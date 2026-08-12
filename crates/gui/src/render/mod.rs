@@ -40,6 +40,7 @@ mod popup;
 mod progression;
 mod routines;
 mod stack;
+mod stack_market;
 mod structure_manifest;
 mod trade;
 
@@ -75,9 +76,11 @@ use party::{
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
 use routines::{
-    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
+    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch,
+    draw_routine_install,
     draw_routine_target, draw_routines,
 };
+use stack_market::draw_stack_market;
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -679,6 +682,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::RoutineTarget => draw_routine_target(game, selected, painter, m),
         Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, painter, m),
         Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),
+        Mode::RoutineEtch => draw_routine_etch(game, selected, painter, m),
         Mode::Refactor => draw_refactor(game, selected, painter, m),
         Mode::RefactorItem => {
             draw_refactor_item(game, app.pending_refactor_target, selected, painter, m)
@@ -694,6 +698,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::StackMarket => draw_stack_market(game, selected, painter, m),
         Mode::Trade => draw_trade_menu(game, selected, painter, m),
         Mode::TradeAction => {
             draw_trade_action_menu(game, app.pending_trade_structure, selected, painter, m)

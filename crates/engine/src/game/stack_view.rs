@@ -121,6 +121,7 @@ const UNDERFOOT_SUFFIXES: &[(&str, Option<&str>, &str)] = &[
     ("stack.link_up", Some("surface"), "  [<] surface"),
     ("stack.link_up", None, "  [<] climb"),
     ("stack.orphan", None, "  [o] adopt"),
+    ("stack.market", None, "  [t] trade"),
     ("stack.corruption", None, "  — moving on costs"),
 ];
 
@@ -350,6 +351,11 @@ impl Game {
                                 FrameMapCell::Orphan
                             }
                             CellKind::Orphan => FrameMapCell::Floor,
+                            // A stall with nothing left on it is a stall
+                            // nobody is standing at — the same argument an
+                            // emptied cache makes.
+                            CellKind::Market if self.market_live(pos) => FrameMapCell::Market,
+                            CellKind::Market => FrameMapCell::Floor,
                         }
                     })
                     .collect()
@@ -442,6 +448,12 @@ impl Game {
                             StackCellView::Orphan
                         }
                         CellKind::Orphan => StackCellView::Floor,
+                        // Bought out is packed up: the corridor stops
+                        // advertising a stall with nothing left on it, for
+                        // the reason an emptied cache stops advertising
+                        // itself.
+                        CellKind::Market if self.market_live(pos) => StackCellView::Market,
+                        CellKind::Market => StackCellView::Floor,
                     })
                     .collect()
             })
@@ -499,6 +511,16 @@ impl Game {
                 underfoot_suffix("stack.orphan", None)
             )),
             CellKind::Orphan => None,
+            // The second arm that offers rather than reports, and the only
+            // one that keeps saying something after it is spent: an emptied
+            // cache is scenery, where a packed-up stall is the answer to
+            // "why is nobody here" for a party that walked back to it.
+            CellKind::Market if self.market_live(pos) => Some(format!(
+                "{}{}",
+                described("Somebody selling things"),
+                underfoot_suffix("stack.market", None)
+            )),
+            CellKind::Market => Some(described("A stall, packed up and picked clean")),
             CellKind::Rock | CellKind::Floor | CellKind::Fault => None,
         };
 

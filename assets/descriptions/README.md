@@ -95,6 +95,7 @@ the screen unexpanded; the engine's shipped-bank test checks this directly.
 | `stack.cache` | unopened | `spent` |
 | `stack.lair` | guardian alive | `cleared` |
 | `stack.orphan` | still there | `spent` |
+| `stack.market` | somebody is selling | `spent` (bought out) |
 | `stack.breakpoint` | unused | `spent` |
 | `stack.link_up` | a link further up | `surface` (depth 1 — the way out) |
 | `stack.link_down` | the way down | — |

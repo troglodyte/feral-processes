@@ -66,6 +66,8 @@ impl Game {
             CellKind::Breakpoint => ("stack.breakpoint", None),
             CellKind::Orphan if self.orphan_present(pos, cell) => ("stack.orphan", None),
             CellKind::Orphan => ("stack.orphan", Some("spent")),
+            CellKind::Market if self.market_live(pos) => ("stack.market", None),
+            CellKind::Market => ("stack.market", Some("spent")),
             CellKind::Fault => ("stack.fault", None),
             CellKind::Corruption => ("stack.corruption", None),
         })

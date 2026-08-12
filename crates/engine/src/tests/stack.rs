@@ -3848,3 +3848,557 @@ fn a_forgiving_death_underground_surfaces_the_party_at_their_base() {
         "and Trace resets, as it does on every other way out"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ephemeral markets
+// ─────────────────────────────────────────────────────────────────────────
+
+use crate::views::{MarketOfferKind, RoutineScope};
+
+/// A game whose depth-1 frame has a market, with the party standing on it.
+///
+/// Only about a third of frames stand one (`STACK_MARKET_CHANCE`), so this
+/// sweeps world seeds rather than unwrapping a fixed one — the sweep is
+/// also what stops a retune of that constant turning every market test into
+/// a mystery `None`.
+fn game_at_a_market() -> Game {
+    for seed in 0..60 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        descend(&mut game);
+        if stand_facing(&mut game, CellKind::Market).is_some() {
+            step_forward_clear(&mut game);
+            // The step can be interrupted by an ambush the flee walked the
+            // party back out of, so confirm rather than assume.
+            if game.stack_market().is_some() {
+                return game;
+            }
+        }
+    }
+    panic!("no seed in the sweep put a market on its depth-1 frame");
+}
+
+/// A tamed program with a routine slot free to write into.
+///
+/// Levelled deliberately, and that is the fixture's whole reason to exist:
+/// `COMPANION_ROUTINE_SLOT_BASE` is 0 with a floor of 1, so a level-1
+/// program has exactly one slot — and `install_innate_routines` has already
+/// filled it with the `priority_boost` fallback every species that grants
+/// nothing gets. A market row bought for a fresh program is therefore
+/// *correctly* refused, which reads as a broken purchase rather than as a
+/// full program if the fixture doesn't say so out loud.
+fn spawn_holder(game: &mut Game) -> Entity {
+    let entity = spawn_tamed(game, 20, 4);
+    set_level(game, entity, 4);
+    assert!(
+        game.routine_view(entity)
+            .iter()
+            .any(|slot| slot.ability.is_none()),
+        "the fixture wanted a program with room and produced a full one"
+    );
+    entity
+}
+
+fn give_credits(game: &mut Game, amount: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CREDITS), amount);
+}
+
+/// The index of the first shelf row matching `want`.
+fn first_offer(game: &mut Game, want: impl Fn(&MarketOfferKind) -> bool) -> Option<usize> {
+    let pos = game.stack_pos()?;
+    game.market_offers(pos).iter().position(want)
+}
+
+/// The index of the first `RoutineScope::One` row, which every shelf has.
+fn first_single_routine(game: &mut Game) -> usize {
+    first_offer(game, |offer| {
+        matches!(
+            offer,
+            MarketOfferKind::Routine {
+                scope: RoutineScope::One,
+                ..
+            }
+        )
+    })
+    .expect("every shelf lists its routines at all three scopes")
+}
+
+/// The ability a shelf row would write.
+fn ability_of(game: &mut Game, index: usize) -> String {
+    let pos = game.stack_pos().unwrap();
+    match game.market_offers(pos)[index].clone() {
+        MarketOfferKind::Routine { ability, .. } => ability,
+        MarketOfferKind::ExclusiveDisk { ability } => ability,
+        MarketOfferKind::Program { .. } => panic!("row {index} is a program, not a routine"),
+    }
+}
+
+/// The invariant the whole derivation exists for, and the same one
+/// `the_species_a_frame_offers_survives_a_save_and_load` pins for an orphan:
+/// the player is shown a price before paying it, so the shelf has to come
+/// back identical after a reload. A test that merely called it twice in one
+/// session would pass against a `GameRng` draw, which is exactly what this
+/// forbids.
+#[test]
+fn a_markets_shelf_survives_a_save_and_load() {
+    let mut game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+    let before = game.market_offers(pos);
+    assert!(!before.is_empty(), "the market derived an empty shelf");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_market_shelf_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let pos = loaded.stack_pos().unwrap();
+    assert_eq!(
+        loaded.market_offers(pos),
+        before,
+        "the stall had different stock after a reload"
+    );
+}
+
+/// The design boundary `no_species_or_research_file_grants_a_wild_only_ability`
+/// states for species and research files, extended to the one other thing
+/// that can now hand a routine over. A shop selling hunt-only routines is
+/// precisely the "buy it instead of hunting for it" shortcut those 28 exist
+/// to prevent.
+#[test]
+fn a_market_never_lists_a_hunt_only_routine() {
+    let game = game_at_a_market();
+    let hunt_only: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .collect();
+    assert!(!hunt_only.is_empty(), "the pool census found nothing");
+
+    // Every depth this stack reaches, not just the frame the party is
+    // standing in: the shelf is drawn per frame, so one clean market says
+    // nothing about the next.
+    let pos = game.stack_pos().unwrap();
+    let mut listed = 0;
+    for depth in 1..=6 {
+        for offer in game.market_offers(StackPos { depth, ..pos }) {
+            if let MarketOfferKind::Routine { ability, .. } = offer {
+                listed += 1;
+                assert!(
+                    !hunt_only.contains(&ability),
+                    "a market is selling {ability}, which is meant to be \
+                     findable only off a wild carrier"
+                );
+            }
+        }
+    }
+    assert!(listed > 0, "no shelf in the sweep listed a routine at all");
+}
+
+/// Buying the narrowest rung hands over one etched disk, spends the
+/// Credits, and grants no *knowledge*: the market sells the writing, not
+/// the routine. Selling knowledge would retire research and extraction the
+/// first time a party walked past a stall.
+///
+/// The disk lands in cargo rather than in a slot, which is the whole of
+/// what disk-first bought: nothing about the purchase asks who it is for,
+/// and a party with every slot full can still buy.
+#[test]
+fn buying_a_routine_hands_over_a_disk_without_teaching_it() {
+    let mut game = game_at_a_market();
+    give_credits(&mut game, 5_000);
+    let before = credits(&game);
+
+    let index = first_single_routine(&mut game);
+    let ability = ability_of(&mut game, index);
+    game.buy_market_offer(index).unwrap();
+
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        RoutineScope::One.disks(),
+        "the rung's disks are what landed in cargo"
+    );
+    assert_eq!(
+        credits(&game),
+        before - RoutineScope::One.price(),
+        "the rung's price is what was taken"
+    );
+    assert!(
+        !game.knows_routine(&ability),
+        "the market taught the routine as well as selling it — research and \
+         extraction are the only two ways to *know* one"
+    );
+
+    // And the disk is a real one: it installs through the ordinary door.
+    let pet = spawn_holder(&mut game);
+    game.install_disk(pet, &ability)
+        .expect("a bought disk must install like any other");
+    assert!(
+        game.routine_view(pet)
+            .iter()
+            .any(|slot| slot.ability.as_deref() == Some(ability.as_str())),
+        "the program is not running what was bought"
+    );
+}
+
+/// Each rung is the same routine at a different bundle size, and the sizes
+/// are the constants rather than whatever the party happens to be — the
+/// point of pinning it is that a shelf quoting three and delivering two
+/// (because a companion was dismissed between reading and paying) is the
+/// bug the constants exist to prevent.
+#[test]
+fn the_wider_rungs_hand_over_more_disks_of_the_same_routine() {
+    use crate::tuning::{
+        STACK_MARKET_ROUTINE_DISKS_EVERYONE, STACK_MARKET_ROUTINE_DISKS_ONE,
+        STACK_MARKET_ROUTINE_DISKS_PARTY,
+    };
+    for (scope, expected) in [
+        (RoutineScope::One, STACK_MARKET_ROUTINE_DISKS_ONE),
+        (RoutineScope::Party, STACK_MARKET_ROUTINE_DISKS_PARTY),
+        (RoutineScope::Everyone, STACK_MARKET_ROUTINE_DISKS_EVERYONE),
+    ] {
+        let mut game = game_at_a_market();
+        give_credits(&mut game, 5_000);
+        let index = first_offer(&mut game, |offer| {
+            matches!(offer, MarketOfferKind::Routine { scope: s, .. } if *s == scope)
+        })
+        .expect("every shelf lists its routines at all three rungs");
+        let ability = ability_of(&mut game, index);
+
+        // A party deliberately smaller than the widest rung: if the quantity
+        // were read off `Party` rather than off the constant, the roster rung
+        // would hand over two disks here instead of six.
+        let fielded = spawn_holder(&mut game);
+        game.add_companion(fielded).unwrap();
+
+        game.buy_market_offer(index).unwrap();
+        assert_eq!(
+            game.etched_disks_of(&ability),
+            expected,
+            "{scope:?} must hand over exactly its constant, whatever the party looks like"
+        );
+    }
+}
+
+/// An exclusive routine is never an ordinary routine row — it has no
+/// bundle rungs, because six copies of the one thing nobody can etch would
+/// make it exactly as ordinary as Throttle.
+#[test]
+fn a_market_never_lists_an_exclusive_routine_as_an_ordinary_rung() {
+    let game = game_at_a_market();
+    let exclusive: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .exclusive_pool()
+        .into_iter()
+        .map(|def| def.id.clone())
+        .collect();
+    assert!(!exclusive.is_empty(), "the pool census found nothing");
+
+    let pos = game.stack_pos().unwrap();
+    let mut listed = 0;
+    for depth in 1..=8 {
+        for offer in game.market_offers(StackPos { depth, ..pos }) {
+            if let MarketOfferKind::Routine { ability, .. } = offer {
+                listed += 1;
+                assert!(
+                    !exclusive.contains(&ability),
+                    "a market is selling {ability} at a bundle rung, and nobody can etch one"
+                );
+            }
+        }
+    }
+    assert!(listed > 0, "no shelf in the sweep listed a routine at all");
+}
+
+/// The rare row exists, gets likelier with depth, and sells one disk at the
+/// exclusive price. Swept across depths rather than asserted on one frame:
+/// at the shallow end it is roughly one market in twelve, so a single-frame
+/// test would be a coin flip dressed up as an assertion.
+#[test]
+fn the_deep_stack_carries_exclusive_disks_and_the_shallow_one_barely_does() {
+    let mut game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+
+    // Swept over the *entrance*, not over `frames`: `FrameSpec::rng_seed`
+    // hashes the world seed, the entrance and the depth, and nothing else.
+    // A sweep over `frames` would derive the same shelf every time and
+    // count it 200 times — a vacuous test that reads like a thorough one.
+    let count_at = |game: &Game, depth: u32| {
+        (0..200)
+            .filter(|&i| {
+                game.market_offers(StackPos {
+                    depth,
+                    entrance: (i, i * 7 + 3),
+                    ..pos
+                })
+                .iter()
+                .any(|offer| matches!(offer, MarketOfferKind::ExclusiveDisk { .. }))
+            })
+            .count()
+    };
+    let shallow = count_at(&game, 1);
+    let deep = count_at(&game, 8);
+    assert!(
+        deep > shallow,
+        "depth bought no better odds of an exclusive disk ({deep} deep vs {shallow} shallow)"
+    );
+    assert!(
+        deep > 0,
+        "no market at depth 8 carried an exclusive disk in 60 frames"
+    );
+}
+
+/// What an exclusive disk costs, and what it delivers, bought through the
+/// real door — the party standing on the stall and paying for the row.
+///
+/// A seed sweep rather than a forced position, because a market is a
+/// property of the frame the party is actually in: there is no way to stand
+/// somewhere the shelf was derived for without walking there.
+#[test]
+fn buying_the_exclusive_row_costs_its_own_price_and_delivers_one_disk() {
+    let (mut game, index, ability) =
+        game_at_a_market_selling_an_exclusive_disk().expect(
+            "no seed in the sweep put an exclusive disk on a reachable shelf;              if STACK_MARKET_EXCLUSIVE_CHANCE_BASE was lowered, widen the sweep",
+        );
+
+    give_credits(&mut game, 50_000);
+    let before = credits(&game);
+    game.buy_market_offer(index).unwrap();
+
+    assert_eq!(
+        credits(&game),
+        before - crate::tuning::STACK_MARKET_EXCLUSIVE_PRICE,
+        "the exclusive row charged something other than its own price"
+    );
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        1,
+        "one disk, never a bundle"
+    );
+    assert!(
+        !game.knows_routine(&ability),
+        "buying the disk taught the routine"
+    );
+}
+
+/// A game standing on a market whose shelf carries an exclusive disk, with
+/// that row's shelf index and the routine on it.
+///
+/// `game_at_a_market`'s sweep, widened: the exclusive row is a roll on top
+/// of the market roll, so a great many more seeds have to be tried.
+fn game_at_a_market_selling_an_exclusive_disk() -> Option<(Game, usize, String)> {
+    for seed in 0..1200 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        descend(&mut game);
+        if stand_facing(&mut game, CellKind::Market).is_none() {
+            continue;
+        }
+        step_forward_clear(&mut game);
+        let Some(pos) = game.stack_pos() else { continue };
+        if game.stack_market().is_none() {
+            continue;
+        }
+        let found = game
+            .market_offers(pos)
+            .into_iter()
+            .enumerate()
+            .find_map(|(index, offer)| match offer {
+                MarketOfferKind::ExclusiveDisk { ability } => Some((index, ability)),
+                _ => None,
+            });
+        if let Some((index, ability)) = found {
+            return Some((game, index, ability));
+        }
+    }
+    None
+}
+
+/// What "whatever's sold is gone" means on the shelf. The row leaving is
+/// only half of it — the frame regenerates from its spec every time the
+/// party steps off and on, so without the record the stall restocks itself.
+#[test]
+fn a_bought_row_stays_gone() {
+    let mut game = game_at_a_market();
+    give_credits(&mut game, 5_000);
+
+    let before = game.stack_market().unwrap().offers.len();
+    let index = first_single_routine(&mut game);
+    game.buy_market_offer(index).unwrap();
+
+    let after = game.stack_market().unwrap();
+    assert_eq!(after.offers.len(), before - 1);
+    assert!(
+        !after.offers.iter().any(|row| row.index == index),
+        "the row that was just bought is still on the shelf"
+    );
+    assert_eq!(
+        game.buy_market_offer(index),
+        Err("That's already been sold.".to_string()),
+        "and buying it again is refused rather than sold twice"
+    );
+}
+
+/// The other half of a cell that can be used up, as `an_adopted_orphan_reads_
+/// as_plain_floor_in_both_views` pins for an orphan. A bought-out stall that
+/// kept drawing would send the party back to a junction with nothing on it.
+#[test]
+fn a_bought_out_market_reads_as_plain_floor_in_both_views() {
+    let mut game = game_at_a_market();
+    let pos = game.stack_pos().unwrap();
+    let cell = (pos.x, pos.y);
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        view.cells[0].contains(&StackCellView::Market),
+        "the party is standing on it and the view does not show one"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Market
+    );
+
+    let rows = game.market_offers(pos).len();
+    game.frame_memory_mut(pos).bought.extend(0..rows);
+
+    let view = game.stack_view().unwrap();
+    assert!(
+        !view.cells[0].contains(&StackCellView::Market),
+        "a stall with nothing left on it is still drawn down the corridor"
+    );
+    assert_eq!(
+        game.frame_map().unwrap().cells[cell.1 as usize][cell.0 as usize],
+        FrameMapCell::Floor
+    );
+    assert!(
+        game.stack_market().is_none(),
+        "and the screen refuses to open on an empty stall"
+    );
+}
+
+/// The whole of what makes these traders ephemeral rather than shops: a
+/// surface Market stocks its `BuybackLedger` shelf on every sale and sells
+/// it back at a markup, and this one keeps no record at all.
+#[test]
+fn selling_to_a_market_leaves_no_buyback_shelf() {
+    let mut game = game_at_a_market();
+    let salvage = ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(salvage.clone(), 6);
+    let before = credits(&game);
+    let stock = game.count_copies(&salvage, 0);
+
+    game.sell_to_market(salvage.clone(), 0, 4).unwrap();
+
+    assert_eq!(
+        game.count_copies(&salvage, 0),
+        stock - 4,
+        "four should have gone"
+    );
+    assert_eq!(
+        credits(&game),
+        before + game.item_value(&salvage) * crate::tuning::STACK_MARKET_SELL_RATE * 4
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::BuybackLedger>()
+            .0
+            .is_empty(),
+        "a Stack trader recorded what it was sold — nothing can ever buy it \
+         back off a stall with no entity and no tile of its own"
+    );
+}
+
+/// The money loop this could otherwise open: a program bought down here and
+/// sold at the surface trader has to lose the player Credits, or the round
+/// trip is a press. Written against both numbers so a retune of either fails
+/// here rather than quietly minting.
+#[test]
+fn a_market_program_costs_more_than_a_trader_would_pay_for_it() {
+    use crate::tuning::STACK_MARKET_PROGRAM_PRICE_PER_POWER;
+
+    let game: Game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let divisor = game
+        .world
+        .resource::<StructureDb>()
+        .get("market")
+        .and_then(|def| def.trade.as_ref())
+        .and_then(|trade| trade.program_sell_divisor)
+        .expect("the shipped trader buys programs");
+
+    assert!(
+        STACK_MARKET_PROGRAM_PRICE_PER_POWER * divisor > 1,
+        "a program bought at {STACK_MARKET_PROGRAM_PRICE_PER_POWER} a point of \
+         power and sold back at a {divisor}th of it returns more than it cost"
+    );
+}
+
+/// Every refusal lands before anything is spent. There is no buyback at a
+/// Stack market, so a purchase that took the Credits and delivered nothing
+/// is the one mistake a player here cannot undo.
+#[test]
+fn a_refused_purchase_spends_nothing() {
+    let mut game = game_at_a_market();
+    let index = first_single_routine(&mut game);
+    let ability = ability_of(&mut game, index);
+
+    // Too poor — the one refusal a routine row still has.
+    let broke = credits(&game);
+    let pet = spawn_holder(&mut game);
+    assert!(game.buy_market_offer(index).is_err());
+    assert_eq!(credits(&game), broke, "a refused purchase took Credits");
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        0,
+        "a refused purchase delivered anyway"
+    );
+    assert!(
+        game.stack_market()
+            .unwrap()
+            .offers
+            .iter()
+            .any(|row| row.index == index),
+        "and the row it refused came off the shelf"
+    );
+
+    // Rich, and every slot in the party full — which used to refuse the
+    // whole purchase and now does not, because a disk goes in the pack and
+    // asks nothing about slots. This is the behaviour disk-first bought,
+    // pinned so a revert is a failing test rather than a quiet regression.
+    give_credits(&mut game, 5_000);
+    let slots = game.routine_slots(pet);
+    let filler: Vec<String> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .map(|def| def.id.clone())
+        .filter(|id| *id != ability)
+        .take(slots)
+        .collect();
+    assert_eq!(
+        filler.len(),
+        slots,
+        "not enough abilities to fill the slots"
+    );
+    for id in filler {
+        game.write_routine(pet, &id);
+    }
+
+    game.buy_market_offer(index)
+        .expect("a full party must not block buying a disk to carry");
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        RoutineScope::One.disks(),
+        "the disk is in the pack, waiting for a slot to free up"
+    );
+}

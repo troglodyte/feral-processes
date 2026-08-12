@@ -274,6 +274,80 @@ impl ItemDb {
         Ok((db, warnings))
     }
 
+    /// Derives one etched Routine Disk item per loaded ability and returns
+    /// a warning for every id a real `.ron` file had already claimed.
+    ///
+    /// **Derived rather than authored** because the disk set is a function
+    /// of the ability set. Sixty-six hand-written files would be sixty-six
+    /// chances for the two to drift, and nothing in the suite would notice
+    /// a disk whose ability had been deleted — where this cannot produce
+    /// one at all.
+    ///
+    /// What is left at its default is doing as much work as what is set.
+    /// No `craftable`, so a disk press cannot make one; no `cache_drop`, so
+    /// a Stack cache cannot hold one; no `equipment`, so it cannot leak into
+    /// `Game::surface_boss_loot`, which filters on `equipment.is_some()`.
+    /// That is the whole of what keeps an exclusive routine exclusive
+    /// without a single explicit exclusion — the disk is reachable only
+    /// where something reaches for it by id.
+    ///
+    /// `droppable` is carried straight across from `AbilityDef::boss_drop`,
+    /// which is why the boss path needs no engine code:
+    /// `Game::equipment_drops_for` already merges every item naming the dead
+    /// species and `award_loot` already rolls them.
+    ///
+    /// A modder's own `etched_*.ron` wins and is warned about, the same call
+    /// `load_dir` makes about a duplicated economy role: a file on disk is a
+    /// deliberate act, and silently overwriting one would make the conflict
+    /// invisible.
+    pub fn synthesise_etched_disks(&mut self, abilities: &crate::abilities::AbilityDb) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for ability in abilities.all() {
+            let id = ItemId::etched(&ability.id);
+            if self.items.contains_key(id.as_str()) {
+                warnings.push(format!(
+                    "item file {} shadows the etched disk derived for ability {}; \
+                     the file wins and the routine cannot be installed from a derived disk",
+                    id.as_str(),
+                    ability.id
+                ));
+                continue;
+            }
+            let value = if ability.exclusive {
+                crate::tuning::ETCHED_DISK_EXCLUSIVE_VALUE
+            } else {
+                crate::tuning::ETCHED_DISK_VALUE
+            };
+            // Every field spelled out rather than `..Default::default()`, so
+            // a new `ItemDef` field is a compile error here and someone has
+            // to decide what an etched disk does about it. The four `None`s
+            // below are load-bearing and a silent default would hide that.
+            self.items.insert(
+                id.0.clone(),
+                ItemDef {
+                    id,
+                    name: format!("Etched Disk · {}", ability.name),
+                    // The ability's own line, so a disk in cargo reads as
+                    // what it will do rather than as what it is. A player
+                    // deciding which of three disks to burn a slot on is
+                    // asking the routine's question, not the item's.
+                    description: ability.description.clone(),
+                    banked: false,
+                    value: Some(value),
+                    role: None,
+                    equipment: None,
+                    taming_potency: None,
+                    consume: None,
+                    craftable: None,
+                    droppable: ability.boss_drop.clone(),
+                    cache_drop: None,
+                    upgrade: None,
+                },
+            );
+        }
+        warnings
+    }
+
     pub fn get(&self, id: &str) -> Option<&ItemDef> {
         self.items.get(id)
     }

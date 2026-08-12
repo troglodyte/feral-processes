@@ -30,7 +30,8 @@ use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
 use feral_processes_engine::{
     AchievementRow, BattleView, DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget,
-    Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
+    Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView,
+    SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -679,9 +680,20 @@ pub enum Mode {
     /// The chosen member's slot list. A filled slot pops its routine back
     /// into cargo; an empty one opens `Mode::RoutineInstall`.
     Routines,
-    /// Picking which loose routine to drop into the slot chosen in
-    /// `Mode::Routines`.
+    /// Picking which etched disk in cargo to spend on the slot chosen in
+    /// `Mode::Routines`. Rows come from `Game::etched_disks_held`.
+    ///
+    /// A disk, never a routine you merely know: knowing one lets you *make*
+    /// a disk (`Mode::RoutineEtch`), and the two steps are separate so that
+    /// a routine nobody can know — an exclusive one, off a boss or a Stack
+    /// trader — can still arrive as a disk and install through this same
+    /// screen.
     RoutineInstall,
+    /// Burning a blank Routine Disk with a routine the player knows, off
+    /// `Game::etchable_routines`. Reached with `e` from
+    /// `Mode::RoutineInstall`, which is where a player discovers they have
+    /// no disk of the thing they wanted.
+    RoutineEtch,
     /// Picking which installed field routine to run — a `FieldBuff` ability
     /// on you or a program you own, cast outside battle rather than spent as
     /// a Special. Reached with `a` from `Mode::Playing`; rows come from
@@ -730,6 +742,16 @@ pub enum Mode {
     Trade,
     TradeAction,
     TradeQuantity,
+    /// A Stack market's shelf — see `Game::stack_market`. Reached with `t`
+    /// underground, which is the same key the surface trader list opens on:
+    /// what a market *is* differs completely between the two locales, but
+    /// "trade with whoever is here" does not, and a second key would be one
+    /// the player has to learn for a screen they meet four frames down.
+    ///
+    /// One list with two sections, offers then cargo the stall will take,
+    /// resolved by `market_row`. There is no buyback section, because there
+    /// is no buyback: what is sold here is gone.
+    StackMarket,
     /// Confirming the sale of the program picked in `Mode::TradeAction`.
     /// Programs take a confirmation where items don't: the sale is
     /// irreversible, and it silently cancels whatever the program was doing,
@@ -855,6 +877,7 @@ impl Mode {
             | Mode::RoutineTarget
             | Mode::Routines
             | Mode::RoutineInstall
+            | Mode::RoutineEtch
             | Mode::FieldCast
             | Mode::FieldCastAlly
             | Mode::FieldCastCell
@@ -867,6 +890,7 @@ impl Mode {
             | Mode::TradeAction
             | Mode::TradeQuantity
             | Mode::TradeProgramConfirm
+            | Mode::StackMarket
             | Mode::Perks
             | Mode::Research
             | Mode::History

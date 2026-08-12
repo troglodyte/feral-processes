@@ -56,10 +56,39 @@ pub(super) fn draw_routines(
 }
 
 pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let known = game.installable_routines();
+    let disks = game.etched_disks_held();
+    let mut rows = vec![text_row(
+        "Install which disk? Installing spends it — popping the routine back out later returns nothing.",
+    )];
+    if disks.is_empty() {
+        rows.push(text_row(
+            "(you are carrying no etched disks — press [e] to burn one, or find one on a boss)",
+        ));
+    }
+    for (i, d) in disks.iter().enumerate() {
+        // Exclusive disks are marked because they are the ones a wrong
+        // choice cannot be undone on: an ordinary routine can be etched
+        // again for a blank, and this one cannot be etched at all.
+        let tag = if d.exclusive { "  ★ exclusive" } else { "" };
+        rows.push(item_row(
+            format!("[{}] {} ×{}{}", menu_shortcut(i), d.name, d.qty, tag),
+            i == selected,
+        ));
+        rows.push(text_row(format!("    {}", d.description)));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row(format!(
+        "[e] burn a blank with a routine you know    Blanks: {}",
+        game.blank_disks_held()
+    )));
+    draw_popup("Install Routine", PopupSize::Large, &rows, painter, m);
+}
+
+pub(super) fn draw_routine_etch(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
+    let known = game.etchable_routines();
     let mut rows = vec![
-        text_row("Install which routine? Writing one burns a blank Routine Disk."),
-        text_row(format!("Disks: {}", game.routine_disks_held())),
+        text_row("Burn which routine onto a blank? The blank is gone either way."),
+        text_row(format!("Blanks: {}", game.blank_disks_held())),
     ];
     if known.is_empty() {
         rows.push(text_row(
@@ -73,7 +102,7 @@ pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Paint
         ));
         rows.push(text_row(format!("    {}", r.description)));
     }
-    draw_popup("Install Routine", PopupSize::Large, &rows, painter, m);
+    draw_popup("Etch Disk", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {

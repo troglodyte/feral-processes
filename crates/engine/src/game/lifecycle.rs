@@ -1096,8 +1096,13 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (research, research_warnings) =
         ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
-    let (items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
     warnings.extend(item_warnings);
+    // After the files, and after `abilities`, because every etched disk is
+    // derived from an ability — this is the one ordering dependency the two
+    // databases have, and the only reason `items` is loaded below
+    // `abilities` rather than beside it.
+    warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // A file, not a directory, and an absent one is silent — see

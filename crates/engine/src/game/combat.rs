@@ -825,7 +825,7 @@ impl Game {
         self.actor_abilities(entity)
             .into_iter()
             .enumerate()
-            .filter(|(_, ability)| !ability.effect.field_only())
+            .filter(|(_, ability)| !ability.effect.field_only() && !ability.is_passive())
             .map(|(index, ability)| SpecialOption {
                 index,
                 name: ability.name.clone(),

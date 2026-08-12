@@ -1,6 +1,7 @@
 //! Resolving a planned round — running each actor's action, computing
 //! effective stats, and rendering the result as a `BattleView`.
 
+use crate::abilities::PassiveTrigger;
 use crate::tuning::{
     ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS, PARTY_PASSIVE_STAT_DIVISOR,
     PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
@@ -74,6 +75,14 @@ impl Game {
             }
         }
 
+        // Taken before anyone acts, so `AllyDropped` can be answered by
+        // comparing against it afterwards rather than by threading a flag
+        // through every path that can drop a party member —
+        // `reap_dead_members`, a status tick, a hostile's routine and a
+        // friendly-fire sweep all reach the same end state, and only one of
+        // them would have remembered to set the flag.
+        let party_before = self.living_party();
+
         for actor in self.roll_initiative() {
             if self.world.get_resource::<BattleState>().is_none() {
                 break;
@@ -101,6 +110,24 @@ impl Game {
             }
         }
 
+        // Passives, after every chosen action and before the round is
+        // closed out. Both triggers are answered from state rather than
+        // from an event stream, which is what lets them sit here in one
+        // place instead of at every site that could cause them.
+        //
+        // `Afflicted` is read *before* `tick_round_status_effects`, which
+        // clears `landed_this_round` — see `Game::newly_afflicted_party`.
+        if self.world.get_resource::<BattleState>().is_some() {
+            if party_before.iter().any(|&e| !self.creature_alive(e)) {
+                let living = self.living_party();
+                self.fire_passives(PassiveTrigger::AllyDropped, &living);
+            }
+            let afflicted = self.newly_afflicted_party();
+            if !afflicted.is_empty() {
+                self.fire_passives(PassiveTrigger::Afflicted, &afflicted);
+            }
+        }
+
         if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
             battle.round += 1;
             let slots = battle.planned.len();
@@ -108,6 +135,40 @@ impl Game {
         }
         self.tick_round_status_effects(player);
         self.tick();
+    }
+
+    /// Puts `ability` on cooldown for `entity`, if it has one to arm.
+    ///
+    /// **Always call this before the effect resolves.** A killing blow ends
+    /// the battle inside `reap_dead_members`, and `end_battle` wipes every
+    /// battle-scoped component — so a cooldown armed afterwards is written
+    /// back onto an entity that has already been cleaned up, and survives
+    /// into the next fight.
+    ///
+    /// `floor = 0`: the player side keeps the authored value untouched (see
+    /// `abilities::armed_cooldown`), which is what leaves `decompile` —
+    /// guarded out by the `cooldown > 0` check — spammable.
+    ///
+    /// Shared by `resolve_one_action` and `Game::fire_passives`, which is
+    /// the whole reason it is a function: a passive that armed its cooldown
+    /// by a second copy of this would drift from the chosen-Special one the
+    /// first time either was retuned.
+    pub(crate) fn arm_cooldown(&mut self, entity: Entity, ability: &AbilityDef) {
+        if ability.cooldown == 0 {
+            return;
+        }
+        let mut cooldowns = self
+            .world
+            .get::<AbilityCooldowns>(entity)
+            .map(|c| c.0.clone())
+            .unwrap_or_default();
+        cooldowns.insert(
+            ability.id.clone(),
+            abilities::armed_cooldown(ability.cooldown, 0),
+        );
+        self.world
+            .entity_mut(entity)
+            .insert(AbilityCooldowns(cooldowns));
     }
 
     /// How to name `actor` in the battle log.
@@ -175,25 +236,7 @@ impl Game {
                     // cooldown armed afterwards would be written back onto an
                     // entity that has already been cleaned up, and survive
                     // into the next fight.
-                    if ability.cooldown > 0 {
-                        let mut cooldowns = self
-                            .world
-                            .get::<AbilityCooldowns>(entity)
-                            .map(|c| c.0.clone())
-                            .unwrap_or_default();
-                        // `floor = 0`: the player side keeps the authored
-                        // value untouched (see `abilities::armed_cooldown`),
-                        // which is what leaves `decompile` — guarded out of
-                        // this branch entirely by `cooldown > 0` above —
-                        // spammable.
-                        cooldowns.insert(
-                            ability.id.clone(),
-                            abilities::armed_cooldown(ability.cooldown, 0),
-                        );
-                        self.world
-                            .entity_mut(entity)
-                            .insert(AbilityCooldowns(cooldowns));
-                    }
+                    self.arm_cooldown(entity, &ability);
                     // Nothing else is charged: the cooldown above is the whole
                     // price of a Special, whoever runs it. Directing a
                     // companion used to come out of the player's Fatigue,

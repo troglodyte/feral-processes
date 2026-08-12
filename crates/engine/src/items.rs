@@ -16,7 +16,37 @@ impl ItemId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The id of the etched Routine Disk holding `ability` — the item
+    /// `ItemDb::synthesise_etched_disks` derives for it.
+    ///
+    /// One function rather than a `format!` at each site because this id is
+    /// the seam between two databases: the ability half spells it when a
+    /// boss drop or a market row is built, and the item half spells it when
+    /// the disk is derived. A prefix typed twice is a disk nothing can ever
+    /// install.
+    ///
+    /// The `etched_` prefix could in principle collide with a modder's own
+    /// item — `ItemDb::synthesise_etched_disks` refuses to overwrite one and
+    /// warns instead, which is the same call `load_dir` makes about a
+    /// duplicated economy role.
+    pub fn etched(ability: &str) -> Self {
+        ItemId(format!("{ETCHED_DISK_PREFIX}{ability}"))
+    }
+
+    /// The ability burnt onto this disk, or `None` if this is not an etched
+    /// disk at all. The inverse of `etched`, and the reason both live here:
+    /// a round trip that does not close is a disk that installs the wrong
+    /// routine.
+    pub fn etched_ability(&self) -> Option<&str> {
+        self.0.strip_prefix(ETCHED_DISK_PREFIX)
+    }
 }
+
+/// What `ItemId::etched` puts in front of an ability id. Not in `ids`
+/// because it is not an id — it is the scheme every etched disk's id is
+/// built from, and `ids` is a list of specific shipped items.
+pub const ETCHED_DISK_PREFIX: &str = "etched_";
 
 impl From<&str> for ItemId {
     fn from(s: &str) -> Self {

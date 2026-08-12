@@ -136,6 +136,139 @@ pub struct BuybackOption {
     pub unit_cost: u32,
 }
 
+/// How many of the player's routine holders one purchase at a Stack market
+/// writes to — see `Game::market_offers`.
+///
+/// The ladder is the product: a market sells the *writing* of a routine,
+/// never the knowledge of it, so what varies between the three rungs is
+/// breadth and nothing else. Prices are `tuning::STACK_MARKET_ROUTINE_PRICE_*`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RoutineScope {
+    /// One holder the player picks — themself, or any program they own.
+    One,
+    /// The player and everyone currently fielded in `Party`.
+    Party,
+    /// The player and every program on the roster.
+    Everyone,
+}
+
+impl RoutineScope {
+    /// Listed cheapest first, which is also narrowest first — the order the
+    /// shelf is built in and the order a screen reads down.
+    pub const ALL: [RoutineScope; 3] = [
+        RoutineScope::One,
+        RoutineScope::Party,
+        RoutineScope::Everyone,
+    ];
+
+    pub fn price(self) -> u32 {
+        match self {
+            RoutineScope::One => crate::tuning::STACK_MARKET_ROUTINE_PRICE_ONE,
+            RoutineScope::Party => crate::tuning::STACK_MARKET_ROUTINE_PRICE_PARTY,
+            RoutineScope::Everyone => crate::tuning::STACK_MARKET_ROUTINE_PRICE_EVERYONE,
+        }
+    }
+
+    /// How many etched disks this rung hands over.
+    ///
+    /// Fixed constants, **not** the live party and roster sizes. A quantity
+    /// read off `Party` would change between the player reading the shelf
+    /// and paying for it — a companion left behind, a program dismissed —
+    /// which is the same objection `Game::market_program_price` already
+    /// makes about folding Trace into a quote. What is on the shelf has to
+    /// be what is bought.
+    pub fn disks(self) -> u32 {
+        match self {
+            RoutineScope::One => crate::tuning::STACK_MARKET_ROUTINE_DISKS_ONE,
+            RoutineScope::Party => crate::tuning::STACK_MARKET_ROUTINE_DISKS_PARTY,
+            RoutineScope::Everyone => crate::tuning::STACK_MARKET_ROUTINE_DISKS_EVERYONE,
+        }
+    }
+
+    /// How the rung reads on the shelf. Worded as what it would *outfit*
+    /// rather than as a tier name or a bare count, because the price and
+    /// the quantity are both already on the row and "T2" would say nothing
+    /// about why anyone wants three.
+    pub fn label(self) -> &'static str {
+        match self {
+            RoutineScope::One => "one program",
+            RoutineScope::Party => "your party",
+            RoutineScope::Everyone => "everything you own",
+        }
+    }
+}
+
+/// What one row of a Stack market's shelf is.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum MarketOfferKind {
+    /// A bundle of etched disks — `scope.disks()` of them, ready to install
+    /// into whichever holders the player picks. Nothing is added to
+    /// `KnownRoutines`: a trader sells the *writing*, never the knowledge.
+    /// See `Game::buy_market_offer`.
+    Routine {
+        ability: String,
+        scope: RoutineScope,
+    },
+    /// A single exclusive routine's etched disk — the rare row. Deliberately
+    /// a kind of its own rather than a `Routine` at a fourth scope: it is
+    /// sold one at a time and priced off `STACK_MARKET_EXCLUSIVE_PRICE`
+    /// rather than off any rung, and rolling it into `RoutineScope` would
+    /// mean a rung whose `disks()` and `price()` both lie.
+    ExclusiveDisk { ability: String },
+    /// A program, adopted through the same `Game::adopt_program` an orphan
+    /// goes through.
+    Program { species: String },
+}
+
+/// One row of a Stack market's shelf, already priced — see
+/// `Game::stack_market`. Renderers draw these verbatim.
+///
+/// `index` is the row's position in the *derived* shelf and is what
+/// `Game::buy_market_offer` takes, not its position in this list: a bought
+/// row is dropped from the view (that is what "whatever's sold is gone"
+/// means on screen) while `resources::FrameMemory::bought` goes on
+/// recording it by the index it always had.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct MarketOffer {
+    pub index: usize,
+    pub kind: MarketOfferKind,
+    /// The row's headline — what is being sold, and to whom.
+    pub name: String,
+    /// The line under it: an ability's own description, or what a program
+    /// would join at.
+    pub detail: String,
+    pub price: u32,
+    /// Whether the player has the Credits for it. The row is drawn either
+    /// way — a shelf you cannot afford yet is a reason to go deeper.
+    pub affordable: bool,
+}
+
+/// One stack of the player's cargo a Stack market will take, priced.
+///
+/// There is no buyback row to match it: a Stack trader keeps no shelf, so
+/// what is sold here is gone. See `Game::sell_to_market`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct MarketSellRow {
+    pub item: ItemId,
+    pub tier: u32,
+    pub name: String,
+    pub qty: u32,
+    pub unit_price: u32,
+}
+
+/// Everything a Stack market screen draws — see `Game::stack_market`.
+/// `None` from that call is the answer to "is there a live stall here",
+/// so no screen has to ask separately.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct StackMarketView {
+    pub offers: Vec<MarketOffer>,
+    pub sells: Vec<MarketSellRow>,
+    /// What the player has to spend, and what it is called — so the screen
+    /// never names the trade currency itself.
+    pub credits: u32,
+    pub currency: String,
+}
+
 /// One sellable program at a trading post, already priced — see
 /// `Game::program_sale_options`. Renderers draw these verbatim and never
 /// compute a payout of their own.
@@ -534,6 +667,9 @@ pub enum StackCellView {
     /// `Floor`, on the same argument as an emptied cache — the dead end has
     /// nothing left in it, so advertising it is a walk for nothing.
     Orphan,
+    /// Somebody selling things. One whose every row has been bought comes
+    /// through as `Floor` — see `Game::market_live`.
+    Market,
 }
 
 /// The party's first-person view of the frame around them — see
@@ -604,6 +740,9 @@ pub enum FrameMapCell {
     /// than as a destination, and the reason mapping a frame is worth more
     /// than knowing which cells are walkable.
     Corruption,
+    /// A market with something still on the shelf. A bought-out one maps as
+    /// `Floor`, like an emptied cache.
+    Market,
     /// A program the party has seen and not yet adopted. An adopted one maps
     /// as `Floor`, like an emptied cache.
     Orphan,
@@ -758,13 +897,34 @@ pub struct UpgradeOption {
     pub zone_bump: bool,
 }
 
-/// One row of the install picker — a routine the player knows. Knowing it
-/// is not enough to install it: that also costs a blank Routine Disk, which
-/// the screen reports separately through `Game::routine_disks_held`.
+/// One row of the etch picker — a routine the player knows. Knowing it is
+/// not enough to put it in a slot: it first has to be burnt onto a blank
+/// Routine Disk (`Game::etch_disk`), which the screen reports separately
+/// through `Game::blank_disks_held`, and only then installed.
+///
+/// An exclusive routine never appears here. Nothing writes one into
+/// `KnownRoutines`, so the list is empty of them by construction rather than
+/// by a filter — see `AbilityDef::exclusive`.
 pub struct KnownRoutineView {
     pub ability: crate::abilities::AbilityId,
     pub name: String,
     pub description: String,
+}
+
+/// One row of the install picker — an etched Routine Disk in cargo, ready to
+/// be spent on a slot.
+///
+/// `qty` is how many of that disk are carried, which is what makes a bought
+/// bundle from a Stack market read as one row rather than six. `exclusive`
+/// is the flag the screen marks a prize with; it is the ability's, not the
+/// disk's, and it is here so no renderer has to reach back into `AbilityDb`
+/// to ask.
+pub struct EtchedDiskView {
+    pub ability: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    pub exclusive: bool,
+    pub qty: u32,
 }
 
 /// One row of the extraction picker — a routine installed on the program

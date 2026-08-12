@@ -46,26 +46,63 @@ impl App {
         self.mode = Mode::RoutineInstall;
     }
 
+    /// Spends one etched disk out of cargo on the slot chosen in
+    /// `Mode::Routines`.
+    ///
+    /// `e` opens the etch screen instead, because this is exactly where a
+    /// player finds out they hold no disk of the routine they came for —
+    /// making them back out two screens to go and make one would be a menu
+    /// asking them to remember what it already knows.
     pub(crate) fn handle_routine_install_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::Routines;
+            return;
+        }
+        if key == GameKey::Char('e') {
+            self.menu_selected = 0;
+            self.mode = Mode::RoutineEtch;
             return;
         }
         let Some(entity) = self.pending_routine_holder else {
             self.mode = Mode::RoutineTarget;
             return;
         };
-        let Some(known) = self.game.as_ref().map(|g| g.installable_routines()) else {
+        let Some(disks) = self.game.as_ref().map(|g| g.etched_disks_held()) else {
+            return;
+        };
+        if let Some(idx) = self.selected_index(key, disks.len()) {
+            let ability = disks[idx].ability.clone();
+            let Some(game) = &mut self.game else { return };
+            match game.install_disk(entity, &ability) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            self.mode = Mode::Routines;
+        }
+    }
+
+    /// Burns a blank Routine Disk with a routine the player knows.
+    ///
+    /// Stays open after each etch rather than dropping back, the way
+    /// `Mode::Research` does: a player who came here to make one disk
+    /// usually came to make three, and the blanks are the only thing
+    /// stopping them.
+    pub(crate) fn handle_routine_etch_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.menu_selected = 0;
+            self.mode = Mode::RoutineInstall;
+            return;
+        }
+        let Some(known) = self.game.as_ref().map(|g| g.etchable_routines()) else {
             return;
         };
         if let Some(idx) = self.selected_index(key, known.len()) {
             let ability = known[idx].ability.clone();
             let Some(game) = &mut self.game else { return };
-            match game.install_routine(entity, &ability) {
+            match game.etch_disk(&ability) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
-            self.mode = Mode::Routines;
         }
     }
 

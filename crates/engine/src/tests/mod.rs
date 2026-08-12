@@ -35,6 +35,7 @@ mod policy;
 mod raids;
 mod refactor;
 mod research;
+mod exclusive_routines;
 mod routines;
 mod spawning;
 mod stack;

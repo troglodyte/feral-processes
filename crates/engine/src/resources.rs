@@ -876,6 +876,24 @@ pub struct FrameMemory {
     /// positional bincode save is what the version bump is for.
     #[serde(default)]
     pub adopted: BTreeSet<(i32, i32)>,
+    /// Rows of this frame's market that have already been bought, by their
+    /// index in `Game::market_offers` — which is derived from the frame
+    /// spec and so hands back the same shelf in the same order after a
+    /// save and load.
+    ///
+    /// Keyed by index rather than by cell, unlike every set above, because
+    /// a market is spent a row at a time: the frame has one stall and the
+    /// question is which of its seven rows are gone. A market with every
+    /// row bought reads as plain floor in both views, exactly as an emptied
+    /// cache does, and that is the whole of what makes a trader down here
+    /// ephemeral — see `Game::market_live`.
+    ///
+    /// `#[serde(default)]` so a save written before markets existed loads
+    /// with an empty shelf history rather than needing a
+    /// `SAVE_FORMAT_VERSION` bump: the payload is field-named RON, so an
+    /// added field costs nothing.
+    #[serde(default)]
+    pub bought: BTreeSet<usize>,
 }
 
 /// Everything the party has learned about every Stack frame in this zone.

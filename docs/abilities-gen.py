@@ -7,7 +7,9 @@
 #
 # `cost` is what the engine actually charges: power_cost for a FieldBuff,
 # fatigue_cost for the two movement routines, and nothing at all for a battle
-# routine, which is priced in its cooldown alone. Most battle files still
+# routine, which is priced in its cooldown alone. The two passives
+# (`deadman`, `watchdog`) show a cost of 0 because they are never cast at
+# all -- they fire on a trigger, and Fatigue is a cast cost. Most battle files still
 # carry a fatigue_cost the engine stopped reading on 2026-08-08 -- it is left
 # out of this table deliberately, because transcribing an inert number would
 # put it in front of a reader as though it meant something. `status` is the
@@ -34,11 +36,13 @@ A = [
  ("coolant_flush",     "Coolant Flush Party",     "WholeParty",         "FieldBuff", "Coolant",         1,   90, "",                 0, 15.0),
  ("cycle_harvest",     "Leech Everyone",          "AllEnemies",         "Drain",     "",                4,    0, "",                 5, 0),
  ("deadlock",          "Hard Lock Single v1.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    1, "",                 2, 0),
+ ("deadman",          "Deadman Everyone",        "AllEnemies",         "Damage",    "",               14,    0, "",                 4, 0),
  ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,    0, "",                 0, 0),
  ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,  100, "",                 0, 18.0),
  ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Def",            -4,    3, "",                 3, 0),
  ("flush_cache",       "Flush Cache Party",       "WholeParty",         "Cleanse",   "",                0,    0, "",                 3, 0),
  ("fork_bomb",         "Fork Bomb Group",         "WholeEnemyGroup",    "Damage",    "",               15,    0, "Bleed 35% 2r",     3, 0),
+ ("hard_fault",       "Hard Fault Everyone",     "AllEnemies",         "Debuff",    "Stun",            0,    2, "",                 5, 0),
  ("hard_lock",         "Hard Lock Single v2.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    2, "",                 4, 0),
  ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,   90, "",                 0, 14.0),
  ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,    3, "",                 3, 0),
@@ -46,9 +50,12 @@ A = [
  ("hyperthread",       "Hyperthread Single v2.0", "OneAlly",            "Buff",      "Atk",             6,    4, "",                 3, 0),
  ("invalidate_line",   "Flush Cache Single",      "OneAlly",            "Cleanse",   "",                0,    0, "",                 2, 0),
  ("kernel_panic",      "Packet Shred Single",     "OneEnemyGroupFront", "Damage",    "",               16,    0, "",                 3, 0),
+ ("kernel_shear",     "Kernel Shear Group",      "WholeEnemyGroup",    "Damage",    "",               22,    0, "Bleed 75% 4r",     4, 0),
  ("leech_array",       "Leech Group",             "WholeEnemyGroup",    "Drain",     "",                6,    0, "",                 4, 0),
+ ("long_winter",      "Long Winter Party",       "WholeParty",         "FieldBuff", "Mitigation",     25,  300, "",                 0, 40.0),
  ("memory_leak",       "Bit Rot Single v1.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           2,    3, "",                 1, 0),
  ("mirror_restore",    "Patch Party v1.0",        "WholeParty",         "Heal",      "",                8,    0, "",                 2, 0),
+ ("null_cache",       "Null Cache Group",        "WholeEnemyGroup",    "Drain",     "",               12,    0, "",                 3, 0),
  ("null_route",        "Hard Lock Everyone",      "AllEnemies",         "Debuff",    "Stun",            0,    1, "",                 5, 0),
  ("overclock",         "Overclock Single",        "OneAlly",            "FieldBuff", "Atk",             4,   90, "",                 0, 14.0),
  ("overclock_array",   "Hyperthread Party",       "WholeParty",         "Buff",      "Atk",             3,    3, "",                 3, 0),
@@ -78,6 +85,7 @@ A = [
  ("throttle",          "Throttle Group",          "WholeEnemyGroup",    "Buff",      "Atk",            -4,    3, "",                 3, 0),
  ("trace_analysis",    "Trace Analysis Party",    "WholeParty",         "FieldBuff", "XpBoost",        20,  100, "",                 0, 18.0),
  ("trickle_charge",    "Trickle Charge Party",    "WholeParty",         "FieldBuff", "Trickle",         1,   80, "",                 0, 20.0),
+ ("watchdog",         "Watchdog Party",          "WholeParty",         "Cleanse",   "",                0,    0, "",                 4, 0),
  ("wild_jump",         "Wild Jump Party",         "WholeParty",         "Jump",      "",                0,    0, "",                 0, 20.0),
 ]
 K = "id name target effect sub power dur status cd cost".split()
@@ -296,10 +304,26 @@ outcome of a fight, which is what Deep Analysis is buying at the far end of
 the research tree. The other {len(FIELD) - len([r for r in FIELD if r["sub"] in ("CaptureBoost", "XpBoost", "DropBoost", "EncounterDamp")])} are ordinary stat and regeneration work, just
 measured in turns.
 
-Installing one is the one place a known routine meets an item, and the item is
-spent **last**: the game checks battle, ownership, knowledge and a free slot
-before it looks for the disk. Uninstalling returns nothing, which is the whole
-point — a slot is a commitment.
+Getting one into a slot is where a known routine meets an item, and it takes
+two steps. **Etching** burns a blank Routine Disk with a routine you know and
+produces an etched disk; **installing** spends that etched disk on a slot.
+Both spend last, after every refusal has cleared — there is no way to lose a
+disk to a failed attempt. Uninstalling returns nothing, which is the whole
+point: a slot is a commitment.
+
+That split is also what makes the exclusive pool possible. An **exclusive**
+routine is one nobody can learn and therefore nobody can etch — its disk
+only ever arrives already written, off a boss's drop table or a Stack
+trader's rare shelf row. Six ship: Kernel Shear, Null Cache and Deadman off
+Wintermute; Hard Fault, Long Winter and Watchdog off the Overseer. Long
+Winter is the field routine among them, which is why it sits at the top of
+the table above with a Power cost nothing else comes near.
+
+**Deadman and Watchdog are passives.** They occupy a slot, appear in no
+menu, and fire on an event instead of a turn — Deadman when one of your own
+goes down, Watchdog the moment a status condition lands on its holder. Their
+cooldowns are their whole price; the Fatigue column reads 0 because a
+passive is never cast.
 
 ## Movement routines
 

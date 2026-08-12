@@ -1199,13 +1199,44 @@ pub(super) fn give_disks(game: &mut Game, qty: u32) {
     give(game, &ItemId::from(ids::ROUTINE_DISK), qty);
 }
 
+/// Both halves of a real install — etch a blank, then spend the result —
+/// for a test that has already arranged the knowledge and the blank disks
+/// itself and is asserting on what they cost.
+///
+/// Distinct from `install_routine_for_test`, which arranges those too. Use
+/// this one when the disk accounting is the point of the test.
+pub(super) fn fit_routine(game: &mut Game, entity: Entity, ability: &str) {
+    game.etch_disk(ability)
+        .unwrap_or_else(|e| panic!("etching {ability}: {e}"));
+    game.install_disk(entity, ability)
+        .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
+}
+
+/// Puts `qty` etched disks of `ability` in the player's pack, skipping both
+/// the blank chain and whatever would have etched them.
+pub(super) fn give_etched_disks(game: &mut Game, ability: &str, qty: u32) {
+    give(game, &ItemId::etched(ability), qty);
+}
+
 /// Writes `ability` into `entity`'s next free slot the way the game does —
-/// teach it, hand over the disk it burns, install. Most tests want a
+/// teach it, hand over the blank it burns, etch, install. Most tests want a
 /// routine sitting in a slot rather than the chain that got it there.
+///
+/// Goes through both real verbs rather than `write_routine` directly, so a
+/// test that depends on a routine being installed also depends on the
+/// install path still working. An exclusive routine can't be taught, so this
+/// hands its disk over directly instead — the same two steps the game does,
+/// minus the boss.
 pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability: &str) {
-    teach_routine(game, ability);
-    give_disks(game, 1);
-    game.install_routine(entity, ability)
+    if game.routine_is_exclusive(ability) {
+        give_etched_disks(game, ability, 1);
+    } else {
+        teach_routine(game, ability);
+        give_disks(game, 1);
+        game.etch_disk(ability)
+            .unwrap_or_else(|e| panic!("etching {ability}: {e}"));
+    }
+    game.install_disk(entity, ability)
         .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
 }
 

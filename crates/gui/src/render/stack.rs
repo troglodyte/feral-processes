@@ -332,6 +332,10 @@ fn cell_mark(cell: StackCellView) -> Option<(char, Color)> {
         StackCellView::Fault => Some(('v', ORANGE)),
         StackCellView::Corruption => Some(('~', MAGENTA)),
         StackCellView::Orphan => Some(('o', GREEN)),
+        // `$` for a market, the same glyph the surface trader draws with on
+        // the zone map — one vocabulary for "somebody is selling here",
+        // wherever the party meets it.
+        StackCellView::Market => Some(('$', YELLOW)),
         // The two that are drawn as a face rather than as corridor, and the
         // reason this table is no longer only about floors: `face_color`
         // alone left a door indistinguishable from the rock it is set into

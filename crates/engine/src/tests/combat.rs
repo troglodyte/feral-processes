@@ -795,7 +795,7 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
     // before installing the routine under test.
     game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 1);
-    game.install_routine(player, "priority_boost").unwrap();
+    fit_routine(&mut game, player, "priority_boost");
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 

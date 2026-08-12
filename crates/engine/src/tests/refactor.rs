@@ -369,5 +369,8 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
         (160, 18, 10),
         "and the multiplier lands on its own numbers, with no gear welded in"
     );
-    assert_eq!(before_gear.1, 80, "the pre-gear block this is measured from");
+    assert_eq!(
+        before_gear.1, 80,
+        "the pre-gear block this is measured from"
+    );
 }

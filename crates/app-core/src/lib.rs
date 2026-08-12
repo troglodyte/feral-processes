@@ -497,6 +497,13 @@ pub fn pane_rows(
 /// A free function for the same reason `pane_rows` is one: no app-core fixture
 /// can stage a background system logging mid-fight, so the only way to test
 /// this is against a hand-built log.
+///
+/// The accepted cost of counting raw: the reveal still spends a beat on a base
+/// line this never draws, so a round that ends with one holds `is_revealing`
+/// for an extra line's worth of time. Base news runs about a quarter of a line
+/// per tick against a running base, so that is usually no beat at all — and
+/// the alternative is a source-aware chop, which `pane_rows`' contiguous raw
+/// suffix cannot express.
 pub fn battle_rows(lines: &[LogLine], revealed: usize) -> Vec<LogLine> {
     lines
         .iter()

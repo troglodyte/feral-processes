@@ -412,6 +412,13 @@ pub enum LogFilter {
 }
 
 impl LogFilter {
+    /// Every filter, in the order `next` walks them — what the pane's header
+    /// lists so the active one reads against the set rather than in isolation.
+    /// The two have to agree or the header would show a row of options the key
+    /// steps through in some other order, which is worse than naming none of
+    /// them; `the_header_order_is_the_cycle_order` is what holds it.
+    pub const ALL: [LogFilter; 3] = [LogFilter::All, LogFilter::Field, LogFilter::Base];
+
     /// The cycle the filter key walks. All → Field → Base → All, so one more
     /// press always gets you back to seeing everything.
     pub fn next(self) -> Self {

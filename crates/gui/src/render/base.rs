@@ -415,7 +415,15 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     }
     // Drawn even under `LogFilter::All`, so the key is discoverable from the
     // screen rather than only from the help popup.
-    painter.ui(&log_header, m.inset, ly, m.font_size, GRAY);
+    let runs: Vec<TextRun> = log_header
+        .iter()
+        .map(|p| TextRun {
+            text: &p.text,
+            bold: p.bold,
+            color: p.color,
+        })
+        .collect();
+    painter.ui_runs(&runs, m.inset, ly, m.font_size);
     ly += m.line_height;
     for e in &log_lines {
         if ly > painter.screen_h() - m.gap {
@@ -426,18 +434,65 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     }
 }
 
-/// The log pane's one-line header: the active filter, the key that cycles it,
-/// and — when a channel is being suppressed — how much of it is going unread.
-/// That last part is what stops a raid alert landing unseen while the pane is
-/// showing only field news.
-fn log_pane_header(filter: LogFilter, filtered_out: usize) -> String {
-    let mut header = format!("LOG [{}]  F to filter", filter.label());
+/// One styled stretch of the log pane's header. Owned rather than
+/// `paint::TextRun`, which borrows: the pieces are built from a formatted
+/// count that has to outlive the call, and the caller turns them into runs at
+/// the point it draws.
+struct HeaderPiece {
+    text: String,
+    bold: bool,
+    color: Color,
+}
+
+impl HeaderPiece {
+    fn dim(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            bold: false,
+            color: GRAY,
+        }
+    }
+}
+
+/// The log pane's one-line header: every filter with the active one picked
+/// out, the key that cycles them, and — when a channel is being suppressed —
+/// how much of it is going unread. That last part is what stops a raid alert
+/// landing unseen while the pane is showing only field news.
+///
+/// All three are listed rather than only the active one, which is what the
+/// header used to do: named alone, "Field" says nothing about what the other
+/// settings are or which way the key steps, and a player reading a base line
+/// under a header they thought said otherwise has no way to tell whether the
+/// filter or the tagging is wrong. The order is `LogFilter::ALL`, which is the
+/// order the key walks.
+fn log_pane_header(filter: LogFilter, filtered_out: usize) -> Vec<HeaderPiece> {
+    let mut pieces = vec![HeaderPiece::dim("LOG  ")];
+    for (i, option) in LogFilter::ALL.iter().enumerate() {
+        if i > 0 {
+            pieces.push(HeaderPiece::dim(" · "));
+        }
+        pieces.push(if *option == filter {
+            HeaderPiece {
+                text: option.label().to_string(),
+                bold: true,
+                color: GREEN,
+            }
+        } else {
+            HeaderPiece::dim(option.label())
+        });
+    }
+    // Lower case because the binding is: `App::handle_playing_key` matches
+    // `'f'` and nothing matches `'F'`, so the old wording sent anyone reaching
+    // for shift to a key that does nothing.
+    pieces.push(HeaderPiece::dim("   f to cycle"));
     if let Some(channel) = filter.hidden_channel()
         && filtered_out > 0
     {
-        header.push_str(&format!("  · {filtered_out} {channel}"));
+        pieces.push(HeaderPiece::dim(format!(
+            "   {filtered_out} {channel} hidden"
+        )));
     }
-    header
+    pieces
 }
 
 /// The message log in full — everything the pane at the bottom of the map
@@ -1088,32 +1143,72 @@ mod tests {
         }
     }
 
+    fn header_text(filter: LogFilter, filtered_out: usize) -> String {
+        log_pane_header(filter, filtered_out)
+            .iter()
+            .map(|p| p.text.as_str())
+            .collect()
+    }
+
     /// The header is the only place the filter key is advertised, so it draws
     /// under `All` too — a filter you can only discover from the help popup is
-    /// one nobody turns on.
+    /// one nobody turns on. Lower case `f`, because that is the key that is
+    /// bound; `F` reaches nothing.
     #[test]
     fn the_unfiltered_header_still_names_the_key_and_counts_nothing() {
-        let header = log_pane_header(LogFilter::All, 0);
+        let header = header_text(LogFilter::All, 0);
         assert!(header.contains("All"), "{header}");
-        assert!(header.contains('F'), "{header}");
-        assert!(!header.contains('·'), "nothing is hidden: {header}");
+        assert!(header.contains("f to cycle"), "{header}");
+        assert!(!header.contains("hidden"), "nothing is hidden: {header}");
+    }
+
+    /// The whole set is listed whichever one is active, which is the point of
+    /// the row: "Field" alone says nothing about what else there is.
+    #[test]
+    fn the_header_lists_every_filter_in_cycle_order() {
+        for filter in LogFilter::ALL {
+            let header = header_text(filter, 0);
+            let labels: Vec<&str> = LogFilter::ALL.iter().map(|f| f.label()).collect();
+            let mut cursor = 0;
+            for label in &labels {
+                let at = header[cursor..]
+                    .find(label)
+                    .unwrap_or_else(|| panic!("{label} missing from {header:?} under {filter:?}"));
+                cursor += at + label.len();
+            }
+        }
+    }
+
+    /// Bold green is the only thing distinguishing the active filter from the
+    /// two it sits between, so it has to land on exactly one piece.
+    #[test]
+    fn only_the_active_filter_is_picked_out() {
+        for filter in LogFilter::ALL {
+            let pieces = log_pane_header(filter, 0);
+            let picked: Vec<&str> = pieces
+                .iter()
+                .filter(|p| p.bold && p.color == GREEN)
+                .map(|p| p.text.as_str())
+                .collect();
+            assert_eq!(picked, [filter.label()], "under {filter:?}");
+        }
     }
 
     /// The count is what stops a raid landing unseen while the pane is showing
     /// only field news.
     #[test]
     fn a_filtered_header_counts_the_channel_it_is_hiding() {
-        let header = log_pane_header(LogFilter::Field, 3);
+        let header = header_text(LogFilter::Field, 3);
         assert!(header.contains("Field"), "{header}");
-        assert!(header.contains("3 base"), "{header}");
+        assert!(header.contains("3 base hidden"), "{header}");
     }
 
     /// A channel with no traffic in it has nothing to report, so the header
     /// stays quiet rather than saying "0 base".
     #[test]
     fn a_filtered_header_with_an_empty_channel_says_nothing() {
-        let header = log_pane_header(LogFilter::Base, 0);
-        assert!(!header.contains('·'), "{header}");
+        let header = header_text(LogFilter::Base, 0);
+        assert!(!header.contains("hidden"), "{header}");
     }
 
     fn entry(text: &str, repeats: usize) -> LogEntry {

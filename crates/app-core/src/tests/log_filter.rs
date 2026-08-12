@@ -42,6 +42,20 @@ fn f_cycles_all_field_base_and_back() {
     assert_eq!(app.log_filter, LogFilter::All);
 }
 
+/// The pane's header lists `LogFilter::ALL` and the key walks `next`, so a
+/// disagreement would draw the options in an order the key does not follow.
+#[test]
+fn the_header_order_is_the_cycle_order() {
+    let mut walked = Vec::new();
+    let mut filter = LogFilter::ALL[0];
+    for _ in 0..LogFilter::ALL.len() {
+        walked.push(filter);
+        filter = filter.next();
+    }
+    assert_eq!(walked, LogFilter::ALL);
+    assert_eq!(filter, LogFilter::ALL[0], "the cycle has to close");
+}
+
 /// Cycling the filter is a view change, not an action — it must not advance
 /// the world, or reading the log would cost turns.
 #[test]

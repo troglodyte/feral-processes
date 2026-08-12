@@ -479,6 +479,33 @@ pub fn pane_rows(
     rows
 }
 
+/// Picks the battle pane's rows out of the round's range: truncate to what
+/// the reveal has released, then drop everything that is not the fight.
+///
+/// `MessageLog::since_round` slices by position, so the range covers whatever
+/// the `tick` inside a battle action pushed as well as the narration itself —
+/// a sweep on the base, a machine clogging, a cronjob paying out. None of that
+/// is what the party is looking at, and it arrives with no round header or
+/// roster change to explain it.
+///
+/// The order matters for the same reason it does in `pane_rows`, from the
+/// other side: `revealed` counts *raw* lines, because `App::hidden_log_lines`
+/// chops that same figure off the map pane's tail. Filtering first would let
+/// the narration outrun its own pacing by however much base chatter had landed
+/// in the round, and would put the two panes' arithmetic out of step.
+///
+/// A free function for the same reason `pane_rows` is one: no app-core fixture
+/// can stage a background system logging mid-fight, so the only way to test
+/// this is against a hand-built log.
+pub fn battle_rows(lines: &[LogLine], revealed: usize) -> Vec<LogLine> {
+    lines
+        .iter()
+        .take(revealed)
+        .filter(|l| l.source == MessageSource::Field)
+        .cloned()
+        .collect()
+}
+
 /// How many of `lines` the filter is holding back — the header's "there is
 /// more you aren't seeing" figure. Zero under `LogFilter::All`, so the pane
 /// says nothing when there is nothing to say.

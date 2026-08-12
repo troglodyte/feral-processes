@@ -292,15 +292,14 @@ impl App {
     }
 
     /// The battle pane's lines: this battle's narration, truncated to what
-    /// has been revealed. The pane draws the tail of this once it overflows,
-    /// which is what makes lines scroll up as new ones arrive.
+    /// has been revealed and stripped of base news — see `battle_rows`. The
+    /// pane draws the tail of this once it overflows, which is what makes
+    /// lines scroll up as new ones arrive.
     pub fn revealed_battle_log(&self) -> Vec<LogLine> {
         let Some(game) = &self.game else {
             return Vec::new();
         };
-        let mut lines = game.battle_log();
-        lines.truncate(self.revealed_count());
-        lines
+        battle_rows(&game.battle_log(), self.revealed_count())
     }
 
     /// The map log pane's rows under the active filter, oldest first — see

@@ -106,6 +106,39 @@ fn the_unrevealed_battle_tail_is_chopped_before_the_filter_applies() {
     assert_eq!(shown, ["older field line"]);
 }
 
+/// The battle pane narrates one fight. A background system logging into the
+/// same range while the party is out fighting — a sweep on the base, a
+/// machine clogging — is not part of that narration, and `since_round` slices
+/// the log by position, so nothing upstream of here can tell the two apart.
+#[test]
+fn the_battle_pane_leaves_base_news_out() {
+    let lines = vec![
+        field("── round 1 ──"),
+        base("The Fabricator loses 8 Durability to a GC Entropy Sweep!"),
+        field("You unleash a data strike for 2 damage."),
+    ];
+    let shown = texts(battle_rows(&lines, 3));
+    assert_eq!(
+        shown,
+        ["── round 1 ──", "You unleash a data strike for 2 damage."]
+    );
+}
+
+/// The reveal counts *raw* lines — `App::hidden_log_lines` chops the same
+/// figure off the map pane's tail — so the truncation has to happen before
+/// the source filter. Filtering first would let the narration outrun the
+/// pacing by however much base chatter had landed in the round.
+#[test]
+fn the_battle_pane_truncates_before_it_filters() {
+    let lines = vec![
+        field("── round 1 ──"),
+        base("The Mining Node is clogged."),
+        field("not revealed yet"),
+    ];
+    let shown = texts(battle_rows(&lines, 2));
+    assert_eq!(shown, ["── round 1 ──"]);
+}
+
 /// The header's "there is more you aren't seeing" figure. Zero when nothing
 /// is filtered out, so the pane says nothing when there is nothing to say.
 #[test]

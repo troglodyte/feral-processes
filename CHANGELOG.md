@@ -27,6 +27,32 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.6
+
+### The log pane's header lists every filter
+
+The header read `LOG [Field]  F to filter`, which names the active setting
+and nothing else — not what the other two are, not which way the key steps.
+Seeing a base line under a header you believed said Field then leaves no way
+to tell whether the filter is broken or the line is tagged wrong; the honest
+reading, that you had cycled one press short, is the one the header gave you
+no way to check. It also advertised `F`, which is bound to nothing: the key
+is `f`, and reaching for shift did nothing at all.
+
+It now reads `LOG  All · Field · Base   f to cycle   12 base hidden`, with
+the active filter in bold green against the other two in dim grey. Two
+colours on one line means the header is drawn as `Painter::ui_runs`
+segments rather than a single string, so `log_pane_header` returns styled
+pieces.
+
+The options are listed in `LogFilter::ALL`, and a test pins that order to
+the one `LogFilter::next` walks — a row of options the key steps through in
+some other order would be worse than naming none of them.
+
+Unchanged: the history screen (`L`) is still deliberately unfiltered, and
+the counted "N base hidden" tail still only appears when the suppressed
+channel has traffic in it.
+
 ## 0.8.5
 
 ### A compile row says what kind of thing it makes

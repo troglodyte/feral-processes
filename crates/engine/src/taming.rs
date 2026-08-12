@@ -1,7 +1,7 @@
-use crate::tuning::DECOMPILER_SKILL_BONUS;
 use crate::tuning::{
     CAPTURE_CHANCE_MAX, CAPTURE_CHANCE_MIN, CAPTURE_DIFFICULTY_PENALTY, CAPTURE_HP_PENALTY,
-    CAPTURE_POTENCY_CEILING,
+    CAPTURE_POTENCY_CEILING, DECOMPILE_ATTEMPT_BONUS_CAP, DECOMPILE_ATTEMPT_BONUS_PCT,
+    DECOMPILER_SKILL_BONUS,
 };
 
 /// Everything the player themself brings to a decompile attempt, as opposed
@@ -61,6 +61,13 @@ pub struct TargetResistance {
 /// `skill_multiplier`, before the final clamp — a running `CaptureBoost`
 /// field buff raises the odds by that many percentage points regardless of
 /// species or catalyst.
+///
+/// `target.prior_attempts` scales it once more, for the same reason those
+/// two do rather than adding to the base: persistence must not be a way to
+/// out-scale a species' own resistance. Every attempt already made on this
+/// program leaves the next one better off, up to
+/// `DECOMPILE_ATTEMPT_BONUS_CAP` attempts' worth — after which a stubborn
+/// target simply stays stubborn, however many catalysts get fed to it.
 pub fn capture_chance(
     item_potency: f32,
     target: TargetResistance,
@@ -72,7 +79,12 @@ pub fn capture_chance(
         * (1.0 - target.taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
     let skill_multiplier = 1.0 + player.skill as f32 * DECOMPILER_SKILL_BONUS;
     let boost_multiplier = 1.0 + player.capture_boost_pct as f32 / 100.0;
-    (base * skill_multiplier * boost_multiplier).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
+    let attempt_multiplier = 1.0
+        + (target.prior_attempts.min(DECOMPILE_ATTEMPT_BONUS_CAP) * DECOMPILE_ATTEMPT_BONUS_PCT)
+            as f32
+            / 100.0;
+    (base * skill_multiplier * boost_multiplier * attempt_multiplier)
+        .clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
 }
 
 #[cfg(test)]
@@ -214,6 +226,78 @@ mod tests {
             "20 percentage points should scale the chance by 1.2x ahead of the \
              final clamp: {boosted} vs {}",
             base * 1.2
+        );
+    }
+
+    fn after_attempts(prior_attempts: u32) -> TargetResistance {
+        TargetResistance {
+            prior_attempts,
+            ..fresh(0.5, 0.4)
+        }
+    }
+
+    #[test]
+    fn each_attempt_raises_the_odds_of_the_next_one() {
+        let first = capture_chance(0.4, after_attempts(0), RAW);
+        let second = capture_chance(0.4, after_attempts(1), RAW);
+        let third = capture_chance(0.4, after_attempts(2), RAW);
+        assert!(
+            second > first && third > second,
+            "each attempt should leave the next better off: \
+             {first} then {second} then {third}"
+        );
+        assert!(
+            (second - first * 1.1).abs() < 1e-6,
+            "one prior attempt should scale the chance by 1.1x: {second} vs {}",
+            first * 1.1
+        );
+    }
+
+    /// The cap is what keeps this a "you are wearing it down" mechanic
+    /// rather than a pity meter that eventually guarantees any capture.
+    #[test]
+    fn attempts_past_the_cap_buy_nothing_further() {
+        let capped = capture_chance(0.4, after_attempts(DECOMPILE_ATTEMPT_BONUS_CAP), RAW);
+        let way_past = capture_chance(0.4, after_attempts(DECOMPILE_ATTEMPT_BONUS_CAP + 50), RAW);
+        assert_eq!(
+            capped, way_past,
+            "persistence past the cap must buy nothing: {capped} vs {way_past}"
+        );
+
+        let fresh_target = capture_chance(0.4, after_attempts(0), RAW);
+        assert!(
+            (capped - fresh_target * 1.5).abs() < 1e-6,
+            "the cap should be worth exactly 1.5x: {capped} vs {}",
+            fresh_target * 1.5
+        );
+    }
+
+    /// A hard species stays hard. The bonus multiplies like `skill` does
+    /// rather than adding to the base, so it can't be used to skip past
+    /// `taming_difficulty` — the same property `high_skill_does_not_flatten_
+    /// the_gap_between_easy_and_boss_species` pins for skill.
+    #[test]
+    fn a_maxed_out_attempt_streak_does_not_close_the_gap_between_species() {
+        let easy = capture_chance(
+            0.4,
+            TargetResistance {
+                prior_attempts: DECOMPILE_ATTEMPT_BONUS_CAP,
+                ..fresh(0.0, 0.15)
+            },
+            RAW,
+        );
+        let hard = capture_chance(
+            0.4,
+            TargetResistance {
+                prior_attempts: DECOMPILE_ATTEMPT_BONUS_CAP,
+                ..fresh(0.0, 0.9)
+            },
+            RAW,
+        );
+        assert!(
+            easy > hard * 1.5,
+            "an easy species must stay far ahead of a resistant one however \
+             many attempts have been spent: {easy} vs {hard}"
         );
     }
 

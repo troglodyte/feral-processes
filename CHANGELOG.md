@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.7
+
+### A decompile that fails still gets you somewhere
+
+Every attempt on a program's ICE now leaves the next one better off. A failed
+decompile used to cost a catalyst and change nothing at all — the odds cell
+read the same number afterwards as before, so a run of bad luck was pure loss
+and the only thing that moved was your stock of ICE Breakers.
+
+Each attempt against a given program is now worth +10% on the next attempt
+against *that same program*, up to five attempts' worth — a hard ceiling of
+1.5x. The failure line says which side of it you are on:
+
+```
+The program's ICE holds — decompile failed! Its defences fray a little.
+The program's ICE holds — decompile failed! Its defences are as frayed as they will get.
+```
+
+The counter belongs to the fight, not to you and not to the species. Jack out
+and come back and the program is met with its ICE intact, which is what keeps
+this "you are wearing this one down" rather than a pity meter you could bank
+against a later target by farming an easy one. The cap is the other half of
+that: it multiplies alongside the skill and Capture Boost terms rather than
+adding to the base, so persistence can never out-scale a species' own
+`taming_difficulty` — a stubborn program stays a gamble however many
+catalysts get fed to it.
+
+The battle screen needed no changes: it already quotes live odds per group,
+so the number simply climbs as you work, and it rewinds with the narration
+along with everything else on the row.
+
 ## 0.7.6
 
 ### A level-up says what it gave

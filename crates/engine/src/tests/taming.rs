@@ -1,7 +1,15 @@
 //! Decompiling a wild program into a companion, and the catalysts it consumes.
 
 use super::support::*;
+use crate::tuning::DECOMPILE_ATTEMPT_BONUS_CAP;
 use crate::*;
+
+/// A `GameRng` seed whose first `random_bool` draw comes up false, so the
+/// tests below can be about what a *failed* decompile leaves behind rather
+/// than about landing one. Each such test asserts the target survived, so a
+/// stream shift that invalidates this fails loudly instead of quietly
+/// testing a success path.
+const SEED_THAT_FAILS: u64 = 1;
 
 #[test]
 fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() {
@@ -467,5 +475,190 @@ fn the_battle_view_quotes_no_decompile_odds_against_a_boss() {
     assert!(
         view.groups[0].decompile_chance.is_none(),
         "a boss can't be decompiled, so the target list must not advertise odds"
+    );
+}
+
+/// Every line the log currently holds, for the two tests below reading a
+/// specific one out.
+fn log_text(game: &Game) -> Vec<String> {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .map(|e| e.text.clone())
+        .collect()
+}
+
+/// Hands the battle a decompile counter directly, for the read-path tests
+/// that are about what the odds *do* with a count rather than about how the
+/// count got there — those would otherwise have to land a seeded roll per
+/// attempt, which couples them to the RNG stream for nothing.
+fn set_attempts(game: &mut Game, target: Entity, attempts: u32) {
+    game.world
+        .resource_mut::<BattleState>()
+        .decompile_attempts
+        .insert(target, attempts);
+}
+
+fn quoted_odds(game: &Game, group: usize) -> f32 {
+    game.battle_view().unwrap().groups[group]
+        .decompile_chance
+        .expect("holding a catalyst should quote odds")
+}
+
+#[test]
+fn a_failed_decompile_raises_the_odds_quoted_for_the_next_one() {
+    let mut game = Game::new(3109, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    // A seeded stream so the attempt below reliably *fails* — the whole
+    // point of the test is what a failure leaves behind. The precondition
+    // assert is what stops this going quiet if a formula change ever makes
+    // the first draw land instead.
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+
+    let before = quoted_odds(&game, 0);
+    game.attempt_decompile(0, player);
+    assert!(
+        game.world.get::<Hostile>(wild).is_some(),
+        "the seeded roll must fail for this test to be about anything"
+    );
+
+    let after = quoted_odds(&game, 0);
+    assert!(
+        after > before,
+        "a spent attempt should leave the next one better off: {after} vs {before}"
+    );
+}
+
+/// The counter is per program, not per player — otherwise softening up one
+/// group would quietly discount every other fight on screen.
+#[test]
+fn attempts_against_one_group_do_not_help_against_another() {
+    let mut game = Game::new(3110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    // Two species rather than two programs: `group_pack` partitions by
+    // species, so a second drone would join the first one's group and there
+    // would be no other group to read.
+    let species: Vec<_> = game
+        .species_defs()
+        .into_iter()
+        .filter(|s| !s.is_boss)
+        .take(2)
+        .map(|s| s.id.to_string())
+        .collect();
+    let first = spawn_wild_without_routine(&mut game, &species[0], pos.x, pos.y);
+    let second = spawn_wild_without_routine(&mut game, &species[1], pos.x, pos.y);
+    // Hand-built rather than through `insert_battle`, which goes via
+    // `group_pack` — that caps at `enemy_group_ceiling()`, one group at
+    // zone 1, and would drop the second group this test is entirely about.
+    let groups = [first, second]
+        .iter()
+        .map(|&e| battle::EnemyGroup {
+            species: game.world.get::<Creature>(e).unwrap().species.clone(),
+            members: vec![e],
+        })
+        .collect();
+    let slots = game.world.resource::<Party>().0.len() + 1;
+    game.world.insert_resource(BattleState {
+        player,
+        groups,
+        round: 1,
+        planned: vec![None; slots],
+        finished: false,
+        player_won: false,
+        decompile_attempts: std::collections::HashMap::new(),
+    });
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+    // Each group is measured against its own baseline: they are different
+    // species, so their odds start at different places.
+    let worked_before = quoted_odds(&game, 0);
+    let untouched_before = quoted_odds(&game, 1);
+    set_attempts(&mut game, first, 3);
+
+    assert!(
+        quoted_odds(&game, 0) > worked_before,
+        "the group that was worked on should read easier: {} vs {worked_before}",
+        quoted_odds(&game, 0)
+    );
+    assert_eq!(
+        quoted_odds(&game, 1),
+        untouched_before,
+        "the group nobody touched must read exactly as it did"
+    );
+}
+
+/// The counter lives on `BattleState`, so walking away from a fight throws
+/// it out — this is "you are wearing its ICE down", not a run-wide pity
+/// meter that a player could bank against a later target.
+#[test]
+fn the_attempt_counter_does_not_survive_the_battle() {
+    let mut game = Game::new(3111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+    let fresh = quoted_odds(&game, 0);
+    set_attempts(&mut game, wild, DECOMPILE_ATTEMPT_BONUS_CAP);
+    assert!(quoted_odds(&game, 0) > fresh, "the fixture should take");
+
+    flee_until_clear(&mut game);
+    game.start_battle(vec![wild]);
+
+    assert_eq!(
+        quoted_odds(&game, 0),
+        fresh,
+        "re-engaging the same program must meet it with its ICE intact"
+    );
+}
+
+#[test]
+fn a_failed_decompile_says_the_ice_is_fraying() {
+    let mut game = Game::new(3112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+
+    game.attempt_decompile(0, player);
+    assert!(
+        game.world.get::<Hostile>(wild).is_some(),
+        "the seeded roll must fail for this test to be about anything"
+    );
+    assert!(
+        log_text(&game).iter().any(|l| l.contains("fray a little")),
+        "a failure below the cap should say the attempt bought something: {:?}",
+        log_text(&game)
+    );
+}
+
+/// Reaching the cap has to be *said*, not just silently stop helping —
+/// otherwise a player reads a number that stopped moving and keeps paying
+/// catalysts into a wall.
+#[test]
+fn a_failed_decompile_at_the_cap_says_persistence_has_run_out() {
+    let mut game = Game::new(3113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    set_attempts(&mut game, wild, DECOMPILE_ATTEMPT_BONUS_CAP - 1);
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+
+    game.attempt_decompile(0, player);
+    assert!(
+        game.world.get::<Hostile>(wild).is_some(),
+        "the seeded roll must fail for this test to be about anything"
+    );
+    let lines = log_text(&game);
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("as frayed as they will get")),
+        "the attempt that reaches the cap should say so: {lines:?}"
     );
 }

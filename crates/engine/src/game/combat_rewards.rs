@@ -2,12 +2,12 @@
 //! decompiling a defeated program into a companion.
 
 use crate::progression::StatRow;
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
     SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
-use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
 use crate::*;
 
 impl Game {
@@ -402,7 +402,7 @@ impl Game {
             };
             self.log_kind(
                 MessageKind::Outcome,
-                &format!("The program's ICE holds — decompile failed!{fraying}"),
+                format!("The program's ICE holds — decompile failed!{fraying}"),
             );
             return false;
         }

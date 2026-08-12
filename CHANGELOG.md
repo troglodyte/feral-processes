@@ -27,6 +27,46 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.7.6
+
+### A level-up says what it gave
+
+Levelling announced itself and stopped there — the stats it grew were left for
+you to notice on the character screen later, if at all. The player, a party
+member and a posted worker now each print a block of stat lines under the
+announcement, one per stat that actually moved:
+
+```
+You gain 40 XP and reach level 5!
+  Max HP 108 → 120
+  ATK 14 → 15
+  DEF 11 → 12
+  Perk Points 3 → 4
+  Decompiler 4 → 5
+```
+
+The Perk Point and the point of Decompiler skill a level pays were previously
+announced nowhere at all, so a player could bank points for a run without
+learning they had any. Those two rows are the player's alone; companions get
+neither.
+
+A stat that didn't move is left out rather than printed as unchanged, since
+attack and defense both grow by one point a level and a low growth multiplier
+rounds them away on a given level.
+
+The lines carry `before → after` rather than a bare `+1 DEF` for a reason
+worth recording: the history screen folds identical lines together, so two
+programs each gaining a point of defense in the same fight would have
+collapsed into one row and deleted the second one's line outright.
+
+### A posted worker's level-up is its own line
+
+It used to be glued to the end of the extraction line as a tail, which left it
+drawn as loot rather than as a level-up, and dropped from the results a
+finished intrusion keeps. It is now a base-log line in its own right, named by
+the machine the program is posted to — so a base running several cronjobs says
+which one grew.
+
 ## 0.7.5
 
 ### Haulers walk around the base instead of through it

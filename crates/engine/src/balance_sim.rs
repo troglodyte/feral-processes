@@ -525,38 +525,56 @@ mod tests {
         }
     }
 
-    /// How deep to sweep the gear-free grind baseline. Zones are actually
-    /// unbounded, and two things compound with depth: wild stats double
-    /// every zone (`ZoneLevel::stat_multiplier`) and a group triples
-    /// (`zone_group_cap`), both against the player's flat linear per-level
-    /// growth. So the level needed to keep pace grows geometrically too
-    /// (confirmed empirically: 1, 8, 29, 61, 138 for zones 1-5) — zone 6
-    /// alone needs north of `MAX_LEVEL_SEARCHED`. That cliff is real and
-    /// expected; this sweep stays inside the range where a pure-grind path
-    /// is still supposed to work, so a regression in the *shape* of that
-    /// curve (not its eventual end) still gets caught.
-    const MAX_GRIND_ONLY_ZONE_SWEPT: u32 = 5;
-    /// How deep to sweep the fully-geared scenario. `GEAR_LEVEL_GROWTH`
-    /// matches `ZoneLevel::stat_multiplier`'s doubling-per-zone base (see
-    /// `crate::tuning::GEAR_LEVEL_GROWTH`'s doc comment), so gear neither overtakes
-    /// deep zones the way the old 2.5x factor did nor collapses to "level 1
-    /// clears everything" (confirmed empirically: 1, 5, 20, 45, 127 geared
-    /// vs. 1, 8, 29, 61, 138 gear-free for zones 1-5).
+    /// How deep to sweep the gear-free grind baseline. Zones are unbounded,
+    /// so what this depth is really asserting is that the curve *has no end*
+    /// — and that is a claim only a linear curve can make.
+    ///
+    /// It used to stop at 5, because it had to: wild stats doubled every
+    /// zone against the player's flat per-level growth, so the level needed
+    /// to keep pace doubled too (measured: 1, 15, 30, 63, 131 for zones 1-5)
+    /// and zone 6 alone wanted more than `MAX_LEVEL_SEARCHED`. That was
+    /// written up as a cliff that was "real and expected". It was neither:
+    /// it was a geometric quantity racing a linear one, which has an end
+    /// wherever you put the coefficients, and past that end
+    /// `battle::compute_damage`'s subtractive rule floors every swing at
+    /// `MIN_DAMAGE` so no amount of levelling helps at all.
+    ///
+    /// With `ZONE_STAT_STEP` linear the measured curve is 1, 15, 24, 32, 47,
+    /// 61, 76, 90, 106, 121 for zones 1-10 — about 14 levels a zone,
+    /// indefinitely. Sweeping to 10 is therefore the gate itself: a return
+    /// to a compounding curve cannot reach zone 10 inside
+    /// `MAX_LEVEL_SEARCHED` and fails here rather than shipping.
+    const MAX_GRIND_ONLY_ZONE_SWEPT: u32 = 10;
+    /// How deep to sweep the fully-geared scenario. `GEAR_LEVEL_STEP`
+    /// matches `ZoneLevel::stat_multiplier`'s per-zone step (see
+    /// `crate::tuning::GEAR_LEVEL_STEP`), so gear neither overtakes deep
+    /// zones the way the old 2.5x factor did nor collapses to "level 1
+    /// clears everything" (measured: 1, 10, 18, 31, 43, 56, 70, 83, 97, 112
+    /// geared vs. 1, 15, 24, 32, 47, 61, 76, 90, 106, 121 gear-free for
+    /// zones 1-10).
     ///
     /// Gear's advantage narrows with depth rather than holding at a
     /// constant fraction, because a full-size group makes the fight about
     /// how long the party takes to chew through it — a per-hit ATK/DEF
     /// bonus moves that less and less as the bodies multiply.
-    ///
-    /// Stops at 5, not 6, for the same reason the gear-free sweep does: a
-    /// zone 6 group is `MAX_GROUP_SIZE` members, which needs more than
-    /// `MAX_LEVEL_SEARCHED` even fully geared. That is not a lockout in the
-    /// game — this sim models no abilities, and a swarm that size is
-    /// answered with AoE (`cascade_overflow`, `broadcast_storm`) rather
-    /// than with more levels — so sweeping it would only pin a number the
-    /// real game never asks the player to reach.
-    const MAX_GEARED_ZONE_SWEPT: u32 = 5;
+    const MAX_GEARED_ZONE_SWEPT: u32 = 10;
     const MAX_LEVEL_SEARCHED: u32 = 200;
+
+    /// How much the largest per-zone *step* in the level curve may exceed
+    /// the smallest, past `GROWTH_GUARD_FIRST_MEASURED_PAIR`.
+    ///
+    /// The guard beside this one (`LEVEL_GROWTH_GUARD_MULTIPLIER`) bounds
+    /// the *ratio* between consecutive requirements, which is a one-sided
+    /// check on steepness: a curve that gets gentler passes it trivially,
+    /// and so does a compounding curve with a small enough base. This one
+    /// bounds the shape instead. On a linear curve the steps are roughly
+    /// constant; on a compounding one they grow without limit, so a single
+    /// figure catches the whole class rather than one retune of it.
+    ///
+    /// Set at 3 against a shipped spread of 8 to 16 — real margin for the
+    /// integer search's lumpiness, and nowhere near the 5x a geometric
+    /// curve reaches within five zones, let alone ten.
+    const LINEAR_STEP_GUARD_MULTIPLIER: u32 = 3;
 
     /// Multiplier and flat slack the "no cliff" guard allows a zone's level
     /// requirement to grow by over the previous zone's. Growth is
@@ -715,6 +733,31 @@ mod tests {
     /// grows roughly geometrically with zone depth — expected, since wild
     /// stats double per zone against flat linear player growth — and
     /// catches any *sharper* blowup than that as a regression.
+    /// Asserts the level curve rises in roughly constant steps rather than
+    /// compounding — the property that makes a zone ceiling fundable at all.
+    ///
+    /// Separate from the ratio guard, which only bounds steepness and so is
+    /// blind to the shape: 1, 2, 4, 8, 16 and 1, 2, 3, 4, 5 both satisfy
+    /// "never more than 6x the previous", and only one of them ends.
+    fn assert_steps_stay_flat(required_levels: &[u32], what: &str) {
+        let steps: Vec<u32> = required_levels
+            .windows(2)
+            .skip(GROWTH_GUARD_FIRST_MEASURED_PAIR)
+            .map(|w| w[1] - w[0])
+            .collect();
+        let (smallest, largest) = (
+            *steps.iter().min().expect("a swept curve has steps"),
+            *steps.iter().max().expect("a swept curve has steps"),
+        );
+        assert!(
+            largest <= smallest * LINEAR_STEP_GUARD_MULTIPLIER,
+            "{what} level curve steps run {smallest}..{largest} — a step that \
+             grows with the zone is a compounding curve, which has a zone \
+             past which no reachable level clears it: {required_levels:?} \
+             (steps {steps:?})"
+        );
+    }
+
     #[test]
     fn grind_only_zone_scaling_grows_predictably() {
         let (db, warnings) =
@@ -768,10 +811,11 @@ mod tests {
             assert!(
                 next <= prev * LEVEL_GROWTH_GUARD_MULTIPLIER + LEVEL_GROWTH_GUARD_SLACK,
                 "level requirement jumped from {prev} to {next} one zone deeper — sharper than \
-                 the shipped curve's geometric growth in stats and group size ever produces: \
+                 the shipped curve's growth in stats and group size ever produces: \
                  {required_levels:?}"
             );
         }
+        assert_steps_stay_flat(&required_levels, "gear-free");
     }
 
     /// Fully-geared scenario: the player re-equips best-in-slot Weapon +
@@ -861,9 +905,10 @@ mod tests {
             assert!(
                 next <= prev * LEVEL_GROWTH_GUARD_MULTIPLIER + LEVEL_GROWTH_GUARD_SLACK,
                 "geared level requirement jumped from {prev} to {next} one zone deeper — \
-                 sharper than the shipped curve's geometric growth in stats and group size ever \
+                 sharper than the shipped curve's growth in stats and group size ever \
                  produces: {required_levels:?}"
             );
         }
+        assert_steps_stay_flat(&required_levels, "geared");
     }
 }

@@ -40,17 +40,16 @@ fn raised(old: i32, pct: f32) -> i32 {
 /// carried into fights for that instead of for what it is.
 ///
 /// `tier` is the program's tier *before* the bump, because the step from one
-/// tier to the next comes from `ZoneLevel::tier_step` rather than from a
+/// tier to the next comes from `ZoneLevel::raised_a_tier` rather than from a
 /// constant restated here — the spawner's curve is what a bump is catching
 /// the program up with, so the two have to be one formula.
 fn refactored(stats: &Stats, upgrade: &CompanionUpgradeDef, tier: u32) -> Stats {
     let mut max_hp = stats.max_hp;
     let (mut atk, mut def) = (stats.atk, stats.def);
     if upgrade.zone_bump {
-        let step = ZoneLevel::tier_step(tier);
-        max_hp *= step;
-        atk *= step;
-        def *= step;
+        max_hp = ZoneLevel::raised_a_tier(max_hp, tier);
+        atk = ZoneLevel::raised_a_tier(atk, tier);
+        def = ZoneLevel::raised_a_tier(def, tier);
     }
     max_hp = raised(max_hp, upgrade.hp_percent);
     atk = raised(atk, upgrade.atk_percent);

@@ -1,6 +1,4 @@
-use crate::tuning::{
-    GEAR_LEVEL_GROWTH, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER,
-};
+use crate::tuning::{GEAR_LEVEL_STEP, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER};
 use serde::{Deserialize, Serialize};
 
 /// `#[serde(transparent)]` so an `ItemId` serializes as its bare inner string
@@ -152,7 +150,7 @@ impl EquipmentSlot {
 }
 
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1
-/// (base). See `GEAR_LEVEL_GROWTH`/`EquipmentStats::scaled_for_level` for
+/// (base). See `GEAR_LEVEL_STEP`/`EquipmentStats::scaled_for_level` for
 /// how a higher gear level scales these up.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct EquipmentStats {
@@ -168,7 +166,7 @@ impl EquipmentStats {
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
     /// Each component is rounded independently to the nearest whole point.
     pub fn scaled_for_level(self, level: u32) -> EquipmentStats {
-        let factor = GEAR_LEVEL_GROWTH.powi(level.max(1) as i32 - 1);
+        let factor = 1.0 + GEAR_LEVEL_STEP * (level.max(1) as f64 - 1.0);
         let scale = |v: i32| (v as f64 * factor).round() as i32;
         EquipmentStats {
             atk: scale(self.atk),
@@ -208,7 +206,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scaled_for_level_grows_100_percent_per_level_above_1() {
+    fn scaled_for_level_adds_100_percent_of_base_per_level_above_1() {
         let base = EquipmentStats {
             atk: 4,
             def: 0,
@@ -222,12 +220,13 @@ mod tests {
         assert_eq!(
             base.scaled_for_level(2).atk,
             8,
-            "level 2 should be 2x base (4 * 2 = 8)"
+            "level 2 should be base + 100% of base (4 * 2 = 8)"
         );
         assert_eq!(
             base.scaled_for_level(3).atk,
-            16,
-            "level 3 should be 2x level 2 (8 * 2 = 16)"
+            12,
+            "level 3 adds another 100% of base, not another 100% of level 2 \
+             (4 * 3 = 12, not 16) — gear tracks a linear zone curve"
         );
         assert_eq!(
             base.scaled_for_level(0).atk,

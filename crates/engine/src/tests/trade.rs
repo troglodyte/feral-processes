@@ -991,8 +991,10 @@ fn buying_a_programs_zone_tiers_does_not_raise_what_a_trader_pays() {
 
     assert_eq!(
         game.world.get::<Stats>(pet).unwrap().power(),
-        70 * 4,
-        "the program really is four times as strong — this is not a no-op"
+        70 * 3,
+        "the program really is three times as strong — this is not a no-op. \
+         Three rather than four because the zone curve is linear: tier 1 to \
+         3 is x2 then x3/2, where a doubling curve gave x2 then x2"
     );
     assert_eq!(
         game.program_payout(market, pet).unwrap(),

@@ -110,12 +110,29 @@ pub const WORK_XP_LEVEL_CAP: u32 = 10;
 // Zone & distance scaling
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Geometric base for `ZoneLevel::stat_multiplier`, the flat multiplier on
+/// Linear step for `ZoneLevel::stat_multiplier`, the flat multiplier on
 /// every wild program's stats in a zone: zone 1 is x1 and each level after
-/// multiplies by this (1, 2, 4, 8, 16, ...). The single steepest difficulty
-/// curve in the game — `GEAR_LEVEL_GROWTH` is deliberately matched to it so
-/// neither gear nor zone depth outruns the other.
-pub const ZONE_STAT_GROWTH: i32 = 2;
+/// *adds* this (1, 2, 3, 4, 5, ...).
+///
+/// **Linear rather than geometric, and the distinction is the difference
+/// between a hard game and an unfinishable one.** It was a geometric base of
+/// 2. Everything on the player's side of the fight grows linearly —
+/// `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are 1, an item is worth a flat point
+/// or four — so a doubling enemy curve is a geometric quantity racing a
+/// linear one, and the geometric side always wins in the end whatever the
+/// coefficients are. Under `battle::compute_damage`'s subtractive rule that
+/// does not read as "hard": once enemy DEF passes your ATK every swing lands
+/// on `MIN_DAMAGE` and the fight stops responding to your stats at all.
+///
+/// Measured on the real roster before the change: the level needed to keep
+/// pace with a Stack guardian ran ~50, ~105, ~215, ~440, ~880 for zones 1-5,
+/// and a zone-3 depth-5 lair was unbeatable at level 90 in the best gear the
+/// game ships. Linear turns that into a roughly constant number of levels per
+/// zone — a curve a player can fund forever.
+///
+/// `GEAR_LEVEL_STEP` is matched to this exactly as it was matched to the old
+/// base, so neither gear nor zone outruns the other.
+pub const ZONE_STAT_STEP: i32 = 1;
 
 /// Radius of the zone-1 newbie ring, in tiles from
 /// `Game::distance_from_danger_origin` — the base platform's edge once a
@@ -796,16 +813,22 @@ pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 /// more encounters, more kills. See `TRACE_PER_KILL`.
 pub const STACK_ENCOUNTER_CHANCE: f64 = 0.08;
 
-/// What each frame of Stack depth multiplies wild program stats by,
-/// compounding, on top of `ZoneLevel::stat_multiplier` and
-/// `Game::distance_stat_multiplier`.
+/// What each frame of Stack depth *adds* to the multiplier on wild program
+/// stats, on top of `ZoneLevel::stat_multiplier` and
+/// `Game::distance_stat_multiplier` (depth 1 = x1, depth 2 = x1.35, depth 3
+/// = x1.70, ...).
 ///
-/// A float and much gentler than `ZONE_STAT_GROWTH`'s flat doubling, because
-/// descending is cheap — a link down, not a Portal you had to fund — so the
-/// curve has to be walkable rather than a wall. XP follows for free:
+/// Linear, for the reason `ZONE_STAT_STEP` gives at length: depth compounded
+/// *on top of* the zone curve, so a geometric depth term made the deepest
+/// frame of a deep zone the least reachable fight in the game. It stays
+/// gentler than the zone step besides, because descending is cheap — a link
+/// down, not a Portal you had to fund — so the curve has to be walkable
+/// rather than a wall. The party does not choose a stack's depth either:
+/// `frames_for` sets it from the link's distance to the spawn point, so a
+/// player can be handed a 6-frame stack as their only remaining lair. XP follows for free:
 /// a kill pays the defeated program's `max_hp`, so scaling stats scales the
 /// reward with the risk.
-pub const STACK_DEPTH_STAT_GROWTH: f32 = 1.35;
+pub const STACK_DEPTH_STAT_STEP: f32 = 0.35;
 
 // ---- The Stack: Trace ------------------------------------------------
 //
@@ -1278,15 +1301,37 @@ pub const HAUL_WALK_RADIUS: i32 = MAX_BUILD_DISTANCE_FROM_HOME * 2;
 pub const INPUT_STOCK_BATCHES: u32 = 2;
 pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
 
-/// Growth factor applied to an item's base `EquipmentStats` per gear level
-/// above 1 — doubles each level (level *N* = base *
-/// `GEAR_LEVEL_GROWTH.powi(N - 1)`), matching `ZoneLevel::stat_multiplier`'s
-/// own per-zone doubling so neither leveling nor gear dominates the other
-/// outright — see `balance_sim::best_case_gear_bonus`'s tests for the
-/// simulation that surfaced the old 2.5x growth overtaking it. Gear level
-/// is capped by `resources::ZoneLevel`: reaching zone *N* is what
-/// "unlocks" level *N* gear — see `Game::equip`.
-pub const GEAR_LEVEL_GROWTH: f64 = 2.0;
+/// Step added to an item's base `EquipmentStats` per gear level above 1 —
+/// level *N* = base * `(1 + GEAR_LEVEL_STEP * (N - 1))`, matching
+/// `ZoneLevel::stat_multiplier`'s own per-zone step so neither levelling nor
+/// gear dominates the other outright. Gear level is capped by
+/// `resources::ZoneLevel`: reaching zone *N* is what "unlocks" level *N*
+/// gear — see `Game::equip`.
+///
+/// Linear because the zone curve it is matched to is (see `ZONE_STAT_STEP`).
+/// Keeping this geometric against a linear enemy curve would invert the old
+/// bug rather than fix it — gear would outrun the zones instead of falling
+/// behind them, which is what `balance_sim::best_case_gear_bonus`'s tests
+/// caught the last time these two disagreed.
+/// **Known cost, accepted rather than overlooked.** An equipped item's bonus
+/// is written into `Stats` by `apply_equipment_delta` and a save restores
+/// those numbers verbatim, so a save written before this became linear
+/// carries the old geometric bonus baked in. Taking that item off subtracts
+/// the *new*, smaller figure and welds the difference into the player's base
+/// stats — the `EquippedItem::fusion_tier` trap, one rung along. It affects
+/// gear equipped at zone 2 or deeper only (level 1 is unscaled under both
+/// curves, so it is exactly zero there), it is a one-off per worn item, and
+/// it errs in the player's favour. It is *correctable* — since
+/// `SAVE_FORMAT_VERSION` 29 the payload is field-named RON, so a
+/// `#[serde(default)]` flag saying "this save's worn bonus is already
+/// linear" would load out of a file written before it existed and needs no
+/// bump at all. It is not done because the error is one-off, bounded by the
+/// item's base stats, and generous; a migration that rewrites a saved
+/// `Stats` to claw a few points back is more ways to be wrong than the bug
+/// is worth.
+/// `an_equip_and_its_unequip_cancel_exactly_at_every_zone` holds the
+/// invariant for every save written from here on.
+pub const GEAR_LEVEL_STEP: f64 = 1.0;
 
 /// Bonus `Game::fuse_item` adds to an item type's equipped stats, per
 /// fusion tier — additive, not compounding (tier 2 is +20%, not +21%).
@@ -1680,14 +1725,26 @@ mod tests {
         );
     }
 
-    /// The zone curve was a bare `1 << (zone - 1)` before it was named.
-    /// Pinning the sequence keeps a retune of `ZONE_STAT_GROWTH` honest
-    /// about what it costs: this is the steepest curve in the game, and
-    /// `balance_sim`'s level sweeps are projected against it.
+    /// The zone curve was a bare `1 << (zone - 1)` before it was named, and
+    /// geometric until it was measured. Pinning the sequence keeps a retune
+    /// honest about what it costs, and pinning it as *linear* is the point:
+    /// the player's side of the fight grows by a constant per level, so a
+    /// geometric enemy curve is a race the player loses at some finite zone
+    /// no matter how the coefficients are set. `balance_sim`'s level sweeps
+    /// are projected against this.
     #[test]
-    fn zone_stat_multiplier_doubles_per_level() {
-        let curve: Vec<i32> = (1..=5).map(|z| ZoneLevel(z).stat_multiplier()).collect();
-        assert_eq!(curve, vec![1, 2, 4, 8, 16]);
+    fn zone_stat_multiplier_rises_linearly_and_never_compounds() {
+        let curve: Vec<i32> = (1..=8).map(|z| ZoneLevel(z).stat_multiplier()).collect();
+        assert_eq!(curve, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+
+        // The property, stated as a property rather than as a table: every
+        // step is the same size. A geometric curve passes the table above
+        // for its first two entries and fails here at the third.
+        let steps: Vec<i32> = curve.windows(2).map(|w| w[1] - w[0]).collect();
+        assert!(
+            steps.iter().all(|&s| s == ZONE_STAT_STEP),
+            "the zone curve compounds somewhere: {steps:?}"
+        );
     }
 
     /// `Game::max_group_size` clamps its distance exponent to

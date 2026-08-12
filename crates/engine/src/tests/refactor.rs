@@ -1,7 +1,7 @@
 //! Permanent companion upgrades: the zone bump and the percentage buffs.
 
 use super::support::*;
-use crate::tuning::{MAX_COMPANION_REFACTORS, ZONE_STAT_GROWTH};
+use crate::tuning::MAX_COMPANION_REFACTORS;
 use crate::*;
 
 const KERNEL: &str = "recompile_kernel";
@@ -60,12 +60,8 @@ fn a_recompile_kernel_doubles_the_stat_block_and_raises_the_tier() {
     let (_, max_hp, atk, def) = stats(&game, pet);
     assert_eq!(
         (max_hp, atk, def),
-        (
-            80 * ZONE_STAT_GROWTH,
-            9 * ZONE_STAT_GROWTH,
-            5 * ZONE_STAT_GROWTH
-        ),
-        "a bump multiplies the whole block by one zone's growth"
+        (160, 18, 10),
+        "a bump moves the whole block up one zone tier — x2/1 from tier 1"
     );
     assert_eq!(
         game.world.get::<ZonePortal>(pet).unwrap().0,
@@ -73,6 +69,31 @@ fn a_recompile_kernel_doubles_the_stat_block_and_raises_the_tier() {
         "one tier at a time, not straight to the player's zone"
     );
     assert_eq!(held(&game, KERNEL), 0, "and the kernel is spent");
+}
+
+/// The tier step is a *ratio* on a linear zone curve, and tier 1 is the one
+/// tier where that is invisible: `stat_multiplier` runs 1, 2, 3, 4, so the
+/// first bump is x2 either way and every later one is not. This is the case
+/// that catches an `i32` step, which truncates 3/2 to 1 and makes a
+/// Recompile Kernel a no-op from tier 2 up.
+#[test]
+fn a_kernel_past_the_first_tier_applies_the_ratio_rather_than_truncating() {
+    let mut game = Game::new(401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    set_stats(&mut game, pet, 80, 9, 5);
+    game.world.entity_mut(pet).insert(ZonePortal(2));
+    set_zone(&mut game, 4);
+    stock(&mut game, KERNEL, 1);
+
+    game.refactor_companion(pet, &ItemId::from(KERNEL)).unwrap();
+
+    let (_, max_hp, atk, def) = stats(&game, pet);
+    assert_eq!(
+        (max_hp, atk, def),
+        (120, 13, 7),
+        "tier 2 to 3 is x3/2, not x1 and not x2"
+    );
+    assert_eq!(game.world.get::<ZonePortal>(pet).unwrap().0, 3);
 }
 
 /// Current HP rises by exactly what the maximum rose by. A level-up
@@ -339,14 +360,14 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
         "a geared program must refactor to exactly what a bare one does"
     );
     let (_, max_hp, atk, def) = stats(&game, pet);
-    let (_, was_max_hp, was_atk, was_def) = before_gear;
+    // 80/9/5 moved one zone tier from tier 1, which is x2/1. Spelled as
+    // numbers rather than as `raised_a_tier` so this is evidence about the
+    // curve rather than a restatement of it — the zone curve is linear, so
+    // the step is a ratio and only the *first* tier happens to be a clean x2.
     assert_eq!(
         (max_hp, atk, def),
-        (
-            was_max_hp * ZONE_STAT_GROWTH,
-            was_atk * ZONE_STAT_GROWTH,
-            was_def * ZONE_STAT_GROWTH
-        ),
+        (160, 18, 10),
         "and the multiplier lands on its own numbers, with no gear welded in"
     );
+    assert_eq!(before_gear.1, 80, "the pre-gear block this is measured from");
 }

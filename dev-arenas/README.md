@@ -36,10 +36,10 @@ number under the highlight, Enter opens a picker for a species, an item or a
 biome, Backspace removes a row. `[L]` loads a scenario from this directory,
 `[S]` writes one back to it, and `[F]` fights.
 
-The `Encounter:` row cycles `Authored → Field → Stack` with Left/Right. On
-`Authored` the `Against:` rows are the fight. On either of the others they
-disappear — a file cannot hold both — and a `Biome:` row takes their place,
-with a `Depth:` row beside it for `Stack`. Cycling back to `Authored` puts an
+The `Encounter:` row cycles `Authored → Field → Stack → Lair` with
+Left/Right. On `Authored` the `Against:` rows are the fight. On any of the
+others they disappear — a file cannot hold both — and a `Biome:` row takes
+their place, with a `Depth:` row beside it for `Stack` and `Lair`. Cycling back to `Authored` puts an
 opponent row back, so every state the row can reach is one `[S]` will write.
 
 A fight opens the real battle screen. **Specials fire, items are spent,
@@ -190,7 +190,21 @@ context and fighting whatever comes out.
 )
 
 encounter: Some(Field(biome: OpenGrid)),   // the surface, same zone
+encounter: Some(Lair(biome: Mainframe, depth: 4)),  // the guardian at the bottom
 ```
+
+`Stack` and `Lair` are both underground at a named depth and they ask
+different questions. `Stack` is the corridor — what a walk between frames
+costs — and it is **never a boss**: `stack_encounter_pack` passes
+`allow_boss: false`, so a lair guardian is unreachable from it. `Lair` is the
+thing at the bottom of the stack, which is the only boss the Stack fields and
+the game's only source of Portal Fragments. It runs `rouse_lair`'s own two
+steps — `pick_lair_species` and `spawn_pack` — without the cell underfoot, the
+`FrameMemory` record of a cleared lair, or the narration, since a scenario
+asks for the guardian directly rather than walking into it.
+
+Ask about them separately: a depth curve that leaves the corridor walkable can
+still leave the gate shut, and the gate is the one on the critical path.
 
 **Mutually exclusive with `opponents`** — one scenario asks one question, and
 a file holding both is an error naming both.

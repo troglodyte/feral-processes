@@ -27,6 +27,46 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.1
+
+### Difficulty rises in steps now, instead of doubling
+
+A zone used to double every wild program's stats, and every frame you
+descended into a stack multiplied them again. Your own side of the fight has
+never worked that way — a level is worth one point of ATK, an item a few flat
+points — so the two curves were never in a race you could win. Past a certain
+depth the arithmetic stopped mattering: every blow you landed came out as 1,
+and no amount of levelling, gear or roster changed it, because there was
+nothing left for those numbers to do.
+
+Both curves are now linear. A zone adds to enemy stats rather than doubling
+them, a frame of Stack adds a little more, and your gear tracks the same
+shape so it neither falls behind nor runs away. Deep is still hard — it is
+just hard in a way you can answer.
+
+What that means concretely, measured on a real stuck save at zone 1: the
+guardian at the bottom of a five-frame stack went from a fight won 3 times in
+40 to one won every time, and a six-frame stack from unwinnable at any level
+to a twenty-round fight. Deeper in, a zone-three guardian was unbeatable at
+level 90 in the best gear the game ships; it now wants about level 110. The
+levels a zone asks of you go up by roughly the same amount each time rather
+than doubling, which is the whole point — there is no longer a zone where the
+game quietly stops being finishable.
+
+Existing saves keep playing. If you are wearing something you equipped at
+zone 2 or deeper, its bonus was banked at the old rate and stays that way
+until you take it off, at which point you keep a few points you did not
+strictly earn.
+
+### Also
+
+- **The arena can stage a lair guardian.** `Encounter::Lair` on the arena
+  screen and in a scenario file fights the thing at the bottom of a stack,
+  which nothing could reach before — corridor ambushes never roll a boss.
+  `dev-saves/deep-lair.ron` is the run the numbers above came from.
+- A Recompile Kernel's zone bump was doing nothing past the second tier. It
+  applies properly now.
+
 ## 0.8.0
 
 ### Your programs can wear your gear

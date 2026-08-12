@@ -12,7 +12,7 @@ use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
-    STACK_DEPTH_STAT_GROWTH, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
+    STACK_DEPTH_STAT_STEP, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
     STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
     STACK_TILES_PER_FRAME,
 };
@@ -565,7 +565,7 @@ impl Game {
         match self.stack_pos() {
             None => 1.0,
             Some(pos) => {
-                STACK_DEPTH_STAT_GROWTH.powi(pos.depth as i32 - 1) * self.trace_stat_mult()
+                (1.0 + STACK_DEPTH_STAT_STEP * (pos.depth as f32 - 1.0)) * self.trace_stat_mult()
             }
         }
     }

@@ -454,10 +454,11 @@ fn swap_rows_are_sorted_best_first_with_unequip_last() {
     );
 }
 
-/// Gear is stamped with the zone level it was equipped at and doubles per
-/// level (`GEAR_LEVEL_GROWTH`), so a spare copy of what you already wear is
-/// a real upgrade after a breach. The delta has to compare the worn item at
-/// its *recorded* level against the candidate at the *current* zone's.
+/// Gear is stamped with the zone level it was equipped at and gains a flat
+/// step per level (`GEAR_LEVEL_STEP`), so a spare copy of what you already
+/// wear is a real upgrade after a breach. The delta has to compare the worn
+/// item at its *recorded* level against the candidate at the *current*
+/// zone's.
 #[test]
 fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
     let app = app_wearing_weapon(
@@ -478,14 +479,14 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
         .expect("a spare of the worn item is still a candidate");
 
     // Base +3 ATK: worn remembers level 1, a fresh equip lands at zone 3
-    // (3 * 2 * 2 = 12), so re-equipping is worth +9.
+    // (3 * 3 = 9), so re-equipping is worth +6.
     assert!(
-        row.label.contains("+12 ATK"),
+        row.label.contains("+9 ATK"),
         "the candidate should be previewed at the level it would equip at; got {:?}",
         row.label
     );
     assert!(
-        row.label.contains("+9 ATK"),
+        row.label.contains("+6 ATK"),
         "the delta should be the gain over the worn copy; got {:?}",
         row.label
     );

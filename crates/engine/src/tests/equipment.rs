@@ -40,8 +40,51 @@ fn equip_grants_stat_bonus_and_removes_item_from_inventory() {
     );
 }
 
+/// An equip and the unequip that undoes it must move `Stats` by the same
+/// amount in both directions, at every zone.
+///
+/// `apply_equipment_delta` writes the bonus straight into `Stats` and
+/// `unequip` subtracts a freshly *recomputed* one, so the two are only
+/// symmetric while `scaled_for_level` returns the same figure at both ends.
+/// Any change to the gear curve that leaves an old bonus baked into a saved
+/// `Stats` breaks it in the direction nobody notices: the unequip subtracts
+/// less than the equip added and welds the difference into the player's base
+/// stats permanently, with no record of where it came from. That is exactly
+/// the trap `EquippedItem::fusion_tier` carries a doc comment about.
 #[test]
-fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
+fn an_equip_and_its_unequip_cancel_exactly_at_every_zone() {
+    for zone in 1..=5 {
+        let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+
+        let before = game.player_status();
+        game.equip(player, &ItemId::from(ids::OVERCLOCK_CORE), 0)
+            .unwrap();
+        let worn = game.player_status();
+        game.unequip(player, EquipmentSlot::Weapon).unwrap();
+        let after = game.player_status();
+
+        assert!(
+            worn.atk > before.atk,
+            "zone {zone}: the equip did nothing, so the symmetry is vacuous"
+        );
+        assert_eq!(
+            (after.atk, after.def),
+            (before.atk, before.def),
+            "zone {zone}: {} ATK welded into base stats by an equip/unequip \
+             round trip",
+            after.atk - before.atk
+        );
+    }
+}
+
+#[test]
+fn equipping_gear_in_a_deeper_zone_adds_100_percent_of_base_per_level() {
     let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.resource_mut::<ZoneLevel>().0 = 3;
@@ -55,11 +98,13 @@ fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
         .unwrap();
 
     let status = game.player_status();
-    // Base +3 ATK, scaled 2x per level above 1: level 3 = 3 * 2^2 = 12.
+    // Base +3 ATK, plus 100% of base per level above 1: level 3 = 3 * 3 = 9.
+    // Linear, matching `ZoneLevel::stat_multiplier` — a geometric gear curve
+    // against a linear zone curve inverts the bug it was matched to fix.
     assert_eq!(
         status.atk,
-        atk_before + 12,
-        "gear equipped at zone level 3 should be scaled 2x per level"
+        atk_before + 9,
+        "gear equipped at zone level 3 should be base * 3"
     );
     assert_eq!(
         status.weapon,

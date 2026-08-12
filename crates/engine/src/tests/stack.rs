@@ -2891,19 +2891,19 @@ fn trace_scales_the_encounter_roll() {
 /// to Hunted meets a harder boss, having chosen to.
 #[test]
 fn trace_scales_enemy_stats_and_reaches_the_lair_through_depth() {
-    use crate::tuning::{STACK_DEPTH_STAT_GROWTH, TRACE_HUNTED};
+    use crate::tuning::{STACK_DEPTH_STAT_STEP, TRACE_HUNTED};
     let mut game = game();
     descend(&mut game);
     stand_on_link_down(&mut game);
     game.descend(); // depth 2
 
     let quiet = game.stack_depth_multiplier();
-    assert!((quiet - STACK_DEPTH_STAT_GROWTH.powi(1)).abs() < 1e-5);
+    assert!((quiet - (1.0 + STACK_DEPTH_STAT_STEP)).abs() < 1e-5);
 
     set_trace(&mut game, TRACE_HUNTED);
     let hunted = game.stack_depth_multiplier();
     assert!(
-        (hunted - STACK_DEPTH_STAT_GROWTH.powi(1) * 1.45).abs() < 1e-5,
+        (hunted - (1.0 + STACK_DEPTH_STAT_STEP) * 1.45).abs() < 1e-5,
         "Hunted should compound with depth, got {hunted}"
     );
 }

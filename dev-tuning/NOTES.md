@@ -78,15 +78,52 @@ cannot reach it by design.
 
 ## Baseline the tuner measured
 
+As of **2026-08-09**, before difficulty scaling became linear:
+
 ```
 opening-fight    100% win (want 92%),  47.8% HP left (want 62%)
 full-group       100% win (want 75%),  98.9% HP left (want 45%)
 stack-depth-5      0% win (want 55%),   0%   HP left (want 30%)
 ```
 
-The `full-group` row is its own finding: a geared zone-3 party clears a full
-enemy group having taken **about 1% damage**. Surface content at that point
-is trivial and depth 5 is a wall. A cliff, not a curve.
+Re-measured on **v0.8.1**, after it:
+
+```
+opening-fight    100% win (want 92%),    65% HP left (want 62%)
+full-group       100% win (want 75%),   100% HP left (want 45%)
+stack-depth-5      2% win (want 55%),     2% HP left (want 30%)
+```
+
+The `full-group` row was its own finding and still is: a geared zone-3 party
+clears a full enemy group having taken **about 1% damage**. Surface content
+at that point is trivial and depth 5 is a wall. A cliff, not a curve.
+
+**Read the two blocks together before pointing the tuner at anything.** The
+`opening-fight` row is `Fresh(level: 1, zone: 1)`, where the zone multiplier
+is x1 under either curve — so its 47.8% → 65% drift is *not* the scaling
+change, it is everything else that landed between those dates, and it is the
+reason a baseline needs re-measuring rather than reasoning about.
+
+What the linear change did and did not do here:
+
+- **`stack-depth-5` went 0% → 2%, and that is the honest size of it.** The
+  2026-08-08 diagnosis of this fight named two causes — every point of
+  player damage floored at `MIN_DAMAGE`, and 36 enemies against 4. Linear
+  scaling fixed the first and cannot touch the second: this seed fields
+  **32 opponents** (5 rootkit, 2 zero_day, 10 glitch, 15 scrapper), and
+  group size comes from `zone_group_cap`, which was already linear at +9 a
+  zone. A target of 55% is still ~53 points away and no stat proposal
+  closes that gap — it is a **volume** question, and the knob is in
+  `tuning.rs`, which the tuner cannot reach by design.
+- **The targets themselves still encode pre-change intent.** They were
+  authored against a game where a zone doubled. None of the three has been
+  re-argued since, so a run today is optimising the roster toward numbers
+  nobody has revisited. That is a game-design call, deliberately not made
+  here — the same line this file already draws about `tuning.rs`.
+- The tuner cannot undo the scaling change (it writes `assets/species/*.ron`
+  only), but it **can** partly re-create the old difficulty inside those
+  files, and nothing in a proposal's summary would say so. Re-argue the
+  targets before the next search, not after.
 
 ## Side-blindness — FIXED 2026-08-09
 

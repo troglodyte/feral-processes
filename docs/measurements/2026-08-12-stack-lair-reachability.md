@@ -120,3 +120,24 @@ drifted and zone 2 was nearly twice what it said.
 - **`balance_sim` still has no Stack term at all.** It sweeps zones with
   surface group sizes and models no depth, no lair and no abilities. That is
   why this file exists rather than a test.
+
+## What it means for the other instruments
+
+Asked after the fact, and worth recording because the answer was not
+obvious in either direction.
+
+- **The trained enemy policy is unaffected in kind and affected in
+  degree.** Every scale-sensitive feature is a ratio, so the weights are
+  scale-invariant and `assets/policies/enemy_battle.ron` did not need
+  regenerating. But the geometric curves used to drive those ratios into
+  their clamps in deep fights, flattening the gradient exactly where the
+  policy mattered; they now vary. Details and the consequences for
+  `dev-logs/policy-sweep/` are in `assets/policies/README.md`.
+- **The roster tuner's baseline moved and its targets did not.** Re-measured
+  in `dev-tuning/NOTES.md`. The row that matters is `stack-depth-5`, which
+  went 0% → 2% against a 55% target: this change fixed the *damage floor*
+  half of that fight and not the *32-opponents-against-4* half, which is
+  group size and lives in `tuning.rs` where the tuner cannot reach it.
+- **Nothing in `balance_sim` needs new data** — it recomputes from the live
+  constants on every `cargo test`, which is exactly why its curves belong
+  there and not here.

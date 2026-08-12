@@ -111,3 +111,37 @@ A retrained file that gives any of those three a non-zero weight will fail
 `bracing_still_draws_more_fire_under_the_shipped_weights` rather than
 shipping quietly. If you are writing weights by hand, that test is the one
 to run.
+
+## The weights survive a rebalance; the training data may not
+
+Every scale-sensitive feature is a **ratio**, by construction —
+`target_def_rel` is DEF over the attacker's ATK clamped to [0, 2],
+`est_damage_frac` is the real `compute_damage` result over the target's
+current HP, and the HP terms are fractions. So a change to how big stats get
+does not invalidate a trained file: double every number in the game and
+every feature value is unchanged. **A rebalance is not a reason to retrain.**
+
+What a rebalance *can* move is the **distribution** over that feature space,
+and v0.8.1 moved it in a way worth knowing about. Under the geometric zone
+and depth curves a deep fight drove those ratios into their clamps —
+`target_def_rel` pinned, `est_damage_frac` and `would_kill` pinned, every
+candidate target scoring alike — so the policy had no discriminating signal
+in exactly the fights it most needed one, and gradient there was flat. With
+linear scaling those features sit in their informative middle range again.
+
+Two practical consequences:
+
+- The shipped `enemy_battle.ron` is still **valid** and still passes its
+  census. It is simply fit to a sample that over-represents saturated
+  states. A retrain would probably find better weights, and is worth doing
+  before reading any conclusion about deep-fight behaviour off the current
+  file.
+- `dev-logs/policy-sweep/*.jsonl` was recorded before the change and is
+  **off-distribution** as a comparison set. Treat those runs the way
+  `CLAUDE.md` says to treat arena numbers generally: comparable within one
+  build, not across a rebalance.
+
+And the standing caveat, which no retrain changes: individual weights are
+not identifiable. A three-seed run put `move_power_rel` at 2.14, 0.93 and
+7.17 at equal fitness. Read the behaviour the file produces, never one
+coefficient.

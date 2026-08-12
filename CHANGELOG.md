@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.5
+
+### A compile row says what kind of thing it makes
+
+The Compile screen listed each recipe by name, by what it grants and by what
+it costs, and never said what the thing actually *is*. A Handshake Forge and
+a Bytecode Block read the same way, so the only way to tell the piece of gear
+from the machine feedstock was to already know — or to compile one and go
+looking for it in cargo.
+
+Every row now leads with the same kind tag the inventory and a trader's
+shelf have always shown, and the list is grouped by kind, so the tag reads as
+a heading for the run of rows beneath it: everything you spend, then
+everything you wear, then everything you hoard. A modded item gets its tag
+for free, since the tag comes off what its file already declares.
+
+### Long rows stop running off the edge of a screen
+
+The four recipes priced in Portal Fragments — Singularity Matrix, Nullsteel
+Plate, Oracle Core and Phase Carapace — were too wide to fit the Compile
+popup, and had been since they were added. The right-hand end of the
+ingredient list was simply drawn past the border and off the panel, so the
+recipes that cost the most were the ones you could not read the price of.
+
+A row that no longer fits now wraps: the item keeps the line with its
+shortcut on it, and its ingredients continue on the line beneath. The
+Recipes screen wraps the same way if anything there ever grows that wide.
+
 ## 0.8.4
 
 ### The Recipes screen says why you would make the thing

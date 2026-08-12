@@ -12,9 +12,8 @@ use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
-    STACK_DEPTH_STAT_STEP, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
-    STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
-    STACK_TILES_PER_FRAME,
+    STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN, STACK_LINK_SCATTER_TILES,
+    STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES, STACK_TILES_PER_FRAME,
 };
 use crate::*;
 
@@ -561,12 +560,13 @@ impl Game {
     /// `distance_stat_multiplier` rather than replacing them: a link far
     /// out in a deep zone is a nastier hole than one beside your base, and
     /// going down makes either worse.
+    /// The depth term alone is `stack::depth_stat_multiplier`, which a
+    /// market's quote is priced off: a price that moved because the party
+    /// had been noisy would change while the player was reading it.
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
         match self.stack_pos() {
             None => 1.0,
-            Some(pos) => {
-                (1.0 + STACK_DEPTH_STAT_STEP * (pos.depth as f32 - 1.0)) * self.trace_stat_mult()
-            }
+            Some(pos) => stack::depth_stat_multiplier(pos.depth) * self.trace_stat_mult(),
         }
     }
 

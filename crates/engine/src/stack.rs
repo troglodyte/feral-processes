@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use crate::tuning::{
     STACK_BREAKPOINTS_PER_FRAME, STACK_CACHES_PER_FRAME, STACK_CORRUPTION_PATCH_CELLS,
     STACK_CORRUPTION_PATCHES_PER_FRAME, STACK_DOORS_PER_FRAME, STACK_FAULTS_PER_FRAME,
-    STACK_ORPHANS_PER_FRAME,
+    STACK_MARKET_CHANCE, STACK_ORPHANS_PER_FRAME,
 };
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -236,6 +236,14 @@ pub enum CellKind {
     /// and whether it has already been taken lives in
     /// `resources::FrameMemory::adopted`, not in the frame.
     Orphan,
+    /// Somebody selling things, on a junction rather than down a spur.
+    ///
+    /// Not every frame has one — see `place_market`. What is on the shelf is
+    /// a function of the frame spec (`Game::market_offers`) and which rows
+    /// have already been bought lives in `resources::FrameMemory::bought`,
+    /// so a trader down here remembers nothing about the transaction and
+    /// what leaves the shelf is gone for the run.
+    Market,
 }
 
 impl CellKind {
@@ -384,6 +392,20 @@ impl Frame {
     }
 }
 
+/// What `depth` frames down multiplies a program's stats by, with nothing
+/// else folded in.
+///
+/// The bare depth term of `Game::stack_depth_multiplier`, which is that
+/// figure times the party's `trace_stat_mult`. Two callers want the depth
+/// alone: a Stack market's quote, which must not move because the party got
+/// noisy, and the stat line printed under it, which has to describe the
+/// same program the price is for. A function rather than the arithmetic
+/// twice, so the linear curve `STACK_DEPTH_STAT_STEP` documents at length
+/// has one expression.
+pub fn depth_stat_multiplier(depth: u32) -> f32 {
+    1.0 + crate::tuning::STACK_DEPTH_STAT_STEP * (depth as f32 - 1.0)
+}
+
 /// Builds the frame `spec` describes.
 ///
 /// Deterministic in the spec and nothing else. The RNG is seeded locally
@@ -469,6 +491,9 @@ pub fn generate(spec: FrameSpec) -> Frame {
     // for free — the two passes stay uncoupled and neither has to know the
     // other's count. See `an_orphan_sits_in_a_dead_end_the_caches_left`.
     place_orphan(&mut level, &mut rng);
+    // Last of all, and that is a constraint rather than an ordering that
+    // happened — see `place_market`.
+    place_market(&mut level, &mut rng);
 
     level
 }
@@ -684,6 +709,41 @@ fn place_orphan(level: &mut Frame, rng: &mut StdRng) {
     let ends = shuffled_floor(level, rng, is_dead_end);
     for &(x, y) in ends.iter().take(STACK_ORPHANS_PER_FRAME) {
         level.set(x, y, CellKind::Orphan);
+    }
+}
+
+/// Stands somebody selling things on a junction, on some frames and not
+/// others.
+///
+/// A junction for the same reason `place_breakpoint` takes one — dead ends
+/// belong to caches and an orphan — and because a stall is something you
+/// walk *past*: a market at the end of a spur is a market most parties
+/// never learn is there. It runs after every other pass and so takes a
+/// junction they left, exactly as `place_orphan` takes a dead end
+/// `place_caches` left.
+///
+/// **Running last is load-bearing**, and it is the whole reason this sits
+/// here rather than beside the breakpoint it most resembles. Every pass
+/// draws its sites from `shuffled_floor`, which collects plain `Floor`
+/// cells and then shuffles them — so a cell claimed early is a candidate
+/// silently deleted from every later pass's shuffle, moving sites that have
+/// nothing to do with markets. A frame is regenerated from its spec rather
+/// than saved (`Game::enter_frame`), so cells moving under a party already
+/// standing in that frame is not a cosmetic problem: it is a loaded save
+/// finding itself in rock. Last, nothing is downstream to move, and the
+/// counts `every_frame_fields_a_full_set_of_caches_and_an_orphan` pins are
+/// measured on frames this has already run on.
+///
+/// The roll comes before the site scan so a frame without a market spends
+/// exactly one draw on the question, rather than shuffling a hundred cells
+/// to throw them away.
+fn place_market(level: &mut Frame, rng: &mut StdRng) {
+    if !rng.random_bool(STACK_MARKET_CHANCE) {
+        return;
+    }
+    let sites = shuffled_floor(level, rng, |l, x, y| exits(l, x, y) >= 3);
+    if let Some(&(x, y)) = sites.first() {
+        level.set(x, y, CellKind::Market);
     }
 }
 
@@ -1895,6 +1955,58 @@ mod tests {
         }
     }
 
+    /// Some frames have a stall and some do not, and no frame has two.
+    ///
+    /// The count is what a `.take(1)` would give whatever the roll did, so
+    /// the sweep has to see *both* answers or the chance is not doing
+    /// anything. Bounds rather than a figure: the rate is
+    /// `STACK_MARKET_CHANCE` times however often a frame has a spare
+    /// junction left after every other pass, and pinning that product would
+    /// be a test of the braid.
+    #[test]
+    fn a_market_stands_on_some_frames_and_not_others() {
+        let mut with = 0;
+        let mut without = 0;
+        for world_seed in 0..90 {
+            for depth in 1..=5 {
+                let level = generate(spec(world_seed, depth));
+                match cells_of(&level, CellKind::Market).len() {
+                    0 => without += 1,
+                    1 => with += 1,
+                    n => panic!("seed {world_seed} depth {depth} placed {n} markets"),
+                }
+            }
+        }
+        assert!(with > 0, "the sweep placed no markets at all");
+        assert!(without > 0, "every frame in the sweep had a market");
+        assert!(
+            with < without,
+            "markets outnumber frames without one ({with} vs {without}) — \
+             STACK_MARKET_CHANCE is under half, so something is placing one \
+             whatever the roll said"
+        );
+    }
+
+    /// A stall goes where the party walks past it, not down a spur. The
+    /// spurs are `place_caches`' and `place_orphan`'s, and a market at the
+    /// end of one is a market most parties never learn is there.
+    #[test]
+    fn a_market_stands_on_a_junction() {
+        for world_seed in 0..90 {
+            for depth in 1..=5 {
+                let level = generate(spec(world_seed, depth));
+                for (x, y) in cells_of(&level, CellKind::Market) {
+                    assert!(
+                        exits(&level, x, y) >= 3,
+                        "seed {world_seed} depth {depth}: the market at \
+                         ({x}, {y}) has {} exits",
+                        exits(&level, x, y)
+                    );
+                }
+            }
+        }
+    }
+
     /// The door trap, guarded. A cell that is both walkable and
     /// sight-blocking fills the first-person view with its own face and
     /// truncates the map to the party's row — the bug doors shipped with,
@@ -1908,6 +2020,7 @@ mod tests {
             CellKind::Fault,
             CellKind::Corruption,
             CellKind::Orphan,
+            CellKind::Market,
         ] {
             assert!(kind.walkable(), "{kind:?} is not walkable");
             assert!(

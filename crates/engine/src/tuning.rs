@@ -794,6 +794,70 @@ pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 /// place with no reason to visit it.
 pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 
+// ---- The Stack: markets ----------------------------------------------
+//
+// Somebody is running a stall down there. What is on it is a function of
+// the frame (`Game::market_offers`); what it costs is here.
+
+/// The odds a Stack frame has a market on it at all — see
+/// `stack::place_market`.
+///
+/// Well under half, deliberately: a stall you meet on every frame is a
+/// shop, and a shop is somewhere you go back to. The whole of what makes
+/// this one worth stopping at is that the next frame probably hasn't got
+/// one, and neither has this one once you have bought the shelf out.
+pub const STACK_MARKET_CHANCE: f64 = 0.35;
+
+/// How many routines a market lists, before the program row it may or may
+/// not also carry.
+///
+/// Two rather than one so the shelf poses a choice rather than a price, and
+/// not more because each is listed at all three scopes below — four rows a
+/// routine, and a screen that has to be scrolled is a screen that hides the
+/// thing you came for.
+pub const STACK_MARKET_ROUTINE_OFFERS: usize = 2;
+
+/// The odds a market also has a program for sale.
+pub const STACK_MARKET_PROGRAM_CHANCE: f64 = 0.4;
+
+/// What a market charges to write a routine into one program's free slot,
+/// into every fielded party member's, and into every program on the roster.
+///
+/// Flat Credits rather than anything derived from the routine: the market
+/// is selling the *writing*, not the knowledge (nothing here touches
+/// `KnownRoutines`), and what a slot is worth does not depend on what goes
+/// in it. Against `STACK_CACHE_CREDITS` at 12-30 a cache and three caches a
+/// frame, the cheapest rung is a frame or two of thorough looting at depth
+/// 1 and much less deeper down.
+///
+/// The party rung is deliberately only twice the single rung while covering
+/// up to `MAX_PARTY_SIZE` programs, and the roster rung is priced above
+/// what a roster is ever likely to hold: buying breadth is the point of the
+/// ladder, and the top rung is a run's savings rather than an errand.
+pub const STACK_MARKET_ROUTINE_PRICE_ONE: u32 = 150;
+pub const STACK_MARKET_ROUTINE_PRICE_PARTY: u32 = 300;
+pub const STACK_MARKET_ROUTINE_PRICE_EVERYONE: u32 = 1000;
+
+/// What a market charges per point of a program's power (`Stats::power()`
+/// as the species would spawn at this depth).
+///
+/// Must stay comfortably above the reciprocal of the surface trader's
+/// `program_sell_divisor` (10, in `assets/structures/black_market.ron`), or
+/// buying a program down here and selling it up there prints Credits. At 2
+/// the round trip returns a twentieth of what it cost, and
+/// `a_market_program_costs_more_than_a_trader_would_pay_for_it` is what
+/// holds that against a retune of either number.
+pub const STACK_MARKET_PROGRAM_PRICE_PER_POWER: u32 = 2;
+
+/// What a market pays per unit of `ItemDef::value` for goods sold to it.
+///
+/// The same 1 the surface trader pays (`black_market.ron`'s `sell_rate`),
+/// and that is the point: a Stack market is worth stopping at for *where*
+/// it is and what is on the shelf, never for a better price. A rate above
+/// the surface one would make hauling a Mining Node's output down a hole
+/// the best-paying thing in the game, on a curve nothing gates.
+pub const STACK_MARKET_SELL_RATE: u32 = 1;
+
 /// Chance per step that walking a Stack corridor draws an encounter.
 ///
 /// Much higher than `RANDOM_ENCOUNTER_CHANCE` on purpose: crossing open

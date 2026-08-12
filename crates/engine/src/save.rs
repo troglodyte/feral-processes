@@ -617,6 +617,7 @@ mod tests {
                 fights: [(5, 5)].into_iter().collect(),
                 jacked: [(7, 2)].into_iter().collect(),
                 adopted: [(9, 4)].into_iter().collect(),
+                bought: [0, 4].into_iter().collect(),
             },
         );
 

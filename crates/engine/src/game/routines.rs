@@ -174,12 +174,34 @@ impl Game {
             .unwrap()
             .take(disk, 1);
         let ability_name = self.ability_display_name(ability);
-        let mut installed = installed;
-        installed.push(ability.to_string());
-        self.world.entity_mut(entity).insert(Routines(installed));
+        self.write_routine(entity, ability);
         let name = self.routine_holder_label(entity);
         self.log(format!("{name} now runs {ability_name}."));
         Ok(())
+    }
+
+    /// Writes `ability` into `entity`'s next free slot, and nothing else —
+    /// no ownership check, no knowledge check, no disk.
+    ///
+    /// Every one of those absences is the caller's business, and the two
+    /// callers disagree about all of them: `install_routine` above spends a
+    /// blank disk on a routine the player has *learned*, while
+    /// `Game::buy_market_offer` spends Credits on a routine a Stack trader
+    /// writes without teaching. What they must agree on is what a slot is
+    /// and how one gets filled, which is the whole of what lives here.
+    ///
+    /// Silently does nothing if there is no room. Both callers check first —
+    /// this refusing loudly would be a second copy of a rule they each
+    /// already have to state in their own vocabulary.
+    pub(crate) fn write_routine(&mut self, entity: Entity, ability: &str) {
+        let Some(mut installed) = self.world.get::<Routines>(entity).map(|r| r.0.clone()) else {
+            return;
+        };
+        if installed.len() >= self.routine_slots(entity) {
+            return;
+        }
+        installed.push(ability.to_string());
+        self.world.entity_mut(entity).insert(Routines(installed));
     }
 
     /// Frees `slot`. The disk that filled it was spent at install and is not

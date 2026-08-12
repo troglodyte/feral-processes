@@ -27,7 +27,7 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## 0.8.6
+## 0.8.7
 
 ### Somebody is selling things four frames down
 

@@ -67,7 +67,6 @@ impl App {
             trade_origin: TradeOrigin::Trader,
             pending_trade_program: None,
             trade_quantity_input: String::new(),
-            pending_market_offer: None,
             zoom: 2,
             stack_zoom: STACK_MAP_MIN_ZOOM,
             menu_selected: 0,

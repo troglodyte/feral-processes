@@ -3931,6 +3931,7 @@ fn ability_of(game: &mut Game, index: usize) -> String {
     let pos = game.stack_pos().unwrap();
     match game.market_offers(pos)[index].clone() {
         MarketOfferKind::Routine { ability, .. } => ability,
+        MarketOfferKind::ExclusiveDisk { ability } => ability,
         MarketOfferKind::Program { .. } => panic!("row {index} is a program, not a routine"),
     }
 }
@@ -3971,7 +3972,7 @@ fn a_markets_shelf_survives_a_save_and_load() {
 /// to prevent.
 #[test]
 fn a_market_never_lists_a_hunt_only_routine() {
-    let mut game = game_at_a_market();
+    let game = game_at_a_market();
     let hunt_only: Vec<String> = game
         .world
         .resource::<crate::abilities::AbilityDb>()
@@ -4001,26 +4002,28 @@ fn a_market_never_lists_a_hunt_only_routine() {
     assert!(listed > 0, "no shelf in the sweep listed a routine at all");
 }
 
-/// Buying the narrowest rung writes the routine into the holder named,
-/// spends the Credits, and grants no *knowledge*: the market sells the
-/// writing, not the routine. Selling knowledge would retire research and
-/// extraction the first time a party walked past a stall.
+/// Buying the narrowest rung hands over one etched disk, spends the
+/// Credits, and grants no *knowledge*: the market sells the writing, not
+/// the routine. Selling knowledge would retire research and extraction the
+/// first time a party walked past a stall.
+///
+/// The disk lands in cargo rather than in a slot, which is the whole of
+/// what disk-first bought: nothing about the purchase asks who it is for,
+/// and a party with every slot full can still buy.
 #[test]
-fn buying_a_routine_for_one_program_writes_it_without_teaching_it() {
+fn buying_a_routine_hands_over_a_disk_without_teaching_it() {
     let mut game = game_at_a_market();
     give_credits(&mut game, 5_000);
     let before = credits(&game);
 
     let index = first_single_routine(&mut game);
     let ability = ability_of(&mut game, index);
-    let pet = spawn_holder(&mut game);
-    game.buy_market_offer(index, Some(pet)).unwrap();
+    game.buy_market_offer(index).unwrap();
 
-    assert!(
-        game.routine_view(pet)
-            .iter()
-            .any(|slot| slot.ability.as_deref() == Some(ability.as_str())),
-        "the program is not running what was bought for it"
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        RoutineScope::One.disks(),
+        "the rung's disks are what landed in cargo"
     );
     assert_eq!(
         credits(&game),
@@ -4029,56 +4032,59 @@ fn buying_a_routine_for_one_program_writes_it_without_teaching_it() {
     );
     assert!(
         !game.knows_routine(&ability),
-        "the market taught the routine as well as writing it — research and \
+        "the market taught the routine as well as selling it — research and \
          extraction are the only two ways to *know* one"
+    );
+
+    // And the disk is a real one: it installs through the ordinary door.
+    let pet = spawn_holder(&mut game);
+    game.install_disk(pet, &ability)
+        .expect("a bought disk must install like any other");
+    assert!(
+        game.routine_view(pet)
+            .iter()
+            .any(|slot| slot.ability.as_deref() == Some(ability.as_str())),
+        "the program is not running what was bought"
     );
 }
 
-/// The party rung reaches everyone fielded and nobody else, and skips
-/// whoever cannot take it rather than refusing the whole purchase — a rung
-/// that failed because one of five programs was full would be unbuyable
-/// exactly when it is most worth buying.
+/// Each rung is the same routine at a different bundle size, and the sizes
+/// are the constants rather than whatever the party happens to be — the
+/// point of pinning it is that a shelf quoting three and delivering two
+/// (because a companion was dismissed between reading and paying) is the
+/// bug the constants exist to prevent.
 #[test]
-fn the_party_rung_writes_to_every_fielded_program_that_has_room() {
-    let mut game = game_at_a_market();
-    give_credits(&mut game, 5_000);
-
-    let index = first_offer(&mut game, |offer| {
-        matches!(
-            offer,
-            MarketOfferKind::Routine {
-                scope: RoutineScope::Party,
-                ..
-            }
-        )
-    })
-    .expect("every shelf lists its routines at all three scopes");
-    let ability = ability_of(&mut game, index);
-
-    // The player starts with one slot and `decompile` already in it, so a
-    // level-1 party is one the rung correctly reaches and correctly skips.
-    let player = game.player_entity();
-    set_level(&mut game, player, 20);
-    let fielded = spawn_holder(&mut game);
-    game.add_companion(fielded).unwrap();
-    let benched = spawn_holder(&mut game);
-
-    game.buy_market_offer(index, None).unwrap();
-
-    let runs = |game: &Game, e: Entity| {
-        game.world
-            .get::<crate::components::Routines>(e)
-            .is_some_and(|r| r.0.iter().any(|id| *id == ability))
+fn the_wider_rungs_hand_over_more_disks_of_the_same_routine() {
+    use crate::tuning::{
+        STACK_MARKET_ROUTINE_DISKS_EVERYONE, STACK_MARKET_ROUTINE_DISKS_ONE,
+        STACK_MARKET_ROUTINE_DISKS_PARTY,
     };
-    assert!(runs(&game, fielded), "a fielded program was skipped");
-    assert!(
-        runs(&game, game.player_entity()),
-        "the player is in their own party and was skipped"
-    );
-    assert!(
-        !runs(&game, benched),
-        "the party rung reached a program that is not in the party"
-    );
+    for (scope, expected) in [
+        (RoutineScope::One, STACK_MARKET_ROUTINE_DISKS_ONE),
+        (RoutineScope::Party, STACK_MARKET_ROUTINE_DISKS_PARTY),
+        (RoutineScope::Everyone, STACK_MARKET_ROUTINE_DISKS_EVERYONE),
+    ] {
+        let mut game = game_at_a_market();
+        give_credits(&mut game, 5_000);
+        let index = first_offer(&mut game, |offer| {
+            matches!(offer, MarketOfferKind::Routine { scope: s, .. } if *s == scope)
+        })
+        .expect("every shelf lists its routines at all three rungs");
+        let ability = ability_of(&mut game, index);
+
+        // A party deliberately smaller than the widest rung: if the quantity
+        // were read off `Party` rather than off the constant, the roster rung
+        // would hand over two disks here instead of six.
+        let fielded = spawn_holder(&mut game);
+        game.add_companion(fielded).unwrap();
+
+        game.buy_market_offer(index).unwrap();
+        assert_eq!(
+            game.etched_disks_of(&ability),
+            expected,
+            "{scope:?} must hand over exactly its constant, whatever the party looks like"
+        );
+    }
 }
 
 /// What "whatever's sold is gone" means on the shelf. The row leaving is
@@ -4088,11 +4094,10 @@ fn the_party_rung_writes_to_every_fielded_program_that_has_room() {
 fn a_bought_row_stays_gone() {
     let mut game = game_at_a_market();
     give_credits(&mut game, 5_000);
-    let pet = spawn_holder(&mut game);
 
     let before = game.stack_market().unwrap().offers.len();
     let index = first_single_routine(&mut game);
-    game.buy_market_offer(index, Some(pet)).unwrap();
+    game.buy_market_offer(index).unwrap();
 
     let after = game.stack_market().unwrap();
     assert_eq!(after.offers.len(), before - 1);
@@ -4101,7 +4106,7 @@ fn a_bought_row_stays_gone() {
         "the row that was just bought is still on the shelf"
     );
     assert_eq!(
-        game.buy_market_offer(index, Some(pet)),
+        game.buy_market_offer(index),
         Err("That's already been sold.".to_string()),
         "and buying it again is refused rather than sold twice"
     );
@@ -4213,15 +4218,30 @@ fn a_refused_purchase_spends_nothing() {
     let index = first_single_routine(&mut game);
     let ability = ability_of(&mut game, index);
 
-    // Too poor.
+    // Too poor — the one refusal a routine row still has.
     let broke = credits(&game);
     let pet = spawn_holder(&mut game);
-    assert!(game.buy_market_offer(index, Some(pet)).is_err());
+    assert!(game.buy_market_offer(index).is_err());
     assert_eq!(credits(&game), broke, "a refused purchase took Credits");
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        0,
+        "a refused purchase delivered anyway"
+    );
+    assert!(
+        game.stack_market()
+            .unwrap()
+            .offers
+            .iter()
+            .any(|row| row.index == index),
+        "and the row it refused came off the shelf"
+    );
 
-    // Rich, but the holder has no room left.
+    // Rich, and every slot in the party full — which used to refuse the
+    // whole purchase and now does not, because a disk goes in the pack and
+    // asks nothing about slots. This is the behaviour disk-first bought,
+    // pinned so a revert is a failing test rather than a quiet regression.
     give_credits(&mut game, 5_000);
-    let rich = credits(&game);
     let slots = game.routine_slots(pet);
     let filler: Vec<String> = game
         .world
@@ -4240,21 +4260,11 @@ fn a_refused_purchase_spends_nothing() {
         game.write_routine(pet, &id);
     }
 
-    assert!(
-        game.buy_market_offer(index, Some(pet)).is_err(),
-        "a program with every slot filled took delivery anyway"
-    );
+    game.buy_market_offer(index)
+        .expect("a full party must not block buying a disk to carry");
     assert_eq!(
-        credits(&game),
-        rich,
-        "a purchase nobody could take still charged for it"
-    );
-    assert!(
-        game.stack_market()
-            .unwrap()
-            .offers
-            .iter()
-            .any(|row| row.index == index),
-        "and the row it refused came off the shelf"
+        game.etched_disks_of(&ability),
+        RoutineScope::One.disks(),
+        "the disk is in the pack, waiting for a slot to free up"
     );
 }

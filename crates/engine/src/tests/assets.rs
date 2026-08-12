@@ -644,6 +644,13 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 /// cast from the map, never appear in the battle picker, and each is its
 /// own thing — Deep Scan has no Single tier because a scope ladder is not
 /// what that half of the set is organised by.
+///
+/// **Exclusive routines are excluded for the opposite reason.** The ladder
+/// exists so that meeting a family at its widest rung means a cheaper rung
+/// is also reachable; an exclusive routine has no cheaper rung anywhere by
+/// design, because there is no path to it but a boss or a trader. Building
+/// three rungs of Kernel Shear so it could sit in this list would triple the
+/// exclusive pool for a reason no player would ever see.
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -653,7 +660,7 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .filter(|d| !d.effect.field_only())
+        .filter(|d| !d.effect.field_only() && !d.exclusive)
     {
         scopes
             .entry(family(def))
@@ -675,6 +682,13 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
 /// ladder is what every Everyone-tier magnitude was derived against, and
 /// nothing else gates it — a new file could otherwise undercut a whole
 /// family's Group tier while reaching further than it.
+///
+/// The Fatigue half is skipped for **passives**, and only for them: Fatigue
+/// is what running a routine costs the player, and a passive is never run
+/// by the player — it fires on its trigger and takes no turn. The cooldown
+/// half still applies to everything, passive or not, because a cooldown is
+/// what bounds how often the effect lands and that question does not care
+/// who asked for it.
 #[test]
 fn every_everyone_scope_routine_pays_the_everyone_tier_price() {
     use crate::abilities::AbilityTarget;
@@ -686,7 +700,7 @@ fn every_everyone_scope_routine_pays_the_everyone_tier_price() {
         .filter(|d| d.target == AbilityTarget::AllEnemies)
     {
         assert!(
-            def.fatigue_cost >= 15.0,
+            def.is_passive() || def.fatigue_cost >= 15.0,
             "{:?} reaches the whole field for {} Fatigue; the Everyone tier starts at 15",
             def.id,
             def.fatigue_cost
@@ -932,7 +946,15 @@ fn a_nan_affinity_disqualifies_the_file_and_the_rest_still_load() {
 /// obtainable.
 ///
 /// Research hands routine items to the player; a species file is what a
-/// companion's kit comes from. Either counts as reachable.
+/// companion's kit comes from; an exclusive routine's `boss_drop` is what a
+/// boss leaves behind. Any of the three counts as reachable.
+///
+/// A boss drop counts as a door but an empty `boss_drop` does not: an
+/// exclusive routine naming no species at all would still be listed on a
+/// Stack trader's rare shelf, but the shelf draws from the whole exclusive
+/// pool and a routine reachable *only* by a market roll is one most runs
+/// never see. Requiring a boss keeps the fighting path open to every one of
+/// them, which is what `progression is earned by fighting` means here.
 #[test]
 fn every_shipped_field_routine_can_actually_be_obtained() {
     let game = Game::new(4711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -957,6 +979,11 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
         .resource::<crate::abilities::AbilityDb>()
         .all()
         .filter(|def| def.effect.field_only())
+        .filter(|def| {
+            !def.boss_drop
+                .as_ref()
+                .is_some_and(|sources| !sources.is_empty())
+        })
         .map(|def| def.id.as_str())
         .filter(|id| !granted.contains(id))
         .collect();

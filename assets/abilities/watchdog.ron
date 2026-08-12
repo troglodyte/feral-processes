@@ -1,0 +1,21 @@
+(
+    id: "watchdog",
+    name: "Watchdog Party",
+    // Exclusive and PASSIVE: the Overseer's. Fires the round a condition
+    // lands on its holder and clears it off everyone, which makes a party
+    // running one close to immune to status — hence exclusive, and hence
+    // the four-round cooldown. Between firings the party takes Bleed and
+    // Stun like anybody else.
+    //
+    // `Cleanse` rather than a heal because the trigger is the condition
+    // landing: answering it with Integrity would be answering a different
+    // question.
+    description: "The moment something sticks to you, it comes off everyone",
+    target: WholeParty,
+    effect: Cleanse,
+    cooldown: 4,
+    fatigue_cost: 0.0,
+    exclusive: true,
+    triggers: Some(Afflicted),
+    boss_drop: Some([("overseer", 0.35)]),
+)

@@ -40,7 +40,7 @@ impl Game {
             };
             for id in &installed.0 {
                 let Some(def) = db.get(id) else { continue };
-                if !def.effect.field_only() {
+                if !def.effect.field_only() || def.is_passive() {
                     continue;
                 }
                 let (cost, held, unit) = match &def.effect {

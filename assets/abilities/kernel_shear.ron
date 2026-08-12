@@ -1,0 +1,15 @@
+(
+    id: "kernel_shear",
+    name: "Kernel Shear Group",
+    // Exclusive: Wintermute's, and nobody etches a blank with it. Twenty-two
+    // across a whole group against segfault_v3's seventeen into one face is
+    // the premium, and the four-round cooldown is what stops it being the
+    // only routine anyone would ever field.
+    description: "Tear a whole group open and leave every one of them bleeding",
+    target: WholeEnemyGroup,
+    effect: Damage(power: 22, status: Some((kind: Bleed, chance: 0.75, duration: 4, power: 6))),
+    cooldown: 4,
+    fatigue_cost: 16.0,
+    exclusive: true,
+    boss_drop: Some([("wintermute", 0.35)]),
+)

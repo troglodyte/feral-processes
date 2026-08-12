@@ -81,24 +81,11 @@ impl App {
         };
         match market_row(idx, view.offers.len(), view.sells.len()) {
             Some(MarketRow::Offer(i)) => {
-                let offer = &view.offers[i];
-                // The one rung with a question left. The other two know
-                // their own recipients, so sending them through a picker
-                // would be asking the player to confirm a choice they do
-                // not have.
-                if matches!(
-                    offer.kind,
-                    MarketOfferKind::Routine {
-                        scope: RoutineScope::One,
-                        ..
-                    }
-                ) {
-                    self.pending_market_offer = Some(offer.index);
-                    self.menu_selected = 0;
-                    self.mode = Mode::StackMarketTarget;
-                    return;
-                }
-                self.buy_market_offer(offer.index, None);
+                // No target picker on any row any more: every routine row
+                // sells disks into cargo, and who runs them is a question
+                // the routine panel asks later. That is what deleted
+                // `Mode::StackMarketTarget`.
+                self.buy_market_offer(view.offers[i].index);
             }
             Some(MarketRow::Sell(i)) => {
                 let row = &view.sells[i];
@@ -108,41 +95,16 @@ impl App {
         }
     }
 
-    /// Picks who the routine row held in `pending_market_offer` is written
-    /// to. The same holder list the routine panel offers, so "who can run a
-    /// routine" is answered in one place.
-    pub(crate) fn handle_stack_market_target_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.pending_market_offer = None;
-            self.mode = Mode::StackMarket;
-            return;
-        }
-        let Some(index) = self.pending_market_offer else {
-            self.mode = Mode::StackMarket;
-            return;
-        };
-        let Some(holders) = self.game.as_mut().map(|g| g.routine_holders()) else {
-            return;
-        };
-        if let Some(idx) = self.selected_index(key, holders.len()) {
-            let holder = holders[idx].entity;
-            self.pending_market_offer = None;
-            self.buy_market_offer(index, Some(holder));
-            self.menu_selected = 0;
-            self.mode = Mode::StackMarket;
-        }
-    }
-
     /// Runs one purchase and reports it, and drops back to the map if that
     /// was the last row on the shelf — a screen left open on a stall with
     /// nothing on it is a screen the player has to press Esc to escape for
     /// no reason.
     ///
-    /// Both entry points come through here so what may be bought is decided
-    /// once, by `Game`, exactly as `execute_trade` does for the surface.
-    fn buy_market_offer(&mut self, index: usize, target: Option<Entity>) {
+    /// What may be bought is decided by `Game`, exactly as `execute_trade`
+    /// does for the surface — this only reports the answer.
+    fn buy_market_offer(&mut self, index: usize) {
         let Some(game) = &mut self.game else { return };
-        match game.buy_market_offer(index, target) {
+        match game.buy_market_offer(index) {
             Ok(()) => self.status_line = None,
             Err(e) => self.status_line = Some(e),
         }
@@ -165,7 +127,6 @@ impl App {
     fn close_if_bought_out(&mut self) {
         self.check_game_over();
         if self.mode == Mode::GameOver {
-            self.pending_market_offer = None;
             return;
         }
         if self
@@ -173,7 +134,6 @@ impl App {
             .as_mut()
             .is_some_and(|g| g.stack_market().is_none())
         {
-            self.pending_market_offer = None;
             self.mode = Mode::Playing;
         }
     }

@@ -86,34 +86,3 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
     );
 }
 
-/// Who the picked routine is written to. The same list the routine panel
-/// draws, since it is the same question.
-pub(super) fn draw_stack_market_target(
-    game: &mut Game,
-    selected: usize,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let holders = game.routine_holders();
-    let mut rows = vec![text_row("Written into whose slot?")];
-    for (i, holder) in holders.iter().enumerate() {
-        rows.push(with_icon(
-            item_row(
-                format!(
-                    "[{}] {} (lv {}) — {}/{} slots used",
-                    menu_shortcut(i),
-                    holder.name,
-                    holder.level,
-                    holder.filled,
-                    holder.slots
-                ),
-                i == selected,
-            ),
-            holder.glyph,
-            glyph_color(holder.color),
-        ));
-    }
-    rows.push(text_row(""));
-    rows.push(text_row("A full program is skipped, not refused."));
-    draw_popup("Routine", PopupSize::Large, &rows, painter, m);
-}

@@ -820,23 +820,64 @@ pub const STACK_MARKET_ROUTINE_OFFERS: usize = 2;
 /// The odds a market also has a program for sale.
 pub const STACK_MARKET_PROGRAM_CHANCE: f64 = 0.4;
 
-/// What a market charges to write a routine into one program's free slot,
-/// into every fielded party member's, and into every program on the roster.
+/// What a market charges for a bundle of etched disks: one, enough for a
+/// fielded party, and enough for a roster.
 ///
 /// Flat Credits rather than anything derived from the routine: the market
 /// is selling the *writing*, not the knowledge (nothing here touches
-/// `KnownRoutines`), and what a slot is worth does not depend on what goes
-/// in it. Against `STACK_CACHE_CREDITS` at 12-30 a cache and three caches a
-/// frame, the cheapest rung is a frame or two of thorough looting at depth
-/// 1 and much less deeper down.
+/// `KnownRoutines`), and what a disk is worth does not depend on what is
+/// burnt onto it. Against `STACK_CACHE_CREDITS` at 12-30 a cache and three
+/// caches a frame, the cheapest rung is a frame or two of thorough looting
+/// at depth 1 and much less deeper down.
 ///
-/// The party rung is deliberately only twice the single rung while covering
-/// up to `MAX_PARTY_SIZE` programs, and the roster rung is priced above
-/// what a roster is ever likely to hold: buying breadth is the point of the
-/// ladder, and the top rung is a run's savings rather than an errand.
+/// The party rung is deliberately only twice the single rung while carrying
+/// three times the disks, and the roster rung is priced above what a roster
+/// is ever likely to need: buying breadth is the point of the ladder, and
+/// the top rung is a run's savings rather than an errand.
 pub const STACK_MARKET_ROUTINE_PRICE_ONE: u32 = 150;
 pub const STACK_MARKET_ROUTINE_PRICE_PARTY: u32 = 300;
 pub const STACK_MARKET_ROUTINE_PRICE_EVERYONE: u32 = 1000;
+
+/// How many etched disks each price rung above hands over.
+///
+/// **Constants rather than the live party and roster sizes**, and that is
+/// the whole reason they are here rather than read off `Party` and
+/// `owned_pets`. A quantity derived from the party would change between the
+/// player reading the shelf and paying for it — a program dismissed, a
+/// companion left behind — which is exactly the objection
+/// `Game::market_program_price` already makes about folding Trace into a
+/// quote. What is on the shelf has to be what is bought.
+///
+/// `MAX_PARTY_SIZE` and a roster's realistic size are what these are
+/// modelled on, but they are not *bound* to them: a retune of party size is
+/// not automatically a retune of what a shelf sells.
+pub const STACK_MARKET_ROUTINE_DISKS_ONE: u32 = 1;
+pub const STACK_MARKET_ROUTINE_DISKS_PARTY: u32 = 3;
+pub const STACK_MARKET_ROUTINE_DISKS_EVERYONE: u32 = 6;
+
+/// The odds a market carries an exclusive routine's etched disk, as
+/// `BASE + PER_DEPTH * depth`, clamped to `0.0..=1.0`.
+///
+/// Climbing with depth is what makes the deep Stack the place these are
+/// actually shopped for, rather than something to farm by re-rolling depth-1
+/// frames — which is cheap, since depth 1 is a short walk from the breach.
+/// At depth 1 it is one market in twelve; by depth 8 it is better than one
+/// in three.
+///
+/// A trader is the *expensive* half of the pair: the boss that drops the
+/// same disk asks for a fight and nothing else, and
+/// `STACK_MARKET_EXCLUSIVE_PRICE` is set above the roster rung so buying
+/// one is never the casual option.
+pub const STACK_MARKET_EXCLUSIVE_CHANCE_BASE: f64 = 0.04;
+pub const STACK_MARKET_EXCLUSIVE_CHANCE_PER_DEPTH: f64 = 0.04;
+
+/// What a market charges for a single exclusive routine's etched disk.
+///
+/// Above `STACK_MARKET_ROUTINE_PRICE_EVERYONE` deliberately: six disks of
+/// something anyone can etch is a convenience, and one disk of something
+/// nobody can etch is the run's prize. A player who can afford both should
+/// feel the second one cost more.
+pub const STACK_MARKET_EXCLUSIVE_PRICE: u32 = 1400;
 
 /// What a market charges per point of a program's power (`Stats::power()`
 /// as the species would spawn at this depth).
@@ -1442,6 +1483,21 @@ pub const MAX_COMPANION_REFACTORS: u32 = 5;
 /// the reason that test documents: a `work.produces` item's value is really
 /// a Credit-per-tick rate, and the recipe ceiling below cannot see it.
 pub const DEFAULT_ITEM_VALUE: u32 = 1;
+
+/// What an etched Routine Disk is worth, and what an *exclusive* one is —
+/// the `ItemDef::value` `ItemDb::synthesise_etched_disks` gives every disk
+/// it derives.
+///
+/// An ordinary disk is worth a good deal more than the blank it was written
+/// on (`routine_disk.ron` values a blank at 5), because the labour of
+/// knowing the routine went into it. The exclusive figure is set well below
+/// `STACK_MARKET_EXCLUSIVE_PRICE`: a trader pays `STACK_MARKET_SELL_RATE`
+/// per point of value, so a disk that sold back for what it cost would make
+/// the shelf a laundry — buy the row, walk two frames, sell it to the next
+/// trader, repeat. Sixty against fourteen hundred is a loss the player takes
+/// on purpose or not at all.
+pub const ETCHED_DISK_VALUE: u32 = 20;
+pub const ETCHED_DISK_EXCLUSIVE_VALUE: u32 = 60;
 
 /// What a trading post charges to sell the player back something they sold
 /// it, as a multiple of that trader's own `TradeDef::sell_rate` — see

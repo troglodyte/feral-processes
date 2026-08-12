@@ -246,8 +246,9 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
     // cap by a zero_day entry the panel can no longer even show.
     teach_routine(&mut loaded, "priority_boost");
     give_disks(&mut loaded, 1);
+    loaded.etch_disk("priority_boost").unwrap();
     loaded
-        .install_routine(player, "priority_boost")
+        .install_disk(player, "priority_boost")
         .expect("the slot the zero_day vacated must accept a real routine");
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -259,7 +260,7 @@ fn a_known_routine_is_offered_with_the_abilitys_own_text() {
     let sandbox = ability(&game, "sandbox");
     teach_routine(&mut game, &sandbox.id);
     let row = game
-        .installable_routines()
+        .etchable_routines()
         .into_iter()
         .find(|r| r.ability == sandbox.id)
         .expect("a routine the player knows is offered");
@@ -271,18 +272,35 @@ fn a_known_routine_is_offered_with_the_abilitys_own_text() {
 }
 
 #[test]
-fn installing_burns_exactly_one_disk_and_uninstalling_returns_nothing() {
+fn etching_burns_a_blank_and_installing_burns_the_etched_disk() {
     let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, pet, 4); // two slots, one of them free
     teach_routine(&mut game, "sandbox");
     give_disks(&mut game, 3);
 
-    game.install_routine(pet, "sandbox").unwrap();
+    game.etch_disk("sandbox").unwrap();
     assert_eq!(
-        game.routine_disks_held(),
+        game.blank_disks_held(),
         2,
-        "installing burns one disk and no more"
+        "etching burns one blank and no more"
+    );
+    assert_eq!(
+        game.etched_disks_of("sandbox"),
+        1,
+        "and the blank comes back as an etched disk, not as nothing"
+    );
+
+    game.install_disk(pet, "sandbox").unwrap();
+    assert_eq!(
+        game.etched_disks_of("sandbox"),
+        0,
+        "installing spends the etched disk"
+    );
+    assert_eq!(
+        game.blank_disks_held(),
+        2,
+        "and touches no blank — that half was paid at the etch"
     );
     assert!(
         game.routine_view(pet)
@@ -298,8 +316,8 @@ fn installing_burns_exactly_one_disk_and_uninstalling_returns_nothing() {
         .unwrap();
     game.uninstall_routine(pet, slot).unwrap();
     assert_eq!(
-        game.routine_disks_held(),
-        2,
+        game.etched_disks_of("sandbox"),
+        0,
         "the disk is spent for good — uninstalling hands nothing back"
     );
     assert!(
@@ -313,30 +331,63 @@ fn installing_burns_exactly_one_disk_and_uninstalling_returns_nothing() {
 }
 
 #[test]
-fn install_is_refused_unknown_diskless_slotless_and_during_battle() {
+fn etch_is_refused_unknown_blankless_and_during_battle() {
     let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = spawn_tamed(&mut game, 10, 3); // level 1: exactly one slot, already full
 
-    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    let err = game.etch_disk("sandbox").unwrap_err();
     assert!(err.contains("don't know"), "never researched it: {err}");
 
     teach_routine(&mut game, "sandbox");
-    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    let err = game.etch_disk("sandbox").unwrap_err();
+    assert!(err.contains("Routine Disk"), "no blank held: {err}");
+
+    give_disks(&mut game, 1);
+    start_battle_with_a_wild_program(&mut game);
+    let err = game.etch_disk("sandbox").unwrap_err();
+    assert!(err.contains("right now"), "mid-battle: {err}");
+    assert_eq!(
+        game.blank_disks_held(),
+        1,
+        "no refusal on any path may spend the blank"
+    );
+    assert_eq!(
+        game.etched_disks_of("sandbox"),
+        0,
+        "and none of them may hand back a disk either"
+    );
+}
+
+#[test]
+fn install_is_refused_diskless_slotless_duplicated_and_during_battle() {
+    let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3); // level 1: exactly one slot, already full
+
+    let err = game.install_disk(pet, "sandbox").unwrap_err();
     assert!(
         err.contains("no free routine slot"),
         "slots full is checked before the disk, so a full slot never eats one: {err}"
     );
 
-    set_level(&mut game, pet, 4); // a free slot, but nothing to write onto
-    let err = game.install_routine(pet, "sandbox").unwrap_err();
-    assert!(err.contains("Routine Disk"), "no disk held: {err}");
+    set_level(&mut game, pet, 4); // a free slot, but no disk to fill it from
+    let err = game.install_disk(pet, "sandbox").unwrap_err();
+    assert!(
+        err.contains("not carrying"),
+        "the disk is what an install spends, and there isn't one: {err}"
+    );
 
-    give_disks(&mut game, 1);
+    give_etched_disks(&mut game, "sandbox", 2);
+    game.install_disk(pet, "sandbox").unwrap();
+    let err = game.install_disk(pet, "sandbox").unwrap_err();
+    assert!(
+        err.contains("already runs"),
+        "a second copy of the same routine in a second slot is refused: {err}"
+    );
+
     start_battle_with_a_wild_program(&mut game);
-    let err = game.install_routine(pet, "sandbox").unwrap_err();
+    let err = game.install_disk(pet, "sandbox").unwrap_err();
     assert!(err.contains("right now"), "mid-battle: {err}");
     assert_eq!(
-        game.routine_disks_held(),
+        game.etched_disks_of("sandbox"),
         1,
         "no refusal on any path may spend the disk"
     );
@@ -355,14 +406,16 @@ fn a_popped_innate_routine_replants_only_if_the_player_knows_it() {
     let host = spawn_tamed(&mut game, 10, 3);
     set_level(&mut game, host, 4);
     give_disks(&mut game, 1);
-    let err = game.install_routine(host, &popped).unwrap_err();
+    // The refusal moved to the etch with the flow split: knowledge is what
+    // writes a blank, and a slot only ever takes a disk somebody wrote.
+    let err = game.etch_disk(&popped).unwrap_err();
     assert!(
         err.contains("don't know"),
         "an innate routine popped out is gone unless the player learned it: {err}"
     );
 
     teach_routine(&mut game, &popped);
-    game.install_routine(host, &popped).unwrap();
+    fit_routine(&mut game, host, &popped);
     assert!(
         game.routine_view(host)
             .iter()
@@ -402,9 +455,8 @@ fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
         ))
         .id();
 
-    teach_routine(&mut game, "sandbox");
-    give_disks(&mut game, 1);
-    let err = game.install_routine(wild, "sandbox").unwrap_err();
+    give_etched_disks(&mut game, "sandbox", 1);
+    let err = game.install_disk(wild, "sandbox").unwrap_err();
     assert!(err.contains("control"), "{err}");
 
     let err = game.uninstall_routine(wild, 0).unwrap_err();
@@ -456,9 +508,9 @@ fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest
         "everything else on the program is lost with it"
     );
     assert_eq!(
-        game.routine_disks_held(),
+        game.blank_disks_held(),
         0,
-        "extraction teaches; it does not hand over a disk to write with"
+        "extraction teaches; it does not hand over a blank to write with"
     );
     assert!(
         game.owned_pets().iter().all(|p| p.entity != medic),
@@ -517,7 +569,7 @@ fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it(
 
     assert!(game.knows_routine(&ability), "the node teaches the routine");
     assert_eq!(
-        game.routine_disks_held(),
+        game.blank_disks_held(),
         0,
         "knowledge is not a disk — the factory is what makes those"
     );
@@ -558,8 +610,10 @@ fn the_player_starts_knowing_decompile_so_popping_it_out_is_recoverable() {
 
     game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 1);
-    game.install_routine(player, crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect("decompile must be re-writable onto a fresh disk");
+    game.etch_disk(crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect("decompile must be re-writable onto a fresh blank");
+    game.install_disk(player, crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect("and the disk that comes out must go back into the slot");
     assert_eq!(
         game.routine_view(player)[0].ability.as_deref(),
         Some(crate::abilities::DECOMPILE_ABILITY_ID)
@@ -595,7 +649,7 @@ fn innate_routines_install_at_spawn_with_no_knowledge_and_no_disk() {
     let (game, medic) = game_with_two_ability_companion();
     let installed = &game.world.get::<Routines>(medic).unwrap().0;
     assert!(!installed.is_empty(), "the species kit is installed");
-    assert_eq!(game.routine_disks_held(), 0, "and it cost no disk");
+    assert_eq!(game.blank_disks_held(), 0, "and it cost no disk");
     assert!(
         installed.iter().all(|id| !game.knows_routine(id)),
         "nor does the player learn what their program runs"

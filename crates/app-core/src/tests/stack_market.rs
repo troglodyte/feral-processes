@@ -10,6 +10,7 @@ use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
 use super::support::*;
 use crate::app::stack_market::{MarketRow, market_row};
 use crate::*;
+use feral_processes_engine::{MarketOfferKind, RoutineScope};
 
 /// An app standing on a Stack market, carrying `credits`.
 ///
@@ -125,51 +126,51 @@ fn t_underground_with_no_stall_refuses_rather_than_listing_the_base() {
     );
 }
 
-/// The narrowest rung is the only one with a question left to answer, so it
-/// is the only one that opens a picker. Sending the other two through one
-/// would ask the player to confirm a choice they do not have.
+/// No rung opens a picker any more: every routine row sells disks into
+/// cargo, and who ends up running them is a question the routine panel asks
+/// later. This is the app-side half of what deleted `routine_recipients`.
 #[test]
-fn the_single_program_rung_asks_who_and_the_others_do_not() {
+fn no_routine_rung_asks_who_it_is_for() {
     let mut app = app_at_a_market(5_000);
     app.handle_key(GameKey::Char('t'));
 
-    let row = row_of_scope(&mut app, RoutineScope::One);
-    app.handle_key(GameKey::Char(menu_shortcut(row)));
-    assert_eq!(app.mode, Mode::StackMarketTarget);
-    assert!(app.pending_market_offer.is_some());
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::StackMarket);
-    assert!(
-        app.pending_market_offer.is_none(),
-        "backing out of the picker left the row pending"
-    );
-
-    let row = row_of_scope(&mut app, RoutineScope::Everyone);
-    app.handle_key(GameKey::Char(menu_shortcut(row)));
-    assert_ne!(
-        app.mode,
-        Mode::StackMarketTarget,
-        "a rung that decides its own recipients still asked who for"
-    );
+    for scope in [RoutineScope::One, RoutineScope::Everyone] {
+        let mut app = app_at_a_market(5_000);
+        app.handle_key(GameKey::Char('t'));
+        let row = row_of_scope(&mut app, scope);
+        app.handle_key(GameKey::Char(menu_shortcut(row)));
+        assert_eq!(
+            app.mode,
+            Mode::StackMarket,
+            "{scope:?} sent the player through a picker for a choice they do not have"
+        );
+    }
 }
 
-/// Picking a holder buys the row, and the screen stays open on the shelf —
-/// a visit is normally a run of trades, exactly as it is at a surface post.
+/// Buying leaves the screen open on the shelf — a visit is normally a run
+/// of trades, exactly as it is at a surface post — and the disks land in
+/// cargo rather than in anybody's slot.
 #[test]
-fn picking_a_holder_buys_the_row_and_returns_to_the_shelf() {
+fn buying_a_rung_banks_the_disks_and_returns_to_the_shelf() {
     let mut app = app_at_a_market(5_000);
     app.handle_key(GameKey::Char('t'));
     let before = shelf(&mut app).len();
     let row = row_of_scope(&mut app, RoutineScope::One);
     let index = shelf(&mut app)[row].index;
+    let ability = match &shelf(&mut app)[row].kind {
+        MarketOfferKind::Routine { ability, .. } => ability.clone(),
+        other => panic!("row {row} is {other:?}, not a routine"),
+    };
 
     app.handle_key(GameKey::Char(menu_shortcut(row)));
-    // The player is the first holder, and starts with a free slot at the
-    // levels this fixture runs at.
-    app.handle_key(GameKey::Char('1'));
 
     assert_eq!(app.mode, Mode::StackMarket);
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        game.etched_disks_of(&ability),
+        RoutineScope::One.disks(),
+        "the rung's disks are not in cargo"
+    );
     let after = shelf(&mut app);
     assert_eq!(after.len(), before - 1, "the row is still on the shelf");
     assert!(!after.iter().any(|offer| offer.index == index));
@@ -185,11 +186,6 @@ fn a_market_screen_with_no_stall_under_it_drops_back_to_the_map() {
     app.mode = Mode::StackMarket;
     app.handle_key(GameKey::Char('1'));
     assert_eq!(app.mode, Mode::Playing);
-
-    // And the same for the holder picker layered over it.
-    app.mode = Mode::StackMarketTarget;
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::StackMarket);
 }
 
 /// Selling is one unit a press, with the whole stack on the shifted key —

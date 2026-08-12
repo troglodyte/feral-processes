@@ -21,15 +21,24 @@
 //! plain floor in both views, like an emptied cache — which is the whole of
 //! what makes these markets ephemeral rather than a shop the party can walk
 //! back to.
+//!
+//! **Everything sold here is a disk, never a slot.** A routine row hands
+//! over etched Routine Disks and asks nothing about who they are for; the
+//! player answers that later, through `Game::install_disk`, wherever they
+//! happen to be. That is what makes a trader one of the two doors an
+//! *exclusive* routine can come through — the other being a boss — since an
+//! exclusive routine has no etch path and can only ever exist as a disk
+//! somebody already wrote.
 
 use super::stack::StackPos;
 use crate::abilities::AbilityDb;
-use crate::components::{Inventory, Routines, Tamed};
-use crate::resources::{Party, StackMemory};
+use crate::components::Inventory;
+use crate::resources::StackMemory;
 use crate::stack::CellKind;
 use crate::tuning::{
-    STACK_MARKET_PROGRAM_CHANCE, STACK_MARKET_PROGRAM_PRICE_PER_POWER, STACK_MARKET_ROUTINE_OFFERS,
-    STACK_MARKET_SELL_RATE,
+    STACK_MARKET_EXCLUSIVE_CHANCE_BASE, STACK_MARKET_EXCLUSIVE_CHANCE_PER_DEPTH,
+    STACK_MARKET_EXCLUSIVE_PRICE, STACK_MARKET_PROGRAM_CHANCE,
+    STACK_MARKET_PROGRAM_PRICE_PER_POWER, STACK_MARKET_ROUTINE_OFFERS, STACK_MARKET_SELL_RATE,
 };
 use crate::views::{MarketOffer, MarketOfferKind, MarketSellRow, RoutineScope, StackMarketView};
 use crate::*;
@@ -81,13 +90,32 @@ impl Game {
     fn offer_row(&mut self, index: usize, kind: MarketOfferKind, credits: u32) -> MarketOffer {
         let (name, detail, price) = match &kind {
             MarketOfferKind::Routine { ability, scope } => (
-                format!("{} — {}", self.ability_display_name(ability), scope.label()),
+                format!(
+                    "{} ×{} — {}",
+                    self.ability_display_name(ability),
+                    scope.disks(),
+                    scope.label()
+                ),
                 self.world
                     .resource::<AbilityDb>()
                     .get(ability)
                     .map(|def| def.description.clone())
                     .unwrap_or_default(),
                 scope.price(),
+            ),
+            MarketOfferKind::ExclusiveDisk { ability } => (
+                // Named as the disk rather than as the routine, because
+                // that is what changes hands and what will be sitting in
+                // cargo afterwards. The ordinary rows above can say the
+                // routine's name plainly; this one is the only shelf row
+                // that is a *thing*.
+                self.item_name(&ItemId::etched(ability)).to_string(),
+                self.world
+                    .resource::<AbilityDb>()
+                    .get(ability)
+                    .map(|def| format!("{} Nobody can write this one.", def.description))
+                    .unwrap_or_default(),
+                STACK_MARKET_EXCLUSIVE_PRICE,
             ),
             MarketOfferKind::Program { species } => {
                 let def = self.world.resource::<SpeciesDb>().get(species).cloned();
@@ -130,13 +158,21 @@ impl Game {
     /// than working the length out from the constants, because a second
     /// expression of "how big is a shelf" is a copy that drifts.
     ///
-    /// Two routines at all three scopes, then a program on some markets and
-    /// not others. The routine pool deliberately **excludes everything in
+    /// Two routines at all three bundle sizes, then a program on some
+    /// markets and not others, then — rarely, and more often the deeper the
+    /// frame — one exclusive routine's disk.
+    ///
+    /// The ordinary routine pool deliberately **excludes everything in
     /// `AbilityDb::wild_pool`**: those are the hunt-only routines, reachable
     /// exactly one way — off a wild carrier — and a shop selling them is
     /// precisely the "just target the species" shortcut that boundary exists
     /// to break. See `no_species_or_research_file_grants_a_wild_only_ability`,
     /// which makes the same demand of species and research files.
+    ///
+    /// It excludes `AbilityDb::exclusive_pool` for the opposite reason: those
+    /// are not cheaper or rarer versions of an ordinary row, they are the one
+    /// thing on the shelf that cannot be etched at home, and listing one at
+    /// six copies for a party would make it exactly as ordinary as Throttle.
     ///
     /// The program is drawn from the **whole non-boss roster**, not from the
     /// entrance biome's `habitat_pools` the way `orphan_species` is, and the
@@ -165,7 +201,7 @@ impl Game {
             .collect();
         let mut pool: Vec<String> = db
             .all()
-            .filter(|def| !hunt_only.contains(&def.id.as_str()))
+            .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
             .map(|def| def.id.clone())
             .collect();
 
@@ -192,6 +228,30 @@ impl Game {
             if !roster.is_empty() {
                 offers.push(MarketOfferKind::Program {
                     species: roster[rng.random_range(0..roster.len())].to_string(),
+                });
+            }
+        }
+        // And the rare row, rolled last for the same reason the program row
+        // is rolled after the routines: appending a draw at the end shifts
+        // no earlier one, so a market that had no exclusive disk before this
+        // existed still has the same routines and the same program on it.
+        //
+        // The chance climbs with depth, which is what stops these being
+        // farmed off depth-1 frames a short walk from the breach.
+        let exclusive_chance = (STACK_MARKET_EXCLUSIVE_CHANCE_BASE
+            + STACK_MARKET_EXCLUSIVE_CHANCE_PER_DEPTH * pos.depth as f64)
+            .clamp(0.0, 1.0);
+        if rng.random_bool(exclusive_chance) {
+            let pool: Vec<String> = self
+                .world
+                .resource::<AbilityDb>()
+                .exclusive_pool()
+                .into_iter()
+                .map(|def| def.id.clone())
+                .collect();
+            if !pool.is_empty() {
+                offers.push(MarketOfferKind::ExclusiveDisk {
+                    ability: pool[rng.random_range(0..pool.len())].clone(),
                 });
             }
         }
@@ -281,17 +341,18 @@ impl Game {
 
     /// Buys row `index` off the market the party is standing on.
     ///
-    /// `target` names the holder for a `RoutineScope::One` row and is
-    /// ignored by every other kind — the scope decides who is written to,
-    /// and only the narrowest rung has a question left for the player to
-    /// answer.
+    /// A routine row hands over etched disks and asks nothing about who they
+    /// are for — that question is deferred to `Game::install_disk`, whenever
+    /// the player gets round to it. Selling disks rather than writing slots
+    /// is what deleted the target picker, the "nobody has a free slot"
+    /// refusal, and the two helpers that decided who a purchase reached.
     ///
     /// **Every refusal lands before anything is spent**, which is this
     /// function's whole ordering and the reason it is worth reading:
-    /// `adopt_orphan` and `install_routine` make the same promise, and a
-    /// purchase that took the Credits and then found no free slot would be
-    /// the one bug a player cannot undo — there is no buyback here.
-    pub fn buy_market_offer(&mut self, index: usize, target: Option<Entity>) -> Result<(), String> {
+    /// `adopt_orphan` and `etch_disk` make the same promise, and a purchase
+    /// that took the Credits and then failed would be the one bug a player
+    /// cannot undo — there is no buyback here.
+    pub fn buy_market_offer(&mut self, index: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -312,6 +373,7 @@ impl Game {
 
         let price = match &kind {
             MarketOfferKind::Routine { scope, .. } => scope.price(),
+            MarketOfferKind::ExclusiveDisk { .. } => STACK_MARKET_EXCLUSIVE_PRICE,
             MarketOfferKind::Program { species } => self.market_program_price(species),
         };
         let currency = self.trade_currency();
@@ -334,16 +396,17 @@ impl Game {
         // it and have not paid.
         let delivered = match &kind {
             MarketOfferKind::Routine { ability, scope } => {
-                let recipients = self.routine_recipients(*scope, target, ability)?;
-                let ability_name = self.ability_display_name(ability);
-                for &holder in &recipients {
-                    self.write_routine(holder, ability);
-                }
-                let names: Vec<String> = recipients
-                    .iter()
-                    .map(|&e| self.routine_holder_label(e))
-                    .collect();
-                format!("{ability_name} is written into {}", join_names(&names))
+                let qty = scope.disks();
+                let disk = ItemId::etched(ability);
+                let name = self.item_name(&disk).to_string();
+                self.grant_loot(disk, qty);
+                format!("{qty} × {name} goes in the pack")
+            }
+            MarketOfferKind::ExclusiveDisk { ability } => {
+                let disk = ItemId::etched(ability);
+                let name = self.item_name(&disk).to_string();
+                self.grant_loot(disk, 1);
+                format!("{name} is yours — the only one you'll see on this shelf")
             }
             MarketOfferKind::Program { species } => {
                 if self.pet_count() >= self.pet_capacity() {
@@ -373,61 +436,6 @@ impl Game {
         );
         self.tick();
         Ok(())
-    }
-
-    /// Who a routine row writes to, or why nobody can take it.
-    ///
-    /// A holder already running the routine, or with no free slot, is
-    /// dropped rather than refused — a party rung that failed outright
-    /// because one of five programs was full would be unbuyable for the
-    /// reason it is most worth buying. Nobody left at all *is* a refusal,
-    /// because there is nothing to sell.
-    fn routine_recipients(
-        &mut self,
-        scope: RoutineScope,
-        target: Option<Entity>,
-        ability: &str,
-    ) -> Result<Vec<Entity>, String> {
-        let player = self.player_entity();
-        let candidates: Vec<Entity> = match scope {
-            RoutineScope::One => {
-                let holder = target.ok_or_else(|| "Pick who that's for.".to_string())?;
-                let owned = holder == player
-                    || self
-                        .world
-                        .get::<Tamed>(holder)
-                        .is_some_and(|t| t.owner == player);
-                if !owned {
-                    return Err("You don't control that program.".into());
-                }
-                vec![holder]
-            }
-            RoutineScope::Party => std::iter::once(player)
-                .chain(self.world.resource::<Party>().0.iter().copied())
-                .collect(),
-            RoutineScope::Everyone => std::iter::once(player)
-                .chain(self.owned_pets().into_iter().map(|pet| pet.entity))
-                .collect(),
-        };
-        let recipients: Vec<Entity> = candidates
-            .into_iter()
-            .filter(|&e| self.routine_slot_free(e, ability))
-            .collect();
-        if recipients.is_empty() {
-            return Err(
-                "Nobody that would reach has a free routine slot — pop one out first.".into(),
-            );
-        }
-        Ok(recipients)
-    }
-
-    /// Whether `entity` could take `ability`: it holds routines at all, is
-    /// not already running this one, and has a slot spare.
-    fn routine_slot_free(&self, entity: Entity, ability: &str) -> bool {
-        let Some(installed) = self.world.get::<Routines>(entity).map(|r| r.0.clone()) else {
-            return false;
-        };
-        !installed.iter().any(|id| id == ability) && installed.len() < self.routine_slots(entity)
     }
 
     /// Sells `qty` copies of `item` at fusion `tier` to the market the party
@@ -478,14 +486,5 @@ impl Game {
         ));
         self.tick();
         Ok(())
-    }
-}
-
-/// "you", "you and Dart", "you, Dart and Slipstream" — the log line's list.
-fn join_names(names: &[String]) -> String {
-    match names {
-        [] => String::new(),
-        [one] => one.clone(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }

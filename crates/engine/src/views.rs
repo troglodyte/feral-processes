@@ -169,9 +169,26 @@ impl RoutineScope {
         }
     }
 
-    /// How the rung reads on the shelf. Worded as who it reaches rather
-    /// than as a tier name, because the price is already on the row and
-    /// "T2" would say nothing about what is being bought.
+    /// How many etched disks this rung hands over.
+    ///
+    /// Fixed constants, **not** the live party and roster sizes. A quantity
+    /// read off `Party` would change between the player reading the shelf
+    /// and paying for it — a companion left behind, a program dismissed —
+    /// which is the same objection `Game::market_program_price` already
+    /// makes about folding Trace into a quote. What is on the shelf has to
+    /// be what is bought.
+    pub fn disks(self) -> u32 {
+        match self {
+            RoutineScope::One => crate::tuning::STACK_MARKET_ROUTINE_DISKS_ONE,
+            RoutineScope::Party => crate::tuning::STACK_MARKET_ROUTINE_DISKS_PARTY,
+            RoutineScope::Everyone => crate::tuning::STACK_MARKET_ROUTINE_DISKS_EVERYONE,
+        }
+    }
+
+    /// How the rung reads on the shelf. Worded as what it would *outfit*
+    /// rather than as a tier name or a bare count, because the price and
+    /// the quantity are both already on the row and "T2" would say nothing
+    /// about why anyone wants three.
     pub fn label(self) -> &'static str {
         match self {
             RoutineScope::One => "one program",
@@ -184,12 +201,20 @@ impl RoutineScope {
 /// What one row of a Stack market's shelf is.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum MarketOfferKind {
-    /// A routine written into free slots — no blank disk spent, and
-    /// nothing added to `KnownRoutines`. See `Game::buy_market_offer`.
+    /// A bundle of etched disks — `scope.disks()` of them, ready to install
+    /// into whichever holders the player picks. Nothing is added to
+    /// `KnownRoutines`: a trader sells the *writing*, never the knowledge.
+    /// See `Game::buy_market_offer`.
     Routine {
         ability: String,
         scope: RoutineScope,
     },
+    /// A single exclusive routine's etched disk — the rare row. Deliberately
+    /// a kind of its own rather than a `Routine` at a fourth scope: it is
+    /// sold one at a time and priced off `STACK_MARKET_EXCLUSIVE_PRICE`
+    /// rather than off any rung, and rolling it into `RoutineScope` would
+    /// mean a rung whose `disks()` and `price()` both lie.
+    ExclusiveDisk { ability: String },
     /// A program, adopted through the same `Game::adopt_program` an orphan
     /// goes through.
     Program { species: String },
@@ -872,13 +897,34 @@ pub struct UpgradeOption {
     pub zone_bump: bool,
 }
 
-/// One row of the install picker — a routine the player knows. Knowing it
-/// is not enough to install it: that also costs a blank Routine Disk, which
-/// the screen reports separately through `Game::routine_disks_held`.
+/// One row of the etch picker — a routine the player knows. Knowing it is
+/// not enough to put it in a slot: it first has to be burnt onto a blank
+/// Routine Disk (`Game::etch_disk`), which the screen reports separately
+/// through `Game::blank_disks_held`, and only then installed.
+///
+/// An exclusive routine never appears here. Nothing writes one into
+/// `KnownRoutines`, so the list is empty of them by construction rather than
+/// by a filter — see `AbilityDef::exclusive`.
 pub struct KnownRoutineView {
     pub ability: crate::abilities::AbilityId,
     pub name: String,
     pub description: String,
+}
+
+/// One row of the install picker — an etched Routine Disk in cargo, ready to
+/// be spent on a slot.
+///
+/// `qty` is how many of that disk are carried, which is what makes a bought
+/// bundle from a Stack market read as one row rather than six. `exclusive`
+/// is the flag the screen marks a prize with; it is the ability's, not the
+/// disk's, and it is here so no renderer has to reach back into `AbilityDb`
+/// to ask.
+pub struct EtchedDiskView {
+    pub ability: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    pub exclusive: bool,
+    pub qty: u32,
 }
 
 /// One row of the extraction picker — a routine installed on the program

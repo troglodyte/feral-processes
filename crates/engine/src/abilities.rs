@@ -365,6 +365,61 @@ pub struct AbilityDef {
     /// out of the pool without this module having to name them.
     #[serde(default)]
     pub wild_weight: u32,
+    /// Marks this routine **exclusive**: it never enters `KnownRoutines`, no
+    /// research node or species may grant it, and no blank Routine Disk can
+    /// be etched with it. Its etched disk is reachable exactly two ways — a
+    /// boss drop (`boss_drop`) or a Stack trader's rare shelf row.
+    ///
+    /// Opt-in exclusion, the same idiom `wild_weight` uses: the default is
+    /// ordinary, so the pool is defined by the files that ask to be in it
+    /// rather than by this module listing them. Knowledge is the only thing
+    /// in this game that duplicates — you learn a routine once and etch it
+    /// forever — so keeping these out of `KnownRoutines` is the whole gate,
+    /// and `Game::etch_disk`, `Game::unlock_research` and
+    /// `Game::extract_routine` are the three places that honour it.
+    #[serde(default)]
+    pub exclusive: bool,
+    /// Which species drop this routine's etched disk, each with its own
+    /// 0.0-1.0 chance. Becomes the synthesised disk item's
+    /// `ItemDef::droppable` (see `ItemDb::synthesise_etched_disks`), which
+    /// is why the boss-drop path needs no engine code of its own:
+    /// `Game::equipment_drops_for` already merges every item that names the
+    /// dead species, and `award_loot` already rolls them.
+    ///
+    /// Nothing here requires the named species to be a boss. What makes
+    /// these boss drops is that only bosses are named — the shipped set is
+    /// checked by `every_exclusive_routine_is_dropped_by_a_boss`.
+    #[serde(default)]
+    pub boss_drop: Option<Vec<(crate::species::SpeciesId, f32)>>,
+    /// Fires on an event rather than being chosen on a turn. `None` — the
+    /// default, and what every ability shipped before this existed is —
+    /// means the routine is offered as a Special and runs when picked.
+    ///
+    /// A field beside `effect` rather than an `AbilityEffect` variant
+    /// because the axis is genuinely orthogonal: *when* a routine runs says
+    /// nothing about *what* it does, and a passive should be free to Damage,
+    /// Heal or Cleanse. As a variant this would need either one arm per
+    /// effect it can pair with or a recursive `Passive { trigger, effect:
+    /// Box<AbilityEffect> }`, which would force a delegating arm into every
+    /// match on the enum. `cooldown`, `fatigue_cost` and `wild_weight` are
+    /// all orthogonal modifiers carried here for the same reason.
+    #[serde(default)]
+    pub triggers: Option<PassiveTrigger>,
+}
+
+/// What makes a passive routine fire.
+///
+/// A small closed set rather than a general event name, because each
+/// variant is a specific point in `game::combat_round` that has to call
+/// `Game::fire_passives`. A trigger nothing fires would be an authored
+/// routine that silently never runs — the failure mode
+/// `decompile_target_mismatch` refuses at load rather than allow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PassiveTrigger {
+    /// A member of the holder's own group was dropped this round.
+    AllyDropped,
+    /// A status condition landed on the holder this round.
+    Afflicted,
 }
 
 fn default_fatigue_cost() -> f32 {
@@ -468,6 +523,28 @@ impl AbilityDef {
             .then_some("effect: Phase and Jump require target: WholeParty")
     }
 
+    /// A `triggers` set on a **field-only** effect. A `Phase` cannot fire
+    /// when an ally drops: every `PassiveTrigger` names a moment inside a
+    /// battle, and a field-only effect is by definition one that runs
+    /// outside one. Refused rather than warned, unlike
+    /// `field_only_dead_fields` — a dead `cooldown` still leaves a routine
+    /// that works, where this leaves one that can never fire at all.
+    fn passive_field_mismatch(&self) -> Option<&'static str> {
+        (self.triggers.is_some() && self.effect.field_only())
+            .then_some("triggers: a field-only effect has no battle moment to fire in")
+    }
+
+    /// `exclusive` set together with `wild_weight > 0`. Both fields claim to
+    /// name this routine's *only* source — one says a wild carrier, the
+    /// other says a boss drop or a Stack trader — and they cannot both be
+    /// the only one. Refused at load because there is no way to pick a
+    /// winner that isn't this module inventing a precedence rule the file
+    /// never asked for.
+    fn exclusive_source_conflict(&self) -> Option<&'static str> {
+        (self.exclusive && self.wild_weight > 0)
+            .then_some("exclusive: a routine cannot be both hunt-only (wild_weight) and exclusive")
+    }
+
     /// Names `cooldown` if it's set on a **field-only** ability, where it
     /// does nothing: cooldown throttles re-use within a battle, and a field
     /// ability runs outside one. Not a load failure — the def still loads —
@@ -493,6 +570,19 @@ impl AbilityDef {
             return None;
         }
         (self.cooldown != 0).then_some("cooldown")
+    }
+
+    /// Whether this routine fires on a trigger rather than being chosen.
+    ///
+    /// A predicate rather than a `triggers.is_some()` at each site, for
+    /// `AbilityEffect::field_only`'s reason: the four places that need it
+    /// must agree. `Game::battle_special_options`, `Game::field_routines`
+    /// and `Game::wild_routine_ready` all exclude these — a passive in a
+    /// menu would be a row that either does nothing when picked or spends a
+    /// turn doing what it was going to do free — and `Game::fire_passives`
+    /// is what runs them instead.
+    pub fn is_passive(&self) -> bool {
+        self.triggers.is_some()
     }
 
     /// Bounds a `Drain`'s `heal_fraction` to `0.0..=1.0`. Applied at load so
@@ -560,6 +650,14 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.passive_field_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
+                    if let Some(reason) = def.exclusive_source_conflict() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     def.clamp_ranges();
                     if let Some(dead) = def.field_only_dead_fields() {
                         warnings.push(format!(
@@ -599,6 +697,17 @@ impl AbilityDb {
             .filter(|d| d.wild_weight > 0)
             .map(|d| (d, d.wild_weight))
             .collect()
+    }
+
+    /// Every routine nobody can learn — the boss-drop and Stack-trader pool,
+    /// ordered by id.
+    ///
+    /// Ordered for `wild_pool`'s reason: a Stack market's shelf is drawn
+    /// from this with a seeded `StdRng` and has to survive a save and load,
+    /// so a `HashMap`-ordered pool would put a different routine on the
+    /// shelf every time the game was reopened.
+    pub fn exclusive_pool(&self) -> Vec<&AbilityDef> {
+        self.all().filter(|d| d.exclusive).collect()
     }
 }
 

@@ -457,8 +457,8 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     // routine this test is actually about.
     game.uninstall_routine(game.player_entity(), 0).unwrap();
     give_disks(&mut game, 1);
-    game.install_routine(game.player_entity(), "priority_boost")
-        .unwrap();
+    let player = game.player_entity();
+    fit_routine(&mut game, player, "priority_boost");
 
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
@@ -493,7 +493,7 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
     unlock_research_chain(&mut game, "also_boost");
 
     assert_eq!(
-        game.installable_routines()
+        game.etchable_routines()
             .iter()
             .filter(|r| r.ability == "priority_boost")
             .count(),
@@ -505,8 +505,8 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
     // routine this test is actually about.
     game.uninstall_routine(game.player_entity(), 0).unwrap();
     give_disks(&mut game, 2);
-    game.install_routine(game.player_entity(), "priority_boost")
-        .unwrap();
+    let player = game.player_entity();
+    fit_routine(&mut game, player, "priority_boost");
     let ids: Vec<String> = game
         .actor_abilities(game.player_entity())
         .into_iter()
@@ -518,7 +518,7 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         "installing fills one slot, however many nodes granted it"
     );
     assert_eq!(
-        game.routine_disks_held(),
+        game.blank_disks_held(),
         1,
         "one install burns exactly one disk"
     );
@@ -540,8 +540,8 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     set_level(&mut game, player, 10);
     game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 2);
-    game.install_routine(player, "priority_boost").unwrap();
-    game.install_routine(player, "hot_patch").unwrap();
+    fit_routine(&mut game, player, "priority_boost");
+    fit_routine(&mut game, player, "hot_patch");
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -605,7 +605,7 @@ fn a_player_special_spends_no_fatigue() {
         // routine this test is actually about.
         game.uninstall_routine(player, 0).unwrap();
         give_disks(&mut game, 1);
-        game.install_routine(player, "null_route").unwrap();
+        fit_routine(&mut game, player, "null_route");
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
@@ -622,9 +622,8 @@ fn a_player_special_spends_no_fatigue() {
     unlock_research_chain(&mut probe, "kernel_privileges");
     probe.uninstall_routine(probe.player_entity(), 0).unwrap();
     give_disks(&mut probe, 1);
-    probe
-        .install_routine(probe.player_entity(), "null_route")
-        .unwrap();
+    let probe_player = probe.player_entity();
+    fit_routine(&mut probe, probe_player, "null_route");
     let abilities = probe.actor_abilities(probe.player_entity());
     let index = abilities
         .iter()
@@ -663,8 +662,8 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     set_level(&mut game, player, 10);
     game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 2);
-    game.install_routine(player, "priority_boost").unwrap();
-    game.install_routine(player, "hot_patch").unwrap();
+    fit_routine(&mut game, player, "priority_boost");
+    fit_routine(&mut game, player, "hot_patch");
     let before: Vec<String> = game
         .actor_abilities(player)
         .into_iter()
@@ -737,6 +736,9 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -773,6 +775,9 @@ fn drain_never_heals_the_user_past_its_maximum() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -806,6 +811,9 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -843,6 +851,9 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -881,6 +892,9 @@ fn drain_logs_what_it_actually_restored() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -914,6 +928,9 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
     assert!(
@@ -958,6 +975,9 @@ fn a_negative_power_buff_saps_effective_attack() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -993,6 +1013,9 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "Enemy", &[player]);
 
@@ -1025,6 +1048,9 @@ fn a_heal_scales_with_the_users_level() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -1055,6 +1081,9 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[player]);
 
@@ -1090,6 +1119,9 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
@@ -1129,6 +1161,9 @@ fn ability_damage_scales_with_the_users_level() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
 
     game.world.get_mut::<Experience>(player).unwrap().level = 1;
@@ -1169,6 +1204,9 @@ fn drain_scales_with_the_users_level() {
         cooldown: 1,
         fatigue_cost: 0.0,
         wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
     };
 
     game.world.get_mut::<Experience>(player).unwrap().level = 1;

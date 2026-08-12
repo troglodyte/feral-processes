@@ -1,0 +1,23 @@
+(
+    id: "deadman",
+    name: "Deadman Everyone",
+    // Exclusive and PASSIVE: Wintermute's. Never appears in the Special
+    // menu — `triggers` is what takes it out of `battle_special_options` —
+    // and costs no turn when it fires. A deadman's switch: the thing that
+    // goes off precisely because nobody is holding it any more.
+    //
+    // Four rounds, the same floor every other Everyone-scope routine pays
+    // (`every_everyone_scope_routine_pays_the_everyone_tier_price`). Being
+    // passive exempts it from that tier's *Fatigue*, which is a cast cost
+    // and so meaningless here, but not from its cooldown: a party being
+    // wiped drops somebody every round, and a cheaper cooldown would let
+    // this fire on every one of them.
+    description: "When one of yours goes down, everything hostile takes the fallout",
+    target: AllEnemies,
+    effect: Damage(power: 14),
+    cooldown: 4,
+    fatigue_cost: 0.0,
+    exclusive: true,
+    triggers: Some(AllyDropped),
+    boss_drop: Some([("wintermute", 0.30)]),
+)

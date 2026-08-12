@@ -70,7 +70,11 @@ impl Game {
             .iter()
             .filter(|id| !cooling.contains_key(*id))
             .filter_map(|id| db.get(id))
-            .find(|def| !matches!(def.effect, AbilityEffect::Decompile) && !def.effect.field_only())
+            .find(|def| {
+                !matches!(def.effect, AbilityEffect::Decompile)
+                    && !def.effect.field_only()
+                    && !def.is_passive()
+            })
             .cloned()
     }
 

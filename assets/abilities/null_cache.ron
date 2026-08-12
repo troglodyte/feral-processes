@@ -1,0 +1,16 @@
+(
+    id: "null_cache",
+    name: "Null Cache Group",
+    // Exclusive: Wintermute's. The shape no ordinary routine has — Leech
+    // Group drains a third of what it deals off one group, this returns all
+    // of it. Half the power of leech_array doubled twice over, which is
+    // deliberately a sustain routine rather than a damage one: it is what
+    // lets a party grind a deep frame without a Patch.
+    description: "Drain a whole group and take back every point of it",
+    target: WholeEnemyGroup,
+    effect: Drain(power: 12, heal_fraction: 1.0),
+    cooldown: 3,
+    fatigue_cost: 18.0,
+    exclusive: true,
+    boss_drop: Some([("wintermute", 0.35)]),
+)

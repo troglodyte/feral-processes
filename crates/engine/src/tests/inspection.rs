@@ -625,7 +625,8 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(item.clone(), 1);
-    game.equip(&item, 0).expect("equipping a held item works");
+    game.equip(game.player_entity(), &item, 0)
+        .expect("equipping a held item works");
 
     let view = game.manifest(player).unwrap();
     let ManifestSubject::Player(p) = view.subject else {

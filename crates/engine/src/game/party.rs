@@ -431,7 +431,7 @@ impl Game {
             .get::<Equipment>(player)
             .is_some_and(|e| e.weapon.is_some());
         if displaced {
-            self.unequip(EquipmentSlot::Weapon)?;
+            self.unequip(player, EquipmentSlot::Weapon)?;
         }
         self.remove_companion(creature);
         self.world.insert_resource(WieldedProgram(Some(creature)));

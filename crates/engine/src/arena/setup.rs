@@ -44,7 +44,8 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             for row in &scenario.equip {
                 known_item(&game, &row.item)?;
                 game.add_copies(&row.item, row.tier, 1);
-                game.equip(&row.item, row.tier)
+                let player = game.player_entity();
+                game.equip(player, &row.item, row.tier)
                     .map_err(|e| format!("equip `{}`: {e}", row.item.as_str()))?;
             }
             for row in &scenario.party {

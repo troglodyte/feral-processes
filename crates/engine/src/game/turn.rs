@@ -18,12 +18,12 @@ fn chebyshev(a: Position, b: Position) -> i32 {
 }
 
 impl Game {
-    /// The player's own `Entity`. `pub(crate)`: no renderer or app-core code
-    /// needs it directly — `Game::routine_holders()[0].entity` is the
-    /// player by construction and is already `pub`, which is the route the
-    /// one production caller that used to need this (`app/routines.rs`)
-    /// actually takes.
-    pub(crate) fn player_entity(&self) -> Entity {
+    /// The player's own `Entity`. `pub` because `equip`/`unequip` name the
+    /// wearer, and the inventory screen's wearer is the player — app-core
+    /// has to be able to say so. An `Entity` is inert outside `Game`:
+    /// `world` stays private, so handing one out grants no reach into the
+    /// ECS, only the right to name a wearer.
+    pub fn player_entity(&self) -> Entity {
         self.world.resource::<PlayerEntity>().0
     }
 

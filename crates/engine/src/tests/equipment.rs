@@ -14,7 +14,8 @@ fn equip_grants_stat_bonus_and_removes_item_from_inventory() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
+    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
+        .unwrap();
 
     let status = game.player_status();
     assert_eq!(
@@ -50,7 +51,8 @@ fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
+    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
+        .unwrap();
 
     let status = game.player_status();
     // Base +3 ATK, scaled 2x per level above 1: level 3 = 3 * 2^2 = 12.
@@ -68,7 +70,8 @@ fn equipping_gear_in_a_deeper_zone_scales_its_bonus_100_percent_per_level() {
         })
     );
 
-    game.unequip(EquipmentSlot::Weapon).unwrap();
+    game.unequip(game.player_entity(), EquipmentSlot::Weapon)
+        .unwrap();
     assert_eq!(
         game.player_status().atk,
         atk_before,
@@ -86,12 +89,14 @@ fn equipping_the_same_slot_again_swaps_without_double_counting_the_bonus() {
         .add(ItemId::from(ids::OVERCLOCK_CORE), 2);
     let atk_before = game.player_status().atk;
 
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
+    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
+        .unwrap();
     assert_eq!(game.player_status().atk, atk_before + 3);
 
     // Equipping into an already-occupied slot swaps the old item back
     // to inventory and must not stack the bonus a second time.
-    game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
+    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
+        .unwrap();
     let status = game.player_status();
     assert_eq!(
         status.atk,
@@ -118,10 +123,16 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
         .unwrap()
         .add(ItemId::from(ids::FIREWALL_PLATING), 1);
     let def_before = game.player_status().def;
-    game.equip(&ItemId::from(ids::FIREWALL_PLATING), 0).unwrap();
+    game.equip(
+        game.player_entity(),
+        &ItemId::from(ids::FIREWALL_PLATING),
+        0,
+    )
+    .unwrap();
     assert_eq!(game.player_status().def, def_before + 3);
 
-    game.unequip(EquipmentSlot::Armor).unwrap();
+    game.unequip(game.player_entity(), EquipmentSlot::Armor)
+        .unwrap();
 
     let status = game.player_status();
     assert_eq!(status.def, def_before, "unequip should remove the bonus");
@@ -139,7 +150,10 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
 #[test]
 fn unequip_errors_on_an_empty_slot() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(game.unequip(EquipmentSlot::Weapon).is_err());
+    assert!(
+        game.unequip(game.player_entity(), EquipmentSlot::Weapon)
+            .is_err()
+    );
 }
 
 #[test]
@@ -164,7 +178,7 @@ fn unequipping_an_item_with_no_itemdb_entry_errors_instead_of_panicking() {
     };
     let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
-    let result = game.unequip(EquipmentSlot::Weapon);
+    let result = game.unequip(game.player_entity(), EquipmentSlot::Weapon);
 
     assert!(
         result.is_err(),
@@ -217,7 +231,7 @@ fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_
     };
     let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
-    let result = game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0);
+    let result = game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0);
 
     assert!(
         result.is_err(),
@@ -324,13 +338,14 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
         .add(armor.clone(), 6);
 
     let def_before = game.player_status().def;
-    game.equip(&armor, 0).unwrap();
+    game.equip(game.player_entity(), &armor, 0).unwrap();
     assert_eq!(
         game.player_status().def,
         def_before + 4,
         "unfused equip should grant the plain base bonus"
     );
-    game.unequip(EquipmentSlot::Armor).unwrap();
+    game.unequip(game.player_entity(), EquipmentSlot::Armor)
+        .unwrap();
 
     // Four base copies for one T2: two T1s, then those two.
     game.fuse_item(&armor, 0).unwrap();
@@ -338,7 +353,7 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     game.fuse_item(&armor, 1).unwrap();
     assert_eq!(held_at(&game, &armor, 2), 1);
 
-    game.equip(&armor, 2).unwrap();
+    game.equip(game.player_entity(), &armor, 2).unwrap();
     assert_eq!(
         game.player_status().def,
         def_before + 6,
@@ -410,7 +425,7 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
         .add(armor.clone(), 4);
     let base_def = game.player_status().def;
 
-    game.equip(&armor, 0).unwrap();
+    game.equip(game.player_entity(), &armor, 0).unwrap();
     assert_eq!(
         game.player_status().def,
         base_def + 4,
@@ -465,7 +480,7 @@ fn a_worn_copy_at_another_tier_does_not_pay_for_the_fusion() {
         .get_mut::<FusedGear>(player)
         .unwrap()
         .add(armor.clone(), 1, 1);
-    game.equip(&armor, 0).unwrap();
+    game.equip(game.player_entity(), &armor, 0).unwrap();
 
     let err = game.fuse_item(&armor, 1).unwrap_err();
     assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
@@ -480,7 +495,7 @@ fn fusing_a_worn_item_still_needs_one_spare() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(armor.clone(), 1);
-    game.equip(&armor, 0).unwrap(); // now zero spares held
+    game.equip(game.player_entity(), &armor, 0).unwrap(); // now zero spares held
     let err = game.fuse_item(&armor, 0).unwrap_err();
     assert_eq!(err, "Need 1 Ablative Plating to fuse (have 0).");
     assert_eq!(
@@ -501,7 +516,7 @@ fn fusing_needs_two_spares_when_a_different_item_is_worn() {
         inv.add(worn.clone(), 1);
         inv.add(target.clone(), 1);
     }
-    game.equip(&worn, 0).unwrap(); // Firewall Plating occupies the Armor slot
+    game.equip(game.player_entity(), &worn, 0).unwrap(); // Firewall Plating occupies the Armor slot
     // The worn armor is a different item, so it can't count toward fusing
     // Ablative Plating — that still needs two spares.
     let err = game.fuse_item(&target, 0).unwrap_err();
@@ -538,8 +553,9 @@ fn unequipping_a_fused_copy_returns_it_to_the_fused_store() {
         .unwrap()
         .add(armor.clone(), 2, 1);
 
-    game.equip(&armor, 2).unwrap();
-    game.unequip(EquipmentSlot::Armor).unwrap();
+    game.equip(game.player_entity(), &armor, 2).unwrap();
+    game.unequip(game.player_entity(), EquipmentSlot::Armor)
+        .unwrap();
 
     assert_eq!(
         held_at(&game, &armor, 2),
@@ -602,7 +618,7 @@ fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
         .get_mut::<FusedGear>(player)
         .unwrap()
         .add(armor.clone(), legacy, 2);
-    game.equip(&armor, legacy).unwrap();
+    game.equip(game.player_entity(), &armor, legacy).unwrap();
     let def_before = game.player_status().def;
 
     let path = std::env::temp_dir().join(format!(
@@ -668,7 +684,12 @@ fn equipped_gear_and_its_bonus_survive_save_and_load() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::NEURAL_AMPLIFIER), 1);
-    game.equip(&ItemId::from(ids::NEURAL_AMPLIFIER), 0).unwrap();
+    game.equip(
+        game.player_entity(),
+        &ItemId::from(ids::NEURAL_AMPLIFIER),
+        0,
+    )
+    .unwrap();
     let decompiler_after_equip = game.player_status().decompiler;
 
     let path = std::env::temp_dir().join(format!(
@@ -726,7 +747,7 @@ fn fusing_costs_the_same_whether_or_not_a_copy_is_worn() {
             .unwrap()
             .add(armor.clone(), 4);
         if wear {
-            game.equip(&armor, 0).unwrap();
+            game.equip(game.player_entity(), &armor, 0).unwrap();
         }
         game.fuse_item(&armor, 0).unwrap();
         // Every tier, because a fusion moves a copy between the two stores.
@@ -778,5 +799,142 @@ fn a_fusion_tier_is_worth_at_least_one_point_on_every_stat_it_touches() {
         "each tier is worth at least a point: {} should be at least {}",
         t3.atk,
         base.atk + 3
+    );
+}
+
+// --- Companion equipment -------------------------------------------------
+
+fn stats_of(game: &Game, entity: Entity) -> Stats {
+    game.world.get::<Stats>(entity).unwrap().clone()
+}
+
+#[test]
+fn a_companion_wears_a_weapon_and_gives_the_bonus_back_on_unequip() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+    let before = stats_of(&game, companion);
+
+    game.equip(companion, &weapon, 0).unwrap();
+
+    assert_eq!(
+        stats_of(&game, companion).atk,
+        before.atk + 3,
+        "a companion should gain the weapon's level-scaled Attack bonus"
+    );
+
+    game.unequip(companion, EquipmentSlot::Weapon).unwrap();
+
+    assert_eq!(
+        stats_of(&game, companion).atk,
+        before.atk,
+        "unequipping should return the program to exactly its own numbers"
+    );
+    assert_eq!(held(&game, &weapon), 1, "the copy goes back to the cargo");
+}
+
+#[test]
+fn gear_on_one_wearer_leaves_the_other_wearer_alone() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 2);
+    let player_before = stats_of(&game, player);
+    let companion_before = stats_of(&game, companion);
+
+    game.equip(companion, &weapon, 0).unwrap();
+
+    assert_eq!(
+        stats_of(&game, player).atk,
+        player_before.atk,
+        "gear worn by a program must not touch the player's Stats"
+    );
+
+    game.equip(player, &weapon, 0).unwrap();
+
+    assert_eq!(
+        stats_of(&game, companion).atk,
+        companion_before.atk + 3,
+        "gear worn by the player must not touch the program's Stats"
+    );
+    assert_eq!(stats_of(&game, player).atk, player_before.atk + 3);
+}
+
+#[test]
+fn a_copy_taken_off_the_player_goes_onto_a_companion() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+    let companion_before = stats_of(&game, companion);
+
+    game.equip(player, &weapon, 0).unwrap();
+    game.unequip(player, EquipmentSlot::Weapon).unwrap();
+    game.equip(companion, &weapon, 0).unwrap();
+
+    assert_eq!(
+        stats_of(&game, companion).atk,
+        companion_before.atk + 3,
+        "one copy is interchangeable: what comes off the player goes on a program"
+    );
+    assert_eq!(
+        stats_of(&game, player).atk,
+        game.player_status().atk,
+        "the player should be carrying no leftover bonus"
+    );
+}
+
+#[test]
+fn a_wild_program_cannot_be_geared() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+    let before = stats_of(&game, wild);
+
+    let result = game.equip(wild, &weapon, 0);
+
+    assert!(
+        result.is_err(),
+        "gear only goes on programs the player owns"
+    );
+    assert_eq!(
+        stats_of(&game, wild).atk,
+        before.atk,
+        "a refused equip must move nothing"
+    );
+    assert_eq!(
+        held(&game, &weapon),
+        1,
+        "a refused equip must not spend the copy"
+    );
+}
+
+#[test]
+fn a_decompiler_module_on_a_companion_changes_none_of_its_stats() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    // Neural Amplifier's only stat is `decompiler`, and programs never
+    // attempt a capture — worn, the bonus is dead.
+    let module = ItemId::from(ids::NEURAL_AMPLIFIER);
+    give(&mut game, &module, 1);
+    let before = stats_of(&game, companion);
+
+    game.equip(companion, &module, 0).unwrap();
+
+    let after = stats_of(&game, companion);
+    assert_eq!(after.atk, before.atk);
+    assert_eq!(after.def, before.def);
+    assert_eq!(after.max_hp, before.max_hp);
+    assert_eq!(
+        game.world
+            .get::<Equipment>(companion)
+            .and_then(|e| e.get(EquipmentSlot::Module))
+            .map(|worn| worn.item),
+        Some(module),
+        "the module is worn even though its bonus does nothing"
     );
 }

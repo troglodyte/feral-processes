@@ -101,9 +101,10 @@ impl App {
             return;
         };
         let Some(game) = &mut self.game else { return };
+        let wearer = game.player_entity();
         let outcome = match &choices[idx] {
-            SwapChoice::Equip(item, tier) => game.equip(item, *tier).err(),
-            SwapChoice::Unequip => game.unequip(slot).err(),
+            SwapChoice::Equip(item, tier) => game.equip(wearer, item, *tier).err(),
+            SwapChoice::Unequip => game.unequip(wearer, slot).err(),
         };
         self.status_line = outcome;
         self.pending_swap_slot = None;
@@ -194,8 +195,9 @@ impl App {
         // panel); a fuse hands back a confirmation to surface, since it
         // changes nothing else visible from behind the inventory popup. Both
         // report a refusal on the status line.
+        let wearer = game.player_entity();
         let outcome = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(&item, tier).err()),
+            Some('e') => Some(game.equip(wearer, &item, tier).err()),
             Some('u') => Some(match game.fuse_item(&item, tier) {
                 Ok(msg) => Some(msg),
                 Err(e) => Some(e),

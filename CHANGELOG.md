@@ -27,6 +27,22 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.4
+
+### The Recipes screen says why you would make the thing
+
+The chains screen has always answered "how do I make this": what to build,
+in what order, back to the raw salvage it bottoms out in. It never said a
+word about what the thing at the end of the chain is *for*, so deciding
+whether a two-machine line was worth standing up meant leaving the screen,
+finding a copy of the product in cargo, and reading its description there —
+or already knowing.
+
+Each chain now opens on that description, above its steps. It is the same
+prose the inventory's describe page shows, drawn from the item's own file,
+so the two cannot end up describing one item differently and a modded item
+gets its line for free.
+
 ## 0.8.3
 
 ### A door beside you looks like a door

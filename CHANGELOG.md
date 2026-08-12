@@ -42,14 +42,15 @@ shelf does not refill — a row that has been bought stays bought for the
 run, and a stall with nothing left on it packs up and reads as plain
 corridor in both Stack views, exactly as an emptied cache does.
 
-What is on the shelf is two routines, each at three rungs of breadth:
-written into **one program** you pick for 150 Credits, into **your party**
-for 300, or into **everything you own** for 1000. What is being sold is the
-*writing*, not the routine — nothing here teaches you anything, so research
-and extraction remain the only two ways to actually know one, and a program
-already running it (or with no slot free) is skipped rather than refusing
-the whole purchase. Some markets also carry a program, priced off what it
-would spawn at as this depth, compiled to your control on the spot.
+What is on the shelf is two routines, each at three sizes of bundle:
+enough disks for **one program** at 150 Credits, for **your party** at 300,
+or for **everything you own** at 1000. What is being sold is the *writing*,
+not the routine — nothing here teaches you anything, so research and
+extraction remain the only two ways to actually know one. The disks go
+straight into cargo, so a party with every slot full can still buy, and who
+ends up running them is a question you answer later at the routine panel.
+Some markets also carry a program, priced off what it would spawn at as
+this depth, compiled to your control on the spot.
 
 Two things a trader down here will not sell. The 28 hunt-only routines
 stay hunt-only — a shop selling those is the "buy it instead of hunting
@@ -59,6 +60,39 @@ orphaned process is never one either.
 What is on a given shelf is a function of the stack, the entrance and the
 depth, so it survives a save and a reload: you can look at a price, climb
 out to go and earn it, and come back to the same stall.
+
+### Some routines are not for sale, or for research, or for anyone
+
+A routine now reaches a slot in two steps rather than one. Etching burns a
+blank Routine Disk with something you know and hands you an **etched disk**;
+installing spends that disk on a slot. Popping the routine back out still
+returns nothing — the disk went at install. The routine panel's install page
+lists the disks you are carrying, and `e` there opens the etch page.
+
+That split is worth a paragraph only because of what it makes possible.
+**Six routines exist that nobody can learn**, and therefore nobody can etch.
+No research node teaches them, no species is born running one, and no shop
+lists one at a bundle price. The only way to hold one is to hold the disk
+somebody else already wrote — and there are exactly two of those.
+
+Wintermute drops **Kernel Shear**, which tears a whole group open and leaves
+every one of them bleeding; **Null Cache**, which drains a group and returns
+every point of it to you rather than a third; and **Deadman**. The Overseer
+drops **Hard Fault**, two rounds of nothing across every hostile on the
+field; **Long Winter**, a quarter off all incoming damage for three hundred
+turns; and **Watchdog**. Roughly one disk a kill, and a Stack trader deep
+enough down will occasionally have one on the shelf for 1400 Credits — far
+more than six copies of anything you could have made yourself.
+
+Deadman and Watchdog are a new kind of thing. They sit in a slot, appear in
+no menu, and never take a turn: Deadman goes off when one of yours goes
+down, and Watchdog clears the condition off everybody the moment one sticks
+to its holder. A deadman's switch fires precisely because nobody is holding
+it any more.
+
+Breaking a program down at a Compiler pops an exclusive routine's disk back
+out intact instead of teaching it, which is the only way to move one — and
+it still costs the whole program. There is never more than one copy.
 
 Two smaller things fell out of it. `t` underground used to open the
 *surface* trader picker, which scans from a position pinned to the entrance

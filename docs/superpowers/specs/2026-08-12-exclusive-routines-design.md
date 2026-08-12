@@ -214,21 +214,40 @@ picker are deleted. `MarketOfferKind` gains `EtchedDisk { ability }`.
 The "already known" refusal applies only to the ordinary branch, since an
 exclusive routine is never known.
 
-One ordering trap: `grant_loot` lands 0 when cargo is full, so the exclusive
-branch **checks cargo room before `dissolve_tamed_program` runs**. Destroying a
-program and then dropping its disk on the floor is precisely the unrecoverable
-failure the rest of this feature is ordered to avoid.
+**A trap this spec designed against turned out not to exist.** The draft
+required a cargo-room check before `dissolve_tamed_program`, on the assumption
+that `grant_loot` can land 0 when cargo is full. It cannot: the Buffer is
+unbounded, `Inventory::cargo_used` is a display figure rather than a cap, and
+`grant_loot` documents that it always lands `qty` in full. The check was
+dropped from both `extract_routine` and `etch_disk`, and a comment in
+`etch_disk` records the condition under which it would have to come back — if
+a hold limit is ever added, both become paths that can destroy something and
+hand back nothing.
 
 ## The six routines
 
 | routine | effect | target | cd | boss | chance |
 |---|---|---|---|---|---|
-| Kernel Shear | `Damage 44` + Bleed 0.6 / 4 / 7 | WholeEnemyGroup | 4 | Wintermute | 0.35 |
-| Null Cache | `Drain 20, heal_fraction 1.0` | WholeEnemyGroup | 3 | Wintermute | 0.35 |
-| Deadman | `Damage 30`, `triggers: AllyDropped` | AllEnemies | 2 | Wintermute | 0.30 |
+| Kernel Shear | `Damage 22` + Bleed 0.75 / 4 / 6 | WholeEnemyGroup | 4 | Wintermute | 0.35 |
+| Null Cache | `Drain 12, heal_fraction 1.0` | WholeEnemyGroup | 3 | Wintermute | 0.35 |
+| Deadman | `Damage 14`, `triggers: AllyDropped` | AllEnemies | 4 | Wintermute | 0.30 |
 | Hard Fault | `Debuff Stun, duration 2` | AllEnemies | 5 | Overseer | 0.30 |
-| Long Winter | `FieldBuff Mitigation 25, duration 300, cost 8.0` | WholeParty | — | Overseer | 0.35 |
+| Long Winter | `FieldBuff Mitigation 25, duration 300, cost 40.0` | WholeParty | — | Overseer | 0.35 |
 | Watchdog | `Cleanse`, `triggers: Afflicted` | WholeParty | 4 | Overseer | 0.35 |
+
+**These magnitudes were revised down during implementation.** The first draft
+put Kernel Shear at 44 and Null Cache at 20, written before the shipped band
+was measured: the top damage power in the whole set is `segfault_v3` at 17,
+into a single target. 44 across a group was not a premium, it was a different
+game. Kernel Shear now sits at 22 on a whole group — above `segfault_v3`
+while reaching wider — and the rest were pulled into proportion with it.
+
+Deadman's cooldown moved 2 → 4 for a different reason: it is `AllEnemies`
+scope, and `every_everyone_scope_routine_pays_the_everyone_tier_price` sets a
+four-round floor for that tier. The Fatigue half of that rule is skipped for
+passives, since Fatigue is a cast cost and a passive is never cast; the
+cooldown half is not, because a cooldown bounds how often the effect lands
+regardless of who asked for it.
 
 Two per flavour: two straight power-tier, two an unusual shape built from effects
 that already exist, two passives.
@@ -256,14 +275,23 @@ Small surface, all of it already enumerated:
 
 Beyond the ordinary coverage each change carries:
 
-- An exclusive routine never appears in `installable_routines`, in an ordinary
-  market routine row, or in any research node's `unlocks_abilities`.
+- An exclusive routine never appears in `etchable_routines`, in an ordinary
+  market routine row, or in any research node's `unlocks_abilities`. Writing
+  this one found a gap: `etchable_routines` had no filter of its own and
+  relied entirely on nothing reaching `KnownRoutines`. It now filters
+  explicitly, so a leak reads as a missing row rather than as a picker row
+  that always refuses.
 - `etch_disk` refuses an exclusive routine, with the message that says why.
 - Extracting an exclusive grants its disk and leaves `KnownRoutines` untouched.
-- Extracting an exclusive with cargo full refuses **and the program survives**.
+- Extracting an ordinary routine still teaches and still yields no disk —
+  without this the exclusive branch could swallow both cases unnoticed.
 - A passive never appears in `battle_special_options` and never in the field cast
   list.
 - Each passive actually fires at its trigger point, and respects its cooldown.
+  The ally has to drop **inside** the round for this to mean anything:
+  `battle_resolve_round` snapshots the living party before anyone acts, so a
+  fixture that sets HP to 0 beforehand tests nothing. A hostile carrying a
+  whole-party routine is the deterministic way to do it.
 - A market shelf is byte-identical across a save/load round trip, exclusive row
   included.
 - Every synthesised disk resolves through `item_name` and `item_value`.

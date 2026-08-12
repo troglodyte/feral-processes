@@ -20,13 +20,23 @@ tree.
 Neither path is how the ability *reaches* a party member, though — abilities
 are installed **routines** occupying level-derived slots (one per two
 companion levels, one per ten player levels, six at most either way). What a
-research node hands over is **knowledge**, not an item: it teaches the id,
-and writing that routine into a slot burns one blank **Routine Disk**, which
-the base has to manufacture. A species file instead names what a companion
-shows up already running. So shipping a new ability means writing a single
-file here — there is no second file and no per-ability item — and, if you
-want it reachable through normal play, referencing its `id` from a species,
-a research node, or both.
+research node hands over is **knowledge**, not an item: it teaches the id.
+
+Getting a known routine into a slot is then **two steps**. Etching burns one
+blank **Routine Disk**, which the base has to manufacture, and produces an
+*etched disk* carrying that routine; installing spends the etched disk on a
+slot. Popping the routine back out later returns nothing — the disk is gone
+at install.
+
+A species file instead names what a companion shows up already running,
+which skips both steps.
+
+You never write an etched disk's item file: one is derived for every ability
+at load (`ItemDb::synthesise_etched_disks`), with the id `etched_<ability
+id>`. So shipping a new ability still means writing a single file here — no
+second file and no per-ability item — and, if you want it reachable through
+normal play, referencing its `id` from a species, a research node, or a
+boss's `boss_drop`.
 
 **Two abilities are mandatory.** `priority_boost` is the fallback every
 companion falls back on when its species declares no abilities of its own,
@@ -381,6 +391,50 @@ because a species is still perfectly playable without one of its abilities.
 
 Companions cap at level 12, so a `level` above that makes an ability
 permanently unreachable.
+
+## The exclusive set
+
+`exclusive: true` marks a routine **nobody can learn**. It never enters
+`KnownRoutines`, no research node or species file may name it, and no blank
+can be etched with it. The only thing that exists is its already-etched
+disk, and there are exactly two places one comes from:
+
+- **A boss drop.** `boss_drop: Some([("wintermute", 0.35)])` names the
+  species that drop it and how often. This becomes the derived disk's
+  `ItemDef::droppable`, so the ordinary loot roll pays it out — there is no
+  separate boss-drop mechanic. Nothing here *requires* the named species to
+  be a boss; the shipped set is held to it by
+  `a_boss_drops_the_disks_its_abilities_claim`.
+- **A Stack trader's rare shelf row**, drawn from the whole exclusive pool
+  at a chance that climbs with depth.
+
+Six ship: `kernel_shear`, `null_cache` and `deadman` off Wintermute;
+`hard_fault`, `long_winter` and `watchdog` off the Overseer. Extraction at a
+Compiler pops an exclusive routine's *disk* back out rather than teaching
+it, which is the only way to move one — and it still costs the whole
+program.
+
+`exclusive` and a non-zero `wild_weight` together are refused at load: both
+claim to name the routine's only source, and they name different ones.
+
+## Passives
+
+`triggers: Some(AllyDropped)` — or `Some(Afflicted)` — makes a routine fire
+on an event instead of being chosen on a turn. A passive occupies a slot
+like anything else and appears in no menu: not the Special picker, not the
+field cast list, and not a wild carrier's options. It costs no turn, so its
+`fatigue_cost` is dead; `cooldown` is its whole price and is honoured
+exactly as a chosen routine's is.
+
+The trigger set is closed and small on purpose — each variant is a point in
+`battle_resolve_round` that calls `Game::fire_passives`, so a trigger with
+no call site would be a routine that silently never runs. `triggers` on a
+field-only effect is refused at load for that reason: there is no battle
+moment for it to fire in.
+
+`AllyDropped` fires for every living party member when any party member goes
+down that round. `Afflicted` fires only for the combatant a status condition
+just landed on.
 
 ## The hunt-only set
 

@@ -587,7 +587,13 @@ fn resolve_a_planned_round(game: &mut Game) {
         .map(|b| b.planned.len())
         .unwrap_or(0);
     for slot in 0..slots {
-        game.battle_set_action(slot, BattleAction::Defend);
+        // Unwrapped rather than ignored: an unplanned slot leaves
+        // `battle_round_ready` false, `battle_resolve_round` returns without
+        // doing anything, and every assertion downstream compares two
+        // untouched worlds and passes. Every member is alive at plan time in
+        // both fixtures, so a failure here is the fixture breaking.
+        game.battle_set_action(slot, BattleAction::Defend)
+            .unwrap_or_else(|e| panic!("planning slot {slot}: {e}"));
     }
     game.battle_resolve_round();
 }

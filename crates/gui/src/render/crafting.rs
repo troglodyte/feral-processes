@@ -11,23 +11,42 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painte
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let cost = cost_display(game, &recipe.cost, &status.inventory);
-        let blurb = game
-            .item_blurb(&recipe.result)
-            .map(|b| format!(" ({b})"))
-            .unwrap_or_default();
         rows.push(item_row(
-            format!(
-                "[{}] {}{} - {}",
-                menu_shortcut(i),
-                game.item_name(&recipe.result),
-                blurb,
-                cost.join(", ")
-            ),
+            craft_row(game, recipe, i, &status.inventory),
             i == selected,
         ));
     }
     draw_popup("Compile", PopupSize::Large, &rows, painter, m);
+}
+
+/// One recipe's row: its kind, its name, what it does, and what it costs.
+///
+/// The kind leads in a column of its own, the same two-space column and the
+/// same `Game::item_category` call the inventory list and a trader's shelf
+/// print — the tag is what says whether the thing you are about to compile
+/// goes on your back or into a machine, and `item_blurb` deliberately no
+/// longer names a slot now that this column does.
+///
+/// The column reads as a heading for the run of rows beneath it rather than
+/// as noise repeated at random, which is `Game::craft_recipes`' job: it hands
+/// the list back already grouped by category.
+///
+/// Split out of `draw_craft_menu` so the width it reaches is measurable
+/// without a window — see `the_widest_compile_row_fits_the_popup_it_is_drawn_in`.
+fn craft_row(game: &Game, recipe: &CraftRecipe, i: usize, inventory: &[InventoryRow]) -> String {
+    let cost = cost_display(game, &recipe.cost, inventory);
+    let blurb = game
+        .item_blurb(&recipe.result)
+        .map(|b| format!(" ({b})"))
+        .unwrap_or_default();
+    format!(
+        "[{}] {}  {}{} - {}",
+        menu_shortcut(i),
+        game.item_category(&recipe.result).short_label(),
+        game.item_name(&recipe.result),
+        blurb,
+        cost.join(", ")
+    )
 }
 
 pub(super) fn draw_craft_quantity(
@@ -276,6 +295,76 @@ mod tests {
             assert!(
                 drawn <= room,
                 "the widest Recipes row overflows its popup by {:.0}px \
+                 ({drawn:.0} drawn into {room:.0} of room):\n{widest}",
+                drawn - room
+            );
+        });
+    }
+
+    /// The kind column, and the fact that it comes from the same
+    /// `Game::item_category` call the inventory and trade screens print — a
+    /// second derivation here is how one screen ends up calling a Module a
+    /// Weapon.
+    #[test]
+    fn every_compile_row_leads_with_its_items_category() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let recipes = game.craft_recipes();
+        let status = game.player_status();
+        assert!(!recipes.is_empty(), "a fresh game can compile something");
+
+        for (i, recipe) in recipes.iter().enumerate() {
+            let row = craft_row(&game, recipe, i, &status.inventory);
+            let tag = game.item_category(&recipe.result).short_label();
+            assert!(
+                row.contains(&format!("] {tag}  ")),
+                "a Compile row should name its item's kind in a column of its \
+                 own, as the inventory does: {row}"
+            );
+        }
+    }
+
+    /// `draw_row` clamps a row vertically and nothing clamps it horizontally,
+    /// so the kind column's five extra cells run a long recipe further off the
+    /// popup rather than wrapping.
+    ///
+    /// **This covers the nine recipes a fresh game offers, and not the rest.**
+    /// Every other recipe is gated behind a bench, research, or both, and a
+    /// gui test can reach neither: `place_structure` wants build materials and
+    /// `unlock_research` wants banked Research Data, both of which live in the
+    /// engine's private `World`. Widening it means an engine-side accessor,
+    /// not a cleverer fixture.
+    ///
+    /// What that gap hides, measured at 1440x900 on 2026-08-12: the widest row
+    /// in the shipped assets is Singularity Matrix's, and it draws 1517px into
+    /// 1243px of room. It overflowed before this column existed too — 1463px —
+    /// so the four Portal-Fragment recipes have always run off this popup and
+    /// the tag deepens it by 54px rather than causing it. Fixing that is a
+    /// separate call about what a Compile row drops when it cannot fit.
+    #[test]
+    fn the_widest_compile_row_fits_the_popup_it_is_drawn_in() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let status = game.player_status();
+        let widest = game
+            .craft_recipes()
+            .iter()
+            .enumerate()
+            .map(|(i, r)| craft_row(&game, r, i, &status.inventory))
+            .map(|line| format!("  {line}"))
+            .max_by_key(|line| line.chars().count())
+            .expect("the shipped assets declare recipes");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let popup_w = 1440.0 * 0.88;
+            let drawn = p.measure_ui_advance(&widest, m.font_size);
+            let room = popup_w - m.pad * 2.0;
+            assert!(
+                drawn <= room,
+                "the widest Compile row overflows its popup by {:.0}px \
                  ({drawn:.0} drawn into {room:.0} of room):\n{widest}",
                 drawn - room
             );

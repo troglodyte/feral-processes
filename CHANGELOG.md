@@ -59,11 +59,32 @@ Two things worth knowing before you spend anything:
   Recompile Kernel cannot quietly bake a borrowed weapon into a program's
   permanent stat block.
 
+### Saves are now plain text, and this should be the last time they break
+
+Every save-format break this game has ever had — nine of them, v19 through
+v28 — was one thing: a struct gained a field. None removed anything, none
+changed what anything meant. They broke your saves anyway, because the file
+was a positional binary encoding where an added field shifts everything
+after it.
+
+The save is now the same field-named text `savetool dump` has always
+printed, with the version on the first line. A field added from here on
+loads out of a file written before it existed, so **an additive change no
+longer breaks your save at all**. What still can is a field removed, or one
+whose meaning changes — and that needs a real migration whatever the file
+looks like.
+
+Two things follow. Saves are readable and editable in any text editor, no
+`savetool` round trip required. And they are bigger: the measured save went
+from 13 KB to 190 KB, which costs 1.46 ms to write and read back rather than
+74 µs — far under a frame, so autosave is unaffected.
+
 ### Saves from 0.7.x will not load
 
-The save format moves to v28, because a program's loadout is new state that
-has to be written per creature. **Existing saves stop loading** — the game
-says so plainly and names the version rather than failing strangely.
+The save format moves to v29 — v28 for the loadout, which is new state that
+has to be written per creature, and v29 for the text format above.
+**Existing saves stop loading** — the game says so plainly rather than
+failing strangely.
 
 If you want to carry a run across, dump it to RON with a 0.7.x build first,
 then pack it with this one:

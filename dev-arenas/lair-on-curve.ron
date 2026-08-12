@@ -1,0 +1,49 @@
+// A stack's lair guardian, fought by a party on the curve for its zone.
+//
+// This is the fight a run cannot walk away from: the guardian is the only
+// boss the Stack fields and `STACK_BOSS_PORTAL_FRAGMENT_DROP` is the game's
+// only source of the breaching currency, so a party that cannot clear one
+// cannot leave the zone. `Lair` rather than `Stack` because
+// `stack_encounter_pack` passes `allow_boss: false` and can never roll it.
+//
+// `Fresh` rather than the `deep-lair` template, deliberately: the tuner
+// refuses a `Save` or `Template` player, since `party` is a `Fresh`-only
+// field and a template's companions would be invisible to the freeze that
+// protects species the player fields.
+//
+// The party is scrappers and nothing else, also deliberately. Every species
+// named in a target's `party` is frozen out of the tuner's candidate, so
+// fielding `rootkit` here — as `docs/measurements/2026-08-12-stack-lair-
+// reachability.md`'s on-curve row does — would freeze the one species
+// `full-group.ron` leaves it any room to move.
+//
+// Level 24 is what `balance_sim`'s curve says zone 3 demands, so this asks
+// about a party that is exactly on its zone's curve rather than one that
+// over-levelled to get here. Depth 2 because that is where the fight is in
+// doubt: measured 2026-08-12, an on-curve party clears depth 1 at 95% and
+// depth 2 at 15%, and depth 3 does not come back until level 70.
+(
+    player: Fresh(level: 24, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    // Standard-band weapon and armour, no module: the same "kitted the
+    // player first" party `full-group.ron` fields, so the two targets differ
+    // in the fight and not in who turned up to it.
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    encounter: Some(Lair(biome: Mainframe, depth: 2)),
+    reps: 50,
+    seed: 900,
+)

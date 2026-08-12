@@ -266,9 +266,19 @@ nothing: nothing was asked for past a ceiling, because nothing was asked for.
 
 - **`opening-fight.ron`** — the fight the game actually opens on. A fresh
   level-1 player, nothing equipped, one program from the opening ring.
-- **`full-group.ron`** — a geared level-20 party against a full zone-3
-  group. The progression sweep's scenario, run for real rather than
-  projected.
+- **`full-group.ron`** — a geared level-20 party against the largest group
+  zone 3 can field. Note this is **4**, from `Game::max_group_size`, not the
+  19 of `zone_group_cap` — so it is not the same fight `balance_sim`'s
+  `full_group_at_zone` projects, despite both being called "a full group".
+- **`lair-on-curve.ron`** — a stack's lair guardian fought by a party
+  exactly on its zone's curve. The fight a run cannot walk away from, since
+  the guardian is the only source of the breaching currency.
+  `docs/measurements/2026-08-12-lair-depth-on-curve.md` is the sweep behind
+  its depth.
+- **`stack-depth-5.ron`** — whatever depth 5 actually fields. Kept to play
+  rather than to tune against; its own comment says why.
+- **`deep-lair.ron`** — the stuck run, on a `Template`. The evidence for the
+  `0.8.1` scaling change.
 - **`geared-vs-boss.ron`** — the `extraction` template against a boss, and
   the worked example of the template path.
 

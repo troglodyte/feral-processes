@@ -10,39 +10,74 @@
 // to feel would therefore land too easy once Specials are in play.
 Objective(
     // Fights per target when comparing candidates. Every candidate is
-    // compared on this same seed set, so a score difference is the roster
-    // rather than noise.
-    seeds: 20,
+    // compared on this same seed set, so a score *difference* is the roster
+    // rather than noise — but the absolute level still has to be right,
+    // because that is what the targets below are compared against.
+    //
+    // This was 20 until 2026-08-12, and 20 was not enough for a fight whose
+    // outcome is in doubt: the lair target read 50% at 20 seeds against a
+    // true rate of 28.5%, so the search would have seen itself as nearly on
+    // target while being 26 points off. The two saturated targets were
+    // unaffected, which is why it went unnoticed — a fight at 100% has
+    // almost no variance to sample. A full evaluation costs 1.6s at 200, so
+    // this was never a real cost.
+    //
+    // Note each target's own `reps` below is inert: `eval::measure`
+    // overwrites it with this number. It is required by the schema and read
+    // by nothing.
+    seeds: 200,
     // Fights on seeds the search never saw, used only on the winner. This
-    // is what catches a proposal that merely learned the training seeds.
-    holdout_seeds: 20,
+    // is what catches a proposal that merely learned the training seeds,
+    // and it needs the same sample size for the same reason.
+    holdout_seeds: 200,
     iterations: 60,
     search_seed: 1337,
 
     targets: [
         // The fight the game opens on. Weighted heavily: if this moves, the
         // first five minutes of the game moved.
+        //
+        // Won outright, not *usually* won: the opening ring draws from the
+        // four species `beatable_by_a_fresh_player` clears, and
+        // `habitat_pools` falls back to the biome's unfiltered roster when
+        // nothing qualifies — so a ring that starts killing new players
+        // looks intact from the outside. The HP band is where the fight
+        // costs something; the win rate is not the place to put that.
         Target(
             scenario: "dev-arenas/opening-fight.ron",
             reps: 20,
-            want_win_rate: 0.92,
+            want_win_rate: 1.0,
             want_hp_left: 0.62,
             weight: 3.0,
         ),
-        // A geared mid-run party against a full zone-3 group.
+        // A geared mid-run party against the largest group zone 3 can field
+        // (`Game::max_group_size` is 4 there, whatever `zone_group_cap`
+        // says). This is a *guard*, not a lever: surface content at this
+        // point is deliberately a victory lap, and difficulty lives
+        // underground where the lair target measures it. So the numbers sit
+        // near what the game already does, and what they catch is the
+        // surface getting harder rather than the search failing to make it
+        // so. It read 75% / 45% until 2026-08-12, which was authored when a
+        // zone doubled enemy stats.
         Target(
             scenario: "dev-arenas/full-group.ron",
             reps: 20,
-            want_win_rate: 0.75,
-            want_hp_left: 0.45,
+            want_win_rate: 1.0,
+            want_hp_left: 0.90,
             weight: 1.0,
         ),
-        // The band this tool was pointed at first: measured 0/50 with gear
-        // and a full party, resolving in 2.5 rounds. Deep Stack should be
-        // punishing, not impossible — a little over half, on a party that
-        // arrived in shape.
+        // The fight a run cannot walk away from: a lair guardian is the
+        // only boss the Stack fields and the only source of the breaching
+        // currency. An on-curve party should find a mid-depth lair hard and
+        // fair — a little over half, on a party arriving in shape.
+        //
+        // This replaced `stack-depth-5.ron` on 2026-08-12. That target was
+        // 80% of the objective's total error and unreachable: its fight is
+        // 32 opponents against 4, group size comes from `tuning.rs` which
+        // the tuner cannot write, and 15 of those 32 were a frozen species.
+        // A target the search cannot move spends every move it has.
         Target(
-            scenario: "dev-arenas/stack-depth-5.ron",
+            scenario: "dev-arenas/lair-on-curve.ron",
             reps: 20,
             want_win_rate: 0.55,
             want_hp_left: 0.30,

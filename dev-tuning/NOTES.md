@@ -1,16 +1,15 @@
-# Where this got to — updated 2026-08-09
+# Where this got to — updated 2026-08-12
 
 Handoff notes for the roster-tuner work. Read `README.md` first for what the
 tool *is*; this is what happened and what to do next.
 
 ## State
 
-`roster-tuner` is unmerged and rebased onto `main`. `fixture-cleanup` landed
-and is gone; `main` is at `0.5.10`. Nothing has been pushed, and `assets/`
-has never been written to.
+`roster-tuner` merged at `4749e75`. `assets/` has still never been written
+to — the tool has only ever produced proposals.
 
-Check the branch is still current rather than trusting this line — `git log`
-answers it and this file cannot.
+Check `git log` rather than trusting this line; it went stale once already,
+claiming the branch was unmerged for three days after it landed.
 
 ## The headline finding: depth 5 is not a roster problem
 
@@ -104,6 +103,30 @@ is x1 under either curve — so its 47.8% → 65% drift is *not* the scaling
 change, it is everything else that landed between those dates, and it is the
 reason a baseline needs re-measuring rather than reasoning about.
 
+Re-argued and re-measured on **2026-08-12**, at 200 seeds rather than 20:
+
+```
+opening-fight    99.0% win (want 100%),  66.7% HP left (want 62%)
+full-group        100% win (want 100%),  99.9% HP left (want 90%)
+lair-on-curve    28.5% win (want  55%),  27.6% HP left (want 30%)
+```
+
+Four things changed at once and the block above is not comparable with the
+two below:
+
+- **The targets were re-argued.** Opening-fight and full-group became
+  guards near what the game already does; the lair became the one lever.
+- **`stack-depth-5` is no longer a target** — see its scenario comment.
+- **Every target's party now wears gear**, which the arena could not
+  express until 2026-08-12. It changed nothing at `full-group`, which was
+  already a walkover, and it is why `lair-on-curve` is not comparable with
+  any earlier Stack number.
+- **`seeds` went 20 → 200.** This is the one that matters most for reading
+  any older number here: at 20 seeds the lair fight read **50%** against a
+  true rate of 28.5%. Both saturated targets were unaffected, because a
+  fight at 100% has almost no variance to sample — so the error was
+  invisible in exactly the rows anyone would have checked it against.
+
 What the linear change did and did not do here:
 
 - **`stack-depth-5` went 0% → 2%, and that is the honest size of it.** The
@@ -163,14 +186,40 @@ fourth, asserting the *written* proposal was byte-identical, was written and
 never happened to pick `scrapper` and patching writes identical values back
 idempotently. Don't re-add that shape; it reads as coverage and is not.
 
-## Suggested order tomorrow
+## Two defects found on 2026-08-12, neither fixed
 
-1. **Decide the depth-scaling question** above. It is the biggest live
-   balance problem in the game and everything else here is downstream of it.
-   No code needed to decide — the arithmetic is all in this file.
-   *Deferred by the user on 2026-08-09; still open.*
+Both were found while re-arguing the targets and both are small; they are
+recorded rather than fixed because neither is a tuning question.
+
+- **`Target::reps` is dead config.** `eval::measure` overwrites
+  `scenario.reps` with `Objective::seeds`, so the `reps:` on each target in
+  `objective.ron` is read by nothing while looking exactly like the knob
+  that controls sample size. It is required by the schema, so it cannot
+  simply be deleted from the file without also dropping the field.
+- **`balance_sim::full_group_at_zone` projects a fight the game cannot
+  field.** It calls `zone_group_cap(zone)` — 19 at zone 3 — but a real
+  fight is capped by `Game::max_group_size`, which is `2^danger_steps`
+  clamped by that, and `danger_steps` on the surface is `zone - 1`. So zone
+  3 fields at most **4**. Its doc justifies the wider figure as "what
+  `Game::max_group_size` allows once distance growth is fully unlocked",
+  which is stale: distance-driven scaling was removed on 2026-08-05. This
+  is the fourth time `balance_sim` has drifted from the game it models.
+
+## Suggested order
+
+1. ~~Decide the depth-scaling question~~ — decided, and the curves went
+   linear in `0.8.1`. What that did and did not fix is above.
 2. ~~Fix the side-blindness~~ — done, see above.
 3. ~~Land `fixture-cleanup`~~ — merged and released as `0.5.10`.
+4. **Run a search against the re-argued objective.** It has never been run
+   with these targets, this sample size, or a geared party. The lair target
+   carries ~96% of the error and is the only one with room to move.
+5. **Unfreeze `scrapper` via coverage.** It is the party in both party
+   targets and therefore frozen out of the candidate entirely, which means
+   the game's most-fielded species is the one the tool can never tune.
+   `README.md`'s two-sided note has the argument; the change is a target
+   that fields it as an *opponent*, plus a freeze rule that reads coverage
+   rather than `party` alone.
 4. **Phase B (burn / learned enemy tactics)** is still gated on the same
    thing it was gated on at the start: enemies carry at most one routine
    (`roll_wild_routine`, `game/spawning.rs:108`), so there is no per-turn

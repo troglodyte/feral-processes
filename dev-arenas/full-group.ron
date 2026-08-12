@@ -9,11 +9,27 @@
         (item: "bastion_lattice", tier: 0),
         (item: "singularity_matrix", tier: 0),
     ],
+    // Standard-band weapon and armour, no module: a run that kitted the
+    // player first and the party out of what was left. Authoring no gear at
+    // all would field a naked party, which is not what a zone-3 run looks
+    // like and is soft in one direction — see `dev-arenas/README.md`.
     party: [
-        (species: "scrapper", level: 12),
-        (species: "scrapper", level: 12),
-        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
     ],
+    // `Game::max_group_size` at zone 3, which is `2^danger_steps` clamped
+    // by `zone_group_cap` — and on the surface `danger_steps` is `zone - 1`,
+    // so this is 4 and cannot be more. `zone_group_cap(3)` is 19, but that
+    // is the ceiling on the ceiling and zone 3 never reaches it. Note
+    // `balance_sim`'s `full_group_at_zone` projects against 19 rather than
+    // this, so the two are not measuring the same fight.
     opponents: [(species: "rootkit", count: 4)],
     reps: 50,
     seed: 7,

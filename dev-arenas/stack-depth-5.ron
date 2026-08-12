@@ -8,6 +8,15 @@
 // the narrower question: is depth 5 unwinnable for a party that arrived
 // there in reasonable shape, or only for a naked one?
 //
+// It was a tuner target until 2026-08-12 and is no longer one. It is not
+// reachable by anything the tuner may write: the fight is 32 opponents
+// against 4, group size comes from `tuning.rs`, and 15 of those 32 are a
+// species frozen out of the candidate because the player fields it. As 80%
+// of the objective's total error it spent every move the search had on a
+// band that could not move. `lair-on-curve.ron` is the Stack target now.
+// Kept here because it is still the right scenario to *play* when asking
+// whether deep Stack is survivable.
+//
 // `Stack` takes its own biome because the biome alone decides the species
 // pool; the zone comes from the player row, since `ZoneLevel` drives both
 // gear scaling and enemy scaling and two zones on one screen would be two

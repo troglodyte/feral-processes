@@ -69,6 +69,12 @@ Set targets knowing that, and play a proposal before applying it —
 `FERAL_DEV_ARENA=1 cargo run`, `[R]`, `[L]` the scenario. A converged tuner
 run is not evidence of play.
 
+**A party with no gear is a second floor, and this one is avoidable.** Any
+program the player owns may wear gear, so a scenario whose `party` rows name
+no `equip` fields a weaker party than the run it is modelling — and the
+search closes the gap by making enemies weaker than they should be. Every
+target scenario gears its party as of 2026-08-12. A new one must too.
+
 **The freeze is narrow, because the roster is two-sided.** A target says
 "this fight should be won 75% of the time"; it does not say whether to get
 there by buffing the enemy or by nerfing the party. The first real run did
@@ -89,18 +95,27 @@ frozen set at all.
 
 ## Current state
 
-Measured against the shipped roster:
+Measured against the shipped roster, 2026-08-12, 200 seeds
+(`tuner dev-tuning/objective.ron --measure`):
 
 | scenario | want | shipped |
 |---|---|---|
-| opening-fight | 92% | 100% |
-| full-group | 75% | 100%, at 98.9% HP left |
-| stack-depth-5 | 55% | 0%, in 2.5 rounds at 0% HP |
+| opening-fight | 100% / 62% HP | 99.0% / 66.7% |
+| full-group | 100% / 90% HP | 100% / 99.9% |
+| lair-on-curve | 55% / 30% HP | 28.5% / 27.6% |
 
-A geared zone-3 party clears a full enemy group having taken about 1%
-damage, and is then erased at depth 5. `stack-depth-5.ron` was written to
-retest the standing note that depth 5 may be unwinnable: that note blamed a
-fixture with no gear, and this one has full gear and three Scrappers and
-still loses 50 out of 50. Whether roster stats alone can fix it is not
-settled — a 60-iteration random search made no progress there, which is
-weak evidence either way.
+Two of the three are deliberately near what the game already does. The
+opening ring is a nursery by design and surface content at zone 3 is
+deliberately a victory lap, so those targets are *guards* — what they catch
+is the surface getting harder, not the search failing to make it so. The
+lair is the lever, and it carries about 96% of the objective's error.
+
+That split is the shape of the game as measured: an on-curve zone-3 party
+takes **zero** damage from the largest group zone 3 can field, and clears a
+depth-2 lair 28.5% of the time. A cliff, not a curve — the same finding the
+older numbers pointed at, now measured on both sides of it.
+
+The targets were re-argued on 2026-08-12; before that they still encoded a
+game where a zone doubled enemy stats. `stack-depth-5.ron` was a target
+until then and is not one now — see its own comment for why, and
+`NOTES.md` for what it cost while it was.

@@ -360,14 +360,14 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
         "a geared program must refactor to exactly what a bare one does"
     );
     let (_, max_hp, atk, def) = stats(&game, pet);
-    let (_, was_max_hp, was_atk, was_def) = before_gear;
+    // 80/9/5 moved one zone tier from tier 1, which is x2/1. Spelled as
+    // numbers rather than as `raised_a_tier` so this is evidence about the
+    // curve rather than a restatement of it — the zone curve is linear, so
+    // the step is a ratio and only the *first* tier happens to be a clean x2.
     assert_eq!(
         (max_hp, atk, def),
-        (
-            was_max_hp * ZONE_STAT_GROWTH,
-            was_atk * ZONE_STAT_GROWTH,
-            was_def * ZONE_STAT_GROWTH
-        ),
+        (160, 18, 10),
         "and the multiplier lands on its own numbers, with no gear welded in"
     );
+    assert_eq!(before_gear.1, 80, "the pre-gear block this is measured from");
 }

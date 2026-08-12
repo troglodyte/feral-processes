@@ -1321,11 +1321,14 @@ pub const DEFAULT_STRUCTURE_DURABILITY: u32 = 30;
 /// stats — the `EquippedItem::fusion_tier` trap, one rung along. It affects
 /// gear equipped at zone 2 or deeper only (level 1 is unscaled under both
 /// curves, so it is exactly zero there), it is a one-off per worn item, and
-/// it errs in the player's favour. It is not corrected on load because
-/// nothing distinguishes a legacy save from a current one without a
-/// `SAVE_FORMAT_VERSION` bump, and this build refuses to load a save from
-/// any other version — so the correction would cost every player their run
-/// to refund a few points to some of them.
+/// it errs in the player's favour. It is *correctable* — since
+/// `SAVE_FORMAT_VERSION` 29 the payload is field-named RON, so a
+/// `#[serde(default)]` flag saying "this save's worn bonus is already
+/// linear" would load out of a file written before it existed and needs no
+/// bump at all. It is not done because the error is one-off, bounded by the
+/// item's base stats, and generous; a migration that rewrites a saved
+/// `Stats` to claw a few points back is more ways to be wrong than the bug
+/// is worth.
 /// `an_equip_and_its_unequip_cancel_exactly_at_every_zone` holds the
 /// invariant for every save written from here on.
 pub const GEAR_LEVEL_STEP: f64 = 1.0;

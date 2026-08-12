@@ -63,9 +63,10 @@ fn an_equip_and_its_unequip_cancel_exactly_at_every_zone() {
             .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
 
         let before = game.player_status();
-        game.equip(&ItemId::from(ids::OVERCLOCK_CORE), 0).unwrap();
+        game.equip(player, &ItemId::from(ids::OVERCLOCK_CORE), 0)
+            .unwrap();
         let worn = game.player_status();
-        game.unequip(EquipmentSlot::Weapon).unwrap();
+        game.unequip(player, EquipmentSlot::Weapon).unwrap();
         let after = game.player_status();
 
         assert!(

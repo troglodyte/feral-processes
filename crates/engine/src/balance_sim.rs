@@ -222,12 +222,114 @@ struct Fighter {
 /// The swarm one intrusion throws at the player deep in `zone`: a full
 /// `MAX_ENEMY_GROUPS` groups, each at the zone's group cap — what
 /// `Game::max_group_size` allows once distance growth is fully unlocked.
-/// Only the reach-rule test scores a swarm this size; the progression
-/// sweeps project against `full_group_at_zone`.
-#[cfg(test)]
+/// Only the reach rule scores a swarm this size; the progression sweeps
+/// project against `full_group_at_zone`.
 fn full_pack_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
     let group = full_group_at_zone(species, zone);
     std::iter::repeat_n(group[0], crate::tuning::MAX_ENEMY_GROUPS).collect()
+}
+
+/// The zone the reach rule is measured at: four groups of nine. Deeper and
+/// the fight is decided by how long the party takes to chew through the
+/// front group against `TURN_CAP` rather than by how much damage comes
+/// back, and both versions land on the same level — the valve stops being
+/// measurable long before it stops mattering.
+const REACH_RULE_ZONE: u32 = 3;
+
+/// The highest level either half of the reach measurement will search to.
+const REACH_RULE_MAX_LEVEL: u32 = 200;
+
+/// What the reach rule is worth on a roster, as the level a full pack
+/// demands with it and without it. `None` means unclearable inside
+/// `REACH_RULE_MAX_LEVEL`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReachRuleVerdict {
+    pub with_reach: Option<u32>,
+    pub all_engaged: Option<u32>,
+}
+
+impl ReachRuleVerdict {
+    /// Whether the valve is still open. A pack big enough to fill every
+    /// group must be meaningfully easier than the same number of enemies
+    /// all standing in melee range — that gap *is* what makes a swarm fight
+    /// survivable, and a roster where it closes has had `ENGAGED_GROUPS`
+    /// quietly stop buying anything.
+    pub fn holds(&self) -> bool {
+        match self.with_reach {
+            None => false,
+            Some(reached) => self.all_engaged.is_none_or(|unreached| reached < unreached),
+        }
+    }
+}
+
+impl std::fmt::Display for ReachRuleVerdict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let level = |l: Option<u32>| match l {
+            Some(l) => l.to_string(),
+            None => format!("none up to {REACH_RULE_MAX_LEVEL}"),
+        };
+        write!(
+            f,
+            "zone {REACH_RULE_ZONE} full pack demands level {} with the reach rule, {} without",
+            level(self.with_reach),
+            level(self.all_engaged)
+        )
+    }
+}
+
+/// Measures what the reach rule is worth on `db`'s roster.
+///
+/// Compared by the level each version demands rather than by HP left: past
+/// a certain depth both versions are losses at a given level, and "0% vs
+/// 0%" measures nothing.
+///
+/// Shipping code because the roster tuner post-checks a winning proposal
+/// against it. That check cannot be a rejection — it runs a level search
+/// per call and would be paid on every candidate — so it runs once on the
+/// winner and is *reported*, which is why this returns the two levels
+/// rather than a bool: a human reading a proposal's diff needs to see how
+/// close it came, not merely that it passed.
+/// `the_reach_rule_measurably_softens_a_full_pack` asserts `holds()`.
+pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
+    let toughest = toughest_ordinary_species(db);
+    let party = median_ordinary_species(db);
+    let companion_power = average_move_power(party);
+
+    let with_reach = full_pack_at_zone(toughest, REACH_RULE_ZONE);
+    // The same pack with every group in melee range — the fight this would
+    // be without the reach rule.
+    let all_engaged: Vec<GroupSim> = with_reach
+        .iter()
+        .map(|g| GroupSim {
+            ranged_move_power: Some(g.move_power),
+            ..*g
+        })
+        .collect();
+
+    let level_needed = |groups: &[GroupSim]| {
+        (1..=REACH_RULE_MAX_LEVEL).find(|&level| {
+            let player = stats_after_levels(
+                PLAYER_BASE_STATS,
+                level - 1,
+                crate::tuning::BASELINE_GROWTH_MULTIPLIER,
+            );
+            let companions: Vec<Stats> = (0..crate::tuning::MAX_PARTY_SIZE)
+                .map(|_| {
+                    companion_stats(
+                        party,
+                        REACH_RULE_ZONE,
+                        companion_level_for_player_level(level),
+                    )
+                })
+                .collect();
+            simulate_roster_fight(player, &companions, companion_power, groups).player_won
+        })
+    };
+
+    ReachRuleVerdict {
+        with_reach: level_needed(&with_reach),
+        all_engaged: level_needed(&all_engaged),
+    }
 }
 
 /// One species group at `zone`'s cap — the unit `min_level_to_clear_zone`
@@ -671,60 +773,20 @@ mod tests {
     /// enemies all standing in melee range — that gap *is* the valve that
     /// makes a swarm fight survivable.
     ///
-    /// Zone 3 (four groups of 9) rather than deeper: past that the fight is
-    /// decided by how long the party takes to chew through the front group
-    /// against `TURN_CAP`, not by how much damage comes back, and both
-    /// versions land on the same level — the valve stops being measurable
-    /// long before it stops mattering.
+    /// The measurement is `reach_rule_verdict`, which is shipping code
+    /// because the roster tuner post-checks a winning proposal against it.
+    /// Asserting through it rather than restating it is what keeps the two
+    /// from drifting, and the drifting copy would be the tuner's — the one
+    /// nobody runs.
     #[test]
     fn the_reach_rule_measurably_softens_a_full_pack() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
-        let toughest = toughest_ordinary_species(&db);
-        let party = median_ordinary_species(&db);
-        let companion_power = average_move_power(party);
-        let zone = 3;
-
-        let with_reach = full_pack_at_zone(toughest, zone);
-        // The same pack with every group in melee range — the fight this
-        // would be without the reach rule.
-        let all_engaged: Vec<GroupSim> = with_reach
-            .iter()
-            .map(|g| GroupSim {
-                ranged_move_power: Some(g.move_power),
-                ..*g
-            })
-            .collect();
-
-        // Compared by the level each version demands rather than by HP
-        // left: past a certain depth both versions are losses at a given
-        // level, and "0% vs 0%" measures nothing.
-        let level_needed = |groups: &[GroupSim]| {
-            (1..=MAX_LEVEL_SEARCHED).find(|&level| {
-                let player = stats_after_levels(
-                    PLAYER_BASE_STATS,
-                    level - 1,
-                    crate::tuning::BASELINE_GROWTH_MULTIPLIER,
-                );
-                let companions: Vec<Stats> = (0..MAX_PARTY_SIZE)
-                    .map(|_| companion_stats(party, zone, companion_level_for_player_level(level)))
-                    .collect();
-                simulate_roster_fight(player, &companions, companion_power, groups).player_won
-            })
-        };
-
-        let reached = level_needed(&with_reach).expect("the reach case must be clearable");
-        let unreached = level_needed(&all_engaged);
-        eprintln!(
-            "zone {zone} pack of {}: level {reached} with the reach rule, {} without",
-            toughest.name,
-            unreached
-                .map(|l| l.to_string())
-                .unwrap_or_else(|| format!("none up to {MAX_LEVEL_SEARCHED}")),
-        );
+        let verdict = reach_rule_verdict(&db);
+        eprintln!("{verdict}");
         assert!(
-            unreached.is_none_or(|unreached| reached < unreached),
+            verdict.holds(),
             "the reach rule must lower the level a full pack demands, or ENGAGED_GROUPS is \
-             buying nothing: {reached} with it, {unreached:?} without"
+             buying nothing: {verdict}"
         );
     }
 

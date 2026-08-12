@@ -609,6 +609,134 @@ pub fn stat_shape_faults(species: &SpeciesDef) -> Vec<ShapeFault> {
     faults
 }
 
+/// Ways a roster's extraction aptitude has collapsed back into its
+/// difficulty ladder.
+///
+/// The point of `base_int` is a species axis that is **not** the ladder
+/// wearing another name. `growth_multiplier` is the ladder, so what has to
+/// hold is that aptitude cuts across it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AptitudeFault {
+    /// Fewer than three growth bands, so there is not enough ladder to cut
+    /// across.
+    TooFewBands { bands: usize },
+    /// A band with no species above the roster's mean aptitude — on that
+    /// rung, aptitude is just the ladder again.
+    BandAllDull { band: String, mean: f64 },
+    /// A band with no species below it, same reasoning.
+    BandAllSharp { band: String, mean: f64 },
+    /// The best extractor in the game is available on the steepest growth
+    /// band, which is how "best extractor" collapses into "furthest up the
+    /// ladder".
+    SharpestOnSteepestBand { sharpest: i32 },
+}
+
+impl std::fmt::Display for AptitudeFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AptitudeFault::TooFewBands { bands } => write!(
+                f,
+                "the ladder should have at least three rungs to cut across, found {bands}"
+            ),
+            AptitudeFault::BandAllDull { band, mean } => write!(
+                f,
+                "growth band {band} has no species above the roster's mean aptitude \
+                 ({mean:.1}), so on that rung aptitude is just the ladder again"
+            ),
+            AptitudeFault::BandAllSharp { band, mean } => write!(
+                f,
+                "growth band {band} has no species below the roster's mean aptitude \
+                 ({mean:.1}), so on that rung aptitude is just the ladder again"
+            ),
+            AptitudeFault::SharpestOnSteepestBand { sharpest } => write!(
+                f,
+                "the best extractor in the game ({sharpest}) is available on the steepest \
+                 growth band, which is how 'best extractor' collapses back into 'furthest \
+                 up the ladder'"
+            ),
+        }
+    }
+}
+
+/// Every way `species`'s aptitude spread has stopped cutting across its
+/// difficulty ladder.
+///
+/// Bosses are filtered out here rather than by the caller: they can never
+/// be posted to a node, so their `base_int` is flavour and must not be able
+/// to carry this either way.
+///
+/// Deliberately not "INT is uncorrelated with tier" — a correlation
+/// threshold is fragile to a one-point retune and would fail for reasons
+/// nobody could read. These are the things a *player* could notice: that
+/// every rung has both a sharp and a dull program on it, and that climbing
+/// the ladder is not how you get the best extractor.
+///
+/// The one definition, read by
+/// `extraction_aptitude_cuts_across_the_difficulty_ladder` and by the
+/// roster tuner's post-check on a winning proposal. It is a post-check
+/// rather than a rejection because it is a property of the whole roster's
+/// *distribution*: a candidate can only break it by moving several species
+/// at once, and reporting it to the human reading the diff is more useful
+/// than refusing a proposal whose other moves were fine.
+pub fn extraction_aptitude_faults<'a>(
+    species: impl IntoIterator<Item = &'a SpeciesDef>,
+) -> Vec<AptitudeFault> {
+    let ordinary: Vec<&SpeciesDef> = species.into_iter().filter(|s| !s.is_boss).collect();
+    if ordinary.is_empty() {
+        return vec![AptitudeFault::TooFewBands { bands: 0 }];
+    }
+    let mean = ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
+
+    let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> = Default::default();
+    for s in &ordinary {
+        bands
+            .entry(format!("{:.2}", s.growth_multiplier))
+            .or_default()
+            .push(s);
+    }
+
+    let mut faults = Vec::new();
+    if bands.len() < 3 {
+        faults.push(AptitudeFault::TooFewBands { bands: bands.len() });
+    }
+    for (band, members) in &bands {
+        if !members.iter().any(|s| (s.base_int as f64) > mean) {
+            faults.push(AptitudeFault::BandAllDull {
+                band: band.clone(),
+                mean,
+            });
+        }
+        if !members.iter().any(|s| (s.base_int as f64) < mean) {
+            faults.push(AptitudeFault::BandAllSharp {
+                band: band.clone(),
+                mean,
+            });
+        }
+    }
+
+    // Phrased as two maxima rather than "the argmax isn't on the top rung",
+    // which would be decided by how `max_by_key` happens to break a tie — a
+    // property of the iterator, not of the roster.
+    let steepest = ordinary
+        .iter()
+        .map(|s| s.growth_multiplier)
+        .fold(f32::MIN, f32::max);
+    let sharpest_overall = ordinary.iter().map(|s| s.base_int).max().unwrap();
+    let sharpest_on_top_rung = ordinary
+        .iter()
+        .filter(|s| s.growth_multiplier == steepest)
+        .map(|s| s.base_int)
+        .max()
+        .expect("the steepest band has members");
+    if sharpest_on_top_rung >= sharpest_overall {
+        faults.push(AptitudeFault::SharpestOnSteepestBand {
+            sharpest: sharpest_overall,
+        });
+    }
+
+    faults
+}
+
 fn default_growth_multiplier() -> f32 {
     crate::tuning::BASELINE_GROWTH_MULTIPLIER
 }
@@ -1282,15 +1410,11 @@ mod tests {
     /// wearing another name. Growth multiplier is the ladder, so the property
     /// asserted here is that aptitude cuts across it.
     ///
-    /// Deliberately not "INT is uncorrelated with tier": a correlation
-    /// threshold is fragile to a one-point retune and would fail for reasons
-    /// nobody could read. These two are the things a *player* could notice —
-    /// that every rung has both a sharp and a dull program on it, and that
-    /// climbing the ladder is not how you get the best extractor.
-    ///
-    /// Bosses are excluded because they can never be posted to a node, so
-    /// their values are flavour and must not be able to carry this either
-    /// way.
+    /// The reasoning is on `species::extraction_aptitude_faults`, which is
+    /// shipping code because the roster tuner post-checks a winning proposal
+    /// against it — a proposal that flattens the aptitude spread is
+    /// something the human reading the diff has to be told about, and the
+    /// tuner cannot be told by a `#[test]`.
     #[test]
     fn extraction_aptitude_cuts_across_the_difficulty_ladder() {
         let (db, warnings) =
@@ -1300,55 +1424,15 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
 
-        let ordinary: Vec<&SpeciesDef> = db.all().filter(|s| !s.is_boss).collect();
-        let mean = ordinary.iter().map(|s| s.base_int).sum::<i32>() as f64 / ordinary.len() as f64;
-
-        let mut bands: std::collections::BTreeMap<String, Vec<&SpeciesDef>> =
-            std::collections::BTreeMap::new();
-        for s in &ordinary {
-            bands
-                .entry(format!("{:.2}", s.growth_multiplier))
-                .or_default()
-                .push(s);
-        }
+        let faults = crate::species::extraction_aptitude_faults(db.all());
         assert!(
-            bands.len() >= 3,
-            "the ladder should have at least three rungs to cut across, found {}",
-            bands.len()
-        );
-
-        for (band, members) in &bands {
-            assert!(
-                members.iter().any(|s| (s.base_int as f64) > mean),
-                "growth band {band} has no species above the roster's mean aptitude \
-                 ({mean:.1}), so on that rung aptitude is just the ladder again"
-            );
-            assert!(
-                members.iter().any(|s| (s.base_int as f64) < mean),
-                "growth band {band} has no species below the roster's mean aptitude \
-                 ({mean:.1}), so on that rung aptitude is just the ladder again"
-            );
-        }
-
-        // Phrased as two maxima rather than "the argmax isn't on the top
-        // rung", which would be decided by how `max_by_key` happens to break
-        // a tie — a property of the iterator, not of the roster.
-        let steepest = ordinary
-            .iter()
-            .map(|s| s.growth_multiplier)
-            .fold(f32::MIN, f32::max);
-        let sharpest_overall = ordinary.iter().map(|s| s.base_int).max().unwrap();
-        let sharpest_on_top_rung = ordinary
-            .iter()
-            .filter(|s| s.growth_multiplier == steepest)
-            .map(|s| s.base_int)
-            .max()
-            .expect("the steepest band has members");
-        assert!(
-            sharpest_on_top_rung < sharpest_overall,
-            "the best extractor in the game ({sharpest_overall}) is available on the \
-             steepest growth band, which is how 'best extractor' collapses back into \
-             'furthest up the ladder'"
+            faults.is_empty(),
+            "extraction aptitude has collapsed back into the difficulty ladder:\n{}",
+            faults
+                .iter()
+                .map(|f| format!("  - {f}"))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 

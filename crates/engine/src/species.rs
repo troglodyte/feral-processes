@@ -332,6 +332,283 @@ impl AffinityClass {
     }
 }
 
+/// The stat shape one class implies: how much of its tier's budget it
+/// carries, how that is split across the three axes, and the speed band it
+/// sits in. Every share is a **percent**, and every derivation from them is
+/// integer, because `50.0f32 * 1.05` is 52.4999… — a species that passes or
+/// fails on the binary representation of a tuning fraction is one nobody can
+/// reason about.
+///
+/// The **up axis alone** names the class. `damps` is a consistency check and
+/// cannot name one on its own — Bastion and Medic both damp `Damage`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ClassShape {
+    pub class: AffinityClass,
+    /// The one axis a species of this class must hold *below* neutral.
+    pub damps: AffinityKind,
+    /// Percent of its growth band's budget a species of this class spends.
+    /// A wall carries more stuff than a glass cannon, by the same factor at
+    /// every tier — which is what makes "low DEF for its size" readable at
+    /// tier 1 and tier 3 alike, as raw totals never were.
+    pub weight: i32,
+    pub hp_share: i32,
+    pub atk_share: i32,
+    pub def_share: i32,
+    pub slowest: i32,
+    pub fastest: i32,
+}
+
+#[rustfmt::skip]
+const CLASS_SHAPES: [ClassShape; 5] = [
+    ClassShape { class: AffinityClass::Striker,  damps: AffinityKind::Heal,   weight:  90, hp_share: 84, atk_share: 13, def_share: 3, slowest: 10, fastest: 11 },
+    ClassShape { class: AffinityClass::Saboteur, damps: AffinityKind::Heal,   weight:  95, hp_share: 85, atk_share: 11, def_share: 4, slowest: 13, fastest: 14 },
+    ClassShape { class: AffinityClass::Medic,    damps: AffinityKind::Damage, weight: 100, hp_share: 87, atk_share:  7, def_share: 6, slowest: 12, fastest: 12 },
+    ClassShape { class: AffinityClass::Leech,    damps: AffinityKind::Buff,   weight: 105, hp_share: 90, atk_share:  8, def_share: 2, slowest:  8, fastest:  9 },
+    ClassShape { class: AffinityClass::Bastion,  damps: AffinityKind::Damage, weight: 110, hp_share: 88, atk_share:  4, def_share: 8, slowest:  6, fastest:  7 },
+];
+
+impl ClassShape {
+    /// The shape a class is built to. The one definition — read by
+    /// `every_ordinary_species_stat_shape_agrees_with_its_affinity_class`
+    /// and by the roster tuner's constraint check, which is why it is
+    /// shipping code rather than a table inside a test.
+    pub fn of(class: AffinityClass) -> ClassShape {
+        CLASS_SHAPES
+            .into_iter()
+            .find(|c| c.class == class)
+            .expect("every AffinityClass has a shape")
+    }
+
+    /// Total HP+ATK+DEF a species of this class spends at `budget`.
+    pub fn spend(&self, budget: i32) -> i32 {
+        pct(budget, self.weight)
+    }
+
+    /// What each axis of a `total`-point block should hold, in HP/ATK/DEF
+    /// order. Named alongside the value so a fault can say which axis moved.
+    pub fn axis_targets(&self, total: i32) -> [(&'static str, i32); 3] {
+        [
+            ("HP", pct(total, self.hp_share)),
+            ("ATK", pct(total, self.atk_share)),
+            ("DEF", pct(total, self.def_share)),
+        ]
+    }
+}
+
+/// `percent` of `value`, rounded half up.
+fn pct(value: i32, percent: i32) -> i32 {
+    (value * percent + 50) / 100
+}
+
+/// The growth multipliers an ordinary species may carry — one per band of
+/// `tier_budget`, and the rungs
+/// `base_roster_growth_multiplier_rises_with_difficulty_tier` pins the base
+/// roster to.
+///
+/// A value *between* rungs is what makes the budget step function
+/// unreadable: `1.238` is neither the 105-point band it looks like nor the
+/// 50-point band it lands in, and the species' whole stat block is then
+/// derived from a number nobody chose. Bosses are outside this, as they are
+/// outside the class system entirely — the shipped two sit at `2.0`.
+pub const GROWTH_TIERS: [f32; 3] = [crate::tuning::BASELINE_GROWTH_MULTIPLIER, 1.25, 1.5];
+
+/// Total HP+ATK+DEF a species of each growth band is built from, before its
+/// class weight. Taken from the bands' own means at the time the classes
+/// landed, so the ladder itself did not move.
+pub fn tier_budget(growth: f32) -> i32 {
+    match growth {
+        g if g < 1.125 => 50,
+        g if g < 1.375 => 105,
+        _ => 140,
+    }
+}
+
+/// How an ordinary species' numbers disagree with the class its affinities
+/// name.
+///
+/// One variant per rule rather than a bare bool, because both consumers have
+/// to *say* what is wrong: the census prints it in an assertion and the
+/// tuner prints it in a rejection a human reads off a proposal.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ShapeFault {
+    /// Raises no affinity axis, or more than one, so it has no readable
+    /// role. What a boss is — which is why bosses are not checked.
+    NoReadableClass,
+    /// Damps some number of axes other than exactly one. A class is one
+    /// thing it is good at and one it is bad at.
+    DampsWrongCount { count: usize },
+    /// Damps the wrong axis for the class its raised axis names.
+    DampsWrongAxis {
+        expected: AffinityKind,
+        found: AffinityKind,
+    },
+    /// Spends a total its growth band and class do not add up to.
+    OffBudget {
+        spent: i32,
+        budget: i32,
+        expected: i32,
+    },
+    /// Puts more than a point of slack away from its class's share into one
+    /// axis.
+    AxisOffShare {
+        axis: &'static str,
+        actual: i32,
+        target: i32,
+    },
+    SpeedOutsideBand {
+        speed: i32,
+        slowest: i32,
+        fastest: i32,
+    },
+    /// A growth multiplier between the rungs of `GROWTH_TIERS`.
+    GrowthOffTier { growth: f32 },
+}
+
+impl std::fmt::Display for ShapeFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShapeFault::NoReadableClass => write!(
+                f,
+                "raises no single affinity axis — exactly one is what names its class, and a \
+                 species with none or two has no readable role"
+            ),
+            ShapeFault::DampsWrongCount { count } => write!(
+                f,
+                "damps {count} affinity axes; a class is one thing it is good at and one it \
+                 is bad at"
+            ),
+            ShapeFault::DampsWrongAxis { expected, found } => {
+                write!(f, "its class damps {expected:?}, but it damps {found:?}")
+            }
+            ShapeFault::OffBudget {
+                spent,
+                budget,
+                expected,
+            } => write!(
+                f,
+                "spends {spent} stat points; its growth band's budget is {budget} and its \
+                 class carries a share of that, so it should spend {expected}"
+            ),
+            ShapeFault::AxisOffShare {
+                axis,
+                actual,
+                target,
+            } => write!(
+                f,
+                "puts {actual} points into {axis} where its class's share is {target}. One \
+                 point of slack is allowed for the residue that makes the three sum to the \
+                 budget, no more"
+            ),
+            ShapeFault::SpeedOutsideBand {
+                speed,
+                slowest,
+                fastest,
+            } => write!(
+                f,
+                "is speed {speed}, outside its class's {slowest}-{fastest} band. Speed is the \
+                 fourth shape axis and it is not only initiative — it paces the machine a \
+                 program is posted to (see Game::work_ticks_for)"
+            ),
+            ShapeFault::GrowthOffTier { growth } => write!(
+                f,
+                "grows at {growth}, which is between the rungs of the ladder \
+                 ({:?}) — its stat budget is then a step function evaluated at a number \
+                 nobody chose",
+                GROWTH_TIERS
+            ),
+        }
+    }
+}
+
+/// Every way `species` disagrees with the class its affinities name.
+///
+/// **Only meaningful for `!is_boss` species.** Bosses are outside the class
+/// system, carry no affinities at all, and would report `NoReadableClass`
+/// for doing exactly what they are supposed to do; both callers filter them
+/// out first rather than this function guessing.
+///
+/// Returns *every* fault rather than the first. The census used to assert
+/// its way down a species and stop at the earliest failure, which is how a
+/// tuner proposal in August 2026 shipped two budget violations that were
+/// never reported — the run died on a speed band three species earlier.
+///
+/// This is the one definition of a legal stat block. The census
+/// (`every_ordinary_species_stat_shape_agrees_with_its_affinity_class`)
+/// asserts it comes back empty; the roster tuner's `constraints::check`
+/// rejects a candidate it comes back non-empty for. A second copy of the
+/// arithmetic in either place is the copy that drifts, and the one nobody
+/// runs is the tuner's.
+pub fn stat_shape_faults(species: &SpeciesDef) -> Vec<ShapeFault> {
+    let Some(class) = species.affinity_class() else {
+        return vec![ShapeFault::NoReadableClass];
+    };
+    let shape = ClassShape::of(class);
+    let mut faults = Vec::new();
+
+    let damped: Vec<AffinityKind> = [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ]
+    .into_iter()
+    .filter(|k| species.affinities.get(*k) < crate::tuning::AFFINITY_NEUTRAL)
+    .collect();
+    match damped.as_slice() {
+        [found] if *found != shape.damps => faults.push(ShapeFault::DampsWrongAxis {
+            expected: shape.damps,
+            found: *found,
+        }),
+        [_] => {}
+        other => faults.push(ShapeFault::DampsWrongCount { count: other.len() }),
+    }
+
+    if !GROWTH_TIERS
+        .iter()
+        .any(|t| (species.growth_multiplier - t).abs() < 1e-4)
+    {
+        faults.push(ShapeFault::GrowthOffTier {
+            growth: species.growth_multiplier,
+        });
+    }
+
+    let total = species.base_hp + species.base_atk + species.base_def;
+    let budget = tier_budget(species.growth_multiplier);
+    let expected = shape.spend(budget);
+    if total != expected {
+        faults.push(ShapeFault::OffBudget {
+            spent: total,
+            budget,
+            expected,
+        });
+    }
+
+    for ((axis, target), actual) in shape.axis_targets(total).into_iter().zip([
+        species.base_hp,
+        species.base_atk,
+        species.base_def,
+    ]) {
+        if (actual - target).abs() > 1 {
+            faults.push(ShapeFault::AxisOffShare {
+                axis,
+                actual,
+                target,
+            });
+        }
+    }
+
+    if !(shape.slowest..=shape.fastest).contains(&species.base_speed) {
+        faults.push(ShapeFault::SpeedOutsideBand {
+            speed: species.base_speed,
+            slowest: shape.slowest,
+            fastest: shape.fastest,
+        });
+    }
+
+    faults
+}
+
 fn default_growth_multiplier() -> f32 {
     crate::tuning::BASELINE_GROWTH_MULTIPLIER
 }
@@ -451,7 +728,6 @@ impl SpeciesDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tuning::AFFINITY_NEUTRAL;
     use std::path::Path;
 
     fn species_assets_dir() -> std::path::PathBuf {
@@ -739,46 +1015,12 @@ mod tests {
         }
     }
 
-    /// The five classes, as the tuple every non-boss species is checked
-    /// against: `(up axis, down axis, budget weight, HP share, ATK share,
-    /// DEF share, slowest speed, fastest speed)`. Every share is a
-    /// **percent**, and the arithmetic below is integer, because
-    /// `50.0f32 * 1.05` is 52.4999… — a census that a species passes or
-    /// fails on the binary representation of a tuning fraction is a census
-    /// nobody can reason about.
-    ///
-    /// The **up axis alone** names the class. The down axis is a
-    /// consistency check and cannot name one on its own — Bastion and
-    /// Medic both damp `damage`.
-    /// (class, damped axis, stat weight %, HP/ATK/DEF shares %, speed band)
-    type ClassRow = (AffinityClass, AffinityKind, i32, i32, i32, i32, i32, i32);
-
-    #[rustfmt::skip]
-    const CLASSES: [ClassRow; 5] = [
-        (AffinityClass::Striker,  AffinityKind::Heal,    90, 84, 13, 3, 10, 11),
-        (AffinityClass::Saboteur, AffinityKind::Heal,    95, 85, 11, 4, 13, 14),
-        (AffinityClass::Medic,    AffinityKind::Damage, 100, 87,  7, 6, 12, 12),
-        (AffinityClass::Leech,    AffinityKind::Buff,   105, 90,  8, 2,  8,  9),
-        (AffinityClass::Bastion,  AffinityKind::Damage, 110, 88,  4, 8,  6,  7),
-    ];
-
-    /// `percent` of `value`, rounded half up.
-    fn pct(value: i32, percent: i32) -> i32 {
-        (value * percent + 50) / 100
-    }
-
-    /// The `CLASSES` row a non-boss species is read as, looked up from
-    /// `SpeciesDef::affinity_class` and cross-checked against the axis it
-    /// damps.
-    ///
-    /// Both censuses go through here rather than deriving the class each for
-    /// itself: the class is what they disagree about most cheaply, and a
-    /// second copy of "raises exactly one axis" is a copy that can drift
-    /// into checking the stats against one class and the kit against
-    /// another. The derivation itself is no longer one of those copies — it
-    /// is the shipping function the base jobs read, so a census passing is
-    /// evidence about the game rather than about the test.
-    fn class_of(species: &SpeciesDef) -> ClassRow {
+    /// The `ClassShape` a non-boss species is read as. Both censuses go
+    /// through here rather than deriving the class each for itself: the
+    /// class is what they disagree about most cheaply, and a second copy of
+    /// "raises exactly one axis" is a copy that can drift into checking the
+    /// stats against one class and the kit against another.
+    fn class_of(species: &SpeciesDef) -> ClassShape {
         let id = &species.id;
         let class = species.affinity_class().unwrap_or_else(|| {
             panic!(
@@ -786,42 +1028,7 @@ mod tests {
                  and a species with none or two has no readable role"
             )
         });
-        let damped: Vec<AffinityKind> = [
-            AffinityKind::Damage,
-            AffinityKind::Heal,
-            AffinityKind::Buff,
-            AffinityKind::Debuff,
-            AffinityKind::Drain,
-        ]
-        .into_iter()
-        .filter(|k| species.affinities.get(*k) < AFFINITY_NEUTRAL)
-        .collect();
-        assert_eq!(
-            damped.len(),
-            1,
-            "{id} damps {} affinity axes; a class is one thing it is good at and \
-             one it is bad at",
-            damped.len()
-        );
-
-        let row = CLASSES.into_iter().find(|c| c.0 == class).unwrap();
-        assert_eq!(
-            damped[0], row.1,
-            "{id} is a {:?} class, which damps {:?}, but it damps {:?}",
-            row.0, row.1, damped[0]
-        );
-        row
-    }
-
-    /// Total HP+ATK+DEF a species of each growth band is built from, before
-    /// its class weight. Taken from the bands' own means at the time the
-    /// classes landed, so the ladder itself did not move.
-    fn tier_budget(growth: f32) -> i32 {
-        match growth {
-            g if g < 1.125 => 50,
-            g if g < 1.375 => 105,
-            _ => 140,
-        }
+        ClassShape::of(class)
     }
 
     /// A class is three things that must agree — the affinity axis, the
@@ -843,6 +1050,15 @@ mod tests {
     /// Bosses are excluded: they are outside the class system entirely and
     /// have no affinities at all, which is what `derive` refusing a neutral
     /// species would otherwise make an error.
+    ///
+    /// The arithmetic is `species::stat_shape_faults`, which is shipping
+    /// code because the roster tuner rejects candidates by it. Asserting
+    /// through the shipped function rather than restating it is what makes
+    /// this census evidence about the game rather than about the test — the
+    /// `Game::creature_class` precedent. It also reports **every** species
+    /// and every fault: this used to assert its way down one species at a
+    /// time and stop at the first failure, which is how a proposal with two
+    /// budget violations was reviewed as having a speed problem.
     #[test]
     fn every_ordinary_species_stat_shape_agrees_with_its_affinity_class() {
         let (db, warnings) =
@@ -852,42 +1068,21 @@ mod tests {
             "species assets should all load cleanly: {warnings:?}"
         );
 
-        for species in db.all().filter(|s| !s.is_boss) {
-            let id = &species.id;
-            let (up, _down, weight, hp_share, atk_share, def_share, slowest, fastest) =
-                class_of(species);
-
-            let total = species.base_hp + species.base_atk + species.base_def;
-            let budget = tier_budget(species.growth_multiplier);
-            let expected = pct(budget, weight);
-            assert_eq!(
-                total, expected,
-                "{id} spends {total} stat points; its growth band's budget is {budget} \
-                 and a {up:?} class carries {weight}% of that, so it should spend {expected}"
-            );
-
-            for (name, actual, share) in [
-                ("HP", species.base_hp, hp_share),
-                ("ATK", species.base_atk, atk_share),
-                ("DEF", species.base_def, def_share),
-            ] {
-                let target = pct(total, share);
-                assert!(
-                    (actual - target).abs() <= 1,
-                    "{id} puts {actual} of its {total} points into {name}; a {up:?} class \
-                     spends {share}% there, which is {target}. One point of slack is allowed \
-                     for the residue that makes the three sum to the budget, no more"
-                );
-            }
-
-            assert!(
-                (slowest..=fastest).contains(&species.base_speed),
-                "{id} is a {up:?} class, which is a {slowest}-{fastest} speed, but it is \
-                 {}. Speed is the fourth shape axis and it is not only initiative — it \
-                 paces the machine a program is posted to (see Game::work_ticks_for)",
-                species.base_speed
-            );
-        }
+        let complaints: Vec<String> = db
+            .all()
+            .filter(|s| !s.is_boss)
+            .flat_map(|s| {
+                let class = class_of(s).class;
+                crate::species::stat_shape_faults(s)
+                    .into_iter()
+                    .map(move |fault| format!("{} (a {class:?}) {fault}", s.id))
+            })
+            .collect();
+        assert!(
+            complaints.is_empty(),
+            "the roster's stat blocks are derived from tier budget and class share:\n{}",
+            complaints.join("\n")
+        );
     }
 
     /// The authored magnitude of a kit entry, which is what the ladder is
@@ -949,7 +1144,7 @@ mod tests {
 
         for species in db.all().filter(|s| !s.is_boss) {
             let id = &species.id;
-            let (class, ..) = class_of(species);
+            let class = class_of(species).class;
 
             assert_eq!(
                 species.abilities.len(),
@@ -1013,7 +1208,7 @@ mod tests {
             ));
         }
 
-        for (class, ..) in CLASSES {
+        for ClassShape { class, .. } in CLASS_SHAPES {
             let mut members: Vec<_> = kits.iter().filter(|k| k.0 == class).collect();
             assert_eq!(
                 members.len(),

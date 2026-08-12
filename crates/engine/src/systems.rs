@@ -12,7 +12,7 @@ use crate::game::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
-use crate::progression;
+use crate::progression::{self, LevelGain};
 use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
@@ -600,7 +600,7 @@ pub fn task_progress_system(
             .unwrap_or(resource.as_str());
         let landed = deliver_payout(&resource, payout, &mut stock, &item_db, bank.as_deref_mut());
         set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
-        let level_note = if exp.level < WORK_XP_LEVEL_CAP {
+        let gain = if exp.level < WORK_XP_LEVEL_CAP {
             let species_growth = species_db
                 .get(&creature.species)
                 .map(|s| s.growth_multiplier)
@@ -609,26 +609,38 @@ pub fn task_progress_system(
                 .map(|p| p.growth_roll)
                 .unwrap_or(Potential::NEUTRAL.growth_roll);
             let growth_multiplier = species_growth * individual_roll;
-            let levels = progression::add_xp(
+            progression::add_xp(
                 &mut exp,
                 &mut stats,
                 WORK_XP_PER_CYCLE,
                 growth_multiplier,
                 Some(crate::tuning::CREATURE_MAX_LEVEL),
                 xp_boost_pct,
-            );
-            if levels > 0 {
-                format!(" It levels up to {}!", exp.level)
-            } else {
-                String::new()
-            }
+            )
         } else {
-            String::new()
+            LevelGain::default()
         };
         log.push_base_kind(
             MessageKind::Loot,
-            format!("Your subroutine extracted {landed} {resource_name}.{level_note}"),
+            format!("Your subroutine extracted {landed} {resource_name}."),
         );
+        // Its own `LevelUp` line rather than a tail on the payout above, so a
+        // base level-up draws and prunes like the two field ones. Named by the
+        // machine because this is a bevy system with no `Game` to ask
+        // `creature_label`, and the base log identifies posted programs by
+        // where they are posted anyway — see `set_machine_status`.
+        if gain.levels > 0 {
+            log.push_base_kind(
+                MessageKind::LevelUp,
+                format!(
+                    "Your subroutine at the {machine_name} levels up to {}!",
+                    exp.level
+                ),
+            );
+            for line in progression::stat_block(&gain.stat_rows(&stats)) {
+                log.push_base_kind(MessageKind::LevelUp, line);
+            }
+        }
     }
 }
 

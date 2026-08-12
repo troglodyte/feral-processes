@@ -1,6 +1,7 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
+use crate::progression::StatRow;
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
@@ -227,12 +228,12 @@ impl Game {
         // regardless of whether `player` here is the player themself (the
         // only caller today, but the parameter doesn't guarantee it).
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
-        let (levels, new_level) = {
+        let (gain, new_level, grown) = {
             let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
             let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, player) else {
                 return;
             };
-            let levels = progression::add_xp(
+            let gain = progression::add_xp(
                 &mut exp,
                 &mut stats,
                 amount,
@@ -241,19 +242,35 @@ impl Game {
                 None,
                 xp_boost_pct,
             );
-            (levels, exp.level)
+            (gain, exp.level, *stats)
         };
-        if levels > 0 {
-            if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
-                decompiler.skill += DECOMPILER_SKILL_PER_LEVEL * levels as i32;
-            }
+        if gain.levels > 0 {
+            // The player's block runs longer than a companion's: a level also
+            // pays a Perk Point and a point of Decompiler skill, and neither
+            // was announced anywhere before this, so a player could bank
+            // points for a run without learning they had any.
+            let mut rows = gain.stat_rows(&grown).to_vec();
             if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
-                perks.points += PERK_POINTS_PER_LEVEL * levels;
+                let before = perks.points;
+                perks.points += PERK_POINTS_PER_LEVEL * gain.levels;
+                rows.push(StatRow::new(
+                    "Perk Points",
+                    before as i32,
+                    perks.points as i32,
+                ));
+            }
+            if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
+                let before = decompiler.skill;
+                decompiler.skill += DECOMPILER_SKILL_PER_LEVEL * gain.levels as i32;
+                rows.push(StatRow::new("Decompiler", before, decompiler.skill));
             }
             self.log_kind(
                 MessageKind::LevelUp,
                 format!("You gain {amount} XP and reach level {new_level}!"),
             );
+            for line in progression::stat_block(&rows) {
+                self.log_kind(MessageKind::LevelUp, line);
+            }
         } else {
             self.log_kind(MessageKind::Outcome, format!("You gain {amount} XP."));
         }
@@ -291,12 +308,12 @@ impl Game {
                 .get::<Experience>(companion)
                 .map(|e| e.level)
                 .unwrap_or(1);
-            {
+            let (gain, grown) = {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
                 };
-                progression::add_xp(
+                let gain = progression::add_xp(
                     &mut exp,
                     &mut stats,
                     amount,
@@ -304,18 +321,22 @@ impl Game {
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
                     xp_boost_pct,
                 );
-            }
+                (gain, *stats)
+            };
             let level = self
                 .world
                 .get::<Experience>(companion)
                 .map(|e| e.level)
                 .unwrap_or(before_level);
-            if level > before_level {
+            if gain.levels > 0 {
                 let name = self.creature_label(companion);
                 self.log_kind(
                     MessageKind::LevelUp,
                     format!("{name} gains {amount} XP and levels up to {level}!"),
                 );
+                for line in progression::stat_block(&gain.stat_rows(&grown)) {
+                    self.log_kind(MessageKind::LevelUp, line);
+                }
                 self.install_unlocked_routines(companion, before_level, level);
             }
         }

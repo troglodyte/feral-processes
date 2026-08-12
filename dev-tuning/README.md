@@ -57,8 +57,48 @@ qualifies, so that failure looks intact from the outside. A roster where
 *every* species is beatable has no upper half left. Both are thrown out
 before any fight runs.
 
+**An ordinary species' stat block is derived, not authored.** Its total is
+its growth band's budget times its class's weight, *exactly*, with per-axis
+shares to ±1 and a speed band per class — and the class comes from the
+species' affinities, which the tuner cannot move. So four more rules apply,
+all of them `species::stat_shape_faults` called rather than restated:
+
+- the total is off its budget,
+- an axis holds more than a point away from its class's share,
+- `base_speed` is outside its class's band,
+- `growth_multiplier` sits between the rungs of `GROWTH_TIERS`. The budget
+  is a step function, so `1.238` derives a whole stat block from a number
+  nobody chose.
+
+**Bosses are exempt from all four**, which is what the shipped census does
+and is not a detail: they sit outside the class system, and the one move the
+first real search made that was worth having was a boss's ATK.
+
 Boss-per-biome coverage is deliberately unchecked: the tuner never touches
 `habitats` or `is_boss`, so it cannot break that census.
+
+## What is reported rather than rejected
+
+Two of the shipped censuses are too expensive or too roster-wide to pay on
+every candidate, so they run once on the winner and land in `report.md`
+under "Censuses too expensive to reject by":
+
+- **the reach rule** (`balance_sim::reach_rule_verdict`) runs a level
+  search per call;
+- **the extraction-aptitude spread** (`species::extraction_aptitude_faults`)
+  is a property of the whole roster's distribution rather than of any one
+  move.
+
+A proposal that breaks one is not thrown out — by the time these run a human
+is reading a diff, and that person decides. The report prints the reach
+rule's two levels rather than a verdict, because how close it came is the
+part that informs the decision.
+
+`report.md` also tallies rejections **by rule**. A bare count says a search
+was turned away without saying from what, and the two readings need
+different fixes: bounds set wrong is a config edit, while a legal move set
+thinner than the search space is a reason to narrow `perturb` so it stops
+proposing the illegal in the first place.
 
 ## Two things to know before trusting a number
 

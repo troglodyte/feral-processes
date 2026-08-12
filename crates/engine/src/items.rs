@@ -120,6 +120,17 @@ pub enum EquipmentSlot {
 }
 
 impl EquipmentSlot {
+    /// Every slot, in the order the equipment panel and the companion slot
+    /// page list them. One definition, so a fourth slot cannot reach some
+    /// screens and miss others — or, worse, be missed by `Game::gear_bonus`
+    /// and `Game::strip_gear`, where a skipped slot is a bonus welded into
+    /// the wearer's base stats.
+    pub const ALL: [EquipmentSlot; 3] = [
+        EquipmentSlot::Weapon,
+        EquipmentSlot::Armor,
+        EquipmentSlot::Module,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             EquipmentSlot::Weapon => "Weapon",

@@ -616,6 +616,15 @@ impl Game {
                 ));
             }
         }
+        // Before the snapshot below, and that ordering is the whole
+        // correctness argument: `fuse_stat` combines both parents' `Stats`
+        // into the child's, so a gear bonus still sitting in one of them is
+        // banked into a new program permanently, with no record of where it
+        // came from. This function does its own reap and never calls
+        // `dissolve_tamed_program`, so it carries its own strip.
+        for e in [a, b] {
+            self.strip_gear(e);
+        }
         let fused_depth = self.fusion_count(a).max(self.fusion_count(b)) + 1;
         let (species_a, exp_a, stats_a, potential_a) = (
             self.world.get::<Creature>(a).unwrap().species.clone(),

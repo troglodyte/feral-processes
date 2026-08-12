@@ -938,3 +938,78 @@ fn a_decompiler_module_on_a_companion_changes_none_of_its_stats() {
         "the module is worn even though its bonus does nothing"
     );
 }
+
+/// A program that has never worn anything must survive the strip the
+/// destruction paths run unconditionally.
+#[test]
+fn stripping_a_program_wearing_nothing_is_a_no_op() {
+    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    let before = stats_of(&game, companion);
+
+    game.strip_gear(companion);
+
+    let after = stats_of(&game, companion);
+    assert_eq!(
+        (after.atk, after.def, after.max_hp),
+        (before.atk, before.def, before.max_hp)
+    );
+    assert!(
+        game.world.get::<Equipment>(companion).is_none(),
+        "a strip must not grow the component it found absent"
+    );
+}
+
+/// The gear on a program that dies fighting is the player's property and
+/// comes back — the reap in `end_battle` runs through
+/// `dissolve_tamed_program`, which is where the strip lives.
+#[test]
+fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
+    let mut game = Game::new(514, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+    game.equip(companion, &weapon, 0).unwrap();
+    assert_eq!(held(&game, &weapon), 0, "the copy is on the program");
+
+    let enemy = spawn_wild_on_player_tile(&mut game);
+    game.world.get_mut::<Stats>(enemy).unwrap().hp = 1;
+    insert_battle(&mut game, player, vec![enemy]);
+    // `apply_damage` is the only path that lowers HP.
+    game.apply_damage(companion, 999);
+    assert!(!game.creature_alive(companion));
+
+    player_attacks(&mut game);
+
+    assert!(
+        game.world.get::<Stats>(companion).is_none(),
+        "the dead program should have been reaped"
+    );
+    assert_eq!(
+        held(&game, &weapon),
+        1,
+        "its gear is the player's property and comes back"
+    );
+}
+
+/// Extraction destroys the program too, and goes through the same dissolve.
+#[test]
+fn extracting_a_routine_from_a_geared_program_returns_its_gear() {
+    let (mut game, medic) = game_with_two_ability_companion();
+    set_level(&mut game, medic, 5);
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let armor = ItemId::from(ids::FIREWALL_PLATING);
+    give(&mut game, &armor, 1);
+    game.equip(medic, &armor, 0).unwrap();
+    assert_eq!(held(&game, &armor), 0);
+
+    game.extract_routine(medic, 0).unwrap();
+
+    assert!(
+        game.world.get::<Stats>(medic).is_none(),
+        "the program is spent"
+    );
+    assert_eq!(held(&game, &armor), 1, "its gear comes back to cargo");
+}

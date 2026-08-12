@@ -258,6 +258,59 @@ impl Game {
         Ok(Some((equipped, base_mods)))
     }
 
+    /// What `wearer`'s gear is worth right now — every worn slot's bonus,
+    /// scaled for the level it went on at and the tier of the copy that
+    /// went on. The single definition of that sum: nothing else walks the
+    /// slots itself, so a fourth slot cannot be half-counted.
+    ///
+    /// A slot whose item has dropped out of `ItemDb` (a save naming a
+    /// since-removed mod item) contributes nothing rather than erroring.
+    /// This is a read used *inside* operations that must not fail halfway —
+    /// unlike `unequip`, which can refuse the whole action and does.
+    pub(crate) fn gear_bonus(&self, wearer: Entity) -> items::EquipmentStats {
+        let Some(equipment) = self.world.get::<Equipment>(wearer) else {
+            return items::EquipmentStats::default();
+        };
+        EquipmentSlot::ALL
+            .into_iter()
+            .filter_map(|slot| {
+                let worn = equipment.get(slot)?;
+                let (_, base) = self.equipment_of(&worn.item)?;
+                Some(
+                    base.scaled_for_level(worn.level)
+                        .fused_for_tier(worn.fusion_tier),
+                )
+            })
+            .fold(items::EquipmentStats::default(), |acc, mods| {
+                items::EquipmentStats {
+                    atk: acc.atk + mods.atk,
+                    def: acc.def + mods.def,
+                    decompiler: acc.decompiler + mods.decompiler,
+                }
+            })
+    }
+
+    /// Returns everything `wearer` has on to the player's cargo, leaving no
+    /// bonus behind in `Stats`. Idempotent on an entity wearing nothing —
+    /// including one that has no `Equipment` at all, which is what a program
+    /// that has never been geared looks like.
+    ///
+    /// Deliberately **not** three `unequip` calls: `unequip` refuses during a
+    /// battle and calls `tick()`, and a companion dying mid-battle is
+    /// precisely when this runs.
+    pub(crate) fn strip_gear(&mut self, wearer: Entity) {
+        let Some(equipment) = self.world.get::<Equipment>(wearer).cloned() else {
+            return;
+        };
+        self.apply_equipment_delta(wearer, self.gear_bonus(wearer), -1);
+        for slot in EquipmentSlot::ALL {
+            if let Some(worn) = equipment.get(slot) {
+                self.add_copies(&worn.item, worn.fusion_tier, 1);
+            }
+        }
+        *self.world.get_mut::<Equipment>(wearer).unwrap() = Equipment::default();
+    }
+
     /// Refuses a wearer that is neither the player nor a program they own.
     /// Both `equip` and `unequip` ask *before* anything moves — the ordering
     /// `use_symlink` and `install_routine` keep, so a refusal spends nothing.

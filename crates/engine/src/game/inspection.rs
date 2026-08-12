@@ -600,14 +600,10 @@ impl Game {
                     .get::<Decompiler>(entity)
                     .map(|d| d.skill)
                     .unwrap_or(0),
-                equipment: [
-                    EquipmentSlot::Weapon,
-                    EquipmentSlot::Armor,
-                    EquipmentSlot::Module,
-                ]
-                .into_iter()
-                .filter_map(|slot| self.manifest_equip_slot(slot, equipment.get(slot)?))
-                .collect(),
+                equipment: EquipmentSlot::ALL
+                    .into_iter()
+                    .filter_map(|slot| self.manifest_equip_slot(slot, equipment.get(slot)?))
+                    .collect(),
                 perk_points: perks.map(|p| p.points).unwrap_or(0),
                 perks: perks
                     .map(|p| {

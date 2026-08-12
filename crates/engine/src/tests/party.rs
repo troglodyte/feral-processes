@@ -1521,3 +1521,52 @@ fn a_custom_name_still_carries_the_tier() {
         "expected both the chosen name and the tier in {name:?}"
     );
 }
+
+/// `fuse_companions` does its own reap and never calls
+/// `dissolve_tamed_program`, so it carries its own strip — and the ordering
+/// is the whole correctness argument: after the `Stats` snapshot, the gear
+/// bonus is already baked into the child.
+#[test]
+fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
+    let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    give(&mut game, &weapon, 1);
+
+    let tamed = |game: &mut Game| -> Vec<Entity> {
+        let mut query = game.world.query_filtered::<Entity, With<Tamed>>();
+        query.iter(&game.world).collect()
+    };
+
+    // The yardstick: the same two programs fused with nothing worn.
+    let c = spawn_tamed(&mut game, 20, 10);
+    let d = spawn_tamed(&mut game, 10, 6);
+    let before = tamed(&mut game);
+    game.fuse_companions(c, d, None).unwrap();
+    let bare_child = *tamed(&mut game)
+        .iter()
+        .find(|e| !before.contains(e))
+        .expect("a fused program exists");
+    let expected = *game.world.get::<Stats>(bare_child).unwrap();
+
+    let a = spawn_tamed(&mut game, 20, 10);
+    let b = spawn_tamed(&mut game, 10, 6);
+    game.equip(a, &weapon, 0).unwrap();
+    let before = tamed(&mut game);
+    game.fuse_companions(a, b, None).unwrap();
+    let geared_child = *tamed(&mut game)
+        .iter()
+        .find(|e| !before.contains(e))
+        .expect("a fused program exists");
+    let actual = *game.world.get::<Stats>(geared_child).unwrap();
+
+    assert_eq!(
+        held(&game, &weapon),
+        1,
+        "gear on a fused-away parent comes back to cargo"
+    );
+    assert_eq!(
+        (actual.max_hp, actual.atk, actual.def),
+        (expected.max_hp, expected.atk, expected.def),
+        "a worn weapon must not be fused into the child's base stats"
+    );
+}

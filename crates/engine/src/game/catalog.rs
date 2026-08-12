@@ -240,7 +240,7 @@ impl Game {
     /// says nothing worth glossing — a plain currency reads fine as itself.
     pub fn item_blurb(&self, id: &ItemId) -> Option<String> {
         let def = self.world.resource::<ItemDb>().get(id.as_str())?;
-        if let Some((slot, stats)) = &def.equipment {
+        if let Some((_, stats)) = &def.equipment {
             let mut parts = Vec::new();
             if stats.atk != 0 {
                 parts.push(format!("+{} atk", stats.atk));
@@ -251,11 +251,12 @@ impl Game {
             if stats.decompiler != 0 {
                 parts.push(format!("+{} decomp", stats.decompiler));
             }
-            return Some(if parts.is_empty() {
-                slot.label().to_string()
-            } else {
-                parts.join(" ")
-            });
+            // Deliberately not naming the slot when there is no magnitude to
+            // quote. Every screen listing an item prints
+            // `ItemCategory::short_label` in a column of its own, so a gloss
+            // saying "Weapon" beside a `WEP` column is the column twice. The
+            // column carries the kind; this carries the magnitude.
+            return (!parts.is_empty()).then(|| parts.join(" "));
         }
         if let Some(c) = &def.consume {
             let mut parts = Vec::new();

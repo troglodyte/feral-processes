@@ -497,6 +497,19 @@ pub(super) fn draw_row(
 /// the pair that preceded this were kept in step by a doc comment.
 pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
 
+/// How wide a *menu row* may run before its trailing detail moves onto a
+/// continuation line. Separate from `DESCRIBE_WRAP_COLUMNS` because that one
+/// is for prose, which reads better narrow than wide; a menu row is a record
+/// the eye scans, and splitting one that would have fit costs a line of the
+/// popup and a glance to reassemble.
+///
+/// So this sits close to the real edge instead. Measured at 1440x900, a
+/// `PopupSize::Large` body has room for about 114 monospace cells including
+/// the two `draw_row` prefixes with, so 100 leaves margin for the narrower
+/// windows the popup's percentage width produces without splitting rows that
+/// would have been fine.
+pub(super) const ROW_WRAP_COLUMNS: usize = 100;
+
 /// Greedy word wrap to `columns`, for prose too long to sit on one popup
 /// row — an item's authored description, chiefly.
 ///

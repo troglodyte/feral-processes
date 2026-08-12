@@ -192,6 +192,103 @@ fn every_compilable_item_either_has_a_blurb_or_declares_nothing_blurb_worthy() {
     }
 }
 
+/// The Compile screen prints `ItemCategory::short_label` as a leading
+/// column, and that column only reads as a heading for the run of rows
+/// beneath it if the list arrives grouped — which is the whole reason the
+/// ordering is decided here rather than in the renderer. `handle_craft_key`
+/// dispatches `recipes[idx]` while `draw_craft_menu` draws `recipes[i]` from
+/// a separate call, so a sort applied on the draw side alone would put the
+/// highlight on a different row from the one that fires.
+#[test]
+fn the_compile_list_comes_back_in_category_order() {
+    let game = Game::new(99, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let keys: Vec<(ItemCategory, String)> = game
+        .craft_recipes()
+        .iter()
+        .map(|r| game.category_sort_key(&r.result))
+        .collect();
+    assert!(keys.len() > 1, "a fresh game should offer several recipes");
+    let mut sorted = keys.clone();
+    sorted.sort();
+    assert_eq!(
+        keys, sorted,
+        "the compile list must arrive in the same category order the \
+         inventory and a trader's shelf use"
+    );
+}
+
+/// The researched half of `craft_recipes` is pushed after the `ItemDb` walk,
+/// so sorting before that push would leave every unlocked recipe trailing
+/// the list in a block of its own — a Weapon under the Materials, with the
+/// category column contradicting itself at the bottom of the screen.
+#[test]
+fn a_researched_recipe_sorts_into_its_category_rather_than_trailing() {
+    let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "fabricator", 3, 0);
+    unlock_research_chain(&mut game, "overclock");
+    let core = ItemId::from("overclock_core");
+
+    let recipes = game.craft_recipes();
+    let at = recipes
+        .iter()
+        .position(|r| r.result == core)
+        .expect("researching overclock with a Fabricator up should offer its recipe");
+    assert_eq!(
+        game.item_category(&core),
+        ItemCategory::Weapon,
+        "the fixture is only meaningful while the unlocked recipe is a Weapon"
+    );
+    assert!(
+        recipes[at + 1..]
+            .iter()
+            .any(|r| game.item_category(&r.result) > ItemCategory::Weapon),
+        "the unlocked Weapon should sit inside the Weapon run, not after \
+         every category the base recipes cover"
+    );
+}
+
+/// With the category column naming the kind, a blurb that named the slot as
+/// well would repeat it on the one screen that reads a blurb at all. So the
+/// column carries the kind and the gloss carries the magnitude, and an
+/// equippable with nothing to say about magnitude says nothing.
+///
+/// Unreachable for the shipped roster — every shipped equippable declares a
+/// non-zero stat — so it takes a modded item to walk.
+#[test]
+fn an_equippable_with_no_stats_leaves_its_kind_to_the_category_column() {
+    let dir = modded_assets_dir(
+        "statless_gear",
+        &[],
+        &[("blank_edge.ron", BLANK_EDGE)],
+        &[],
+        &[],
+        &[],
+    );
+    let game = Game::new(23, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let blank = ItemId::from("blank_edge");
+
+    assert_eq!(
+        game.item_category(&blank),
+        ItemCategory::Weapon,
+        "the column still has the kind to report"
+    );
+    assert_eq!(
+        game.item_blurb(&blank),
+        None,
+        "and the gloss has no magnitude to add to it"
+    );
+}
+
+/// An equippable granting nothing, which no shipped item is.
+const BLANK_EDGE: &str = r#"(
+    id: "blank_edge",
+    name: "Blank Edge",
+    description: "A test weapon that grants nothing.",
+    value: Some(1),
+    equipment: Some((Weapon, ())),
+)"#;
+
 /// A modded recipe priced in a fusable item, so the one thing keeping
 /// fused gear out of the production chain can actually be walked.
 const PLATING_RECIPE: &str = r#"(

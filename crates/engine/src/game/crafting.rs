@@ -62,6 +62,13 @@ impl Game {
                 }
             }
         }
+        // After the researched half is pushed, not before: sorted early, every
+        // unlocked recipe would trail the list in a block of its own and the
+        // Compile screen's category column would contradict itself at the
+        // bottom. The ordering is decided here rather than in the renderer
+        // because `App::handle_craft_key` dispatches `recipes[idx]` from a
+        // different `craft_recipes` call than the one the screen draws.
+        recipes.sort_by_key(|r| self.category_sort_key(&r.result));
         recipes
     }
 

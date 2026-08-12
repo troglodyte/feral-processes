@@ -17,8 +17,9 @@ use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, Entity, EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP, MessageKind,
-    PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState, StructureReport,
+    Assignee, CraftRecipe, Entity, EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP,
+    MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState,
+    StructureReport,
 };
 
 mod arena;

@@ -237,6 +237,8 @@ pub(super) const HELP_ROWS: &[&str] = &[
     "In the Stack:     hjkl/arrows  forward, back, turn left, turn right",
     "                  > descend   < climb / leave the link",
     "                  o adopt an orphaned process (costs a catalyst)",
+    "                  t trade, if somebody is selling on this cell —",
+    "                  they keep no buyback, and the shelf does not refill",
     "                  g map — only what you have seen",
     "                  +/- zoom the corner map, whole frame to close in",
     "",

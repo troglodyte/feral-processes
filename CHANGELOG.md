@@ -27,6 +27,46 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.6
+
+### Somebody is selling things four frames down
+
+A Stack frame can now stand a market on one of its junctions — not every
+frame, and never twice — where somebody nobody asked about is trading out
+of a folded tarp. Press `t` on the cell.
+
+They are ephemeral in the way the word means. There is **no buyback**: a
+surface Market keeps what you sell it and offers it back at double, and
+this one keeps no record at all, so what leaves your pack is gone. And the
+shelf does not refill — a row that has been bought stays bought for the
+run, and a stall with nothing left on it packs up and reads as plain
+corridor in both Stack views, exactly as an emptied cache does.
+
+What is on the shelf is two routines, each at three rungs of breadth:
+written into **one program** you pick for 150 Credits, into **your party**
+for 300, or into **everything you own** for 1000. What is being sold is the
+*writing*, not the routine — nothing here teaches you anything, so research
+and extraction remain the only two ways to actually know one, and a program
+already running it (or with no slot free) is skipped rather than refusing
+the whole purchase. Some markets also carry a program, priced off what it
+would spawn at as this depth, compiled to your control on the spot.
+
+Two things a trader down here will not sell. The 28 hunt-only routines
+stay hunt-only — a shop selling those is the "buy it instead of hunting
+for it" shortcut they exist to prevent — and no boss, for the reason an
+orphaned process is never one either.
+
+What is on a given shelf is a function of the stack, the entrance and the
+depth, so it survives a save and a reload: you can look at a price, climb
+out to go and earn it, and come back to the same stall.
+
+Two smaller things fell out of it. `t` underground used to open the
+*surface* trader picker, which scans from a position pinned to the entrance
+tile — so it would cheerfully offer to trade with a base four frames
+overhead; it now answers about the cell you are standing on. And the frame
+map's glyph table is exhaustive, so the next cell kind added cannot ship
+drawing as bare floor.
+
 ## 0.8.5
 
 ### A compile row says what kind of thing it makes

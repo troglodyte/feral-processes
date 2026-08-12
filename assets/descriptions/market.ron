@@ -1,0 +1,47 @@
+(
+    subject: "stack.market",
+    variants: [
+        (
+            underfoot: ["Somebody selling things"],
+            sighted: [
+                "Something is laid out on the floor {bearing}.",
+                "A stall stands at the junction {bearing}.",
+                "Someone has set up shop {bearing}.",
+            ],
+            openers: [
+                "A stall, at the crossing.",
+                "Somebody is trading here.",
+                "Goods, laid out on a folded tarp.",
+            ],
+            details: [
+                "",
+                "They do not say where any of it came from, and they will not be here tomorrow.",
+                "Nothing is written down. Nothing is kept.",
+                "They deal in what a frame like this one leaves behind.",
+            ],
+            codas: [
+                "",
+                "Whatever leaves the tarp is not coming back.",
+                "They will not remember you.",
+            ],
+        ),
+        (
+            when: Some("spent"),
+            underfoot: ["A stall, packed up"],
+            sighted: [
+                "The tarp lies empty {bearing}.",
+            ],
+            openers: [
+                "An empty crossing.",
+                "A folded tarp, and nothing on it.",
+            ],
+            details: [
+                "",
+                "Whoever was selling here has moved on with the takings.",
+            ],
+            codas: [
+                "",
+            ],
+        ),
+    ],
+)

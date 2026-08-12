@@ -665,24 +665,45 @@ impl Default for ZoneLevel {
 
 impl ZoneLevel {
     /// Flat stat multiplier applied to wild programs spawned in this zone:
-    /// doubles with each zone level (level 1 = x1, level 2 = x2, level 3 =
-    /// x4, ...).
+    /// rises by `ZONE_STAT_STEP` per zone level (level 1 = x1, level 2 = x2,
+    /// level 3 = x3, ...).
+    ///
+    /// **Linear, and that is the whole of what keeps a deep zone reachable.**
+    /// It used to double. The player's own offence rises by `ATK_PER_LEVEL`
+    /// per level and a flat point or two per item, so a doubling enemy curve
+    /// is a geometric quantity racing a linear one — a race the geometric
+    /// side always eventually wins, whatever the coefficients. Damage is
+    /// `move_power + atk - def` floored at `MIN_DAMAGE`, so "eventually wins"
+    /// means every swing lands on the floor and no amount of levelling, gear
+    /// or roster moves it. Measured before the change: a zone-3 Stack
+    /// guardian was unbeatable at level 90 in the best gear in the game.
+    ///
+    /// Linear does not remove difficulty, it makes it *fundable*: the levels
+    /// needed to keep pace then grow by a roughly constant amount per zone
+    /// forever, instead of doubling per zone until no reachable level is
+    /// enough. `GEAR_LEVEL_STEP` is matched to this for the same reason it
+    /// was matched to the old base.
     pub fn stat_multiplier(self) -> i32 {
-        crate::tuning::ZONE_STAT_GROWTH.pow(self.0 - 1)
+        1 + crate::tuning::ZONE_STAT_STEP * (self.0 as i32 - 1)
     }
 
-    /// What a stat is multiplied by to move a program from tier `from` to
-    /// `from + 1` — the step `Game::refactor_companion`'s zone bump applies.
+    /// `stat` moved from tier `from` to `from + 1` — the step
+    /// `Game::refactor_companion`'s zone bump applies.
+    ///
+    /// Applies the step rather than returning it, because on a linear curve
+    /// the step is a *ratio* (tier 2 to 3 is 3/2) and an `i32` multiplier
+    /// cannot hold one: it truncated to 1, silently making a Recompile
+    /// Kernel's zone bump a no-op from tier 2 up. Multiplying before
+    /// dividing keeps the arithmetic exact without reaching for a float.
     ///
     /// Derived from `stat_multiplier` rather than reaching for
-    /// `ZONE_STAT_GROWTH` directly, because "one zone tier" has to keep
+    /// `ZONE_STAT_STEP` directly, because "one zone tier" has to keep
     /// meaning the same thing on both sides. A Recompile Kernel is sold to
     /// the player as catching a companion up with the ground the spawner
-    /// scales to, so if that curve ever gains a cap or stops being geometric,
-    /// a bump that kept doubling would be paying for a tier the spawner no
-    /// longer grants.
-    pub fn tier_step(from: u32) -> i32 {
-        ZoneLevel(from + 1).stat_multiplier() / ZoneLevel(from).stat_multiplier()
+    /// scales to, so a bump that kept its own copy of the curve would be
+    /// paying for a tier the spawner no longer grants.
+    pub fn raised_a_tier(stat: i32, from: u32) -> i32 {
+        stat * ZoneLevel(from + 1).stat_multiplier() / ZoneLevel(from).stat_multiplier()
     }
 }
 

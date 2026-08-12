@@ -1,0 +1,10 @@
+(
+    // The stuck run: zone 1, level 38, five companions, no Portal Fragments
+    // left and one uncleared 5-frame stack between it and a breach. `Lair`
+    // rather than `Stack` because the guardian is the fight it is stuck on,
+    // and `stack_encounter_pack` can never roll one.
+    player: Template("deep-lair"),
+    encounter: Some(Lair(biome: Mainframe, depth: 5)),
+    reps: 40,
+    seed: 900,
+)

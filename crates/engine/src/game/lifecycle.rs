@@ -162,6 +162,7 @@ impl Game {
             // because a load is taken off a machine the tick *after* that
             // machine reports itself clogged.
             (
+                systems::idle_machine_system,
                 systems::task_progress_system,
                 systems::player_gather_system,
                 systems::assembler_system,

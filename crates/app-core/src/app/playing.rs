@@ -40,6 +40,21 @@ impl App {
                 self.mode = Mode::InspectDirection;
                 return;
             }
+            // Demolish, aimed rather than picked from a list. Refused here
+            // rather than in the direction handler because `Position` is
+            // pinned to the surface entrance tile underground: the prompt
+            // would open onto four directions that all mean the base
+            // overhead. Matches the `surface_only` flag on the group menu's
+            // Demolish row, which hides that route for the same reason.
+            GameKey::Char('d') => {
+                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+                    self.status_line =
+                        Some("There's nothing of yours to demolish down here.".to_string());
+                } else {
+                    self.mode = Mode::RemoveDirection;
+                }
+                return;
+            }
             // Flat despite belonging to the party, like `c` and `t` below:
             // these three are pressed every few turns while walking, and a
             // group menu is a keystroke tax on anything that frequent.

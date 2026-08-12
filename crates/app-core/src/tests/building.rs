@@ -212,3 +212,95 @@ fn the_posting_picker_offers_programs_parked_far_from_the_player() {
         "and still list only tamed programs"
     );
 }
+
+/// `d` + a direction demolishes what is on the neighbouring tile, without
+/// going through the base menu's picker at all.
+#[test]
+fn the_demolish_key_removes_the_structure_next_to_you() {
+    let mut app = app_inside_a_small_base(240, false);
+    assert_eq!(
+        structure_count(&mut app),
+        2,
+        "precondition: Home and a node"
+    );
+
+    app.handle_key(GameKey::Char('d'));
+    assert_eq!(
+        app.mode,
+        Mode::RemoveDirection,
+        "the key opens a direction prompt rather than a list"
+    );
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        structure_count(&mut app),
+        1,
+        "the node east of the player should be gone"
+    );
+}
+
+/// Home cascades to the whole base, so the hotkey routes it into the same
+/// warning the menu does rather than taking the base down on one keypress.
+#[test]
+fn the_demolish_key_still_asks_before_taking_down_home() {
+    let mut app = app_inside_a_small_base(241, false);
+
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Up);
+    assert_eq!(
+        app.mode,
+        Mode::RemoveConfirm,
+        "Home must reach the confirmation screen, not be demolished outright"
+    );
+    assert_eq!(structure_count(&mut app), 2, "nothing is gone yet");
+
+    app.handle_key(GameKey::Char('y'));
+    assert_eq!(
+        structure_count(&mut app),
+        0,
+        "confirming takes Home and the cascade with it"
+    );
+}
+
+#[test]
+fn the_demolish_key_says_when_there_is_nothing_that_way() {
+    let mut app = app_inside_a_small_base(242, false);
+
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Down);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(structure_count(&mut app), 2, "nothing was demolished");
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("Nothing to demolish")),
+        "an empty neighbour has to say so: {:?}",
+        app.status_line
+    );
+}
+
+/// `Position` is pinned to the surface entrance tile underground, so a
+/// direction key down there would aim at the base overhead. Refused at the
+/// keypress, matching the `surface_only` flag the menu's Demolish row carries.
+#[test]
+fn the_demolish_key_is_refused_underground() {
+    let mut app = app_inside_a_small_base(243, true);
+    assert!(
+        app.game.as_ref().is_some_and(|g| g.is_underground()),
+        "precondition: the fixture really went down"
+    );
+
+    app.handle_key(GameKey::Char('d'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the direction prompt must not even open down here"
+    );
+    assert!(
+        app.status_line.is_some(),
+        "a refused key says why rather than doing nothing"
+    );
+}

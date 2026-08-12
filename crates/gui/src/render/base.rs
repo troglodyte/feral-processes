@@ -845,14 +845,17 @@ fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, op
 }
 
 /// A machine's state colour, worn by both its glyph and its outline. The
-/// five are ordered by what the player should do about them: green needs
+/// six are ordered by what the player should do about them: green needs
 /// nothing, grey needs a program, yellow needs a feeder or is waiting on one
-/// to walk back, red needs a trip home with `c`.
+/// to walk back, red needs the player to go and act — a trip home with `c`
+/// for a clog, or a path cleared for a program that cannot get there at all.
 fn machine_color(status: MachineStatus) -> Color {
     match status {
         MachineStatus::Running => GREEN,
         MachineStatus::Starved | MachineStatus::Unstaffed => YELLOW,
-        MachineStatus::Clogged => RED,
+        // Red rather than yellow: unlike `Unstaffed`, waiting does not fix
+        // this one, so it belongs with the states that are asking for you.
+        MachineStatus::Clogged | MachineStatus::Stranded => RED,
         MachineStatus::Idle => TEXT_DIM,
     }
 }

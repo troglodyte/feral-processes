@@ -339,6 +339,16 @@ impl Game {
         self.world.resource_mut::<Platform>().center = None;
     }
 
+    /// Every tile a deployed structure stands on — the set a hauler's walk
+    /// refuses, from the `Game` side. `haul_step_system` builds the same set
+    /// from its own query; both go through `hauling::structure_tiles` so the
+    /// two cannot disagree about what a blocked tile is.
+    pub(crate) fn structure_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
+        let mut query = self.world.query_filtered::<&Position, With<Structure>>();
+        let positions: Vec<Position> = query.iter(&self.world).copied().collect();
+        crate::game::hauling::structure_tiles(positions.into_iter())
+    }
+
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         let mut query = self
             .world

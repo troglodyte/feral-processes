@@ -212,6 +212,44 @@ impl App {
         }
     }
 
+    /// `d` + a direction: demolish whatever stands on that neighbouring
+    /// tile.
+    ///
+    /// The adjacency is `Game::adjacent_structure`'s, not a cone like `x`'s —
+    /// this key destroys what it finds, so it has to be something you are
+    /// standing next to. Home routes into the same warning the menu's picker
+    /// uses, read off the same `is_home` field, so the two ways in cannot
+    /// disagree about what cascades.
+    pub(crate) fn handle_remove_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => (0, -1),
+            GameKey::Down | GameKey::Char('j') => (0, 1),
+            GameKey::Left | GameKey::Char('h') => (-1, 0),
+            GameKey::Right | GameKey::Char('l') => (1, 0),
+            _ => return,
+        };
+        let Some(game) = &mut self.game else { return };
+        let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
+            self.status_line = Some("Nothing to demolish that way.".to_string());
+            self.mode = Mode::Playing;
+            return;
+        };
+        if found.is_home {
+            self.pending_remove_structure = Some(found.entity);
+            self.mode = Mode::RemoveConfirm;
+            return;
+        }
+        match game.remove_structure(found.entity) {
+            Ok(()) => self.status_line = None,
+            Err(e) => self.status_line = Some(e),
+        }
+        self.mode = Mode::Playing;
+    }
+
     pub(crate) fn handle_upgrade_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();

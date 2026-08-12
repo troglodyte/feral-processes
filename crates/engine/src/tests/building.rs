@@ -1552,7 +1552,9 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
         .assign_cronjob(worker, structure)
         .expect_err("a post the program could never walk to must not be accepted");
 
-    assert!(err.contains("too far away"), "unexpected refusal: {err}");
+    // Not the walled-in wording: the structure has a free tile beside it,
+    // the player is simply further off than a walk can cover.
+    assert!(err.contains("No route"), "unexpected refusal: {err}");
     assert!(
         game.world.get::<Task>(worker).is_none(),
         "a refused cronjob must leave no Task behind"
@@ -1712,8 +1714,10 @@ fn only_structures_that_run_a_job_get_a_machine_status() {
 
     assert_eq!(
         game.world.get::<MachineStatus>(node).copied(),
-        Some(MachineStatus::Running),
-        "a work node starts optimistic and is corrected on the first tick"
+        Some(MachineStatus::Idle),
+        "a work node with nobody posted to it is idle — it starts optimistic \
+         and `idle_machine_system` is what actually corrects it, which for a \
+         long time nothing did for an extractor"
     );
     assert!(game.world.get::<MachineStatus>(home).is_none());
 }

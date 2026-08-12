@@ -58,6 +58,37 @@ impl Game {
     /// load-bearing-seams entry. Underground, `x` describes the cell instead
     /// (`Game::describe_view_direction`), which is a claim about the frame
     /// the party is actually in.
+    /// The structure standing on the tile one step in `(dx, dy)`, if any.
+    ///
+    /// One tile, deliberately, where `find_target_in_direction` above scans a
+    /// cone out to `MENU_SCAN_RADIUS`. Its caller demolishes what it finds, so
+    /// a cone would let a single keypress take down a structure off the far
+    /// side of the screen; you have to be standing next to what you remove.
+    ///
+    /// An `EntityView` rather than an `Entity` because the caller has to route
+    /// a Home into its confirmation screen, and `view_entities` is where
+    /// `is_home` is decided — the demolish menu reads the same field from the
+    /// same builder, so the two routes cannot disagree about what a Home is.
+    ///
+    /// Nothing is found underground, for the reason `find_target_in_direction`
+    /// finds nothing there: `Position` is pinned to the surface entrance tile
+    /// while the party is in the Stack, so aiming a direction key down there
+    /// would pick out the base four frames overhead.
+    pub fn adjacent_structure(&mut self, dx: i32, dy: i32) -> Option<EntityView> {
+        if self.is_underground() {
+            return None;
+        }
+        let center = *self.world.get::<Position>(self.player_entity())?;
+        let target = (center.x + dx, center.y + dy);
+        // A square box just big enough to contain the one tile asked about,
+        // rather than a per-axis one: the scan is only a way to reach the
+        // shared view builder, and the `pos` filter is what actually selects.
+        let reach = dx.abs().max(dy.abs());
+        self.view_entities(reach, reach)
+            .into_iter()
+            .find(|e| e.is_structure && e.pos == target)
+    }
+
     pub fn find_target_in_direction(
         &mut self,
         dx: i32,
@@ -669,6 +700,7 @@ impl Game {
                     }),
                 fusions: self.fusion_count(entity),
                 max_fusions: MAX_FUSIONS,
+                rarity: self.rarity_of(entity),
                 refactors: self.refactor_count(entity),
                 max_refactors: MAX_COMPANION_REFACTORS,
                 zone_tier: self.zone_tier(entity),

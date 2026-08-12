@@ -48,8 +48,8 @@ use components::{
     FieldBuff, FieldBuffKind, FusedGear, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
     MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position, Potential,
     PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, Stats,
-    StatusEffects, StatusKind, Stock, Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind,
-    Temporary, WanderAi, ZonePortal,
+    StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Tamed, Task,
+    TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};

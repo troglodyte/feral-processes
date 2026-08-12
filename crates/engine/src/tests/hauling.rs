@@ -111,7 +111,9 @@ fn a_worker_off_its_tile_produces_nothing_and_says_so() {
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();
     // Well outside the four tiles the node can be worked from, and outside
-    // any cost field a walk could build, so it never arrives.
+    // any cost field a walk could build, so it never arrives — which is
+    // `Stranded` rather than merely `Unstaffed`. `unstaffed_wins_over_running`
+    // below is the reachable half of the same gate.
     move_to(&mut game, worker, 400, 400);
 
     let before = game.world.get::<Task>(worker).unwrap().progress;
@@ -126,7 +128,7 @@ fn a_worker_off_its_tile_produces_nothing_and_says_so() {
     );
     assert_eq!(
         *game.world.get::<MachineStatus>(node).unwrap(),
-        MachineStatus::Unstaffed,
+        MachineStatus::Stranded,
     );
 }
 
@@ -136,7 +138,11 @@ fn unstaffed_wins_over_running() {
     let node = deploy(&mut game, "mining_node", 1, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();
-    move_to(&mut game, worker, 400, 400);
+    // Off its post but with a clear route to it, so this is a worker that is
+    // merely walking. Deliberately not the unreachable tile the test above
+    // uses: that one reads `Stranded`, and asserting the precedence from
+    // there would pass on the marker's one-tick lag rather than on the rule.
+    move_to(&mut game, worker, 4, 0);
     // An empty output buffer would otherwise read as Running.
     game.world.get_mut::<Stock>(node).unwrap().output.clear();
 
@@ -491,4 +497,239 @@ fn a_carried_load_survives_a_save_and_load() {
         .expect("the load must come back with the worker");
     assert_eq!(carrying.item, before.item);
     assert_eq!(carrying.qty, before.qty);
+}
+
+/// Every tile `worker` stands on across `limit` ticks, including where it
+/// starts. Recorded rather than asserted per tick so a failure can name the
+/// tile that was walked over.
+fn tiles_walked(game: &mut Game, worker: Entity, limit: u32) -> Vec<(i32, i32)> {
+    let mut seen = Vec::new();
+    for _ in 0..limit {
+        let pos = *game.world.get::<Position>(worker).unwrap();
+        if seen.last() != Some(&(pos.x, pos.y)) {
+            seen.push((pos.x, pos.y));
+        }
+        game.tick();
+    }
+    seen
+}
+
+fn structure_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+    let mut query = game.world.query_filtered::<&Position, With<Structure>>();
+    query.iter(&game.world).map(|p| (p.x, p.y)).collect()
+}
+
+/// A hauler routes around the base rather than over it.
+///
+/// A *wall* rather than a single blocker: the step rule picks the cheapest
+/// neighbour by `(cost, x, y)`, so one structure on the straight line is
+/// dodged by the tie-break alone and the test passes without the fix. Three
+/// abreast leaves no equal-cost tile to slip through, and the only route to
+/// the depot is around the end of the wall.
+#[test]
+fn a_hauler_never_walks_over_a_structure() {
+    let mut game = base(20);
+    let node = deploy(&mut game, "mining_node", 2, 0);
+    deploy(&mut game, "depot", 6, 0);
+    let blocker = deploy(&mut game, "mining_node", 4, 0);
+    deploy(&mut game, "mining_node", 4, -1);
+    deploy(&mut game, "mining_node", 4, 1);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    let walked = tiles_walked(&mut game, worker, 60);
+    let blocked = structure_tiles(&mut game);
+
+    let trespass: Vec<(i32, i32)> = walked
+        .iter()
+        .copied()
+        .filter(|t| blocked.contains(t))
+        .collect();
+    assert!(
+        trespass.is_empty(),
+        "a hauler walked over {trespass:?}; its route was {walked:?}"
+    );
+    let blocker_pos = *game.world.get::<Position>(blocker).unwrap();
+    assert!(
+        walked.len() > 1,
+        "precondition: the worker has to actually set off, route was {walked:?}"
+    );
+    assert_eq!(
+        (blocker_pos.x, blocker_pos.y),
+        (4, 0),
+        "precondition: the blocker sits between the two posts"
+    );
+}
+
+/// A machine the base has been built around has no tile to stand on, and
+/// posting to it is refused before anything is spent — the same check
+/// `haul_step_system` would fail, asked up front.
+#[test]
+fn posting_to_a_boxed_in_machine_is_refused() {
+    let mut game = base(21);
+    let node = deploy(&mut game, "mining_node", 2, 0);
+    for (dx, dy) in [(1, 0), (3, 0), (2, 1), (2, -1)] {
+        deploy(&mut game, "mining_node", dx, dy);
+    }
+    let worker = spawn_tamed(&mut game, 10, 3);
+
+    let err = game
+        .assign_cronjob(worker, node)
+        .expect_err("nothing can stand next to a machine walled in on all four sides");
+
+    assert!(err.contains("walled in"), "unexpected refusal: {err}");
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a refused cronjob must leave no Task behind"
+    );
+}
+
+/// A route lost *after* the posting. `assign_cronjob` checks the walk to the
+/// machine, not the walk to a depot, so a depot the base has closed in is
+/// reachable at assignment and unreachable by the time there is a load to
+/// carry — which is the case `Stranded` exists to name.
+#[test]
+fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
+    let mut game = base(22);
+    let node = deploy(&mut game, "mining_node", 0, 2);
+    deploy(&mut game, "depot", 4, 0);
+    for (dx, dy) in [(3, 0), (5, 0), (4, 1), (4, -1)] {
+        deploy(&mut game, "mining_node", dx, dy);
+    }
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 40, |g| {
+        g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Stranded)
+    });
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker has to be holding a load it cannot deliver"
+    );
+    assert_eq!(
+        *game.world.get::<MachineStatus>(node).unwrap(),
+        MachineStatus::Stranded,
+        "a machine whose worker has nowhere to go says so, rather than \
+         reading as merely away"
+    );
+}
+
+/// `place_structure` never checks whether a program is standing on the tile,
+/// so a building can go up on top of a hauler. It has to be able to step off
+/// its own tile — the walk refuses occupied tiles as *destinations*, not as
+/// starting points.
+///
+/// Built over mid-errand rather than at its post: a worker standing at its
+/// own machine is `at_station` and never builds a field at all, so it would
+/// carry on working from under the building and prove nothing.
+#[test]
+fn a_worker_built_over_can_still_step_off_its_own_tile() {
+    let mut game = base(23);
+    let node = deploy(&mut game, "mining_node", 2, 0);
+    let depot = deploy(&mut game, "depot", -2, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 40, |g| g.world.get::<Carrying>(worker).is_some());
+    let parked = *game.world.get::<Position>(worker).unwrap();
+    assert!(
+        game.world.get::<Carrying>(worker).is_some(),
+        "precondition: the worker must be holding a load and have somewhere to take it"
+    );
+
+    // Deployed from beside the worker onto the very tile it is standing on.
+    stand_player_at(&mut game, parked.x, parked.y + 1);
+    deploy(&mut game, "mining_node", 0, -1);
+
+    tick_until(&mut game, 60, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "a worker built over must be able to walk out from under it and \
+         finish its delivery"
+    );
+}
+
+/// The nearest tile beside a machine is not always a tile you may stand on.
+/// `station_tile` has to skip an occupied neighbour rather than nominate it
+/// and leave the worker walking at a building forever.
+#[test]
+fn a_worker_parks_on_the_free_side_of_its_machine() {
+    let mut game = base(24);
+    let node = deploy(&mut game, "mining_node", 2, 0);
+    // The two sides facing the player, so the nearest neighbour by distance
+    // is the occupied one and only the far side is legal.
+    deploy(&mut game, "mining_node", 1, 0);
+    deploy(&mut game, "mining_node", 2, 1);
+    deploy(&mut game, "mining_node", 2, -1);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+
+    tick_until(&mut game, 40, |g| {
+        g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Running)
+    });
+
+    let pos = *game.world.get::<Position>(worker).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        (3, 0),
+        "the worker must walk around to the one free side"
+    );
+}
+
+/// An extractor nobody is posted to reports `Idle`, the same as an
+/// assembler nobody is posted to.
+///
+/// `MachineStatus` defaults to `Running`, and for a long time the only thing
+/// that ever said otherwise for an unworked machine was `assembler_system` —
+/// which skips anything that does not declare `assembles`. So a freshly
+/// deployed Research Node sat green on the map, reading as producing, for as
+/// long as it went unstaffed.
+#[test]
+fn an_extractor_with_no_program_reports_idle() {
+    let mut game = base(25);
+    let node = deploy(&mut game, "research_node", 1, 0);
+    let mine = deploy(&mut game, "mining_node", 0, 2);
+
+    game.tick();
+
+    assert_eq!(
+        *game.world.get::<MachineStatus>(node).unwrap(),
+        MachineStatus::Idle,
+        "a Research Node with nobody on it is idle, not running"
+    );
+    assert_eq!(
+        *game.world.get::<MachineStatus>(mine).unwrap(),
+        MachineStatus::Idle,
+        "and so is every other extractor — this was never research-specific"
+    );
+}
+
+/// The other half: a machine that *is* worked must not be dragged back to
+/// `Idle` by the pass that sets it.
+#[test]
+fn a_worked_extractor_does_not_read_idle() {
+    let mut game = base(26);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    tick_until(&mut game, 20, |g| {
+        g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Running)
+    });
+
+    assert_eq!(
+        *game.world.get::<MachineStatus>(node).unwrap(),
+        MachineStatus::Running,
+    );
 }

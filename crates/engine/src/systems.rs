@@ -5,8 +5,8 @@ use rand::RngExt;
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX,
     NEED_MIN, Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing,
-    ResourceNode, Stats, Stock, Structure, StructureTier, Tamed, Task, TaskKind, WanderAi,
-    field_buff_power_of,
+    ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
+    WanderAi, field_buff_power_of,
 };
 use crate::game::hauling::at_station;
 use crate::items::ItemId;
@@ -374,8 +374,50 @@ pub(crate) fn set_machine_status(
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
         MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
         MachineStatus::Unstaffed => format!("The {name} has no one at it — its program is away."),
+        MachineStatus::Stranded => {
+            format!("The {name} is cut off — its program can't find a way to it.")
+        }
         MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
     });
+}
+
+/// Every machine nobody is posted to reports `Idle`.
+///
+/// One pass for every kind of machine, because "nobody is working this" is
+/// one fact. It used to be a branch inside `assembler_system`, which visits
+/// only structures declaring `assembles` — so an *extractor* with no program
+/// was never visited by anything at all. `MachineStatus` defaults to
+/// `Running`, and nothing else writes a status for a machine with no `Task`
+/// pointed at it, so a freshly deployed Research Node drew green on the map
+/// as though it were producing, and a machine whose worker was killed or
+/// reassigned kept whatever status it had held at the time, forever.
+///
+/// `TaskKind::Guard` deliberately does not count: a guard defends a
+/// structure without working it (see `Game::assign_guard`), so a machine
+/// with only a guard on it really is idle.
+///
+/// Runs first in the chain, as the baseline the worked-machine systems
+/// refine. It can only ever touch a machine those systems will not look at,
+/// so the order is for legibility rather than to resolve a conflict.
+pub fn idle_machine_system(
+    mut machines: Query<(Entity, &Structure, &mut MachineStatus)>,
+    tasks: Query<&Task>,
+    structure_db: Res<StructureDb>,
+    mut log: ResMut<MessageLog>,
+) {
+    for (machine, structure, mut status) in &mut machines {
+        let worked = tasks
+            .iter()
+            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
+        if worked {
+            continue;
+        }
+        let name = structure_db
+            .get(&structure.kind)
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
+        set_machine_status(&mut status, MachineStatus::Idle, name, &mut log);
+    }
 }
 
 /// The producing side of a gather cycle, shared by the cronjob and
@@ -404,6 +446,7 @@ type CronjobWorker = (
     &'static mut Stats,
     &'static Position,
     Option<&'static Carrying>,
+    Option<&'static Stranded>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -475,7 +518,9 @@ pub fn task_progress_system(
         ),
         None => (0, 0, None),
     };
-    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying) in &mut tasks {
+    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying, stranded) in
+        &mut tasks
+    {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
         }
@@ -494,16 +539,27 @@ pub fn task_progress_system(
         // specifically — a worker that produced there would refill the room
         // its own load needs and be left holding the remainder forever.
         if !at_station(*worker_pos, *node_pos) || carrying.is_some() {
-            set_machine_status(
-                &mut status,
-                MachineStatus::Unstaffed,
-                machine_name,
-                &mut log,
-            );
+            // `Stranded` is the more specific reading of the same situation:
+            // nobody is at the machine, and no amount of waiting will change
+            // that. The marker is `haul_step_system`'s, written a tick ago —
+            // see `components::Stranded` for why the lag is accepted.
+            let away = if stranded.is_some() {
+                MachineStatus::Stranded
+            } else {
+                MachineStatus::Unstaffed
+            };
+            set_machine_status(&mut status, away, machine_name, &mut log);
             continue;
         }
         task.progress += 1;
         if task.progress < task.required {
+            // A cycle part-way through is a working machine, and it has to
+            // say so: this used to ride on `MachineStatus`'s `Running`
+            // default, which held only because nothing announced a status
+            // for a machine until its first payout. `idle_machine_system`
+            // now writes that baseline, so a long cycle would otherwise read
+            // as idle for every tick but the one it pays out on.
+            set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
             continue;
         }
         // Held at `required` rather than reset, so a cleared clog pays out on
@@ -723,12 +779,14 @@ pub fn assembler_system(
             }
         };
 
+        // `Idle` is `idle_machine_system`'s to announce, for every kind of
+        // machine rather than only the ones that assemble. This branch just
+        // has nothing to pull.
         let Some(worker) = tasks
             .iter()
             .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
             .map(|(e, _)| e)
         else {
-            announce(&mut statuses, &mut log, MachineStatus::Idle);
             continue;
         };
 

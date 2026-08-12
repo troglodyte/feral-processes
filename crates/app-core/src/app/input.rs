@@ -112,6 +112,7 @@ impl App {
             Mode::GuardStructure => self.handle_guard_structure_key(key),
             Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
+            Mode::RemoveDirection => self.handle_remove_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::Upgrade => self.handle_upgrade_key(key),
             Mode::Symlink => self.handle_symlink_key(key),

@@ -27,6 +27,53 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.2
+
+### The guardian at the bottom of a stack stops outclassing you
+
+A lair guardian is the fight a run cannot walk away from — it is the only
+thing in the game that pays a Portal Fragment, so a zone you cannot breach
+is a run that has quietly ended. Measured on a party arriving in the shape
+the game expects, a depth-2 lair in zone 3 was clearing about once in four.
+It now clears a little over half the time. The change is one number, the
+Overseer's attack; nothing else about the fight moved.
+
+### The roster tuner can no longer propose a roster the game would reject
+
+Developer tooling, and the rest of this release is all of that kind.
+
+A species' stats are not authored freely — its growth band sets a budget,
+its class sets what share of that budget it carries and how the three stats
+divide it, and its speed sits in a band the class decides. That is what
+makes "tanky for its tier" a readable thing rather than a number you have to
+already know the ladder to interpret. The tuner moves exactly those fields
+and had never been told any of it, so its first real search proposed
+fourteen changes of which thirteen would have broken the shipped suite. Two
+of the fourteen were never even reported, because the check that catches
+them stopped at the first thing it found.
+
+It now knows. A candidate that puts a species off its budget, off its
+class's shares, outside its speed band, or on a growth multiplier between
+the ladder's rungs is thrown out before any fight is run — and the rules are
+the game's own, called rather than restated, so the two cannot drift apart.
+Bosses stay exempt, which is deliberate: they sit outside the class system,
+and a boss's attack was the one move the tool has ever found worth having.
+
+Two further checks are too expensive to pay on every candidate — one runs a
+level search, the other reads the whole roster's distribution — so they run
+once on the winner and are **reported** rather than enforced. By then a
+person is reading a diff and deciding, and a report that hides what it
+checked is worse than one that admits what it could not.
+
+The rejection count now says *which rule*, which turned out to matter
+immediately: the first run under the new rules threw out forty candidates
+against twenty-one fought and proposed nothing at all. That is the search's
+move generator being wrong rather than the roster being right, and
+`dev-tuning/NOTES.md` records it as the next piece of work instead of
+letting a converged-looking run stand as evidence.
+
+None of this touches a save, a species file, or anything a player sees.
+
 ## 0.8.1
 
 ### Difficulty rises in steps now, instead of doubling

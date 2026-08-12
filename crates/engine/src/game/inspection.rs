@@ -709,14 +709,12 @@ impl Game {
                 moves: species.moves.clone(),
                 work_resource: species.work_resource.clone(),
                 taming_difficulty: species.taming_difficulty,
-                decompile_chance: self.taming_catalyst().map(|(_, potency)| {
-                    taming::capture_chance(
-                        stats.hp_fraction(),
-                        potency,
-                        species.taming_difficulty,
-                        bonuses,
-                    )
-                }),
+                decompile_chance: self
+                    .taming_catalyst()
+                    .zip(self.target_resistance(entity))
+                    .map(|((_, potency), resistance)| {
+                        taming::capture_chance(potency, resistance, bonuses)
+                    }),
                 growth_multiplier: species.growth_multiplier,
                 base_speed: species.base_speed,
                 base_int: species.base_int,

@@ -2,7 +2,7 @@
 //! effective stats, and rendering the result as a `BattleView`.
 
 use crate::tuning::{
-    DEFAULT_TAMING_DIFFICULTY, ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
+    ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS,
     PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR,
     WIELDED_ROUTINE_PROC_CHANCE,
 };
@@ -426,9 +426,7 @@ impl Game {
                 let species_name = species
                     .map(|s| self.zone_tagged_name(front, s.name.clone()))
                     .unwrap_or_default();
-                let taming_difficulty = species
-                    .map(|s| s.taming_difficulty)
-                    .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
+                let resistance = self.target_resistance(front)?;
                 let is_boss = species.is_some_and(|s| s.is_boss);
                 Some(EnemyGroupView {
                     letter: (b'A' + idx as u8) as char,
@@ -444,14 +442,9 @@ impl Game {
                     status_effect: self.status_label(front),
                     // No odds against a boss, because there is no attempt to
                     // make — `battle_set_action` refuses the target outright.
-                    decompile_chance: catalyst_potency.filter(|_| !is_boss).map(|potency| {
-                        taming::capture_chance(
-                            stats.hp_fraction(),
-                            potency,
-                            taming_difficulty,
-                            bonuses,
-                        )
-                    }),
+                    decompile_chance: catalyst_potency
+                        .filter(|_| !is_boss)
+                        .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
                 })
             })
             .collect();

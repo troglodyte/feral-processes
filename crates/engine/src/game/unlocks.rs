@@ -1,10 +1,11 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
-use crate::taming::DecompilerBonuses;
+use crate::taming::{DecompilerBonuses, TargetResistance};
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
-    DEFENDER_BONUS_PER_LEVEL, EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL,
+    DEFAULT_TAMING_DIFFICULTY, DEFENDER_BONUS_PER_LEVEL,
+    EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL,
 };
 use crate::*;
 
@@ -37,6 +38,35 @@ impl Game {
                 * self.player_perk_level(Perk::ExploitFocus) as f32,
             capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost),
         }
+    }
+
+    /// Everything the target brings to a decompile attempt: its remaining
+    /// Integrity, its species' resistance, and how many attempts this fight
+    /// has already spent on it. The mirror of `player_decompiler_bonuses`
+    /// above and the one place these three are assembled, for the same
+    /// reason — the two call sites that *show* odds and the one that *rolls*
+    /// them must not drift apart, and `prior_attempts` is exactly the sort
+    /// of term a display would forget.
+    ///
+    /// A species the `SpeciesDb` doesn't know falls back to
+    /// `DEFAULT_TAMING_DIFFICULTY` rather than refusing, which is what the
+    /// battle view already did.
+    pub(crate) fn target_resistance(&self, entity: Entity) -> Option<TargetResistance> {
+        let stats = self.world.get::<Stats>(entity)?;
+        Some(TargetResistance {
+            hp_fraction: stats.hp_fraction(),
+            taming_difficulty: self
+                .world
+                .get::<Creature>(entity)
+                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+                .map(|s| s.taming_difficulty)
+                .unwrap_or(DEFAULT_TAMING_DIFFICULTY),
+            prior_attempts: self
+                .world
+                .get_resource::<BattleState>()
+                .and_then(|b| b.decompile_attempts.get(&entity).copied())
+                .unwrap_or(0),
+        })
     }
 
     /// The taming catalyst a decompile attempt would spend, paired with its

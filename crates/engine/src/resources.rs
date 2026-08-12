@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::{Entity, Resource};
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::battle::{BattleAction, EnemyGroup};
 use crate::items::ItemId;
@@ -458,6 +458,21 @@ pub struct BattleState {
     pub planned: Vec<Option<BattleAction>>,
     pub finished: bool,
     pub player_won: bool,
+    /// How many decompiles have already been attempted against each target,
+    /// which `taming::capture_chance` reads to make each attempt raise the
+    /// odds of the next one against that same program.
+    ///
+    /// It lives here, on the battle, rather than as a component on the
+    /// creature or a saved resource, because that is exactly the lifetime
+    /// the mechanic wants: removing this resource ends the battle and takes
+    /// the counter with it, so a program the party fled from is met fresh
+    /// and no teardown code has to remember to clear anything. Battles are
+    /// never serialised, so this needs no `SAVE_FORMAT_VERSION` bump.
+    ///
+    /// Keying by `Entity` is safe against `finish_member`'s mid-round
+    /// despawns: an `Entity` carries a generation, so a recycled index is a
+    /// different `Entity` and a stale key can never alias a live target.
+    pub decompile_attempts: HashMap<Entity, u32>,
 }
 
 /// What the battle roster looked like at one point in the current round's

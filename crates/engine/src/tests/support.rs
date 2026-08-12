@@ -240,6 +240,7 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
         planned: vec![None; slots],
         finished: false,
         player_won: false,
+        decompile_attempts: std::collections::HashMap::new(),
     });
 }
 

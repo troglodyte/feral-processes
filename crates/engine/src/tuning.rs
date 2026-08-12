@@ -471,6 +471,23 @@ pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
 pub const CAPTURE_HP_PENALTY: f32 = 0.65;
 pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
 
+/// How much each decompile already attempted against a target raises the
+/// odds of the next attempt on that *same* program, in percentage points,
+/// and how many attempts stop counting.
+///
+/// The counter is battle-scoped (`BattleState::decompile_attempts`), so this
+/// is "you are wearing this program's ICE down", not a run-wide pity meter —
+/// walking away and coming back meets it fresh. The cap is what keeps it
+/// from becoming one: at 5 x 10 points the most persistence can buy is
+/// 1.5x, so a stubborn species stays a gamble however many catalysts get
+/// burned on it, and the catalyst cost is the real brake.
+///
+/// It multiplies alongside `skill_multiplier` and `capture_boost_pct` rather
+/// than adding into the base, so — like those two — it can't be out-scaled
+/// by a species' own resistance.
+pub const DECOMPILE_ATTEMPT_BONUS_PCT: u32 = 10;
+pub const DECOMPILE_ATTEMPT_BONUS_CAP: u32 = 5;
+
 /// Hard bounds on the final decompile chance, applied after skill bonuses.
 /// No attempt is ever hopeless and none is ever certain.
 ///
@@ -478,9 +495,12 @@ pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
 /// unreachable with the content that ships and shouldn't be reached for when
 /// tuning. The only catalyst is the ICE Breaker at `taming_potency` 0.4, so
 /// the best base the formula can produce is a fully-drained Drone at
-/// `0.4 * 0.9 * 0.91 = 0.328`; clearing 0.95 would need a 2.9x skill
-/// multiplier, i.e. `Decompiler` skill 95, against a realistic ceiling near
-/// 38 (level 30 plus the best 8 points of gear). See
+/// `0.4 * 0.9 * 0.91 = 0.328`; clearing 0.95 would need a 2.9x multiplier
+/// over it. The three that stack are skill (1.76x at a realistic `Decompiler`
+/// ceiling near 38 — level 30 plus the best 8 points of gear), a capped
+/// 1.5x from `DECOMPILE_ATTEMPT_BONUS_PCT`, and whatever `CaptureBoost` is
+/// running; the first two together reach 0.866, so the margin is real but
+/// thinner than it was. See
 /// `high_skill_does_not_flatten_the_gap_between_easy_and_boss_species`.
 pub const CAPTURE_CHANCE_MIN: f32 = 0.05;
 pub const CAPTURE_CHANCE_MAX: f32 = 0.95;

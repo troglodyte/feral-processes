@@ -23,6 +23,27 @@ pub struct DecompilerBonuses {
     pub capture_boost_pct: i32,
 }
 
+/// Everything the *target* brings to a decompile attempt, as opposed to what
+/// the player and the catalyst bring. Bundled for the same reason
+/// `DecompilerBonuses` is — `hp_fraction` and `taming_difficulty` are both
+/// bare `f32`s in `0.0..=1.0` sitting next to each other, so a swap would
+/// compile and quietly invert the whole formula — and because
+/// `Game::target_resistance` needs something to return: it is the one place
+/// these terms are assembled, so the odds a player is *shown* and the odds
+/// they are *rolled against* cannot drift apart.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TargetResistance {
+    /// How much Integrity the target has left, `0.0..=1.0`.
+    pub hp_fraction: f32,
+    /// `SpeciesDef::taming_difficulty` — how well this species resists
+    /// being decompiled at all.
+    pub taming_difficulty: f32,
+    /// How many decompiles have already been attempted against *this*
+    /// program in *this* fight. Counted by `Game::attempt_decompile` into
+    /// `BattleState::decompile_attempts`, so it dies with the battle.
+    pub prior_attempts: u32,
+}
+
 /// ICE-breaking odds: weaker (lower `hp_fraction`) and easier-compiled
 /// species are more likely to be decompiled, and stronger breakers help. A
 /// more practiced player (`player.skill`) *multiplies* whatever those three
@@ -41,15 +62,14 @@ pub struct DecompilerBonuses {
 /// field buff raises the odds by that many percentage points regardless of
 /// species or catalyst.
 pub fn capture_chance(
-    hp_fraction: f32,
     item_potency: f32,
-    taming_difficulty: f32,
+    target: TargetResistance,
     player: DecompilerBonuses,
 ) -> f32 {
     let hp_penalty = (CAPTURE_HP_PENALTY - player.hp_penalty_reduction).max(0.0);
     let base = item_potency
-        * (CAPTURE_POTENCY_CEILING - hp_fraction * hp_penalty)
-        * (1.0 - taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
+        * (CAPTURE_POTENCY_CEILING - target.hp_fraction * hp_penalty)
+        * (1.0 - target.taming_difficulty * CAPTURE_DIFFICULTY_PENALTY);
     let skill_multiplier = 1.0 + player.skill as f32 * DECOMPILER_SKILL_BONUS;
     let boost_multiplier = 1.0 + player.capture_boost_pct as f32 / 100.0;
     (base * skill_multiplier * boost_multiplier).clamp(CAPTURE_CHANCE_MIN, CAPTURE_CHANCE_MAX)
@@ -81,31 +101,41 @@ mod tests {
         }
     }
 
+    /// A target nobody has tried to decompile yet — the baseline every test
+    /// below varies one term away from.
+    fn fresh(hp_fraction: f32, taming_difficulty: f32) -> TargetResistance {
+        TargetResistance {
+            hp_fraction,
+            taming_difficulty,
+            prior_attempts: 0,
+        }
+    }
+
     #[test]
     fn weaker_prey_is_easier_to_tame() {
-        let full_hp = capture_chance(1.0, 0.55, 0.2, RAW);
-        let low_hp = capture_chance(0.1, 0.55, 0.2, RAW);
+        let full_hp = capture_chance(0.55, fresh(1.0, 0.2), RAW);
+        let low_hp = capture_chance(0.55, fresh(0.1, 0.2), RAW);
         assert!(low_hp > full_hp);
     }
 
     #[test]
     fn harder_species_resist_taming() {
-        let easy = capture_chance(0.5, 0.55, 0.1, RAW);
-        let hard = capture_chance(0.5, 0.55, 0.9, RAW);
+        let easy = capture_chance(0.55, fresh(0.5, 0.1), RAW);
+        let hard = capture_chance(0.55, fresh(0.5, 0.9), RAW);
         assert!(hard < easy);
     }
 
     #[test]
     fn higher_decompiler_skill_improves_odds() {
-        let unskilled = capture_chance(0.5, 0.55, 0.5, RAW);
-        let skilled = capture_chance(0.5, 0.55, 0.5, with_skill(10));
+        let unskilled = capture_chance(0.55, fresh(0.5, 0.5), RAW);
+        let skilled = capture_chance(0.55, fresh(0.5, 0.5), with_skill(10));
         assert!(skilled > unskilled);
     }
 
     #[test]
     fn hp_penalty_reduction_helps_a_target_that_has_not_been_worn_down() {
-        let plain = capture_chance(1.0, 0.4, 0.4, RAW);
-        let focused = capture_chance(1.0, 0.4, 0.4, exploit_focus(0.15));
+        let plain = capture_chance(0.4, fresh(1.0, 0.4), RAW);
+        let focused = capture_chance(0.4, fresh(1.0, 0.4), exploit_focus(0.15));
         assert!(
             focused > plain,
             "Exploit Focus should make a full-HP target more decompilable: \
@@ -120,8 +150,8 @@ mod tests {
     /// `DECOMPILER_SKILL_PER_LEVEL` that it exists to avoid.
     #[test]
     fn hp_penalty_reduction_is_inert_against_a_fully_drained_target() {
-        let plain = capture_chance(0.0, 0.4, 0.4, RAW);
-        let focused = capture_chance(0.0, 0.4, 0.4, exploit_focus(0.15));
+        let plain = capture_chance(0.4, fresh(0.0, 0.4), RAW);
+        let focused = capture_chance(0.4, fresh(0.0, 0.4), exploit_focus(0.15));
         assert_eq!(
             plain, focused,
             "at zero HP there is no HP penalty left to reduce"
@@ -133,8 +163,8 @@ mod tests {
     /// easier to decompile than the same target at death's door.
     #[test]
     fn hp_penalty_never_inverts_however_much_it_is_reduced() {
-        let full_hp = capture_chance(1.0, 0.4, 0.4, exploit_focus(5.0));
-        let drained = capture_chance(0.0, 0.4, 0.4, exploit_focus(5.0));
+        let full_hp = capture_chance(0.4, fresh(1.0, 0.4), exploit_focus(5.0));
+        let drained = capture_chance(0.4, fresh(0.0, 0.4), exploit_focus(5.0));
         assert!(
             full_hp <= drained,
             "remaining HP must never help: {full_hp} vs {drained}"
@@ -147,8 +177,8 @@ mod tests {
     /// both of these pinned to `CAPTURE_CHANCE_MAX` and the spread vanished.
     #[test]
     fn high_skill_does_not_flatten_the_gap_between_easy_and_boss_species() {
-        let drone = capture_chance(0.0, 0.4, 0.15, with_skill(40));
-        let boss = capture_chance(0.0, 0.4, 0.9, with_skill(40));
+        let drone = capture_chance(0.4, fresh(0.0, 0.15), with_skill(40));
+        let boss = capture_chance(0.4, fresh(0.0, 0.9), with_skill(40));
 
         assert!(
             drone < CAPTURE_CHANCE_MAX,
@@ -166,11 +196,10 @@ mod tests {
     /// stat, but it has to move the same roll the same way.
     #[test]
     fn capture_boost_pct_raises_chance_multiplicatively() {
-        let base = capture_chance(0.5, 0.4, 0.4, RAW);
+        let base = capture_chance(0.4, fresh(0.5, 0.4), RAW);
         let boosted = capture_chance(
-            0.5,
             0.4,
-            0.4,
+            fresh(0.5, 0.4),
             DecompilerBonuses {
                 capture_boost_pct: 20,
                 ..RAW
@@ -195,9 +224,8 @@ mod tests {
                 for skill in [0, 5, 50] {
                     for reduction in [0.0, 0.15, 5.0] {
                         let c = capture_chance(
-                            hp,
                             0.55,
-                            diff,
+                            fresh(hp, diff),
                             DecompilerBonuses {
                                 skill,
                                 hp_penalty_reduction: reduction,

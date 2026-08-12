@@ -713,6 +713,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         planned: vec![None, None],
         finished: false,
         player_won: false,
+        decompile_attempts: std::collections::HashMap::new(),
     });
 
     let player_decompile = game

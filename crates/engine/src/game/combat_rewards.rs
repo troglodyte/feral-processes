@@ -7,7 +7,7 @@ use crate::tuning::{
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
     SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
-use crate::tuning::{DEFAULT_TAMING_DIFFICULTY, WORK_RESOURCE_DROP};
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
 use crate::*;
 
 impl Game {
@@ -374,28 +374,35 @@ impl Game {
             .unwrap()
             .take(catalyst, 1);
 
-        let (hp_fraction, species_id) = {
-            let stats = *self.world.get::<Stats>(front).unwrap();
-            let species = self.world.get::<Creature>(front).unwrap().species.clone();
-            (stats.hp_fraction(), species)
-        };
-        let taming_difficulty = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)
-            .map(|s| s.taming_difficulty)
-            .unwrap_or(DEFAULT_TAMING_DIFFICULTY);
         let bonuses = self.player_decompiler_bonuses();
-        let chance = taming::capture_chance(hp_fraction, potency, taming_difficulty, bonuses);
+        // Read before the increment below, deliberately: the count this
+        // rolls against is the count the battle screen has been showing all
+        // along, so the odds cell is always exactly what the next attempt
+        // gets rather than what the last one got.
+        let resistance = self.target_resistance(front).unwrap();
+        let chance = taming::capture_chance(potency, resistance, bonuses);
         let roll = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance as f64)
         };
+        let attempts = {
+            let mut battle = self.world.resource_mut::<BattleState>();
+            let counter = battle.decompile_attempts.entry(front).or_insert(0);
+            *counter += 1;
+            *counter
+        };
 
         if !roll {
+            // Naming the cap matters: without it a player reads a rising
+            // number and keeps feeding catalysts to a wall.
+            let fraying = if attempts < DECOMPILE_ATTEMPT_BONUS_CAP {
+                " Its defences fray a little."
+            } else {
+                " Its defences are as frayed as they will get."
+            };
             self.log_kind(
                 MessageKind::Outcome,
-                "The program's ICE holds — decompile failed!",
+                &format!("The program's ICE holds — decompile failed!{fraying}"),
             );
             return false;
         }

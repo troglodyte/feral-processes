@@ -157,6 +157,10 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
     let text_x = rect.x + painter.measure_map(&glyph, glyph_size).width + m.pad;
 
     let boss = matches!(&view.subject, ManifestSubject::Program(p) if p.is_boss);
+    let rarity = match &view.subject {
+        ManifestSubject::Program(p) => p.rarity,
+        ManifestSubject::Player(_) => Rarity::Ordinary,
+    };
     let species = match &view.subject {
         ManifestSubject::Program(p) => p.species_name.clone(),
         ManifestSubject::Player(_) => None,
@@ -165,13 +169,29 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
         Some(s) => format!("{}  ({s})", view.name),
         None => view.name.clone(),
     };
+    // Both flags, and the tier keeps its own colour claim: a boss reads red
+    // and an Overclocked spawn gold, so a program that is both would have to
+    // give one up if this were a single string in a single colour. `[BOSS]`
+    // wins the title because it is the one that decides whether to open the
+    // fight; the tier follows it, drawn in the same silver/gold the map's
+    // bar uses so the two channels agree.
+    let head = format!("{title}{}", if boss { "  [BOSS]" } else { "" });
     painter.ui_bold(
-        format!("{title}{}", if boss { "  [BOSS]" } else { "" }),
+        head.clone(),
         text_x,
         rect.y + m.title() as f32,
         m.title(),
         if boss { RED } else { WHITE },
     );
+    if let Some(tier_color) = rarity_color(rarity) {
+        painter.ui_bold(
+            rarity_tag(rarity),
+            text_x + painter.measure_ui(&head, m.title()).width,
+            rect.y + m.title() as f32,
+            m.title(),
+            tier_color,
+        );
+    }
 
     let mut tags: Vec<String> = Vec::new();
     if let Some(level) = view.level {
@@ -626,6 +646,7 @@ mod tests {
             potential: None,
             fusions: 0,
             max_fusions: 3,
+            rarity: Rarity::Ordinary,
             refactors: 0,
             max_refactors: 3,
             zone_tier: 1,

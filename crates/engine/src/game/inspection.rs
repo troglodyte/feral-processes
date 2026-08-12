@@ -700,6 +700,7 @@ impl Game {
                     }),
                 fusions: self.fusion_count(entity),
                 max_fusions: MAX_FUSIONS,
+                rarity: self.rarity_of(entity),
                 refactors: self.refactor_count(entity),
                 max_refactors: MAX_COMPANION_REFACTORS,
                 zone_tier: self.zone_tier(entity),

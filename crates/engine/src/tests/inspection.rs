@@ -979,7 +979,7 @@ fn a_structure_report_row_carries_its_stock_and_status() {
     assert_eq!(row.output_capacity, crate::tuning::DEFAULT_OUTPUT_CAPACITY);
     assert_eq!(
         row.status,
-        Some(MachineStatus::Running),
+        Some(MachineStatus::Idle),
         "a work node has a state to be in"
     );
     assert!(row.workable, "and a program can be posted to it");
@@ -1537,5 +1537,33 @@ fn adjacent_structure_finds_nothing_underground() {
     assert!(
         game.adjacent_structure(1, 0).is_none(),
         "a structure on the surface must not be reachable from four frames down"
+    );
+}
+
+/// The manifest is the page a player opens to find out what something is,
+/// so a rare-spawn tier belongs on it. Before this it appeared only as a
+/// two-pixel bar on the map tile and as a tag on the battle roster's front
+/// row — nowhere a player could go and *check*.
+#[test]
+fn a_manifest_carries_the_programs_rare_tier() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(program).insert(Rarity::Gold);
+
+    let view = game.manifest(program).expect("a program has a manifest");
+    let ManifestSubject::Program(p) = &view.subject else {
+        panic!("a tamed program's manifest is a program manifest");
+    };
+    assert_eq!(p.rarity, Rarity::Gold);
+
+    let plain = spawn_tamed(&mut game, 10, 3);
+    let view = game.manifest(plain).unwrap();
+    let ManifestSubject::Program(p) = &view.subject else {
+        panic!("a tamed program's manifest is a program manifest");
+    };
+    assert_eq!(
+        p.rarity,
+        Rarity::Ordinary,
+        "and an ordinary program says so rather than inheriting a tier"
     );
 }

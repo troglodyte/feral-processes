@@ -381,6 +381,45 @@ pub(crate) fn set_machine_status(
     });
 }
 
+/// Every machine nobody is posted to reports `Idle`.
+///
+/// One pass for every kind of machine, because "nobody is working this" is
+/// one fact. It used to be a branch inside `assembler_system`, which visits
+/// only structures declaring `assembles` — so an *extractor* with no program
+/// was never visited by anything at all. `MachineStatus` defaults to
+/// `Running`, and nothing else writes a status for a machine with no `Task`
+/// pointed at it, so a freshly deployed Research Node drew green on the map
+/// as though it were producing, and a machine whose worker was killed or
+/// reassigned kept whatever status it had held at the time, forever.
+///
+/// `TaskKind::Guard` deliberately does not count: a guard defends a
+/// structure without working it (see `Game::assign_guard`), so a machine
+/// with only a guard on it really is idle.
+///
+/// Runs first in the chain, as the baseline the worked-machine systems
+/// refine. It can only ever touch a machine those systems will not look at,
+/// so the order is for legibility rather than to resolve a conflict.
+pub fn idle_machine_system(
+    mut machines: Query<(Entity, &Structure, &mut MachineStatus)>,
+    tasks: Query<&Task>,
+    structure_db: Res<StructureDb>,
+    mut log: ResMut<MessageLog>,
+) {
+    for (machine, structure, mut status) in &mut machines {
+        let worked = tasks
+            .iter()
+            .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
+        if worked {
+            continue;
+        }
+        let name = structure_db
+            .get(&structure.kind)
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
+        set_machine_status(&mut status, MachineStatus::Idle, name, &mut log);
+    }
+}
+
 /// The producing side of a gather cycle, shared by the cronjob and
 /// player-run systems. Aliased for the same `type_complexity` reason as
 /// `CronjobWorker` below.
@@ -514,6 +553,13 @@ pub fn task_progress_system(
         }
         task.progress += 1;
         if task.progress < task.required {
+            // A cycle part-way through is a working machine, and it has to
+            // say so: this used to ride on `MachineStatus`'s `Running`
+            // default, which held only because nothing announced a status
+            // for a machine until its first payout. `idle_machine_system`
+            // now writes that baseline, so a long cycle would otherwise read
+            // as idle for every tick but the one it pays out on.
+            set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
             continue;
         }
         // Held at `required` rather than reset, so a cleared clog pays out on
@@ -733,12 +779,14 @@ pub fn assembler_system(
             }
         };
 
+        // `Idle` is `idle_machine_system`'s to announce, for every kind of
+        // machine rather than only the ones that assemble. This branch just
+        // has nothing to pull.
         let Some(worker) = tasks
             .iter()
             .find(|(_, t)| t.target == machine && matches!(t.kind, TaskKind::GatherResource))
             .map(|(e, _)| e)
         else {
-            announce(&mut statuses, &mut log, MachineStatus::Idle);
             continue;
         };
 

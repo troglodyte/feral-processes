@@ -952,6 +952,12 @@ pub struct ProgramManifest {
     /// `tuning::MAX_FUSIONS`, carried so the renderer prints "1/3" without
     /// importing a tuning constant of its own.
     pub max_fusions: u32,
+    /// The rare-spawn tier (`components::Rarity`). The manifest is the page
+    /// a player opens to find out what something *is*, so the tier belongs
+    /// here as a fact about the program and not only as the colour of a bar
+    /// on the map — which is the only place it used to appear for anything
+    /// the player was not already fighting.
+    pub rarity: Rarity,
     /// Spent upgrade slots and `tuning::MAX_COMPANION_REFACTORS`, the same
     /// pair as `fusions`/`max_fusions` above and for the same reason.
     pub refactors: u32,

@@ -685,3 +685,51 @@ fn a_worker_parks_on_the_free_side_of_its_machine() {
         "the worker must walk around to the one free side"
     );
 }
+
+/// An extractor nobody is posted to reports `Idle`, the same as an
+/// assembler nobody is posted to.
+///
+/// `MachineStatus` defaults to `Running`, and for a long time the only thing
+/// that ever said otherwise for an unworked machine was `assembler_system` —
+/// which skips anything that does not declare `assembles`. So a freshly
+/// deployed Research Node sat green on the map, reading as producing, for as
+/// long as it went unstaffed.
+#[test]
+fn an_extractor_with_no_program_reports_idle() {
+    let mut game = base(25);
+    let node = deploy(&mut game, "research_node", 1, 0);
+    let mine = deploy(&mut game, "mining_node", 0, 2);
+
+    game.tick();
+
+    assert_eq!(
+        *game.world.get::<MachineStatus>(node).unwrap(),
+        MachineStatus::Idle,
+        "a Research Node with nobody on it is idle, not running"
+    );
+    assert_eq!(
+        *game.world.get::<MachineStatus>(mine).unwrap(),
+        MachineStatus::Idle,
+        "and so is every other extractor — this was never research-specific"
+    );
+}
+
+/// The other half: a machine that *is* worked must not be dragged back to
+/// `Idle` by the pass that sets it.
+#[test]
+fn a_worked_extractor_does_not_read_idle() {
+    let mut game = base(26);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    tick_until(&mut game, 20, |g| {
+        g.world.get::<MachineStatus>(node) == Some(&MachineStatus::Running)
+    });
+
+    assert_eq!(
+        *game.world.get::<MachineStatus>(node).unwrap(),
+        MachineStatus::Running,
+    );
+}

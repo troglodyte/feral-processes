@@ -343,12 +343,6 @@ fn cell_mark(cell: StackCellView) -> Option<(char, Color)> {
     }
 }
 
-/// How wide the cell description lets prose run before wrapping. Matches
-/// `inventory::DESCRIBE_WRAP_COLUMNS` and for the same reason — a fixed
-/// column count rather than a pixel width derived from the window, which
-/// varies per machine.
-const DESCRIBE_WRAP_COLUMNS: usize = 72;
-
 /// `draw_cell_describe`'s rows, built without touching a `Painter` — the
 /// same split `building::build_direction_rows` uses for its prompt, so the
 /// wrapping and the "nothing to say" fallback are each directly assertable

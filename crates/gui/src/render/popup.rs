@@ -486,6 +486,17 @@ pub(super) fn draw_row(
     cy + m.line_height
 }
 
+/// How wide a popup lets prose run before wrapping. Deliberately
+/// conservative rather than derived from the popup's pixel width, which is
+/// a percentage of the window and so varies per machine — the longest
+/// description any shipped item carries is about 165 characters, which lands
+/// in three rows here with room to spare on the narrowest supported window.
+///
+/// One constant beside `wrap_text` rather than one per screen: the three
+/// screens that print prose have no reason to disagree about the width, and
+/// the pair that preceded this were kept in step by a doc comment.
+pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
+
 /// Greedy word wrap to `columns`, for prose too long to sit on one popup
 /// row — an item's authored description, chiefly.
 ///

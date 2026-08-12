@@ -1458,3 +1458,33 @@ fn a_recipe_step_yields_one_unit_and_a_tap_declines_to_say() {
         "a node's payout is not fixed at one"
     );
 }
+
+/// The chains say how to make a thing and never why you would. The product's
+/// own authored prose is what answers that, and it is carried as the string
+/// rather than the id for the reason `RecipeStep`'s names are: the renderer
+/// holds no `ItemDb` to resolve one with.
+#[test]
+fn a_chain_carries_its_products_authored_description() {
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chains = game.recipe_chains();
+
+    let cell = chains
+        .iter()
+        .find(|c| c.product == "Power Cell")
+        .expect("the Power Conduit produces them");
+    assert_eq!(
+        cell.description.as_deref(),
+        game.item_description(&ItemId::from(ids::POWER_CELL)),
+        "the chain quotes power_cell.ron's own prose, not a derived gloss"
+    );
+
+    let missing: Vec<&str> = chains
+        .iter()
+        .filter(|c| c.description.is_none())
+        .map(|c| c.product.as_str())
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "every shipped item carries description text, so every chain shows one: {missing:?}"
+    );
+}

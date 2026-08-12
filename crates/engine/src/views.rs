@@ -704,6 +704,12 @@ pub struct RecipeStep {
 /// `Game::recipe_chains`.
 pub struct RecipeChain {
     pub product: String,
+    /// The product's own authored description — the screen's answer to why
+    /// you would make one, where the steps only say how. Resolved here for
+    /// the reason `RecipeStep`'s names are: a renderer holding item ids has
+    /// no `ItemDb` to look prose up in. `None` for a product whose file
+    /// leaves the field blank; every shipped item carries one.
+    pub description: Option<String>,
     /// Deepest dependency first; `product`'s own step is always last.
     pub steps: Vec<RecipeStep>,
 }

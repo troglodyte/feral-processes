@@ -110,6 +110,7 @@ impl Game {
                 });
                 Some(RecipeChain {
                     product: self.item_name(output).to_string(),
+                    description: self.item_description(output).map(str::to_string),
                     steps,
                 })
             })

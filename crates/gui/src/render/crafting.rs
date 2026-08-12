@@ -106,6 +106,25 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
     draw_popup("Recipes", PopupSize::Large, &rows, painter, m);
 }
 
+/// One chain's sub-rows: what the product is *for*, then how it is made.
+///
+/// The steps answer "how do I make this" and nothing else on the screen
+/// answers "why would I", so the product's own authored prose leads — the
+/// same text the inventory's describe page shows, wrapped the same way, so
+/// the two cannot describe one item differently.
+///
+/// A chain whose product has no description (a mod leaving the field blank)
+/// simply opens on its steps.
+fn chain_rows(chain: &RecipeChain) -> Vec<String> {
+    chain
+        .description
+        .iter()
+        .flat_map(|text| wrap_text(text, DESCRIBE_WRAP_COLUMNS))
+        .map(|line| format!("  {line}"))
+        .chain(step_rows(chain))
+        .collect()
+}
+
 /// One chain's step lines, arrow columns aligned.
 ///
 /// Columns are padded per chain rather than across the whole screen. A single
@@ -117,8 +136,10 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
 /// without a window — `draw_row` clamps a row vertically and nothing clamps
 /// it horizontally, so an over-wide row runs off the popup and takes the
 /// product of the deepest chain in the game with it. See
-/// `the_widest_recipe_row_fits_the_popup_it_is_drawn_in`.
-fn chain_rows(chain: &RecipeChain) -> Vec<String> {
+/// `the_widest_recipe_row_fits_the_popup_it_is_drawn_in`, which measures
+/// `chain_rows` rather than this, so the description lines are held to the
+/// same edge as the steps they sit above.
+fn step_rows(chain: &RecipeChain) -> Vec<String> {
     let cells: Vec<(String, &str)> = chain
         .steps
         .iter()
@@ -185,14 +206,51 @@ mod tests {
     use crate::text::ui_metrics;
     use feral_processes_engine::DifficultyMode;
 
+    /// The chain says how to make the thing; the description is the only
+    /// line saying why you would want one. Asserted as `wrap_text`'s own
+    /// output against a product whose prose genuinely runs past one row, so
+    /// a description printed raw would run off the popup and fail here
+    /// rather than only on a wide window nobody tests on.
+    #[test]
+    fn a_chains_rows_open_on_its_products_description() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let chains = game.recipe_chains();
+        let chain = chains
+            .iter()
+            .find(|c| c.product == "Core Fragment")
+            .expect("the Mining Node taps them");
+
+        let description = chain
+            .description
+            .as_deref()
+            .expect("core_fragment.ron carries prose");
+        assert!(
+            description.chars().count() > DESCRIBE_WRAP_COLUMNS,
+            "this product is chosen for being longer than one row: {description}"
+        );
+        let expected: Vec<String> = wrap_text(description, DESCRIBE_WRAP_COLUMNS)
+            .into_iter()
+            .map(|line| format!("  {line}"))
+            .chain(step_rows(chain))
+            .collect();
+
+        assert_eq!(
+            chain_rows(chain),
+            expected,
+            "the prose leads, wrapped, and the steps follow it unchanged"
+        );
+    }
+
     /// `draw_row` clamps a row vertically and nothing clamps it horizontally,
     /// so a Recipes row wider than its popup silently runs off the right edge
     /// — taking the product column, the one thing every row exists to name.
     ///
     /// Measured against the real shipped assets rather than a fixture: what
     /// sets the width is the longest ingredient list plus the longest
-    /// structure name in the game, and a fixture would go stale the first
-    /// time either moved. `with_painter`'s 1440x900 is the geometry
+    /// structure name in the game — or a wrapped line of the longest
+    /// description — and a fixture would go stale the first time any of them
+    /// moved. `with_painter`'s 1440x900 is the geometry
     /// `ui_metrics` is calibrated against (`REFERENCE_HEIGHT`), so the font
     /// here is the unscaled body size.
     #[test]

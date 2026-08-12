@@ -210,13 +210,6 @@ pub(super) fn draw_equip_swap(
     );
 }
 
-/// How wide the describe page lets prose run before wrapping. Deliberately
-/// conservative rather than derived from the popup's pixel width, which is
-/// a percentage of the window and so varies per machine — the longest
-/// description any shipped item carries is about 165 characters, which lands
-/// in three rows here with room to spare on the narrowest supported window.
-const DESCRIBE_WRAP_COLUMNS: usize = 72;
-
 /// The read-only description page reached with `d` from the action list.
 ///
 /// The prose is the item's own authored `.ron` text — see

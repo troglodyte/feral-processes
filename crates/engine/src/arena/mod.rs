@@ -375,6 +375,7 @@ mod tests {
                 .map(|(species, level)| CompanionSpec {
                     species: (*species).into(),
                     level: *level,
+                    ..Default::default()
                 })
                 .collect(),
             opponents: vec![OpponentSpec {
@@ -557,6 +558,7 @@ mod tests {
             party: vec![CompanionSpec {
                 species: "glitch".into(),
                 level: 1,
+                ..Default::default()
             }],
             opponents: vec![OpponentSpec {
                 species: "sub_process".into(),
@@ -585,6 +587,7 @@ mod tests {
             party: vec![CompanionSpec {
                 species: "glitch".into(),
                 level: 3,
+                ..Default::default()
             }],
             opponents: vec![OpponentSpec {
                 species: "sub_process".into(),
@@ -679,6 +682,7 @@ mod tests {
             party: vec![CompanionSpec {
                 species: "glitch".into(),
                 level: 12,
+                ..Default::default()
             }],
             opponents: vec![OpponentSpec {
                 species: "sprite".into(),

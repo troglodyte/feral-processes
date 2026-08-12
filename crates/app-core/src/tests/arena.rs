@@ -318,6 +318,7 @@ fn a_refight_starts_from_a_whole_party() {
     built.party = vec![feral_processes_engine::arena::CompanionSpec {
         species: "glitch".into(),
         level: 1,
+        ..Default::default()
     }];
     let mut app = app_fighting(23, built);
 
@@ -497,6 +498,7 @@ fn backspace_removes_the_highlighted_party_row() {
         .map(|species| feral_processes_engine::arena::CompanionSpec {
             species: species.into(),
             level: 1,
+            ..Default::default()
         })
         .collect();
     let mut app = app_building(35, built);
@@ -536,6 +538,7 @@ fn switching_off_a_fresh_player_clears_the_loadout_it_authored() {
     built.party = vec![feral_processes_engine::arena::CompanionSpec {
         species: "glitch".into(),
         level: 1,
+        ..Default::default()
     }];
     let mut app = app_building(37, built);
     app.install_dev_templates(DevTemplates {

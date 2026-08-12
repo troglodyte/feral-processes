@@ -131,6 +131,7 @@ mod tests {
                 .map(|(species, level)| CompanionSpec {
                     species: (*species).into(),
                     level: *level,
+                    ..Default::default()
                 })
                 .collect(),
             opponents: against

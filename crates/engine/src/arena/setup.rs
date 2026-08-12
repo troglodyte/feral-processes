@@ -31,8 +31,9 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
             let mut game = Game::new(0, DifficultyMode::Forgiving, assets_dir)
                 .map_err(|e| format!("{}: {e}", assets_dir.display()))?;
             // Before the equips below: `Game::equip` captures
-            // `EquippedItem::level` off the current zone and gear doubles
-            // per level, so equipping first under-scales every weapon.
+            // `EquippedItem::level` off the current zone and gear grows by
+            // `GEAR_LEVEL_STEP` per level, so equipping first under-scales
+            // every weapon — the party's as well as the player's.
             game.world.resource_mut::<ZoneLevel>().0 = *zone;
             let player = game.player_entity();
             set_level(&mut game, player, *level);
@@ -53,6 +54,14 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                     .ok_or_else(|| format!("unknown companion species `{}`", row.species))?;
                 game.add_companion(program)
                     .map_err(|e| format!("party `{}`: {e}", row.species))?;
+                // After the join: `Game::equip` checks the wearer is owned.
+                for gear in &row.equip {
+                    known_item(&game, &gear.item)?;
+                    game.add_copies(&gear.item, gear.tier, 1);
+                    game.equip(program, &gear.item, gear.tier).map_err(|e| {
+                        format!("equip `{}` on `{}`: {e}", gear.item.as_str(), row.species)
+                    })?;
+                }
             }
             Ok(game)
         }
@@ -232,12 +241,106 @@ mod tests {
         assert_eq!(game.count_copies(&item, 0), before + 5);
     }
 
+    /// Every item worn by `wearer`, so a test can ask *who* is wearing a
+    /// row rather than only whether it was equipped at all.
+    fn worn(game: &Game, wearer: Entity) -> Vec<ItemId> {
+        game.world
+            .get::<Equipment>(wearer)
+            .map(|e| {
+                [&e.weapon, &e.armor, &e.module]
+                    .into_iter()
+                    .flatten()
+                    .map(|w| w.item.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_companion_equip_row_lands_on_that_companion_and_not_the_player() {
+        let probe = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let item = an_equippable(&probe);
+        let mut s = fresh(10, 2);
+        s.party = vec![CompanionSpec {
+            species: "glitch".into(),
+            level: 4,
+            equip: vec![EquipSpec {
+                item: item.clone(),
+                tier: 0,
+            }],
+        }];
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let program = game.world.resource::<Party>().0[0];
+        assert!(worn(&game, program).contains(&item));
+        // The failure mode this exists for: `Game::equip` takes a wearer,
+        // so an implementation copied from the player's loop above equips
+        // the player and the scenario reads as a geared party.
+        assert!(
+            !worn(&game, game.player_entity()).contains(&item),
+            "the player is wearing the companion's gear"
+        );
+    }
+
+    #[test]
+    fn a_companions_gear_bonus_reaches_its_stats() {
+        let probe = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let item = an_equippable(&probe);
+
+        // Against `Game::gear_bonus` rather than the item's base mods: gear
+        // scales by the zone it was equipped at, so the base numbers are
+        // not what lands in `Stats` anywhere but zone 1.
+        let member = |equip: Vec<EquipSpec>| {
+            let mut s = fresh(10, 2);
+            s.party = vec![CompanionSpec {
+                species: "glitch".into(),
+                level: 4,
+                equip,
+            }];
+            let game = build_player(&s, &test_assets_dir()).unwrap();
+            let program = game.world.resource::<Party>().0[0];
+            let stats = game.world.get::<Stats>(program).unwrap();
+            ((stats.atk, stats.def), game.gear_bonus(program))
+        };
+
+        let (bare, no_bonus) = member(Vec::new());
+        let (geared, bonus) = member(vec![EquipSpec { item, tier: 0 }]);
+        assert_eq!((no_bonus.atk, no_bonus.def), (0, 0));
+        // A zero-bonus item would make the deltas below trivially equal.
+        assert!(
+            bonus.atk != 0 || bonus.def != 0,
+            "picked an equippable worth nothing"
+        );
+        assert_eq!(geared.0 - bare.0, bonus.atk);
+        assert_eq!(geared.1 - bare.1, bonus.def);
+    }
+
+    #[test]
+    fn an_unknown_item_in_a_companions_gear_is_an_err_naming_it() {
+        let mut s = fresh(1, 1);
+        s.party = vec![CompanionSpec {
+            species: "glitch".into(),
+            level: 1,
+            equip: vec![EquipSpec {
+                item: ItemId("not_an_item".into()),
+                tier: 0,
+            }],
+        }];
+
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("not_an_item"), "{err}");
+    }
+
     #[test]
     fn a_party_row_becomes_a_party_member_at_the_requested_level() {
         let mut s = fresh(10, 2);
         s.party = vec![CompanionSpec {
             species: "glitch".into(),
             level: 4,
+            equip: Vec::new(),
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -270,6 +373,7 @@ mod tests {
         s.party = vec![CompanionSpec {
             species: "not_a_program".into(),
             level: 1,
+            ..Default::default()
         }];
         let err = build_player(&s, &test_assets_dir())
             .err()

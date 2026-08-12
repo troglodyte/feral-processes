@@ -755,6 +755,7 @@ impl App {
                 ArenaPickKind::PartySpecies(_) => s.party.push(CompanionSpec {
                     species: id,
                     level: 1,
+                    ..Default::default()
                 }),
                 ArenaPickKind::OpponentSpecies(Some(i)) if i < s.opponents.len() => {
                     s.opponents[i].species = id

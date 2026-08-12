@@ -135,12 +135,22 @@ therefore an **error** on a save or template rather than being ignored —
 equip: [(item: "plasma_router", tier: 0)],   // tier defaults to 0
 inventory: [(item: "power_cell", qty: 5)],   // qty defaults to 1
 party: [(species: "scrapper", level: 12)],   // level defaults to 1
+
+// A companion takes the same `equip` rows the player does:
+party: [(species: "scrapper", level: 12, equip: [(item: "arc_lance")])],
 ```
 
 `tier` is the copy's fusion tier, and it is not decoration: gear fuses per
 physical copy, so a tier-2 weapon is a different weapon from a tier-0 one of
-the same name. `equip` is applied *after* the zone is set, because gear
-locks in the zone level it was equipped at and doubles per level.
+the same name. `equip` is applied *after* the zone is set, because gear locks
+in the zone level it was equipped at and grows by `GEAR_LEVEL_STEP` per level.
+
+**A party authored without `equip` is a naked party.** Any program the player
+owns may wear gear, so a scenario whose companions carry none fields a weaker
+party than a run of that shape actually would — and it is weaker in one
+direction, so every number measured against it is soft in that direction too.
+This is a second floor alongside the Specials gap above, and unlike that one
+it is avoidable: gear the party to what the run you are modelling would have.
 
 A companion's level tops out at `CREATURE_MAX_LEVEL`; asking for more gets
 you the ceiling, because that is all play can reach.

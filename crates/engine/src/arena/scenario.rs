@@ -131,6 +131,25 @@ pub struct CompanionSpec {
     pub species: SpeciesId,
     #[serde(default = "one")]
     pub level: u32,
+    /// What this companion is wearing. Any program the player owns may wear
+    /// gear, so a party authored without it is a *naked* party — weaker
+    /// than one a run of the same shape would actually field, which biases
+    /// every measurement taken against it in one direction.
+    #[serde(default)]
+    pub equip: Vec<EquipSpec>,
+}
+
+/// Hand-written for the same reason `Scenario`'s is: `level` has a meaning
+/// at 1 and none at 0, and the derived zero would field a companion no
+/// spawn path can produce.
+impl Default for CompanionSpec {
+    fn default() -> Self {
+        Self {
+            species: SpeciesId::default(),
+            level: one(),
+            equip: Vec::new(),
+        }
+    }
 }
 
 /// One enemy group. There is deliberately no level here: a wild spawn

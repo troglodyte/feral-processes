@@ -146,6 +146,8 @@ impl App {
             Mode::Trade => self.handle_trade_key(key),
             Mode::TradeAction => self.handle_trade_action_key(key),
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
+            Mode::StackMarket => self.handle_stack_market_key(key),
+            Mode::StackMarketTarget => self.handle_stack_market_target_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
             Mode::History => self.handle_history_key(key),

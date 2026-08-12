@@ -65,7 +65,8 @@ fn tile_color(cell: FrameMapCell) -> Color {
         | FrameMapCell::SealedDoor
         | FrameMapCell::Breakpoint
         | FrameMapCell::Fault
-        | FrameMapCell::Orphan => WALKED,
+        | FrameMapCell::Orphan
+        | FrameMapCell::Market => WALKED,
     }
 }
 
@@ -83,9 +84,19 @@ fn cell_glyph(cell: FrameMapCell) -> Option<(char, Color)> {
         FrameMapCell::Breakpoint => Some(('*', BLUE)),
         FrameMapCell::Fault => Some(('v', ORANGE)),
         FrameMapCell::Orphan => Some(('o', GREEN)),
+        FrameMapCell::Market => Some(('$', YELLOW)),
         // Corruption deliberately has none: it is the one kind carrying its
         // meaning in `tile_color` instead. See `CORRUPT`.
-        _ => None,
+        //
+        // Exhaustive rather than a `_ => None` tail, and for the reason
+        // `render/stack.rs::cell_mark` is: under a wildcard a new
+        // `FrameMapCell` compiles clean and draws as bare floor, so a cell
+        // worth walking to is one the map never mentions. Deciding what it
+        // looks like is now a compile error rather than an omission.
+        FrameMapCell::Corruption
+        | FrameMapCell::Unknown
+        | FrameMapCell::Rock
+        | FrameMapCell::Floor => None,
     }
 }
 

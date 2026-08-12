@@ -40,6 +40,7 @@ mod popup;
 mod progression;
 mod routines;
 mod stack;
+mod stack_market;
 mod structure_manifest;
 mod trade;
 
@@ -78,6 +79,7 @@ use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_install,
     draw_routine_target, draw_routines,
 };
+use stack_market::{draw_stack_market, draw_stack_market_target};
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -694,6 +696,8 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
+        Mode::StackMarket => draw_stack_market(game, selected, painter, m),
+        Mode::StackMarketTarget => draw_stack_market_target(game, selected, painter, m),
         Mode::Trade => draw_trade_menu(game, selected, painter, m),
         Mode::TradeAction => {
             draw_trade_action_menu(game, app.pending_trade_structure, selected, painter, m)

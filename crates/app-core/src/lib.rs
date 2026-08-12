@@ -30,7 +30,8 @@ use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
 use feral_processes_engine::{
     AchievementRow, BattleView, DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget,
-    Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
+    Game, LogLine, MESSAGE_LOG_CAP, MarketOfferKind, MessageSource, ProgramSaleOption,
+    RoutineHolderView, RoutineScope, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -723,6 +724,21 @@ pub enum Mode {
     Trade,
     TradeAction,
     TradeQuantity,
+    /// A Stack market's shelf — see `Game::stack_market`. Reached with `t`
+    /// underground, which is the same key the surface trader list opens on:
+    /// what a market *is* differs completely between the two locales, but
+    /// "trade with whoever is here" does not, and a second key would be one
+    /// the player has to learn for a screen they meet four frames down.
+    ///
+    /// One list with two sections, offers then cargo the stall will take,
+    /// resolved by `market_row`. There is no buyback section, because there
+    /// is no buyback: what is sold here is gone.
+    StackMarket,
+    /// Picking who a `RoutineScope::One` row writes to. The only rung with
+    /// a question left to answer — the other two decide their own
+    /// recipients — so this is layered over the shelf rather than being a
+    /// step every purchase walks through.
+    StackMarketTarget,
     /// Confirming the sale of the program picked in `Mode::TradeAction`.
     /// Programs take a confirmation where items don't: the sale is
     /// irreversible, and it silently cancels whatever the program was doing,
@@ -860,6 +876,8 @@ impl Mode {
             | Mode::TradeAction
             | Mode::TradeQuantity
             | Mode::TradeProgramConfirm
+            | Mode::StackMarket
+            | Mode::StackMarketTarget
             | Mode::Perks
             | Mode::Research
             | Mode::History
@@ -1114,6 +1132,13 @@ pub struct App {
     pub pending_trade_program: Option<ProgramSaleOption>,
     /// Digits typed so far on the trade-quantity page.
     pub trade_quantity_input: String,
+    /// The shelf row picked in `Mode::StackMarket`, awaiting a holder from
+    /// `Mode::StackMarketTarget`.
+    ///
+    /// The row's index on the *derived* shelf, which is what
+    /// `Game::buy_market_offer` takes — not its position in the drawn list,
+    /// which shifts as rows are bought. See `views::MarketOffer::index`.
+    pub pending_market_offer: Option<usize>,
     /// How many screen characters render each world tile along each axis.
     pub zoom: u16,
     /// How close the Stack's corner map is drawn in: `STACK_MAP_MIN_ZOOM`

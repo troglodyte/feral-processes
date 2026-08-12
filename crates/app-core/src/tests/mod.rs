@@ -22,5 +22,6 @@ mod research;
 mod routines;
 mod saves;
 mod stack;
+mod stack_market;
 mod telemetry;
 mod trade;

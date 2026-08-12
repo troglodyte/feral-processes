@@ -330,9 +330,9 @@ fn an_encounter_underground_opens_the_battle_screen() {
 /// maze solver in a keybinding test — what this has to prove is that `o`
 /// gets past the mode block above and into `handle_stack_key` at all.
 ///
-/// `t` would not: it is spent on `Mode::Trade` before the underground
-/// dispatch is reached, which the second half asserts so the binding cannot
-/// quietly move onto a taken letter.
+/// `t` would not: it is spent before the underground dispatch is reached —
+/// on the stall underfoot, or on saying there isn't one — which the second
+/// half asserts so the binding cannot quietly move onto a taken letter.
 #[test]
 fn o_reaches_adopt_orphan_underground() {
     let mut app = app_underground(505);
@@ -348,9 +348,9 @@ fn o_reaches_adopt_orphan_underground() {
     let mut app = app_underground(505);
     app.handle_key(GameKey::Char('t'));
     assert_eq!(
-        app.mode,
-        Mode::Trade,
-        "'t' is the trader list even underground — the adopt key cannot be it"
+        app.status_line.as_deref(),
+        Some("There's nobody selling anything here."),
+        "'t' is trading wherever you are standing — the adopt key cannot be it"
     );
 }
 

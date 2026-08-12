@@ -392,12 +392,12 @@ impl Game {
         let candidates: Vec<Entity> = match scope {
             RoutineScope::One => {
                 let holder = target.ok_or_else(|| "Pick who that's for.".to_string())?;
-                if holder != player
-                    && !self
+                let owned = holder == player
+                    || self
                         .world
                         .get::<Tamed>(holder)
-                        .is_some_and(|t| t.owner == player)
-                {
+                        .is_some_and(|t| t.owner == player);
+                if !owned {
                     return Err("You don't control that program.".into());
                 }
                 vec![holder]

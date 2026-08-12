@@ -63,6 +63,25 @@ impl App {
                 return;
             }
             GameKey::Char('t') => {
+                // Underground the same key opens whoever is selling *here*.
+                // The trader list would otherwise scan from a `Position`
+                // pinned to the surface entrance tile and offer to trade
+                // with a base four frames overhead — the same hole the
+                // `surface_only` group-menu rows and the `d` refusal above
+                // are each closing at their own door.
+                if self
+                    .game
+                    .as_mut()
+                    .is_some_and(|g| g.stack_market().is_some())
+                {
+                    self.menu_selected = 0;
+                    self.mode = Mode::StackMarket;
+                    return;
+                }
+                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+                    self.status_line = Some("There's nobody selling anything here.".to_string());
+                    return;
+                }
                 // Opening the trader list from the map is a fresh visit, not
                 // the tail of a sale begun in the inventory.
                 self.trade_origin = TradeOrigin::Trader;

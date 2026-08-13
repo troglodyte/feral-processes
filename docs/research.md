@@ -1,10 +1,10 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. Twenty of them.
+`assets/research/`. 21 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/research/*.ron` on 2026-08-05 and will drift the moment one of those
+`assets/research/*.ron` on 2026-08-13 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Research Data is the currency, and it comes from one place: a Research Node
@@ -14,12 +14,42 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 20 |
+| nodes | 21 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
-| deepest chain | 5 nodes |
-| total Research Data | 511 |
-| cheapest / dearest node | 8 / 48 |
-| unlocks | 13 structures, 13 routines, 6 gear recipes |
+| deepest chain | 6 nodes |
+| total Research Data | 1258 |
+| cheapest / dearest node | 8 / 140 |
+| zone bands | from turn one (9), zone 2 (6), zone 3 (6) |
+| unlocks | 13 structures, 15 routines, 6 gear recipes |
+
+## What the zone gates
+
+Price is not the only thing pacing the tree. A node may declare a `min_zone`,
+and below it the node is listed, priced and explained but unbuyable at any
+balance — the visible tier *is* the reason to go breach. Research Data
+survives a breach, so without this the whole tree could be finished without
+ever opening a portal.
+
+| Available | Nodes | Research Data | Which |
+|:---|---:|---:|:---|
+| from turn one | 9 | 158 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication |
+| zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
+| zone 3 | 6 | 750 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
+
+The gate and the tap compound without either knowing about the other.
+`Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
+Mk3 in zone 3 — and its cycle succeeds 50% of the time at Mk1 against 90% at
+Mk5. So the band you can buy earliest is also the band you earn slowest, and
+each breach speeds the bank up at the same moment it releases more to spend
+it on.
+
+The bands are monotone in `requires`: a node is never gated below something
+it depends on, or the prerequisite lock would always outlive the zone lock
+and the gate could never be the reason the node was unbuyable. The one thing
+that must never be gated is anything unlocking the Zone Portal — that is the
+structure you reach the next zone *with*, so gating it behind the zone it
+opens softlocks the run. No shipped node touches the portal at all; both
+rules are asserted against the loaded tree in the engine's test suite.
 
 ## The tree
 
@@ -27,34 +57,35 @@ it is the one progression track you cannot fight your way along.
 RESEARCH TREE            (Research Data to unlock each node)
 
 Automation (8)
-|-- Reactive Armor (18)
-|   `-- Firewall Plating (22)
-|       `-- Ablative Lattice (40)
-|-- Weapon Fabrication (18)
-|   |-- Neural Interfacing (25)
-|   |   `-- Cortex Hacking (45)
-|   `-- Overclock Cores (22)
-|       `-- Monofilament Edge (40)
-|-- Routine Fabrication (20)
-|   `-- Self-Execution (12)
-|       |-- Field Operations (16)
-|       |   |-- Adaptive Plating (32)
-|       |   `-- Deep Analysis (46)
-|       `-- Runtime Patching (28)
-|           `-- Kernel Privileges (48)
-`-- Program Refactoring (34)
+|-- Reactive Armor (24)
+|   `-- Firewall Plating (45)
+|       `-- Ablative Lattice (110)
+|-- Weapon Fabrication (24)
+|   |-- Neural Interfacing (55)
+|   |   `-- Cortex Hacking (125)
+|   `-- Overclock Cores (45)
+|       `-- Monofilament Edge (110)
+|-- Routine Fabrication (26)
+|   `-- Self-Execution (14)
+|       |-- Field Operations (20)
+|       |   |-- Adaptive Plating (70)
+|       |   `-- Deep Analysis (130)
+|       |       `-- Address Translation (140)
+|       `-- Runtime Patching (60)
+|           `-- Kernel Privileges (135)
+`-- Program Refactoring (75)
 
-Isometric Commerce (12)
+Isometric Commerce (14)
 
 Power Grid (10)
-`-- Fortification (15)
+`-- Fortification (18)
 ```
 
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at 8, so the opening move is barely a
 decision. **Power Grid** is a two-node stub that ends in defence.
-**Isometric Commerce** is a leaf — 12 Research Data buys
+**Isometric Commerce** is a leaf — 14 Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.
 
@@ -66,28 +97,29 @@ there is no node you can reach two ways.
 
 ## What each node unlocks
 
-| Node | Cost | Needs | Unlocks |
-|:---|---:|:---|:---|
-| Automation | 8 | - | `compiler` |
-| Isometric Commerce | 12 | - | `market` |
-| Power Grid | 10 | - | `power_conduit` |
-| Fortification | 15 | `power_grid` | `shield`, `patch_node` |
-| Program Refactoring | 34 | `automation` | `annealing_node`, `refactor_bench` |
-| Reactive Armor | 18 | `automation` | `armory` |
-| Routine Fabrication | 20 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
-| Weapon Fabrication | 18 | `automation` | `fabricator` |
-| Firewall Plating | 22 | `armor_bench` | recipe `firewall_plating` at the armory — 6 `portal_fragment` |
-| Neural Interfacing | 25 | `weapon_bench` | recipe `neural_amplifier` at the fabricator — 6 `portal_fragment` |
-| Overclock Cores | 22 | `weapon_bench` | recipe `overclock_core` at the fabricator — 6 `portal_fragment` |
-| Self-Execution | 12 | `routine_fabrication` | `priority_boost` |
-| Ablative Lattice | 40 | `firewall` | recipe `ablative_plating` at the armory — 12 `portal_fragment` |
-| Cortex Hacking | 45 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment` |
-| Field Operations | 16 | `self_exec` | `repair_loop`, `coolant_flush`, `trickle_charge` |
-| Monofilament Edge | 40 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
-| Runtime Patching | 28 | `self_exec` | `hot_patch` |
-| Adaptive Plating | 32 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
-| Deep Analysis | 46 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine` |
-| Kernel Privileges | 48 | `runtime_patching` | `null_route` |
+| Node | Zone | Cost | Needs | Unlocks |
+|:---|---:|---:|:---|:---|
+| Automation | - | 8 | - | `compiler` |
+| Isometric Commerce | - | 14 | - | `market` |
+| Power Grid | - | 10 | - | `power_conduit` |
+| Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
+| Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench` |
+| Reactive Armor | - | 24 | `automation` | `armory` |
+| Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
+| Weapon Fabrication | - | 24 | `automation` | `fabricator` |
+| Firewall Plating | 2 | 45 | `armor_bench` | recipe `firewall_plating` at the armory — 6 `portal_fragment` |
+| Neural Interfacing | 2 | 55 | `weapon_bench` | recipe `neural_amplifier` at the fabricator — 6 `portal_fragment` |
+| Overclock Cores | 2 | 45 | `weapon_bench` | recipe `overclock_core` at the fabricator — 6 `portal_fragment` |
+| Self-Execution | - | 14 | `routine_fabrication` | `priority_boost` |
+| Ablative Lattice | 3 | 110 | `firewall` | recipe `ablative_plating` at the armory — 12 `portal_fragment` |
+| Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment` |
+| Field Operations | - | 20 | `self_exec` | `repair_loop`, `coolant_flush`, `trickle_charge` |
+| Monofilament Edge | 3 | 110 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
+| Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
+| Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
+| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine` |
+| Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
+| Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
 
 A structure named by **no** research file is buildable from turn one — the
 tree gates the machines that automate a base, not the base itself.
@@ -95,38 +127,41 @@ tree gates the machines that automate a base, not the base itself.
 ## What it costs to get there
 
 A node's own `cost` is not what it costs you. Everything above it has to be
-unlocked first, so the real price of Monofilament Edge is its own 40 plus the
-whole chain behind it.
+unlocked first, so the real price of Monofilament Edge is its own
+110 plus the whole chain behind it.
 
 ```
 CUMULATIVE COST FROM A STANDING START
 
-Automation              8  ###.....................................
-Power Grid             10  ###.....................................
-Isometric Commerce     12  ####....................................
-Fortification          25  #########...............................
-Reactive Armor         26  #########...............................
-Weapon Fabrication     26  #########...............................
-Routine Fabrication    28  ##########..............................
-Self-Execution         40  ##############..........................
-Program Refactoring    42  ##############..........................
-Firewall Plating       48  #################.......................
-Overclock Cores        48  #################.......................
-Neural Interfacing     51  ##################......................
-Field Operations       56  ###################.....................
-Runtime Patching       68  #######################.................
-Ablative Lattice       88  ##############################..........
-Adaptive Plating       88  ##############################..........
-Monofilament Edge      88  ##############################..........
-Cortex Hacking         96  #################################.......
-Deep Analysis         102  ###################################.....
-Kernel Privileges     116  ########################################
+Automation              8  #.......................................
+Power Grid             10  #.......................................
+Isometric Commerce     14  ##......................................
+Fortification          28  ###.....................................
+Reactive Armor         32  ####....................................
+Weapon Fabrication     32  ####....................................
+Routine Fabrication    34  ####....................................
+Self-Execution         48  ######..................................
+Field Operations       68  ########................................
+Firewall Plating       77  #########...............................
+Overclock Cores        77  #########...............................
+Program Refactoring    83  ##########..............................
+Neural Interfacing     87  ##########..............................
+Runtime Patching      108  #############...........................
+Adaptive Plating      138  ################........................
+Ablative Lattice      187  ######################..................
+Monofilament Edge     187  ######################..................
+Deep Analysis         198  #######################.................
+Cortex Hacking        212  #########################...............
+Kernel Privileges     243  #############################...........
+Address Translation   338  ########################################
 ```
 
-The shape to notice is the 6 end-of-branch nodes: Kernel Privileges, Deep Analysis, Cortex Hacking, Adaptive Plating, Ablative Lattice, Monofilament Edge.
-Each carries 48-68 Research Data of prerequisites behind it,
-which is at least what the dearest single node in the whole tree costs on its
-own (48). The tree is not steep at the top; it is long.
+The shape to notice is the 6 end-of-branch nodes: Address Translation, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge, Adaptive Plating.
+Each carries 68-198 Research Data of prerequisites behind it before
+its own price is counted, and lands at 138-338 from a
+standing start — 2x the dearest single node in the
+tree (140) at the top end. The tree is not steep; it is long, and the
+zone bands are what stop that length being paid off in one sitting.
 
 ## Routines against recipes
 

@@ -26,6 +26,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
+use crate::derive::index;
 use crate::tuning::MIN_SECTOR_WALKABLE_FRACTION;
 use crate::world::{SectorShape, WorldMap};
 
@@ -291,4 +292,64 @@ impl SectorDb {
     pub fn all(&self) -> impl Iterator<Item = &SectorDef> {
         self.defs.values()
     }
+}
+
+/// Which sector zone `zone` of the world seeded `seed` is, or `None` for a
+/// neutral one.
+///
+/// **The only place a sector is chosen.** Nothing else derives one, so the
+/// three sites that build a `WorldMap` for real play cannot disagree about
+/// what zone 6 of a given world is — and disagreeing is not a cosmetic bug:
+/// `Game::load` reconstructing at a different shape would regenerate every
+/// unwalked chunk differently and could strand a party inside rock.
+///
+/// **Zone 1 is always neutral**, before the pool is even consulted. That is
+/// not politeness. `in_opening_ring` fields only species that
+/// `beatable_by_a_fresh_player` clears, and `Game::habitat_pools` falls back
+/// to the biome's *unfiltered* roster when nothing qualifies — so a sector
+/// biasing zone 1's biome mix would move the opening roster while looking
+/// like a cosmetic change, and could empty the ring while leaving it looking
+/// intact.
+///
+/// An empty pool is neutral everywhere, which is what makes deleting
+/// `assets/sectors/` restore the pre-sector game.
+pub fn for_zone(seed: u32, zone: u32, db: &SectorDb) -> Option<&SectorDef> {
+    if zone <= 1 {
+        return None;
+    }
+    let pool: Vec<&SectorDef> = db.all().collect();
+    if pool.is_empty() {
+        return None;
+    }
+    Some(pool[index(sector_seed(seed, zone), pool.len())])
+}
+
+/// Folds the world seed and the zone number into the value `index` reduces.
+///
+/// FNV-1a, from the same offset basis `stack::FrameSpec::rng_seed` starts
+/// from — not `GameRng` (a draw does not survive a save/load and shifts every
+/// later roll in the run) and not an `StdRng` sequence (not guaranteed stable
+/// across a `rand` upgrade, so a dependency bump would silently reshuffle
+/// every sector in the game).
+///
+/// **Both inputs go in a byte at a time, and the zone especially.** One
+/// XOR-then-multiply round carries a difference only about the prime's own
+/// width upward, so folding the zone as a single 64-bit word would leave
+/// zones 2, 3 and 4 differing nowhere near bit 63 — which is the bit
+/// `derive::index` reads. Every zone in a run would then land in the same
+/// sector while each individual answer still looked arbitrary. That is the
+/// measured failure `descriptions::Slot::tags` documents, reached here by a
+/// shorter route, and `one_seed_does_not_send_every_zone_to_the_same_sector`
+/// is the test that fails if someone shortens it.
+fn sector_seed(seed: u32, zone: u32) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in (seed as u64).to_le_bytes() {
+        h ^= byte as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    for byte in (zone as u64).to_le_bytes() {
+        h ^= byte as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
 }

@@ -5,6 +5,7 @@ pub mod arena;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;
+pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;
 mod game;

@@ -4,7 +4,8 @@ use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
-    DEFENDER_BONUS_PER_LEVEL, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEAN_COMPILER_DISCOUNT_PER_LEVEL,
+    DEFENDER_BONUS_PER_LEVEL, DIFFICULTY_EVEN_MAX, KEEN_SCAVENGER_BONUS_PER_LEVEL,
+    LEAN_COMPILER_DISCOUNT_PER_LEVEL,
 };
 use crate::*;
 
@@ -91,12 +92,25 @@ fn unlock_perk_rejects_without_enough_points() {
 /// `max_hp` Integrity. The easiest species on purpose: a hard one at full
 /// health sits close enough to `CAPTURE_CHANCE_MIN` that the clamp, not the
 /// perk, would decide what these tests measure.
+///
+/// Its Attack and Defense are padded to put `Stats::power` at
+/// `DIFFICULTY_EVEN_MAX` of the player's, for the same kind of reason.
+/// Exploit Focus and `taming::power_relief` subtract from the same
+/// `CAPTURE_HP_PENALTY`, and relief waives all of it at a Green-con gap — so
+/// an unpadded 12-power dummy leaves the perk nothing to reduce and turns
+/// both tests below into measurements of the power gap. Only `hp`/`max_hp`
+/// are the callers' own; the padding exists solely to keep the target a
+/// threat, which is the regime the perk is for.
 fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
     let species = game
         .species_defs()
         .into_iter()
         .min_by(|a, b| a.taming_difficulty.total_cmp(&b.taming_difficulty))
         .expect("at least one species");
+    let even_match = (game.player_power() as f64 * DIFFICULTY_EVEN_MAX).ceil() as i32;
+    // Rounded up, so the total lands at or above the threshold rather than a
+    // stat's-worth under it and back inside the relief ramp.
+    let padding = ((even_match - max_hp + 1) / 2).max(1);
     game.world
         .spawn((
             Creature {
@@ -107,8 +121,8 @@ fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
             Stats {
                 hp,
                 max_hp,
-                atk: 1,
-                def: 1,
+                atk: padding,
+                def: padding,
             },
         ))
         .id()

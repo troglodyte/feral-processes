@@ -348,11 +348,7 @@ impl Game {
                 .any(|(kind, room)| *room > 0 && db.get(kind).is_some_and(|d| d.stores))
         };
 
-        let player_power = self
-            .world
-            .get::<Stats>(self.player_entity())
-            .unwrap()
-            .power();
+        let player_power = self.player_power();
         let mut linked_edges = self.linked_edges_by_structure();
 
         let mut views: Vec<EntityView> = hits
@@ -904,6 +900,32 @@ impl Game {
         self.tick();
         Ok(())
     }
+
+    /// The denominator of every `power_ratio` reading. The `unwrap` is the
+    /// player entity always carrying `Stats` — the same invariant the map
+    /// coloring has always relied on here.
+    pub(crate) fn player_power(&self) -> i32 {
+        self.world
+            .get::<Stats>(self.player_entity())
+            .unwrap()
+            .power()
+    }
+}
+
+/// How outmatched the player is by one creature, as its `Stats::power` over
+/// theirs — the single reading two systems share. `difficulty_color` buckets
+/// it into the con colors drawn on the map, and `Game::target_resistance`
+/// hands it to `taming::capture_chance`, whose two power ramps are bounded by
+/// the same `DIFFICULTY_*` thresholds this is bucketed against. One function
+/// rather than two divisions, so the color on a program and the decompile
+/// odds against it can never come to different conclusions about which of the
+/// two is stronger.
+///
+/// `player_power` is floored at 1 rather than guarded by the caller: the one
+/// value that would divide by zero is a dead player, and every caller here
+/// runs while they are alive.
+pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
+    creature_power as f64 / player_power.max(1) as f64
 }
 
 /// Old-school "con"-style map coloring for a hostile wild program, relative
@@ -920,7 +942,7 @@ pub(crate) fn difficulty_color(
     if is_boss {
         return GlyphColor::Magenta;
     }
-    let ratio = creature_power as f64 / player_power.max(1) as f64;
+    let ratio = power_ratio(creature_power, player_power);
     if ratio <= DIFFICULTY_EASY_MAX {
         GlyphColor::Green
     } else if ratio <= DIFFICULTY_EVEN_MAX {

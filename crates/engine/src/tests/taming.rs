@@ -662,3 +662,47 @@ fn a_failed_decompile_at_the_cap_says_persistence_has_run_out() {
         "the attempt that reaches the cap should say so: {lines:?}"
     );
 }
+
+/// Rewrites a creature to a chosen `Stats::power` at full Integrity. How the
+/// total splits across the three stats is arbitrary — only the sum reaches
+/// `inspection::power_ratio`.
+fn set_power_at_full_integrity(game: &mut Game, entity: Entity, power: i32) {
+    let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
+    stats.atk = 1;
+    stats.def = 1;
+    stats.max_hp = power - 2;
+    stats.hp = stats.max_hp;
+}
+
+/// The power gap has to reach the *screen*, not just the roll: a player who
+/// cannot see that a trivial program is now worth a catalyst will not spend
+/// one. Both readings here go through `Game::target_resistance`, which is
+/// what makes the quote and the roll the same number by construction.
+///
+/// Integrity stays full on both sides deliberately. That is the whole case
+/// this term exists for — a program you delete in one strike can never be
+/// presented at low HP, so the old formula priced every attempt on it as
+/// though the player had simply declined to soften it.
+#[test]
+fn a_program_far_beneath_you_previews_better_odds_than_an_even_match() {
+    let mut game = Game::new(3108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    let player_power = game.player_power();
+
+    set_power_at_full_integrity(&mut game, wild, player_power);
+    let even = program_manifest(&game, wild)
+        .decompile_chance
+        .expect("holding a catalyst should quote odds");
+
+    set_power_at_full_integrity(&mut game, wild, player_power / 4);
+    let outclassed = program_manifest(&game, wild)
+        .decompile_chance
+        .expect("holding a catalyst should quote odds");
+
+    assert!(
+        outclassed > even * 1.5,
+        "a program at a quarter of the player's power should preview \
+         markedly better odds at the same full Integrity: {outclassed} vs {even}"
+    );
+}

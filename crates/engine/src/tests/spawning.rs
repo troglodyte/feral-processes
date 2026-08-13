@@ -1937,8 +1937,15 @@ fn no_shiny_spawns_in_the_opening_ring() {
     );
 }
 
+/// A census over `Rarity::ALL` rather than a check on two named tiers, so
+/// a rung added to the ladder without a threshold in `roll_rarity` fails
+/// here instead of silently never spawning.
+///
+/// The sample is large enough that the rarest rung is not a coin flip:
+/// `PRISMATIC_SPAWN_CHANCE` is 0.0003, so 200k rolls expect ~60 of them.
+/// The roll is seeded, so this is deterministic rather than merely likely.
 #[test]
-fn an_eligible_spawn_can_roll_both_tiers() {
+fn every_rare_tier_is_reachable_and_rarer_than_the_one_below() {
     let mut game = Game::new(9023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ordinary = game
         .species_defs()
@@ -1946,19 +1953,31 @@ fn an_eligible_spawn_can_roll_both_tiers() {
         .find(|s| !s.is_boss)
         .expect("ordinary species should ship");
     let far = OPENING_RING_TILES + 50;
-    let (mut silver, mut gold) = (0, 0);
-    for _ in 0..20_000 {
-        match game.roll_rarity(&ordinary, far, far) {
-            Rarity::Silver => silver += 1,
-            Rarity::Gold => gold += 1,
-            Rarity::Ordinary => {}
-        }
+
+    let mut counts = [0usize; Rarity::ALL.len()];
+    for _ in 0..200_000 {
+        counts[game.roll_rarity(&ordinary, far, far).rank() as usize] += 1;
     }
-    assert!(silver > 0 && gold > 0, "both tiers must be reachable");
-    assert!(
-        gold < silver,
-        "gold is the rarer tier: got {gold} gold to {silver} silver"
-    );
+
+    for tier in Rarity::ALL {
+        assert!(
+            counts[tier.rank() as usize] > 0,
+            "{tier:?} never spawned in 200k rolls — is it missing a threshold \
+             in roll_rarity? counts: {counts:?}"
+        );
+    }
+    for pair in Rarity::ALL.windows(2) {
+        let (lower, upper) = (
+            counts[pair[0].rank() as usize],
+            counts[pair[1].rank() as usize],
+        );
+        assert!(
+            upper < lower,
+            "{:?} ({upper}) must be rarer than {:?} ({lower})",
+            pair[1],
+            pair[0]
+        );
+    }
 }
 
 #[test]

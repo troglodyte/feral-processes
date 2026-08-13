@@ -4066,9 +4066,10 @@ fn the_wider_rungs_hand_over_more_disks_of_the_same_routine() {
     ] {
         let mut game = game_at_a_market();
         give_credits(&mut game, 5_000);
-        let index = first_offer(&mut game, |offer| {
-            matches!(offer, MarketOfferKind::Routine { scope: s, .. } if *s == scope)
-        })
+        let index = first_offer(
+            &mut game,
+            |offer| matches!(offer, MarketOfferKind::Routine { scope: s, .. } if *s == scope),
+        )
         .expect("every shelf lists its routines at all three rungs");
         let ability = ability_of(&mut game, index);
 
@@ -4202,18 +4203,19 @@ fn game_at_a_market_selling_an_exclusive_disk() -> Option<(Game, usize, String)>
             continue;
         }
         step_forward_clear(&mut game);
-        let Some(pos) = game.stack_pos() else { continue };
+        let Some(pos) = game.stack_pos() else {
+            continue;
+        };
         if game.stack_market().is_none() {
             continue;
         }
-        let found = game
-            .market_offers(pos)
-            .into_iter()
-            .enumerate()
-            .find_map(|(index, offer)| match offer {
-                MarketOfferKind::ExclusiveDisk { ability } => Some((index, ability)),
-                _ => None,
-            });
+        let found =
+            game.market_offers(pos).into_iter().enumerate().find_map(
+                |(index, offer)| match offer {
+                    MarketOfferKind::ExclusiveDisk { ability } => Some((index, ability)),
+                    _ => None,
+                },
+            );
         if let Some((index, ability)) = found {
             return Some((game, index, ability));
         }

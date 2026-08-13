@@ -64,8 +64,11 @@ impl Game {
                     break;
                 }
                 self.arm_cooldown(holder, &ability);
-                let recipients =
-                    self.ability_recipients(holder, ability.target, &battle::SpecialTarget::WholeParty);
+                let recipients = self.ability_recipients(
+                    holder,
+                    ability.target,
+                    &battle::SpecialTarget::WholeParty,
+                );
                 if recipients.is_empty() {
                     continue;
                 }

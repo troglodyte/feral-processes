@@ -10,9 +10,7 @@
 
 use super::support::*;
 use crate::abilities::{AbilityDb, PassiveTrigger};
-use crate::components::{
-    ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Routines, Stats,
-};
+use crate::components::{ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Routines, Stats};
 use crate::items::ItemId;
 use crate::*;
 
@@ -133,7 +131,11 @@ fn etching_an_exclusive_routine_is_refused_with_a_reason() {
         err.contains("already etched"),
         "a taught exclusive routine became etchable: {err}"
     );
-    assert_eq!(game.etched_disks_of(&id), 0, "and it produced a disk anyway");
+    assert_eq!(
+        game.etched_disks_of(&id),
+        0,
+        "and it produced a disk anyway"
+    );
 }
 
 /// Every exclusive routine names at least one real boss, that boss's claim
@@ -316,7 +318,10 @@ fn extracting_an_ordinary_routine_still_teaches_and_yields_no_disk() {
 
     game.extract_routine(medic, 0).unwrap();
 
-    assert!(game.knows_routine(&ability), "the ordinary branch stopped teaching");
+    assert!(
+        game.knows_routine(&ability),
+        "the ordinary branch stopped teaching"
+    );
     assert_eq!(
         game.etched_disks_of(&ability),
         0,

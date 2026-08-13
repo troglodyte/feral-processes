@@ -8,8 +8,8 @@ use crate::tuning::{
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
-    MAX_GROUP_SIZE_STEPS, SILVER_SPAWN_CHANCE, WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE,
-    WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    MAX_GROUP_SIZE_STEPS, PLATINUM_SPAWN_CHANCE, PRISMATIC_SPAWN_CHANCE, SILVER_SPAWN_CHANCE,
+    WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::*;
 
@@ -93,6 +93,42 @@ pub(crate) fn swarm_radius(n: u32) -> i32 {
 /// encounters entirely but never invert into a spawn bonus.
 pub(crate) fn damped_wild_spawn_chance(damp_pct: i32) -> f64 {
     (WILD_SPAWN_CHANCE * (1.0 - damp_pct as f64 / 100.0)).max(0.0)
+}
+
+/// How often each rung comes up. Exhaustive **on purpose**: a rung added to
+/// `Rarity` without a chance beside it is a compile error here rather than a
+/// tier that ships and never rolls, which is the failure a `_ =>` arm would
+/// hide. Same argument `render/stack.rs::cell_mark` makes about a new
+/// `CellKind` drawing as bare floor.
+fn rarity_spawn_chance(tier: Rarity) -> f64 {
+    match tier {
+        Rarity::Ordinary => 0.0,
+        Rarity::Silver => SILVER_SPAWN_CHANCE,
+        Rarity::Gold => GOLD_SPAWN_CHANCE,
+        Rarity::Platinum => PLATINUM_SPAWN_CHANCE,
+        Rarity::Prismatic => PRISMATIC_SPAWN_CHANCE,
+    }
+}
+
+/// Which rung a single `0.0..1.0` roll lands on, walking `Rarity::ALL`
+/// **rarest first** so the thresholds accumulate and cannot sum past 1.0 —
+/// one draw decides the tier, and each rung is genuinely rarer than the one
+/// below rather than a separate chance landing on top of it.
+///
+/// The one definition of the ladder. `Game::roll_rarity` is its caller
+/// today; gear rolls the same tiers and will share this rather than getting
+/// its own chances, because two copies would let a weapon and a program
+/// disagree about how rare "Overclocked" is while sharing the word and the
+/// colour that say they don't.
+pub(crate) fn rarity_for_roll(roll: f64) -> Rarity {
+    let mut ceiling = 0.0;
+    for tier in Rarity::ALL.into_iter().rev() {
+        ceiling += rarity_spawn_chance(tier);
+        if roll < ceiling {
+            return tier;
+        }
+    }
+    Rarity::Ordinary
 }
 
 impl Game {
@@ -394,22 +430,19 @@ impl Game {
     /// Eligible spawns do consume one draw, which shifts the stream for
     /// everything after them — that was a one-time, expected re-baselining.
     ///
-    /// One roll decides both tiers rather than two independent draws, so the
-    /// chances cannot sum past 1.0 and gold is genuinely rarer than silver
-    /// instead of landing on top of it.
+    /// **One** roll decides the tier rather than one draw per rung, so the
+    /// chances cannot sum past 1.0 and each rung is genuinely rarer than the
+    /// one below instead of landing on top of it. The thresholds accumulate
+    /// rarest-first for that reason, and `rarity_ladder` is the single
+    /// definition of them — shared with `Game::roll_gear_rarity`, so a
+    /// program and a dropped weapon cannot come up rare at different rates.
     pub(crate) fn roll_rarity(&mut self, species: &SpeciesDef, x: i32, y: i32) -> Rarity {
         if species.is_boss || self.in_opening_ring(x, y) {
             return Rarity::Ordinary;
         }
         let mut rng = self.world.resource_mut::<GameRng>();
         let roll: f64 = rng.0.random_range(0.0..1.0);
-        if roll < GOLD_SPAWN_CHANCE {
-            Rarity::Gold
-        } else if roll < GOLD_SPAWN_CHANCE + SILVER_SPAWN_CHANCE {
-            Rarity::Silver
-        } else {
-            Rarity::Ordinary
-        }
+        rarity_for_roll(roll)
     }
 
     /// How many escalation steps a fight sits at — the one input both group

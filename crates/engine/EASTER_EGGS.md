@@ -72,4 +72,4 @@ If you are adding a fifth, follow the same rules — they are not arbitrary:
   neighbour to slip from.
 
 The design argument for the three added on 2026-08-06 is in
-`docs/superpowers/specs/2026-08-06-easter-eggs-design.md`.
+`docs/superpowers/archive/specs/2026-08-06-easter-eggs-design.md`.

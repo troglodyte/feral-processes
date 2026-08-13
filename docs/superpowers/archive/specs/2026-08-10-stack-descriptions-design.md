@@ -266,7 +266,7 @@ blocks; repoint `Game::listen`. Existing lines keep their text and gain
 composition.
 
 `crates/engine/EASTER_EGGS.md` and
-`docs/superpowers/specs/2026-08-06-easter-eggs-design.md` are updated in the same
+`docs/superpowers/archive/specs/2026-08-06-easter-eggs-design.md` are updated in the same
 change: `Z` still works, still costs a turn and Trace, and still says the thing
 the frame map cannot — only what it reads now comes from elsewhere.
 

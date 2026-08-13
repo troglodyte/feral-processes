@@ -22,8 +22,8 @@ that does not exist yet goes stale.
 | 5 | **Corner map inset** | ✅ **built** 2026-08-02 on `stack-phase-5-corner-map`, unplayed | no | gui only |
 | — | *deferred from 4*: derelict trader, crash log | sketched only | — | — |
 
-Phase 1's plan is at
-`docs/superpowers/plans/2026-07-31-the-stack-phase-1-rename.md`. It was
+Phase 1's plan was deleted 2026-08-13 with the rest of `plans/`; git history
+has it at `docs/superpowers/plans/2026-07-31-the-stack-phase-1-rename.md`. It was
 amended six times mid-execution and those amendments are the useful part —
 they record where the plan was wrong, which is the same shape of error the
 later phases will make.

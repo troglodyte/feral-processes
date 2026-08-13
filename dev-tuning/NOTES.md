@@ -297,9 +297,7 @@ recorded rather than fixed because neither is a tuning question.
    was told to measure: **`perturb` now needs narrowing.**
 6. **Narrow `perturb` to the legal move set.** Two thirds of the last
    search's budget went on candidates it should never have generated. The
-   shape is in the section above and in
-   `docs/superpowers/plans/2026-08-12-tuner-roster-constraints.md`'s central
-   design question — a boss's stats free, `taming_difficulty` free,
+   shape is in the section above — a boss's stats free, `taming_difficulty` free,
    `base_speed` within its class band, and an ordinary block moved only by
    changing the *budget* and redistributing by class share. Until this
    lands, "the search proposed nothing" is not evidence the roster is

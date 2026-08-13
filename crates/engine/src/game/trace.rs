@@ -6,8 +6,9 @@
 //! apply at their own call sites.
 //!
 //! The design argument is in
-//! `docs/superpowers/specs/2026-07-31-the-stack-design.md`, "Phase 2". Two
-//! points from it are load-bearing enough to repeat here, because both look
+//! `docs/superpowers/archive/specs/2026-07-31-the-stack-design.md`,
+//! "Phase 2". Two points from it are load-bearing enough to repeat here,
+//! because both look
 //! like arbitrary choices from inside the code:
 //!
 //! - **A kill is worth a fifth of a cache.** Kills outnumber caches by

@@ -1919,6 +1919,27 @@ pub const MAX_PROFILE_PERK_POINTS: u32 = 5;
 /// free companion is half a starting party rather than a flavour of one.
 pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 
+// ---------------------------------------------------------------------------
+// Sector traits
+// ---------------------------------------------------------------------------
+
+/// Least standable ground a sector may leave, as a fraction of the tiles
+/// around the origin (see `sectors::walkable_fraction`).
+///
+/// A playability bound rather than content, which is why it is here and not
+/// in the `.ron`: nothing about a threshold delta stops an authored sector
+/// generating a map that is almost entirely Data Void and Black Ice, and
+/// that is not merely ugly. `enter_next_zone` calls `find_walkable_start` on
+/// the new map, every spawn, structure and Stack link refuses an unwalkable
+/// tile, and `stamp_platform` needs somewhere to lay the base — a sector
+/// with no ground is a stranded run.
+///
+/// Set well under the neutral shape's own figure so an authored sector has
+/// real room to be hostile, and well over zero so it still refuses one that
+/// strands the player. A sector under this floor is skipped at load with a
+/// warning, like any other malformed file.
+pub const MIN_SECTOR_WALKABLE_FRACTION: f64 = 0.45;
+
 #[cfg(test)]
 mod tests {
     use super::*;

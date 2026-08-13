@@ -1,0 +1,21 @@
+// A fractured sector: the map is mostly holes.
+//
+// Both elevation thresholds close in on each other, so low ground drops out
+// as Data Void and high ground freezes into Black Ice. This is the sector
+// that gets near `MIN_SECTOR_WALKABLE_FRACTION` — it leaves about half the
+// ground standable against a neutral sector's ~0.61, which is what makes it
+// awkward to cross and build in rather than merely differently coloured.
+// Pushing either delta much further trips the load-time floor.
+(
+    id: "fractured",
+    name: "Fractured Allocation",
+    description: "Address space in pieces; more gap than ground.",
+    shape: (
+        void_elevation: 0.10,
+        black_ice_elevation: -0.10,
+    ),
+    palette: (
+        ground_hue: 225.0,
+        hazard_hue: 33.0,
+    ),
+)

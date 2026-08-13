@@ -16,6 +16,7 @@ pub mod progression;
 pub mod research;
 pub mod resources;
 pub mod save;
+pub mod sectors;
 pub mod species;
 pub mod stack;
 pub mod structures;

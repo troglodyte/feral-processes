@@ -37,6 +37,7 @@ mod raids;
 mod refactor;
 mod research;
 mod routines;
+mod sectors;
 mod spawning;
 mod stack;
 mod stack_movement;

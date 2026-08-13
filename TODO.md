@@ -11,7 +11,6 @@
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 13. one button to fuse all items
-15. rotten substrate, in stacks take 15% off health tunable
 
 # Bugs
 1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest

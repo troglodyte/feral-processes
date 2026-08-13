@@ -27,6 +27,29 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.18
+
+### Rotten substrate can kill you now
+
+A step onto corrupted ground in the Stack costs 10% of your maximum
+Integrity, up from 3%. A patch is three cells, so walking one end to end is
+about a third of the bar, and turning round and walking back out is most of
+the rest.
+
+At 3% a patch was a toll. It could not kill, so the only question it ever
+asked was whether the way round was longer than a tenth of your health, and
+the answer was almost always no — you paid it and forgot it. At 10% a party
+that is already hurt can die on the third cell, which makes the detour a
+decision you can get wrong. That is the whole reason the Stack has a second
+kind of walkable floor.
+
+Nothing else moved. Corruption still comes as two patches of three per
+frame, sparse enough that most routes miss them; it still measures against
+your maximum rather than your remaining Integrity, because Stack depth is
+uncorrelated with your level and any flat figure is lethal at one end of a
+run and free at the other; and it still goes through the one damage path in
+the game, so a Mitigation field buff blunts it exactly as it always has.
+
 ## 0.8.17
 
 ### The roster's row shortcuts stopped standing programs down

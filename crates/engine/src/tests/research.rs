@@ -721,7 +721,11 @@ fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
                 "{} sits on an unresearched chain, so it owes a prereq too",
                 deep.id
             );
-            assert_eq!(min_zone, Some(3), "and the zone is a second, separate reason");
+            assert_eq!(
+                min_zone,
+                Some(3),
+                "and the zone is a second, separate reason"
+            );
         }
         other => panic!("expected {} to be Locked, got {other:?}", deep.id),
     }

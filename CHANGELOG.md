@@ -27,6 +27,36 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.12
+
+### A companion's gear, and the machine it is standing at, on its own sheet
+
+The manifest is the page you open to find out what something *is*, and for a
+program you own it had two holes in it.
+
+Gear was the first. Any program you own has been able to wear a weapon,
+armour and a module since 0.8.0, but the manifest's EQUIPMENT box was the
+player's alone — the only way to see what a companion had on was the Program
+Gear screen you equip from, which tells you what is in the slots and nothing
+about what those slots are currently worth. A companion's page now carries
+the same box the player's does, measured the same way: each item at the zone
+level and fusion tier recorded when it went on, not at a fresh preview of
+today's. A program wearing nothing shows no box, the same way an empty slot
+has never been listed as "(none)".
+
+The post was the second. A program on a cronjob did say so, as one entry in
+the run of tags under its name — but a worker's tag is the bare structure
+name, which beside "Lv 14" and "Excellent (91%)" reads as decoration rather
+than as an assignment. The WORK box, which is already the box about what a
+program is like to *post* somewhere, now states it outright: **Posted to
+Mining Node** for a worker, **Guarding Shield Wall** for a guard, and no row
+at all for one that is idle or in your party. The verb is the whole
+difference between the two jobs, and it is the reason the row is not one
+label for both.
+
+Nothing about how gear or posts work has changed — this is what the screen
+reports, not what the game does. Existing saves load untouched.
+
 ## 0.8.11
 
 ### Decompiling reads the gap between you and what you are pointing at

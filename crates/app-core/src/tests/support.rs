@@ -2,6 +2,8 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use feral_processes_engine::affixes::AffixId;
+use feral_processes_engine::components::Rarity;
 use feral_processes_engine::resources::Locale;
 use feral_processes_engine::save::{self, CreatureSave};
 use feral_processes_engine::stack::{Dir, FrameSpec, generate};
@@ -632,6 +634,43 @@ pub(crate) fn app_wearing_weapon(
     let _ = std::fs::remove_file(&path);
     app.mode = Mode::Playing;
     app
+}
+
+/// A game `zone` sectors deep, wearing nothing, carrying one copy of `item`
+/// with `affix` on it.
+///
+/// Written into the save rather than staged through play because nothing
+/// public grants an affixed copy: `Game::grant_gear_drop` is the only way one
+/// enters the game and it is the engine's own, rolled off `GameRng`. An empty
+/// slot is the point — with nothing worn, what the swap picker prints for a
+/// candidate is what equipping it must actually grant, with no outgoing item's
+/// figure in between.
+pub(crate) fn app_carrying_affixed_gear(seed: u32, item: &str, affix: &str, zone: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("affixed", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.zone = zone;
+    data.player.gear_copies = vec![(affixed_gear(item, affix), 1)];
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// An ordinary, unfused copy of `item` wearing `affix` — the affixed twin of
+/// `gear` above.
+pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
+    GearCopy {
+        item: ItemId::from(item),
+        rarity: Rarity::Ordinary,
+        tier: 0,
+        affix: Some(AffixId::from(affix)),
+    }
 }
 
 /// Opens a screen the way a player now has to: through its group menu.

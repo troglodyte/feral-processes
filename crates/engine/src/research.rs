@@ -32,6 +32,13 @@ pub struct ResearchDef {
     pub description: String,
     /// Research Data spent to unlock this node.
     pub cost: u32,
+    /// The zone the player must have reached before this node can be bought,
+    /// compared against `resources::ZoneLevel`. 0 — the default, and what an
+    /// absent field means — is ungated, available from turn one. Not an
+    /// `Option`: "absent" and "zone 0" already say the same thing, and a
+    /// second spelling for it is a second thing to get wrong.
+    #[serde(default)]
+    pub min_zone: u32,
     #[serde(default)]
     pub requires: Vec<ResearchId>,
     #[serde(default)]
@@ -197,7 +204,23 @@ mod tests {
             def.unlocks_abilities.is_empty(),
             "unlocks_abilities defaults to empty"
         );
+        assert_eq!(def.min_zone, 0, "an absent min_zone means ungated");
         assert_eq!(def.unlocks_structures, vec!["compiler".to_string()]);
+        assert!(warnings.is_empty(), "a valid node warns about nothing");
+    }
+
+    #[test]
+    fn a_node_may_declare_the_zone_it_becomes_available_in() {
+        let node = r#"(
+            id: "cortex",
+            name: "Cortex Expansion",
+            description: "Deep work.",
+            cost: 125,
+            min_zone: 3,
+        )"#;
+        let (db, warnings) = load("min_zone", &[("cortex", node)]);
+        let def = db.get("cortex").expect("valid node should load");
+        assert_eq!(def.min_zone, 3);
         assert!(warnings.is_empty(), "a valid node warns about nothing");
     }
 

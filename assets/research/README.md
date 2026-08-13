@@ -24,6 +24,11 @@ Core Fragments.
     // Research Data spent to unlock this node.
     cost: 18,
 
+    // Optional; defaults to 0, meaning available from turn one. The zone the
+    // player must have reached before this node can be researched. Below it
+    // the node is still listed, and says which zone it is waiting on.
+    min_zone: 3,
+
     // Optional; defaults to none. Node ids that must already be unlocked
     // before this one can be taken.
     requires: ["automation"],
@@ -72,6 +77,15 @@ Core Fragments.
   so the second unlock is silently a no-op rather than a wasted purchase —
   what limits how many copies you can install is Routine Disks, not how many
   nodes taught you the id.
+- **A node must not be gated below its own prerequisite.** If `min_zone` is
+  lower than that of anything in `requires`, the prereq lock always outlives
+  the zone lock and the gate can never be the reason the node is unbuyable —
+  it reads in the menu as a reason that disappears without the node becoming
+  available.
+- **Nothing needed to breach may sit behind a gate.** A node naming the Zone
+  Portal in `unlocks_structures` must leave `min_zone` at 0, or the run
+  softlocks: the structure that opens the next zone would be waiting on the
+  zone it opens. Researching the portal is fine; gating it is not.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
 - Nodes are listed cheapest first, ties broken by id, so the menu numbering

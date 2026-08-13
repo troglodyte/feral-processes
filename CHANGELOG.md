@@ -27,6 +27,26 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.8
+
+### A key pressed while the map log scrolls in is no longer eaten
+
+Battle results scroll in a line at a time after a fight, and a keypress
+during that reveal skips to the end rather than acting — which is right, on
+the battle screen. The reveal range was never closed, though, because the
+results are still arriving when the fight ends. So `battle_log` went on
+growing with ordinary map and base news for the rest of the run, and the map
+believed it was still revealing something.
+
+The result was a key silently spent for every line a running base logged.
+Stand next to a working machine, press a direction, and the step would
+sometimes just not happen — with nothing on screen to say why.
+
+The reveal now applies only on the battle screen, gated in the one place
+both the "is it revealing" check and the line count read. The map's log pane
+stops holding lines back too, which was the same leak seen from the other
+side.
+
 ## 0.8.7
 
 ### Somebody is selling things four frames down

@@ -819,9 +819,19 @@ pub const STACK_ORPHANS_PER_FRAME: usize = 1;
 /// `STACK_CACHE_DEPTH_GROWTH` uses, because Stack depth is uncorrelated with
 /// player level: the party is 90 HP at level 1 (`PLAYER_BASE_STATS`) and
 /// around 510 by mid-run, so any flat number is lethal at one end and free at
-/// the other. At 3%, a three-cell patch costs about a tenth of the bar
+/// the other. At 10%, a three-cell patch costs about a third of the bar
 /// wherever the party is in the run.
-pub const STACK_CORRUPTION_HP_PERCENT: f32 = 0.03;
+///
+/// Raised from 3% on 2026-08-13, and the raise changes what the terrain *is*
+/// rather than merely what it costs. At 3% a patch was a toll: crossing one
+/// could not kill, so the only question was whether the detour was longer
+/// than a tenth of the bar. At 10% a crossing cannot kill a party at full
+/// health either — but a wounded one, or one that crosses back, dies, and
+/// that death goes through `Game::apply_damage` into
+/// `difficulty::death_handling_system` like any other. So the route around
+/// is now a decision the party can get wrong, which is the point.
+/// `balance_sim` has no Stack term at all and cannot gate any of this.
+pub const STACK_CORRUPTION_HP_PERCENT: f32 = 0.10;
 pub const STACK_CORRUPTION_MIN_DAMAGE: i32 = 2;
 
 /// Credits a cache holds at depth 1, before `STACK_CACHE_DEPTH_GROWTH`.

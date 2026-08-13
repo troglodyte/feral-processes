@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.13
+
+### Every screen now prices the affix it is naming
+
+Gear picked up on the Grid can roll an affix — an Overdriven weapon, a
+Reinforced plate, something of Static — worth a small flat bonus on top of
+what the item already grants. That bonus is added before gear scaling rather
+than after, so an affix grows with the run instead of dwindling into a
+rounding error, which is the whole reason to be pleased about finding one.
+
+The numbers on the screens were not being told any of this. The swap picker
+would name a candidate "Overdriven Kinetic Edge" in one column and, in the
+next column along, price it as a plain Kinetic Edge. Because the affix is
+folded in before the level multiplier, the gap was not a fixed point or two —
+it grew with how deep you were. At zone 3 that row promised +6 ATK where
+putting it on actually granted 15. At zone 5 it read +10 against 25.
+
+The same blind spot ran through the inventory tag, the delta column, the
+`(Unequip)` row — which understated what taking a good weapon off would cost
+you — and the equipped panel, which dropped the rare tier as well and could
+report an Overclocked Overdriven Kinetic Edge worth 27 ATK as being worth 6.
+
+Nothing about your character changed: the stats you were actually fighting
+with were always correct, and no save is affected. What changed is that the
+screens now agree with them, so a comparison between two pieces of gear is a
+comparison you can trust — and an affixed find no longer looks like a
+downgrade to the plain copy already on your back.
+
 ## 0.8.12
 
 ### A companion's gear, and the machine it is standing at, on its own sheet

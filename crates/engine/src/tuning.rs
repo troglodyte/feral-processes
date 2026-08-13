@@ -145,13 +145,21 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// its zone, and underground of its depth. What survives is a pocket, not
 /// a curve.
 ///
-/// Set to `MAX_BUILD_DISTANCE_FROM_HOME` so the ring is exactly your base
-/// and its doorstep, and travels with the base for free once a Home is
-/// placed. An explicit radius rather than "wherever the curves say a fight
-/// is one program", which is how the ring used to be spelled: with fixed
-/// zone scaling that condition is true across the whole of zone 1, so the
-/// old spelling would have silently made the entire zone a nursery.
-pub const OPENING_RING_TILES: i32 = MAX_BUILD_DISTANCE_FROM_HOME;
+/// Its own literal, and deliberately *not* `MAX_BUILD_DISTANCE_FROM_HOME`,
+/// which is what it used to be. That spelling made the ring exactly your
+/// base and its doorstep, travelling with the base for free — an argument
+/// that only held while the base was one fixed size. It is now a starting
+/// size a Heap Pillar grows, so a derived ring would shrink the nursery to
+/// 4 for the opening minutes and then *widen* it every time the player
+/// builds, which is a difficulty knob keyed to base geometry: precisely the
+/// thing removed on 2026-08-05 when distance stopped scaling anything.
+/// 7 keeps the ring the size it has always been and stops it moving.
+///
+/// An explicit radius rather than "wherever the curves say a fight is one
+/// program", which is how the ring used to be spelled before that: with
+/// fixed zone scaling that condition is true across the whole of zone 1, so
+/// the old spelling would have silently made the entire zone a nursery.
+pub const OPENING_RING_TILES: i32 = 7;
 
 /// How far `x` looks along the row or column the player is facing
 /// (`Game::find_target_in_direction`).
@@ -1659,11 +1667,39 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// Every non-Home structure must be deployed within this many tiles (per
-/// axis, same box-radius style as `StructureDef::power_regen`'s
-/// `radius`) of the Home structure — a base clusters around its Home
-/// rather than sprawling across the map.
-pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
+/// The radius a base *starts* at, not the radius it has: every non-Home
+/// structure must be deployed within `Game::build_radius` tiles (per axis,
+/// same box-radius style as `StructureDef::power_regen`'s `radius`) of the
+/// Home, and that live value is this constant plus every deployed
+/// structure's `StructureDef::build_radius_bonus`, clamped to
+/// `MAX_BUILD_RADIUS_TILES`. Read the live one anywhere the answer is about
+/// a base that exists; this one only says where a fresh Home begins.
+///
+/// A 9x9 slab of ~69 buildable tiles, halved from the 15x15 it was until
+/// the Heap Pillar shipped. The opening base is deliberately cramped —
+/// growth is the feature, and a base that starts at its final size can
+/// never read as a settlement that grew.
+pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
+
+/// The widest a base can ever get: `Game::build_radius` clamps here no
+/// matter how many `build_radius_bonus` structures are deployed. A 21x21
+/// slab — six Heap Pillars past the starting 9x9, and comfortably bigger
+/// than the 15x15 the base used to start at.
+///
+/// The cap is not arbitrary in either direction. The 31x31 base that
+/// predates 2026-07-24 was judged too big and cut deliberately, so this
+/// stays well under it. Above it the slab starts eating the box
+/// `Game::spawn_surface_links` draws a zone's first link from: at radius 9
+/// every tile in that box is platform on every seed, and since the attempt
+/// budget is shared across all three links, an on-ramp that can never land
+/// starves the zone of links entirely. That is why the on-ramp draws from
+/// the ring *outside* the slab — but the cap is the second line of defence,
+/// and the reason nothing has to reason about a 40-tile-wide base.
+///
+/// Two asset radii are pinned to this rather than to the starting radius —
+/// the Home's `enables_rest` and the Recharger Node's `power_regen` — so
+/// "covers the whole base" stays true of a base that has grown.
+pub const MAX_BUILD_RADIUS_TILES: i32 = 10;
 
 /// How deep each of the base slab's four corners is chamfered, in diagonal
 /// steps — the slab is the box above with `Platform::covers` trimming a

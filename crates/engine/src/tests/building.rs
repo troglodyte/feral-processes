@@ -1,7 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME};
+use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES};
 use crate::*;
 
 #[test]
@@ -900,8 +900,8 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         .expect("the Recharger Node should regenerate Power");
     assert_eq!(regen.per_tick, 1.0);
     assert_eq!(
-        regen.radius, MAX_BUILD_DISTANCE_FROM_HOME,
-        "the Recharger Node should cover the whole base"
+        regen.radius, MAX_BUILD_RADIUS_TILES,
+        "the Recharger Node should cover a fully grown base, not the size it starts at"
     );
     assert!(
         def.enables_rest.is_none(),
@@ -934,7 +934,7 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    spawn_recharger_node(&mut game, MAX_BUILD_DISTANCE_FROM_HOME + 1, 0);
+    spawn_recharger_node(&mut game, MAX_BUILD_RADIUS_TILES + 1, 0);
 
     game.wait();
 

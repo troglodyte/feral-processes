@@ -2,6 +2,7 @@
 //! and coming back.
 
 use super::support::*;
+use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
 use crate::*;
 
 /// A Home on the player's own tile — walkable by definition — plus enough
@@ -31,6 +32,20 @@ fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
         .find(|(_, p, _)| p.x == x && p.y == y)
         .map(|(e, ..)| e)
         .expect("the structure was just deployed")
+}
+
+/// A worker with enough Integrity to outlast the ambient GC Entropy Sweeps
+/// a base takes while these fixtures run.
+///
+/// Not belt-and-braces: a posted program defends its machine for
+/// `RAID_DEFENDER_DAMAGE` a sweep, these tests tick for up to 400, and a
+/// 10 HP worker dies to two unlucky rolls — which surfaces as a hauling
+/// assertion failing on a `Position` that is suddenly gone, hundreds of
+/// lines from the sweep that caused it. The HP is incidental to every test
+/// here, so it is set where it cannot be read as part of the fixture's
+/// meaning.
+fn hauler(game: &mut Game) -> Entity {
+    spawn_tamed(game, 500, 3)
 }
 
 fn move_to(game: &mut Game, entity: Entity, x: i32, y: i32) {
@@ -74,7 +89,7 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // Somewhere to take a load: with no depot there is no errand, which is
     // `with_no_depot_a_clogged_machine_just_stays_clogged` below.
     deploy(&mut game, "depot", 4, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
 
@@ -108,7 +123,7 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
 fn a_worker_off_its_tile_produces_nothing_and_says_so() {
     let mut game = base(2);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     // Well outside the four tiles the node can be worked from, and outside
     // any cost field a walk could build, so it never arrives — which is
@@ -136,7 +151,7 @@ fn a_worker_off_its_tile_produces_nothing_and_says_so() {
 fn unstaffed_wins_over_running() {
     let mut game = base(3);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     // Off its post but with a clear route to it, so this is a worker that is
     // merely walking. Deliberately not the unreachable tile the test above
@@ -167,9 +182,9 @@ fn unstaffed_wins_over_running() {
 fn a_worker_delivers_to_the_nearer_of_two_depots() {
     let mut game = base(4);
     let node = deploy(&mut game, "mining_node", 0, 1);
-    let far = deploy(&mut game, "depot", 5, 1);
+    let far = deploy(&mut game, "depot", 4, 1);
     let near = deploy(&mut game, "depot", 2, 1);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -194,7 +209,7 @@ fn a_worker_delivers_to_the_nearer_of_two_depots() {
 fn a_depot_is_not_offered_as_a_cronjob() {
     let mut game = base(5);
     let depot = deploy(&mut game, "depot", 2, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
 
     assert!(
         game.assign_cronjob(worker, depot).is_err(),
@@ -208,7 +223,7 @@ fn a_carried_load_ends_up_in_the_depot_and_in_your_cargo() {
     let mut game = base(6);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     let cap = capacity_of(&game, node);
@@ -246,12 +261,17 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     let mut game = base(7);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     // The distance is the *player's*: a posted program sets off from
-    // wherever you were standing when you posted it, so posting from five
-    // tiles out is what buys the walk.
+    // wherever you were standing when you posted it, so posting from the
+    // far edge of the slab is what buys the walk.
     let player = game.player_entity();
-    move_to(&mut game, player, node_pos.x + 5, node_pos.y);
+    move_to(
+        &mut game,
+        player,
+        node_pos.x + MAX_BUILD_DISTANCE_FROM_HOME - 1,
+        node_pos.y,
+    );
     game.assign_cronjob(worker, node).unwrap();
 
     let start = *game.world.get::<Position>(worker).unwrap();
@@ -285,7 +305,7 @@ fn clearing_a_full_buffer_takes_several_trips() {
     let mut game = base(11);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
 
@@ -322,7 +342,7 @@ fn clearing_a_full_buffer_takes_several_trips() {
 fn with_no_depot_a_clogged_machine_just_stays_clogged() {
     let mut game = base(13);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
 
@@ -356,7 +376,7 @@ fn a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine() {
     let mut game = base(8);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let depot = deploy(&mut game, "depot", 4, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
 
@@ -391,8 +411,8 @@ fn a_load_with_nowhere_to_land_goes_back_and_re_clogs_the_machine() {
 fn demolishing_a_machine_takes_its_workers_load_with_it() {
     let mut game = base(9);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    deploy(&mut game, "depot", 6, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -415,8 +435,8 @@ fn demolishing_a_machine_takes_its_workers_load_with_it() {
 fn a_sweep_that_destroys_a_machine_takes_its_workers_load_too() {
     let mut game = base(14);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    deploy(&mut game, "depot", 6, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -441,8 +461,8 @@ fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
     let mut game = base(12);
     let node = deploy(&mut game, "mining_node", 1, 0);
     let near = deploy(&mut game, "depot", 3, 0);
-    let far = deploy(&mut game, "depot", 6, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let far = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -467,8 +487,8 @@ fn a_depot_demolished_mid_walk_re_targets_the_next_one() {
 fn a_carried_load_survives_a_save_and_load() {
     let mut game = base(10);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    deploy(&mut game, "depot", 6, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -529,12 +549,12 @@ fn structure_tiles(game: &mut Game) -> Vec<(i32, i32)> {
 #[test]
 fn a_hauler_never_walks_over_a_structure() {
     let mut game = base(20);
-    let node = deploy(&mut game, "mining_node", 2, 0);
-    deploy(&mut game, "depot", 6, 0);
-    let blocker = deploy(&mut game, "mining_node", 4, 0);
-    deploy(&mut game, "mining_node", 4, -1);
-    deploy(&mut game, "mining_node", 4, 1);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    deploy(&mut game, "depot", 4, 0);
+    let blocker = deploy(&mut game, "mining_node", 3, 0);
+    deploy(&mut game, "mining_node", 3, -1);
+    deploy(&mut game, "mining_node", 3, 1);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -558,7 +578,7 @@ fn a_hauler_never_walks_over_a_structure() {
     );
     assert_eq!(
         (blocker_pos.x, blocker_pos.y),
-        (4, 0),
+        (3, 0),
         "precondition: the blocker sits between the two posts"
     );
 }
@@ -573,7 +593,7 @@ fn posting_to_a_boxed_in_machine_is_refused() {
     for (dx, dy) in [(1, 0), (3, 0), (2, 1), (2, -1)] {
         deploy(&mut game, "mining_node", dx, dy);
     }
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
 
     let err = game
         .assign_cronjob(worker, node)
@@ -594,11 +614,11 @@ fn posting_to_a_boxed_in_machine_is_refused() {
 fn a_worker_with_nowhere_to_deliver_strands_its_machine() {
     let mut game = base(22);
     let node = deploy(&mut game, "mining_node", 0, 2);
-    deploy(&mut game, "depot", 4, 0);
-    for (dx, dy) in [(3, 0), (5, 0), (4, 1), (4, -1)] {
+    deploy(&mut game, "depot", 3, 0);
+    for (dx, dy) in [(2, 0), (4, 0), (3, 1), (3, -1)] {
         deploy(&mut game, "mining_node", dx, dy);
     }
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -632,7 +652,7 @@ fn a_worker_built_over_can_still_step_off_its_own_tile() {
     let mut game = base(23);
     let node = deploy(&mut game, "mining_node", 2, 0);
     let depot = deploy(&mut game, "depot", -2, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
@@ -671,7 +691,7 @@ fn a_worker_parks_on_the_free_side_of_its_machine() {
     deploy(&mut game, "mining_node", 1, 0);
     deploy(&mut game, "mining_node", 2, 1);
     deploy(&mut game, "mining_node", 2, -1);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
 
     tick_until(&mut game, 40, |g| {
@@ -720,7 +740,7 @@ fn an_extractor_with_no_program_reports_idle() {
 fn a_worked_extractor_does_not_read_idle() {
     let mut game = base(26);
     let node = deploy(&mut game, "mining_node", 1, 0);
-    let worker = spawn_tamed(&mut game, 10, 3);
+    let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
 

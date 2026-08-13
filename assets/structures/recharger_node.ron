@@ -1,13 +1,13 @@
 (
     id: "recharger_node",
     name: "Recharger Node",
-    description: "Trickles Power back into you every tick while you stand within 7 tiles. No worker, no input.",
+    description: "Trickles Power back into you every tick while you stand anywhere on your base. No worker, no input.",
     glyph: 'z',
     color: Orange,
     build_cost: [("core_fragment", 10)],
     work: None,
     power_regen: Some((
         per_tick: 1.0,
-        radius: 7,
+        radius: 10,
     )),
 )

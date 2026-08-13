@@ -2,7 +2,8 @@
     id: "neural_amp",
     name: "Neural Interfacing",
     description: "Compile Neural Amplifiers at a Fabricator.",
-    cost: 25,
+    cost: 55,
+    min_zone: 2,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
         result: "neural_amplifier",

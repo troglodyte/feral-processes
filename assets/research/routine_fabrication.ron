@@ -2,7 +2,7 @@
     id: "routine_fabrication",
     name: "Routine Fabrication",
     description: "Blank media a routine can be written onto. Unlocks the Log Scraper, the Lathe, the Transcriber and the Disk Press.",
-    cost: 20,
+    cost: 26,
     requires: ["automation"],
     unlocks_structures: ["log_scraper", "lathe", "transcriber", "disk_press"],
 )

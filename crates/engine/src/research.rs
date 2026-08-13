@@ -370,8 +370,8 @@ mod tests {
         );
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
-            Some(45),
-            "cortex is the deepest node"
+            Some(125),
+            "cortex is a zone-3 node"
         );
     }
 

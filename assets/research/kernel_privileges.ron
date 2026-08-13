@@ -2,7 +2,8 @@
     id: "kernel_privileges",
     name: "Kernel Privileges",
     description: "Halt every hostile process at once. Unlocks Null Route.",
-    cost: 48,
+    cost: 135,
+    min_zone: 3,
     requires: ["runtime_patching"],
     unlocks_abilities: ["null_route"],
 )

@@ -2,7 +2,8 @@
     id: "overclock",
     name: "Overclock Cores",
     description: "Compile Overclock Cores at a Fabricator.",
-    cost: 22,
+    cost: 45,
+    min_zone: 2,
     requires: ["weapon_bench"],
     unlocks_recipes: [(
         result: "overclock_core",

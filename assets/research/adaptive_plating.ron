@@ -2,7 +2,8 @@
     id: "adaptive_plating",
     name: "Adaptive Plating",
     description: "Field routines that harden a process before the fight starts. Compiles Hardened Shell, Overclock and Ablative Layer into cargo.",
-    cost: 32,
+    cost: 70,
+    min_zone: 2,
     requires: ["field_ops"],
     unlocks_abilities: ["hardened_shell", "overclock", "ablative_layer"],
 )

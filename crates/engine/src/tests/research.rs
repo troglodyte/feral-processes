@@ -569,6 +569,58 @@ fn no_research_node_is_left_unlocking_nothing() {
     }
 }
 
+/// A node gated below its own prerequisite is a gate that can never fire:
+/// the prereq lock outlives it, so the zone is never the reason the node is
+/// unbuyable, and the menu shows a reason that disappears without the node
+/// becoming available. Catches a band edit that makes a gate unreachable.
+#[test]
+fn no_research_node_is_gated_below_its_own_prerequisite() {
+    let game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<ResearchDb>();
+    for def in db.all() {
+        for prereq_id in &def.requires {
+            let prereq = db
+                .get(prereq_id)
+                .expect("a dangling prereq is dropped at load, so this must resolve");
+            assert!(
+                prereq.min_zone <= def.min_zone,
+                "{} is zone {} but requires {}, which is zone {} — the gate could never fire",
+                def.id,
+                def.min_zone,
+                prereq.id,
+                prereq.min_zone
+            );
+        }
+    }
+}
+
+/// The one way this feature could softlock a run: gate a node that unlocks
+/// the structure the player needs in order to *reach* the zone that ungates
+/// it. Researching the Zone Portal is fine and a mod is free to do it —
+/// gating it is what breaks.
+///
+/// Vacuously true today, since no shipped node names the portal at all, and
+/// that is exactly the point: the property is currently safe by accident,
+/// and one content edit could remove it silently.
+///
+/// Asserted against the loaded `ResearchDb` rather than by reading the
+/// files, so a node dropped at load time cannot make it pass for the wrong
+/// reason.
+#[test]
+fn nothing_needed_to_breach_is_locked_behind_research() {
+    let game = Game::new(714, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<ResearchDb>().all() {
+        if def.unlocks_structures.iter().any(|s| s == "portal") {
+            assert_eq!(
+                def.min_zone, 0,
+                "{} gates the Zone Portal behind zone {} — the portal is how you \
+                 reach that zone, so the run cannot get there",
+                def.id, def.min_zone
+            );
+        }
+    }
+}
+
 #[test]
 fn the_research_node_is_a_cronjob_worked_research_data_source() {
     let game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

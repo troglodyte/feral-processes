@@ -2,7 +2,8 @@
     id: "program_refactoring",
     name: "Program Refactoring",
     description: "Rewrite a tamed program instead of replacing it. Unlocks the Annealing Node and the Refactor Bench.",
-    cost: 34,
+    cost: 75,
+    min_zone: 2,
     requires: ["automation"],
     unlocks_structures: ["annealing_node", "refactor_bench"],
 )

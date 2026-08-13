@@ -2,7 +2,8 @@
     id: "cortex",
     name: "Cortex Hacking",
     description: "Compile Cortex Hacks at a Fabricator.",
-    cost: 45,
+    cost: 125,
+    min_zone: 3,
     requires: ["neural_amp"],
     unlocks_recipes: [(
         result: "cortex_hack",

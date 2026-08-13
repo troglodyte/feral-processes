@@ -2,7 +2,8 @@
     id: "ablative",
     name: "Ablative Lattice",
     description: "Compile Ablative Plating at an Armory.",
-    cost: 40,
+    cost: 110,
+    min_zone: 3,
     requires: ["firewall"],
     unlocks_recipes: [(
         result: "ablative_plating",

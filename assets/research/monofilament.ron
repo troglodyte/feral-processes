@@ -2,7 +2,8 @@
     id: "monofilament",
     name: "Monofilament Edge",
     description: "Compile Monofilament Whips at a Fabricator.",
-    cost: 40,
+    cost: 110,
+    min_zone: 3,
     requires: ["overclock"],
     unlocks_recipes: [(
         result: "monofilament_whip",

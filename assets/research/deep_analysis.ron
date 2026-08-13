@@ -2,7 +2,8 @@
     id: "deep_analysis",
     name: "Deep Analysis",
     description: "Field routines that bend the odds of a whole run rather than a single fight. Compiles Deep Scan Party, Trace Analysis Party, Stealth Protocol Party and Salvage Routine Party into cargo.",
-    cost: 46,
+    cost: 130,
+    min_zone: 3,
     requires: ["field_ops"],
     unlocks_abilities: ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"],
 )

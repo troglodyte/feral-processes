@@ -2,7 +2,8 @@
     id: "firewall",
     name: "Firewall Plating",
     description: "Compile Firewall Plating at an Armory.",
-    cost: 22,
+    cost: 45,
+    min_zone: 2,
     requires: ["armor_bench"],
     unlocks_recipes: [(
         result: "firewall_plating",

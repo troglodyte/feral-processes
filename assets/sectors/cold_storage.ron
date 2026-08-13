@@ -1,0 +1,20 @@
+// A cold sector: Static Field spreads over most of the ground.
+//
+// One number does it. `classify` puts the temperature field near 1.0 around
+// the origin, so the neutral floor of -0.3 is never met and Static Field is
+// effectively unreachable in a neutral sector; raising the floor past the
+// field's own range is what makes it the dominant biome. Nothing else about
+// the shape moves, so the holes in the map stay exactly where a neutral
+// sector puts them and the walkable fraction is untouched.
+(
+    id: "cold_storage",
+    name: "Cold Storage",
+    description: "Long-idle allocations, frost-locked and slow to answer.",
+    shape: (
+        static_temperature: 1.15,
+    ),
+    palette: (
+        ground_hue: 200.0,
+        hazard_hue: 12.0,
+    ),
+)

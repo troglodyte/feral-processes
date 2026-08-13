@@ -86,7 +86,81 @@ fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
 /// Exhaustive on purpose, the same call `render/stack.rs`'s `cell_mark`
 /// makes: a new `Biome` must not compile until someone has decided which
 /// side of that rule it falls on.
-fn biome_tint(biome: Biome) -> Color {
+///
+/// `hues` is the sector's `(ground, hazard)` pair from `Game::sector_hues`,
+/// and it moves the two *bands* rather than recolouring biomes. The match
+/// below stays the reference table it always was — the sector rotates each
+/// entry's hue by however far its own band's anchor has moved, so every
+/// biome keeps its offset within the band along with its saturation and
+/// value. That is what leaves the brightness spread — the thing that
+/// actually separates the five walkable biomes from each other, and that
+/// keeps Platform much the darkest — untouched by a sector.
+///
+/// **The neutral pair is a zero rotation and is not applied**, so an install
+/// with no `assets/sectors/` draws these literals bit for bit.
+fn biome_tint(biome: Biome, hues: (f32, f32)) -> Color {
+    let base = biome_reference_tint(biome);
+    let (anchor, authored) = if biome.walkable() {
+        (feral_processes_engine::sectors::NEUTRAL_GROUND_HUE, hues.0)
+    } else {
+        (feral_processes_engine::sectors::NEUTRAL_HAZARD_HUE, hues.1)
+    };
+    rotate_hue(base, authored - anchor)
+}
+
+/// `c` with its hue moved `degrees` around the wheel, saturation and value
+/// untouched.
+///
+/// The saturation/value spread is what separates the biomes within a band
+/// from each other; hue is what separates walkable from not. Moving only H
+/// shifts the band without disturbing either — see `biome_tint`.
+///
+/// A zero rotation returns `c` itself rather than round-tripping it through
+/// HSV and back. Not an optimisation: it is what makes "deleting
+/// `assets/sectors/` restores today's game" exactly true rather than true to
+/// within a float epsilon.
+fn rotate_hue(c: Color, degrees: f32) -> Color {
+    if degrees == 0.0 {
+        return c;
+    }
+    let (h, s, v) = rgb_to_hsv(c);
+    hsv_to_rgb((h + degrees).rem_euclid(360.0), s, v, c.a)
+}
+
+fn rgb_to_hsv(c: Color) -> (f32, f32, f32) {
+    let max = c.r.max(c.g).max(c.b);
+    let min = c.r.min(c.g).min(c.b);
+    let d = max - min;
+    let h = if d == 0.0 {
+        0.0
+    } else if max == c.r {
+        60.0 * (((c.g - c.b) / d).rem_euclid(6.0))
+    } else if max == c.g {
+        60.0 * ((c.b - c.r) / d + 2.0)
+    } else {
+        60.0 * ((c.r - c.g) / d + 4.0)
+    };
+    (h, if max == 0.0 { 0.0 } else { d / max }, max)
+}
+
+fn hsv_to_rgb(h: f32, s: f32, v: f32, a: f32) -> Color {
+    let c = v * s;
+    let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
+    let m = v - c;
+    let (r, g, b) = match (h / 60.0) as u32 % 6 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    Color::new(r + m, g + m, b + m, a)
+}
+
+/// The colour each biome has in a neutral sector: the table every sector's
+/// palette is a rotation of.
+fn biome_reference_tint(biome: Biome) -> Color {
     match biome {
         // Hot: the edge of the world. Nothing is ever placed on these, so
         // they never share a tile with the red durability wash
@@ -591,11 +665,14 @@ fn draw_surface_map(
         .collect();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
+    // Read once for the whole map: the sector is a property of the zone, so
+    // asking per tile would be the same answer several thousand times.
+    let hues = game.sector_hues();
 
     painter.rect(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
-            let biome_color = biome_tint(tile.biome);
+            let biome_color = biome_tint(tile.biome, hues);
             // Terrain no longer carries a glyph — the biome is drawn as
             // geometry — so this stays `None` unless something is standing
             // here. That is the whole division of labour on this map:
@@ -1112,21 +1189,154 @@ mod tests {
         c.r > c.g && c.r > c.b
     }
 
+    /// The neutral pair, which every non-sector screen and every zone 1 draws
+    /// with.
+    const NEUTRAL: (f32, f32) = (
+        feral_processes_engine::sectors::NEUTRAL_GROUND_HUE,
+        feral_processes_engine::sectors::NEUTRAL_HAZARD_HUE,
+    );
+
+    /// Every hue pair a sector is allowed to author, at one-degree steps.
+    ///
+    /// The whole band rather than only the hue pairs `assets/sectors/`
+    /// happens to ship, because the bounds in `sectors::GROUND_HUE_BAND`
+    /// claim a sweep like this exists — and because the failure being
+    /// guarded against is a *mod* authoring a legal-but-unreadable palette,
+    /// which a census over the shipped three could never see.
+    fn every_legal_hue_pair() -> impl Iterator<Item = (f32, f32)> {
+        let (glo, ghi) = feral_processes_engine::sectors::GROUND_HUE_BAND;
+        let (hlo, hhi) = feral_processes_engine::sectors::HAZARD_HUE_BAND;
+        (glo as i32..=ghi as i32)
+            .flat_map(move |g| (hlo as i32..=hhi as i32).map(move |h| (g as f32, h as f32)))
+    }
+
     /// The palette's one load-bearing promise: hue tells the player whether
     /// terrain can be walked on, and pattern tells them which biome it is.
     /// A biome tinted into the wrong family is worse than a drawing bug —
     /// it tells the player they can walk into the void.
+    ///
+    /// This is the gate the whole band-swap design exists to satisfy. A free
+    /// per-biome palette could not have one, which is why a sector authors
+    /// two numbers inside stated bounds rather than seven colours.
     #[test]
-    fn every_biomes_tint_says_whether_it_can_be_walked_on() {
-        for biome in ALL_BIOMES {
+    fn every_biomes_tint_says_whether_it_can_be_walked_on_in_every_legal_sector() {
+        for hues in every_legal_hue_pair() {
+            for biome in ALL_BIOMES {
+                assert_eq!(
+                    reads_as_hostile(biome_tint(biome, hues)),
+                    !biome.walkable(),
+                    "at hues {hues:?}, {biome:?} is walkable={} but its tint {:?} reads \
+                     the other way — hue is the map's only signal for passability",
+                    biome.walkable(),
+                    biome_tint(biome, hues),
+                );
+            }
+        }
+    }
+
+    /// What separates the five walkable biomes from each other is brightness,
+    /// not hue — hue is spoken for by the rule above. So a sector may move
+    /// the band but must not disturb the order inside it, and Platform in
+    /// particular has to stay much the darkest: it is the only biome the
+    /// player lays, it covers whole screens wherever a base stands, and that
+    /// number was taken down twice after being seen on screen behind a full
+    /// base.
+    #[test]
+    fn a_sector_never_reorders_the_walkable_biomes_by_brightness() {
+        let value = |c: Color| c.r.max(c.g).max(c.b);
+        let walkable: Vec<Biome> = ALL_BIOMES.into_iter().filter(|b| b.walkable()).collect();
+        let mut expected: Vec<Biome> = walkable.clone();
+        expected.sort_by(|a, b| {
+            value(biome_tint(*a, NEUTRAL))
+                .partial_cmp(&value(biome_tint(*b, NEUTRAL)))
+                .unwrap()
+        });
+        assert_eq!(
+            expected.first(),
+            Some(&Biome::Platform),
+            "Platform must be the darkest walkable biome"
+        );
+
+        for hues in every_legal_hue_pair() {
+            let mut got = walkable.clone();
+            got.sort_by(|a, b| {
+                value(biome_tint(*a, hues))
+                    .partial_cmp(&value(biome_tint(*b, hues)))
+                    .unwrap()
+            });
+            assert_eq!(got, expected, "hues {hues:?} reordered the walkable biomes");
+        }
+    }
+
+    /// Deleting `assets/sectors/` restores today's game **exactly**, not
+    /// approximately: the neutral pair is a zero rotation, and a zero
+    /// rotation is not applied at all. Asserted against the literals rather
+    /// than against a recomputation, so a drift in either direction fails.
+    #[test]
+    fn the_neutral_hues_reproduce_the_shipped_table_exactly() {
+        let table = [
+            (Biome::DataVoid, Color::new(0.95, 0.60, 0.15, 1.0)),
+            (Biome::BlackIce, Color::new(0.95, 0.32, 0.18, 1.0)),
+            (Biome::Platform, Color::new(0.06, 0.11, 0.32, 1.0)),
+            (Biome::Mainframe, Color::new(0.25, 0.85, 0.85, 1.0)),
+            (Biome::StaticField, Color::new(0.70, 0.92, 0.95, 1.0)),
+            (Biome::OpenGrid, Color::new(0.35, 0.85, 0.60, 1.0)),
+            (Biome::NullSector, Color::new(0.20, 0.50, 0.52, 1.0)),
+        ];
+        for (biome, expected) in table {
+            let got = biome_tint(biome, NEUTRAL);
             assert_eq!(
-                reads_as_hostile(biome_tint(biome)),
-                !biome.walkable(),
-                "{biome:?} is walkable={} but its tint {:?} reads the other way — \
-                 hue is the map's only signal for passability",
-                biome.walkable(),
-                biome_tint(biome),
+                (got.r, got.g, got.b, got.a),
+                (expected.r, expected.g, expected.b, expected.a),
+                "{biome:?} is not what it was before sectors existed"
             );
+        }
+    }
+
+    /// The five walkable biomes must stay telling-apart-able in every
+    /// sector, and brightness alone does not do it: Mainframe and OpenGrid
+    /// have *identical* value (0.85), so hue is the only thing separating
+    /// them. A palette that set every walkable biome to one hue — which is
+    /// what replacing H rather than rotating it does — would leave those two
+    /// as two near-identical cyans differing only in saturation.
+    ///
+    /// Distinct hues rather than a distance threshold because that is the
+    /// mechanism: a rotation moves all five by the same amount, so it
+    /// preserves distinctness exactly, and nothing else does.
+    #[test]
+    fn no_sector_collapses_two_walkable_biomes_onto_one_hue() {
+        let walkable: Vec<Biome> = ALL_BIOMES.into_iter().filter(|b| b.walkable()).collect();
+        for hues in every_legal_hue_pair() {
+            for (i, a) in walkable.iter().enumerate() {
+                for b in &walkable[i + 1..] {
+                    let (ha, _, _) = rgb_to_hsv(biome_tint(*a, hues));
+                    let (hb, _, _) = rgb_to_hsv(biome_tint(*b, hues));
+                    assert!(
+                        (ha - hb).abs() > 1.0,
+                        "at hues {hues:?}, {a:?} and {b:?} are both at hue {ha} — \
+                         a sector may move the band, not flatten it"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The transform's actual job, tested where the zero-rotation
+    /// short-circuit above cannot reach: a rotation moves hue and leaves
+    /// saturation and value alone. A round trip that clamped or lost
+    /// precision would show up here as a drifting S or V, which is exactly
+    /// what would flatten the brightness spread the test above depends on.
+    #[test]
+    fn a_rotation_moves_only_hue() {
+        for hues in every_legal_hue_pair() {
+            for biome in ALL_BIOMES {
+                let (_, s0, v0) = rgb_to_hsv(biome_tint(biome, NEUTRAL));
+                let (_, s1, v1) = rgb_to_hsv(biome_tint(biome, hues));
+                assert!(
+                    (s0 - s1).abs() < 1e-4 && (v0 - v1).abs() < 1e-4,
+                    "at hues {hues:?}, {biome:?} moved from S={s0} V={v0} to S={s1} V={v1}"
+                );
+            }
         }
     }
 

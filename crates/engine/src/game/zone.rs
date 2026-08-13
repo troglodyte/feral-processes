@@ -504,7 +504,11 @@ impl Game {
             .resource::<WorldMap>()
             .seed()
             .wrapping_add(0x9E37_79B9);
-        let mut new_map = WorldMap::new(new_seed);
+        let mut new_map = crate::sectors::map_for_zone(
+            new_seed,
+            new_level,
+            self.world.resource::<crate::sectors::SectorDb>(),
+        );
         let start = find_walkable_start(&mut new_map);
         self.world.insert_resource(new_map);
         self.world.insert_resource(ZoneSpawnPoint {
@@ -585,6 +589,16 @@ impl Game {
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
+        // A second line rather than a longer first one: a neutral sector has
+        // nothing to say and must read exactly as it did before sectors
+        // existed. Read before logging because `Game::log` wants `&mut self`
+        // while `sector` is borrowing it.
+        if let Some((name, description)) = self
+            .sector()
+            .map(|def| (def.name.clone(), def.description.clone()))
+        {
+            self.log(format!("{name}. {description}"));
+        }
         if !lost.is_empty() {
             let manifest = lost
                 .iter()

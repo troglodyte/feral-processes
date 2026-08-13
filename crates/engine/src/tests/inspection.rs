@@ -1851,3 +1851,76 @@ fn a_manifest_carries_the_programs_rare_tier() {
         "and an ordinary program says so rather than inheriting a tier"
     );
 }
+
+/// Every zone past the first is Cold Storage here, with hues nothing else
+/// in the shipped set uses, so a fallback cannot pass for the real answer.
+const ONLY_COLD: &str = r#"(
+    id: "cold_storage",
+    name: "Cold Storage",
+    description: "Long-idle allocations, frost-locked and slow to answer.",
+    shape: (static_temperature: 1.15),
+    palette: (ground_hue: 205.0, hazard_hue: 12.0),
+)"#;
+
+/// The engine hands the renderer two numbers and no colour: the table and
+/// everything about it stays in `crates/gui`.
+#[test]
+fn zone_one_reports_the_neutral_hues() {
+    let assets = assets_dir_with_sectors("hues_zone_one", &[("cold.ron", ONLY_COLD)]);
+    let game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    assert_eq!(
+        game.sector_hues(),
+        (
+            crate::sectors::NEUTRAL_GROUND_HUE,
+            crate::sectors::NEUTRAL_HAZARD_HUE
+        )
+    );
+}
+
+#[test]
+fn a_sectors_own_hues_are_reported_after_a_breach() {
+    let assets = assets_dir_with_sectors("hues_breached", &[("cold.ron", ONLY_COLD)]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+    assert_eq!(game.player_status().zone, 2);
+
+    assert_eq!(game.sector_hues(), (205.0, 12.0));
+}
+
+/// Absence is supported here too: with no sectors installed the renderer is
+/// handed the neutral pair at every zone, which is what reproduces the
+/// shipped colour table exactly.
+#[test]
+fn with_no_sectors_installed_the_hues_stay_neutral() {
+    let assets = assets_dir_with_sectors("hues_absent", &[]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+
+    assert_eq!(
+        game.sector_hues(),
+        (
+            crate::sectors::NEUTRAL_GROUND_HUE,
+            crate::sectors::NEUTRAL_HAZARD_HUE
+        )
+    );
+}

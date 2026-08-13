@@ -30,6 +30,8 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
 
+use crate::derive::index;
+
 /// One bank file: the subject it describes, and the variants it contributes.
 #[derive(Clone, Debug, Deserialize)]
 pub struct DescriptionDef {
@@ -359,26 +361,6 @@ pub(crate) fn fold(seed: u64, slot: Slot) -> u64 {
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
     }
     h
-}
-
-/// Reduces `seed` to an index in `0..len`, for `len > 0`.
-///
-/// Lemire's `(seed as u128 * len) >> 64` rather than `seed % len`: `%` for a
-/// two-entry pool reads nothing but `seed`'s lowest bit, and `fold`'s
-/// multiply-by-odd-prime step provably never disturbs that bit once it is
-/// set. Reading the *high* bits instead uses the ones the repeated
-/// multiplication actually mixes, so a two-entry pool decorrelates from its
-/// neighbours the same as a larger one instead of standing out as the one
-/// size that silently breaks the independence `fold` promises — see
-/// `Slot::tags` for the caveat that reaching those high bits is *also* not
-/// automatic, and `tests::descriptions::every_pair_of_slots_is_independent`
-/// for the test that actually pins it.
-///
-/// Exposed `pub(crate)` — rather than folded into `pick` alone — so that
-/// test can compute joint outcomes at pool sizes no real bank happens to
-/// use, without needing real `String` pools to index into.
-pub(crate) fn index(seed: u64, len: usize) -> usize {
-    ((seed as u128 * len as u128) >> 64) as usize
 }
 
 /// Indexes `pool` by `seed`, or `None` when the pool is empty — which is

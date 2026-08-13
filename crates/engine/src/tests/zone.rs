@@ -7,6 +7,7 @@ use crate::tuning::{
     NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
     NEST_TETHER_RADIUS, WORK_RESOURCE_DROP,
 };
+use crate::world::SectorShape;
 use crate::*;
 
 #[test]
@@ -657,7 +658,7 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
 
     assert!(
         !game
-            .message_log(20)
+            .message_log(200)
             .iter()
             .any(|e| e.text.contains("decohere")),
         "an empty wallet shouldn't be announced as a loss"
@@ -673,11 +674,11 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
     // uses for a teleport cost — item names are modder-supplied data, not
     // English to inflect.
     assert!(
-        game.message_log(20)
+        game.message_log(200)
             .iter()
             .any(|e| e.text.contains("3 Portal Fragment")),
         "a real loss is named and counted: {:?}",
-        game.message_log(20)
+        game.message_log(200)
     );
 }
 
@@ -1785,12 +1786,12 @@ fn a_lost_nest_orphan_says_so() {
     one_shot_nest(&mut game, nest);
 
     assert!(
-        game.message_log(20)
+        game.message_log(200)
             .into_iter()
             .any(|e| e.text.contains("no room")),
         "a full roster must be told what it just lost, not left to notice nothing arrived: \
          {:?}",
-        game.message_log(20)
+        game.message_log(200)
     );
 }
 
@@ -1905,7 +1906,7 @@ fn the_cache_lines_are_loot_kind() {
 
     one_shot_nest(&mut game, nest);
 
-    let log = game.message_log(20);
+    let log = game.message_log(200);
     let cache_lines: Vec<_> = log
         .iter()
         .filter(|e| e.text.contains("wreckage") || e.text.contains("cache"))
@@ -1924,4 +1925,253 @@ fn the_cache_lines_are_loot_kind() {
             e.text
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Sector traits reaching world generation
+// ---------------------------------------------------------------------------
+//
+// Three sites build a `WorldMap` for real play — `Game::new`, `Game::load`
+// and `enter_next_zone` — and all three must derive through
+// `sectors::for_zone`. Which sector a zone gets is `tests::sectors`' subject;
+// what is under test here is the wiring, so these drive scratch installs
+// holding one sector or none rather than searching the shipped pool for a
+// seed.
+
+/// Every zone past the first is Cold Storage in this install: Static Field
+/// over most of the ground, holes exactly where a neutral sector puts them.
+const ONLY_COLD: &str = r#"(
+    id: "cold_storage",
+    name: "Cold Storage",
+    description: "Long-idle allocations, frost-locked and slow to answer.",
+    shape: (static_temperature: 1.15),
+    palette: (ground_hue: 200.0, hazard_hue: 12.0),
+)"#;
+
+/// Walks the player onto a zone portal, which is what a breach is.
+fn breach(game: &mut Game) {
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position {
+            x: ppos.x + 1,
+            y: ppos.y,
+        },
+    ));
+    game.move_player(1, 0);
+}
+
+/// How many tiles of `biome` a map has around its origin.
+fn count_biome(map: &mut WorldMap, biome: Biome) -> usize {
+    (-32..32)
+        .flat_map(|y| (-32..32).map(move |x| (x, y)))
+        .filter(|&(x, y)| map.tile(x, y).biome == biome)
+        .count()
+}
+
+/// Zone 1 is neutral through the real constructor, not just through
+/// `for_zone`. The opening ring's roster depends on it.
+#[test]
+fn a_new_game_generates_zone_one_at_the_neutral_shape() {
+    let game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(
+        game.world.resource::<WorldMap>().shape(),
+        SectorShape::NEUTRAL
+    );
+}
+
+/// The wiring test: a breach into a Static-Field sector must put Static
+/// Field on the ground. It is a crisp assertion because the latitude falloff
+/// leaves a neutral sector with *no* Static Field at all near the origin, so
+/// this cannot pass on terrain that was already there.
+#[test]
+fn breaching_into_a_cold_sector_generates_its_biome() {
+    let assets = assets_dir_with_sectors("zone_cold", &[("cold.ron", ONLY_COLD)]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    assert_eq!(
+        count_biome(
+            game.world.resource_mut::<WorldMap>().as_mut(),
+            Biome::StaticField
+        ),
+        0,
+        "zone 1 is neutral, and a neutral sector generates no Static Field here"
+    );
+
+    breach(&mut game);
+    assert_eq!(game.player_status().zone, 2);
+
+    let cold = count_biome(
+        game.world.resource_mut::<WorldMap>().as_mut(),
+        Biome::StaticField,
+    );
+    assert!(
+        cold > 500,
+        "zone 2 generated {cold} Static Field tiles of 4096 — the sector's shape \
+         is not reaching `enter_next_zone`"
+    );
+}
+
+/// The roster moves with the biome mix, and it moves for free: there is no
+/// species-pool knob, because `Game::habitat_pools` already filters by the
+/// tile's biome. A second knob pointing at the same outcome could disagree
+/// with this one.
+///
+/// Asserted against the *same seed under a neutral install* rather than
+/// against an absolute count, since what is claimed is a shift and not a
+/// number.
+#[test]
+fn a_cold_sectors_wild_population_leans_on_static_field_species() {
+    let count_cold_dwellers = |assets: &std::path::Path| {
+        let mut game = Game::new(4242, DifficultyMode::Forgiving, assets).unwrap();
+        breach(&mut game);
+        let species: Vec<String> = {
+            let mut query = game.world.query_filtered::<&Creature, With<Hostile>>();
+            query.iter(&game.world).map(|c| c.species.clone()).collect()
+        };
+        let db = game.species_defs();
+        species
+            .iter()
+            .filter(|s| {
+                db.iter()
+                    .find(|d| &d.id == *s)
+                    .is_some_and(|d| d.habitats.contains(&Biome::StaticField))
+            })
+            .count()
+    };
+
+    let cold = assets_dir_with_sectors("zone_roster_cold", &[("cold.ron", ONLY_COLD)]);
+    let neutral = assets_dir_with_sectors("zone_roster_neutral", &[]);
+    let in_cold = count_cold_dwellers(&cold);
+    let in_neutral = count_cold_dwellers(&neutral);
+
+    assert!(
+        in_cold > in_neutral,
+        "a Static Field sector spawned {in_cold} Static-Field-dwelling programs \
+         against a neutral sector's {in_neutral} — the biome mix is not reaching \
+         `habitat_pools`"
+    );
+}
+
+/// `Game::load` must rebuild the map at the same shape `enter_next_zone`
+/// built it with. Reconstructing at a different one regenerates every
+/// unwalked chunk differently, which can strand a party inside rock — the
+/// same class of bug the Stack-frame RNG rule exists to prevent.
+///
+/// Through a real save file rather than a recomputation in the same process,
+/// because what is being claimed is that the two saved numbers are enough.
+#[test]
+fn a_sectors_shape_survives_a_save_and_load_round_trip() {
+    let assets = assets_dir_with_sectors("zone_roundtrip", &[("cold.ron", ONLY_COLD)]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    breach(&mut game);
+
+    let shape = game.world.resource::<WorldMap>().shape();
+    let before: Vec<Biome> = {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        // Deliberately far from anywhere the party has walked, so these
+        // chunks are regenerated by the load rather than restored from the
+        // override overlay.
+        (0..64).map(|i| map.tile(400 + i, -350 - i).biome).collect()
+    };
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_sector_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.world.resource::<WorldMap>().shape(),
+        shape,
+        "the load rebuilt the map at a different shape"
+    );
+    let after: Vec<Biome> = {
+        let mut map = loaded.world.resource_mut::<WorldMap>();
+        (0..64).map(|i| map.tile(400 + i, -350 - i).biome).collect()
+    };
+    assert_eq!(before, after, "unwalked terrain regenerated differently");
+}
+
+/// Absence is supported, at every zone rather than only at zone 1. Deleting
+/// `assets/sectors/` restores the pre-sector game exactly, the way deleting
+/// `assets/affixes/` or the enemy policy does — and an omission is invisible
+/// without a test saying so.
+#[test]
+fn with_no_sectors_installed_every_zone_generates_at_the_neutral_shape() {
+    let assets = assets_dir_with_sectors("zone_no_sectors", &[]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+
+    for zone in 2..=5 {
+        breach(&mut game);
+        assert_eq!(game.player_status().zone, zone);
+
+        let seed = game.world.resource::<WorldMap>().seed();
+        assert_eq!(
+            game.world.resource::<WorldMap>().shape(),
+            SectorShape::NEUTRAL,
+            "zone {zone} is not neutral"
+        );
+        // The seed is read back off the live map rather than recomputed, so
+        // this does not carry a second copy of how a breach advances it.
+        let mut reference = WorldMap::new(seed);
+        let live: Vec<Biome> = {
+            let mut map = game.world.resource_mut::<WorldMap>();
+            (-40..40).map(|i| map.tile(i, i * 2).biome).collect()
+        };
+        let expected: Vec<Biome> = (-40..40).map(|i| reference.tile(i, i * 2).biome).collect();
+        assert_eq!(live, expected, "zone {zone} did not generate as neutral");
+    }
+}
+
+/// A breach says *where* you have landed, not only how hard it is. The
+/// level line is untouched: a neutral sector must read exactly as it did
+/// before sectors existed, which is the same absence-is-supported property
+/// the generation side has.
+#[test]
+fn breaching_into_a_named_sector_announces_it() {
+    let assets = assets_dir_with_sectors("zone_announce", &[("cold.ron", ONLY_COLD)]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    breach(&mut game);
+
+    let log = game
+        .message_log(200)
+        .into_iter()
+        .map(|l| l.text)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        log.contains("level 2 sector"),
+        "the level line should be unchanged: {log}"
+    );
+    assert!(
+        log.contains("Cold Storage"),
+        "the sector's name should be announced: {log}"
+    );
+    assert!(
+        log.contains("frost-locked"),
+        "the sector's description should be announced: {log}"
+    );
+}
+
+#[test]
+fn breaching_into_a_neutral_sector_logs_only_the_level_line() {
+    let assets = assets_dir_with_sectors("zone_announce_neutral", &[]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    breach(&mut game);
+
+    let breach_lines: Vec<String> = game
+        .message_log(200)
+        .into_iter()
+        .map(|l| l.text)
+        .filter(|m| m.contains("breach the portal"))
+        .collect();
+    assert_eq!(
+        breach_lines.len(),
+        1,
+        "a neutral sector should add no second line: {breach_lines:?}"
+    );
 }

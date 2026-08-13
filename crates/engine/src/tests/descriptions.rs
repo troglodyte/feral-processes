@@ -5,7 +5,8 @@
 //! a fold of the frame spec. A test that needed a seeded `Game` to be stable
 //! would be evidence the fold had been replaced by a draw.
 
-use crate::descriptions::{DescriptionDb, DescriptionDef, Slot, fold, index, merge};
+use crate::derive::index;
+use crate::descriptions::{DescriptionDb, DescriptionDef, Slot, fold, merge};
 
 /// A scratch bank directory holding `files` as `(filename, body)`.
 ///

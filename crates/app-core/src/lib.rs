@@ -228,7 +228,13 @@ pub struct SwapRow {
 
 /// How wide the swap picker's name and stat columns are. Padding lives here
 /// rather than in the renderer because the labels do — see `SwapRow`.
-const SWAP_NAME_COLUMN: usize = 20;
+/// Wide enough for the longest rare-tier-prefixed name the shipped roster
+/// can produce — "Overclocked Monofilament Whip" is 29 cells. `{:<N}` pads
+/// but never truncates, so a name past this does not clip: it shunts the
+/// stat and delta columns right and misaligns every row below it. Held by
+/// `the_widest_swap_row_still_fits_its_popup`, which measures real text
+/// rather than counting characters.
+const SWAP_NAME_COLUMN: usize = 30;
 const SWAP_STATS_COLUMN: usize = 20;
 
 /// Every replacement for `slot` the player could put on right now, best

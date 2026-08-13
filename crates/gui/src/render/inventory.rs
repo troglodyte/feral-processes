@@ -294,3 +294,46 @@ pub(super) fn draw_inventory_item_action(
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup("Item", PopupSize::Large, &rows, painter, m);
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+    use feral_processes_engine::components::Rarity;
+
+    /// A rare tier is drawn as a *word* in front of the item name, and
+    /// `swap_label` pads its columns with `{:<N}` — which never truncates.
+    /// So a name past `SWAP_NAME_COLUMN` does not clip: it pushes the stat
+    /// and delta columns right and misaligns every row below it.
+    ///
+    /// Measured against the real font rather than counted in characters,
+    /// because counting is exactly what missed this — the column was 20
+    /// cells and "Overclocked Monofilament Whip" is 29.
+    #[test]
+    fn the_widest_swap_row_still_fits_its_popup() {
+        // The widest row this screen can build: the longest tier word, the
+        // longest equippable name, a fusion note, and a three-stat delta.
+        let widest = format!(
+            "[a] {:<30} {:<20} {}",
+            format!(
+                "{} Monofilament Whip",
+                Rarity::Gold.label().expect("Gold reads as a word")
+            ),
+            "+12 ATK +9 DEF +9 DECOMP T3/3",
+            "-12 ATK -9 DEF -9 DECOMP"
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
+            assert!(
+                drawn <= room,
+                "the widest gear-swap row overflows by {:.0}px \
+                 ({drawn:.0} into {room:.0}):\n{widest}",
+                drawn - room
+            );
+        });
+    }
+}

@@ -1,0 +1,10 @@
+// The commonest weapon affix, and the calibration point for the rest:
+// two flat ATK is roughly what one gear level is worth on a scavenged
+// weapon, so a Honed find is a real upgrade early and a rounding error late.
+(
+    id: "honed",
+    prefix: Some("Honed"),
+    stats: (atk: 2),
+    slots: Some([Weapon]),
+    weight: 12,
+)

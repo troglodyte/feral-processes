@@ -1388,7 +1388,7 @@ pub(super) fn spawn_pursuing_guardian(
 }
 
 /// How many copies of `item` at fusion `tier` the player is carrying —
-/// `Inventory` at tier 0, `FusedGear` above it, the same split
+/// `Inventory` at tier 0, `GearCopies` above it, the same split
 /// `Game::count_copies` makes.
 ///
 /// Reads the stores rather than `PlayerStatus::inventory` on purpose: that
@@ -1396,15 +1396,84 @@ pub(super) fn spawn_pursuing_guardian(
 /// Research Data and read as a payout bug.
 pub(super) fn held_at(game: &Game, item: &ItemId, tier: u32) -> u32 {
     let player = game.player_entity();
-    if tier == 0 {
+    let copy = gear(item, tier);
+    if copy.is_plain() {
         game.world
             .get::<Inventory>(player)
             .map(|inv| inv.count(item))
             .unwrap_or(0)
     } else {
         game.world
-            .get::<FusedGear>(player)
-            .map(|f| f.count(item, tier))
+            .get::<GearCopies>(player)
+            .map(|f| f.count(&copy))
             .unwrap_or(0)
     }
+}
+
+/// A carried copy of `item` at fusion `tier`, ordinary rare tier — what a
+/// gear test means when it says "a copy" unless it is specifically testing
+/// rare tiers.
+///
+/// Exists so the ~90 call sites that used to pass `(&item, tier)` as two
+/// loose arguments keep reading the same way now that `items::GearCopy` is
+/// the unit. A test that *is* about rare tiers builds the struct directly,
+/// which makes those cases stand out on the page rather than hiding behind
+/// a defaulted parameter.
+pub fn gear(item: &ItemId, tier: u32) -> GearCopy {
+    GearCopy {
+        item: item.clone(),
+        rarity: Rarity::Ordinary,
+        tier,
+        affix: None,
+    }
+}
+
+/// Whether `f` left the shared `GameRng` stream exactly where it found it.
+///
+/// A gate that refuses *before* drawing keeps every seeded test downstream of
+/// it in place; one that draws and then discards the result moves them all.
+/// Asserting only on the returned value would pass equally well either way,
+/// which is the regression this exists to catch — see `Game::roll_rarity`
+/// (the two ineligible spawns) and `Game::grant_gear_drop` (a material,
+/// which has no tier to roll).
+///
+/// `StdRng` is not `Clone`, so the proof is two games built from one seed:
+/// they share a stream position, and only one is asked to do the thing. If it
+/// spent a draw, their next values diverge.
+pub(super) fn rng_unadvanced_by(seed: u32, f: impl FnOnce(&mut Game)) -> bool {
+    let mut touched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut untouched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    f(&mut touched);
+    let after: u64 = touched.world.resource_mut::<GameRng>().0.random();
+    let baseline: u64 = untouched.world.resource_mut::<GameRng>().0.random();
+    after == baseline
+}
+
+/// How many copies of `item` the player is carrying **at any tier** — both
+/// stores summed.
+///
+/// `held` above counts only plain copies, which is what most tests mean.
+/// This one is for tests asking "did the player gain one of these at all",
+/// where the answer must not depend on what the copy rolled — a surface
+/// boss's gear now always lands in `GearCopies`, so counting `Inventory`
+/// alone reads as the boss having paid nothing.
+pub(super) fn held_any(game: &Game, item: &ItemId) -> u32 {
+    let player = game.player_entity();
+    let plain = game
+        .world
+        .get::<Inventory>(player)
+        .map(|inv| inv.count(item))
+        .unwrap_or(0);
+    let special: u32 = game
+        .world
+        .get::<GearCopies>(player)
+        .map(|g| {
+            g.copies
+                .iter()
+                .filter(|(copy, _)| copy.item == *item)
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
+        .unwrap_or(0);
+    plain + special
 }

@@ -1,4 +1,9 @@
-use crate::tuning::{GEAR_LEVEL_STEP, ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER};
+use crate::affixes::AffixId;
+use crate::components::Rarity;
+use crate::tuning::{
+    GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, ITEM_FUSION_BONUS_PER_TIER,
+    ITEM_FUSION_MIN_BONUS_PER_TIER,
+};
 use serde::{Deserialize, Serialize};
 
 /// `#[serde(transparent)]` so an `ItemId` serializes as its bare inner string
@@ -140,6 +145,80 @@ impl ItemCategory {
     }
 }
 
+/// Which *copy* of an item this is — everything that makes two copies of the
+/// same id non-interchangeable, and nothing else.
+///
+/// Two copies with equal `GearCopy`s are genuinely the same thing and stack;
+/// two that differ are separate rows on every screen, separate rows on a
+/// trader's shelf, and separate stores in cargo. That is the whole reason
+/// this is one value rather than three parameters: **`is_plain` decides
+/// which store a copy lives in**, and `count_copies`/`take_copies`/
+/// `add_copies` all have to answer that question identically or a copy is
+/// written to one store and looked up in the other, which reads to a player
+/// as gear vanishing out of cargo.
+///
+/// It is also what makes the equip/unequip symmetry structural.
+/// `Game::apply_equipment_delta` writes a bonus straight into `Stats`, so the
+/// unequip must subtract *exactly* what the equip added; with the properties
+/// loose, a path that forgot one would subtract less and weld the difference
+/// permanently into base stats with no record of where it came from. Because
+/// `EquippedItem` stores this whole value and `Game::gear_bonus` computes
+/// from it, forgetting one is not expressible.
+///
+/// `level` is deliberately **not** here. It is a property of the moment an
+/// item was put on rather than of the copy — a copy in cargo has no level,
+/// and two copies that differ only in the level someone once wore them at
+/// are the same copy. It lives on `EquippedItem` beside this.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct GearCopy {
+    pub item: ItemId,
+    /// The rare tier this copy rolled when it dropped, `Ordinary` for
+    /// anything crafted, bought, or found before 0.8.9 — see
+    /// `Game::grant_gear_drop`.
+    #[serde(default)]
+    pub rarity: Rarity,
+    /// How many times this copy has been fused — see `Game::fuse_item`.
+    #[serde(default)]
+    pub tier: u32,
+    /// The affix this copy rolled when it dropped, if any — see
+    /// `affixes::AffixDef` and `Game::grant_gear_drop`. It decides both the
+    /// generated name and an extra flat stat bonus.
+    ///
+    /// `#[serde(default)]` on a field of a *named* struct, so it is purely
+    /// additive: a save written before affixes existed loads with every copy
+    /// unaffixed, which is what it had. An id naming an affix the build no
+    /// longer has is not an error either — `Game::affix_of` simply finds
+    /// nothing and the copy reads as unaffixed, the same shape
+    /// `recognized_routines` gives a removed ability.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
+}
+
+impl GearCopy {
+    /// An ordinary, unfused copy: what crafting, buying, and every drop
+    /// before rare tiers existed produce.
+    pub fn plain(item: ItemId) -> Self {
+        Self {
+            item,
+            rarity: Rarity::Ordinary,
+            tier: 0,
+            affix: None,
+        }
+    }
+
+    /// Whether this copy is indistinguishable from any other copy of the
+    /// same id — which is exactly the question "does it live in
+    /// `Inventory`". **The single definition**, so the three functions that
+    /// pick a store cannot drift apart; see this type's doc for what happens
+    /// if they do.
+    ///
+    /// A fourth property added to a copy joins the `&&` here and nowhere
+    /// else.
+    pub fn is_plain(&self) -> bool {
+        self.rarity == Rarity::Ordinary && self.tier == 0 && self.affix.is_none()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EquipmentSlot {
     Weapon,
@@ -229,6 +308,54 @@ impl EquipmentStats {
             decompiler: scale(self.decompiler),
         }
     }
+
+    /// This item's bonus scaled up for the rare tier the *copy* rolled when
+    /// it dropped (`Ordinary` = base, no scaling) — see `components::Rarity`
+    /// and `Game::grant_gear_drop`. Applied on top of the other two, not in
+    /// place of either.
+    ///
+    /// Deliberately the same shape as `fused_for_tier`, floor and all, and
+    /// for the same reason: the percentage alone is worthless at the
+    /// magnitudes equipment ships at, so `GEAR_RARITY_MIN_BONUS_PER_RUNG`
+    /// is what makes a tier observable rather than a colour that changes no
+    /// number. A stat sitting at zero stays at zero.
+    ///
+    /// The multiplier is shared with programs (`Rarity::stat_mult`) rather
+    /// than being a second gear-only ladder, so one retune moves the word,
+    /// the colour and both sets of numbers together.
+    ///
+    /// **Why this walks the rungs instead of applying one multiplier.** A
+    /// creature's stats are in the tens or hundreds, where a 1.5x and a 1.8x
+    /// are plainly different numbers. Gear ships at 1..=4 points, where they
+    /// are frequently the *same* number: `round(3 * 1.5)` and
+    /// `round(3 * 1.8)` are both 5, so a single-multiplier form makes an
+    /// Overclocked weapon identical to an Optimized one on every base-3 stat
+    /// in the game — a different colour, a different word, and no difference
+    /// the player can act on. Walking the ladder and taking
+    /// `max(multiplier, previous_rung + GEAR_RARITY_MIN_BONUS_PER_RUNG)`
+    /// makes every rung strictly better than the one below it *by
+    /// construction*, at every base value, which is the property
+    /// `every_rare_tier_is_worth_more_than_the_one_below_it` pins.
+    ///
+    /// A stat sitting at zero stays at zero — a tier sharpens what an item
+    /// does and does not hand it a stat it never had.
+    pub fn for_rarity(self, rarity: Rarity) -> EquipmentStats {
+        let scale = |base: i32| {
+            if base <= 0 {
+                return base;
+            }
+            (1..=rarity.rank()).fold(base, |value, rank| {
+                let by_multiplier =
+                    (base as f64 * Rarity::ALL[rank as usize].stat_mult() as f64).round() as i32;
+                by_multiplier.max(value + GEAR_RARITY_MIN_BONUS_PER_RUNG)
+            })
+        };
+        EquipmentStats {
+            atk: scale(self.atk),
+            def: scale(self.def),
+            decompiler: scale(self.decompiler),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -262,6 +389,96 @@ mod tests {
             base.scaled_for_level(0).atk,
             4,
             "level 0 should clamp to level 1's unscaled base"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_tier_leaves_an_item_exactly_as_it_was() {
+        let base = EquipmentStats {
+            atk: 3,
+            def: 1,
+            decompiler: 2,
+        };
+        let same = base.for_rarity(Rarity::Ordinary);
+        assert_eq!((same.atk, same.def, same.decompiler), (3, 1, 2));
+    }
+
+    /// Every rung has to move every stat the item actually has. The floor
+    /// exists precisely because the percentage alone does not guarantee it
+    /// at the magnitudes gear ships at (1..=4 a stat).
+    #[test]
+    fn every_rare_tier_is_worth_more_than_the_one_below_it() {
+        // Every magnitude shipped gear actually uses. 3 is the one that
+        // caught the original single-multiplier form: round(3 * 1.5) and
+        // round(3 * 1.8) are both 5.
+        for stat in [1, 2, 3, 4] {
+            let base = EquipmentStats {
+                atk: stat,
+                ..Default::default()
+            };
+            for pair in Rarity::ALL.windows(2) {
+                let lower = base.for_rarity(pair[0]).atk;
+                let upper = base.for_rarity(pair[1]).atk;
+                assert!(
+                    upper > lower,
+                    "at base {stat}, {:?} ({upper}) must beat {:?} ({lower})",
+                    pair[1],
+                    pair[0]
+                );
+            }
+        }
+    }
+
+    /// A tier sharpens what an item does; it does not hand it a stat it
+    /// never had. Same rule `fused_for_tier` follows, and the reason the
+    /// floor is guarded on `v > 0`.
+    #[test]
+    fn a_rare_tier_never_invents_a_stat_the_item_lacks() {
+        let weapon_only = EquipmentStats {
+            atk: 3,
+            ..Default::default()
+        };
+        for tier in Rarity::ALL {
+            let scaled = weapon_only.for_rarity(tier);
+            assert_eq!(scaled.def, 0, "{tier:?} invented a DEF bonus");
+            assert_eq!(scaled.decompiler, 0, "{tier:?} invented a DECOMP bonus");
+        }
+    }
+
+    /// **The three axes do not commute, so the order `Game::gear_bonus`
+    /// applies them in is load-bearing rather than stylistic.**
+    ///
+    /// Two of them carry a per-step floor, and a floor is not commutative
+    /// with a multiplier: applying rarity to a base 3 and then levelling
+    /// gives a different number from levelling first and then applying
+    /// rarity, because the floor is measured against whatever it is handed.
+    /// That is fine — one order is canonical — but it means a call site that
+    /// reorders the chain silently changes the stat, and an unequip that
+    /// reordered it relative to its equip would leave the difference welded
+    /// into the wearer's base `Stats` with no record of where it came from.
+    ///
+    /// This asserts the asymmetry exists so nobody "tidies" the chain on the
+    /// assumption that it can't matter.
+    #[test]
+    fn the_gear_axes_do_not_commute_so_the_order_is_load_bearing() {
+        let base = EquipmentStats {
+            atk: 3,
+            def: 2,
+            decompiler: 0,
+        };
+        let canonical = base
+            .scaled_for_level(3)
+            .fused_for_tier(2)
+            .for_rarity(Rarity::Gold);
+        let reordered = base
+            .for_rarity(Rarity::Gold)
+            .scaled_for_level(3)
+            .fused_for_tier(2);
+        assert_ne!(
+            (canonical.atk, canonical.def),
+            (reordered.atk, reordered.def),
+            "if these ever agree, this test has stopped protecting anything — \
+             check whether a floor was removed from one of the three axes"
         );
     }
 

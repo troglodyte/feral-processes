@@ -42,32 +42,37 @@ impl Game {
         // by name through `Game::banked`.
         //
         // The two stores are merged here rather than handed out separately:
-        // a fused copy is cargo like any other, and every screen that lists
-        // "what does the player have" wants both. Tier is the tiebreak
-        // inside a category so an item's fused rows sit beside its plain
-        // one instead of drifting apart as categories are re-sorted.
-        let fused = self.world.get::<FusedGear>(player);
+        // a special copy is cargo like any other, and every screen that
+        // lists "what does the player have" wants both. Rare tier and then
+        // fusion tier are the tiebreaks inside a category, so an item's
+        // special rows sit beside its plain one instead of drifting apart as
+        // categories are re-sorted.
+        let special = self.world.get::<GearCopies>(player);
         let mut inventory: Vec<InventoryRow> = inv
             .items
             .iter()
             .filter(|(item, _)| !db.get(item.as_str()).is_some_and(|d| d.banked))
             .map(|(item, qty)| InventoryRow {
-                item: item.clone(),
-                tier: 0,
+                copy: GearCopy::plain(item.clone()),
                 qty: *qty,
             })
             .chain(
-                fused
+                special
                     .into_iter()
                     .flat_map(|f| f.copies.iter())
-                    .map(|(item, tier, qty)| InventoryRow {
-                        item: item.clone(),
-                        tier: *tier,
+                    .map(|(copy, qty)| InventoryRow {
+                        copy: copy.clone(),
                         qty: *qty,
                     }),
             )
             .collect();
-        inventory.sort_by_key(|row| (self.category_sort_key(&row.item), row.tier));
+        inventory.sort_by_key(|row| {
+            (
+                self.category_sort_key(&row.copy.item),
+                row.copy.rarity,
+                row.copy.tier,
+            )
+        });
         PlayerStatus {
             position: (pos.x, pos.y),
             hp: stats.hp,
@@ -423,7 +428,7 @@ impl Game {
             return Err("You're already wielding that program.".into());
         }
         // The unequip comes first because it is the last thing here that can
-        // still fail — `slot_occupant_with_mods` refuses a worn item that has
+        // still fail — `slot_occupant` refuses a worn item that has
         // dropped out of the item set. Standing the program down before it
         // would leave a refused wield having emptied a party slot for nothing.
         let displaced = self

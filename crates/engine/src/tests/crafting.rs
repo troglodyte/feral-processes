@@ -327,7 +327,7 @@ fn a_fused_copy_is_not_a_recipe_ingredient() {
 
     assert_eq!(game.max_craftable(&probe), 1, "two spares buy one probe");
 
-    game.fuse_item(&armor, 0).unwrap();
+    game.fuse_item(&gear(&armor, 0)).unwrap();
 
     assert_eq!(
         game.max_craftable(&probe),

@@ -295,10 +295,7 @@ impl Game {
         }
         let etched = ItemId::etched(ability);
         if self.etched_disks_of(ability) == 0 {
-            return Err(format!(
-                "You're not carrying {}.",
-                self.item_name(&etched)
-            ));
+            return Err(format!("You're not carrying {}.", self.item_name(&etched)));
         }
         let player = self.player_entity();
         self.world

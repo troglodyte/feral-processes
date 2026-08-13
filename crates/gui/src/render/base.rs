@@ -1058,16 +1058,16 @@ fn draw_status_panel(
         // what the fusion colour replaces. The tier is spelled out beside
         // it because this pane has no room for the equip tag the inventory
         // screen carries, and colour alone doesn't say how deep.
-        let tier = match row.tier {
+        let tier = match row.copy.tier {
             0 => String::new(),
             tier => format!(" {}", item_fusion_note(tier)),
         };
         painter.ui(
-            format!("{}{tier} x{}", game.item_name(&row.item), row.qty),
+            format!("{}{tier} x{}", game.copy_name(&row.copy), row.qty),
             x + m.inset,
             cy,
             m.font_size,
-            fusion_color(row.tier).unwrap_or(TEXT_DIM),
+            fusion_color(row.copy.tier).unwrap_or(TEXT_DIM),
         );
         cy += m.line_height;
     }

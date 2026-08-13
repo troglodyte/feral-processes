@@ -22,6 +22,44 @@ fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Ve
     ids.iter().cloned().partition(|id| db.get(id).is_some())
 }
 
+/// The save's flat worn-item fields back into the live nested form, `None`
+/// for an empty slot.
+///
+/// The save keeps equipment flat (see `save::EquippedItemSave`) precisely so
+/// that adding a property to a worn copy stays an additive `#[serde(default)]`
+/// field, which nesting `GearCopy` on disk would not be. These two functions
+/// are the whole cost of that, and having them named is what stops the
+/// conversion being open-coded at the four sites that need it — three player
+/// slots and every program's loadout.
+fn worn_from_save(
+    item: Option<ItemId>,
+    level: u32,
+    fusion_tier: u32,
+    rarity: Rarity,
+    affix: Option<AffixId>,
+) -> Option<EquippedItem> {
+    Some(EquippedItem {
+        copy: GearCopy {
+            item: item?,
+            rarity,
+            tier: fusion_tier,
+            affix,
+        },
+        level,
+    })
+}
+
+/// The inverse of `worn_from_save`, for the write side.
+fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
+    save::EquippedItemSave {
+        item: worn.copy.item.clone(),
+        level: worn.level,
+        fusion_tier: worn.copy.tier,
+        rarity: worn.copy.rarity,
+        affix: worn.copy.affix.clone(),
+    }
+}
+
 /// Present once `Game::grant_profile_rewards` has run. Not saved and not
 /// inserted by either constructor: it exists only so a second grant in the
 /// same session is a no-op.
@@ -39,6 +77,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            affixes: affix_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -53,6 +92,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(affix_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
@@ -123,7 +163,7 @@ impl Game {
                         (ItemId::from(ids::OUTLET), 2),
                     ],
                 },
-                FusedGear::default(),
+                GearCopies::default(),
                 StatusEffects::default(),
                 CombatBuff::default(),
                 FieldBuff::default(),
@@ -189,6 +229,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            affixes: affix_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -216,6 +257,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(affix_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
@@ -230,12 +272,34 @@ impl Game {
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
-        world.insert_resource(BuybackLedger(
-            data.buyback
-                .into_iter()
-                .map(|(kind, tile, shelf)| ((kind, tile), shelf))
-                .collect(),
-        ));
+        world.insert_resource(BuybackLedger({
+            // The pre-0.8.9 shelves are drained into the current shape here
+            // and read nowhere else, exactly as `fused_gear` is above.
+            let legacy = data.buyback.into_iter().map(|(kind, tile, shelf)| {
+                let rows = shelf
+                    .into_iter()
+                    .map(|(item, tier, qty)| {
+                        (
+                            GearCopy {
+                                item,
+                                rarity: Rarity::Ordinary,
+                                tier,
+                                affix: None,
+                            },
+                            qty,
+                        )
+                    })
+                    .collect();
+                ((kind, tile), rows)
+            });
+            legacy
+                .chain(
+                    data.buyback_shelves
+                        .into_iter()
+                        .map(|(kind, tile, shelf)| ((kind, tile), shelf)),
+                )
+                .collect()
+        }));
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(Platform::default());
         world.insert_resource(Locale::default());
@@ -287,21 +351,27 @@ impl Game {
                     skill: data.player.decompiler,
                 },
                 Equipment {
-                    weapon: data.player.weapon.map(|item| EquippedItem {
-                        item,
-                        level: data.player.weapon_level,
-                        fusion_tier: data.player.weapon_fusion_tier,
-                    }),
-                    armor: data.player.armor.map(|item| EquippedItem {
-                        item,
-                        level: data.player.armor_level,
-                        fusion_tier: data.player.armor_fusion_tier,
-                    }),
-                    module: data.player.module.map(|item| EquippedItem {
-                        item,
-                        level: data.player.module_level,
-                        fusion_tier: data.player.module_fusion_tier,
-                    }),
+                    weapon: worn_from_save(
+                        data.player.weapon,
+                        data.player.weapon_level,
+                        data.player.weapon_fusion_tier,
+                        data.player.weapon_rarity,
+                        data.player.weapon_affix.clone(),
+                    ),
+                    armor: worn_from_save(
+                        data.player.armor,
+                        data.player.armor_level,
+                        data.player.armor_fusion_tier,
+                        data.player.armor_rarity,
+                        data.player.armor_affix.clone(),
+                    ),
+                    module: worn_from_save(
+                        data.player.module,
+                        data.player.module_level,
+                        data.player.module_fusion_tier,
+                        data.player.module_rarity,
+                        data.player.module_affix.clone(),
+                    ),
                 },
                 Inventory {
                     items: data.player.inventory,
@@ -313,17 +383,38 @@ impl Game {
                 // `Stats` is restored with that bonus already in it and
                 // unequipping must subtract exactly what was added.
                 //
-                // Clamping can collapse two rows onto one tier, so this
-                // goes through `add` rather than building the `Vec`
-                // directly: `FusedGear` holds one row per `(item, tier)`,
-                // and a duplicate row would make `count` under-report and
-                // strand the copies in the row it didn't find.
+                // Clamping can collapse two rows onto one key, so this goes
+                // through `add` rather than building the `Vec` directly:
+                // `GearCopies` holds one row per `GearCopy`, and a duplicate
+                // row would make `count` under-report and strand the copies
+                // in the row it didn't find.
+                //
+                // `fused_gear` is the pre-0.8.9 store and is drained here
+                // rather than read anywhere else — see its doc in `save.rs`
+                // for why the two coexist and when the legacy one goes.
                 {
-                    let mut fused = FusedGear::default();
-                    for (item, tier, qty) in data.player.fused_gear {
-                        fused.add(item, tier.min(crate::tuning::MAX_FUSIONS), qty);
+                    let mut carried = GearCopies::default();
+                    let legacy = data.player.fused_gear.into_iter().map(|(item, tier, qty)| {
+                        (
+                            GearCopy {
+                                item,
+                                rarity: Rarity::Ordinary,
+                                tier,
+                                affix: None,
+                            },
+                            qty,
+                        )
+                    });
+                    for (copy, qty) in legacy.chain(data.player.gear_copies) {
+                        carried.add(
+                            GearCopy {
+                                tier: copy.tier.min(crate::tuning::MAX_FUSIONS),
+                                ..copy
+                            },
+                            qty,
+                        );
                     }
-                    fused
+                    carried
                 },
                 StatusEffects::default(),
                 CombatBuff::default(),
@@ -450,8 +541,14 @@ impl Game {
             // this to empty and lands here.
             if !c.equipment.is_empty() {
                 let mut worn = Equipment::default();
-                for (slot, item) in c.equipment.clone() {
-                    *worn.slot_mut(slot) = Some(item);
+                for (slot, saved) in c.equipment.clone() {
+                    *worn.slot_mut(slot) = worn_from_save(
+                        Some(saved.item),
+                        saved.level,
+                        saved.fusion_tier,
+                        saved.rarity,
+                        saved.affix,
+                    );
                 }
                 entity.insert(worn);
             }
@@ -621,9 +718,9 @@ impl Game {
         let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = self.world.get::<Equipment>(player).unwrap().clone();
         let inventory = self.world.get::<Inventory>(player).unwrap().items.clone();
-        let fused_gear = self
+        let gear_copies = self
             .world
-            .get::<FusedGear>(player)
+            .get::<GearCopies>(player)
             .map(|f| f.copies.clone())
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
@@ -744,7 +841,7 @@ impl Game {
                     .map(|eq| {
                         EquipmentSlot::ALL
                             .into_iter()
-                            .filter_map(|slot| Some((slot, eq.get(slot)?)))
+                            .filter_map(|slot| Some((slot, worn_to_save(&eq.get(slot)?))))
                             .collect()
                     })
                     .unwrap_or_default(),
@@ -813,24 +910,38 @@ impl Game {
                 xp: exp.xp,
                 xp_to_next: exp.xp_to_next,
                 decompiler,
-                weapon: equipment.weapon.as_ref().map(|e| e.item.clone()),
+                weapon: equipment.weapon.as_ref().map(|e| e.copy.item.clone()),
                 weapon_level: equipment.weapon.as_ref().map(|e| e.level).unwrap_or(1),
-                weapon_fusion_tier: equipment
+                weapon_fusion_tier: equipment.weapon.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+                weapon_rarity: equipment
                     .weapon
                     .as_ref()
-                    .map(|e| e.fusion_tier)
-                    .unwrap_or(0),
-                armor: equipment.armor.as_ref().map(|e| e.item.clone()),
+                    .map(|e| e.copy.rarity)
+                    .unwrap_or_default(),
+                weapon_affix: equipment.weapon.as_ref().and_then(|e| e.copy.affix.clone()),
+                armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
                 armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
-                armor_fusion_tier: equipment.armor.as_ref().map(|e| e.fusion_tier).unwrap_or(0),
-                module: equipment.module.as_ref().map(|e| e.item.clone()),
+                armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+                armor_rarity: equipment
+                    .armor
+                    .as_ref()
+                    .map(|e| e.copy.rarity)
+                    .unwrap_or_default(),
+                armor_affix: equipment.armor.as_ref().and_then(|e| e.copy.affix.clone()),
+                module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
                 module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
-                module_fusion_tier: equipment
+                module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+                module_rarity: equipment
                     .module
                     .as_ref()
-                    .map(|e| e.fusion_tier)
-                    .unwrap_or(0),
-                fused_gear,
+                    .map(|e| e.copy.rarity)
+                    .unwrap_or_default(),
+                module_affix: equipment.module.as_ref().and_then(|e| e.copy.affix.clone()),
+                // The legacy store is never written again — see its doc in
+                // `save.rs`. It is `skip_serializing_if` empty, so a save
+                // from here on carries only `gear_copies`.
+                fused_gear: Vec::new(),
+                gear_copies,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 routines,
@@ -845,7 +956,9 @@ impl Game {
                 let p = self.world.resource::<ZoneSpawnPoint>();
                 (p.x, p.y)
             },
-            buyback: self
+            // Never written again — see the field docs in `save.rs`.
+            buyback: Vec::new(),
+            buyback_shelves: self
                 .world
                 .resource::<BuybackLedger>()
                 .0
@@ -1065,6 +1178,7 @@ struct AssetDbs {
     research: ResearchDb,
     items: ItemDb,
     perks: PerkDb,
+    affixes: AffixDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -1105,6 +1219,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // An absent directory is silent and leaves the db empty, which is the
+    // pre-affix game — see `AffixDb`.
+    let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
+    warnings.extend(affix_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.
@@ -1150,6 +1268,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         items,
         perks,
+        affixes,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

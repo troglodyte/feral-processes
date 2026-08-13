@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::battle::{BattleAction, EnemyGroup};
-use crate::items::ItemId;
+use crate::items::GearCopy;
 use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, PLATFORM_CORNER_CUT};
@@ -638,12 +638,17 @@ impl Platform {
 /// order; the inner `Vec` stays in insertion order, which is player-driven
 /// and gives the trade screen a stable row order.
 ///
-/// A shelf row is `(item, fusion tier, qty)`. The tier is not decoration:
-/// a shelf keyed on the item alone would hand a mis-sold T3 back as an
-/// ordinary copy and silently delete eight base copies of work — see
-/// `components::FusedGear`.
+/// A shelf row is `(copy, qty)`, keyed on the whole `items::GearCopy` and
+/// not on the item. That is not decoration: a shelf keyed on the item alone
+/// would hand a mis-sold T3 back as an ordinary copy and silently delete
+/// eight base copies of work — and now that a copy also carries a rare tier,
+/// it would hand back an ordinary Arc Lance for the Bare-Metal one that was
+/// just sold by mistake. The unit price is deliberately the same at every
+/// tier (`Game::item_value` is untouched), so being able to buy the *same
+/// copy* back is the only thing that makes a mis-sale recoverable.
+/// See `components::GearCopies`.
 #[derive(Resource, Default, Clone)]
-pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(ItemId, u32, u32)>>);
+pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(GearCopy, u32)>>);
 
 /// Which shelf: the trader's kind and the tile it stands on — see
 /// `BuybackLedger` for why those two and not an `Entity`.

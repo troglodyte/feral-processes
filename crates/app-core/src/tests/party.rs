@@ -317,7 +317,7 @@ fn the_pickers_rows_are_measured_against_the_programs_own_worn_copy() {
         let player = game.player_entity();
         (game, player)
     };
-    game.equip(program, &ItemId::from("overclock_core"), 0)
+    game.equip(program, &gear(&ItemId::from("overclock_core"), 0))
         .unwrap();
 
     let program_rows: Vec<String> =

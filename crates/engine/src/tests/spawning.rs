@@ -1490,15 +1490,22 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             weapon: None,
             weapon_level: 1,
             weapon_fusion_tier: 0,
+            weapon_rarity: Rarity::Ordinary,
+            weapon_affix: None,
             armor: None,
             armor_level: 1,
             armor_fusion_tier: 0,
+            armor_rarity: Rarity::Ordinary,
+            armor_affix: None,
             module: None,
             module_level: 1,
             module_fusion_tier: 0,
+            module_rarity: Rarity::Ordinary,
+            module_affix: None,
             perk_points: 0,
             unlocked_perks: Vec::new(),
             fused_gear: Vec::new(),
+            gear_copies: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
         },
@@ -1540,6 +1547,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         zone: 1,
         spawn_point: (spawn.x, spawn.y),
         buyback: Vec::new(),
+        buyback_shelves: Vec::new(),
         researched: Vec::new(),
         known_routines: Vec::new(),
         link_sites: Vec::new(),
@@ -1870,23 +1878,6 @@ fn the_dev_console_ignores_the_density_target() {
     );
 }
 
-/// The two ineligible spawns must cost nothing from the shared stream —
-/// see `Game::roll_rarity`, where gating before the draw is what keeps every
-/// seeded boss and opening-ring test from moving. Asserting only that the
-/// tier comes back `Ordinary` would pass just as well with the gate placed
-/// *after* the roll, which is the regression this exists to catch.
-/// `StdRng` is not `Clone`, so the proof is two games built from one seed:
-/// they share a stream position, and only one of them is asked to refuse a
-/// roll. If the refusal spent a draw, their next values diverge.
-fn rng_unadvanced_by(seed: u32, f: impl FnOnce(&mut Game)) -> bool {
-    let mut touched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let mut untouched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    f(&mut touched);
-    let after: u64 = touched.world.resource_mut::<GameRng>().0.random();
-    let baseline: u64 = untouched.world.resource_mut::<GameRng>().0.random();
-    after == baseline
-}
-
 #[test]
 fn a_boss_never_rolls_a_rarity() {
     let mut game = Game::new(9021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1937,8 +1928,15 @@ fn no_shiny_spawns_in_the_opening_ring() {
     );
 }
 
+/// A census over `Rarity::ALL` rather than a check on two named tiers, so
+/// a rung added to the ladder without a threshold in `roll_rarity` fails
+/// here instead of silently never spawning.
+///
+/// The sample is large enough that the rarest rung is not a coin flip:
+/// `PRISMATIC_SPAWN_CHANCE` is 0.0003, so 200k rolls expect ~60 of them.
+/// The roll is seeded, so this is deterministic rather than merely likely.
 #[test]
-fn an_eligible_spawn_can_roll_both_tiers() {
+fn every_rare_tier_is_reachable_and_rarer_than_the_one_below() {
     let mut game = Game::new(9023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ordinary = game
         .species_defs()
@@ -1946,19 +1944,31 @@ fn an_eligible_spawn_can_roll_both_tiers() {
         .find(|s| !s.is_boss)
         .expect("ordinary species should ship");
     let far = OPENING_RING_TILES + 50;
-    let (mut silver, mut gold) = (0, 0);
-    for _ in 0..20_000 {
-        match game.roll_rarity(&ordinary, far, far) {
-            Rarity::Silver => silver += 1,
-            Rarity::Gold => gold += 1,
-            Rarity::Ordinary => {}
-        }
+
+    let mut counts = [0usize; Rarity::ALL.len()];
+    for _ in 0..200_000 {
+        counts[game.roll_rarity(&ordinary, far, far).rank() as usize] += 1;
     }
-    assert!(silver > 0 && gold > 0, "both tiers must be reachable");
-    assert!(
-        gold < silver,
-        "gold is the rarer tier: got {gold} gold to {silver} silver"
-    );
+
+    for tier in Rarity::ALL {
+        assert!(
+            counts[tier.rank() as usize] > 0,
+            "{tier:?} never spawned in 200k rolls — is it missing a threshold \
+             in roll_rarity? counts: {counts:?}"
+        );
+    }
+    for pair in Rarity::ALL.windows(2) {
+        let (lower, upper) = (
+            counts[pair[0].rank() as usize],
+            counts[pair[1].rank() as usize],
+        );
+        assert!(
+            upper < lower,
+            "{:?} ({upper}) must be rarer than {:?} ({lower})",
+            pair[1],
+            pair[0]
+        );
+    }
 }
 
 #[test]

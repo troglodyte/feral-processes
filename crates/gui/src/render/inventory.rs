@@ -5,17 +5,17 @@ use super::*;
 
 pub(super) fn draw_erase_quantity(
     game: &mut Game,
-    pending: Option<(ItemId, u32)>,
+    pending: Option<GearCopy>,
     quantity_input: &str,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some((item, tier)) = pending else { return };
+    let Some(copy) = pending else { return };
     let status = game.player_status();
     let held = status
         .inventory
         .iter()
-        .find(|r| r.item == item && r.tier == tier)
+        .find(|r| r.copy == copy)
         .map(|r| r.qty)
         .unwrap_or(0);
     let shown = if quantity_input.is_empty() {
@@ -24,10 +24,13 @@ pub(super) fn draw_erase_quantity(
         quantity_input.to_string()
     };
     let rows = vec![
+        // Both tiers, because erasing is irreversible and a rare or fused
+        // copy is worth many plain ones — the prompt is the last chance to
+        // notice which copy is highlighted.
         text_row(format!(
             "Erase how many {}{}?",
-            game.item_name(&item),
-            match tier {
+            game.copy_name(&copy),
+            match copy.tier {
                 0 => String::new(),
                 tier => format!(" {}", item_fusion_note(tier)),
             }
@@ -79,22 +82,23 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(game, &row.item, status.zone, row.tier);
+        let tag = equip_preview_tag(game, &row.copy, status.zone);
         // The engine hands this list back grouped, so the category column
         // reads as a heading for the run of rows beneath it rather than as
         // noise repeated at random. A fused copy is its own row beside its
         // ordinary spares, which is the whole point of the screen.
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!(
                 "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
-                game.item_category(&row.item).short_label(),
-                game.item_name(&row.item),
+                game.item_category(&row.copy.item).short_label(),
+                game.copy_name(&row.copy),
                 row.qty,
                 tag
             ),
             selected == i + 3,
-            row.tier,
+            row.copy.tier,
+            row.copy.rarity,
         ));
     }
     rows.push(text_row(""));
@@ -114,11 +118,13 @@ pub(super) fn equipped_row(
     // The tier the worn copy was equipped at, not the ledger's current one —
     // the same number `equipped_summary` prints beside it, so the colour and
     // the text on this row cannot disagree.
-    let fusions = equipped.as_ref().map(|e| e.fusion_tier).unwrap_or(0);
-    fusion_row(
+    let fusions = equipped.as_ref().map(|e| e.copy.tier).unwrap_or(0);
+    let rarity = equipped.as_ref().map(|e| e.copy.rarity).unwrap_or_default();
+    tier_row(
         format!("[{num}] {}", equipped_summary(label, equipped, game)),
         selected,
         fusions,
+        rarity,
     )
 }
 
@@ -133,19 +139,19 @@ fn equipped_summary(
     game: &Game,
 ) -> String {
     let Some((equipped, base)) =
-        equipped.and_then(|e| game.equipment_of(&e.item).map(|(_, mods)| (e, mods)))
+        equipped.and_then(|e| game.equipment_of(&e.copy.item).map(|(_, mods)| (e, mods)))
     else {
         return format!("{label}: (empty)");
     };
     let mods = base
         .scaled_for_level(equipped.level)
-        .fused_for_tier(equipped.fusion_tier);
+        .fused_for_tier(equipped.copy.tier);
     let mut notes = Vec::new();
     if equipped.level > 1 {
         notes.push(format!("Lv{}", equipped.level));
     }
-    if equipped.fusion_tier > 0 {
-        notes.push(item_fusion_note(equipped.fusion_tier));
+    if equipped.copy.tier > 0 {
+        notes.push(item_fusion_note(equipped.copy.tier));
     }
     let note = if notes.is_empty() {
         String::new()
@@ -154,7 +160,7 @@ fn equipped_summary(
     };
     format!(
         "{label}: {}{note} ({})",
-        game.item_name(&equipped.item),
+        game.copy_name(&equipped.copy),
         stat_summary(mods)
     )
 }
@@ -190,10 +196,11 @@ pub(super) fn draw_equip_swap(
         text_row(""),
     ];
     for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!("[{}] {}", menu_shortcut(i), row.label),
             i == selected,
             row.fusion_tier,
+            row.rarity,
         ));
     }
     rows.push(text_row(""));
@@ -218,13 +225,12 @@ pub(super) fn draw_equip_swap(
 /// above it, since the two answer different questions.
 pub(super) fn draw_item_describe(
     game: &Game,
-    item: Option<ItemId>,
+    copy: Option<GearCopy>,
     zone_level: u32,
-    fusion_tier: u32,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some(item) = item else {
+    let Some(copy) = copy else {
         draw_popup(
             "Item",
             PopupSize::Small,
@@ -236,11 +242,11 @@ pub(super) fn draw_item_describe(
     };
     let title = format!(
         "{}{}",
-        game.item_name(&item),
-        equip_preview_tag(game, &item, zone_level, fusion_tier)
+        game.copy_name(&copy),
+        equip_preview_tag(game, &copy, zone_level)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
-    match game.item_description(&item) {
+    match game.item_description(&copy.item) {
         Some(text) => rows.extend(
             wrap_text(text, DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
@@ -255,14 +261,13 @@ pub(super) fn draw_item_describe(
 
 pub(super) fn draw_inventory_item_action(
     game: &mut Game,
-    item: Option<ItemId>,
+    copy: Option<GearCopy>,
     zone_level: u32,
-    fusion_tier: u32,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some(item) = item else {
+    let Some(copy) = copy else {
         draw_popup(
             "Item",
             PopupSize::Small,
@@ -274,14 +279,58 @@ pub(super) fn draw_inventory_item_action(
     };
     let title = format!(
         "{}{}",
-        game.item_name(&item),
-        equip_preview_tag(game, &item, zone_level, fusion_tier)
+        game.copy_name(&copy),
+        equip_preview_tag(game, &copy, zone_level)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
-    for (i, (_, label)) in inventory_item_actions(game, &item).iter().enumerate() {
+    for (i, (_, label)) in inventory_item_actions(game, &copy.item).iter().enumerate() {
         rows.push(item_row(label.clone(), i == selected));
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
     draw_popup("Item", PopupSize::Large, &rows, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+    use feral_processes_engine::components::Rarity;
+
+    /// A rare tier is drawn as a *word* in front of the item name, and
+    /// `swap_label` pads its columns with `{:<N}` — which never truncates.
+    /// So a name past `SWAP_NAME_COLUMN` does not clip: it pushes the stat
+    /// and delta columns right and misaligns every row below it.
+    ///
+    /// Measured against the real font rather than counted in characters,
+    /// because counting is exactly what missed this — the column was 20
+    /// cells and "Overclocked Monofilament Whip" is 29.
+    #[test]
+    fn the_widest_swap_row_still_fits_its_popup() {
+        // The widest row this screen can build out of the shipped assets: the
+        // longest tier word, the longest affix, the longest equippable name,
+        // a maxed fusion note and a three-stat delta.
+        let widest = format!(
+            "[a] {:<50} {:<20} {}",
+            format!(
+                "{} Singularity Matrix of Quiet Handshakes",
+                Rarity::Gold.label().expect("Gold reads as a word")
+            ),
+            "+12 ATK +9 DEF +9 DECOMP T3/3",
+            "-12 ATK -9 DEF -9 DECOMP"
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
+            assert!(
+                drawn <= room,
+                "the widest gear-swap row overflows by {:.0}px \
+                 ({drawn:.0} into {room:.0}):\n{widest}",
+                drawn - room
+            );
+        });
+    }
 }

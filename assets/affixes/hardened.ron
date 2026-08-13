@@ -1,0 +1,8 @@
+// Overdriven's armour twin.
+(
+    id: "hardened",
+    prefix: Some("Hardened"),
+    stats: (def: 3),
+    slots: Some([Armor]),
+    weight: 6,
+)

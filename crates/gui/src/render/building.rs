@@ -155,7 +155,7 @@ pub(super) fn draw_worker_menu(
         let fusions = pet.map(|p| p.fusions).unwrap_or(0);
         let rarity = pet.map(|p| p.rarity).unwrap_or_default();
         rows.push(with_icon(
-            program_row(
+            tier_row(
                 format!(
                     "[{}] {}{}{} at ({}, {}){}{}",
                     menu_shortcut(i),

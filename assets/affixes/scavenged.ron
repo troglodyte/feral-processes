@@ -1,0 +1,10 @@
+// The floor of the ladder — one point, any slot, the highest
+// weight. Its job is to be the affix you see most, so that seeing any
+// other one registers as luck.
+(
+    id: "scavenged",
+    prefix: Some("Scavenged"),
+    stats: (def: 1),
+    // No `slots`, so every slot is eligible.
+    weight: 14,
+)

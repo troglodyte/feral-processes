@@ -1,5 +1,6 @@
 //! Item actions, erasing, and the equip preview tag.
 
+use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::items::ids;
 
 use super::support::*;
@@ -15,11 +16,11 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
         .player_status()
         .inventory
         .iter()
-        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .find(|r| r.copy.item == ItemId::from(ids::CORE_FRAGMENT))
         .map(|r| r.qty)
         .unwrap();
 
-    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
+    app.pending_inventory_item = Some(gear(&ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     assert_eq!(
@@ -38,7 +39,7 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
         .player_status()
         .inventory
         .iter()
-        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .find(|r| r.copy.item == ItemId::from(ids::CORE_FRAGMENT))
         .map(|r| r.qty)
         .unwrap();
     assert_eq!(after, before - 3);
@@ -48,7 +49,7 @@ fn erasing_asks_for_a_quantity_and_removes_exactly_that_many() {
 #[test]
 fn erase_all_dumps_the_whole_stack() {
     let mut app = test_app(901);
-    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
+    app.pending_inventory_item = Some(gear(&ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Char('a'));
@@ -60,7 +61,7 @@ fn erase_all_dumps_the_whole_stack() {
         .player_status()
         .inventory
         .iter()
-        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT))
+        .find(|r| r.copy.item == ItemId::from(ids::CORE_FRAGMENT))
         .map(|r| r.qty);
     assert_eq!(held, None, "[A] should clear the stack entirely");
 }
@@ -69,7 +70,7 @@ fn erase_all_dumps_the_whole_stack() {
 fn escaping_the_erase_prompt_erases_nothing() {
     let mut app = test_app(902);
     let before = app.game.as_ref().unwrap().player_status().inventory;
-    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
+    app.pending_inventory_item = Some(gear(&ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Esc);
@@ -121,14 +122,14 @@ fn a_plain_resource_offers_only_describe_and_erase() {
 #[test]
 fn describe_opens_a_page_and_esc_returns_to_the_action_list() {
     let mut app = test_app(906);
-    app.pending_inventory_item = Some((ItemId::from(ids::CORE_FRAGMENT), 0));
+    app.pending_inventory_item = Some(gear(&ItemId::from(ids::CORE_FRAGMENT), 0));
     app.mode = Mode::InventoryItemAction;
 
     app.handle_key(GameKey::Char('d'));
     assert_eq!(app.mode, Mode::ItemDescribe);
     assert_eq!(
         app.pending_inventory_item,
-        Some((ItemId::from(ids::CORE_FRAGMENT), 0)),
+        Some(gear(&ItemId::from(ids::CORE_FRAGMENT), 0)),
         "the page needs to still know which item it is describing"
     );
 
@@ -159,7 +160,7 @@ fn the_describe_page_reads_the_authored_ron_description() {
 #[test]
 fn fusing_without_enough_copies_explains_why_instead_of_ignoring_the_key() {
     let mut app = test_app(903);
-    app.pending_inventory_item = Some((ItemId::from(ids::OVERCLOCK_CORE), 0));
+    app.pending_inventory_item = Some(gear(&ItemId::from(ids::OVERCLOCK_CORE), 0));
     app.mode = Mode::InventoryItemAction;
     app.handle_key(GameKey::Char('u'));
 
@@ -176,15 +177,15 @@ fn equip_preview_tag_leads_with_the_slot_the_item_would_take() {
     let game = app.game.as_ref().expect("test_app builds a game");
 
     assert_eq!(
-        equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 1, 0),
+        equip_preview_tag(game, &gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 0), 1),
         " (WEP +4 ATK)"
     );
     assert_eq!(
-        equip_preview_tag(game, &ItemId::from(ids::ABLATIVE_PLATING), 1, 0),
+        equip_preview_tag(game, &gear(&ItemId::from(ids::ABLATIVE_PLATING), 0), 1),
         " (ARM +4 DEF)"
     );
     assert_eq!(
-        equip_preview_tag(game, &ItemId::from(ids::CORTEX_HACK), 1, 0),
+        equip_preview_tag(game, &gear(&ItemId::from(ids::CORTEX_HACK), 0), 1),
         " (MOD +3 DECOMP)"
     );
 }
@@ -213,7 +214,7 @@ fn every_equippable_item_a_trading_post_stocks_has_a_slot_tag() {
         if !game.is_equippable(&item) {
             continue;
         }
-        let tag = equip_preview_tag(game, &item, 1, 0);
+        let tag = equip_preview_tag(game, &gear(&item, 0), 1);
         assert!(
             tag.contains("WEP") || tag.contains("ARM") || tag.contains("MOD"),
             "{item} is equippable stock but its trade row would show {tag:?}"
@@ -227,7 +228,7 @@ fn equip_preview_tag_stays_empty_for_a_non_equippable_item() {
     let game = app.game.as_ref().expect("test_app builds a game");
 
     assert_eq!(
-        equip_preview_tag(game, &ItemId::from(ids::CORE_FRAGMENT), 1, 0),
+        equip_preview_tag(game, &gear(&ItemId::from(ids::CORE_FRAGMENT), 0), 1),
         "",
         "a non-equippable item must contribute no tag at all, not a bare slot"
     );
@@ -241,7 +242,7 @@ fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
     // Zone 2 doubles the base bonus (GEAR_LEVEL_GROWTH), and one fusion
     // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 10.
     assert_eq!(
-        equip_preview_tag(game, &ItemId::from(ids::MONOFILAMENT_WHIP), 2, 1),
+        equip_preview_tag(game, &gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 1), 2),
         " (WEP +10 ATK fusion T1/3)"
     );
 }
@@ -256,13 +257,13 @@ fn equip_preview_tag_names_the_ceiling_and_calls_out_a_maxed_item() {
     let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
 
     assert!(
-        !equip_preview_tag(game, &whip, 1, 0).contains("fusion"),
+        !equip_preview_tag(game, &gear(&whip, 0), 1).contains("fusion"),
         "an unfused item mentions no tier at all"
     );
     assert!(
-        equip_preview_tag(game, &whip, 1, MAX_FUSIONS).ends_with("fusion T3/3 - maxed)"),
+        equip_preview_tag(game, &gear(&whip, MAX_FUSIONS), 1).ends_with("fusion T3/3 - maxed)"),
         "got: {}",
-        equip_preview_tag(game, &whip, 1, MAX_FUSIONS)
+        equip_preview_tag(game, &gear(&whip, MAX_FUSIONS), 1)
     );
 }
 
@@ -277,7 +278,11 @@ fn equip_preview_tag_names_the_ceiling_and_calls_out_a_maxed_item() {
 fn a_swap_row_carries_its_items_fusion_tier() {
     let mut app = app_wearing_weapon(913, None, &[("kinetic_edge", 3)], 1);
     let spare = ItemId::from("kinetic_edge");
-    app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
+    app.game
+        .as_mut()
+        .unwrap()
+        .fuse_item(&gear(&spare, 0))
+        .unwrap();
 
     let rows = equip_swap_rows(
         app.game.as_ref().unwrap(),
@@ -286,7 +291,7 @@ fn a_swap_row_carries_its_items_fusion_tier() {
     );
     let row = rows
         .iter()
-        .find(|r| r.choice == SwapChoice::Equip(spare.clone(), 1))
+        .find(|r| r.choice == SwapChoice::Equip(gear(&spare.clone(), 1)))
         .expect("the fused spare should still be offered");
 
     assert_eq!(row.fusion_tier, 1);
@@ -319,7 +324,7 @@ fn selecting_an_equipped_slot_opens_the_swap_list_instead_of_unequipping() {
             .unwrap()
             .player_status()
             .weapon
-            .map(|e| e.item),
+            .map(|e| e.copy.item),
         Some(ItemId::from("overclock_core")),
         "opening the picker must not strip the slot on the way in"
     );
@@ -338,20 +343,20 @@ fn picking_a_swap_row_equips_it_and_returns_to_the_inventory() {
     );
     let idx = rows
         .iter()
-        .position(|r| r.choice == SwapChoice::Equip(ItemId::from("kinetic_edge"), 0))
+        .position(|r| r.choice == SwapChoice::Equip(gear(&ItemId::from("kinetic_edge"), 0)))
         .expect("the spare weapon should be offered");
     app.handle_key(GameKey::Char(menu_shortcut(idx)));
 
     let status = app.game.as_ref().unwrap().player_status();
     assert_eq!(
-        status.weapon.map(|e| e.item),
+        status.weapon.map(|e| e.copy.item),
         Some(ItemId::from("kinetic_edge"))
     );
     assert!(
         status
             .inventory
             .iter()
-            .any(|r| r.item == ItemId::from("overclock_core") && r.qty == 1),
+            .any(|r| r.copy.item == ItemId::from("overclock_core") && r.qty == 1),
         "the weapon that came off must land back in cargo"
     );
     assert_eq!(app.mode, Mode::Inventory);
@@ -381,7 +386,7 @@ fn the_unequip_row_empties_the_slot() {
         status
             .inventory
             .iter()
-            .any(|r| r.item == ItemId::from("overclock_core") && r.qty == 1)
+            .any(|r| r.copy.item == ItemId::from("overclock_core") && r.qty == 1)
     );
     assert_eq!(app.mode, Mode::Inventory);
 }
@@ -407,7 +412,7 @@ fn the_swap_list_offers_only_gear_for_that_slot() {
     )
     .into_iter()
     .filter_map(|r| match r.choice {
-        SwapChoice::Equip(item, _) => Some(item),
+        SwapChoice::Equip(copy) => Some(copy.item),
         SwapChoice::Unequip => None,
     })
     .collect();
@@ -445,9 +450,9 @@ fn swap_rows_are_sorted_best_first_with_unequip_last() {
     assert_eq!(
         choices,
         vec![
-            SwapChoice::Equip(ItemId::from("monofilament_whip"), 0),
-            SwapChoice::Equip(ItemId::from("kinetic_edge"), 0),
-            SwapChoice::Equip(ItemId::from("shiv_routine"), 0),
+            SwapChoice::Equip(gear(&ItemId::from("monofilament_whip"), 0)),
+            SwapChoice::Equip(gear(&ItemId::from("kinetic_edge"), 0)),
+            SwapChoice::Equip(gear(&ItemId::from("shiv_routine"), 0)),
             SwapChoice::Unequip,
         ],
         "the upgrade should be row 1 and emptying the slot the last resort"
@@ -475,7 +480,7 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
     );
     let row = rows
         .iter()
-        .find(|r| r.choice == SwapChoice::Equip(ItemId::from("overclock_core"), 0))
+        .find(|r| r.choice == SwapChoice::Equip(gear(&ItemId::from("overclock_core"), 0)))
         .expect("a spare of the worn item is still a candidate");
 
     // Base +3 ATK: worn remembers level 1, a fresh equip lands at zone 3
@@ -535,11 +540,15 @@ fn the_inventory_screen_lists_no_row_for_a_banked_item() {
     let listed = app.game.as_ref().unwrap().player_status().inventory;
 
     assert!(
-        !listed.iter().any(|r| r.item.as_str() == ids::RESEARCH_DATA),
+        !listed
+            .iter()
+            .any(|r| r.copy.item.as_str() == ids::RESEARCH_DATA),
         "a bank must not be an inventory row: {listed:?}"
     );
     assert!(
-        listed.iter().any(|r| r.item.as_str() == ids::CORE_FRAGMENT),
+        listed
+            .iter()
+            .any(|r| r.copy.item.as_str() == ids::CORE_FRAGMENT),
         "ordinary cargo is untouched: {listed:?}"
     );
 }
@@ -569,8 +578,8 @@ fn fusing_from_the_inventory_screen_splits_the_stack_into_two_rows() {
         .player_status()
         .inventory
         .iter()
-        .filter(|r| r.item == spare)
-        .map(|r| (r.tier, r.qty))
+        .filter(|r| r.copy.item == spare)
+        .map(|r| (r.copy.tier, r.qty))
         .collect();
 
     assert_eq!(
@@ -586,7 +595,11 @@ fn fusing_from_the_inventory_screen_splits_the_stack_into_two_rows() {
 fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
     let spare = ItemId::from("kinetic_edge");
     let mut app = app_wearing_weapon(9131, None, &[("kinetic_edge", 4)], 1);
-    app.game.as_mut().unwrap().fuse_item(&spare, 0).unwrap();
+    app.game
+        .as_mut()
+        .unwrap()
+        .fuse_item(&gear(&spare, 0))
+        .unwrap();
 
     let tiers: Vec<u32> = equip_swap_rows(
         app.game.as_ref().unwrap(),
@@ -595,7 +608,7 @@ fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
     )
     .into_iter()
     .filter_map(|r| match r.choice {
-        SwapChoice::Equip(item, tier) if item == spare => Some(tier),
+        SwapChoice::Equip(copy) if copy.item == spare => Some(copy.tier),
         _ => None,
     })
     .collect();
@@ -604,5 +617,62 @@ fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
         tiers,
         vec![1, 0],
         "the fused copy is the better row and sorts first"
+    );
+}
+
+/// **The drift guard for `SWAP_NAME_COLUMN`.** The gui's
+/// `the_widest_swap_row_still_fits_its_popup` measures one hand-written
+/// worst-case string against the real font; this asks the shipped assets
+/// whether that string is still the worst case.
+///
+/// Without it the pair goes stale exactly the way the palette test did: a
+/// long affix or a long item name lands, the hand-written string still fits,
+/// and the column silently starts shunting every row below a long name.
+/// Names are built through `Game::copy_name`, so this covers both tier words
+/// and affixes at once.
+#[test]
+fn no_shipped_copy_name_outgrows_the_swap_name_column() {
+    let mut app = test_app(931);
+    let game = app.game.as_mut().expect("test_app builds a game");
+
+    let equippables: Vec<ItemId> = game
+        .item_defs()
+        .into_iter()
+        .filter(|d| d.equipment.is_some())
+        .map(|d| d.id)
+        .collect();
+    assert!(
+        !equippables.is_empty(),
+        "the shipped set has equippable gear"
+    );
+
+    let affixes: Vec<Option<AffixId>> = std::iter::once(None)
+        .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+        .collect();
+
+    let mut worst = (String::new(), 0usize);
+    for item in &equippables {
+        for rarity in Rarity::ALL {
+            for affix in &affixes {
+                let name = game.copy_name(&GearCopy {
+                    item: item.clone(),
+                    rarity,
+                    tier: 0,
+                    affix: affix.clone(),
+                });
+                if name.chars().count() > worst.1 {
+                    worst = (name.clone(), name.chars().count());
+                }
+            }
+        }
+    }
+
+    assert!(
+        worst.1 <= SWAP_NAME_COLUMN_FOR_TESTS,
+        "{:?} is {} cells and the column is {} — widen SWAP_NAME_COLUMN and \
+         update the gui's worst-case string, or shorten the asset",
+        worst.0,
+        worst.1,
+        SWAP_NAME_COLUMN_FOR_TESTS
     );
 }

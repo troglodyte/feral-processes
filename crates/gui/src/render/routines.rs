@@ -115,7 +115,7 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, 
     }
     for (i, p) in programs.iter().enumerate() {
         rows.push(with_icon(
-            program_row(
+            tier_row(
                 format!(
                     "[{}] {} Lv{}{}",
                     menu_shortcut(i),

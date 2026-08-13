@@ -94,12 +94,12 @@ impl App {
         // one the player is looking at. Salvage is ordinary goods to a
         // trader; Credits are what it won't buy (see `Game::sell_item`).
         let currency = game.trade_currency();
-        let sell_rows: Vec<(ItemId, u32)> = game
+        let sell_rows: Vec<GearCopy> = game
             .player_status()
             .inventory
             .iter()
-            .map(|row| (row.item.clone(), row.tier))
-            .filter(|(item, _)| *item != currency)
+            .map(|row| row.copy.clone())
+            .filter(|copy| copy.item != currency)
             .collect();
         let buy_items: Vec<ItemId> = trade.buy.iter().map(|(item, _)| item.clone()).collect();
         // Empty until the player sells this trader something, so the screen
@@ -126,19 +126,15 @@ impl App {
             );
             match row {
                 Some(TradeRow::Sell(i)) if selling => {
-                    let (item, tier) = sell_rows[i].clone();
-                    self.execute_trade(structure, TradeChoice::Sell(item, tier), 1)
+                    let copy = sell_rows[i].clone();
+                    self.execute_trade(structure, TradeChoice::Sell(copy), 1)
                 }
                 Some(TradeRow::Buy(i)) if !selling => {
                     self.execute_trade(structure, TradeChoice::Buy(buy_items[i].clone()), 1)
                 }
                 Some(TradeRow::BuyBack(i)) if !selling => {
                     let row = &buybacks[i];
-                    self.execute_trade(
-                        structure,
-                        TradeChoice::BuyBack(row.item.clone(), row.tier),
-                        1,
-                    )
+                    self.execute_trade(structure, TradeChoice::BuyBack(row.copy.clone()), 1)
                 }
                 // Deliberately not a quick sale. Selling a levelled program
                 // is permanent and a quick key is exactly a mis-hit, so this
@@ -174,14 +170,9 @@ impl App {
                 buybacks.len(),
                 programs.len(),
             ) {
-                Some(TradeRow::Sell(i)) => {
-                    let (item, tier) = sell_rows[i].clone();
-                    TradeChoice::Sell(item, tier)
-                }
+                Some(TradeRow::Sell(i)) => TradeChoice::Sell(sell_rows[i].clone()),
                 Some(TradeRow::Buy(i)) => TradeChoice::Buy(buy_items[i].clone()),
-                Some(TradeRow::BuyBack(i)) => {
-                    TradeChoice::BuyBack(buybacks[i].item.clone(), buybacks[i].tier)
-                }
+                Some(TradeRow::BuyBack(i)) => TradeChoice::BuyBack(buybacks[i].copy.clone()),
                 Some(TradeRow::Program(i)) => {
                     // A program needs no quantity — there is exactly one of it
                     // — so it skips the quantity page and goes to confirmation.
@@ -208,9 +199,9 @@ impl App {
     pub(crate) fn execute_trade(&mut self, structure: Entity, choice: TradeChoice, qty: u32) {
         let Some(game) = &mut self.game else { return };
         let result = match choice {
-            TradeChoice::Sell(item, tier) => game.sell_item(structure, item, tier, qty),
+            TradeChoice::Sell(copy) => game.sell_item(structure, copy, qty),
             TradeChoice::Buy(item) => game.buy_item(structure, item, qty),
-            TradeChoice::BuyBack(item, tier) => game.buy_back(structure, item, tier, qty),
+            TradeChoice::BuyBack(copy) => game.buy_back(structure, copy, qty),
         };
         match result {
             Ok(()) => self.status_line = None,

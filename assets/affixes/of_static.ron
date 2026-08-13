@@ -1,0 +1,10 @@
+// Slot-agnostic on purpose: a small bonus on both axes is worth
+// having wherever it lands, so it is the affix that keeps a Module roll
+// from feeling like a wasted one.
+(
+    id: "of_static",
+    suffix: Some("of Static"),
+    stats: (atk: 1, def: 1),
+    // No `slots`, so every slot is eligible.
+    weight: 10,
+)

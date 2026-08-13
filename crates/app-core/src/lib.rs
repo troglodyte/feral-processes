@@ -26,12 +26,12 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, ItemId};
+use feral_processes_engine::components::Rarity;
+use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
 use feral_processes_engine::{
     AchievementRow, BattleView, DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget,
-    Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView,
-    SlotShift,
+    Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, RoutineHolderView, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -127,25 +127,26 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
 ///
 /// Lives here rather than in either renderer because both draw the identical
 /// tag, on both the inventory list and the item-action page.
-pub fn equip_preview_tag(game: &Game, item: &ItemId, zone_level: u32, fusion_tier: u32) -> String {
-    let Some((slot, base_mods)) = game.equipment_of(item) else {
+pub fn equip_preview_tag(game: &Game, copy: &GearCopy, zone_level: u32) -> String {
+    let Some((slot, base_mods)) = game.equipment_of(&copy.item) else {
         return String::new();
     };
     let mods = base_mods
         .scaled_for_level(zone_level)
-        .fused_for_tier(fusion_tier);
+        .fused_for_tier(copy.tier)
+        .for_rarity(copy.rarity);
     let mut parts = vec![slot.short_label().to_string()];
     let summary = stat_summary(mods);
     if !summary.is_empty() {
         parts.push(summary);
     }
-    if fusion_tier > 0 {
-        let maxed = if fusion_tier >= MAX_FUSIONS {
+    if copy.tier > 0 {
+        let maxed = if copy.tier >= MAX_FUSIONS {
             " - maxed"
         } else {
             ""
         };
-        parts.push(format!("fusion {}{maxed}", item_fusion_note(fusion_tier)));
+        parts.push(format!("fusion {}{maxed}", item_fusion_note(copy.tier)));
     }
     format!(" ({})", parts.join(" "))
 }
@@ -193,9 +194,9 @@ pub fn stat_summary(mods: EquipmentStats) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SwapChoice {
     /// Wear this copy instead, sending whatever the slot holds back to
-    /// cargo. The `u32` is the copy's fusion tier: two rows can name the
-    /// same item and differ only in it.
-    Equip(ItemId, u32),
+    /// cargo. The whole `GearCopy` rather than an id: two rows can name the
+    /// same item and differ only in fusion tier, or only in rare tier.
+    Equip(GearCopy),
     /// Empty the slot. Offered only when something is actually worn.
     Unequip,
 }
@@ -209,18 +210,38 @@ pub enum SwapChoice {
 pub struct SwapRow {
     pub choice: SwapChoice,
     pub label: String,
-    /// The item's fusion depth, for the renderer's row colour. Carried
-    /// rather than re-derived on the far side: this screen's rows are built
-    /// here and only drawn there, and a renderer that looked the tier up
-    /// itself could colour a row its own label contradicts. Zero on the
-    /// unequip row, which stands for no item at all.
+    /// The copy's two permanent tiers, for the renderer's row colour — see
+    /// `render/mod.rs::tier_color`, which resolves which of them wins.
+    /// Carried rather than re-derived on the far side: this screen's rows
+    /// are built here and only drawn there, and a renderer that looked them
+    /// up itself could colour a row its own label contradicts. Both are the
+    /// inert value on the unequip row, which stands for no item at all.
     pub fusion_tier: u32,
+    pub rarity: Rarity,
 }
 
 /// How wide the swap picker's name and stat columns are. Padding lives here
 /// rather than in the renderer because the labels do — see `SwapRow`.
-const SWAP_NAME_COLUMN: usize = 20;
+/// Wide enough for the longest name `Game::copy_name` can build out of the
+/// shipped assets — a rare tier's word, an affix's prefix or suffix, and the
+/// item's own name. "Overclocked Singularity Matrix of Quiet Handshakes" is
+/// 50 cells.
+///
+/// `{:<N}` pads but never truncates, so a name past this does not clip: it
+/// shunts the stat and delta columns right and misaligns every row below it.
+/// That is worth spending the width on rather than truncating, because the
+/// affix can sit at *either* end of the name — cutting the tail would drop
+/// "of Quiet Handshakes" entirely, which is the half of the name the player
+/// does not already know.
+///
+/// Held by `the_widest_swap_row_still_fits_its_popup`, which measures real
+/// text rather than counting characters. **Adding a long affix or a long
+/// item name can break this**, and that test is what says so.
+const SWAP_NAME_COLUMN: usize = 50;
 const SWAP_STATS_COLUMN: usize = 20;
+
+#[cfg(test)]
+pub(crate) const SWAP_NAME_COLUMN_FOR_TESTS: usize = SWAP_NAME_COLUMN;
 
 /// Every replacement for `slot` the player could put on right now, best
 /// first, with the row that empties the slot last. One row per *copy*: a
@@ -251,8 +272,11 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
     let worn_mods = worn
         .as_ref()
         .and_then(|e| {
-            game.equipment_of(&e.item)
-                .map(|(_, base)| base.scaled_for_level(e.level).fused_for_tier(e.fusion_tier))
+            game.equipment_of(&e.copy.item).map(|(_, base)| {
+                base.scaled_for_level(e.level)
+                    .fused_for_tier(e.copy.tier)
+                    .for_rarity(e.copy.rarity)
+            })
         })
         .unwrap_or_default();
 
@@ -260,14 +284,27 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
         .inventory
         .iter()
         .filter_map(|row| {
-            let (item_slot, base) = game.equipment_of(&row.item)?;
+            let (item_slot, base) = game.equipment_of(&row.copy.item)?;
             (item_slot == slot).then_some((row, base))
         })
         .map(|(row, base)| {
-            let tier = row.tier;
-            let mods = base.scaled_for_level(status.zone).fused_for_tier(tier);
-            let name = game.item_name(&row.item).to_string();
-            let stats = match tier {
+            let copy = &row.copy;
+            let mods = base
+                .scaled_for_level(status.zone)
+                .fused_for_tier(copy.tier)
+                .for_rarity(copy.rarity);
+            // The rare tier goes in the *name* column and the fusion tier in
+            // the stat column, because they are different lengths of thing:
+            // "Overclocked" is a word that belongs beside the item it
+            // describes, while "T2/3" is a measurement that belongs beside
+            // the numbers. Both columns are fixed width — see
+            // `SWAP_NAME_COLUMN` — so this is also what keeps either from
+            // pushing the other's content out of view.
+            // Through the engine's one name-builder, so this column cannot
+            // come to disagree with a drop line or the trade screen about
+            // what a copy is called.
+            let name = game.copy_name(copy);
+            let stats = match copy.tier {
                 0 => stat_summary(mods),
                 tier => format!("{} {}", stat_summary(mods), item_fusion_note(tier)),
             };
@@ -275,9 +312,10 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
                 delta_total(mods, worn_mods),
                 name.clone(),
                 SwapRow {
-                    choice: SwapChoice::Equip(row.item.clone(), tier),
+                    choice: SwapChoice::Equip(copy.clone()),
                     label: swap_label(&name, &stats, mods, worn_mods),
-                    fusion_tier: tier,
+                    fusion_tier: copy.tier,
+                    rarity: copy.rarity,
                 },
             )
         })
@@ -292,6 +330,7 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
             choice: SwapChoice::Unequip,
             label: swap_label("(Unequip)", "", EquipmentStats::default(), worn_mods),
             fusion_tier: 0,
+            rarity: Rarity::Ordinary,
         });
     }
     rows
@@ -932,15 +971,18 @@ pub enum TradeOrigin {
 /// The `u32` beside a sold or bought-back item is its fusion tier — the
 /// player may hold several copies of one item at different tiers, and which
 /// one they picked is not recoverable from the id (see
-/// `components::FusedGear`). `Buy` carries none because a trader's stock is
+/// `components::GearCopies`). `Buy` carries none because a trader's stock is
 /// always ordinary.
 #[derive(Clone)]
 pub enum TradeChoice {
-    Sell(ItemId, u32),
+    /// Which *copy* is being sold, not just which item — a fused or rare
+    /// copy is a different physical thing from its plain spares, and the
+    /// shelf keeps whichever one it was handed.
+    Sell(GearCopy),
     Buy(ItemId),
     /// Something the player sold this trader, offered back at a markup —
-    /// see `Game::buyback_options`.
-    BuyBack(ItemId, u32),
+    /// see `Game::buyback_options`. The same copy that was sold.
+    BuyBack(GearCopy),
 }
 
 pub const MIN_ZOOM: u16 = 1;
@@ -1103,7 +1145,7 @@ pub struct App {
     /// The cargo row picked on `Mode::Inventory`, as `(item, fusion tier)`
     /// — a fused copy and its ordinary spares are separate rows and every
     /// action on one has to say which it meant.
-    pub pending_inventory_item: Option<(ItemId, u32)>,
+    pub pending_inventory_item: Option<GearCopy>,
     /// The equipment slot picked on `Mode::Inventory` or
     /// `Mode::CompanionEquip`, awaiting a replacement (or an unequip) from
     /// `Mode::EquipSwap`.
@@ -1120,7 +1162,7 @@ pub struct App {
     pub pending_equip_program: Option<Entity>,
     /// The inventory item picked for erasure, awaiting a quantity from
     /// `Mode::EraseQuantity`.
-    pub pending_erase: Option<(ItemId, u32)>,
+    pub pending_erase: Option<GearCopy>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from

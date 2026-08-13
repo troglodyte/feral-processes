@@ -121,29 +121,20 @@ pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Colo
     }
 }
 
-/// `item_row` for a program or a piece of gear, coloured by how many times
-/// it has been fused — see `fusion_color`. Every menu that lists either
-/// goes through here, so none of them can grow its own idea of what the
-/// colours mean. A caller with a louder rule of its own checks that first
-/// and only falls through to this (see `draw_companion_menu`'s CRITICAL).
-pub(super) fn fusion_row(s: impl Into<String>, selected: bool, fusions: u32) -> Row {
-    match fusion_color(fusions) {
-        Some(color) => colored_item_row(s, selected, color),
-        None => item_row(s, selected),
-    }
-}
-
-/// `fusion_row` for a *program*, which unlike a piece of gear can also carry
-/// a rare-spawn tier. `program_color` is what decides between the two when
-/// a program has both; this is only the row-building half, and the same
-/// "one function so no menu grows its own idea" rule applies.
-pub(super) fn program_row(
-    s: impl Into<String>,
-    selected: bool,
-    fusions: u32,
-    rarity: Rarity,
-) -> Row {
-    match program_color(fusions, rarity) {
+/// `item_row` for anything carrying a permanent tier — a program or a piece
+/// of gear, both of which now have two of them. `tier_color` decides which
+/// one wins; this is only the row-building half.
+///
+/// Every menu that lists either goes through here, so none of them can grow
+/// its own idea of what the colours mean. A caller with a louder rule of its
+/// own checks that first and only falls through to this (see
+/// `draw_companion_menu`'s CRITICAL).
+///
+/// It absorbed a `fusion_row` that took no rarity, back when gear had none.
+/// Keeping both would have left the gear screens silently unable to show a
+/// tier they now roll.
+pub(super) fn tier_row(s: impl Into<String>, selected: bool, fusions: u32, rarity: Rarity) -> Row {
+    match tier_color(fusions, rarity) {
         Some(color) => colored_item_row(s, selected, color),
         None => item_row(s, selected),
     }
@@ -552,12 +543,25 @@ mod tests {
     /// grew its own copy is how one list ends up disagreeing with the rest
     /// about what magenta means.
     #[test]
-    fn fusion_row_colours_by_depth_and_leaves_an_unfused_row_plain() {
-        assert_eq!(row_color(&fusion_row("x", false, 0)), Some(TEXT));
-        assert_eq!(row_color(&fusion_row("x", false, 1)), Some(CYAN));
+    fn a_tier_row_colours_by_depth_and_leaves_a_plain_row_plain() {
+        let plain = Rarity::Ordinary;
+        assert_eq!(row_color(&tier_row("x", false, 0, plain)), Some(TEXT));
+        assert_eq!(row_color(&tier_row("x", false, 1, plain)), Some(CYAN));
         assert_eq!(
-            row_color(&fusion_row("x", false, MAX_FUSIONS)),
+            row_color(&tier_row("x", false, MAX_FUSIONS, plain)),
             Some(MAGENTA)
+        );
+        // A rare copy that has never been fused takes the rarity colour, and
+        // a fused one gives it up — the precedence `tier_color` states. Gear
+        // reaches both arms now, which is why this row builder took a rarity
+        // in the first place.
+        assert_eq!(
+            row_color(&tier_row("x", false, 0, Rarity::Gold)),
+            rarity_color(Rarity::Gold)
+        );
+        assert_eq!(
+            row_color(&tier_row("x", false, 1, Rarity::Gold)),
+            Some(CYAN)
         );
     }
 

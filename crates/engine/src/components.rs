@@ -3,12 +3,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
-use crate::items::{EquipmentSlot, ItemId};
+use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
-use crate::tuning::{GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, SILVER_STAT_MULT};
+use crate::tuning::{
+    GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, PLATINUM_STAT_MULT,
+    PRISMATIC_STAT_MULT, SILVER_STAT_MULT,
+};
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
@@ -176,20 +179,26 @@ pub struct Tamed {
     pub owner: Entity,
 }
 
-/// An item sitting in an `Equipment` slot, and the gear level its stat
-/// bonus was scaled for when it was equipped (see
-/// `items::EquipmentStats::scaled_for_level`). The level is captured at
-/// equip time — like a wild program's zone-doubled stats, it doesn't
-/// retroactively change if the player breaches deeper afterward; re-equip
-/// (or unequip/re-equip) to pick up a newly unlocked level.
+/// An item sitting in an `Equipment` slot: *which copy* went on, and the
+/// gear level its stat bonus was scaled for when it did.
 ///
-/// `fusion_tier` is the tier of the individual copy that went on — see
-/// `FusedGear` and `items::EquipmentStats::fused_for_tier`.
+/// The level is captured at equip time (see
+/// `items::EquipmentStats::scaled_for_level`) — like a wild program's
+/// zone-scaled stats, it doesn't retroactively change if the player breaches
+/// deeper afterward; re-equip to pick up a newly unlocked level. That is
+/// exactly why it sits *beside* `GearCopy` rather than inside it: the level
+/// is a property of the moment, not of the copy, and a copy back in cargo
+/// has no level at all.
+///
+/// **Storing the copy whole is what keeps the bonus symmetric.**
+/// `Game::apply_equipment_delta` writes the bonus into `Stats`, so the
+/// unequip has to subtract precisely what the equip added; every property
+/// that scales it lives in this one value, so a path cannot subtract a
+/// bonus computed from fewer properties than it added. See `GearCopy`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItem {
-    pub item: ItemId,
+    pub copy: GearCopy,
     pub level: u32,
-    pub fusion_tier: u32,
 }
 
 /// What's currently equipped in each slot, on the player or on any program
@@ -245,77 +254,71 @@ pub struct Inventory {
 #[derive(Component, Default, Clone)]
 pub struct Routines(pub Vec<AbilityId>);
 
-/// Player-only: the gear the player has fused, one row per `(item, tier)`
-/// — see `Game::fuse_item`. A fusion produces one stronger *physical copy*
-/// (consuming `crate::tuning::ITEM_FUSION_COST` copies at the tier below
-/// it), so a fused copy lives here while its ordinary spares stay in
-/// `Inventory`.
+/// Player-only: every carried copy of gear that is *not* interchangeable
+/// with a plain one, a row per `(GearCopy, qty)`. A copy earns a place here
+/// by having been fused (`Game::fuse_item`) or by having dropped at a rare
+/// tier (`Game::grant_gear_drop`) — `GearCopy::is_plain` is the predicate,
+/// and it is the only thing that decides.
 ///
-/// **`Inventory` is by definition the tier-0 store**, and that is the seam
-/// that keeps this out of the production chain entirely: recipes, `Stock`,
-/// `assembler_system`, hauling and banking read `Inventory` and therefore
-/// cannot encounter a fused copy, so none of them needs a tier rule. Tier
-/// here is always >= 1.
+/// **`Inventory` is by definition the plain-copy store**, and that is the
+/// seam that keeps this out of the production chain entirely: recipes,
+/// `Stock`, `assembler_system`, hauling and banking read `Inventory` and
+/// therefore cannot encounter a special copy, so none of them needs a tier
+/// or rarity rule. That was true of fusion alone and stays true now that a
+/// copy has two ways to be special — which is the whole reason rarity was
+/// added as a property of the *copy* rather than of the item.
 ///
-/// Keyed by value rather than by position. Two copies of the same item at
-/// the same tier are genuinely interchangeable, so an index would identify
-/// nothing the pair does not — and it would be the positional-index trap
+/// Keyed by value rather than by position. Two copies with equal
+/// `GearCopy`s are genuinely interchangeable, so an index would identify
+/// nothing the key does not — and it would be the positional-index trap
 /// `BattleState::planned` documents, for no gain.
 ///
-/// `EquippedItem::fusion_tier` is the same fact for a copy that is worn
-/// rather than carried; this ledger agrees with it rather than shadowing
-/// it, which is what the per-`ItemId` predecessor got wrong.
+/// `EquippedItem` holds the same key for a copy that is worn rather than
+/// carried; this ledger agrees with it rather than shadowing it, which is
+/// what the per-`ItemId` predecessor got wrong.
 #[derive(Component, Default, Clone)]
-pub struct FusedGear {
-    pub copies: Vec<(ItemId, u32, u32)>,
+pub struct GearCopies {
+    pub copies: Vec<(GearCopy, u32)>,
 }
 
-impl FusedGear {
-    pub fn add(&mut self, item: ItemId, tier: u32, qty: u32) {
+impl GearCopies {
+    pub fn add(&mut self, copy: GearCopy, qty: u32) {
         // Saturating for the reason `Inventory::add` is.
-        if let Some(row) = self
-            .copies
-            .iter_mut()
-            .find(|(i, t, _)| *i == item && *t == tier)
-        {
-            row.2 = row.2.saturating_add(qty);
+        if let Some(row) = self.copies.iter_mut().find(|(c, _)| *c == copy) {
+            row.1 = row.1.saturating_add(qty);
         } else {
-            self.copies.push((item, tier, qty));
+            self.copies.push((copy, qty));
         }
     }
 
-    pub fn count(&self, item: &ItemId, tier: u32) -> u32 {
+    pub fn count(&self, copy: &GearCopy) -> u32 {
         self.copies
             .iter()
-            .find(|(i, t, _)| i == item && *t == tier)
-            .map(|(_, _, q)| *q)
+            .find(|(c, _)| c == copy)
+            .map(|(_, q)| *q)
             .unwrap_or(0)
     }
 
-    /// Removes up to `qty` copies of `item` at `tier`, returning how many
-    /// were actually removed. Drops the row at zero for the reason
-    /// `Inventory::take` does — every screen lists these rows.
-    pub fn take(&mut self, item: &ItemId, tier: u32, qty: u32) -> u32 {
-        let Some(pos) = self
-            .copies
-            .iter()
-            .position(|(i, t, _)| i == item && *t == tier)
-        else {
+    /// Removes up to `qty` of `copy`, returning how many were actually
+    /// removed. Drops the row at zero for the reason `Inventory::take`
+    /// does — every screen lists these rows.
+    pub fn take(&mut self, copy: &GearCopy, qty: u32) -> u32 {
+        let Some(pos) = self.copies.iter().position(|(c, _)| c == copy) else {
             return 0;
         };
-        let taken = self.copies[pos].2.min(qty);
-        self.copies[pos].2 -= taken;
-        if self.copies[pos].2 == 0 {
+        let taken = self.copies[pos].1.min(qty);
+        self.copies[pos].1 -= taken;
+        if self.copies[pos].1 == 0 {
             self.copies.remove(pos);
         }
         taken
     }
 
-    /// Every fused copy held, for the cargo total. Fused gear is carried
-    /// like anything else, so it counts against the Buffer figure the
-    /// player reads.
+    /// Every special copy held, for the cargo total. These are carried like
+    /// anything else, so they count against the Buffer figure the player
+    /// reads.
     pub fn total(&self) -> u32 {
-        self.copies.iter().map(|(_, _, qty)| *qty).sum()
+        self.copies.iter().map(|(_, qty)| *qty).sum()
     }
 }
 
@@ -901,9 +904,17 @@ impl Potential {
 /// the save field name the colours, everything a player reads names the
 /// thing. `label` is the one place that translation happens.
 ///
-/// **Variant order is save format.** bincode encodes enums positionally and
-/// `CreatureSave::rarity` holds one, so append new tiers, never reorder —
-/// the same trap `Perk` carries.
+/// **Append new tiers, never reorder.** The derived `Ord` *is* the worth
+/// order and `Game::fuse_companions` inherits `max(a, b)` off it, so moving
+/// a variant silently changes what a fusion produces. The save no longer
+/// cares — since v29 the payload is field-named RON and an enum is written
+/// by name — but `the_tiers_order_by_how_good_they_are` pins the half that
+/// still bites.
+///
+/// Since 0.8.9 this axis covers **gear as well as programs**: a dropped
+/// weapon rolls a tier the same way a wild program does, and reads in the
+/// same words and the same colour. `EquipmentStats::for_rarity` is the gear
+/// side of `stat_mult`.
 #[derive(
     Component, Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
@@ -912,28 +923,67 @@ pub enum Rarity {
     Ordinary,
     Silver,
     Gold,
+    Platinum,
+    Prismatic,
 }
 
 impl Rarity {
-    /// What this tier multiplies every one of a creature's four stats by,
-    /// on top of zone, depth and the individual `Potential` roll.
+    /// Every tier, worst first. One definition, for the reason
+    /// `EquipmentSlot::ALL` gives: the spawn ladder, the gear roll and the
+    /// colour table all walk it, so a sixth rung cannot reach some of them
+    /// and miss others — and `rank` is defined as the position in it.
+    pub const ALL: [Rarity; 5] = [
+        Rarity::Ordinary,
+        Rarity::Silver,
+        Rarity::Gold,
+        Rarity::Platinum,
+        Rarity::Prismatic,
+    ];
+
+    /// How far up the ladder this tier sits, `Ordinary` being 0.
+    ///
+    /// Read by `EquipmentStats::for_rarity`'s floor, which needs a *count*
+    /// of rungs rather than a multiplier — the same job
+    /// `ITEM_FUSION_MIN_BONUS_PER_TIER` does with a fusion tier, which is
+    /// already a number. Derived from `ALL` rather than written out again,
+    /// so the two cannot disagree.
+    pub fn rank(self) -> u32 {
+        Rarity::ALL.iter().position(|r| *r == self).unwrap_or(0) as u32
+    }
+
+    /// What this tier multiplies stats by — every one of a creature's four,
+    /// or an item's three (see `EquipmentStats::for_rarity`).
+    ///
+    /// Deliberately one ladder for both. An Overclocked program and an
+    /// Overclocked weapon are the same promise to the player, and a retune
+    /// that moved only one of them would make the shared colour and the
+    /// shared word a lie.
     pub fn stat_mult(self) -> f32 {
         match self {
             Rarity::Ordinary => 1.0,
             Rarity::Silver => SILVER_STAT_MULT,
             Rarity::Gold => GOLD_STAT_MULT,
+            Rarity::Platinum => PLATINUM_STAT_MULT,
+            Rarity::Prismatic => PRISMATIC_STAT_MULT,
         }
     }
 
-    /// How the tier reads to a player, or `None` for an ordinary creature —
+    /// How the tier reads to a player, or `None` for an ordinary one —
     /// `Option` rather than an empty string so a caller has to decide what
     /// "no tier" looks like in its own context, the way `fusion_color`
     /// returns `Option` so a louder rule can compose with it.
+    ///
+    /// The words continue the compiler vocabulary the first two set, which
+    /// is what lets one ladder cover programs and gear without either
+    /// reading oddly: a program and a weapon are both things that were
+    /// compiled better than usual.
     pub fn label(self) -> Option<&'static str> {
         match self {
             Rarity::Ordinary => None,
             Rarity::Silver => Some("Optimized"),
             Rarity::Gold => Some("Overclocked"),
+            Rarity::Platinum => Some("Unrolled"),
+            Rarity::Prismatic => Some("Bare-Metal"),
         }
     }
 }
@@ -1077,31 +1127,75 @@ impl Perks {
 mod rarity_tests {
     use super::Rarity;
 
+    /// Walks `ALL` rather than naming pairs, so a sixth rung is covered the
+    /// moment it is added instead of leaving a test that still passes while
+    /// checking five of six.
     #[test]
     fn rarity_multiplies_every_stat() {
         assert_eq!(Rarity::Ordinary.stat_mult(), 1.0, "ordinary must be inert");
-        assert!(Rarity::Silver.stat_mult() > Rarity::Ordinary.stat_mult());
-        assert!(Rarity::Gold.stat_mult() > Rarity::Silver.stat_mult());
+        for pair in Rarity::ALL.windows(2) {
+            assert!(
+                pair[1].stat_mult() > pair[0].stat_mult(),
+                "{:?} must be worth more than {:?}",
+                pair[1],
+                pair[0]
+            );
+        }
     }
 
     #[test]
     fn only_a_rare_tier_has_a_label() {
         assert_eq!(Rarity::Ordinary.label(), None);
-        assert!(Rarity::Silver.label().is_some());
-        assert!(Rarity::Gold.label().is_some());
+        for tier in Rarity::ALL.into_iter().skip(1) {
+            assert!(
+                tier.label().is_some(),
+                "{tier:?} needs a player-facing name"
+            );
+        }
+    }
+
+    /// Every rung's label is distinct. Two tiers reading the same way is the
+    /// failure that survives every other test here — the stats would differ,
+    /// the colour would differ, and the word on screen would not.
+    #[test]
+    fn no_two_tiers_read_the_same() {
+        let mut seen: Vec<&str> = Rarity::ALL.into_iter().filter_map(|r| r.label()).collect();
+        let before = seen.len();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(before, seen.len(), "two rare tiers share a label: {seen:?}");
     }
 
     /// `Game::fuse_companions` inherits `max(parent_a, parent_b)`, so the
     /// derived `Ord` has to agree with the tiers' worth. Reordering the
     /// variants would silently make a fusion of a gold and a silver
-    /// produce a silver — and reordering is already forbidden for a save
-    /// format reason, so this pins the second consequence too.
+    /// produce a silver.
     #[test]
     fn the_tiers_order_by_how_good_they_are() {
-        assert!(Rarity::Gold > Rarity::Silver);
-        assert!(Rarity::Silver > Rarity::Ordinary);
+        for pair in Rarity::ALL.windows(2) {
+            assert!(
+                pair[1] > pair[0],
+                "{:?} must outrank {:?}",
+                pair[1],
+                pair[0]
+            );
+        }
         assert_eq!(Rarity::Silver.max(Rarity::Gold), Rarity::Gold);
         assert_eq!(Rarity::default(), Rarity::Ordinary);
+        assert_eq!(
+            Rarity::ALL[0],
+            Rarity::Ordinary,
+            "ALL must start at the inert rung — `rank` and the spawn ladder both index off it"
+        );
+    }
+
+    /// `rank` is what the gear floor multiplies, so it has to be the
+    /// position in `ALL` and not a second hand-written ladder.
+    #[test]
+    fn rank_is_the_position_in_the_ladder() {
+        for (i, tier) in Rarity::ALL.into_iter().enumerate() {
+            assert_eq!(tier.rank(), i as u32, "{tier:?} is out of step with ALL");
+        }
     }
 }
 

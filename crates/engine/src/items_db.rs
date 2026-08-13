@@ -300,7 +300,10 @@ impl ItemDb {
     /// `load_dir` makes about a duplicated economy role: a file on disk is a
     /// deliberate act, and silently overwriting one would make the conflict
     /// invisible.
-    pub fn synthesise_etched_disks(&mut self, abilities: &crate::abilities::AbilityDb) -> Vec<String> {
+    pub fn synthesise_etched_disks(
+        &mut self,
+        abilities: &crate::abilities::AbilityDb,
+    ) -> Vec<String> {
         let mut warnings = Vec::new();
         for ability in abilities.all() {
             let id = ItemId::etched(&ability.id);

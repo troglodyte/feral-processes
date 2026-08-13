@@ -2,11 +2,11 @@
 //! decompiling a defeated program into a companion.
 
 use crate::progression::StatRow;
-use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, WORK_RESOURCE_DROP};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
-    SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
+    SURFACE_BOSS_LOOT_RARITY_FLOOR, SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
 use crate::*;
 
@@ -51,6 +51,143 @@ impl Game {
         drops
     }
 
+    /// Hands the player one dropped copy of `item`, rolling its rare tier
+    /// on the way in — **the one way a copy above `Ordinary` enters the
+    /// game.** Returns the copy so the caller can name it in its own log
+    /// line, which is the only thing the four callers do differently.
+    ///
+    /// `floor` is the worst tier this source may pay, and exists for one
+    /// caller: `SURFACE_BOSS_LOOT_RARITY_FLOOR`. Everything else passes
+    /// `Ordinary` and takes the bare ladder.
+    ///
+    /// **Crafting, buying and buying back are deliberately not callers.**
+    /// A made or purchased copy is always plain, so found gear is
+    /// categorically better than made gear — which is the whole of why a
+    /// player would go looking rather than shopping, and is asserted as an
+    /// absence by `crafted_gear_is_never_rare`, since an omission is
+    /// invisible otherwise. It also keeps `ItemDef::value`'s two meanings
+    /// intact: no recipe becomes underpriced for its output, so
+    /// `no_craftable_item_is_worth_more_than_its_ingredients` still binds.
+    ///
+    /// A non-equippable item takes the early return and **spends no RNG
+    /// draw**. A rare tier is defined by `EquipmentStats::for_rarity`, so a
+    /// Core Fragment has nothing for one to scale; rolling anyway would also
+    /// shift the shared `GameRng` stream on every material drop in the game,
+    /// which is the kind of change that silently rewrites a seeded combat
+    /// test three files away.
+    pub(crate) fn grant_gear_drop(&mut self, item: ItemId, floor: Rarity) -> GearCopy {
+        if self.equipment_of(&item).is_none() {
+            self.grant_loot(item.clone(), 1);
+            return GearCopy::plain(item);
+        }
+        let rarity = self.roll_gear_rarity().max(floor);
+        let affix = self.roll_affix(&item);
+        let copy = GearCopy {
+            item,
+            rarity,
+            tier: 0,
+            affix,
+        };
+        self.add_copies(&copy, 1);
+        copy
+    }
+
+    /// The affix a dropping copy of `item` rolls, or `None` — see
+    /// `affixes::AffixDef`.
+    ///
+    /// **Two rolls, deliberately separate**, the shape `roll_wild_routine`
+    /// already uses: `GEAR_AFFIX_CHANCE` decides whether there is an affix
+    /// at all, and the per-affix `weight` decides which. Folding them into
+    /// one would mean *adding* an affix to the game changed how often
+    /// affixes appear, so a mod could not add content without retuning.
+    ///
+    /// Independent of the rare tier, rather than gated behind it. Rarity is
+    /// the axis you read from the row colour and affixes are the axis you
+    /// read from the name, and coupling them would mean the overwhelming
+    /// majority of drops — the ordinary ones — stayed exactly as
+    /// featureless as they were, which is the complaint the whole feature
+    /// exists to answer.
+    ///
+    /// Spends no RNG draw when the item is not equippable or the eligible
+    /// pool is empty, for the reason `grant_gear_drop` spends none on a
+    /// material: an empty `assets/affixes/` must leave every seeded run
+    /// exactly where it was, which is what makes deleting the directory a
+    /// supported way to play.
+    fn roll_affix(&mut self, item: &ItemId) -> Option<AffixId> {
+        let slot = self.equipment_of(item)?.0;
+        let pool: Vec<(AffixId, u32)> = self
+            .world
+            .resource::<AffixDb>()
+            .pool_for(slot)
+            .into_iter()
+            .map(|def| (def.id.clone(), def.weight))
+            .collect();
+        let total: u32 = pool.iter().map(|(_, w)| w).sum();
+        if total == 0 {
+            return None;
+        }
+        let mut roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            if !rng.0.random_bool(GEAR_AFFIX_CHANCE) {
+                return None;
+            }
+            rng.0.random_range(0..total)
+        };
+        for (id, weight) in pool {
+            match roll.checked_sub(weight) {
+                Some(rest) => roll = rest,
+                None => return Some(id),
+            }
+        }
+        None
+    }
+
+    /// What `affix` is, if the copy has one and the build still knows it.
+    ///
+    /// The `and_then` is the whole compatibility story for a removed affix:
+    /// a save naming one the build no longer has reads as unaffixed rather
+    /// than failing to load, the same shape `recognized_routines` gives a
+    /// removed ability. Every reader goes through here.
+    pub(crate) fn affix_of(&self, copy: &GearCopy) -> Option<&crate::affixes::AffixDef> {
+        copy.affix
+            .as_ref()
+            .and_then(|id| self.world.resource::<AffixDb>().get(id))
+    }
+
+    /// What this copy is called: its affix's decoration of the item name,
+    /// with the rare tier in front.
+    ///
+    /// **The one place a copy's name is built.** `Rarity::label` makes the
+    /// same argument for the tier word alone; this is that plus the affix,
+    /// and it is the engine's job rather than a renderer's so the inventory,
+    /// the swap picker, the trade screen and a drop line cannot come to
+    /// disagree about what a copy is called.
+    pub fn copy_name(&self, copy: &GearCopy) -> String {
+        let base = self.item_name(&copy.item);
+        let named = match self.affix_of(copy) {
+            Some(affix) => affix.decorate(base),
+            None => base.to_string(),
+        };
+        match copy.rarity.label() {
+            Some(tier) => format!("{tier} {named}"),
+            None => named,
+        }
+    }
+
+    /// How a dropped copy reads in its loot line: the tier's word, the item
+    /// name, and the category tag `item_name_tagged` adds.
+    ///
+    /// A drop line is the one place an item is named to a player who has not
+    /// opened a screen, so it is also the only place a rare tier can be
+    /// noticed at the moment it is earned — the row colour is a screen away.
+    pub(crate) fn drop_label(&self, copy: &GearCopy) -> String {
+        format!(
+            "{} [{}]",
+            self.copy_name(copy),
+            self.item_category(&copy.item).short_label()
+        )
+    }
+
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any.
     ///
@@ -87,10 +224,11 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
             };
-            if roll && self.grant_loot(item.clone(), 1) > 0 {
+            if roll {
+                let copy = self.grant_gear_drop(item, Rarity::Ordinary);
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("It also drops a {}!", self.item_name_tagged(&item)),
+                    format!("It also drops a {}!", self.drop_label(&copy)),
                 );
             }
         }
@@ -155,12 +293,11 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 pool[rng.0.random_range(0..pool.len())].clone()
             };
-            if self.grant_loot(item.clone(), 1) > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("Its crash spills a {}!", self.item_name_tagged(&item)),
-                );
-            }
+            let copy = self.grant_gear_drop(item, SURFACE_BOSS_LOOT_RARITY_FLOOR);
+            self.log_kind(
+                MessageKind::Loot,
+                format!("Its crash spills a {}!", self.drop_label(&copy)),
+            );
         }
     }
 

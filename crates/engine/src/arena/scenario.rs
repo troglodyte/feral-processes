@@ -11,7 +11,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::items::ItemId;
+use crate::affixes::AffixId;
+use crate::components::Rarity;
+use crate::items::{GearCopy, ItemId};
 use crate::species::SpeciesId;
 use crate::world::Biome;
 
@@ -109,14 +111,39 @@ impl Default for PlayerSource {
     }
 }
 
-/// An item to put on the player. `tier` is the fusion tier of the copy —
-/// gear fuses per physical copy, so a tier-blind scenario measures a
-/// different weapon from the one it names.
+/// An item to put on the player. `tier` is the fusion tier of the copy and
+/// `rarity` its rare tier — gear varies per physical copy, so a scenario
+/// blind to either measures a different weapon from the one it names.
+///
+/// Both default, so every scenario written before they existed still
+/// describes exactly the copy it always did: ordinary and unfused.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EquipSpec {
     pub item: ItemId,
     #[serde(default)]
     pub tier: u32,
+    #[serde(default)]
+    pub rarity: Rarity,
+    /// An affix by id, or none. Authorable for the same reason `rarity` is:
+    /// an affix is rolled on a *drop*, and a staged fight drops nothing, so
+    /// this is the only way to measure what one is worth.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
+}
+
+impl EquipSpec {
+    /// The copy this spec names. `arena::stage` is the one way into a
+    /// staged fight, so this is the one place a scenario's gear becomes a
+    /// `GearCopy` — the headless bin and the in-game arena screen cannot
+    /// disagree about what a scenario asked for.
+    pub fn copy(&self) -> GearCopy {
+        GearCopy {
+            item: self.item.clone(),
+            rarity: self.rarity,
+            tier: self.tier,
+            affix: self.affix.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

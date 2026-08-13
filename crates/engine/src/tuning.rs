@@ -23,7 +23,7 @@
 //! - **Simulation-only values.** `balance_sim::TURN_CAP` and the guard
 //!   constants beside it tune the offline projections, not the game.
 
-use crate::components::Stats;
+use crate::components::{Rarity, Stats};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Player baseline & progression
@@ -1079,10 +1079,10 @@ pub const WILD_CREATURE_CAP: usize = 2000;
 pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
 
 /// How often a wild spawn comes up rare, and what it's worth when it does —
-/// see `Game::roll_rarity` and `components::Rarity`. The two chances are
-/// checked against one roll in tier order, so they don't sum past 1.0 and
-/// gold is genuinely the rarer of the two rather than a second independent
-/// draw that could land on top of silver.
+/// see `Game::roll_rarity` and `components::Rarity`. The chances are checked
+/// against **one** roll in tier order, rarest first, so they can't sum past
+/// 1.0 and each tier is genuinely rarer than the one below rather than a
+/// separate draw that lands on top of it.
 ///
 /// This is a *discrete* axis deliberately laid over the continuous one:
 /// `MIN_INDIVIDUAL_ROLL`/`MAX_INDIVIDUAL_ROLL` above already give every
@@ -1091,17 +1091,44 @@ pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
 /// rather than replacing it, so a gold lands 1.44x-2.16x an ordinary spawn
 /// of the same species.
 ///
-/// Neither applies to a boss (its stats are hand-authored per `.ron`, so a
+/// None applies to a boss (its stats are hand-authored per `.ron`, so a
 /// multiplier discards the authoring) nor inside `Game::in_opening_ring`
 /// (where `balance_sim::beatable_by_a_fresh_player` guarantees a fresh
 /// player can beat one program, computed against `MAX_INDIVIDUAL_ROLL`).
 /// That second exclusion is what lets `balance_sim` stay ignorant of rarity
 /// entirely — if its curves ever move because of this, the exclusion is
 /// wrong, not the test.
+///
+/// **The top two rungs are deliberately gentler than the curve below them
+/// suggests.** Silver→gold steps by 0.3, but platinum and prismatic step by
+/// 0.2 and 0.15: a wild program's multiplier is applied to *every* stat at
+/// once, so the top of this ladder is the hardest ordinary fight in the
+/// game, and it can be rolled anywhere outside the opening ring at any
+/// player level. Continuing at 0.3 a rung puts a 2.4x-3.6x program in front
+/// of a zone-1 player who has no way to read the danger before the fight
+/// opens. Fleeing exists, and that is the intended answer to one of these —
+/// but only if the fight is survivable long enough to flee *from*.
 pub const SILVER_SPAWN_CHANCE: f64 = 0.030;
 pub const GOLD_SPAWN_CHANCE: f64 = 0.005;
+pub const PLATINUM_SPAWN_CHANCE: f64 = 0.0015;
+pub const PRISMATIC_SPAWN_CHANCE: f64 = 0.0003;
 pub const SILVER_STAT_MULT: f32 = 1.5;
 pub const GOLD_STAT_MULT: f32 = 1.8;
+pub const PLATINUM_STAT_MULT: f32 = 2.0;
+pub const PRISMATIC_STAT_MULT: f32 = 2.15;
+
+/// The least a rare tier adds to a stat an item already has, per rung —
+/// `EquipmentStats::for_rarity`'s floor, and the exact counterpart of
+/// `ITEM_FUSION_MIN_BONUS_PER_TIER`.
+///
+/// Gear ships at 1..=4 points a stat, where `SILVER_STAT_MULT`'s 1.5x
+/// rounds a 1 to 2 but leaves a 3 at 5 and a 2 at 3 — fine — while the
+/// *percentage alone* would let a future retune of `stat_mult` quietly
+/// produce a tier that changes nothing on the smallest items. The floor is
+/// what makes every rung observable on every item that has the stat at all.
+/// A stat sitting at zero stays at zero: a tier sharpens what an item does
+/// and does not hand it a new stat, which is the affix's job.
+pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
@@ -1139,6 +1166,32 @@ pub const SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT: u32 = 30;
 /// How many items a defeated surface boss draws from that band. Drawn with
 /// replacement — a thin band repeats rather than paying less.
 pub const SURFACE_BOSS_LOOT_DROPS: u32 = 2;
+
+/// The worst rare tier a **surface boss** may pay — see
+/// `Game::pay_surface_boss_gear`. Ordinary drops have no floor and roll the
+/// bare `rarity_for_roll` ladder, where a rare copy is a lucky accident.
+///
+/// A floor here rather than a bigger pile of items, because
+/// `NEST_ORPHAN_CHANCE`'s doc already fixes what each of the three faucets
+/// pays: a Stack lair boss pays progression, a surface boss pays *power*,
+/// and a nest pays roster. Paying power means the gear a surface boss drops
+/// has to be better than what the player could have picked up on the way
+/// there, and "two more of the same items" is not that — the zone band
+/// already decides which items, so the tier is the only axis left that says
+/// *this fight was worth it* rather than *this fight took longer*.
+pub const SURFACE_BOSS_LOOT_RARITY_FLOOR: Rarity = Rarity::Silver;
+
+/// How often a dropped piece of gear carries an affix — see
+/// `Game::roll_affix` and `affixes::AffixDef`.
+///
+/// Much commoner than a rare tier, and independently rolled, because the two
+/// answer different halves of the same complaint. A rare tier is the *chase*:
+/// rare enough that seeing one is an event, which at about 3.5% across the
+/// whole ladder means most drops never have one. An affix is the *variety*:
+/// at roughly one drop in five, it is what stops the other 96.5% being the
+/// same item you already have four of. Set this as rare as a tier and
+/// ordinary drops stay exactly as featureless as they were.
+pub const GEAR_AFFIX_CHANCE: f64 = 0.20;
 
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
 /// produces a Nest instead of an ordinary pack, for a species that has

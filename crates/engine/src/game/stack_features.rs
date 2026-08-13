@@ -99,10 +99,11 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
             };
-            if roll && self.grant_loot(item.clone(), 1) > 0 {
+            if roll {
+                let copy = self.grant_gear_drop(item, Rarity::Ordinary);
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("Also inside: a {}.", self.item_name(&item)),
+                    format!("Also inside: a {}.", self.drop_label(&copy)),
                 );
             }
         }

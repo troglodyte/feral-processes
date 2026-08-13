@@ -7,7 +7,7 @@
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
-use crate::items::ItemId;
+use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
 use crate::species::{AffinityClass, MoveDef};
@@ -46,19 +46,19 @@ pub enum ResearchState {
     },
 }
 
-/// One stack of cargo the player is carrying: `qty` copies of `item`, all
-/// at fusion `tier`. Tier 0 is the ordinary stack (`components::Inventory`);
-/// anything above it is a fused copy (`components::FusedGear`).
+/// One stack of cargo the player is carrying: `qty` of exactly this copy.
+/// A plain copy lives in `components::Inventory`, anything fused or rare in
+/// `components::GearCopies` — `GearCopy::is_plain` is which.
 ///
 /// A struct rather than the `(ItemId, u32)` pair this replaced, because
-/// every consumer now has to say which of two numbers it means. Changing
-/// the type instead of adding a parallel list of fused rows is the point:
-/// a screen or handler that summed across tiers would be silently wrong,
-/// and the compiler is what stops that.
+/// every consumer now has to say *which copy* it means. Changing the type
+/// instead of adding a parallel list is the point: a screen or handler that
+/// summed a fused copy together with its plain spares — or an Overclocked
+/// weapon together with an ordinary one — would be silently wrong, and the
+/// compiler is what stops that.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InventoryRow {
-    pub item: ItemId,
-    pub tier: u32,
+    pub copy: GearCopy,
     pub qty: u32,
 }
 
@@ -79,9 +79,9 @@ pub struct PlayerStatus {
     /// deals in, so it is neither an inventory row nor a sell row. Ask
     /// `Game::banked` for one by name — the research screen does.
     ///
-    /// One row per `(item, tier)`: a fused copy and its ordinary spares are
-    /// separate rows, because they are separate physical things — see
-    /// `components::FusedGear`.
+    /// One row per `GearCopy`: a fused copy, a rare one and their ordinary
+    /// spares are separate rows, because they are separate physical things
+    /// — see `components::GearCopies`.
     pub inventory: Vec<InventoryRow>,
     /// Units of ordinary cargo currently carried. The Buffer is unbounded, so
     /// this is just how much is stored. It matches the sum of `inventory`,
@@ -124,12 +124,11 @@ pub struct PlayerStatus {
 /// draw these verbatim and never compute a price of their own.
 #[derive(Clone)]
 pub struct BuybackOption {
-    pub item: ItemId,
+    /// Exactly which copy is on this row. A shelf keeps what was sold to
+    /// it, so buying a T2 back returns a T2 and buying an Overclocked one
+    /// back returns an Overclocked one — see `resources::BuybackLedger`.
+    pub copy: GearCopy,
     pub name: String,
-    /// The fusion tier of the copies on this row. A shelf keeps what was
-    /// sold to it, so buying a T2 back returns a T2 — see
-    /// `resources::BuybackLedger`.
-    pub tier: u32,
     /// How many are on the shelf — the shelf is a record of the player's own
     /// sales, so this is a hard cap on what `Game::buy_back` will hand over.
     pub qty: u32,
@@ -249,8 +248,7 @@ pub struct MarketOffer {
 /// what is sold here is gone. See `Game::sell_to_market`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct MarketSellRow {
-    pub item: ItemId,
-    pub tier: u32,
+    pub copy: GearCopy,
     pub name: String,
     pub qty: u32,
     pub unit_price: u32,
@@ -1093,6 +1091,10 @@ pub struct ManifestEquipSlot {
     pub item_name: String,
     pub gear_level: u32,
     pub fusion_tier: u32,
+    /// The rare tier of the copy actually worn — see `items::GearCopy`.
+    /// Carried beside `fusion_tier` rather than folded into it: the two are
+    /// independent, and the sheet colours by one while listing the other.
+    pub rarity: Rarity,
     pub atk: i32,
     pub def: i32,
     pub decompiler: i32,

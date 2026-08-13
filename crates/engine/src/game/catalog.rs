@@ -431,7 +431,7 @@ impl Game {
             .unwrap_or(0);
         let fused = self
             .world
-            .get::<FusedGear>(player)
+            .get::<GearCopies>(player)
             .map(|f| f.total())
             .unwrap_or(0);
         carried + fused

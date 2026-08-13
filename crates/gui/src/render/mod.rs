@@ -12,7 +12,7 @@ use feral_processes_app_core::{
     stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
-use feral_processes_engine::items::{EquipmentSlot, ItemId};
+use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId};
 use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
@@ -76,8 +76,7 @@ use party::{
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
 use routines::{
-    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch,
-    draw_routine_install,
+    draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
 };
 use stack_market::draw_stack_market;
@@ -109,6 +108,13 @@ const ORANGE: Color = Color::new(0.95, 0.55, 0.15, 1.0);
 /// bar.
 const SILVER: Color = Color::new(0.72, 0.80, 0.92, 1.0);
 const GOLD: Color = Color::new(1.0, 0.85, 0.40, 1.0);
+/// The two rungs above gold. Platinum is a cool near-white with enough blue
+/// to stay clear of `TEXT`, and prismatic a saturated violet — the only
+/// corner of the palette left once silver has taken cool-blue, gold pale-
+/// warm, `MAGENTA` the fused-and-finished slot and `CYAN` the fusable one.
+/// Pinned by `the_tier_colours_are_separable_from_their_neighbours`.
+const PLATINUM: Color = Color::new(0.62, 0.95, 0.90, 1.0);
+const PRISMATIC: Color = Color::new(0.65, 0.45, 1.0, 1.0);
 /// Thickness of the rare-tier bar the map draws along the top edge of a
 /// creature's tile — see `draw_surface_map`. Matches the breach spawn
 /// point's outline, the other overlay drawn over a glyph rather than
@@ -143,7 +149,7 @@ pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
 /// ordinary colour alone.
 ///
 /// Programs and gear both call this, because both stop at the same
-/// ceiling: `components::FusionCount` for a program, `FusedGear` (or a
+/// ceiling: `components::FusionCount` for a program, `GearCopies` (or a
 /// worn copy's `EquippedItem::fusion_tier`) for a piece of gear — see
 /// `Game::fuse_item`. One function rather than a
 /// parallel pair, so the two cannot come to mean different things.
@@ -160,24 +166,30 @@ pub(super) fn fusion_color(fusions: u32) -> Option<Color> {
     }
 }
 
-/// What colour a rare-spawn tier draws in, or `None` for an ordinary
-/// creature. Silver and gold, which is what the tiers are named after
-/// internally even though a player only ever reads Optimized/Overclocked.
+/// What colour a rare tier draws in, or `None` for an ordinary one. The
+/// variant names are colours even though a player only ever reads the
+/// compiler vocabulary — see `Rarity::label`.
 ///
 /// **The map's tile bar and every menu row call this same function**, so a
 /// program cannot read as one colour on the grid and another on its own
 /// row — the argument `fusion_color` above makes about programs and gear,
 /// applied to the two places a tier is shown.
+///
+/// Exhaustive on purpose: a rung added to `Rarity` without a colour is a
+/// compile error here rather than a tier that ships drawing as plain text,
+/// which is the failure a `_ =>` arm would hide.
 pub(super) fn rarity_color(rarity: Rarity) -> Option<Color> {
     match rarity {
         Rarity::Ordinary => None,
         Rarity::Silver => Some(SILVER),
         Rarity::Gold => Some(GOLD),
+        Rarity::Platinum => Some(PLATINUM),
+        Rarity::Prismatic => Some(PRISMATIC),
     }
 }
 
-/// The one colour rule for a program's menu row, resolving the only case
-/// where two permanent properties both want the same channel.
+/// The one colour rule for a menu row carrying both permanent tiers,
+/// resolving the only case where two of them want the same channel.
 ///
 /// **Fusion outranks rarity**, extending the chain `fusion_color`'s doc
 /// starts to `CRITICAL > fusion > rarity > plain`. The same argument
@@ -187,8 +199,13 @@ pub(super) fn rarity_color(rarity: Rarity) -> Option<Color> {
 /// knowing, not worth deciding on. A fused Overclocked program keeps the
 /// tier in its name and gives up only the colour.
 ///
-/// Gear keeps calling `fusion_color` directly, because gear has no tier.
-pub(super) fn program_color(fusions: u32, rarity: Rarity) -> Option<Color> {
+/// **Gear calls this too, as of 0.8.9.** It used to call `fusion_color`
+/// directly, on the stated grounds that "gear has no tier" — a dropped
+/// weapon now rolls exactly the same `Rarity` a wild program does, so that
+/// sentence stopped being true and this is the function both use. Sharing it
+/// is what stops a weapon and a program disagreeing about what Overclocked
+/// looks like while sharing the word.
+pub(super) fn tier_color(fusions: u32, rarity: Rarity) -> Option<Color> {
     fusion_color(fusions).or_else(|| rarity_color(rarity))
 }
 
@@ -485,7 +502,7 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow])
         .map(|(item, qty)| {
             let have = inventory
                 .iter()
-                .find(|row| &row.item == item && row.tier == 0)
+                .find(|row| &row.copy.item == item && row.copy.tier == 0)
                 .map(|row| row.qty)
                 .unwrap_or(0);
             format!("{} ({have}/{qty})", game.item_name(item))
@@ -495,13 +512,6 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow])
 
 /// The cargo row `Mode::InventoryItemAction` and `Mode::ItemDescribe` are
 /// about, as the `(item, tier)` pair both their screens take.
-fn split_pending_item(pending: &Option<(ItemId, u32)>) -> (Option<ItemId>, u32) {
-    match pending {
-        Some((item, tier)) => (Some(item.clone()), *tier),
-        None => (None, 0),
-    }
-}
-
 fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let pending_manifest = app.pending_manifest;
@@ -651,13 +661,11 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         ),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
-            let (item, fusion_tier) = split_pending_item(&pending_item);
-            draw_inventory_item_action(game, item, zone, fusion_tier, selected, painter, m)
+            draw_inventory_item_action(game, pending_item.clone(), zone, selected, painter, m)
         }
         Mode::ItemDescribe => {
             let zone = game.player_status().zone;
-            let (item, fusion_tier) = split_pending_item(&pending_item);
-            draw_item_describe(game, item, zone, fusion_tier, painter, m)
+            draw_item_describe(game, pending_item.clone(), zone, painter, m)
         }
         Mode::Companion => draw_companion_menu(game, selected, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, painter, m),
@@ -777,22 +785,22 @@ mod tests {
     #[test]
     fn fusion_outranks_rarity_in_a_menu_row() {
         assert_eq!(
-            program_color(0, Rarity::Gold),
+            tier_color(0, Rarity::Gold),
             Some(GOLD),
             "an unfused program shows its tier"
         );
         assert_eq!(
-            program_color(1, Rarity::Gold),
+            tier_color(1, Rarity::Gold),
             Some(CYAN),
             "fusion depth is the actionable read and takes the channel"
         );
         assert_eq!(
-            program_color(MAX_FUSIONS, Rarity::Silver),
+            tier_color(MAX_FUSIONS, Rarity::Silver),
             Some(MAGENTA),
             "and still does at the ceiling"
         );
         assert_eq!(
-            program_color(0, Rarity::Ordinary),
+            tier_color(0, Rarity::Ordinary),
             None,
             "an ordinary unfused program keeps the plain row colour"
         );

@@ -65,13 +65,13 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
             format!(
                 "[{}] {}  Sell {} x{} ({} {money} each)",
                 menu_shortcut(idx),
-                game.item_category(&row.item).short_label(),
+                game.item_category(&row.copy.item).short_label(),
                 row.name,
                 row.qty,
                 row.unit_price
             ),
             idx == selected,
-            row.tier,
+            row.copy.tier,
         ));
         idx += 1;
     }
@@ -85,4 +85,3 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
         m,
     );
 }
-

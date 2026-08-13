@@ -634,15 +634,17 @@ impl Game {
         slot: EquipmentSlot,
         worn: EquippedItem,
     ) -> Option<ManifestEquipSlot> {
-        let (_, base) = self.equipment_of(&worn.item)?;
-        let mods = base
-            .scaled_for_level(worn.level)
-            .fused_for_tier(worn.fusion_tier);
+        // Through `worn_bonus` rather than scaling here, so the sheet cannot
+        // quote a figure the wearer's `Stats` disagree with — this was a
+        // second copy of the chain, and the copy nobody runs is the one that
+        // drifts.
+        let mods = self.worn_bonus(&worn)?;
         Some(ManifestEquipSlot {
             slot: slot.label().to_string(),
-            item_name: self.item_name(&worn.item).to_string(),
+            item_name: self.item_name(&worn.copy.item).to_string(),
             gear_level: worn.level,
-            fusion_tier: worn.fusion_tier,
+            fusion_tier: worn.copy.tier,
+            rarity: worn.copy.rarity,
             atk: mods.atk,
             def: mods.def,
             decompiler: mods.decompiler,

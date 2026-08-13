@@ -57,7 +57,7 @@ pub(super) fn draw_trade_action_menu(
     // covers the log pane the payout is announced in.
     let purse = inventory
         .iter()
-        .find(|row| row.item == currency)
+        .find(|row| row.copy.item == currency)
         .map(|row| row.qty)
         .unwrap_or(0);
     // One line, not two with a spacer: everything above the first
@@ -69,7 +69,7 @@ pub(super) fn draw_trade_action_menu(
     ];
     let sellable: Vec<_> = inventory
         .iter()
-        .filter(|row| row.item != currency)
+        .filter(|row| row.copy.item != currency)
         .collect();
     if sellable.is_empty() {
         rows.push(text_row("(nothing to sell)"));
@@ -80,19 +80,19 @@ pub(super) fn draw_trade_action_menu(
         // reads identically on both screens — fusion tier included, since
         // that's exactly what you'd want to check before selling. A fused
         // copy is its own row here for the same reason it is there.
-        let tag = equip_preview_tag(game, &row.item, status.zone, row.tier);
+        let tag = equip_preview_tag(game, &row.copy, status.zone);
         rows.push(fusion_row(
             format!(
                 "[{}] {}  Sell {} x{}{} ({} {money} each)",
                 menu_shortcut(idx),
-                game.item_category(&row.item).short_label(),
-                game.item_name(&row.item),
+                game.item_category(&row.copy.item).short_label(),
+                game.item_name(&row.copy.item),
                 row.qty,
                 tag,
-                game.sell_price(structure, &row.item).unwrap_or(0)
+                game.sell_price(structure, &row.copy.item).unwrap_or(0)
             ),
             idx == selected,
-            row.tier,
+            row.copy.tier,
         ));
         idx += 1;
     }
@@ -101,7 +101,7 @@ pub(super) fn draw_trade_action_menu(
     for (item, cost) in &trade.buy {
         // Fusion tier 0: stock is unfused, so the tag shows what you'd get
         // buying it, not what some copy in your buffer happens to be.
-        let tag = equip_preview_tag(game, item, status.zone, 0);
+        let tag = equip_preview_tag(game, &GearCopy::plain(item.clone()), status.zone);
         rows.push(item_row(
             format!(
                 "[{}] {}  Buy {}{} ({cost} {money} each)",
@@ -122,12 +122,12 @@ pub(super) fn draw_trade_action_menu(
         rows.push(text_row(""));
         rows.push(Row::TextColored("Buy back (your sales):".to_string(), TEXT));
         for row in &buybacks {
-            let tag = equip_preview_tag(game, &row.item, status.zone, 0);
+            let tag = equip_preview_tag(game, &row.copy, status.zone);
             rows.push(item_row(
                 format!(
                     "[{}] {}  Buy back {}{} x{} ({} {money} each)",
                     menu_shortcut(idx),
-                    game.item_category(&row.item).short_label(),
+                    game.item_category(&row.copy.item).short_label(),
                     row.name,
                     tag,
                     row.qty,
@@ -223,9 +223,9 @@ pub(super) fn draw_trade_quantity_menu(
         // Priced through the engine for the same reason the buyback row
         // below is: `sell_rate` is only half a price now that an item
         // carries its own value.
-        TradeChoice::Sell(item, _) => {
-            let price = game.sell_price(structure, &item).unwrap_or(0);
-            ("Sell", item, price)
+        TradeChoice::Sell(copy) => {
+            let price = game.sell_price(structure, &copy.item).unwrap_or(0);
+            ("Sell", copy.item, price)
         }
         TradeChoice::Buy(item) => {
             let price = trade
@@ -238,14 +238,14 @@ pub(super) fn draw_trade_quantity_menu(
         }
         // Priced from the shelf row rather than from `sell_rate` here, so
         // this screen can't drift from the markup the engine charges.
-        TradeChoice::BuyBack(item, tier) => {
+        TradeChoice::BuyBack(copy) => {
             let price = game
                 .buyback_options(structure)
                 .iter()
-                .find(|row| row.item == item && row.tier == tier)
+                .find(|row| row.copy == copy)
                 .map(|row| row.unit_cost)
                 .unwrap_or(0);
-            ("Buy back", item, price)
+            ("Buy back", copy.item, price)
         }
     };
     let shown = if quantity_input.is_empty() {

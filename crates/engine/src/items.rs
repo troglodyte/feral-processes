@@ -144,6 +144,67 @@ impl ItemCategory {
     }
 }
 
+/// Which *copy* of an item this is — everything that makes two copies of the
+/// same id non-interchangeable, and nothing else.
+///
+/// Two copies with equal `GearCopy`s are genuinely the same thing and stack;
+/// two that differ are separate rows on every screen, separate rows on a
+/// trader's shelf, and separate stores in cargo. That is the whole reason
+/// this is one value rather than three parameters: **`is_plain` decides
+/// which store a copy lives in**, and `count_copies`/`take_copies`/
+/// `add_copies` all have to answer that question identically or a copy is
+/// written to one store and looked up in the other, which reads to a player
+/// as gear vanishing out of cargo.
+///
+/// It is also what makes the equip/unequip symmetry structural.
+/// `Game::apply_equipment_delta` writes a bonus straight into `Stats`, so the
+/// unequip must subtract *exactly* what the equip added; with the properties
+/// loose, a path that forgot one would subtract less and weld the difference
+/// permanently into base stats with no record of where it came from. Because
+/// `EquippedItem` stores this whole value and `Game::gear_bonus` computes
+/// from it, forgetting one is not expressible.
+///
+/// `level` is deliberately **not** here. It is a property of the moment an
+/// item was put on rather than of the copy — a copy in cargo has no level,
+/// and two copies that differ only in the level someone once wore them at
+/// are the same copy. It lives on `EquippedItem` beside this.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct GearCopy {
+    pub item: ItemId,
+    /// The rare tier this copy rolled when it dropped, `Ordinary` for
+    /// anything crafted, bought, or found before 0.8.9 — see
+    /// `Game::grant_gear_drop`.
+    #[serde(default)]
+    pub rarity: Rarity,
+    /// How many times this copy has been fused — see `Game::fuse_item`.
+    #[serde(default)]
+    pub tier: u32,
+}
+
+impl GearCopy {
+    /// An ordinary, unfused copy: what crafting, buying, and every drop
+    /// before rare tiers existed produce.
+    pub fn plain(item: ItemId) -> Self {
+        Self {
+            item,
+            rarity: Rarity::Ordinary,
+            tier: 0,
+        }
+    }
+
+    /// Whether this copy is indistinguishable from any other copy of the
+    /// same id — which is exactly the question "does it live in
+    /// `Inventory`". **The single definition**, so the three functions that
+    /// pick a store cannot drift apart; see this type's doc for what happens
+    /// if they do.
+    ///
+    /// A fourth property added to a copy joins the `&&` here and nowhere
+    /// else.
+    pub fn is_plain(&self) -> bool {
+        self.rarity == Rarity::Ordinary && self.tier == 0
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EquipmentSlot {
     Weapon,

@@ -288,8 +288,10 @@ fn an_unavailable_routine_is_refused_instead_of_opening_the_target_picker() {
         // Decompile's catalyst. Gone, the row reads "no taming catalyst",
         // which is the cheapest of the three reasons to set up.
         let _ = game.erase_item(
-            &ItemId::from(feral_processes_engine::items::ids::ICE_BREAKER),
-            0,
+            &gear(
+                &ItemId::from(feral_processes_engine::items::ids::ICE_BREAKER),
+                0,
+            ),
             99,
         );
     });
@@ -432,7 +434,7 @@ fn using_an_item_in_battle_spends_it_and_costs_the_round() {
             .player_status()
             .inventory
             .iter()
-            .find(|r| r.item == target)
+            .find(|r| r.copy.item == target)
             .map(|r| r.qty)
             .unwrap_or(0)
     };
@@ -474,7 +476,7 @@ fn shift_t_in_the_item_picker_throws_rather_than_picking_a_row() {
             .player_status()
             .inventory
             .iter()
-            .find(|r| r.item == target)
+            .find(|r| r.copy.item == target)
             .map(|r| r.qty)
             .unwrap_or(0)
     };

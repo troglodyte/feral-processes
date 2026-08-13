@@ -319,7 +319,7 @@ fn sell_item_pays_for_the_sold_quantity_and_mints_no_salvage() {
         .sell_price(market, &ItemId::from(ids::FIREWALL_PLATING))
         .unwrap();
 
-    game.sell_item(market, ItemId::from(ids::FIREWALL_PLATING), 0, 2)
+    game.sell_item(market, gear(&ItemId::from(ids::FIREWALL_PLATING), 0), 2)
         .unwrap();
 
     assert_eq!(
@@ -356,12 +356,14 @@ fn sell_item_pays_each_item_its_own_value() {
 
     give(&mut game, &plating, 1);
     let before = credits(&game);
-    game.sell_item(market, plating.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 1)
+        .unwrap();
     let plating_paid = credits(&game) - before;
 
     let before = credits(&game);
     give(&mut game, &fragment, 1);
-    game.sell_item(market, fragment.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&fragment.clone(), 0), 1)
+        .unwrap();
     let fragment_paid = credits(&game) - before;
 
     assert_eq!(plating_paid, game.item_value(&plating) * rate);
@@ -381,7 +383,7 @@ fn the_quoted_sell_price_is_what_selling_actually_pays() {
 
     let quoted = game.sell_price(market, &plating).unwrap();
     let before = credits(&game);
-    game.sell_item(market, plating, 0, 2).unwrap();
+    game.sell_item(market, gear(&plating, 0), 2).unwrap();
 
     assert_eq!(credits(&game) - before, quoted * 2);
 }
@@ -412,7 +414,7 @@ fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 4);
     }
 
-    game.sell_item(market, ItemId::from(ids::CORE_FRAGMENT), 0, 4)
+    game.sell_item(market, gear(&ItemId::from(ids::CORE_FRAGMENT), 0), 4)
         .unwrap();
 
     let unit_price = game
@@ -438,12 +440,13 @@ fn selling_stocks_the_shelf_at_double_what_the_trader_paid() {
         "a trader you have never sold to has nothing to offer back"
     );
 
-    game.sell_item(market, plating.clone(), 0, 3).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 3)
+        .unwrap();
 
     let paid = game.sell_price(market, &plating).unwrap();
     let shelf = game.buyback_options(market);
     assert_eq!(shelf.len(), 1);
-    assert_eq!(shelf[0].item, plating);
+    assert_eq!(shelf[0].copy.item, plating);
     assert_eq!(shelf[0].qty, 3, "only what the trader actually took");
     assert_eq!(shelf[0].unit_cost, paid * 2);
 }
@@ -457,7 +460,8 @@ fn the_shelf_records_what_was_taken_not_what_was_asked_for() {
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
 
-    game.sell_item(market, plating.clone(), 0, 99).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 99)
+        .unwrap();
 
     assert_eq!(game.buyback_options(market)[0].qty, 2);
 }
@@ -468,13 +472,14 @@ fn buying_back_returns_the_item_charges_double_and_empties_the_row() {
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
-    game.sell_item(market, plating.clone(), 0, 2).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 2)
+        .unwrap();
 
     let paid = game.sell_price(market, &plating).unwrap();
     give(&mut game, &ItemId::from(ids::CREDITS), paid * 4);
     let credits_before = credits(&game);
 
-    game.buy_back(market, plating.clone(), 0, 2).unwrap();
+    game.buy_back(market, gear(&plating.clone(), 0), 2).unwrap();
 
     assert_eq!(held(&game, &plating), 2, "the goods come home");
     assert_eq!(credits(&game), credits_before - paid * 4);
@@ -490,10 +495,11 @@ fn buying_back_takes_only_part_of_a_stack() {
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 5);
-    game.sell_item(market, plating.clone(), 0, 5).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 5)
+        .unwrap();
     give(&mut game, &ItemId::from(ids::CREDITS), 100);
 
-    game.buy_back(market, plating.clone(), 0, 2).unwrap();
+    game.buy_back(market, gear(&plating.clone(), 0), 2).unwrap();
 
     assert_eq!(held(&game, &plating), 2);
     assert_eq!(game.buyback_options(market)[0].qty, 3);
@@ -507,17 +513,18 @@ fn you_cannot_buy_back_more_than_you_sold() {
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     let amplifier = ItemId::from(ids::NEURAL_AMPLIFIER);
     give(&mut game, &plating, 1);
-    game.sell_item(market, plating.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 1)
+        .unwrap();
     give(&mut game, &ItemId::from(ids::CREDITS), 100);
 
-    assert!(game.buy_back(market, plating.clone(), 0, 2).is_err());
+    assert!(game.buy_back(market, gear(&plating.clone(), 0), 2).is_err());
     assert_eq!(
         game.buyback_options(market)[0].qty,
         1,
         "a refused buyback leaves the shelf alone"
     );
     assert!(
-        game.buy_back(market, amplifier, 0, 1).is_err(),
+        game.buy_back(market, gear(&amplifier, 0), 1).is_err(),
         "an item never sold here isn't on the shelf"
     );
 }
@@ -528,12 +535,13 @@ fn buying_back_without_the_credits_is_refused_and_costs_nothing() {
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
-    game.sell_item(market, plating.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 1)
+        .unwrap();
     // Buying back costs double what the sale paid, so the proceeds of a sale
     // are never enough to undo it whatever the item is worth.
     let credits_before = credits(&game);
 
-    assert!(game.buy_back(market, plating.clone(), 0, 1).is_err());
+    assert!(game.buy_back(market, gear(&plating.clone(), 0), 1).is_err());
     assert_eq!(credits(&game), credits_before);
     assert_eq!(game.buyback_options(market)[0].qty, 1);
     assert_eq!(held(&game, &plating), 0);
@@ -547,14 +555,15 @@ fn buying_back_is_barred_during_a_battle() {
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
-    game.sell_item(market, plating.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 1)
+        .unwrap();
     give(&mut game, &ItemId::from(ids::CREDITS), 100);
 
     let wild = spawn_wild_on_player_tile(&mut game);
     let player = game.player_entity();
     insert_battle(&mut game, player, vec![wild]);
 
-    assert!(game.buy_back(market, plating, 0, 1).is_err());
+    assert!(game.buy_back(market, gear(&plating, 0), 1).is_err());
 }
 
 /// The shelf is the stockroom on a site, not a property of the building, so
@@ -565,7 +574,8 @@ fn a_shelf_outlives_the_trader_standing_on_it() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
-    game.sell_item(market, plating.clone(), 0, 3).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 3)
+        .unwrap();
 
     game.world.despawn(market);
     let rebuilt = spawn_market_at(&mut game, 5, 5);
@@ -585,7 +595,8 @@ fn a_trader_rebuilt_on_a_different_tile_opens_empty() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
-    game.sell_item(market, plating.clone(), 0, 3).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 3)
+        .unwrap();
     game.world.despawn(market);
 
     let moved = spawn_market_at(&mut game, 9, 9);
@@ -603,7 +614,7 @@ fn two_traders_in_one_zone_keep_separate_shelves() {
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
 
-    game.sell_item(near, plating.clone(), 0, 2).unwrap();
+    game.sell_item(near, gear(&plating.clone(), 0), 2).unwrap();
 
     assert_eq!(game.buyback_options(near)[0].qty, 2);
     assert!(
@@ -620,7 +631,8 @@ fn another_structure_on_the_tile_inherits_nothing() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
-    game.sell_item(market, plating.clone(), 0, 2).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 2)
+        .unwrap();
     game.world.despawn(market);
 
     spawn_structure_at(&mut game, "shield", 5, 5);
@@ -644,7 +656,8 @@ fn a_breach_clears_every_shelf() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
-    game.sell_item(market, plating.clone(), 0, 3).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 3)
+        .unwrap();
     assert_eq!(game.buyback_options(market)[0].qty, 3);
 
     game.enter_next_zone();
@@ -673,10 +686,12 @@ fn a_shelf_survives_a_save_and_load_round_trip() {
     let amplifier = ItemId::from(ids::NEURAL_AMPLIFIER);
     give(&mut game, &plating, 3);
     give(&mut game, &amplifier, 1);
-    game.sell_item(standing, plating.clone(), 0, 3).unwrap();
+    game.sell_item(standing, gear(&plating.clone(), 0), 3)
+        .unwrap();
     // A shelf on a tile whose building is gone has to persist too, or the
     // rebuild-the-same-footprint rule silently stops working across a save.
-    game.sell_item(doomed, amplifier.clone(), 0, 1).unwrap();
+    game.sell_item(doomed, gear(&amplifier.clone(), 0), 1)
+        .unwrap();
     game.world.despawn(doomed);
 
     let path = std::env::temp_dir().join(format!("feral_buyback_save_{}.bin", std::process::id()));
@@ -691,12 +706,12 @@ fn a_shelf_survives_a_save_and_load_round_trip() {
     .expect("the surviving trader should load");
     let shelf = loaded.buyback_options(restored);
     assert_eq!(shelf.len(), 1);
-    assert_eq!(shelf[0].item, plating);
+    assert_eq!(shelf[0].copy.item, plating);
     assert_eq!(shelf[0].qty, 3);
 
     let rebuilt = spawn_market_at(&mut loaded, 9, 9);
     assert_eq!(
-        loaded.buyback_options(rebuilt)[0].item,
+        loaded.buyback_options(rebuilt)[0].copy.item,
         amplifier,
         "the orphaned shelf is still on its tile after a reload"
     );
@@ -710,7 +725,8 @@ fn losing_a_trader_that_holds_stock_says_so() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
-    game.sell_item(market, plating.clone(), 0, 2).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 2)
+        .unwrap();
     // `spawn_market_at` bypasses `place_structure`, so nothing raidable is
     // attached; without this `damage_structure` returns before it can act.
     game.world
@@ -763,7 +779,8 @@ fn demolishing_a_trader_that_holds_stock_says_so_too() {
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
-    game.sell_item(market, plating.clone(), 0, 2).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 2)
+        .unwrap();
 
     let before = game.world.resource::<MessageLog>().lines.len();
     game.remove_structure(market).unwrap();
@@ -808,11 +825,11 @@ fn sell_item_rejects_credits_and_items_you_dont_have() {
         .id();
 
     assert!(
-        game.sell_item(market, ItemId::from(ids::CREDITS), 0, 1)
+        game.sell_item(market, gear(&ItemId::from(ids::CREDITS), 0), 1)
             .is_err()
     );
     assert!(
-        game.sell_item(market, ItemId::from(ids::NEURAL_AMPLIFIER), 0, 1)
+        game.sell_item(market, gear(&ItemId::from(ids::NEURAL_AMPLIFIER), 0), 1)
             .is_err(),
         "can't sell what you don't have"
     );
@@ -903,7 +920,7 @@ fn a_banked_item_cannot_be_sold() {
     let before = credits(&game);
 
     let refusal = game
-        .sell_item(market, ItemId::from(ids::RESEARCH_DATA), 0, 10)
+        .sell_item(market, gear(&ItemId::from(ids::RESEARCH_DATA), 0), 10)
         .expect_err("a banked item must not be sellable");
 
     assert!(
@@ -929,21 +946,23 @@ fn selling_a_fused_copy_and_buying_it_back_returns_it_fused() {
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 5);
-    game.fuse_item(&plating, 0).unwrap();
-    game.fuse_item(&plating, 0).unwrap();
-    game.fuse_item(&plating, 1).unwrap();
+    game.fuse_item(&gear(&plating, 0)).unwrap();
+    game.fuse_item(&gear(&plating, 0)).unwrap();
+    game.fuse_item(&gear(&plating, 1)).unwrap();
     assert_eq!(held_at(&game, &plating, 2), 1);
     assert_eq!(held_at(&game, &plating, 0), 1);
 
-    game.sell_item(market, plating.clone(), 2, 1).unwrap();
-    game.sell_item(market, plating.clone(), 0, 1).unwrap();
+    game.sell_item(market, gear(&plating.clone(), 2), 1)
+        .unwrap();
+    game.sell_item(market, gear(&plating.clone(), 0), 1)
+        .unwrap();
 
     let shelf = game.buyback_options(market);
     assert_eq!(shelf.len(), 2, "the two tiers are separate shelf rows");
-    assert_eq!(shelf.iter().filter(|o| o.tier == 2).count(), 1);
+    assert_eq!(shelf.iter().filter(|o| o.copy.tier == 2).count(), 1);
 
     give(&mut game, &ItemId::from(ids::CREDITS), 100);
-    game.buy_back(market, plating.clone(), 2, 1).unwrap();
+    game.buy_back(market, gear(&plating.clone(), 2), 1).unwrap();
 
     assert_eq!(held_at(&game, &plating, 2), 1, "it comes back fused");
     assert_eq!(
@@ -1043,7 +1062,7 @@ fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
     game.world.get_mut::<Stats>(geared).unwrap().def = 2;
     let bare = spawn_tamed(&mut game, 60, 8);
     game.world.get_mut::<Stats>(bare).unwrap().def = 2;
-    game.equip(geared, &weapon, 0).unwrap();
+    game.equip(geared, &gear(&weapon, 0)).unwrap();
 
     let before = credits(&game);
     game.sell_companion(market, geared).unwrap();

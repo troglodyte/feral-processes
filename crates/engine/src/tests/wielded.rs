@@ -116,8 +116,11 @@ fn wielding_returns_the_worn_weapon_and_removes_its_bonus() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
-    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
-        .unwrap();
+    game.equip(
+        game.player_entity(),
+        &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0),
+    )
+    .unwrap();
     assert!(game.world.get::<Stats>(player).unwrap().atk > bare_atk);
 
     let program = spawn_tamed(&mut game, 40, 20);
@@ -137,7 +140,7 @@ fn wielding_returns_the_worn_weapon_and_removes_its_bonus() {
         game.player_status()
             .inventory
             .iter()
-            .any(|r| r.item == ItemId::from(ids::OVERCLOCK_CORE) && r.qty == 1),
+            .any(|r| r.copy.item == ItemId::from(ids::OVERCLOCK_CORE) && r.qty == 1),
         "the displaced item goes back to cargo rather than being destroyed"
     );
 }
@@ -150,8 +153,11 @@ fn a_wield_refused_in_battle_changes_nothing() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
-    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
-        .unwrap();
+    game.equip(
+        game.player_entity(),
+        &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0),
+    )
+    .unwrap();
     let program = spawn_tamed(&mut game, 40, 20);
     game.add_companion(program).unwrap();
     let wild = spawn_wild_on_player_tile(&mut game);
@@ -180,9 +186,11 @@ fn a_wield_refused_by_an_unequippable_weapon_leaves_the_party_alone() {
         .unwrap()
         .weapon
         .replace(EquippedItem {
-            item: ItemId::from("an_item_this_asset_set_has_never_heard_of"),
+            copy: gear(
+                &ItemId::from("an_item_this_asset_set_has_never_heard_of"),
+                0,
+            ),
             level: 1,
-            fusion_tier: 0,
         });
     let program = spawn_tamed(&mut game, 40, 20);
     game.add_companion(program).unwrap();
@@ -212,7 +220,10 @@ fn wielding_costs_one_turn_whether_or_not_it_displaces_a_weapon() {
         .unwrap()
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
     armed
-        .equip(armed.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
+        .equip(
+            armed.player_entity(),
+            &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0),
+        )
         .unwrap();
     let program = spawn_tamed(&mut armed, 40, 20);
     let before = armed.world.resource::<GameClock>().tick;
@@ -593,8 +604,11 @@ fn player_status_shows_the_wielded_program_in_place_of_a_weapon() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
-    game.equip(game.player_entity(), &ItemId::from(ids::OVERCLOCK_CORE), 0)
-        .unwrap();
+    game.equip(
+        game.player_entity(),
+        &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0),
+    )
+    .unwrap();
     let program = spawn_tamed(&mut game, 40, 60);
     set_level(&mut game, program, 4);
     game.wield_program(program).unwrap();

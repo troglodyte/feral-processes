@@ -202,7 +202,7 @@ fn a_cargo_row_sells_one_on_a_pick_and_the_stack_on_shift() {
             .map(|view| {
                 view.sells
                     .iter()
-                    .find(|row| row.item.as_str() == ids::CORE_FRAGMENT)
+                    .find(|row| row.copy.item.as_str() == ids::CORE_FRAGMENT)
                     .map(|row| row.qty)
                     .unwrap_or(0)
             })
@@ -223,7 +223,7 @@ fn a_cargo_row_sells_one_on_a_pick_and_the_stack_on_shift() {
         .unwrap()
         .sells
         .iter()
-        .position(|row| row.item.as_str() == ids::CORE_FRAGMENT)
+        .position(|row| row.copy.item.as_str() == ids::CORE_FRAGMENT)
         .expect("salvage is sellable");
     app.handle_key(GameKey::Char(menu_shortcut(offers + row)));
     assert_eq!(held(&mut app), stock - 1, "a pick sold more than one unit");

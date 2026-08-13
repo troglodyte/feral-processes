@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
-use crate::items::{EquipmentSlot, ItemId};
+use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::species::SpeciesId;
@@ -179,20 +179,26 @@ pub struct Tamed {
     pub owner: Entity,
 }
 
-/// An item sitting in an `Equipment` slot, and the gear level its stat
-/// bonus was scaled for when it was equipped (see
-/// `items::EquipmentStats::scaled_for_level`). The level is captured at
-/// equip time — like a wild program's zone-doubled stats, it doesn't
-/// retroactively change if the player breaches deeper afterward; re-equip
-/// (or unequip/re-equip) to pick up a newly unlocked level.
+/// An item sitting in an `Equipment` slot: *which copy* went on, and the
+/// gear level its stat bonus was scaled for when it did.
 ///
-/// `fusion_tier` is the tier of the individual copy that went on — see
-/// `FusedGear` and `items::EquipmentStats::fused_for_tier`.
+/// The level is captured at equip time (see
+/// `items::EquipmentStats::scaled_for_level`) — like a wild program's
+/// zone-scaled stats, it doesn't retroactively change if the player breaches
+/// deeper afterward; re-equip to pick up a newly unlocked level. That is
+/// exactly why it sits *beside* `GearCopy` rather than inside it: the level
+/// is a property of the moment, not of the copy, and a copy back in cargo
+/// has no level at all.
+///
+/// **Storing the copy whole is what keeps the bonus symmetric.**
+/// `Game::apply_equipment_delta` writes the bonus into `Stats`, so the
+/// unequip has to subtract precisely what the equip added; every property
+/// that scales it lives in this one value, so a path cannot subtract a
+/// bonus computed from fewer properties than it added. See `GearCopy`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EquippedItem {
-    pub item: ItemId,
+    pub copy: GearCopy,
     pub level: u32,
-    pub fusion_tier: u32,
 }
 
 /// What's currently equipped in each slot, on the player or on any program
@@ -248,77 +254,71 @@ pub struct Inventory {
 #[derive(Component, Default, Clone)]
 pub struct Routines(pub Vec<AbilityId>);
 
-/// Player-only: the gear the player has fused, one row per `(item, tier)`
-/// — see `Game::fuse_item`. A fusion produces one stronger *physical copy*
-/// (consuming `crate::tuning::ITEM_FUSION_COST` copies at the tier below
-/// it), so a fused copy lives here while its ordinary spares stay in
-/// `Inventory`.
+/// Player-only: every carried copy of gear that is *not* interchangeable
+/// with a plain one, a row per `(GearCopy, qty)`. A copy earns a place here
+/// by having been fused (`Game::fuse_item`) or by having dropped at a rare
+/// tier (`Game::grant_gear_drop`) — `GearCopy::is_plain` is the predicate,
+/// and it is the only thing that decides.
 ///
-/// **`Inventory` is by definition the tier-0 store**, and that is the seam
-/// that keeps this out of the production chain entirely: recipes, `Stock`,
-/// `assembler_system`, hauling and banking read `Inventory` and therefore
-/// cannot encounter a fused copy, so none of them needs a tier rule. Tier
-/// here is always >= 1.
+/// **`Inventory` is by definition the plain-copy store**, and that is the
+/// seam that keeps this out of the production chain entirely: recipes,
+/// `Stock`, `assembler_system`, hauling and banking read `Inventory` and
+/// therefore cannot encounter a special copy, so none of them needs a tier
+/// or rarity rule. That was true of fusion alone and stays true now that a
+/// copy has two ways to be special — which is the whole reason rarity was
+/// added as a property of the *copy* rather than of the item.
 ///
-/// Keyed by value rather than by position. Two copies of the same item at
-/// the same tier are genuinely interchangeable, so an index would identify
-/// nothing the pair does not — and it would be the positional-index trap
+/// Keyed by value rather than by position. Two copies with equal
+/// `GearCopy`s are genuinely interchangeable, so an index would identify
+/// nothing the key does not — and it would be the positional-index trap
 /// `BattleState::planned` documents, for no gain.
 ///
-/// `EquippedItem::fusion_tier` is the same fact for a copy that is worn
-/// rather than carried; this ledger agrees with it rather than shadowing
-/// it, which is what the per-`ItemId` predecessor got wrong.
+/// `EquippedItem` holds the same key for a copy that is worn rather than
+/// carried; this ledger agrees with it rather than shadowing it, which is
+/// what the per-`ItemId` predecessor got wrong.
 #[derive(Component, Default, Clone)]
-pub struct FusedGear {
-    pub copies: Vec<(ItemId, u32, u32)>,
+pub struct GearCopies {
+    pub copies: Vec<(GearCopy, u32)>,
 }
 
-impl FusedGear {
-    pub fn add(&mut self, item: ItemId, tier: u32, qty: u32) {
+impl GearCopies {
+    pub fn add(&mut self, copy: GearCopy, qty: u32) {
         // Saturating for the reason `Inventory::add` is.
-        if let Some(row) = self
-            .copies
-            .iter_mut()
-            .find(|(i, t, _)| *i == item && *t == tier)
-        {
-            row.2 = row.2.saturating_add(qty);
+        if let Some(row) = self.copies.iter_mut().find(|(c, _)| *c == copy) {
+            row.1 = row.1.saturating_add(qty);
         } else {
-            self.copies.push((item, tier, qty));
+            self.copies.push((copy, qty));
         }
     }
 
-    pub fn count(&self, item: &ItemId, tier: u32) -> u32 {
+    pub fn count(&self, copy: &GearCopy) -> u32 {
         self.copies
             .iter()
-            .find(|(i, t, _)| i == item && *t == tier)
-            .map(|(_, _, q)| *q)
+            .find(|(c, _)| c == copy)
+            .map(|(_, q)| *q)
             .unwrap_or(0)
     }
 
-    /// Removes up to `qty` copies of `item` at `tier`, returning how many
-    /// were actually removed. Drops the row at zero for the reason
-    /// `Inventory::take` does — every screen lists these rows.
-    pub fn take(&mut self, item: &ItemId, tier: u32, qty: u32) -> u32 {
-        let Some(pos) = self
-            .copies
-            .iter()
-            .position(|(i, t, _)| i == item && *t == tier)
-        else {
+    /// Removes up to `qty` of `copy`, returning how many were actually
+    /// removed. Drops the row at zero for the reason `Inventory::take`
+    /// does — every screen lists these rows.
+    pub fn take(&mut self, copy: &GearCopy, qty: u32) -> u32 {
+        let Some(pos) = self.copies.iter().position(|(c, _)| c == copy) else {
             return 0;
         };
-        let taken = self.copies[pos].2.min(qty);
-        self.copies[pos].2 -= taken;
-        if self.copies[pos].2 == 0 {
+        let taken = self.copies[pos].1.min(qty);
+        self.copies[pos].1 -= taken;
+        if self.copies[pos].1 == 0 {
             self.copies.remove(pos);
         }
         taken
     }
 
-    /// Every fused copy held, for the cargo total. Fused gear is carried
-    /// like anything else, so it counts against the Buffer figure the
-    /// player reads.
+    /// Every special copy held, for the cargo total. These are carried like
+    /// anything else, so they count against the Buffer figure the player
+    /// reads.
     pub fn total(&self) -> u32 {
-        self.copies.iter().map(|(_, _, qty)| *qty).sum()
+        self.copies.iter().map(|(_, qty)| *qty).sum()
     }
 }
 

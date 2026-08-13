@@ -58,7 +58,7 @@ fn spending_the_highlighted_upgrade_does_not_leave_the_highlight_on_another_one(
             .player_status()
             .inventory
             .iter()
-            .find(|r| r.item.as_str() == item)
+            .find(|r| r.copy.item.as_str() == item)
             .map(|r| r.qty)
             .unwrap_or(0)
     };
@@ -129,7 +129,7 @@ fn a_refused_refactor_reports_why_and_spends_nothing() {
         .player_status()
         .inventory
         .iter()
-        .find(|r| r.item.as_str() == "recompile_kernel")
+        .find(|r| r.copy.item.as_str() == "recompile_kernel")
         .map(|r| r.qty)
         .unwrap_or(0);
     assert_eq!(kernels, 1, "a refused refactor spends nothing");

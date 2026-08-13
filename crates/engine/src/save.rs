@@ -3,7 +3,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::components::{ActiveFieldBuff, EquippedItem, Rarity};
+use crate::components::{ActiveFieldBuff, Rarity};
+use crate::items::GearCopy;
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
@@ -27,23 +28,53 @@ pub struct PlayerSave {
     pub weapon: Option<ItemId>,
     /// Gear level `weapon` was equipped at — see `components::EquippedItem`.
     pub weapon_level: u32,
-    /// Fusion tier `weapon` was equipped at — see `components::EquippedItem`.
+    /// Fusion tier `weapon` was equipped at — see `items::GearCopy`.
     pub weapon_fusion_tier: u32,
+    /// Rare tier of the worn `weapon` — see `items::GearCopy`. Additive
+    /// behind `#[serde(default)]`, like its two siblings below: a save
+    /// written before gear had rare tiers loads with ordinary gear, which is
+    /// what it had.
+    #[serde(default)]
+    pub weapon_rarity: Rarity,
     pub armor: Option<ItemId>,
     pub armor_level: u32,
     pub armor_fusion_tier: u32,
+    #[serde(default)]
+    pub armor_rarity: Rarity,
     pub module: Option<ItemId>,
     pub module_level: u32,
     pub module_fusion_tier: u32,
+    #[serde(default)]
+    pub module_rarity: Rarity,
     /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
     /// Which perks have been bought, and at what level (see
     /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
-    /// Every fused copy of gear the player is carrying, as
-    /// `(item, tier, qty)` — see `components::FusedGear`. Unfused copies
-    /// are in `inventory`, which is the tier-0 store.
+    /// **Legacy, read-only, and on its way out.** Fused copies as
+    /// `(item, tier, qty)`, which is how they were stored up to v29.
+    ///
+    /// A copy now carries a rare tier as well as a fusion tier, and this is
+    /// a *positional* tuple — RON matches those by exact arity and refuses a
+    /// widened one, so the property could not be added here. (It also cannot
+    /// be turned into a named struct with defaulted trailing fields: RON
+    /// parses `(` in a struct position as the start of named fields and
+    /// raises `ExpectedIdentifier` at the first element rather than falling
+    /// through to serde's `visit_seq`. Measured — see
+    /// `a_v29_save_still_loads_its_gear_after_the_new_field_lands`.)
+    ///
+    /// So `gear_copies` below supersedes it and `Game::load` drains this
+    /// into that. `skip_serializing_if` means a save written from here on
+    /// does not contain the key at all, and since nothing sets
+    /// `deny_unknown_fields`, **this field can simply be deleted a release
+    /// later** — no migration, no version bump.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fused_gear: Vec<(ItemId, u32, u32)>,
+    /// Every carried copy of gear that is not interchangeable with a plain
+    /// one, as `(copy, qty)` — see `components::GearCopies`. Plain copies
+    /// are in `inventory`, which is the plain-copy store.
+    #[serde(default)]
+    pub gear_copies: Vec<(GearCopy, u32)>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -199,7 +230,34 @@ pub struct CreatureSave {
     /// here for the field-named RON that `savetool dump`/`pack` round-trips
     /// through, which is the migration path.
     #[serde(default)]
-    pub equipment: Vec<(EquipmentSlot, EquippedItem)>,
+    pub equipment: Vec<(EquipmentSlot, EquippedItemSave)>,
+}
+
+/// A worn item on disk. Deliberately **not** `components::EquippedItem`,
+/// which it used to be.
+///
+/// That component now nests its `items::GearCopy` (so a bonus cannot be
+/// applied and un-applied from different property sets), and nesting is a
+/// shape change RON cannot absorb: a v29 row reads
+/// `(item: "arc_lance", level: 2, fusion_tier: 1)`, and against the nested
+/// form the required `copy` field is simply absent, which is a load failure
+/// rather than a defaulted field. Keeping the *save's* shape flat makes
+/// rarity an ordinary additive field here, and costs one conversion each
+/// way in `Game::save`/`Game::load`.
+///
+/// This is also what `PlayerSave` has always done — its equipment is nine
+/// flat fields rather than the component — so the two halves of the save
+/// now agree rather than one of them shadowing a live type.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EquippedItemSave {
+    pub item: ItemId,
+    pub level: u32,
+    pub fusion_tier: u32,
+    /// The rare tier of the copy worn — see `items::GearCopy`. Additive
+    /// behind `#[serde(default)]`, so a save written before gear had rare
+    /// tiers loads with every worn copy ordinary, which is what it was.
+    #[serde(default)]
+    pub rarity: Rarity,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -267,8 +325,19 @@ pub struct StructureSave {
 }
 
 /// One trading post's buyback shelf on disk: the trader kind and tile that
-/// key it, then what is on it — see `SaveData::buyback`.
+/// key it, then what is on it — see `SaveData::buyback_shelves`.
 pub type BuybackShelfSave = (
+    crate::structures::StructureId,
+    (i32, i32),
+    Vec<(GearCopy, u32)>,
+);
+
+/// The pre-0.8.9 shelf shape, whose rows are positional `(item, tier, qty)`
+/// triples. Read-only, and superseded by `BuybackShelfSave` for exactly the
+/// reason `PlayerSave::fused_gear` is — see that field's doc for the
+/// measured RON behaviour that forces a new field rather than a widened
+/// one. The two go away together.
+pub type LegacyBuybackShelfSave = (
     crate::structures::StructureId,
     (i32, i32),
     Vec<(ItemId, u32, u32)>,
@@ -299,7 +368,17 @@ pub struct SaveData {
     /// whose `BTreeMap` this is the flattened, key-ordered form of. Not part
     /// of `StructureSave` because a shelf outlives its building and can sit
     /// on a tile holding nothing at all.
-    pub buyback: Vec<BuybackShelfSave>,
+    ///
+    /// **Legacy, read-only, drained by `Game::load` into `buyback_shelves`.**
+    /// See `PlayerSave::fused_gear`, which is the same situation and carries
+    /// the reasoning; these two fields are the whole cost of gear rarity
+    /// landing without a save-format bump, and both can be deleted in one
+    /// later release with no migration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub buyback: Vec<LegacyBuybackShelfSave>,
+    /// Every trading post's buyback shelf — see `resources::BuybackLedger`.
+    #[serde(default)]
+    pub buyback_shelves: Vec<BuybackShelfSave>,
     /// Which research nodes have been unlocked — see `research::ResearchDb`.
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
@@ -383,7 +462,7 @@ pub struct SaveData {
 /// 23 → 24: `CreatureSave` gained `carrying`, for a program mid-delivery to
 /// a depot (`components::Carrying`).
 /// 24 → 25: gear fuses per physical copy, so `PlayerSave` carries
-/// `FusedGear`'s `(item, tier, qty)` rows and every entry point naming an
+/// `GearCopies`'s `(item, tier, qty)` rows and every entry point naming an
 /// item names a tier beside it. Backfilled — this bump shipped undocumented.
 /// 25 → 26: `CreatureSave` gained `rarity`, the rare-spawn tier
 /// (`components::Rarity`).
@@ -600,13 +679,17 @@ mod tests {
                 weapon: None,
                 weapon_level: 1,
                 weapon_fusion_tier: 0,
+                weapon_rarity: Rarity::Ordinary,
                 armor: None,
                 armor_level: 1,
                 armor_fusion_tier: 0,
+                armor_rarity: Rarity::Ordinary,
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
+                module_rarity: Rarity::Ordinary,
                 fused_gear: Vec::new(),
+                gear_copies: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 routines: Vec::new(),
@@ -619,6 +702,7 @@ mod tests {
             zone: 1,
             spawn_point: (0, 0),
             buyback: Vec::new(),
+            buyback_shelves: Vec::new(),
             researched: Vec::new(),
             known_routines: Vec::new(),
             link_sites: Vec::new(),

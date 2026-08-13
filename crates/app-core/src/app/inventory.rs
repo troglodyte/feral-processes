@@ -22,9 +22,9 @@ impl App {
             let row = inventory
                 .get(self.menu_selected.saturating_sub(3))
                 .filter(|_| self.menu_selected >= 3)
-                .map(|row| (row.item.clone(), row.tier));
-            if let Some((item, tier)) = row {
-                self.quick_sell_from_inventory(item, tier);
+                .map(|row| row.copy.clone());
+            if let Some(copy) = row {
+                self.quick_sell_from_inventory(copy);
             }
             return;
         }
@@ -43,7 +43,7 @@ impl App {
             return;
         }
         if let Some(row) = inventory.get(idx - 3) {
-            self.pending_inventory_item = Some((row.item.clone(), row.tier));
+            self.pending_inventory_item = Some(row.copy.clone());
             self.mode = Mode::InventoryItemAction;
         }
     }
@@ -119,7 +119,7 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         let outcome = match &choices[idx] {
-            SwapChoice::Equip(item, tier) => game.equip(wearer, item, *tier).err(),
+            SwapChoice::Equip(copy) => game.equip(wearer, copy).err(),
             SwapChoice::Unequip => game.unequip(wearer, slot).err(),
         };
         self.status_line = outcome;
@@ -133,7 +133,7 @@ impl App {
     /// goods can be bought back. Rather than pick a shop on the player's
     /// behalf it opens the existing picker with the item already decided,
     /// which is the `TradeOrigin::Inventory` path.
-    fn quick_sell_from_inventory(&mut self, item: ItemId, tier: u32) {
+    fn quick_sell_from_inventory(&mut self, copy: GearCopy) {
         let Some(game) = &mut self.game else { return };
         let traders = traders_in_range(game);
         match traders.as_slice() {
@@ -143,10 +143,10 @@ impl App {
             }
             [only] => {
                 let structure = *only;
-                self.execute_trade(structure, TradeChoice::Sell(item, tier), 1);
+                self.execute_trade(structure, TradeChoice::Sell(copy), 1);
             }
             _ => {
-                self.pending_trade_choice = Some(TradeChoice::Sell(item, tier));
+                self.pending_trade_choice = Some(TradeChoice::Sell(copy));
                 self.trade_origin = TradeOrigin::Inventory;
                 self.mode = Mode::Trade;
             }
@@ -159,7 +159,7 @@ impl App {
             self.mode = Mode::Inventory;
             return;
         }
-        let Some((item, tier)) = self.pending_inventory_item.clone() else {
+        let Some(copy) = self.pending_inventory_item.clone() else {
             self.mode = Mode::Inventory;
             return;
         };
@@ -168,7 +168,7 @@ impl App {
                 self.mode = Mode::Inventory;
                 return;
             };
-            inventory_item_actions(game, &item)
+            inventory_item_actions(game, &copy.item)
                 .into_iter()
                 .map(|(k, _)| k)
                 .collect()
@@ -180,14 +180,14 @@ impl App {
                 _ => None,
             });
         if idx.map(|i| actions[i]) == Some('x') {
-            self.pending_erase = Some((item, tier));
+            self.pending_erase = Some(copy);
             self.erase_quantity_input.clear();
             self.mode = Mode::EraseQuantity;
             self.pending_inventory_item = None;
             return;
         }
         if idx.map(|i| actions[i]) == Some('s') {
-            self.begin_sale_from_inventory(item, tier);
+            self.begin_sale_from_inventory(copy);
             return;
         }
         if idx.map(|i| actions[i]) == Some('d') {
@@ -198,7 +198,7 @@ impl App {
         }
         if idx.map(|i| actions[i]) == Some('c') {
             let Some(game) = &mut self.game else { return };
-            game.use_item(&item);
+            game.use_item(&copy.item);
             self.status_line = None;
             self.pending_inventory_item = None;
             self.mode = Mode::Inventory;
@@ -211,8 +211,8 @@ impl App {
         // report a refusal on the status line.
         let wearer = game.player_entity();
         let outcome = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(wearer, &item, tier).err()),
-            Some('u') => Some(match game.fuse_item(&item, tier) {
+            Some('e') => Some(game.equip(wearer, &copy).err()),
+            Some('u') => Some(match game.fuse_item(&copy) {
                 Ok(msg) => Some(msg),
                 Err(e) => Some(e),
             }),
@@ -234,7 +234,7 @@ impl App {
     /// (`inventory_item_actions`), so the empty case is unreachable from
     /// the menu and falls back to the inventory rather than inventing an
     /// error for it.
-    fn begin_sale_from_inventory(&mut self, item: ItemId, tier: u32) {
+    fn begin_sale_from_inventory(&mut self, copy: GearCopy) {
         let Some(game) = &mut self.game else { return };
         let posts: Vec<_> = game
             .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
@@ -242,7 +242,7 @@ impl App {
             .filter(|e| e.can_trade)
             .collect();
         self.trade_origin = TradeOrigin::Inventory;
-        self.pending_trade_choice = Some(TradeChoice::Sell(item, tier));
+        self.pending_trade_choice = Some(TradeChoice::Sell(copy));
         self.trade_quantity_input.clear();
         match posts.as_slice() {
             [] => {
@@ -266,7 +266,7 @@ impl App {
     /// destroy. `[A]` erases the whole stack, matching the pre-cap
     /// behavior. An empty input on Enter means 1.
     pub(crate) fn handle_erase_quantity_key(&mut self, key: GameKey) {
-        let Some((item, tier)) = self.pending_erase.clone() else {
+        let Some(copy) = self.pending_erase.clone() else {
             self.mode = Mode::Inventory;
             return;
         };
@@ -277,7 +277,7 @@ impl App {
                 g.player_status()
                     .inventory
                     .iter()
-                    .find(|r| r.item == item && r.tier == tier)
+                    .find(|r| r.copy == copy)
                     .map(|r| r.qty)
                     .unwrap_or(0)
             })
@@ -295,7 +295,7 @@ impl App {
                 self.erase_quantity_input.push(c);
             }
             GameKey::Char('a') | GameKey::Char('A') => {
-                self.commit_erase(item, tier, stack_qty);
+                self.commit_erase(copy, stack_qty);
             }
             GameKey::Enter => {
                 let quantity: u32 = if self.erase_quantity_input.is_empty() {
@@ -303,7 +303,7 @@ impl App {
                 } else {
                     self.erase_quantity_input.parse().unwrap_or(0)
                 };
-                self.commit_erase(item, tier, quantity);
+                self.commit_erase(copy.clone(), quantity);
             }
             _ => {}
         }
@@ -312,7 +312,7 @@ impl App {
     /// Calls `Game::erase_item` and returns to the inventory screen. A
     /// quantity of 0 is a silent no-op rather than a round-trip to the
     /// engine for an error, matching `commit_craft`.
-    fn commit_erase(&mut self, item: ItemId, tier: u32, quantity: u32) {
+    fn commit_erase(&mut self, copy: GearCopy, quantity: u32) {
         self.pending_erase = None;
         self.erase_quantity_input.clear();
         self.mode = Mode::Inventory;
@@ -320,7 +320,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.erase_item(&item, tier, quantity) {
+            match game.erase_item(&copy, quantity) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }

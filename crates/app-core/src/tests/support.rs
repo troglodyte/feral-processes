@@ -632,3 +632,15 @@ pub(crate) fn app_inside_a_small_base(seed: u32, underground: bool) -> App {
     app.mode = Mode::Playing;
     app
 }
+
+/// A carried copy of `item` at fusion `tier`, ordinary rare tier — the
+/// app-core twin of the engine's test helper of the same name, and here for
+/// the same reason: the screens and handlers now name a whole
+/// `items::GearCopy`, and almost every test means the plain one.
+pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
+    GearCopy {
+        item: item.clone(),
+        rarity: Rarity::Ordinary,
+        tier,
+    }
+}

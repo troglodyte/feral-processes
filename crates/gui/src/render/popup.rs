@@ -134,7 +134,7 @@ pub(super) fn fusion_row(s: impl Into<String>, selected: bool, fusions: u32) -> 
 }
 
 /// `fusion_row` for a *program*, which unlike a piece of gear can also carry
-/// a rare-spawn tier. `program_color` is what decides between the two when
+/// a rare-spawn tier. `tier_color` is what decides between the two when
 /// a program has both; this is only the row-building half, and the same
 /// "one function so no menu grows its own idea" rule applies.
 pub(super) fn program_row(
@@ -143,7 +143,7 @@ pub(super) fn program_row(
     fusions: u32,
     rarity: Rarity,
 ) -> Row {
-    match program_color(fusions, rarity) {
+    match tier_color(fusions, rarity) {
         Some(color) => colored_item_row(s, selected, color),
         None => item_row(s, selected),
     }

@@ -349,7 +349,7 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
     let weapon = ItemId::from(ids::OVERCLOCK_CORE);
     stock(&mut game, ids::OVERCLOCK_CORE, 1);
     let before_gear = stats(&game, pet);
-    game.equip(pet, &weapon, 0).unwrap();
+    game.equip(pet, &gear(&weapon, 0)).unwrap();
 
     game.refactor_companion(pet, &ItemId::from(KERNEL)).unwrap();
     game.unequip(pet, EquipmentSlot::Weapon).unwrap();

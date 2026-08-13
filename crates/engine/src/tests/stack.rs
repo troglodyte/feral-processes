@@ -4298,12 +4298,12 @@ fn selling_to_a_market_leaves_no_buyback_shelf() {
         .unwrap()
         .add(salvage.clone(), 6);
     let before = credits(&game);
-    let stock = game.count_copies(&salvage, 0);
+    let stock = game.count_copies(&gear(&salvage, 0));
 
-    game.sell_to_market(salvage.clone(), 0, 4).unwrap();
+    game.sell_to_market(gear(&salvage.clone(), 0), 4).unwrap();
 
     assert_eq!(
-        game.count_copies(&salvage, 0),
+        game.count_copies(&gear(&salvage, 0)),
         stock - 4,
         "four should have gone"
     );

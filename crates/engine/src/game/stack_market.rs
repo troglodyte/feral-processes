@@ -299,13 +299,12 @@ impl Game {
         self.player_status()
             .inventory
             .iter()
-            .filter(|row| row.item != currency && !self.is_banked(&row.item))
+            .filter(|row| row.copy.item != currency && !self.is_banked(&row.copy.item))
             .map(|row| MarketSellRow {
-                name: self.item_name(&row.item).to_string(),
-                item: row.item.clone(),
-                tier: row.tier,
+                name: self.item_name(&row.copy.item).to_string(),
+                copy: row.copy.clone(),
                 qty: row.qty,
-                unit_price: self.market_unit_price(&row.item),
+                unit_price: self.market_unit_price(&row.copy.item),
             })
             .collect()
     }
@@ -447,7 +446,8 @@ impl Game {
     /// down here has none of those — no entity, no surface, and no memory of
     /// the transaction. What the two do share is the one thing that must not
     /// drift, `Game::item_value`, which both reach through.
-    pub fn sell_to_market(&mut self, item: ItemId, tier: u32, qty: u32) -> Result<(), String> {
+    pub fn sell_to_market(&mut self, copy: GearCopy, qty: u32) -> Result<(), String> {
+        let item = copy.item.clone();
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -468,7 +468,7 @@ impl Game {
         if self.is_banked(&item) {
             return Err(format!("{} can't be traded.", self.item_name(&item)));
         }
-        let have = self.count_copies(&item, tier);
+        let have = self.count_copies(&copy);
         if have == 0 {
             return Err(format!("You don't have any {}.", self.item_name(&item)));
         }
@@ -476,7 +476,7 @@ impl Game {
         let payout = self.market_unit_price(&item) * taken;
         let name = self.item_name(&item).to_string();
         let money = self.item_name(&currency).to_string();
-        self.take_copies(&item, tier, taken);
+        self.take_copies(&copy, taken);
         self.world
             .get_mut::<Inventory>(self.player_entity())
             .unwrap()

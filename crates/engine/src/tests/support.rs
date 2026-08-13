@@ -1388,7 +1388,7 @@ pub(super) fn spawn_pursuing_guardian(
 }
 
 /// How many copies of `item` at fusion `tier` the player is carrying —
-/// `Inventory` at tier 0, `FusedGear` above it, the same split
+/// `Inventory` at tier 0, `GearCopies` above it, the same split
 /// `Game::count_copies` makes.
 ///
 /// Reads the stores rather than `PlayerStatus::inventory` on purpose: that
@@ -1396,15 +1396,33 @@ pub(super) fn spawn_pursuing_guardian(
 /// Research Data and read as a payout bug.
 pub(super) fn held_at(game: &Game, item: &ItemId, tier: u32) -> u32 {
     let player = game.player_entity();
-    if tier == 0 {
+    let copy = gear(item, tier);
+    if copy.is_plain() {
         game.world
             .get::<Inventory>(player)
             .map(|inv| inv.count(item))
             .unwrap_or(0)
     } else {
         game.world
-            .get::<FusedGear>(player)
-            .map(|f| f.count(item, tier))
+            .get::<GearCopies>(player)
+            .map(|f| f.count(&copy))
             .unwrap_or(0)
+    }
+}
+
+/// A carried copy of `item` at fusion `tier`, ordinary rare tier — what a
+/// gear test means when it says "a copy" unless it is specifically testing
+/// rare tiers.
+///
+/// Exists so the ~90 call sites that used to pass `(&item, tier)` as two
+/// loose arguments keep reading the same way now that `items::GearCopy` is
+/// the unit. A test that *is* about rare tiers builds the struct directly,
+/// which makes those cases stand out on the page rather than hiding behind
+/// a defaulted parameter.
+pub fn gear(item: &ItemId, tier: u32) -> GearCopy {
+    GearCopy {
+        item: item.clone(),
+        rarity: Rarity::Ordinary,
+        tier,
     }
 }

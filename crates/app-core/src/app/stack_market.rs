@@ -66,7 +66,7 @@ impl App {
             match row {
                 Some(MarketRow::Sell(i)) => {
                     let row = &view.sells[i];
-                    self.sell_to_market(row.item.clone(), row.tier, row.qty);
+                    self.sell_to_market(row.copy.clone(), row.qty);
                 }
                 Some(MarketRow::Offer(_)) => {
                     self.status_line = Some("That's theirs — pick it to buy it.".to_string())
@@ -89,7 +89,7 @@ impl App {
             }
             Some(MarketRow::Sell(i)) => {
                 let row = &view.sells[i];
-                self.sell_to_market(row.item.clone(), row.tier, 1);
+                self.sell_to_market(row.copy.clone(), 1);
             }
             None => {}
         }
@@ -111,9 +111,9 @@ impl App {
         self.close_if_bought_out();
     }
 
-    fn sell_to_market(&mut self, item: ItemId, tier: u32, qty: u32) {
+    fn sell_to_market(&mut self, copy: GearCopy, qty: u32) {
         let Some(game) = &mut self.game else { return };
-        match game.sell_to_market(item, tier, qty) {
+        match game.sell_to_market(copy, qty) {
             Ok(()) => self.status_line = None,
             Err(e) => self.status_line = Some(e),
         }

@@ -770,6 +770,7 @@ impl App {
                 ArenaPickKind::EquipItem(_) => s.equip.push(EquipSpec {
                     item: ItemId::from(id.as_str()),
                     tier: 0,
+                    rarity: Rarity::Ordinary,
                 }),
                 ArenaPickKind::InventoryItem(Some(i)) if i < s.inventory.len() => {
                     s.inventory[i].item = ItemId::from(id.as_str())

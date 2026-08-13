@@ -45,14 +45,14 @@ use battle::{
 use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BuffKind, BuffSource, Carrying,
     CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem, Experience,
-    FieldBuff, FieldBuffKind, FusedGear, FusionCount, Glyph, GlyphColor, Hostile, Inventory,
+    FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile, Inventory,
     MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position, Potential,
     PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, Stats,
     StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Tamed, Task,
     TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::stack_view::ExamineDir;
-use items::{EquipmentSlot, EquipmentStats, ItemCategory, ItemId, ids};
+use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};
 pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};

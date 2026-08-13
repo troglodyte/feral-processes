@@ -43,13 +43,13 @@ fn a_banked_item_is_not_an_inventory_row() {
     assert!(
         !listed
             .iter()
-            .any(|r| r.item == ItemId::from(ids::RESEARCH_DATA)),
+            .any(|r| r.copy.item == ItemId::from(ids::RESEARCH_DATA)),
         "a bank is not cargo and must not be listed: {listed:?}"
     );
     assert!(
         listed
             .iter()
-            .any(|r| r.item == ItemId::from(ids::CORE_FRAGMENT)),
+            .any(|r| r.copy.item == ItemId::from(ids::CORE_FRAGMENT)),
         "ordinary cargo must be untouched by that filter: {listed:?}"
     );
 }

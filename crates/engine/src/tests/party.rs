@@ -1550,7 +1550,7 @@ fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
 
     let a = spawn_tamed(&mut game, 20, 10);
     let b = spawn_tamed(&mut game, 10, 6);
-    game.equip(a, &weapon, 0).unwrap();
+    game.equip(a, &gear(&weapon, 0)).unwrap();
     let before = tamed(&mut game);
     game.fuse_companions(a, b, None).unwrap();
     let geared_child = *tamed(&mut game)

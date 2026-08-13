@@ -40,13 +40,13 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
 
             for row in &scenario.inventory {
                 known_item(&game, &row.item)?;
-                game.add_copies(&row.item, 0, row.qty);
+                game.add_copies(&GearCopy::plain(row.item.clone()), row.qty);
             }
             for row in &scenario.equip {
                 known_item(&game, &row.item)?;
-                game.add_copies(&row.item, row.tier, 1);
+                game.add_copies(&row.copy(), 1);
                 let player = game.player_entity();
-                game.equip(player, &row.item, row.tier)
+                game.equip(player, &row.copy())
                     .map_err(|e| format!("equip `{}`: {e}", row.item.as_str()))?;
             }
             for row in &scenario.party {
@@ -57,8 +57,8 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                 // After the join: `Game::equip` checks the wearer is owned.
                 for gear in &row.equip {
                     known_item(&game, &gear.item)?;
-                    game.add_copies(&gear.item, gear.tier, 1);
-                    game.equip(program, &gear.item, gear.tier).map_err(|e| {
+                    game.add_copies(&gear.copy(), 1);
+                    game.equip(program, &gear.copy()).map_err(|e| {
                         format!("equip `{}` on `{}`: {e}", gear.item.as_str(), row.species)
                     })?;
                 }
@@ -209,6 +209,7 @@ mod tests {
         s.equip = vec![EquipSpec {
             item: item.clone(),
             tier: 2,
+            rarity: Rarity::Ordinary,
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -217,11 +218,11 @@ mod tests {
         let worn = [&equipment.weapon, &equipment.armor, &equipment.module]
             .into_iter()
             .flatten()
-            .find(|e| e.item == item)
+            .find(|e| e.copy.item == item)
             .expect("the requested item is worn");
         // Gear fuses per physical copy, so a tier-blind implementation
         // would quietly measure a different weapon from the one named.
-        assert_eq!(worn.fusion_tier, 2);
+        assert_eq!(worn.copy.tier, 2);
         assert_eq!(worn.level, 2, "gear locks in the zone it was equipped at");
     }
 
@@ -229,7 +230,7 @@ mod tests {
     fn an_inventory_row_is_countable_in_cargo() {
         let probe = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let item = an_equippable(&probe);
-        let before = probe.count_copies(&item, 0);
+        let before = probe.count_copies(&GearCopy::plain(item.clone()));
         let mut s = fresh(1, 1);
         s.inventory = vec![InventorySpec {
             item: item.clone(),
@@ -238,7 +239,10 @@ mod tests {
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
 
-        assert_eq!(game.count_copies(&item, 0), before + 5);
+        assert_eq!(
+            game.count_copies(&GearCopy::plain(item.clone())),
+            before + 5
+        );
     }
 
     /// Every item worn by `wearer`, so a test can ask *who* is wearing a
@@ -250,7 +254,7 @@ mod tests {
                 [&e.weapon, &e.armor, &e.module]
                     .into_iter()
                     .flatten()
-                    .map(|w| w.item.clone())
+                    .map(|w| w.copy.item.clone())
                     .collect()
             })
             .unwrap_or_default()
@@ -267,6 +271,7 @@ mod tests {
             equip: vec![EquipSpec {
                 item: item.clone(),
                 tier: 0,
+                rarity: Rarity::Ordinary,
             }],
         }];
 
@@ -305,7 +310,11 @@ mod tests {
         };
 
         let (bare, no_bonus) = member(Vec::new());
-        let (geared, bonus) = member(vec![EquipSpec { item, tier: 0 }]);
+        let (geared, bonus) = member(vec![EquipSpec {
+            item,
+            tier: 0,
+            rarity: Rarity::Ordinary,
+        }]);
         assert_eq!((no_bonus.atk, no_bonus.def), (0, 0));
         // A zero-bonus item would make the deltas below trivially equal.
         assert!(
@@ -325,6 +334,7 @@ mod tests {
             equip: vec![EquipSpec {
                 item: ItemId("not_an_item".into()),
                 tier: 0,
+                rarity: Rarity::Ordinary,
             }],
         }];
 
@@ -360,6 +370,7 @@ mod tests {
         s.equip = vec![EquipSpec {
             item: ItemId("not_an_item".into()),
             tier: 0,
+            rarity: Rarity::Ordinary,
         }];
         let err = build_player(&s, &test_assets_dir())
             .err()

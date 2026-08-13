@@ -71,6 +71,8 @@
             ((item: "arc_lance", rarity: Platinum, tier: 0), 1),
             ((item: "arc_lance", rarity: Prismatic, tier: 0), 1),
             ((item: "ablative_plating", rarity: Prismatic, tier: 2), 1),
+            ((item: "arc_lance", rarity: Ordinary, tier: 0, affix: Some("honed")), 1),
+            ((item: "singularity_matrix", rarity: Gold, tier: 0, affix: Some("of_the_ghost_protocol")), 1),
         ],
         routines: [
             "decompile",

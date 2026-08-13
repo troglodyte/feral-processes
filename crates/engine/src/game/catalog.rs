@@ -12,20 +12,26 @@ impl Game {
             .collect()
     }
 
-    /// Every loaded item definition, id-sorted (see `ItemDb::all`). Reached
-    /// only by engine tests today; `cfg(test)` rather than widening `Game`'s
-    /// renderer-facing surface for a need nothing outside the crate has yet.
-    #[cfg(test)]
-    pub(crate) fn item_defs(&self) -> Vec<ItemDef> {
+    /// Every loaded item definition, id-sorted (see `ItemDb::all`).
+    ///
+    /// It was `cfg(test)` on the stated grounds that nothing outside the
+    /// crate needed it. Something does now — see `affix_defs` below, which
+    /// names the one consumer both exist for.
+    pub fn item_defs(&self) -> Vec<ItemDef> {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
     /// Every affix the game knows about — the mirror of `item_defs`, and
-    /// the one door to `AffixDb` from outside that module. `cfg(test)` for
-    /// the same reason: no screen lists affixes on their own, they are only
-    /// ever seen through a copy that rolled one.
-    #[cfg(test)]
-    pub(crate) fn affix_defs(&self) -> Vec<crate::affixes::AffixDef> {
+    /// the one door to `AffixDb` from outside that module.
+    ///
+    /// Public alongside `item_defs` for one consumer:
+    /// `no_shipped_copy_name_outgrows_the_swap_name_column`, which walks
+    /// every item × tier × affix through `copy_name` to check the widest
+    /// name the shipped assets can build still fits the column app-core
+    /// pads it to. That census cannot live in this crate — the column is
+    /// app-core's — and it is the only thing standing between a long affix
+    /// landing and every swap row below it silently misaligning.
+    pub fn affix_defs(&self) -> Vec<crate::affixes::AffixDef> {
         self.world
             .resource::<crate::affixes::AffixDb>()
             .all()

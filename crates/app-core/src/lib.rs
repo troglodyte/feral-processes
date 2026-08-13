@@ -222,14 +222,26 @@ pub struct SwapRow {
 
 /// How wide the swap picker's name and stat columns are. Padding lives here
 /// rather than in the renderer because the labels do — see `SwapRow`.
-/// Wide enough for the longest rare-tier-prefixed name the shipped roster
-/// can produce — "Overclocked Monofilament Whip" is 29 cells. `{:<N}` pads
-/// but never truncates, so a name past this does not clip: it shunts the
-/// stat and delta columns right and misaligns every row below it. Held by
-/// `the_widest_swap_row_still_fits_its_popup`, which measures real text
-/// rather than counting characters.
-const SWAP_NAME_COLUMN: usize = 30;
+/// Wide enough for the longest name `Game::copy_name` can build out of the
+/// shipped assets — a rare tier's word, an affix's prefix or suffix, and the
+/// item's own name. "Overclocked Singularity Matrix of Quiet Handshakes" is
+/// 50 cells.
+///
+/// `{:<N}` pads but never truncates, so a name past this does not clip: it
+/// shunts the stat and delta columns right and misaligns every row below it.
+/// That is worth spending the width on rather than truncating, because the
+/// affix can sit at *either* end of the name — cutting the tail would drop
+/// "of Quiet Handshakes" entirely, which is the half of the name the player
+/// does not already know.
+///
+/// Held by `the_widest_swap_row_still_fits_its_popup`, which measures real
+/// text rather than counting characters. **Adding a long affix or a long
+/// item name can break this**, and that test is what says so.
+const SWAP_NAME_COLUMN: usize = 50;
 const SWAP_STATS_COLUMN: usize = 20;
+
+#[cfg(test)]
+pub(crate) const SWAP_NAME_COLUMN_FOR_TESTS: usize = SWAP_NAME_COLUMN;
 
 /// Every replacement for `slot` the player could put on right now, best
 /// first, with the row that empties the slot last. One row per *copy*: a

@@ -307,12 +307,13 @@ mod tests {
     /// cells and "Overclocked Monofilament Whip" is 29.
     #[test]
     fn the_widest_swap_row_still_fits_its_popup() {
-        // The widest row this screen can build: the longest tier word, the
-        // longest equippable name, a fusion note, and a three-stat delta.
+        // The widest row this screen can build out of the shipped assets: the
+        // longest tier word, the longest affix, the longest equippable name,
+        // a maxed fusion note and a three-stat delta.
         let widest = format!(
-            "[a] {:<30} {:<20} {}",
+            "[a] {:<50} {:<20} {}",
             format!(
-                "{} Monofilament Whip",
+                "{} Singularity Matrix of Quiet Handshakes",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
             "+12 ATK +9 DEF +9 DECOMP T3/3",

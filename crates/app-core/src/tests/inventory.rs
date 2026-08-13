@@ -1,5 +1,6 @@
 //! Item actions, erasing, and the equip preview tag.
 
+use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::items::ids;
 
 use super::support::*;
@@ -616,5 +617,62 @@ fn the_swap_picker_lists_a_fused_copy_beside_its_spares() {
         tiers,
         vec![1, 0],
         "the fused copy is the better row and sorts first"
+    );
+}
+
+/// **The drift guard for `SWAP_NAME_COLUMN`.** The gui's
+/// `the_widest_swap_row_still_fits_its_popup` measures one hand-written
+/// worst-case string against the real font; this asks the shipped assets
+/// whether that string is still the worst case.
+///
+/// Without it the pair goes stale exactly the way the palette test did: a
+/// long affix or a long item name lands, the hand-written string still fits,
+/// and the column silently starts shunting every row below a long name.
+/// Names are built through `Game::copy_name`, so this covers both tier words
+/// and affixes at once.
+#[test]
+fn no_shipped_copy_name_outgrows_the_swap_name_column() {
+    let mut app = test_app(931);
+    let game = app.game.as_mut().expect("test_app builds a game");
+
+    let equippables: Vec<ItemId> = game
+        .item_defs()
+        .into_iter()
+        .filter(|d| d.equipment.is_some())
+        .map(|d| d.id)
+        .collect();
+    assert!(
+        !equippables.is_empty(),
+        "the shipped set has equippable gear"
+    );
+
+    let affixes: Vec<Option<AffixId>> = std::iter::once(None)
+        .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+        .collect();
+
+    let mut worst = (String::new(), 0usize);
+    for item in &equippables {
+        for rarity in Rarity::ALL {
+            for affix in &affixes {
+                let name = game.copy_name(&GearCopy {
+                    item: item.clone(),
+                    rarity,
+                    tier: 0,
+                    affix: affix.clone(),
+                });
+                if name.chars().count() > worst.1 {
+                    worst = (name.clone(), name.chars().count());
+                }
+            }
+        }
+    }
+
+    assert!(
+        worst.1 <= SWAP_NAME_COLUMN_FOR_TESTS,
+        "{:?} is {} cells and the column is {} — widen SWAP_NAME_COLUMN and \
+         update the gui's worst-case string, or shorten the asset",
+        worst.0,
+        worst.1,
+        SWAP_NAME_COLUMN_FOR_TESTS
     );
 }

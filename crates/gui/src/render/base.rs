@@ -4,6 +4,7 @@ use super::bars::*;
 use super::field::draw_status_buffs;
 use super::stack::draw_stack;
 use super::*;
+use feral_processes_engine::views::drawn_on_surface_map;
 
 /// Fraction of the window the map pane occupies — the zone map or, while the
 /// party is underground, the first-person corridor. Named rather than inline
@@ -582,7 +583,11 @@ fn draw_surface_map(
         // nothing ever walks a guard, an idle program or a party member, so
         // each keeps whatever tile it was standing on when it took the job
         // and drawing it would claim it is somewhere it isn't.
-        .filter(|e| !e.is_tamed || e.worker_away_from_post)
+        //
+        // Through the engine's predicate rather than spelled out here,
+        // because `Game::find_target_in_direction` filters its ray with the
+        // same rule so that `x` can only name what this draws.
+        .filter(|e| drawn_on_surface_map(e.is_tamed, e.worker_away_from_post))
         .collect();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());

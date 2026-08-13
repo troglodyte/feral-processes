@@ -153,6 +153,29 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// old spelling would have silently made the entire zone a nursery.
 pub const OPENING_RING_TILES: i32 = MAX_BUILD_DISTANCE_FROM_HOME;
 
+/// How far `x` looks along the row or column the player is facing
+/// (`Game::find_target_in_direction`).
+///
+/// **Engine tuning rather than the frontend's `MENU_SCAN_RADIUS`, which is
+/// what this used to be.** That constant is a *menu window* — how much world
+/// a picker lists — which is genuinely a frontend policy, and at 40 tiles it
+/// is more than twice the map pane in either axis. Borrowing it made the
+/// inspector name things the player could not see, which is a rule about the
+/// game rather than about a list. Nothing keeps this in step with the pane
+/// automatically: the renderer derives its half-width and half-height from
+/// live pixels, so the visible area changes when the window is resized and
+/// the engine cannot read it.
+///
+/// 12 sits inside the pane horizontally, a little past it vertically, and is
+/// comfortably more than `MAX_BUILD_DISTANCE_FROM_HOME` so you can examine
+/// right across your own base.
+///
+/// Deliberately not written as `WILD_SPAWN_RADIUS_TILES` even though both are
+/// 12 today. They agree by coincidence and would have to be justified
+/// together if they were one name — see `CLAUDE.md` on a shared formula
+/// having to be a call rather than a claim.
+pub const EXAMINE_RANGE_TILES: i32 = 12;
+
 /// Geometric base for group-size growth per escalation step, and the cap on
 /// how many steps count. The exponent has to be clamped because depth is
 /// unbounded and a shift of 32 or more is a panic in debug;

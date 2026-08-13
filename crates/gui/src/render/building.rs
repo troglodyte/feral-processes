@@ -500,17 +500,32 @@ fn buffer_line(label: &str, stock: &[(String, u32)], capacity: Option<u32>) -> O
     })
 }
 
-/// One assignee row: who it is, what it is doing, and how far into a cycle it
-/// is. A guard has no cycle to be partway through —
+/// One assignee row: who it is, how it is holding up, what it is doing, and
+/// how far into a cycle it is. A guard has no cycle to be partway through —
 /// `systems::task_progress_system` ignores the kind entirely — so it gets no
 /// progress figure rather than a permanent `0/0`.
+///
+/// The vitals are here because this is the only screen that can carry them
+/// for a posted program: at its post it is not drawn on the map, and the
+/// inspector names only what is drawn, so there is no way to open its own
+/// manifest without first calling it off the job.
 fn assignee_line(a: &Assignee) -> String {
+    let who = format!("{}{}", a.label, assignee_vitals(a));
     match a.kind {
-        TaskKind::GatherResource => {
-            format!("{} — cronjob {}/{}", a.label, a.progress, a.required)
-        }
-        TaskKind::Guard => format!("{} — guarding", a.label),
+        TaskKind::GatherResource => format!("{who} — cronjob {}/{}", a.progress, a.required),
+        TaskKind::Guard => format!("{who} — guarding"),
     }
+}
+
+/// `" Lv7 HP 18/22"`, or empty for anything missing the components. Matching
+/// the party roster's `Lv{n} HP {a}/{b}` so one program reads the same on
+/// both screens.
+fn assignee_vitals(a: &Assignee) -> String {
+    let level = a.level.map(|l| format!(" Lv{l}")).unwrap_or_default();
+    let hp =
+        a.hp.map(|(hp, max)| format!(" HP {hp}/{max}"))
+            .unwrap_or_default();
+    format!("{level}{hp}")
 }
 
 #[cfg(test)]
@@ -594,5 +609,60 @@ mod tests {
     #[test]
     fn a_tier_stopped_by_the_defs_own_ceiling_says_nothing_about_zones() {
         assert_eq!(tier_tag(&view(5, 5, 5)), "Mk5");
+    }
+
+    fn assignee(kind: TaskKind) -> Assignee {
+        Assignee {
+            entity: Entity::PLACEHOLDER,
+            label: "Sub-Process (Z9)".into(),
+            kind,
+            progress: 999,
+            required: 999,
+            level: Some(99),
+            hp: Some((999, 999)),
+        }
+    }
+
+    #[test]
+    fn an_assignee_row_reads_the_way_the_party_roster_does() {
+        assert_eq!(
+            assignee_line(&assignee(TaskKind::GatherResource)),
+            "Sub-Process (Z9) Lv99 HP 999/999 — cronjob 999/999"
+        );
+        assert_eq!(
+            assignee_line(&assignee(TaskKind::Guard)),
+            "Sub-Process (Z9) Lv99 HP 999/999 — guarding"
+        );
+    }
+
+    /// A program without the components still gets a row rather than a line
+    /// full of placeholder figures.
+    #[test]
+    fn an_assignee_with_no_stats_reads_as_it_did_before_the_vitals() {
+        let bare = Assignee {
+            level: None,
+            hp: None,
+            ..assignee(TaskKind::Guard)
+        };
+        assert_eq!(assignee_line(&bare), "Sub-Process (Z9) — guarding");
+    }
+
+    /// The structure sheet is a `PopupSize::Small`, which is half the window
+    /// wide — and `draw_row` clamps rows vertically but never horizontally,
+    /// so a line too long for the box runs off its edge rather than wrapping
+    /// or being cut. Adding the vitals lengthened every assignee row, so the
+    /// worst case is measured against the real box rather than eyeballed.
+    #[test]
+    fn the_longest_assignee_row_fits_the_structure_sheet() {
+        let m = crate::text::ui_metrics(900.0);
+        let line = format!("  {}", assignee_line(&assignee(TaskKind::GatherResource)));
+        crate::paint::with_painter(|p| {
+            let box_w = p.screen_w() * 0.5;
+            let text_w = p.measure_ui_advance(&line, m.font_size);
+            assert!(
+                text_w + 2.0 * m.pad < box_w,
+                "an assignee row is {text_w}px inside a {box_w}px sheet: {line:?}"
+            );
+        });
     }
 }

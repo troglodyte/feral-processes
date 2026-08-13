@@ -1,6 +1,7 @@
 //! Aiming the inspector at a tile, and the manifest screen it opens.
 
 use crate::*;
+use feral_processes_engine::tuning::EXAMINE_RANGE_TILES;
 use feral_processes_engine::{ExamineDir, InspectTarget};
 
 impl App {
@@ -39,7 +40,7 @@ impl App {
             _ => None,
         };
         let Some((dx, dy)) = dir else { return };
-        match game.find_target_in_direction(dx, dy, MENU_SCAN_RADIUS) {
+        match game.find_target_in_direction(dx, dy, EXAMINE_RANGE_TILES) {
             Some(InspectTarget::Creature(entity)) => {
                 self.pending_manifest = Some(entity);
                 self.manifest_from_picker = false;

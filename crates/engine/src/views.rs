@@ -499,6 +499,27 @@ pub struct EntityView {
     pub linked_edges: Vec<(i32, i32)>,
 }
 
+/// Whether the surface map draws this entity at all — the rule stated once
+/// so that what the player can *see* and what the inspector can *name* are
+/// the same set.
+///
+/// It says: everything untamed is drawn, and a tamed program only while it
+/// is out on an errand. `EntityView::worker_away_from_post` above carries
+/// the reasoning; the short of it is that a worker is the only tamed program
+/// whose `Position` the sim keeps honest, so drawing any other would claim
+/// it is somewhere it isn't.
+///
+/// **A pure function shared by two crates rather than a condition written
+/// twice.** `render/base.rs` filters the map with it, and
+/// `Game::find_target_in_direction` filters its ray with it. They used to
+/// disagree: the ray had no such rule, so aiming at a machine hit the worker
+/// parked in front of it — a program with no glyph on screen — while the
+/// machine's own glyph sat under the cursor. Per `CLAUDE.md`, a claim that
+/// two places use the same rule has to be a call, not a comment.
+pub fn drawn_on_surface_map(is_tamed: bool, worker_away_from_post: bool) -> bool {
+    !is_tamed || worker_away_from_post
+}
+
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {
@@ -554,6 +575,17 @@ pub struct Assignee {
     /// which never progresses — `systems::task_progress_system` ignores it.
     pub progress: u32,
     pub required: u32,
+    /// The posted program's own level and health.
+    ///
+    /// Here rather than only on its manifest because a posted program is
+    /// often not reachable from the map at all: at its post it is not drawn
+    /// (`drawn_on_surface_map`), and `Game::find_target_in_direction` skips
+    /// what is not drawn, so the structure's sheet is the one screen that can
+    /// tell you how the program working it is doing. `None` for anything
+    /// without the component, which in practice is nothing that can hold a
+    /// `Task`.
+    pub level: Option<u32>,
+    pub hp: Option<(i32, i32)>,
 }
 
 /// One addressable enemy group on the battle roster — "3 Glitches" as a

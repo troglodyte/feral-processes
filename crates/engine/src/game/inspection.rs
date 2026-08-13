@@ -6,8 +6,19 @@ use crate::tuning::{
     DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_COMPANION_REFACTORS,
     MAX_FUSIONS,
 };
+use crate::views::drawn_on_surface_map;
 use crate::*;
 use std::collections::HashSet;
+
+/// Which of two things sharing one tile `find_target_in_direction` names —
+/// lower wins. The structure, because it is the glyph the map draws there.
+///
+/// Named constants rather than deriving `Ord` on `InspectTarget` and letting
+/// its variant order carry the rule: that would hide a decision about what
+/// the player sees inside a declaration order, where a tidy-up reorder flips
+/// it silently and nothing reads as having changed.
+const STRUCTURE_ON_TILE: u8 = 0;
+const CREATURE_ON_TILE: u8 = 1;
 
 impl Game {
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
@@ -24,46 +35,12 @@ impl Game {
         rows
     }
 
-    /// Finds the nearest creature *or structure* generally toward (dx, dy)
-    /// from the player — the read-only "look in a direction" counterpart to
-    /// `move_player`. `(dx, dy)` is one of the four cardinal unit vectors.
-    /// Something counts as "that way" if it's within the 90° cone centered
-    /// on the chosen direction (i.e. leans at least as much toward that axis
-    /// as away from it) and within `max_range` tiles — a strict
-    /// single-tile-wide ray would almost never line up with a wandering
-    /// creature's exact row/column, so this is deliberately forgiving.
-    /// Ignores terrain walkability (this never moves anything, just looks),
-    /// and never matches the player.
-    ///
-    /// **Both kinds are gathered in one walk, and that is what makes
-    /// "nearest wins" answerable.** Two functions and a caller choosing
-    /// between them would have to re-derive distance to compare, putting the
-    /// cone rule in two places; the returned variant is the answer this walk
-    /// already computed, so a caller never has to ask a second time what it
-    /// just found.
-    ///
-    /// **Nothing is found underground, and that is the whole function's
-    /// guard rather than one scan's.** `Position` stays pinned to the
-    /// surface entrance tile while the party is in the Stack, so an
-    /// unguarded scan reports the base four frames overhead as being off to
-    /// your east — and, before this guard covered creatures too, opened a
-    /// manifest for a wild program up there as lying "that way". The guard
-    /// lives here rather than at the call site for the reason
-    /// `require_surface` exists.
-    ///
-    /// This takes no action and moves nothing, so `require_surface` does not
-    /// apply and never would have caught it. The test for whether a
-    /// `Position` reader needs the guard is not "does it act" but "does it
-    /// claim something about where the party is" — see `CLAUDE.md`'s
-    /// load-bearing-seams entry. Underground, `x` describes the cell instead
-    /// (`Game::describe_view_direction`), which is a claim about the frame
-    /// the party is actually in.
     /// The structure standing on the tile one step in `(dx, dy)`, if any.
     ///
-    /// One tile, deliberately, where `find_target_in_direction` above scans a
-    /// cone out to `MENU_SCAN_RADIUS`. Its caller demolishes what it finds, so
-    /// a cone would let a single keypress take down a structure off the far
-    /// side of the screen; you have to be standing next to what you remove.
+    /// One tile, deliberately, where `find_target_in_direction` below runs a
+    /// ray out to `EXAMINE_RANGE_TILES`. Its caller demolishes what it finds,
+    /// so any reach at all would let a single keypress take down a structure
+    /// across the base; you have to be standing next to what you remove.
     ///
     /// An `EntityView` rather than an `Entity` because the caller has to route
     /// a Home into its confirmation screen, and `view_entities` is where
@@ -89,6 +66,87 @@ impl Game {
             .find(|e| e.is_structure && e.pos == target)
     }
 
+    /// Whether `entity` is a tamed program holding a `GatherResource` post
+    /// and not currently standing at it — see
+    /// `EntityView::worker_away_from_post`, which is this value.
+    ///
+    /// A function rather than the inline expression it was, because
+    /// `find_target_in_direction` needs the same answer to decide whether the
+    /// map draws a program before naming it.
+    pub(crate) fn worker_away_from_post(&self, entity: Entity) -> bool {
+        self.world.get::<Tamed>(entity).is_some()
+            && self.world.get::<Task>(entity).is_some_and(|t| {
+                t.kind == TaskKind::GatherResource
+                    && self
+                        .world
+                        .get::<Position>(entity)
+                        .zip(self.world.get::<Position>(t.target))
+                        .is_some_and(|(pos, station)| !at_station(*pos, *station))
+            })
+    }
+
+    /// The first creature or structure along the row or column the player is
+    /// facing — the read-only "look in a direction" counterpart to
+    /// `move_player`. `(dx, dy)` is one of the four cardinal unit vectors.
+    /// Ignores terrain walkability (this never moves anything, just looks),
+    /// and never matches the player.
+    ///
+    /// **A ray exactly one tile wide, and it used to be a 90° cone.** The
+    /// cone counted anything leaning toward the chosen axis at least as much
+    /// as away from it, on the reasoning that a strict line would rarely
+    /// coincide with a wandering creature's exact row. What that traded away
+    /// was any relationship between the key pressed and the answer: paired
+    /// with the 40-tile reach the caller passed — app-core's `MENU_SCAN_
+    /// RADIUS`, a *menu window*, against a map pane of roughly 16x9 — an
+    /// eastward press could name a program forty tiles east *and* forty
+    /// north, well off screen in both. The reach is now `EXAMINE_RANGE_TILES`
+    /// and the shape is the line the player is looking down. Missing the
+    /// creature one tile off your row is the price, and it is the right one:
+    /// you can step or turn, and now what `x` names is what was in front of
+    /// you.
+    ///
+    /// **Both kinds are gathered in one walk, and that is what makes
+    /// "nearest wins" answerable.** Two functions and a caller choosing
+    /// between them would have to re-derive distance to compare, putting the
+    /// ray rule in two places; the returned variant is the answer this walk
+    /// already computed, so a caller never has to ask a second time what it
+    /// just found.
+    ///
+    /// **The order is total, which is what makes the answer stable.** Bevy's
+    /// query iteration order is not, so `min_by_key` — which returns the
+    /// *first* of several equal minima — would let a tie resolve differently
+    /// between runs or after a reload. `(step, kind, entity)` has no equal
+    /// minima to be first among. Same trap as `assembler_system`'s `(x, y)`
+    /// sort, reached from the other side.
+    ///
+    /// A tile holding both names the **structure**, because that is the glyph
+    /// the map draws there. For the same reason the walk skips any program
+    /// the map does not draw (`views::drawn_on_surface_map`): a worker at its
+    /// post stands orthogonally *beside* its machine, so without that filter
+    /// aiming at a machine hit an invisible program one tile in front of it.
+    ///
+    /// The ray is transparent to everything that is neither a `Creature` nor
+    /// a `Structure` — nests, surface links and zone portals all draw a glyph
+    /// and are passed straight through, so aiming at one reports whatever
+    /// lies beyond it. That is a known gap rather than a decision; see
+    /// `TODO.md`.
+    ///
+    /// **Nothing is found underground, and that is the whole function's
+    /// guard rather than one scan's.** `Position` stays pinned to the
+    /// surface entrance tile while the party is in the Stack, so an
+    /// unguarded scan reports the base four frames overhead as being off to
+    /// your east — and, before this guard covered creatures too, opened a
+    /// manifest for a wild program up there as lying "that way". The guard
+    /// lives here rather than at the call site for the reason
+    /// `require_surface` exists.
+    ///
+    /// This takes no action and moves nothing, so `require_surface` does not
+    /// apply and never would have caught it. The test for whether a
+    /// `Position` reader needs the guard is not "does it act" but "does it
+    /// claim something about where the party is" — see `CLAUDE.md`'s
+    /// load-bearing-seams entry. Underground, `x` describes the cell instead
+    /// (`Game::describe_view_direction`), which is a claim about the frame
+    /// the party is actually in.
     pub fn find_target_in_direction(
         &mut self,
         dx: i32,
@@ -98,42 +156,49 @@ impl Game {
         if self.is_underground() {
             return None;
         }
-        let player = self.player_entity();
-        let start = *self.world.get::<Position>(player).unwrap();
-        let in_cone = |pos: &Position| -> Option<i32> {
+        let start = *self.world.get::<Position>(self.player_entity()).unwrap();
+        // `(dx, dy)` is a cardinal unit vector, so a tile is on the ray
+        // exactly when its offset *is* `step` copies of it — which rules out
+        // the off-axis tile, the player's own tile and everything behind
+        // them in one condition.
+        let on_ray = |pos: &Position| -> Option<i32> {
             let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
-            let leans = if dx != 0 {
-                ddx.signum() == dx && ddx.abs() >= ddy.abs()
+            let step = ddx * dx + ddy * dy;
+            (step >= 1 && step <= max_range && ddx == dx * step && ddy == dy * step).then_some(step)
+        };
+
+        let mut candidates: Vec<(i32, u8, Entity)> = Vec::new();
+        {
+            let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
+            candidates.extend(
+                structures
+                    .iter(&self.world)
+                    .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, STRUCTURE_ON_TILE, e))),
+            );
+        }
+        let creatures_on_ray: Vec<(i32, Entity)> = {
+            let mut creatures = self.world.query::<(Entity, &Position, &Creature)>();
+            creatures
+                .iter(&self.world)
+                .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
+                .collect()
+        };
+        candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
+            let tamed = self.world.get::<Tamed>(e).is_some();
+            drawn_on_surface_map(tamed, self.worker_away_from_post(e)).then_some((
+                step,
+                CREATURE_ON_TILE,
+                e,
+            ))
+        }));
+
+        candidates.into_iter().min().map(|(_, rank, entity)| {
+            if rank == STRUCTURE_ON_TILE {
+                InspectTarget::Structure(entity)
             } else {
-                ddy.signum() == dy && ddy.abs() >= ddx.abs()
-            };
-            let dist = ddx.abs().max(ddy.abs());
-            (leans && dist >= 1 && dist <= max_range).then_some(dist)
-        };
-
-        let mut creatures = self.world.query::<(Entity, &Position, &Creature)>();
-        let mut best: Option<(i32, InspectTarget)> = creatures
-            .iter(&self.world)
-            .filter_map(|(entity, pos, _)| {
-                in_cone(pos).map(|d| (d, InspectTarget::Creature(entity)))
-            })
-            .min_by_key(|(dist, _)| *dist);
-
-        let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
-        let nearest_structure = structures
-            .iter(&self.world)
-            .filter_map(|(entity, pos, _)| {
-                in_cone(pos).map(|d| (d, InspectTarget::Structure(entity)))
-            })
-            .min_by_key(|(dist, _)| *dist);
-        // Strictly nearer, so a creature standing *on* a structure's tile
-        // keeps the tie — it is the thing that might wander off before
-        // you look again, and the structure will still be there.
-        best = match (best, nearest_structure) {
-            (Some((cd, c)), Some((sd, s))) => Some(if sd < cd { (sd, s) } else { (cd, c) }),
-            (some, None) | (None, some) => some,
-        };
-        best.map(|(_, target)| target)
+                InspectTarget::Creature(entity)
+            }
+        })
     }
 
     /// The `B` roster's row for one structure, for the inspector's detail
@@ -318,14 +383,7 @@ impl Game {
                 } else {
                     None
                 };
-                let worker_away_from_post = is_tamed
-                    && self.world.get::<Task>(entity).is_some_and(|t| {
-                        t.kind == TaskKind::GatherResource
-                            && self
-                                .world
-                                .get::<Position>(t.target)
-                                .is_some_and(|s| !at_station(pos, *s))
-                    });
+                let worker_away_from_post = self.worker_away_from_post(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
                 let output_stranded = is_structure
                     && !anywhere_to_unload
@@ -493,6 +551,8 @@ impl Game {
                     kind,
                     progress,
                     required,
+                    level: self.world.get::<Experience>(worker).map(|e| e.level),
+                    hp: self.world.get::<Stats>(worker).map(|s| (s.hp, s.max_hp)),
                 });
         }
 

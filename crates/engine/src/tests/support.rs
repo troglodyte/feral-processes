@@ -699,22 +699,22 @@ pub(super) fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Enti
         .map(|(e, _)| e)
 }
 
-/// The initial world spawns 14 wild creatures scattered around the
-/// player, so directional-inspect tests clear whatever landed along
-/// their search ray first — otherwise they'd be at the mercy of the
-/// seed's RNG instead of testing the method itself.
+/// The initial world spawns wild creatures scattered around the player, so
+/// directional-inspect tests clear whatever landed along their search ray
+/// first — otherwise they'd be at the mercy of the seed's RNG instead of
+/// testing the method itself.
 pub(super) fn clear_creatures_east_of_player(game: &mut Game, start: Position, range: i32) {
-    // Matches the same 90° eastward cone `find_creature_in_direction`
-    // itself uses, not just the exact row — otherwise a wild creature
-    // that merely leans east (without being exactly on the player's
-    // row) would survive the cleanup and make the test flaky.
+    // Exactly the row `Game::find_target_in_direction` reads, and no wider.
+    // It used to clear a 90° cone, matching the scan when the scan was one;
+    // a cone-shaped cleanup for a ray-shaped read despawns creatures no test
+    // could have seen and would quietly hide a widening of the ray.
     let stale: Vec<Entity> = {
         let mut query = game.world.query::<(Entity, &Position, &Creature)>();
         query
             .iter(&game.world)
             .filter(|(_, pos, _)| {
                 let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
-                ddx > 0 && ddx >= ddy.abs() && ddx <= range
+                ddy == 0 && ddx >= 1 && ddx <= range
             })
             .map(|(e, ..)| e)
             .collect()

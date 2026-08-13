@@ -445,6 +445,27 @@ impl Game {
         rarity_for_roll(roll)
     }
 
+    /// The rare tier a piece of *dropped gear* rolls — see
+    /// `Game::grant_gear_drop`, its only caller.
+    ///
+    /// Shares `rarity_for_roll` with the program ladder rather than having
+    /// chances of its own, so an Overclocked weapon is exactly as rare as an
+    /// Overclocked program and the word they share means one thing.
+    ///
+    /// Unlike `roll_rarity` this takes no position and has no exclusions.
+    /// Both of that one's carve-outs are about a rare *enemy*: a boss's
+    /// stats are hand-authored and a multiplier would discard the authoring,
+    /// and a rare spawn inside the opening ring falsifies
+    /// `balance_sim::beatable_by_a_fresh_player`. A lucky weapon is the
+    /// opposite problem in both cases — it can only make a fight easier, and
+    /// `balance_sim` models the player's gear without it, so the curve it
+    /// gates is the unlucky floor rather than the expected case.
+    pub(crate) fn roll_gear_rarity(&mut self) -> Rarity {
+        let mut rng = self.world.resource_mut::<GameRng>();
+        let roll: f64 = rng.0.random_range(0.0..1.0);
+        rarity_for_roll(roll)
+    }
+
     /// How many escalation steps a fight sits at — the one input both group
     /// curves take, so the two halves of the pack ceiling cannot disagree
     /// about how dangerous a place is.

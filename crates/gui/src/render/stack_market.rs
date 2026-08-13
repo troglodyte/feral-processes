@@ -61,7 +61,7 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
         rows.push(text_row("(nothing they want)"));
     }
     for row in &view.sells {
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!(
                 "[{}] {}  Sell {} x{} ({} {money} each)",
                 menu_shortcut(idx),
@@ -72,6 +72,7 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
             ),
             idx == selected,
             row.copy.tier,
+            row.copy.rarity,
         ));
         idx += 1;
     }

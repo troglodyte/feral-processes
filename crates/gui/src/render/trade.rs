@@ -81,7 +81,7 @@ pub(super) fn draw_trade_action_menu(
         // that's exactly what you'd want to check before selling. A fused
         // copy is its own row here for the same reason it is there.
         let tag = equip_preview_tag(game, &row.copy, status.zone);
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!(
                 "[{}] {}  Sell {} x{}{} ({} {money} each)",
                 menu_shortcut(idx),
@@ -93,6 +93,7 @@ pub(super) fn draw_trade_action_menu(
             ),
             idx == selected,
             row.copy.tier,
+            row.copy.rarity,
         ));
         idx += 1;
     }
@@ -149,7 +150,7 @@ pub(super) fn draw_trade_action_menu(
             TEXT,
         ));
         for program in &programs {
-            rows.push(program_row(
+            rows.push(tier_row(
                 format!(
                     "[{}] Sell {} Lv{} — power {} → {} {money}{}{}",
                     menu_shortcut(idx),

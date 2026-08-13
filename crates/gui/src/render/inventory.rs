@@ -91,7 +91,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         // reads as a heading for the run of rows beneath it rather than as
         // noise repeated at random. A fused copy is its own row beside its
         // ordinary spares, which is the whole point of the screen.
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!(
                 "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
@@ -102,6 +102,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
             ),
             selected == i + 3,
             row.copy.tier,
+            row.copy.rarity,
         ));
     }
     rows.push(text_row(""));
@@ -122,10 +123,12 @@ pub(super) fn equipped_row(
     // the same number `equipped_summary` prints beside it, so the colour and
     // the text on this row cannot disagree.
     let fusions = equipped.as_ref().map(|e| e.copy.tier).unwrap_or(0);
-    fusion_row(
+    let rarity = equipped.as_ref().map(|e| e.copy.rarity).unwrap_or_default();
+    tier_row(
         format!("[{num}] {}", equipped_summary(label, equipped, game)),
         selected,
         fusions,
+        rarity,
     )
 }
 
@@ -197,10 +200,11 @@ pub(super) fn draw_equip_swap(
         text_row(""),
     ];
     for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
-        rows.push(fusion_row(
+        rows.push(tier_row(
             format!("[{}] {}", menu_shortcut(i), row.label),
             i == selected,
             row.fusion_tier,
+            row.rarity,
         ));
     }
     rows.push(text_row(""));

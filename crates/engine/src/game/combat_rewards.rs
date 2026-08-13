@@ -6,7 +6,7 @@ use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
-    SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
+    SURFACE_BOSS_LOOT_RARITY_FLOOR, SURFACE_BOSS_LOOT_VALUE_PER_ZONE,
 };
 use crate::*;
 
@@ -51,6 +51,58 @@ impl Game {
         drops
     }
 
+    /// Hands the player one dropped copy of `item`, rolling its rare tier
+    /// on the way in — **the one way a copy above `Ordinary` enters the
+    /// game.** Returns the copy so the caller can name it in its own log
+    /// line, which is the only thing the four callers do differently.
+    ///
+    /// `floor` is the worst tier this source may pay, and exists for one
+    /// caller: `SURFACE_BOSS_LOOT_RARITY_FLOOR`. Everything else passes
+    /// `Ordinary` and takes the bare ladder.
+    ///
+    /// **Crafting, buying and buying back are deliberately not callers.**
+    /// A made or purchased copy is always plain, so found gear is
+    /// categorically better than made gear — which is the whole of why a
+    /// player would go looking rather than shopping, and is asserted as an
+    /// absence by `crafted_gear_is_never_rare`, since an omission is
+    /// invisible otherwise. It also keeps `ItemDef::value`'s two meanings
+    /// intact: no recipe becomes underpriced for its output, so
+    /// `no_craftable_item_is_worth_more_than_its_ingredients` still binds.
+    ///
+    /// A non-equippable item takes the early return and **spends no RNG
+    /// draw**. A rare tier is defined by `EquipmentStats::for_rarity`, so a
+    /// Core Fragment has nothing for one to scale; rolling anyway would also
+    /// shift the shared `GameRng` stream on every material drop in the game,
+    /// which is the kind of change that silently rewrites a seeded combat
+    /// test three files away.
+    pub(crate) fn grant_gear_drop(&mut self, item: ItemId, floor: Rarity) -> GearCopy {
+        if self.equipment_of(&item).is_none() {
+            self.grant_loot(item.clone(), 1);
+            return GearCopy::plain(item);
+        }
+        let rarity = self.roll_gear_rarity().max(floor);
+        let copy = GearCopy {
+            item,
+            rarity,
+            tier: 0,
+        };
+        self.add_copies(&copy, 1);
+        copy
+    }
+
+    /// How a dropped copy reads in its loot line: the tier's word, the item
+    /// name, and the category tag `item_name_tagged` adds.
+    ///
+    /// A drop line is the one place an item is named to a player who has not
+    /// opened a screen, so it is also the only place a rare tier can be
+    /// noticed at the moment it is earned — the row colour is a screen away.
+    pub(crate) fn drop_label(&self, copy: &GearCopy) -> String {
+        match copy.rarity.label() {
+            Some(tier) => format!("{tier} {}", self.item_name_tagged(&copy.item)),
+            None => self.item_name_tagged(&copy.item),
+        }
+    }
+
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any.
     ///
@@ -87,10 +139,11 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_bool(chance.clamp(0.0, 1.0) as f64)
             };
-            if roll && self.grant_loot(item.clone(), 1) > 0 {
+            if roll {
+                let copy = self.grant_gear_drop(item, Rarity::Ordinary);
                 self.log_kind(
                     MessageKind::Loot,
-                    format!("It also drops a {}!", self.item_name_tagged(&item)),
+                    format!("It also drops a {}!", self.drop_label(&copy)),
                 );
             }
         }
@@ -155,12 +208,11 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 pool[rng.0.random_range(0..pool.len())].clone()
             };
-            if self.grant_loot(item.clone(), 1) > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("Its crash spills a {}!", self.item_name_tagged(&item)),
-                );
-            }
+            let copy = self.grant_gear_drop(item, SURFACE_BOSS_LOOT_RARITY_FLOOR);
+            self.log_kind(
+                MessageKind::Loot,
+                format!("Its crash spills a {}!", self.drop_label(&copy)),
+            );
         }
     }
 

@@ -131,7 +131,7 @@ pub(super) fn draw_companion_menu(
             if critical {
                 critical_item_row(text, i == selected)
             } else {
-                program_row(text, i == selected, p.fusions, p.rarity)
+                tier_row(text, i == selected, p.fusions, p.rarity)
             },
             p.glyph,
             glyph_color(p.color),
@@ -159,7 +159,7 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
     }
     for (i, p) in candidates.iter().enumerate() {
         rows.push(with_icon(
-            program_row(
+            tier_row(
                 fuse_candidate_label(menu_shortcut(i), p),
                 i == selected,
                 p.fusions,
@@ -195,7 +195,7 @@ pub(super) fn draw_fuse_second_menu(
     }
     for (i, p) in candidates.iter().enumerate() {
         rows.push(with_icon(
-            program_row(
+            tier_row(
                 fuse_candidate_label(menu_shortcut(i), p),
                 i == selected,
                 p.fusions,
@@ -434,7 +434,7 @@ pub(super) fn draw_refactor(game: &mut Game, selected: usize, painter: &Painter,
     ];
     for (i, p) in programs.iter().enumerate() {
         rows.push(with_icon(
-            program_row(
+            tier_row(
                 format!(
                     "[{}] {} Lv{}{}{}",
                     menu_shortcut(i),

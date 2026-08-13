@@ -1082,3 +1082,58 @@ fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
         "a sale appraises the program, not the gear it happens to be holding"
     );
 }
+
+/// A shelf keeps *the copy that was sold to it*, rare tier included.
+///
+/// This is `BuybackLedger`'s existing fusion-tier argument reached by a new
+/// route: the unit price is deliberately the same at every tier
+/// (`Game::item_value` is untouched), so a player who sells a Bare-Metal
+/// weapon by mistake gets nothing back for the difference — buying back the
+/// *same copy* is the only thing that makes the mistake recoverable. Keyed
+/// on the item alone, the shelf would hand over an ordinary copy and quietly
+/// delete the tier.
+#[test]
+fn selling_a_rare_copy_buys_back_the_same_copy() {
+    let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let post = spawn_market_at(&mut game, 1, 0);
+    let rare = GearCopy {
+        item: ItemId::from(ids::ABLATIVE_PLATING),
+        rarity: Rarity::Prismatic,
+        tier: 0,
+    };
+    let plain = GearCopy::plain(rare.item.clone());
+    game.add_copies(&rare, 1);
+    game.add_copies(&plain, 1);
+
+    // Both copies of the same item, so a shelf keyed on the id alone would
+    // merge them into one row and lose the tier — which is the failure this
+    // exists to catch, and is invisible if only one copy is ever sold.
+    game.sell_item(post, rare.clone(), 1).unwrap();
+    game.sell_item(post, plain.clone(), 1).unwrap();
+
+    let shelf = game.buyback_options(post);
+    assert_eq!(
+        shelf.len(),
+        2,
+        "two copies that differ by rare tier are two shelf rows, got {shelf:?}",
+        shelf = shelf.iter().map(|r| r.copy.clone()).collect::<Vec<_>>()
+    );
+    let shelved_rare = shelf
+        .iter()
+        .find(|r| r.copy == rare)
+        .expect("the Bare-Metal copy must be on the shelf as itself");
+
+    give(&mut game, &ItemId::from(ids::CREDITS), 500);
+    game.buy_back(post, shelved_rare.copy.clone(), 1).unwrap();
+
+    assert_eq!(
+        game.count_copies(&rare),
+        1,
+        "buying back must return the Bare-Metal copy, not an ordinary one"
+    );
+    assert_eq!(
+        game.count_copies(&plain),
+        0,
+        "and must not have quietly handed back the ordinary one instead"
+    );
+}

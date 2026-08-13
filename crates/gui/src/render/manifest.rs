@@ -406,6 +406,12 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     if slot.fusion_tier > 0 {
         bonus.push(format!("T{}", slot.fusion_tier));
     }
+    // In the stat column beside the fusion tier rather than in the name,
+    // which is a fixed-width cell the packer measures — the same reason the
+    // battle roster carries `rarity_tag` outside its `NAME_W`.
+    if let Some(tier) = slot.rarity.label() {
+        bonus.push(tier.to_string());
+    }
     SectionRow::Stat(
         format!("{}: {}", slot.slot, slot.item_name),
         bonus.join(" "),

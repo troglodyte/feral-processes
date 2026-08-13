@@ -832,20 +832,39 @@ mod tests {
             ("GRAY", GRAY),
             ("WHITE", WHITE),
         ];
-        for (name, tier) in [("SILVER", SILVER), ("GOLD", GOLD)] {
+        // Walks `Rarity::ALL` through `rarity_color` rather than naming the
+        // colour constants: named, this checked exactly the two rungs that
+        // existed when it was written and went on passing when two more were
+        // added, which is the whole failure it is supposed to prevent.
+        let tiers: Vec<(Rarity, Color)> = Rarity::ALL
+            .into_iter()
+            .filter_map(|r| Some((r, rarity_color(r)?)))
+            .collect();
+        assert_eq!(
+            tiers.len(),
+            Rarity::ALL.len() - 1,
+            "every rung above Ordinary needs a colour"
+        );
+        for (tier, colour) in &tiers {
             for (other_name, other) in neighbours {
                 assert!(
-                    dist(tier, other) > 0.25,
-                    "{name} is only {:.2} from {other_name} — it would read \
+                    dist(*colour, other) > 0.25,
+                    "{tier:?} is only {:.2} from {other_name} — it would read \
                      as that colour in a two-pixel bar",
-                    dist(tier, other)
+                    dist(*colour, other)
                 );
             }
         }
-        assert!(
-            dist(SILVER, GOLD) > 0.25,
-            "the two tiers must not read alike"
-        );
+        for (i, (tier, colour)) in tiers.iter().enumerate() {
+            for (other, other_colour) in &tiers[i + 1..] {
+                assert!(
+                    dist(*colour, *other_colour) > 0.25,
+                    "{tier:?} and {other:?} are only {:.2} apart — two tiers \
+                     that read alike are no ladder at all",
+                    dist(*colour, *other_colour)
+                );
+            }
+        }
     }
 
     #[test]

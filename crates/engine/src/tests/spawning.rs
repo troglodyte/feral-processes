@@ -1875,23 +1875,6 @@ fn the_dev_console_ignores_the_density_target() {
     );
 }
 
-/// The two ineligible spawns must cost nothing from the shared stream —
-/// see `Game::roll_rarity`, where gating before the draw is what keeps every
-/// seeded boss and opening-ring test from moving. Asserting only that the
-/// tier comes back `Ordinary` would pass just as well with the gate placed
-/// *after* the roll, which is the regression this exists to catch.
-/// `StdRng` is not `Clone`, so the proof is two games built from one seed:
-/// they share a stream position, and only one of them is asked to refuse a
-/// roll. If the refusal spent a draw, their next values diverge.
-fn rng_unadvanced_by(seed: u32, f: impl FnOnce(&mut Game)) -> bool {
-    let mut touched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let mut untouched = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    f(&mut touched);
-    let after: u64 = touched.world.resource_mut::<GameRng>().0.random();
-    let baseline: u64 = untouched.world.resource_mut::<GameRng>().0.random();
-    after == baseline
-}
-
 #[test]
 fn a_boss_never_rolls_a_rarity() {
     let mut game = Game::new(9021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

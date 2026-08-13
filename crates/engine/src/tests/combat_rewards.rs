@@ -1,7 +1,9 @@
 //! What a fight pays out — loot, experience, and how it spreads across the party.
 
 use super::support::*;
-use crate::tuning::STACK_BOSS_PORTAL_FRAGMENT_DROP;
+use crate::tuning::{
+    STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
+};
 use crate::*;
 
 /// A bare creature of `species` on the player's tile, ready for
@@ -325,10 +327,13 @@ fn a_boss_defeated_on_the_surface_pays_gear_from_its_zones_band() {
     let band = game.surface_boss_loot();
     assert!(!band.is_empty(), "zone 1 should have a band to draw from");
 
-    let before: u32 = band.iter().map(|id| held(&game, id)).sum();
+    // `held_any`, not `held`: a surface boss's gear carries
+    // `SURFACE_BOSS_LOOT_RARITY_FLOOR`, so every copy lands in `GearCopies`
+    // and counting the plain store alone would read as paying nothing.
+    let before: u32 = band.iter().map(|id| held_any(&game, id)).sum();
     let wild = corpse_of(&mut game, &boss.id);
     game.award_loot(wild);
-    let after: u32 = band.iter().map(|id| held(&game, id)).sum();
+    let after: u32 = band.iter().map(|id| held_any(&game, id)).sum();
 
     assert!(
         after > before,
@@ -682,5 +687,142 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
         exp.xp - before,
         3 * members.len() as u32,
         "every vanquished member should pay its own max_hp in XP"
+    );
+}
+
+/// Over enough kills a dropped weapon comes up rare. Seeded, so this is a
+/// fact about the build rather than a probability.
+///
+/// Deliberately asserts on `GearCopies` rather than on a log line: the store
+/// a copy lands in *is* the mechanism (`GearCopy::is_plain` picks it), so a
+/// rare drop that somehow landed in `Inventory` would read as ordinary
+/// everywhere and this is the assertion that catches it.
+#[test]
+fn a_dropped_weapon_can_roll_a_rare_tier() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let weapon = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("shipped assets include equippable gear")
+        .id;
+
+    for _ in 0..2000 {
+        game.grant_gear_drop(weapon.clone(), Rarity::Ordinary);
+    }
+
+    let rare: Vec<Rarity> = game
+        .world
+        .get::<GearCopies>(player)
+        .expect("the player carries the special-copy store")
+        .copies
+        .iter()
+        .map(|(copy, _)| copy.rarity)
+        .collect();
+    assert!(
+        !rare.is_empty(),
+        "2000 drops rolled no rare tier at all — is the roll wired up?"
+    );
+    assert!(
+        rare.iter().all(|r| *r != Rarity::Ordinary),
+        "an ordinary copy must live in Inventory, not the special store: {rare:?}"
+    );
+}
+
+/// **The floor is what makes a surface boss worth fighting**, so this pins
+/// that no boss drop is ever ordinary — see
+/// `SURFACE_BOSS_LOOT_RARITY_FLOOR`. Nothing else in the game guarantees a
+/// tier.
+#[test]
+fn a_surface_boss_never_drops_an_ordinary_copy() {
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = a_boss(&game).id;
+    let boss = corpse_of(&mut game, &species);
+
+    game.award_loot(boss);
+
+    // Counted against the floor rather than asserting that *nothing*
+    // ordinary arrived: `award_loot` also rolls the boss species' own
+    // `equipment_drop` table, and that one is an ordinary drop like any
+    // other. Only `pay_surface_boss_gear` carries the floor.
+    let floored: u32 = game
+        .world
+        .get::<GearCopies>(player)
+        .map(|g| {
+            g.copies
+                .iter()
+                .filter(|(copy, _)| copy.rarity >= SURFACE_BOSS_LOOT_RARITY_FLOOR)
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
+        .unwrap_or(0);
+    assert!(
+        floored >= SURFACE_BOSS_LOOT_DROPS,
+        "a boss owes {SURFACE_BOSS_LOOT_DROPS} copies at or above \
+         {SURFACE_BOSS_LOOT_RARITY_FLOOR:?}, got {floored}"
+    );
+}
+
+/// Materials take `grant_gear_drop`'s early return, and that return must
+/// spend **no** `GameRng` draw. Every kill in the game drops a work
+/// resource, so a draw here would shift the shared stream on essentially
+/// every fight — the failure mode `roll_rarity`'s doc describes, where a
+/// seeded combat test three files away quietly changes its answer.
+#[test]
+fn a_material_drop_spends_no_rarity_roll() {
+    let material = {
+        let probe = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        probe
+            .item_defs()
+            .into_iter()
+            .find(|d| d.equipment.is_none())
+            .expect("shipped assets include non-equippable items")
+            .id
+    };
+    assert!(
+        rng_unadvanced_by(9, |g| {
+            g.grant_gear_drop(material.clone(), Rarity::Ordinary);
+        }),
+        "dropping a material must not consume a rarity roll"
+    );
+}
+
+/// The absence that makes the whole feature worth having: gear you *make*
+/// is never rare, so gear you *find* is categorically better. An omission
+/// is invisible without a test naming it — the same reason
+/// `an_arena_fight_writes_no_save` exists.
+#[test]
+fn crafted_gear_is_never_rare() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let recipe = game
+        .craft_recipes()
+        .into_iter()
+        .find(|r| game.equipment_of(&r.result).is_some())
+        .expect("some equippable is craftable with no bench");
+
+    for (item, qty) in &recipe.cost {
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(item.clone(), qty * 20);
+    }
+    for _ in 0..20 {
+        let _ = game.craft(&recipe.result, 1);
+    }
+
+    assert!(
+        game.count_copies(&GearCopy::plain(recipe.result.clone())) > 0,
+        "the crafted copies should be in the plain store"
+    );
+    assert_eq!(
+        game.world
+            .get::<GearCopies>(player)
+            .map(|g| g.total())
+            .unwrap_or(0),
+        0,
+        "crafting must never produce a rare copy"
     );
 }

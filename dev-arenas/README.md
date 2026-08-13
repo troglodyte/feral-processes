@@ -136,14 +136,27 @@ equip: [(item: "plasma_router", tier: 0)],   // tier defaults to 0
 inventory: [(item: "power_cell", qty: 5)],   // qty defaults to 1
 party: [(species: "scrapper", level: 12)],   // level defaults to 1
 
+// A copy can also carry a rare tier — Ordinary, Silver, Gold, Platinum
+// or Prismatic. Defaults to Ordinary.
+equip: [(item: "arc_lance", rarity: Gold)],
+
 // A companion takes the same `equip` rows the player does:
 party: [(species: "scrapper", level: 12, equip: [(item: "arc_lance")])],
 ```
 
-`tier` is the copy's fusion tier, and it is not decoration: gear fuses per
-physical copy, so a tier-2 weapon is a different weapon from a tier-0 one of
-the same name. `equip` is applied *after* the zone is set, because gear locks
-in the zone level it was equipped at and grows by `GEAR_LEVEL_STEP` per level.
+`tier` and `rarity` are the two things that make one *copy* of an item
+different from another, and neither is decoration: gear fuses per physical
+copy and drops at a rolled rare tier, so a tier-2 Gold weapon is a different
+weapon from a plain one of the same name. Both default, so a scenario written
+before either existed still describes exactly the copy it always did.
+
+**A rare tier cannot be reached by playing to it in an arena** — rarity is
+rolled by `Game::grant_gear_drop` when gear *drops*, and a staged fight
+drops nothing. So authoring it here is the only way to measure what one is
+worth, which is the whole reason the field exists.
+
+`equip` is applied *after* the zone is set, because gear locks in the zone
+level it was equipped at and grows by `GEAR_LEVEL_STEP` per level.
 
 **A party authored without `equip` is a naked party.** Any program the player
 owns may wear gear, so a scenario whose companions carry none fields a weaker

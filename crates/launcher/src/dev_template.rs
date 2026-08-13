@@ -209,6 +209,7 @@ pub fn capture(save_path: &Path, name: &str) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::components::Rarity;
 
     /// The regression gate for the whole directory: a `SaveData` change or a
     /// `SAVE_FORMAT_VERSION` bump that a template cannot survive fails here,
@@ -227,6 +228,46 @@ mod tests {
             let _ = std::fs::remove_file(&out);
             assert!(generated.is_ok(), "{}", generated.unwrap_err());
         }
+    }
+
+    /// **The concrete evidence that gear rarity landed without breaking a
+    /// save.** `extraction` is a checked-in v29 file whose `fused_gear` is
+    /// four positional `(item, tier, qty)` rows — the shape RON cannot widen
+    /// in place, and the reason `SaveData` carries a legacy field drained on
+    /// load (see `PlayerSave::fused_gear`).
+    ///
+    /// Asserting on a template rather than a hand-written string is the
+    /// point: this is a real file a player could have, written by a build
+    /// that predates the feature, and it is the only test here that would
+    /// catch the drain being dropped in a later tidy-up.
+    #[test]
+    fn a_pre_rarity_templates_fused_gear_survives_the_load() {
+        let out = std::env::temp_dir().join("feral_processes_template_legacy_gear.bin");
+        generate("extraction", &out).unwrap();
+        let game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let fused: Vec<_> = game
+            .player_status()
+            .inventory
+            .into_iter()
+            .filter(|row| row.copy.tier > 0)
+            .collect();
+        assert_eq!(
+            fused.len(),
+            4,
+            "extraction.ron carries four fused rows; got {fused:?}"
+        );
+        assert!(
+            fused.iter().all(|row| row.copy.rarity == Rarity::Ordinary),
+            "a copy saved before rare tiers existed must load as ordinary: {fused:?}"
+        );
+        assert!(
+            fused
+                .iter()
+                .any(|row| row.copy.item.as_str() == "scrap_ward" && row.copy.tier == 3),
+            "the T3 Scrap Ward must come back at its own tier, not flattened: {fused:?}"
+        );
     }
 
     /// Loading is not the bar for `chains`: it exists so that a session

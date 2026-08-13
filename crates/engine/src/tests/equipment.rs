@@ -1177,3 +1177,126 @@ fn a_save_dump_without_the_equipment_key_still_packs() {
         "a program in an older dump wears nothing"
     );
 }
+
+/// **The trap this whole feature is built around.** `apply_equipment_delta`
+/// writes a gear bonus straight into `Stats`, so an unequip must subtract
+/// precisely what the equip added — with rarity as a third scaling axis, a
+/// path that computed one side without it would leave the difference welded
+/// permanently into the player's base stats, invisibly, because a stat
+/// carries no record of where it came from.
+///
+/// Walks every rung rather than checking one, since the failure is
+/// proportional to the tier and a check at Silver would barely move.
+#[test]
+fn unequipping_a_rare_copy_leaves_no_bonus_behind() {
+    let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    let base = *game.world.get::<Stats>(player).unwrap();
+
+    for rarity in Rarity::ALL {
+        let copy = GearCopy {
+            item: weapon.clone(),
+            rarity,
+            tier: 0,
+        };
+        game.add_copies(&copy, 1);
+        game.equip(player, &copy).unwrap();
+
+        let worn = *game.world.get::<Stats>(player).unwrap();
+        if rarity != Rarity::Ordinary {
+            assert!(
+                worn.atk > base.atk,
+                "{rarity:?} should be worth something while worn"
+            );
+        }
+
+        game.unequip(player, EquipmentSlot::Weapon).unwrap();
+        let after = *game.world.get::<Stats>(player).unwrap();
+        assert_eq!(
+            (after.atk, after.def),
+            (base.atk, base.def),
+            "{rarity:?} left a bonus welded into base stats after the unequip"
+        );
+        // And the copy came back as itself rather than laundering its tier.
+        assert_eq!(game.count_copies(&copy), 1, "{rarity:?} did not come back");
+        game.take_copies(&copy, 1);
+    }
+}
+
+/// A rare copy is strictly better worn than a plain one of the same item, at
+/// the same level and fusion tier. Without this the whole axis could be
+/// wired up correctly and still be worth nothing, because `for_rarity` is
+/// the only thing that makes a tier mean a number.
+#[test]
+fn a_rare_copy_is_worth_more_worn_than_a_plain_one() {
+    let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+
+    let atk_at = |game: &mut Game, rarity: Rarity| {
+        let copy = GearCopy {
+            item: weapon.clone(),
+            rarity,
+            tier: 0,
+        };
+        game.add_copies(&copy, 1);
+        game.equip(player, &copy).unwrap();
+        let atk = game.world.get::<Stats>(player).unwrap().atk;
+        game.unequip(player, EquipmentSlot::Weapon).unwrap();
+        game.take_copies(&copy, 1);
+        atk
+    };
+
+    let plain = atk_at(&mut game, Rarity::Ordinary);
+    for pair in Rarity::ALL.windows(2) {
+        assert!(
+            atk_at(&mut game, pair[1]) > atk_at(&mut game, pair[0]),
+            "{:?} must beat {:?} on the wearer's ATK",
+            pair[1],
+            pair[0]
+        );
+    }
+    assert!(atk_at(&mut game, Rarity::Prismatic) > plain);
+}
+
+/// Fusion matches on the whole copy, so two copies that differ only in rare
+/// tier are not two of a thing — see `Game::fuse_item`. The alternative
+/// launders a tier into or out of the result depending on which parent won.
+#[test]
+fn a_rare_copy_will_not_fuse_with_a_plain_one() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let plain = GearCopy::plain(armor.clone());
+    let rare = GearCopy {
+        item: armor,
+        rarity: Rarity::Gold,
+        tier: 0,
+    };
+    game.add_copies(&plain, 1);
+    game.add_copies(&rare, 1);
+
+    assert!(
+        game.fuse_item(&rare).is_err(),
+        "one Overclocked copy plus one ordinary copy is not two of a thing"
+    );
+    assert_eq!(
+        game.count_copies(&rare),
+        1,
+        "the refusal must spend nothing"
+    );
+    assert_eq!(game.count_copies(&plain), 1);
+
+    // Two of the same copy do fuse, and the result keeps the tier.
+    game.add_copies(&rare, 1);
+    game.fuse_item(&rare).unwrap();
+    let fused = GearCopy {
+        tier: 1,
+        ..rare.clone()
+    };
+    assert_eq!(
+        game.count_copies(&fused),
+        1,
+        "the fused copy must still be Overclocked"
+    );
+}

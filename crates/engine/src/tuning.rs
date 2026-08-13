@@ -23,7 +23,7 @@
 //! - **Simulation-only values.** `balance_sim::TURN_CAP` and the guard
 //!   constants beside it tune the offline projections, not the game.
 
-use crate::components::Stats;
+use crate::components::{Rarity, Stats};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Player baseline & progression
@@ -1166,6 +1166,20 @@ pub const SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT: u32 = 30;
 /// How many items a defeated surface boss draws from that band. Drawn with
 /// replacement — a thin band repeats rather than paying less.
 pub const SURFACE_BOSS_LOOT_DROPS: u32 = 2;
+
+/// The worst rare tier a **surface boss** may pay — see
+/// `Game::pay_surface_boss_gear`. Ordinary drops have no floor and roll the
+/// bare `rarity_for_roll` ladder, where a rare copy is a lucky accident.
+///
+/// A floor here rather than a bigger pile of items, because
+/// `NEST_ORPHAN_CHANCE`'s doc already fixes what each of the three faucets
+/// pays: a Stack lair boss pays progression, a surface boss pays *power*,
+/// and a nest pays roster. Paying power means the gear a surface boss drops
+/// has to be better than what the player could have picked up on the way
+/// there, and "two more of the same items" is not that — the zone band
+/// already decides which items, so the tier is the only axis left that says
+/// *this fight was worth it* rather than *this fight took longer*.
+pub const SURFACE_BOSS_LOOT_RARITY_FLOOR: Rarity = Rarity::Silver;
 
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
 /// produces a Nest instead of an ordinary pack, for a species that has

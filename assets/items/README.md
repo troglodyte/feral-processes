@@ -115,10 +115,11 @@ any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
     // set, this item can be worn in the given slot — one of `Weapon`,
     // `Armor`, `Module` — granting the paired stat bonus while equipped.
     // Stats are `atk`, `def`, `decompiler`, each optionally omitted (they
-    // default to 0), and scale up with the wearer's gear level and with the
-    // fusion tier of the *individual copy* worn — see
-    // `EquipmentStats::scaled_for_level`/`fused_for_tier` and
-    // `components::FusedGear`. Only equippable items can be fused.
+    // default to 0), and scale up with the wearer's gear level, with the
+    // fusion tier of the *individual copy* worn, and with that copy's rare
+    // tier — see `EquipmentStats::scaled_for_level`/`fused_for_tier`/
+    // `for_rarity` and `components::GearCopies`. Only equippable items can
+    // be fused, and only they roll a rare tier.
     //
     // The wearer is the player *or* any program they own — one copy is
     // interchangeable, and every copy comes out of and returns to the
@@ -296,3 +297,28 @@ For the canonical list of shipped item ids and the rules governing the
 four economy roles, see [Item ids](../../docs/manual.md#item-ids) and
 [The four economy roles](../../docs/manual.md#the-four-economy-roles) in the
 manual.
+
+## Rare tiers are engine-rolled, not an item field
+
+There is deliberately no `rarity` field, and adding one to a `.ron` file does
+nothing. A rare tier belongs to a *copy*, not to an item: two Arc Lances can
+differ, which is the whole point — see `items::GearCopy`.
+
+The tier is rolled by `Game::grant_gear_drop` at the moment a copy drops, and
+only for the three sources that drop gear: a defeated program's own drop
+table, a surface boss's payout, and a Stack or nest cache. **Crafting and
+buying never roll one**, so a made or purchased copy is always ordinary. That
+asymmetry is the design rather than an oversight: found gear is meant to be
+categorically better than made gear, which is what gives a player a reason to
+go looking rather than shopping.
+
+The chances and the multipliers live in `crates/engine/src/tuning.rs`
+(`SILVER_SPAWN_CHANCE` and its siblings, `Rarity::stat_mult`,
+`GEAR_RARITY_MIN_BONUS_PER_RUNG`) rather than here, for the same reason every
+other difficulty knob does: content is moddable, how hard the game is, is not.
+The one exception is a surface boss, which pays at or above
+`SURFACE_BOSS_LOOT_RARITY_FLOOR` rather than rolling the bare ladder.
+
+A mod that adds an equippable item gets all of this for free — its copies
+roll the same tiers, scale by the same multipliers, and draw in the same
+colours as a shipped one.

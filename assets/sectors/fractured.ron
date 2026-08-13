@@ -16,6 +16,6 @@
     ),
     palette: (
         ground_hue: 225.0,
-        hazard_hue: 33.0,
+        hazard_hue: 26.0,
     ),
 )

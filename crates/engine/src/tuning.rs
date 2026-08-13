@@ -511,6 +511,31 @@ pub const CAPTURE_POTENCY_CEILING: f32 = 0.9;
 pub const CAPTURE_HP_PENALTY: f32 = 0.65;
 pub const CAPTURE_DIFFICULTY_PENALTY: f32 = 0.6;
 
+/// How the gap between the two sides' `Stats::power` bends a decompile. The
+/// ratio is `inspection::power_ratio`'s — the same number `difficulty_color`
+/// buckets into con colors — so the color painted on a program and the odds
+/// rolled against it can never disagree about which of you is stronger. Both
+/// ramps are bounded by the `DIFFICULTY_*` thresholds rather than by numbers
+/// of their own, so moving a con boundary moves the taming math with it.
+///
+/// The two halves are deliberately not symmetric, because the problems
+/// aren't. On the weaker-target side the ratio waives `CAPTURE_HP_PENALTY`
+/// instead of scaling the chance: against a program you delete in one strike
+/// there is no wearing-down for that penalty to reward, so a formula that
+/// keeps demanding it is demanding something the fight cannot supply. Full
+/// relief lands at `DIFFICULTY_EASY_MAX`, where the target stops reading as a
+/// threat at all, and there is none left by `DIFFICULTY_EVEN_MAX`.
+///
+/// On the stronger-target side it multiplies the whole attempt down from
+/// `DIFFICULTY_TOUGH_MAX`, for the reason `DECOMPILER_SKILL_BONUS` and
+/// `DECOMPILE_ATTEMPT_BONUS_PCT` also multiply rather than adding into the
+/// base: how outgunned you are must not become a route around a species' own
+/// `taming_difficulty`, in either direction. The floor keeps a deep-zone
+/// monster a long shot rather than a wall — 0.6x on top of a boss-grade
+/// difficulty still clears `CAPTURE_CHANCE_MIN` comfortably.
+pub const CAPTURE_OUTCLASSED_RATIO_FLOOR: f32 = 2.5;
+pub const CAPTURE_OUTCLASSED_MULT_FLOOR: f32 = 0.6;
+
 /// How much each decompile already attempted against a target raises the
 /// odds of the next attempt on that *same* program, in percentage points,
 /// and how many attempts stop counting.

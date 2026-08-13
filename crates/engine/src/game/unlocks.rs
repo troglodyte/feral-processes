@@ -1,6 +1,7 @@
 //! Perk and research progression — what the player has unlocked and what
 //! unlocking costs.
 
+use crate::game::inspection::power_ratio;
 use crate::taming::{DecompilerBonuses, TargetResistance};
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
@@ -41,12 +42,13 @@ impl Game {
     }
 
     /// Everything the target brings to a decompile attempt: its remaining
-    /// Integrity, its species' resistance, and how many attempts this fight
-    /// has already spent on it. The mirror of `player_decompiler_bonuses`
-    /// above and the one place these three are assembled, for the same
-    /// reason — the two call sites that *show* odds and the one that *rolls*
-    /// them must not drift apart, and `prior_attempts` is exactly the sort
-    /// of term a display would forget.
+    /// Integrity, its species' resistance, how many attempts this fight has
+    /// already spent on it, and how its `Stats::power` compares to the
+    /// player's. The mirror of `player_decompiler_bonuses` above and the one
+    /// place these four are assembled, for the same reason — the two call
+    /// sites that *show* odds and the one that *rolls* them must not drift
+    /// apart, and `prior_attempts` is exactly the sort of term a display
+    /// would forget.
     ///
     /// A species the `SpeciesDb` doesn't know falls back to
     /// `DEFAULT_TAMING_DIFFICULTY` rather than refusing, which is what the
@@ -66,6 +68,7 @@ impl Game {
                 .get_resource::<BattleState>()
                 .and_then(|b| b.decompile_attempts.get(&entity).copied())
                 .unwrap_or(0),
+            power_ratio: power_ratio(stats.power(), self.player_power()) as f32,
         })
     }
 

@@ -494,6 +494,91 @@ pub fn append_run_history(path: &Path, summary: &str) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    /// The one save surface gear rarity cannot widen in place.
+    /// `PlayerSave::fused_gear` ships as a positional 3-tuple
+    /// (`dev-saves/extraction.ron:63` is literally `("scrap_ward", 3, 1)`),
+    /// and RON parses a `(` in a struct position as the start of *named*
+    /// fields — it raises `ExpectedIdentifier` rather than falling through
+    /// to serde's `visit_seq`, so converting the row to a named struct with
+    /// defaulted trailing fields does **not** load an old save. Measured,
+    /// not assumed.
+    ///
+    /// So the two shapes coexist for one release instead: `fused_gear` stays
+    /// exactly as it was and is read-only, `gear_copies` is the new store,
+    /// and `Game::load` drains the first into the second. `fused_gear` is
+    /// skipped when empty, so a save written from here on carries only the
+    /// new field — and since nothing sets `deny_unknown_fields`, the legacy
+    /// field can be deleted outright a release later with no bump.
+    #[test]
+    fn a_v29_save_still_loads_its_gear_after_the_new_field_lands() {
+        #[derive(Debug, Serialize, Deserialize)]
+        struct GearCopyProbe {
+            item: ItemId,
+            tier: u32,
+            qty: u32,
+            #[serde(default)]
+            rarity: Rarity,
+            #[serde(default)]
+            affix: Option<String>,
+        }
+
+        #[derive(Debug, Default, Serialize, Deserialize)]
+        struct PlayerProbe {
+            #[serde(default, skip_serializing_if = "Vec::is_empty")]
+            fused_gear: Vec<(ItemId, u32, u32)>,
+            #[serde(default)]
+            gear_copies: Vec<GearCopyProbe>,
+        }
+
+        // A v29 player: legacy rows, and no `gear_copies` field at all.
+        let old: PlayerProbe = ron::from_str(r#"(fused_gear: [("scrap_ward", 3, 1)])"#)
+            .expect("a v29 save must still load");
+        assert_eq!(old.fused_gear, vec![(ItemId::from("scrap_ward"), 3, 1)]);
+        assert!(
+            old.gear_copies.is_empty(),
+            "the new store defaults empty so load can drain the legacy rows into it"
+        );
+
+        // A save written after this change: new rows, no legacy field.
+        let new: PlayerProbe = ron::from_str(
+            r#"(gear_copies: [(item: "kinetic_edge", tier: 1, qty: 2, rarity: Silver)])"#,
+        )
+        .expect("the new row shape must load");
+        assert_eq!(new.gear_copies[0].rarity, Rarity::Silver);
+        assert_eq!(new.gear_copies[0].qty, 2);
+        assert!(
+            new.gear_copies[0].affix.is_none(),
+            "affix lands in a later phase and must default until then"
+        );
+
+        // Nothing carries `deny_unknown_fields`, so dropping `fused_gear` in
+        // a later release is not a format break either.
+        let dropped: GearCopyProbe =
+            ron::from_str(r#"(item: "shim_blade", tier: 1, qty: 1, retired_field: 7)"#)
+                .expect("an unknown field must be ignored, not refused");
+        assert_eq!(dropped.item, ItemId::from("shim_blade"));
+
+        // And a fresh save carries no legacy field at all.
+        let written = ron::ser::to_string_pretty(
+            &PlayerProbe {
+                gear_copies: vec![GearCopyProbe {
+                    item: ItemId::from("shim_blade"),
+                    tier: 0,
+                    qty: 1,
+                    rarity: Rarity::Gold,
+                    affix: None,
+                }],
+                ..Default::default()
+            },
+            ron::ser::PrettyConfig::default(),
+        )
+        .unwrap();
+        assert!(
+            !written.contains("fused_gear"),
+            "an empty legacy field must not be written back out: {written}"
+        );
+    }
+
     fn sample_data() -> SaveData {
         SaveData {
             seed: 1,

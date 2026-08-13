@@ -368,6 +368,11 @@ pub struct PetInfo {
     /// Whether this is the program equipped as the player's weapon (see
     /// `resources::WieldedProgram`). At most one row in a list carries it.
     pub wielded: bool,
+    /// Which of this program's three equipment slots are filled, as the
+    /// fixed-width `w|a|m` cell `Game::gear_tag` builds. Pre-formatted rather
+    /// than three booleans because `CompanionInfo` shows the same cell on the
+    /// status panel, and one loadout must not read two ways.
+    pub gear: String,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel
@@ -391,6 +396,9 @@ pub struct CompanionInfo {
     /// can see what its Special would do. In battle the action menu carries
     /// the full label instead (see `Game::battle_action_options`).
     pub ability: String,
+    /// The same `w|a|m` loadout cell the roster carries — see
+    /// `PetInfo::gear`.
+    pub gear: String,
 }
 
 #[derive(Clone)]

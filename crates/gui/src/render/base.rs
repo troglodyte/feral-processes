@@ -999,10 +999,15 @@ fn machine_color(status: MachineStatus) -> Color {
 
 /// One party member's line in the status column, indented under the
 /// `Party: n/m` heading it belongs to.
+///
+/// The `w|a|m` loadout cell trails the stats rather than leading them: the
+/// panel's job while you are walking is the numbers, and the cell is here so
+/// an unequipped member is noticeable without opening the roster — see
+/// `Game::gear_tag`, which is where both screens get it from.
 fn party_row(companion: &feral_processes_engine::CompanionInfo) -> String {
     format!(
-        "  {} (HP {}/{}, PWR {})",
-        companion.name, companion.hp, companion.max_hp, companion.power
+        "  {} (HP {}/{}, PWR {}) {}",
+        companion.name, companion.hp, companion.max_hp, companion.power, companion.gear
     )
 }
 
@@ -1450,7 +1455,21 @@ mod tests {
             power: 41,
             status: None,
             ability: "Rally".to_string(),
+            gear: "w|.|.".to_string(),
         }
+    }
+
+    /// The panel is the only companion list on screen while you are walking
+    /// around, so it is where a player notices a party member is still
+    /// wearing nothing without stopping to open the roster.
+    #[test]
+    fn a_party_row_shows_which_gear_slots_are_filled() {
+        let row = party_row(&companion("Sparkgrub"));
+        assert!(row.contains("w|.|."), "{row}");
+        assert!(
+            row.find("PWR").unwrap() < row.find("w|.|.").unwrap(),
+            "the cell trails the stats it annotates: {row}"
+        );
     }
 
     /// The row's own word for what it is was redundant against the

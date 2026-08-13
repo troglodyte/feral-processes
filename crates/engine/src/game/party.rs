@@ -195,6 +195,7 @@ impl Game {
             power: stats.power(),
             status: self.status_label(entity),
             ability: self.ability_label(entity),
+            gear: self.gear_tag(entity),
         })
     }
 
@@ -329,6 +330,7 @@ impl Game {
                     refactors: self.refactor_count(entity),
                     rarity: self.rarity_of(entity),
                     wielded: self.wielded_program() == Some(entity),
+                    gear: self.gear_tag(entity),
                 })
             })
             .collect()
@@ -493,6 +495,27 @@ impl Game {
     /// opened for, rather than matching on the player's three by slot.
     pub fn worn(&self, wearer: Entity, slot: EquipmentSlot) -> Option<EquippedItem> {
         self.world.get::<Equipment>(wearer)?.get(slot)
+    }
+
+    /// `wearer`'s loadout as one cell — `w|a|m`, with a filled slot named by
+    /// its `EquipmentSlot::initial` and an empty one held open by a dot.
+    ///
+    /// Fixed width on purpose: the roster and the status panel both list
+    /// several programs at once, and a cell that shrank when a slot was bare
+    /// would leave the marks unaligned down the list, which is the one thing
+    /// this is for. It also cannot be built in a renderer — two screens draw
+    /// it, and a program's loadout must not read one way in the panel and
+    /// another in the roster it was opened from.
+    pub(crate) fn gear_tag(&self, wearer: Entity) -> String {
+        EquipmentSlot::ALL
+            .iter()
+            .map(|&slot| match self.worn(wearer, slot) {
+                Some(_) => slot.initial(),
+                None => '.',
+            })
+            .map(String::from)
+            .collect::<Vec<_>>()
+            .join("|")
     }
 
     /// The player-chosen name on `creature`, or `None` if it is still going

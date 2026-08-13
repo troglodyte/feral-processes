@@ -256,6 +256,21 @@ impl EquipmentSlot {
             EquipmentSlot::Module => "MOD",
         }
     }
+
+    /// One character for a roster row, where three slots have to fit beside a
+    /// name, a level and two stat pairs — see `Game::gear_tag`.
+    ///
+    /// Derived from `short_label` rather than matched again: the letters are
+    /// the same three words abbreviated further, and a fourth slot added to
+    /// `ALL` gets its mark for free instead of silently drawing as whatever a
+    /// second match's fallback arm said.
+    pub fn initial(self) -> char {
+        self.short_label()
+            .chars()
+            .next()
+            .expect("every slot label is non-empty")
+            .to_ascii_lowercase()
+    }
 }
 
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1

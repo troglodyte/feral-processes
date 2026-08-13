@@ -303,6 +303,73 @@ fn owned_pets_sorts_everything_behind_the_party_by_name() {
     );
 }
 
+/// The roster lists programs the player never opens a gear screen for — a
+/// posted worker, a bench-warmer — so "is this one kitted out" has to be
+/// readable from the list itself rather than three keypresses deep.
+#[test]
+fn a_roster_row_marks_which_gear_slots_are_filled() {
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+
+    let tag = |game: &mut Game| {
+        game.owned_pets()
+            .into_iter()
+            .find(|p| p.entity == pet)
+            .map(|p| p.gear)
+            .unwrap()
+    };
+    assert_eq!(tag(&mut game), ".|.|.", "a bare program fills nothing");
+
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    let module = ItemId::from(ids::NEURAL_AMPLIFIER);
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let player = game.player_entity();
+    for item in [&weapon, &module, &armor] {
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(item.clone(), 1);
+    }
+
+    game.equip(pet, &gear(&weapon, 0)).unwrap();
+    game.equip(pet, &gear(&module, 0)).unwrap();
+    assert_eq!(
+        tag(&mut game),
+        "w|.|m",
+        "a gap keeps its place so the slots line up down the list"
+    );
+
+    game.equip(pet, &gear(&armor, 0)).unwrap();
+    assert_eq!(tag(&mut game), "w|a|m");
+}
+
+/// The status panel lists the party too, and the two screens read the same
+/// program at the same moment. One formatter, or they disagree.
+#[test]
+fn the_status_panel_reads_a_loadout_the_same_way_the_roster_does() {
+    let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(pet).unwrap();
+
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+    game.equip(pet, &gear(&armor, 0)).unwrap();
+
+    let roster = game
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity == pet)
+        .unwrap()
+        .gear;
+    let panel = game.player_status().companions[0].gear.clone();
+    assert_eq!(roster, ".|a|.");
+    assert_eq!(panel, roster, "both screens read one loadout");
+}
+
 #[test]
 fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

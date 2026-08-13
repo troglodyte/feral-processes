@@ -82,6 +82,47 @@ pub(super) fn draw_companion_equip(
     draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
 }
 
+/// One program's line on the roster.
+///
+/// The `w|a|m` loadout cell sits directly after the stats and ahead of every
+/// optional tag, so it holds one column down the list: quality, fusion depth,
+/// the wield mark and the activity all come and go per row, and a cell placed
+/// after any of them would only line up with rows carrying the same ones.
+/// Its shortcut is passed in rather than read off the row, since the number
+/// keys are the list's position and `PetInfo` has no idea where it landed.
+fn companion_row(shortcut: char, p: &PetInfo) -> String {
+    let slot = p
+        .party_slot
+        .map(|s| format!("#{} ", s + 1))
+        .unwrap_or_default();
+    let activity = activity_tag(&p.activity);
+    let quality = p
+        .quality
+        .as_ref()
+        .map(|q| format!(" [{q}]"))
+        .unwrap_or_default();
+    let fused = fusion_tag(p.fusions);
+    let wielded = if p.wielded { " (WEP)" } else { "" };
+    format!(
+        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  PWR {}  {}{}{}{}{}{}",
+        p.name,
+        p.level,
+        p.hp,
+        p.max_hp,
+        p.power,
+        p.gear,
+        quality,
+        fused,
+        wielded,
+        activity,
+        if hp_critical(p.hp, p.max_hp) {
+            " - CRITICAL"
+        } else {
+            ""
+        }
+    )
+}
+
 pub(super) fn draw_companion_menu(
     game: &mut Game,
     selected: usize,
@@ -94,35 +135,10 @@ pub(super) fn draw_companion_menu(
         rows.push(text_row("(you don't have any compiled programs yet)"));
     }
     for (i, p) in pets.iter().enumerate() {
-        let slot = p
-            .party_slot
-            .map(|s| format!("#{} ", s + 1))
-            .unwrap_or_default();
-        let activity = activity_tag(&p.activity);
-        let quality = p
-            .quality
-            .as_ref()
-            .map(|q| format!(" [{q}]"))
-            .unwrap_or_default();
-        let fused = fusion_tag(p.fusions);
         // No row colour of its own: `fusion_row` already loses to CRITICAL
         // below, and a third meaning on that axis makes all three unreadable.
-        let wielded = if p.wielded { " (WEP)" } else { "" };
         let critical = hp_critical(p.hp, p.max_hp);
-        let text = format!(
-            "[{}] {slot}{} Lv{} - HP {}/{}  PWR {}{}{}{}{}{}",
-            menu_shortcut(i),
-            p.name,
-            p.level,
-            p.hp,
-            p.max_hp,
-            p.power,
-            quality,
-            fused,
-            wielded,
-            activity,
-            if critical { " - CRITICAL" } else { "" }
-        );
+        let text = companion_row(menu_shortcut(i), p);
         // CRITICAL outranks both the fusion colour and the rare tier: one is
         // a state to act on this turn, the others are permanent properties
         // to read at leisure. `tier_color` settles those two against each
@@ -385,6 +401,55 @@ mod tests {
                 );
             }
         });
+    }
+
+    fn pet(name: &str, gear: &str) -> PetInfo {
+        PetInfo {
+            entity: Entity::PLACEHOLDER,
+            glyph: 'p',
+            color: GlyphColor::White,
+            name: name.to_string(),
+            level: 6,
+            hp: 22,
+            max_hp: 28,
+            atk: 8,
+            def: 5,
+            power: 19,
+            party_slot: Some(0),
+            activity: "in party".to_string(),
+            quality: None,
+            fusions: 0,
+            refactors: 0,
+            rarity: Rarity::Ordinary,
+            wielded: false,
+            gear: gear.to_string(),
+        }
+    }
+
+    /// The roster is where a program's gear is *fitted*, so it is also where
+    /// the player is deciding which one to fit next — and the list is the
+    /// only screen that can answer "which of these is still bare" without
+    /// three keypresses per program.
+    #[test]
+    fn a_roster_row_carries_the_loadout_cell() {
+        assert!(companion_row('a', &pet("Kestrel", "w|a|m")).contains("w|a|m"));
+        let bare = companion_row('b', &pet("Nine", ".|.|."));
+        assert!(bare.contains(".|.|."), "{bare}");
+    }
+
+    /// The cell sits ahead of the tags that come and go — quality, fusion,
+    /// the wield mark, the activity — because a column that only lines up on
+    /// rows carrying the same optional tags lines up nowhere.
+    #[test]
+    fn the_loadout_cell_precedes_the_optional_tags() {
+        let mut p = pet("Kestrel", "w|.|.");
+        p.quality = Some("Excellent (94%)".to_string());
+        p.wielded = true;
+        let row = companion_row('a', &p);
+        let cell = row.find("w|.|.").expect("the cell is drawn");
+        assert!(cell < row.find("Excellent").unwrap(), "{row}");
+        assert!(cell < row.find("WEP").unwrap(), "{row}");
+        assert!(cell < row.find("in party").unwrap(), "{row}");
     }
 
     /// The gear key is the opposite of the one below: it has a screen, it

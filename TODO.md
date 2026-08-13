@@ -12,6 +12,8 @@
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 13. one button to fuse all items
+14. compainions list, enter does nothing, P adds | removes from party
+15. rotten substrate, in stacks take 15% off health tunable
 
 # Bugs
 1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest
@@ -21,3 +23,12 @@
    this screen has the room. Pre-existing, measured 2026-08-13;
    `no_shipped_inventory_row_overflows_its_popup` covers every tier below
    maxed and excludes that case by name.
+2. The roster's widest row overflows the Party popup the same way, and by far
+   more: a maxed-fusion rare program with a full custom name, a zone tag, a
+   quality tier, the wield mark, an activity and CRITICAL measures 1636px into
+   the same 1243px body — 393px over. Pre-existing and worse than Bug 1
+   because the name half is player-authored rather than shipped, so no census
+   over the assets can bound it. Measured 2026-08-13, when the `w|a|m` loadout
+   cell was added; the cell is 54px of that total and the row was already
+   339px over without it. The fix is a chop, not a shorter tag — the row has
+   six optional tags and drops none of them.

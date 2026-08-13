@@ -27,6 +27,38 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.9
+
+### A dropped weapon can come up rare, and can carry a name
+
+Gear that drops now rolls two things it never used to. The first is a rare
+tier, off the same five-rung ladder a wild program rolls on — so an
+Overclocked Arc Lance is exactly as rare as an Overclocked program, and the
+word means one thing wherever you read it. The ladder itself grew two rungs
+at the top, Unrolled and Bare-Metal, for gear and programs alike.
+
+The second is an affix: a name fragment and an extra stat, giving you
+"Overclocked Arc Lance of Static" — the colour you read off the row and the
+words you read off the name, rolled independently. A tier is the chase, at
+about one drop in thirty across the whole ladder. An affix is the variety,
+at about one in five, which is what stops the other drops being the fourth
+copy of something you already have. An affix's stats are added before the
+gear scales, so a good one grows with the run rather than dwindling.
+
+Only *found* gear rolls either. Crafting, buying and buying one back are
+deliberately excluded: what you go looking for should beat what you can
+shop for. A surface boss now pays at Optimized or better, since that fight's
+whole job is to hand you something better than the ground you crossed to
+reach it — where a Stack lair pays progression and a nest pays roster.
+
+Affixes are content, not code. `assets/affixes/*.ron` ships eight, a mod
+adds one by dropping in a file, and deleting the directory restores the
+previous game exactly, down to the random number stream.
+
+Existing saves load untouched. A copy you were already carrying reads as
+ordinary and unaffixed, and gear you sold before this release still buys
+back as the copy you sold.
+
 ## 0.8.8
 
 ### A key pressed while the map log scrolls in is no longer eaten

@@ -38,19 +38,7 @@ fn program_activity_tells_a_guard_apart_from_a_worker() {
 fn program_activity_names_the_structure_a_worker_is_on() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = game
-        .world
-        .spawn((
-            Structure {
-                kind: "mining_node".to_string(),
-            },
-            Position { x: 4, y: 4 },
-            ResourceNode {
-                resource: ItemId::from(ids::CORE_FRAGMENT),
-                level: None,
-            },
-        ))
-        .id();
+    let node = spawn_mining_node(&mut game, 4, 4);
 
     game.assign_cronjob(worker, node).unwrap();
     let label = game.program_activity(worker);
@@ -58,6 +46,76 @@ fn program_activity_names_the_structure_a_worker_is_on() {
     assert!(
         !label.starts_with("guarding "),
         "a worker must not read as a guard"
+    );
+}
+
+/// `program_post` is the one read of a `Task` into a label, and
+/// `program_activity` is built on top of it — so the manifest's row and the
+/// terse status every dialog shows cannot disagree about which structure a
+/// program is standing at, or about which of the two jobs it is doing.
+///
+/// Two games rather than one, on the two seeds the neighbouring activity
+/// tests already prove: `assign_cronjob` refuses a machine with no walkable
+/// unoccupied neighbour to stand at, so which tiles a post can be built on
+/// is a property of the seed's terrain, and pairing an arbitrary seed with
+/// two structures is how this reads as a broken feature instead of a fixture
+/// that got unlucky.
+#[test]
+fn program_post_names_the_structure_and_which_job_it_is() {
+    let mut game = Game::new(130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let idle = spawn_tamed(&mut game, 30, 5);
+    let fighter = spawn_tamed(&mut game, 30, 5);
+    let guard = spawn_tamed(&mut game, 30, 5);
+    let market = spawn_market(&mut game);
+
+    game.assign_guard(guard, market).unwrap();
+    game.add_companion(fighter).unwrap();
+
+    assert_eq!(
+        game.program_post(guard),
+        Some((TaskKind::Guard, game.entity_label(market))),
+        "a guard's post carries the kind, so the renderer picks the word"
+    );
+    assert_eq!(
+        game.program_post(idle),
+        None,
+        "a program with no Task is posted nowhere"
+    );
+    assert_eq!(
+        game.program_post(fighter),
+        None,
+        "and neither is one in the party — `add_companion` clears the task"
+    );
+
+    let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 30, 5);
+    let node = spawn_mining_node(&mut game, 4, 4);
+    game.assign_cronjob(worker, node).unwrap();
+
+    assert_eq!(
+        game.program_post(worker),
+        Some((TaskKind::GatherResource, game.entity_label(node)))
+    );
+}
+
+/// The manifest's WORK box carries the post, which is what turns the bare
+/// structure name in the header's run of tags into a stated assignment.
+#[test]
+fn a_manifest_names_the_structure_a_program_is_posted_to() {
+    let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 30, 5);
+    let node = spawn_mining_node(&mut game, 4, 4);
+    game.assign_cronjob(worker, node).unwrap();
+
+    let view = game
+        .manifest(worker)
+        .expect("a tamed program has a manifest");
+    let ManifestSubject::Program(p) = view.subject else {
+        panic!("a creature is a Program subject");
+    };
+    assert_eq!(
+        p.post,
+        Some((TaskKind::GatherResource, game.entity_label(node)))
     );
 }
 

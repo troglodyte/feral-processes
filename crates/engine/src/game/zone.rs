@@ -589,6 +589,16 @@ impl Game {
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
+        // A second line rather than a longer first one: a neutral sector has
+        // nothing to say and must read exactly as it did before sectors
+        // existed. Read before logging because `Game::log` wants `&mut self`
+        // while `sector` is borrowing it.
+        if let Some((name, description)) = self
+            .sector()
+            .map(|def| (def.name.clone(), def.description.clone()))
+        {
+            self.log(format!("{name}. {description}"));
+        }
         if !lost.is_empty() {
             let manifest = lost
                 .iter()

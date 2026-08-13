@@ -658,7 +658,7 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
 
     assert!(
         !game
-            .message_log(20)
+            .message_log(200)
             .iter()
             .any(|e| e.text.contains("decohere")),
         "an empty wallet shouldn't be announced as a loss"
@@ -674,11 +674,11 @@ fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
     // uses for a teleport cost — item names are modder-supplied data, not
     // English to inflect.
     assert!(
-        game.message_log(20)
+        game.message_log(200)
             .iter()
             .any(|e| e.text.contains("3 Portal Fragment")),
         "a real loss is named and counted: {:?}",
-        game.message_log(20)
+        game.message_log(200)
     );
 }
 
@@ -1786,12 +1786,12 @@ fn a_lost_nest_orphan_says_so() {
     one_shot_nest(&mut game, nest);
 
     assert!(
-        game.message_log(20)
+        game.message_log(200)
             .into_iter()
             .any(|e| e.text.contains("no room")),
         "a full roster must be told what it just lost, not left to notice nothing arrived: \
          {:?}",
-        game.message_log(20)
+        game.message_log(200)
     );
 }
 
@@ -1906,7 +1906,7 @@ fn the_cache_lines_are_loot_kind() {
 
     one_shot_nest(&mut game, nest);
 
-    let log = game.message_log(20);
+    let log = game.message_log(200);
     let cache_lines: Vec<_> = log
         .iter()
         .filter(|e| e.text.contains("wreckage") || e.text.contains("cache"))
@@ -2125,4 +2125,53 @@ fn with_no_sectors_installed_every_zone_generates_at_the_neutral_shape() {
         let expected: Vec<Biome> = (-40..40).map(|i| reference.tile(i, i * 2).biome).collect();
         assert_eq!(live, expected, "zone {zone} did not generate as neutral");
     }
+}
+
+/// A breach says *where* you have landed, not only how hard it is. The
+/// level line is untouched: a neutral sector must read exactly as it did
+/// before sectors existed, which is the same absence-is-supported property
+/// the generation side has.
+#[test]
+fn breaching_into_a_named_sector_announces_it() {
+    let assets = assets_dir_with_sectors("zone_announce", &[("cold.ron", ONLY_COLD)]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    breach(&mut game);
+
+    let log = game
+        .message_log(200)
+        .into_iter()
+        .map(|l| l.text)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        log.contains("level 2 sector"),
+        "the level line should be unchanged: {log}"
+    );
+    assert!(
+        log.contains("Cold Storage"),
+        "the sector's name should be announced: {log}"
+    );
+    assert!(
+        log.contains("frost-locked"),
+        "the sector's description should be announced: {log}"
+    );
+}
+
+#[test]
+fn breaching_into_a_neutral_sector_logs_only_the_level_line() {
+    let assets = assets_dir_with_sectors("zone_announce_neutral", &[]);
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+    breach(&mut game);
+
+    let breach_lines: Vec<String> = game
+        .message_log(200)
+        .into_iter()
+        .map(|l| l.text)
+        .filter(|m| m.contains("breach the portal"))
+        .collect();
+    assert_eq!(
+        breach_lines.len(),
+        1,
+        "a neutral sector should add no second line: {breach_lines:?}"
+    );
 }

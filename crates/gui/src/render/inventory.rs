@@ -130,22 +130,20 @@ pub(super) fn equipped_row(
 
 /// `Weapon: Arc Lance Lv3 T1 (+16 ATK)`, or `Weapon: (empty)`.
 ///
-/// The stat bonus goes through `stat_summary` rather than being formatted
-/// here, so the equipped panel, the inventory list's tag and the swap
-/// picker's columns cannot disagree about what an item grants.
+/// The figure comes from `Game::copy_bonus` and is formatted by
+/// `stat_summary`, so the equipped panel, the inventory list's tag and the
+/// swap picker's columns cannot disagree about what an item grants. Sharing
+/// only the formatter is what let them disagree before — see `copy_bonus`.
 fn equipped_summary(
     label: &str,
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     game: &Game,
 ) -> String {
-    let Some((equipped, base)) =
-        equipped.and_then(|e| game.equipment_of(&e.copy.item).map(|(_, mods)| (e, mods)))
+    let Some((equipped, mods)) =
+        equipped.and_then(|e| game.copy_bonus(&e.copy, e.level).map(|mods| (e, mods)))
     else {
         return format!("{label}: (empty)");
     };
-    let mods = base
-        .scaled_for_level(equipped.level)
-        .fused_for_tier(equipped.copy.tier);
     let mut notes = Vec::new();
     if equipped.level > 1 {
         notes.push(format!("Lv{}", equipped.level));
@@ -293,9 +291,50 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
+    use super::equipped_summary;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::components::Rarity;
+    use feral_processes_engine::items::EquipmentSlot;
+    use feral_processes_engine::{DifficultyMode, Game, save};
+
+    /// **The equipped panel prints what the player is actually wearing.**
+    ///
+    /// It rebuilt the scaling chain by hand and knew about two of the four
+    /// properties a `GearCopy` carries — so an Overclocked Overdriven Kinetic
+    /// Edge, really worth 27 ATK, was reported at 6. Both omissions
+    /// are here on purpose: an affix and a rare tier are the two properties
+    /// added after this function was written, which is what a hand-rolled
+    /// copy of `Game::copy_bonus` costs.
+    #[test]
+    fn the_equipped_panel_prices_the_affix_and_the_rare_tier() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game = Game::new(77, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let path = std::env::temp_dir().join("feral_processes_gui_equipped_panel.sav");
+        game.save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.player.weapon = Some("kinetic_edge".into());
+        data.player.weapon_level = 3;
+        data.player.weapon_rarity = Rarity::Gold;
+        data.player.weapon_affix = Some("overdriven".into());
+        save::save_to_file(&path, &data).unwrap();
+        let game = Game::load(&path, assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let player = game.player_entity();
+        let worn = game
+            .worn(player, EquipmentSlot::Weapon)
+            .expect("wearing it");
+        let real = game.copy_bonus(&worn.copy, worn.level).expect("priced");
+
+        let summary = equipped_summary("Weapon", Some(worn), &game);
+        assert!(
+            summary.contains(&format!("+{} ATK", real.atk)),
+            "the panel disagrees with what the player is wearing ({} ATK): {summary}",
+            real.atk
+        );
+    }
 
     /// A rare tier is drawn as a *word* in front of the item name, and
     /// `swap_label` pads its columns with `{:<N}` — which never truncates.

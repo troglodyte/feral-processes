@@ -676,3 +676,92 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
         SWAP_NAME_COLUMN_FOR_TESTS
     );
 }
+
+/// **The swap picker must price the affix it just named.**
+///
+/// The name column is built by `Game::copy_name`, so an affixed candidate has
+/// always *read* as "Overdriven Kinetic Edge"; the stat column beside it was
+/// computed from the item's catalogue entry alone. Because the affix is folded
+/// into the base *before* the level axis (see `Game::copy_bonus`), dropping it
+/// understates the row by the affix times the zone — invisible at zone 1 and
+/// 15 ATK at zone 5.
+///
+/// Nothing is worn, so the figure the row prints is the whole of what
+/// equipping it grants and the two can be compared directly rather than
+/// through a delta.
+#[test]
+fn an_affixed_swap_row_prices_the_affix_it_names() {
+    let zone = 3;
+    let mut app = app_carrying_affixed_gear(950, "kinetic_edge", "overdriven", zone);
+    let game = app.game.as_ref().unwrap();
+    let player = game.player_entity();
+
+    let row = equip_swap_rows(game, player, EquipmentSlot::Weapon)
+        .into_iter()
+        .find(|r| matches!(&r.choice, SwapChoice::Equip(c) if c.affix.is_some()))
+        .expect("the affixed copy is offered");
+    assert!(
+        row.label.contains("Overdriven"),
+        "the row names the affix: {}",
+        row.label
+    );
+
+    // What equipping it really grants — Kinetic Edge is 2 ATK and Overdriven
+    // adds 3, so zone 3 is (2 + 3) * 3.
+    let before = game.player_status().atk;
+    let game = app.game.as_mut().unwrap();
+    game.equip(player, &affixed_gear("kinetic_edge", "overdriven"))
+        .unwrap();
+    let granted = game.player_status().atk - before;
+    assert_eq!(granted, 15, "the affix scales with the zone like the base");
+
+    assert!(
+        row.label.contains(&format!("+{granted} ATK")),
+        "the row promised something other than the {granted} ATK it grants: {}",
+        row.label
+    );
+}
+
+/// The inventory list's tag has the same job and the same trap: it is the
+/// figure a player reads *before* opening the picker, so the two disagreeing
+/// is worse than either being wrong alone.
+#[test]
+fn the_inventory_tag_prices_an_affix() {
+    let app = app_carrying_affixed_gear(951, "kinetic_edge", "overdriven", 3);
+    let game = app.game.as_ref().unwrap();
+
+    let tag = equip_preview_tag(game, &affixed_gear("kinetic_edge", "overdriven"), 3);
+    assert!(
+        tag.contains("+15 ATK"),
+        "the tag dropped the affix's contribution: {tag}"
+    );
+}
+
+/// The picker's other half: every row's delta column, and the whole of the
+/// `(Unequip)` row, are measured against what is *already worn*. That figure
+/// was a second hand-rolled copy of the chain with the same blind spot, so an
+/// affixed item on your back read as costing less to take off than it does —
+/// which turns every comparison on the screen into a recommendation to
+/// downgrade.
+#[test]
+fn the_unequip_row_prices_the_affix_on_your_back() {
+    let zone = 3;
+    let mut app = app_carrying_affixed_gear(952, "kinetic_edge", "overdriven", zone);
+    let player = app.game.as_ref().unwrap().player_entity();
+
+    let game = app.game.as_mut().unwrap();
+    let before = game.player_status().atk;
+    game.equip(player, &affixed_gear("kinetic_edge", "overdriven"))
+        .unwrap();
+    let worn_worth = game.player_status().atk - before;
+
+    let row = equip_swap_rows(game, player, EquipmentSlot::Weapon)
+        .into_iter()
+        .find(|r| r.choice == SwapChoice::Unequip)
+        .expect("something is worn, so the row is offered");
+    assert!(
+        row.label.contains(&format!("-{worn_worth} ATK")),
+        "taking it off costs {worn_worth} ATK, and the row says otherwise: {}",
+        row.label
+    );
+}

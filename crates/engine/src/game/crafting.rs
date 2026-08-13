@@ -270,8 +270,9 @@ impl Game {
         Ok(Some(equipped))
     }
 
-    /// What one worn item is worth: its authored bonus put through all three
-    /// scaling axes, in the canonical order.
+    /// What one copy of gear is worth at gear level `level`: its authored
+    /// bonus plus its affix, put through all three scaling axes in the
+    /// canonical order.
     ///
     /// **This is the only place that order is written down**, and the order
     /// is load-bearing rather than stylistic — two of the three axes carry a
@@ -282,17 +283,29 @@ impl Game {
     /// scaled — figure from the one its equip added and weld the difference
     /// into the wearer's base `Stats`.
     ///
+    /// It is `pub` rather than `pub(crate)` because **the screens need it as
+    /// much as the operations do**, and could not have it. Four of them —
+    /// the inventory tag, the swap picker's two columns and the equipped
+    /// panel — each rebuilt this chain by hand out of `equipment_of`, and
+    /// every one of them knew about the properties a `GearCopy` carried on
+    /// the day it was written. When the affix landed as the fourth, all four
+    /// went on pricing gear as though it did not exist: a row that *named*
+    /// "Overdriven Kinetic Edge" costed the bare Kinetic Edge, understating
+    /// itself by the affix times the zone. Taking the whole copy rather than
+    /// its loose properties is the same argument `EquippedItem`'s doc makes:
+    /// a fifth property is then not forgettable at a call site.
+    ///
     /// `None` when the item has dropped out of `ItemDb`, which a save naming
     /// a since-removed mod item produces.
-    pub(crate) fn worn_bonus(&self, worn: &EquippedItem) -> Option<items::EquipmentStats> {
-        let (_, base) = self.equipment_of(&worn.copy.item)?;
+    pub fn copy_bonus(&self, copy: &GearCopy, level: u32) -> Option<items::EquipmentStats> {
+        let (_, base) = self.equipment_of(&copy.item)?;
         // The affix is added to the *base* before any scaling, so it grows
         // with gear level and both tiers exactly as the item's own bonus
         // does. Added after would make an affix worth steadily less as a run
         // goes on, which is the opposite of what a rolled property is for —
         // and would make a scavenged weapon with a good affix worthless
         // after one breach.
-        let affixed = match self.affix_of(&worn.copy) {
+        let affixed = match self.affix_of(copy) {
             Some(affix) => items::EquipmentStats {
                 atk: base.atk + affix.stats.atk,
                 def: base.def + affix.stats.def,
@@ -302,10 +315,17 @@ impl Game {
         };
         Some(
             affixed
-                .scaled_for_level(worn.level)
-                .fused_for_tier(worn.copy.tier)
-                .for_rarity(worn.copy.rarity),
+                .scaled_for_level(level)
+                .fused_for_tier(copy.tier)
+                .for_rarity(copy.rarity),
         )
+    }
+
+    /// What one *worn* item is worth — `copy_bonus` at the level the copy
+    /// remembers being equipped at, which is the only thing a worn item adds
+    /// to a carried one.
+    pub(crate) fn worn_bonus(&self, worn: &EquippedItem) -> Option<items::EquipmentStats> {
+        self.copy_bonus(&worn.copy, worn.level)
     }
 
     /// What `wearer`'s gear is worth right now — every worn slot's bonus,

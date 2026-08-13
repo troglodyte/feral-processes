@@ -261,6 +261,15 @@ impl EquipmentSlot {
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1
 /// (base). See `GEAR_LEVEL_STEP`/`EquipmentStats::scaled_for_level` for
 /// how a higher gear level scales these up.
+///
+/// The type is `pub` — a `.ron` file authors one — but the **three scaling
+/// axes below are `pub(crate)` on purpose**: outside the engine the only way
+/// to price a piece of gear is `Game::copy_bonus`. They were public, and four
+/// screens each built the chain themselves out of an item's catalogue entry;
+/// every one of them then priced gear as though the affix property did not
+/// exist, because none of them could see a `GearCopy`'s affix from an
+/// `EquipmentStats`. Keeping them crate-private is what makes that fifth copy
+/// fail to compile rather than merely be discouraged.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct EquipmentStats {
     #[serde(default)]
@@ -274,7 +283,7 @@ pub struct EquipmentStats {
 impl EquipmentStats {
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
     /// Each component is rounded independently to the nearest whole point.
-    pub fn scaled_for_level(self, level: u32) -> EquipmentStats {
+    pub(crate) fn scaled_for_level(self, level: u32) -> EquipmentStats {
         let factor = 1.0 + GEAR_LEVEL_STEP * (level.max(1) as f64 - 1.0);
         let scale = |v: i32| (v as f64 * factor).round() as i32;
         EquipmentStats {
@@ -295,7 +304,7 @@ impl EquipmentStats {
     /// so the floor is what makes a fusion observable rather than a
     /// silent loss of two items. A stat sitting at zero stays at zero: the
     /// floor sharpens what an item does and does not hand it a new stat.
-    pub fn fused_for_tier(self, tier: u32) -> EquipmentStats {
+    pub(crate) fn fused_for_tier(self, tier: u32) -> EquipmentStats {
         let factor = 1.0 + ITEM_FUSION_BONUS_PER_TIER * tier as f64;
         let floor = ITEM_FUSION_MIN_BONUS_PER_TIER * tier as i32;
         let scale = |v: i32| {
@@ -339,7 +348,7 @@ impl EquipmentStats {
     ///
     /// A stat sitting at zero stays at zero — a tier sharpens what an item
     /// does and does not hand it a stat it never had.
-    pub fn for_rarity(self, rarity: Rarity) -> EquipmentStats {
+    pub(crate) fn for_rarity(self, rarity: Rarity) -> EquipmentStats {
         let scale = |base: i32| {
             if base <= 0 {
                 return base;

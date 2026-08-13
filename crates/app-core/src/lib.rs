@@ -128,13 +128,10 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
 /// Lives here rather than in either renderer because both draw the identical
 /// tag, on both the inventory list and the item-action page.
 pub fn equip_preview_tag(game: &Game, copy: &GearCopy, zone_level: u32) -> String {
-    let Some((slot, base_mods)) = game.equipment_of(&copy.item) else {
+    let Some((slot, _)) = game.equipment_of(&copy.item) else {
         return String::new();
     };
-    let mods = base_mods
-        .scaled_for_level(zone_level)
-        .fused_for_tier(copy.tier)
-        .for_rarity(copy.rarity);
+    let mods = game.copy_bonus(copy, zone_level).unwrap_or_default();
     let mut parts = vec![slot.short_label().to_string()];
     let summary = stat_summary(mods);
     if !summary.is_empty() {
@@ -175,8 +172,15 @@ pub fn item_fusion_note(tier: u32) -> String {
 ///
 /// One formatter rather than three. The inventory list's equip tag, the
 /// equipped panel and the swap picker's two stat columns all print exactly
-/// this, over the same `scaled_for_level().fused_for_tier()` pair, and three
-/// copies of it is how the column that nobody re-reads drifts.
+/// this, over figures that all come from `Game::copy_bonus`.
+///
+/// Sharing the *formatter* was never enough on its own, and this doc used to
+/// say so while proving the opposite: it promised the four sites worked "over
+/// the same `scaled_for_level().fused_for_tier()` pair", which was four hand-
+/// rolled copies of the engine's chain rather than a call to it. They agreed
+/// until gear grew a fourth property, and then all four silently dropped the
+/// affix — see `Game::copy_bonus`. A shared formatter cannot hold the numbers
+/// it is handed in step; only a shared source of them can.
 pub fn stat_summary(mods: EquipmentStats) -> String {
     [
         (mods.atk, "ATK"),
@@ -271,28 +275,19 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
     let worn = game.worn(wearer, slot);
     let worn_mods = worn
         .as_ref()
-        .and_then(|e| {
-            game.equipment_of(&e.copy.item).map(|(_, base)| {
-                base.scaled_for_level(e.level)
-                    .fused_for_tier(e.copy.tier)
-                    .for_rarity(e.copy.rarity)
-            })
-        })
+        .and_then(|e| game.copy_bonus(&e.copy, e.level))
         .unwrap_or_default();
 
     let mut rows: Vec<(i32, String, SwapRow)> = status
         .inventory
         .iter()
         .filter_map(|row| {
-            let (item_slot, base) = game.equipment_of(&row.copy.item)?;
-            (item_slot == slot).then_some((row, base))
+            let (item_slot, _) = game.equipment_of(&row.copy.item)?;
+            (item_slot == slot).then_some(row)
         })
-        .map(|(row, base)| {
+        .map(|row| {
             let copy = &row.copy;
-            let mods = base
-                .scaled_for_level(status.zone)
-                .fused_for_tier(copy.tier)
-                .for_rarity(copy.rarity);
+            let mods = game.copy_bonus(copy, status.zone).unwrap_or_default();
             // The rare tier goes in the *name* column and the fusion tier in
             // the stat column, because they are different lengths of thing:
             // "Overclocked" is a word that belongs beside the item it

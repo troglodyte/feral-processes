@@ -1045,8 +1045,14 @@ pub struct ActiveBuffView {
 /// Everything the engine knows about one subject, for the manifest screen —
 /// the player, a program you own, or a wild one. Shared header fields plus a
 /// `subject` carrying the half that differs, so "the player has no Potential
-/// roll" and "a program has no equipment" are type-level facts rather than
-/// `Option`s a renderer can forget to check.
+/// roll" is a type-level fact rather than an `Option` a renderer can forget
+/// to check.
+///
+/// `equipment` used to sit in `PlayerManifest` on the same argument — "a
+/// program has no equipment" — and that stopped being true in 0.8.0, when
+/// any program the player owns became able to wear gear. It is a shared
+/// field for the same reason `routines` is: both are things a *wearer* has,
+/// and neither cares which kind of subject is carrying them.
 pub struct ManifestView {
     pub entity: Entity,
     /// "You" for the player; a program's `CustomName` if it has one, else its
@@ -1074,6 +1080,11 @@ pub struct ManifestView {
     /// than a parallel type, so the manifest and the routines menu cannot
     /// disagree about what is installed.
     pub routines: Vec<RoutineSlotView>,
+    /// One entry per *occupied* equipment slot — an empty slot is absent
+    /// rather than listed as "(none)", so the section shrinks to what is
+    /// actually worn and disappears entirely for a wild program, which has
+    /// no `Equipment` component at all.
+    pub equipment: Vec<ManifestEquipSlot>,
     pub subject: ManifestSubject,
 }
 
@@ -1097,9 +1108,6 @@ pub struct PlayerManifest {
     pub hunger: f32,
     pub fatigue: f32,
     pub decompiler: i32,
-    /// One entry per *occupied* slot — an empty slot is absent rather than
-    /// listed as "(none)", so the section shrinks to what is actually worn.
-    pub equipment: Vec<ManifestEquipSlot>,
     pub perk_points: u32,
     /// Every perk bought at least once, as (display name, level).
     pub perks: Vec<(String, u32)>,
@@ -1141,6 +1149,15 @@ pub struct ProgramManifest {
     /// What this program is doing right now — see `Game::program_activity`.
     /// `None` for a program you don't own, which has no job to report.
     pub activity: Option<String>,
+    /// Where this program is posted, as `(what the post is, the structure's
+    /// label)` — see `Game::program_post`, which `activity` above is built
+    /// on top of, so the two cannot name different structures.
+    ///
+    /// `None` for a program with no `Task`: idle, in the party, or wild.
+    /// Carried as the kind rather than as a finished phrase for the same
+    /// reason `base_job` is — the renderer is where every other
+    /// player-facing word on this screen is chosen.
+    pub post: Option<(TaskKind, String)>,
     /// `None` for a creature with no `Potential` component — an old save
     /// predating it, or a test helper that spawned one directly.
     pub potential: Option<ManifestPotential>,

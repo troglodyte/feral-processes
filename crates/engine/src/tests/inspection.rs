@@ -761,10 +761,7 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
         .expect("equipping a held item works");
 
     let view = game.manifest(player).unwrap();
-    let ManifestSubject::Player(p) = view.subject else {
-        panic!("the player is a Player subject");
-    };
-    let slot = p
+    let slot = view
         .equipment
         .iter()
         .find(|s| s.item_name == equippable.name)
@@ -821,6 +818,61 @@ fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
         "every roll is surfaced individually, not just the aggregate tier"
     );
     assert!(!rolls.label.is_empty());
+}
+
+/// Any program the player owns has been able to wear gear since 0.8.0, and
+/// the manifest is the page you open to find out what something *is* — so a
+/// companion's loadout belongs on it for the same reason the player's does.
+/// It was `PlayerManifest`-only until then, which made "a program has no
+/// equipment" a type-level fact that had quietly stopped being true.
+#[test]
+fn manifest_lists_a_companions_worn_gear() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 20, 5);
+    let player = game.player_entity();
+    let equippable = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("the shipped item set has equippable gear");
+    let item = equippable.id.clone();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 1);
+    game.equip(pet, &gear(&item, 0))
+        .expect("a program you own can wear gear");
+
+    let view = game.manifest(pet).expect("a tamed program has a manifest");
+    let slot = view
+        .equipment
+        .iter()
+        .find(|s| s.item_name == equippable.name)
+        .expect("the item the companion is wearing is listed");
+    let (_, base) = game.equipment_of(&item).unwrap();
+    let expected = base
+        .scaled_for_level(slot.gear_level)
+        .fused_for_tier(slot.fusion_tier);
+    assert_eq!(
+        (slot.atk, slot.def, slot.decompiler),
+        (expected.atk, expected.def, expected.decompiler),
+        "a companion's row is measured the same way the player's is"
+    );
+}
+
+/// A wild program has no `Equipment` component at all, so the section is
+/// absent rather than a row of empty slots — the same rule the player's page
+/// has always followed for a slot it isn't using.
+#[test]
+fn manifest_of_a_wild_program_lists_no_equipment() {
+    let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    let view = game.manifest(wild).expect("a wild program has a manifest");
+    assert!(
+        view.equipment.is_empty(),
+        "nothing has ever geared a wild program, so there is nothing to list"
+    );
 }
 
 #[test]

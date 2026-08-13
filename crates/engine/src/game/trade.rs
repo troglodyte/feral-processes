@@ -364,16 +364,26 @@ impl Game {
         if self.world.resource::<Party>().0.contains(&creature) {
             return "in party".to_string();
         }
-        match self.world.get::<Task>(creature) {
-            Some(task) => {
-                let target = self.entity_label(task.target);
-                match task.kind {
-                    TaskKind::GatherResource => target,
-                    TaskKind::Guard => format!("guarding {target}"),
-                }
-            }
+        match self.program_post(creature) {
+            Some((TaskKind::GatherResource, target)) => target,
+            Some((TaskKind::Guard, target)) => format!("guarding {target}"),
             None => "idle".to_string(),
         }
+    }
+
+    /// Where `creature` is posted, as `(what the post is, the structure's
+    /// label)`, or `None` for a program with no `Task` at all.
+    ///
+    /// The one read of a `Task` into something a screen can show, so the
+    /// manifest's own row and the terse status `program_activity` builds on
+    /// top of it cannot disagree about which structure a program is standing
+    /// at. It knows nothing about the party or the wield — `add_companion`
+    /// clears the task, so a party member simply has none, and the ordering
+    /// of those two checks stays stated in `program_activity` rather than
+    /// hidden in here.
+    pub fn program_post(&self, creature: Entity) -> Option<(TaskKind, String)> {
+        let task = self.world.get::<Task>(creature)?;
+        Some((task.kind, self.entity_label(task.target)))
     }
 
     /// What selling `creature` would also cancel, worded for display. Built

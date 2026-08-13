@@ -5,6 +5,7 @@ use super::bars::*;
 use super::manifest_layout::*;
 use super::popup::*;
 use super::*;
+use feral_processes_engine::components::TaskKind;
 use feral_processes_engine::species::{AffinityClass, MoveDef};
 use feral_processes_engine::{
     ManifestEquipSlot, ManifestSubject, ManifestView, PlayerManifest, ProgramManifest,
@@ -280,9 +281,9 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
 }
 
 /// Builds COMBAT, dispatches to `player_sections` or `program_sections` for
-/// the subject-specific middle, then appends ROUTINES **last** — after
-/// whichever of those two returns, not as one of their own pushes. That
-/// makes this function, not either of them, the one place that knows the
+/// the subject-specific middle, then appends EQUIPMENT and ROUTINES **last**
+/// — after whichever of those two returns, not as one of their own pushes.
+/// That makes this function, not either of them, the one place that knows the
 /// page's *full* section set.
 ///
 /// `manifest_layout`'s column packer is an exact 2-partition
@@ -311,6 +312,17 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
         ManifestSubject::Player(p) => player_sections(&mut sections, p),
         ManifestSubject::Program(p) => program_sections(&mut sections, game, p),
     }
+    // Both subjects, appended here rather than pushed by either arm, for the
+    // same reason ROUTINES is: a wearer is a wearer, and one function knows
+    // the page's full section set. It was `player_sections`' third push
+    // until any program the player owns could wear gear.
+    if !view.equipment.is_empty() {
+        sections.push(Section {
+            title: "EQUIPMENT",
+            rows: section_rows(view.equipment.iter().map(equip_row).collect()),
+            full_width: false,
+        });
+    }
     if !view.routines.is_empty() {
         sections.push(Section {
             title: "ROUTINES",
@@ -336,10 +348,10 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
 ///
 /// Every `sections.push` here needs a matching entry in
 /// `manifest_layout::tests::worst_case_player` — see `sections_for`'s doc
-/// for why. Keep ROUTINES **last** in that fixture too, matching the real
-/// page — not because the packer's exact-partition column split cares
-/// about order (it doesn't decide whether the page fits), but because
-/// `sections_for` appends ROUTINES after this function returns, and a
+/// for why. Keep EQUIPMENT and ROUTINES **last** in that fixture too,
+/// matching the real page — not because the packer's exact-partition column
+/// split cares about order (it doesn't decide whether the page fits), but
+/// because `sections_for` appends both after this function returns, and a
 /// fixture that silently drops or reorders a box is the failure mode this
 /// whole file exists to catch.
 fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
@@ -354,13 +366,6 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
         full_width: false,
     });
 
-    if !p.equipment.is_empty() {
-        sections.push(Section {
-            title: "EQUIPMENT",
-            rows: section_rows(p.equipment.iter().map(equip_row).collect()),
-            full_width: false,
-        });
-    }
     if !p.perks.is_empty() {
         sections.push(Section {
             title: "PERKS",
@@ -502,6 +507,15 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if let Some(class) = p.base_job {
         work.push(stat("Base job", base_job_label(class)));
     }
+    // The header already carries the post as one of a run of tags, where a
+    // worker's is the bare structure name and reads as decoration. Stated as
+    // a labelled row it reads as the assignment it is — and this is the box
+    // about what the program is like to *post*, so it is where a player
+    // looking for that answer already is.
+    if let Some((kind, structure)) = &p.post {
+        work.push(stat(post_label(*kind), structure.clone()));
+    }
+
     sections.push(Section {
         title: "WORK",
         rows: section_rows(work),
@@ -537,6 +551,21 @@ fn base_job_label(class: AffinityClass) -> String {
         AffinityClass::Leech => "extraction",
     };
     format!("{job} ({class:?})")
+}
+
+/// What a post *is*, as the row's own label — the structure's name is the
+/// value beside it, so "Posted to  Mining Node" and "Guarding  Shield Wall"
+/// both read as a sentence. The verb is the whole difference between the two
+/// kinds, which is the same distinction `Game::program_activity` draws for
+/// its terse one-liner.
+///
+/// Exhaustive on purpose: a third `TaskKind` must decide how it reads on
+/// this row before it compiles.
+fn post_label(kind: TaskKind) -> &'static str {
+    match kind {
+        TaskKind::GatherResource => "Posted to",
+        TaskKind::Guard => "Guarding",
+    }
 }
 
 fn move_row(mv: &MoveDef) -> SectionRow {
@@ -643,6 +672,7 @@ mod tests {
             is_companion: true,
             is_boss: false,
             activity: None,
+            post: None,
             potential: None,
             fusions: 0,
             max_fusions: 3,
@@ -804,38 +834,10 @@ mod tests {
         );
     }
 
-    /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
-    /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
-    /// last (it's the full-width band), and ROUTINES is appended only after
-    /// `program_sections` returns (see `sections_for`'s own doc). That drift
-    /// is currently harmless — MOVES is the only `full_width` box, so
-    /// `best_column_split` filters it out before packing the columned two,
-    /// and order stops mattering the moment a box leaves that set — but this
-    /// project has previously shipped a layout fixture that drifted from
-    /// what the renderer actually emits and hid a real overflow behind a
-    /// green suite. Pinning the real sequence here is what would catch that
-    /// again if a future change ever made full-width order matter.
-    #[test]
-    fn sections_for_emits_moves_before_routines() {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(
-            11,
-            feral_processes_engine::DifficultyMode::Forgiving,
-            assets,
-        )
-        .expect("shipped assets load");
-
-        let mut program = plain_program(14, 12);
-        program.moves = vec![MoveDef {
-            name: "Strike".to_string(),
-            power: 5,
-            effect: None,
-            ranged: false,
-        }];
-        // Every program a player can page to has a class, so the WORK box is
-        // three rows here and two only for a boss.
-        program.base_job = Some(AffinityClass::Striker);
-        let view = ManifestView {
+    /// A `ManifestView` around `program`, with one routine slot so ROUTINES
+    /// is emitted, and whatever gear the caller hands it.
+    fn program_view(program: ProgramManifest, equipment: Vec<ManifestEquipSlot>) -> ManifestView {
+        ManifestView {
             entity: Entity::PLACEHOLDER,
             name: "Testmon".to_string(),
             glyph: 'x',
@@ -854,8 +856,63 @@ mod tests {
                 name: "(empty)".to_string(),
                 description: String::new(),
             }],
+            equipment,
             subject: ManifestSubject::Program(program),
-        };
+        }
+    }
+
+    fn worn(slot: &str) -> ManifestEquipSlot {
+        ManifestEquipSlot {
+            slot: slot.to_string(),
+            item_name: "Arc Lance".to_string(),
+            gear_level: 1,
+            fusion_tier: 0,
+            atk: 4,
+            def: 0,
+            decompiler: 0,
+        }
+    }
+
+    /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
+    /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
+    /// last (it's the full-width band), and EQUIPMENT and ROUTINES are
+    /// appended only after `program_sections` returns (see `sections_for`'s
+    /// own doc). That drift is currently harmless — MOVES is the only
+    /// `full_width` box, so `best_column_split` filters it out before packing
+    /// the columned rest, and order stops mattering the moment a box leaves
+    /// that set — but this project has previously shipped a layout fixture
+    /// that drifted from what the renderer actually emits and hid a real
+    /// overflow behind a green suite. Pinning the real sequence here is what
+    /// would catch that again if a future change ever made full-width order
+    /// matter.
+    ///
+    /// The gear is what makes this a program's *worst* case rather than a
+    /// typical one: EQUIPMENT was a player-only box until any program the
+    /// player owns could wear gear, and a companion page that silently
+    /// stopped emitting it would otherwise pass this test unchanged.
+    #[test]
+    fn sections_for_emits_moves_before_a_programs_equipment_and_routines() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let mut program = plain_program(14, 12);
+        program.moves = vec![MoveDef {
+            name: "Strike".to_string(),
+            power: 5,
+            effect: None,
+            ranged: false,
+        }];
+        // Every program a player can page to has a class, and a posted one
+        // names its structure — so the WORK box is four rows here and two
+        // only for an unposted boss.
+        program.base_job = Some(AffinityClass::Striker);
+        program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
+        let view = program_view(program, vec![worn("Weapon"), worn("Armor")]);
 
         let sections = sections_for(&game, &view);
         let shape: Vec<(&str, usize, bool)> = sections
@@ -868,12 +925,84 @@ mod tests {
             vec![
                 ("COMBAT", 3, false),
                 ("SPECIES", 5, false),
-                ("WORK", 3, false),
+                ("WORK", 4, false),
                 ("MOVES", 1, true),
+                ("EQUIPMENT", 2, false),
                 ("ROUTINES", 1, false),
             ],
             "sections_for's real emission order — the shape the layout \
              fixture must mirror: {shape:?}"
+        );
+    }
+
+    /// A wild program wears nothing, so the box is absent rather than drawn
+    /// empty — the same rule the player's page has always followed for a
+    /// slot it isn't using.
+    #[test]
+    fn a_program_wearing_nothing_gets_no_equipment_box() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let sections = sections_for(&game, &program_view(plain_program(14, 12), vec![]));
+        assert!(
+            !sections.iter().any(|s| s.title == "EQUIPMENT"),
+            "an empty loadout emits no box: {:?}",
+            sections.iter().map(|s| s.title).collect::<Vec<_>>()
+        );
+    }
+
+    /// The post is stated as a labelled row, and the verb is the whole
+    /// difference between the two kinds — a guard posted to a Shield Wall
+    /// and a worker posted to one mean different things, and a single
+    /// "Posted to" for both would erase that.
+    #[test]
+    fn the_work_box_states_where_a_program_is_posted() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let post_rows = |post| {
+            let mut program = plain_program(14, 12);
+            program.post = post;
+            let mut sections = Vec::new();
+            program_sections(&mut sections, &game, &program);
+            sections
+                .iter()
+                .find(|s| s.title == "WORK")
+                .expect("a WORK box is always emitted")
+                .rows
+                .iter()
+                .filter_map(|r| match r {
+                    SectionRow::Stat(label, value)
+                        if label == "Posted to" || label == "Guarding" =>
+                    {
+                        Some((label.clone(), value.clone()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            post_rows(Some((TaskKind::GatherResource, "Mining Node".to_string()))),
+            vec![("Posted to".to_string(), "Mining Node".to_string())]
+        );
+        assert_eq!(
+            post_rows(Some((TaskKind::Guard, "Shield Wall".to_string()))),
+            vec![("Guarding".to_string(), "Shield Wall".to_string())]
+        );
+        assert!(
+            post_rows(None).is_empty(),
+            "an idle program has no post to state"
         );
     }
 

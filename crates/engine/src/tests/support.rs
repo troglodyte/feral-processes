@@ -1149,6 +1149,29 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
     current
 }
 
+/// A Core Fragment extractor, spawned without paying for it — the plainest
+/// structure a `GatherResource` cronjob can be posted to.
+///
+/// Bare: no `Stock` and no `MachineStatus`, so `task_progress_system` skips
+/// it and it never produces. That is what the tests about *posting* want;
+/// anything measuring a payout curve needs `work_node_parts()` as well, and
+/// a node short of those reads as a rate that moved rather than as a fixture
+/// missing a component.
+pub(super) fn spawn_mining_node(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x, y },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                level: None,
+            },
+        ))
+        .id()
+}
+
 /// A trading structure, spawned without paying for it.
 pub(super) fn spawn_market(game: &mut Game) -> Entity {
     spawn_market_at(game, 5, 5)

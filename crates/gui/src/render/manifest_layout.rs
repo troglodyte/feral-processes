@@ -338,9 +338,16 @@ mod tests {
             section("POTENTIAL", 5, false),
             section("AFFINITIES", MAX_AFFINITY_ROWS, false),
             section("SPECIES", 5, false),
-            // Speed, Analysis, Base job — a tameable program always has a
-            // class, so three is the real worst case and two is the boss.
-            section("WORK", 3, false),
+            // Speed, Analysis, Base job, and the post — a tameable program
+            // always has a class, and a posted one names the structure it
+            // works, so four is the real worst case. A boss has neither and
+            // sits at two.
+            section("WORK", 4, false),
+            // One row per occupied `EquipmentSlot`, so `EquipmentSlot::ALL`
+            // is the cap. Any program the player owns can wear gear as of
+            // 0.8.0, so a fully kitted companion is the worst case here and
+            // not an edge case.
+            section("EQUIPMENT", 3, false),
             section("ROUTINES", 6, false),
             section("MOVES", MAX_BAND_ROWS, true),
         ]
@@ -365,9 +372,9 @@ mod tests {
         vec![
             section("COMBAT", 3, false),
             section("PROGRESSION", 4, false),
-            section("EQUIPMENT", 3, false),
             section("PERKS", MAX_SECTION_ROWS, false),
             section("PARTY", 5, false),
+            section("EQUIPMENT", 3, false),
             section("ROUTINES", 6, false),
         ]
     }

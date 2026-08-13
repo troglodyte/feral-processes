@@ -628,11 +628,6 @@ impl Game {
         // cannot show different numbers for the same player.
         let atk = self.effective_atk(entity);
         let def = self.effective_def(entity);
-        let equipment = self
-            .world
-            .get::<Equipment>(entity)
-            .cloned()
-            .unwrap_or_default();
         let perks = self.world.get::<Perks>(entity);
         Some(ManifestView {
             entity,
@@ -648,6 +643,7 @@ impl Game {
             power: stats.max_hp + atk + def,
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
+            equipment: self.worn_slots(entity),
             subject: ManifestSubject::Player(PlayerManifest {
                 hunger: needs.hunger,
                 fatigue: needs.fatigue,
@@ -656,10 +652,6 @@ impl Game {
                     .get::<Decompiler>(entity)
                     .map(|d| d.skill)
                     .unwrap_or(0),
-                equipment: EquipmentSlot::ALL
-                    .into_iter()
-                    .filter_map(|slot| self.manifest_equip_slot(slot, equipment.get(slot)?))
-                    .collect(),
                 perk_points: perks.map(|p| p.points).unwrap_or(0),
                 perks: perks
                     .map(|p| {
@@ -680,6 +672,20 @@ impl Game {
                 party: self.party_info(),
             }),
         })
+    }
+
+    /// Every occupied equipment slot on `wearer`, in `EquipmentSlot::ALL`
+    /// order. Empty for anything with no `Equipment` component, which is
+    /// what a wild program — and an owned one that has never been geared —
+    /// looks like.
+    fn worn_slots(&self, wearer: Entity) -> Vec<ManifestEquipSlot> {
+        let Some(equipment) = self.world.get::<Equipment>(wearer) else {
+            return Vec::new();
+        };
+        EquipmentSlot::ALL
+            .into_iter()
+            .filter_map(|slot| self.manifest_equip_slot(slot, equipment.get(slot)?))
+            .collect()
     }
 
     /// One worn item as the manifest lists it. `None` if the item's
@@ -731,6 +737,7 @@ impl Game {
             power: stats.power(),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
+            equipment: self.worn_slots(entity),
             subject: ManifestSubject::Program(ProgramManifest {
                 species_name: custom
                     .is_some()
@@ -740,6 +747,7 @@ impl Game {
                 is_companion: self.world.resource::<Party>().0.contains(&entity),
                 is_boss: species.is_boss,
                 activity: is_tamed.then(|| self.program_activity(entity)),
+                post: self.program_post(entity),
                 potential: self
                     .world
                     .get::<Potential>(entity)

@@ -259,13 +259,35 @@ impl App {
         self.reveal.revealed
     }
 
+    /// How many lines of the round's range have yet to scroll in — the one
+    /// definition of "the narration is behind", read by `is_revealing` and by
+    /// `hidden_log_lines`.
+    ///
+    /// **Zero off a battle screen, and that gate is the whole of it.**
+    /// `MessageLog::round_start` is deliberately never closed — the results
+    /// are still scrolling in after the fight, so the range has to outlive it
+    /// — which means `Game::battle_log` goes on growing with ordinary map and
+    /// base news for the rest of the run once a fight has opened it. The
+    /// battle pane is the only screen that draws any of that as narration, so
+    /// ungated this paced the *map's* log pane too and, through
+    /// `handle_key`'s skip, swallowed a keypress for every line a running
+    /// base logged. `Mode::is_battle` rather than "a battle is live" because
+    /// `Mode::BattleResult` outlives `BattleState` and is exactly when the
+    /// results are scrolling in.
+    fn unrevealed(&self) -> usize {
+        let Some(game) = &self.game else { return 0 };
+        if !self.mode.is_battle() {
+            return 0;
+        }
+        game.battle_log()
+            .len()
+            .saturating_sub(self.revealed_count())
+    }
+
     /// Whether narration is still scrolling in. While this holds, a frontend
     /// suppresses the action bar and `handle_key` skips rather than acting.
     pub fn is_revealing(&self) -> bool {
-        let Some(game) = &self.game else {
-            return false;
-        };
-        self.revealed_count() < game.battle_log().len()
+        self.unrevealed() > 0
     }
 
     /// The battle screen's roster, stepped to what the narration has
@@ -334,13 +356,12 @@ impl App {
     }
 
     /// How many lines the *base* screen must chop off the tail of
-    /// `Game::message_log` — the battle results that have not scrolled in
-    /// yet. Zero except in the moments after a battle ends.
+    /// `Game::message_log` — narration that has not scrolled in yet. Zero
+    /// whenever the map is what's on screen, so the map's pane never holds a
+    /// line back: see `unrevealed` for why that gate is where the pacing
+    /// stops being a battle-pane concern.
     pub fn hidden_log_lines(&self) -> usize {
-        let Some(game) = &self.game else { return 0 };
-        game.battle_log()
-            .len()
-            .saturating_sub(self.revealed_count())
+        self.unrevealed()
     }
 
     /// Releases every remaining line at once — the skip.

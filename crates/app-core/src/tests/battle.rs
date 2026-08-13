@@ -659,6 +659,68 @@ fn a_key_pressed_mid_reveal_skips_instead_of_acting() {
     );
 }
 
+/// The reported bug: on the map, a key sometimes did nothing at all.
+///
+/// `MessageLog::round_start` is never closed once the run's first battle has
+/// opened it, so `since_round` — and with it `is_revealing` — goes on growing
+/// with ordinary map and base news for the rest of the run. `handle_key`'s
+/// skip is unconditional, so every one of those lines bought the player a
+/// swallowed keypress on a screen with no narration to skip.
+#[test]
+fn a_key_pressed_while_map_news_scrolls_in_still_acts() {
+    let mut app = escaped_app();
+    app.advance_reveal(1_000.0);
+    assert!(!app.is_revealing(), "the fixture did not settle");
+
+    // Any map action that logs will do; a refused rest is the one that
+    // neither ticks the world nor depends on where the player is standing.
+    app.handle_key(GameKey::Char('r'));
+    assert_eq!(app.mode, Mode::Playing, "the fixture left the map");
+    app.advance_reveal(0.0);
+
+    app.handle_key(GameKey::Char('x'));
+
+    assert_eq!(
+        app.mode,
+        Mode::InspectDirection,
+        "the key was eaten by the map log's reveal"
+    );
+}
+
+/// The other half of the same leak: the map's pane chopped that unrevealed
+/// tail off, so news from a running base arrived at four lines a second
+/// however much of it there was.
+#[test]
+fn map_news_reaches_the_pane_without_waiting_for_a_reveal() {
+    let mut app = escaped_app();
+    app.advance_reveal(1_000.0);
+    let before = app.visible_log(40).len();
+
+    app.handle_key(GameKey::Char('r'));
+    app.advance_reveal(0.0);
+
+    assert_eq!(app.hidden_log_lines(), 0, "the map pane held a line back");
+    assert!(
+        app.visible_log(40).len() > before,
+        "the refusal never reached the pane"
+    );
+}
+
+/// A game back on the map with a finished battle behind it, which is what
+/// leaves `round_start` open.
+fn escaped_app() -> App {
+    let mut app = battling_app();
+    app.advance_reveal(1_000.0);
+    for _ in 0..200 {
+        if app.mode == Mode::Playing {
+            return app;
+        }
+        app.handle_key(GameKey::Char('j'));
+        app.advance_reveal(1_000.0);
+    }
+    panic!("could not get back to the map");
+}
+
 #[test]
 fn a_key_pressed_after_the_reveal_acts_normally() {
     let mut app = battling_app();

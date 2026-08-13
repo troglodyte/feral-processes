@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.10
+
+### Examine looks down a line
+
+Pressing `x` and picking a direction used to search a 90° wedge out to forty
+tiles. Anything leaning your way counted — a thing forty tiles east *and*
+forty north was "east" — and forty tiles is more than twice what the map pane
+shows in either direction, so the inspector regularly opened a sheet for
+something you could not see and had no way to find. It now looks down the row
+or column you are facing, one tile wide, twelve tiles out. A creature one tile
+off your row is missed, which is the price: you can step or turn, and what `x`
+names is now what was in front of you.
+
+Two things came out of the same rewrite. Two candidates the same distance away
+could resolve differently between runs, because the scan asked for "whichever
+came back first" from a source that does not promise an order — so the same
+press could give two answers on two loads of the same save. And aiming at a
+machine with a program posted to it would open the *program's* sheet, which
+was odd on its own and stranger still because a program at its post is not
+drawn on the map: the answer was something invisible standing one tile in
+front of the thing you were pointing at. The inspector now names only what the
+map draws, and a tile holding both a machine and a program names the machine.
+
+That leaves a posted program with no sheet of its own, so its machine's sheet
+now carries its level and health beside its cronjob progress. The `B` roster
+shows the same, since both screens are built from one place.
+
+Nests, Stack entrances and zone portals are still passed straight through —
+they draw a glyph but are not yet things the inspector can name, so aiming at
+one reports whatever lies beyond it.
+
 ## 0.8.9
 
 ### A dropped weapon can come up rare, and can carry a name

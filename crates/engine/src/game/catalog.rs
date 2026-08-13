@@ -1,6 +1,7 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES};
 use crate::*;
 
 impl Game {
@@ -424,6 +425,33 @@ impl Game {
             .map(|def| def.pet_slot_bonus)
             .sum();
         BASE_PET_CAPACITY + bonus as usize
+    }
+
+    /// How wide the base platform is right now: `MAX_BUILD_DISTANCE_FROM_HOME`
+    /// plus every deployed structure's `build_radius_bonus`, clamped to
+    /// `MAX_BUILD_RADIUS_TILES`. The same shape as `pet_capacity` over
+    /// `pet_slot_bonus`, and derived on each call for the same reason: a
+    /// Pillar lost with its Home shrinks the base back with no invalidation
+    /// step, and the save format stays unchanged because nothing stores this.
+    ///
+    /// `Platform::radius` caches the answer, because the footprint has to be
+    /// readable from `&self` while this needs `&mut self` to query. That
+    /// cache is written at exactly the three sites that write
+    /// `Platform::center` — `stamp_platform`, `clear_platform` and the load
+    /// path — and a fourth writer means the design has drifted.
+    pub fn build_radius(&mut self) -> i32 {
+        let kinds: Vec<StructureId> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        let bonus: i32 = kinds
+            .iter()
+            .filter_map(|k| db.get(k.as_str()))
+            .map(|def| def.build_radius_bonus)
+            .sum();
+        (MAX_BUILD_DISTANCE_FROM_HOME + bonus).min(MAX_BUILD_RADIUS_TILES)
     }
 
     /// How many tamed programs the player currently owns, wherever they are —

@@ -1970,3 +1970,88 @@ fn a_wild_program_will_not_wander_onto_the_base_slab() {
         );
     }
 }
+
+/// A structure whose only job is to widen the slab — the shape the Heap
+/// Pillar ships in, written here as a mod so the derivation is under test
+/// before any shipped asset sets the field.
+const WIDENING_PILLAR: &str = r#"(
+    id: "test_pillar",
+    name: "Test Pillar",
+    description: "Widens the base by one tile.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 1,
+)"#;
+
+/// The same, with a bonus far past the ceiling — the clamp is what is under
+/// test, not how many structures fit on a slab.
+const HUGE_PILLAR: &str = r#"(
+    id: "test_huge_pillar",
+    name: "Test Huge Pillar",
+    description: "Widens the base absurdly.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 99,
+)"#;
+
+fn game_with_pillar(tag: &str, body: &str) -> Game {
+    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", body);
+    let game = Game::new(700, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    game
+}
+
+/// Spawns `kind` as a deployed structure at `(x, y)` without going through
+/// `place_structure`, which would refuse anything outside the very radius
+/// under test.
+fn spawn_structure_of(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: StructureId::from(kind),
+            },
+            Position { x, y },
+        ))
+        .id()
+}
+
+#[test]
+fn a_base_with_nothing_deployed_is_the_starting_radius() {
+    let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "a fresh run builds at the starting radius"
+    );
+}
+
+#[test]
+fn each_deployed_widening_structure_adds_its_bonus() {
+    let mut game = game_with_pillar("build_radius_sum", WIDENING_PILLAR);
+    spawn_structure_of(&mut game, "test_pillar", 1, 0);
+    spawn_structure_of(&mut game, "test_pillar", 2, 0);
+
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_DISTANCE_FROM_HOME + 2,
+        "the bonus stacks additively across deployed structures"
+    );
+}
+
+#[test]
+fn the_build_radius_clamps_at_its_ceiling() {
+    let mut game = game_with_pillar("build_radius_clamp", HUGE_PILLAR);
+    spawn_structure_of(&mut game, "test_huge_pillar", 1, 0);
+
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_RADIUS_TILES,
+        "no amount of bonus takes a base past the ceiling"
+    );
+}

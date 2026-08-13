@@ -27,6 +27,42 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.11
+
+### Decompiling reads the gap between you and what you are pointing at
+
+Wearing a program down before spending a catalyst on it has always been most
+of the odds, and against anything near your own strength it still is. Against
+trash it made no sense. A program far enough beneath you dies to a single
+strike, so it can never be shown to you at low Integrity — and the attempt was
+priced as though you had looked at the option and declined it. Decompiling
+something harmless was therefore *worse* than decompiling something dangerous,
+which is backwards, and it made the easiest programs on the Grid the most
+annoying ones to collect.
+
+The gap now counts. Once a target is far enough below you that it reads Green,
+its remaining Integrity stops entering the odds at all: there is no softening
+to reward, so you are no longer charged for skipping it. With the shipped ICE
+Breaker that takes a healthy Green-con drone from roughly one attempt in eight
+to closer to one in two. The relief fades in across the Yellow band rather
+than switching on, so an even fight is very nearly the fight it was.
+
+The same reading runs the other way. A program more than half again your
+strength — the ones already drawn in Red — gets harder to decompile the
+further above you it is, down to a floor of 60% of the odds at two and a half
+times your power. Nothing becomes impossible; a long shot stays a long shot.
+
+The number driving both is the one already on your screen. It is the same
+comparison that paints a wild program Green, Yellow, Orange or Red, so the
+color you are looking at and the odds you are quoted can no longer disagree
+about which of the two of you is stronger.
+
+One consequence worth knowing if you have bought into it: **Exploit Focus does
+nothing against a target you badly outclass.** The perk cuts the penalty for
+attempting a healthy program, and against a Green-con one that penalty is now
+already gone. It is worth exactly what it always was everywhere else, which is
+where it was always meant to matter.
+
 ## 0.8.10
 
 ### Examine looks down a line

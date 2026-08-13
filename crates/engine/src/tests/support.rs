@@ -519,6 +519,16 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) {
 /// Unlocks `id` and every prerequisite it needs, funding the whole
 /// chain — so a test that just needs a research-gated structure on the
 /// map doesn't have to model the tree itself.
+///
+/// Since the tree gained zone bands (`ResearchDef::min_zone`), funding is no
+/// longer enough on its own, so this also stands the party in the deepest
+/// zone the chain asks for. That is a direct `ZoneLevel` write rather than a
+/// real breach deliberately: `enter_next_zone` regenerates the map and
+/// respawns the wild population, which is a great deal of world change to
+/// impose on a fixture that only wanted a bench researched. Nothing is lost
+/// by the shortcut, because the tests that are *about* the gate
+/// (`breaching_makes_a_zone_gated_node_available`) breach for real, so a
+/// gate regression cannot hide behind this.
 pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     fn order(game: &Game, id: &str, out: &mut Vec<String>) {
         let Some(def) = game.world.resource::<ResearchDb>().get(id).cloned() else {
@@ -534,6 +544,14 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     grant_research_data(game, 1000);
     let mut chain = Vec::new();
     order(game, id, &mut chain);
+    let needed = chain
+        .iter()
+        .filter_map(|node| game.world.resource::<ResearchDb>().get(node))
+        .map(|def| def.min_zone)
+        .max()
+        .unwrap_or(0);
+    let zone = &mut game.world.resource_mut::<ZoneLevel>().0;
+    *zone = (*zone).max(needed);
     for node in chain {
         if !game.is_researched(&node) {
             game.unlock_research(&node).unwrap();

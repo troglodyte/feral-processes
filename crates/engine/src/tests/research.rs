@@ -484,7 +484,12 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
     assert_eq!(
         node.state,
         ResearchState::Locked {
-            missing: vec!["Automation".to_string()]
+            missing: vec!["Automation".to_string()],
+            // Weapon Fabrication is a bootstrap node, so the prereq is the
+            // only thing in its way — the contrast that makes
+            // `a_node_can_report_both_a_missing_prereq_and_its_zone` mean
+            // something.
+            min_zone: None,
         }
     );
 }
@@ -567,6 +572,182 @@ fn no_research_node_is_left_unlocking_nothing() {
             node.id
         );
     }
+}
+
+/// The cheapest node in a band, found by asking the db rather than named,
+/// so retuning which node sits in which band leaves the tests below still
+/// measuring what they mean to. `ResearchDb::all` is already cheapest-first.
+fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
+    game.world
+        .resource::<ResearchDb>()
+        .all()
+        .find(|d| d.min_zone == zone)
+        .unwrap_or_else(|| panic!("the shipped tree should band something at zone {zone}"))
+        .clone()
+}
+
+/// Unlocks everything `id` transitively requires — and deliberately *not*
+/// `id` itself, which is the node under test.
+///
+/// Not `support::unlock_research_chain`, which differs in both halves that
+/// matter here: it takes the node too, and it funds the chain with a flat
+/// 1000 rather than exactly what it spends. Both would make these tests
+/// vacuous — the first has nothing left to refuse, and the second leaves the
+/// player rich enough that `the_zone_gate_is_refused_before_the_cost` could
+/// not tell a zone refusal from a cost one. It also raises `ZoneLevel` to
+/// clear the chain's own bands, which is the very thing being tested.
+///
+/// Every prereq of a gated node sits in a band at or below its own — that is
+/// `no_research_node_is_gated_below_its_own_prerequisite` — so at the zone
+/// the caller is testing, all of them are buyable.
+fn research_prereqs_of(game: &mut Game, id: &str) {
+    let requires = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id)
+        .expect("a shipped node")
+        .requires
+        .clone();
+    for prereq in requires {
+        if game.is_researched(&prereq) {
+            continue;
+        }
+        research_prereqs_of(game, &prereq);
+        let cost = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&prereq)
+            .expect("a resolved prereq")
+            .cost;
+        grant_research_data(game, cost);
+        game.unlock_research(&prereq)
+            .unwrap_or_else(|e| panic!("prereq {prereq} should be buyable: {e}"));
+    }
+}
+
+fn research_state(game: &Game, id: &str) -> ResearchState {
+    game.research_nodes()
+        .into_iter()
+        .find(|n| n.id == id)
+        .map(|n| n.state)
+        .expect("a shipped node should be listed")
+}
+
+#[test]
+fn a_node_above_the_players_zone_reports_its_zone() {
+    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated = cheapest_gated_node(&game, 2);
+    match research_state(&game, &gated.id) {
+        ResearchState::Locked { min_zone, .. } => assert_eq!(
+            min_zone,
+            Some(2),
+            "{} is a zone-2 node and the party is in zone 1",
+            gated.id
+        ),
+        other => panic!("expected {} to be Locked, got {other:?}", gated.id),
+    }
+}
+
+/// A gated node is not filtered out of the menu, for the reason
+/// `Game::upgrade_ceiling` records about a structure stalled at its zone
+/// ceiling: hiding the stalled rows means a player who never breached never
+/// learns the tier exists. The visible zone-3 band *is* the reason to breach.
+#[test]
+fn a_zone_gated_node_is_still_listed() {
+    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated = cheapest_gated_node(&game, 3);
+    assert!(
+        game.research_nodes().iter().any(|n| n.id == gated.id),
+        "{} must stay on the menu at zone 1 — it is what tells the player \
+         there is a reason to breach",
+        gated.id
+    );
+}
+
+#[test]
+fn unlock_research_refuses_a_node_above_the_players_zone() {
+    let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated = cheapest_gated_node(&game, 2);
+    research_prereqs_of(&mut game, &gated.id);
+    grant_research_data(&mut game, gated.cost);
+
+    let err = game.unlock_research(&gated.id).unwrap_err();
+
+    assert!(err.contains("Zone 2"), "got: {err}");
+    assert!(!game.is_researched(&gated.id));
+    // The half that fails if the refusal is ever moved below the payment —
+    // without it this passes against a build that charges and then refuses.
+    assert_eq!(
+        research_data_held(&game),
+        gated.cost,
+        "a refused unlock must not charge the player"
+    );
+}
+
+#[test]
+fn breaching_makes_a_zone_gated_node_available() {
+    let mut game = Game::new(718, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated = cheapest_gated_node(&game, 2);
+    research_prereqs_of(&mut game, &gated.id);
+    assert!(
+        matches!(
+            research_state(&game, &gated.id),
+            ResearchState::Locked {
+                min_zone: Some(2),
+                ..
+            }
+        ),
+        "the fixture is vacuous unless the node starts gated"
+    );
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        research_state(&game, &gated.id),
+        ResearchState::Available,
+        "with its prereqs met, reaching zone 2 is the whole of what {} was waiting on",
+        gated.id
+    );
+}
+
+#[test]
+fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
+    let game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let deep = cheapest_gated_node(&game, 3);
+    match research_state(&game, &deep.id) {
+        ResearchState::Locked { missing, min_zone } => {
+            assert!(
+                !missing.is_empty(),
+                "{} sits on an unresearched chain, so it owes a prereq too",
+                deep.id
+            );
+            assert_eq!(min_zone, Some(3), "and the zone is a second, separate reason");
+        }
+        other => panic!("expected {} to be Locked, got {other:?}", deep.id),
+    }
+}
+
+/// `upgrade_structure` checks its ceilings before the materials check "so the
+/// player is never sent to find fragments they couldn't have spent". Same
+/// argument: a broke player at zone 1 must hear about the zone.
+#[test]
+fn the_zone_gate_is_refused_before_the_cost() {
+    let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated = cheapest_gated_node(&game, 2);
+    research_prereqs_of(&mut game, &gated.id);
+    assert_eq!(
+        research_data_held(&game),
+        0,
+        "the fixture spends exactly what it grants, or this asserts nothing"
+    );
+
+    let err = game.unlock_research(&gated.id).unwrap_err();
+
+    assert!(err.contains("Zone 2"), "got: {err}");
+    assert!(
+        !err.contains("Research Data"),
+        "the zone is the reason, not the balance: {err}"
+    );
 }
 
 /// A node gated below its own prerequisite is a gate that can never fire:

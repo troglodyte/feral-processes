@@ -51,7 +51,14 @@ pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Pai
         let tag = match &node.state {
             ResearchState::Unlocked => " (researched)".to_string(),
             ResearchState::Available => String::new(),
-            ResearchState::Locked { missing } => format!(" (needs {})", missing.join(", ")),
+            // A node can be waiting on prerequisites and on a breach at once,
+            // so the two reasons are joined rather than one winning — the
+            // engine reports both precisely so neither is dropped here.
+            ResearchState::Locked { missing, min_zone } => {
+                let mut reasons = missing.clone();
+                reasons.extend(min_zone.map(|z| format!("Zone {z}")));
+                format!(" (needs {})", reasons.join(", "))
+            }
         };
         let label = format!(
             "[{}] {} - {} Research Data{tag}",

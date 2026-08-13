@@ -177,10 +177,25 @@ impl Game {
             .collect()
     }
 
+    /// The zone `def` is still waiting on, or `None` if the party has already
+    /// reached it. Read the same way `Game::upgrade_ceiling` reads it, and
+    /// the one definition of the gate — `research_nodes` explains it and
+    /// `unlock_research` refuses on it, so a menu cannot promise a node the
+    /// purchase would turn down.
+    fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
+        (def.min_zone > self.world.resource::<ZoneLevel>().0).then_some(def.min_zone)
+    }
+
     /// Every research node, ordered the way the menu shows them: available
     /// first, then locked, then already-unlocked, each group cheapest-first
     /// (see `ResearchDb::all`). Ordering lives here rather than in each
     /// renderer so both peers agree on what `[3]` means.
+    ///
+    /// A zone-gated node is `Locked` rather than filtered out, for the reason
+    /// `Game::upgrade_ceiling` records about a structure stalled at its zone
+    /// ceiling: hiding the stalled rows would mean a player who never
+    /// breached never learns the tier is there, and the visible band is
+    /// exactly what makes breaching worth doing.
     pub fn research_nodes(&self) -> Vec<ResearchStatus> {
         let research_currency = self.research_currency();
         let held = self
@@ -197,10 +212,11 @@ impl Game {
                     ResearchState::Unlocked
                 } else {
                     let missing = self.missing_prereqs(def);
-                    if missing.is_empty() {
+                    let min_zone = self.research_zone_gate(def);
+                    if missing.is_empty() && min_zone.is_none() {
                         ResearchState::Available
                     } else {
-                        ResearchState::Locked { missing }
+                        ResearchState::Locked { missing, min_zone }
                     }
                 };
                 ResearchStatus {
@@ -226,7 +242,20 @@ impl Game {
 
     /// Unlocks `id`, consuming its Research Data cost. Fails with an
     /// explicit message when the id is unknown, it's already unlocked, a
-    /// prerequisite is missing, or the player can't pay.
+    /// prerequisite is missing, the party hasn't reached the node's zone, or
+    /// the player can't pay.
+    ///
+    /// The zone is checked **before the cost** for the reason
+    /// `upgrade_structure` checks its ceilings before materials: a player at
+    /// zone 1 looking at a zone-3 node must be told about the zone, not sent
+    /// to earn Research Data they could not have spent. It is checked
+    /// **after** the prereqs, which is the existing order extended rather
+    /// than rearranged.
+    ///
+    /// The gate is on buying, not on having: `resources::Research` holds what
+    /// has already been unlocked and is never re-validated, so a save written
+    /// before this gate existed keeps every node it paid for whatever zone
+    /// the party is standing in.
     pub fn unlock_research(&mut self, id: &str) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -243,6 +272,9 @@ impl Game {
         let missing = self.missing_prereqs(&def);
         if !missing.is_empty() {
             return Err(format!("Requires {} first.", missing.join(", ")));
+        }
+        if let Some(zone) = self.research_zone_gate(&def) {
+            return Err(format!("Requires Zone {zone} first."));
         }
         let player = self.player_entity();
         let research_currency = self.research_currency();

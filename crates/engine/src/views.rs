@@ -39,10 +39,17 @@ pub struct ResearchStatus {
 pub enum ResearchState {
     Unlocked,
     Available,
-    /// Display names of the prerequisites still missing — the menu shows
-    /// *why* a node can't be taken rather than just greying it out.
+    /// Why a node can't be taken, rather than just greying it out. The two
+    /// reasons are independent and both may hold at once — a deep node in a
+    /// fresh game owes a prerequisite *and* a breach — so they are two
+    /// fields rather than two variants: a variant would force an arbitrary
+    /// precedence between them and lose whichever it did not pick.
     Locked {
+        /// Display names of the prerequisites still missing.
         missing: Vec<String>,
+        /// `Some(n)` when the player's zone is below the node's `min_zone`;
+        /// `None` when the zone is satisfied and only prereqs are in the way.
+        min_zone: Option<u32>,
     },
 }
 

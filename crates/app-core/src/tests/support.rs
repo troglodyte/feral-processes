@@ -117,6 +117,72 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
     app
 }
 
+/// Puts one wild program exactly `east` tiles due east of the player and
+/// clears the rest of that row, then returns it.
+///
+/// `Game::find_target_in_direction` reads the row and nothing beside it, so
+/// an inspect test has to *own* that row rather than hope the seed left it
+/// clear — and the clearing is what makes the returned entity the answer
+/// rather than merely *an* answer. Built by editing a save and reloading it,
+/// for the same reason `app_owning_distant_programs` is: the engine exposes
+/// no way to hand-place a creature from outside the crate.
+pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("wild_east", east as u32);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    // Only the row, because only the row can be seen from here — a wider
+    // sweep would hide a ray that had been widened back into a cone.
+    data.creatures
+        .retain(|c| !(c.position.1 == py && c.position.0 > px));
+    data.creatures.push(CreatureSave {
+        species,
+        position: (px + east, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        def: 2,
+        tamed: false,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        pursuing: false,
+        carrying: None,
+        rarity: Default::default(),
+        equipment: Vec::new(),
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+
+    let game = app.game.as_mut().unwrap();
+    game.view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
+        .into_iter()
+        .find(|e| e.pos == (px + east, py) && e.is_hostile)
+        .expect("the program was just placed on the eastward row")
+        .entity
+}
+
 /// A game where the player owns one tamed program carrying `routines` and
 /// has a Compiler standing, so the extraction flow has both of its
 /// preconditions. Built by editing a save and reloading it, for the same

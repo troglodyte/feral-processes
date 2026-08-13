@@ -267,24 +267,18 @@ fn find_target_in_direction_respects_max_range() {
     );
 }
 
-#[test]
-fn find_target_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() {
-    let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    let start = *game.world.get::<Position>(player).unwrap();
+/// Spawns a bare creature at `(dx, dy)` from `start` — enough of one for the
+/// inspector, which reads `Position` and `Creature` and nothing else.
+fn spawn_marker_creature(game: &mut Game, start: Position, dx: i32, dy: i32) -> Entity {
     let species = game.species_defs().into_iter().next().unwrap();
-    clear_creatures_east_of_player(&mut game, start, 10);
-
-    // Leans east more than north/south (ddx=4 >= |ddy|=3) — inside the cone.
-    let diagonal_ish = game
-        .world
+    game.world
         .spawn((
             Creature {
                 species: species.id.clone(),
             },
             Position {
-                x: start.x + 4,
-                y: start.y - 3,
+                x: start.x + dx,
+                y: start.y + dy,
             },
             Stats {
                 hp: 1,
@@ -293,32 +287,170 @@ fn find_target_in_direction_matches_a_90_degree_cone_not_just_the_exact_row() {
                 def: 1,
             },
         ))
-        .id();
+        .id()
+}
+
+fn spawn_marker_structure(game: &mut Game, start: Position, dx: i32, dy: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: "refinery".to_string(),
+            },
+            Position {
+                x: start.x + dx,
+                y: start.y + dy,
+            },
+        ))
+        .id()
+}
+
+/// The inspector is a ray one tile wide, so a creature that merely *leans*
+/// east is not east. This is the direct inversion of a deleted test that
+/// asserted `(+4, -3)` — a pure-ish diagonal — was found by an eastward
+/// scan: at the 40-tile reach the caller used to pass, that forgiveness
+/// meant `x` could name something forty tiles off the row and well outside
+/// the map pane.
+///
+/// The final leg is what makes the two `None`s evidence: it moves a creature
+/// onto the row and finds it, so the emptiness above is the ray's doing
+/// rather than an accident of a cleared world.
+#[test]
+fn find_target_in_direction_ignores_a_creature_one_tile_off_the_ray() {
+    let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    spawn_marker_creature(&mut game, start, 4, -3);
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Creature(diagonal_ish))
+        None,
+        "leaning east is not being east"
     );
 
-    // Leans north more than east (ddy=-8, ddx=2) — outside the eastward cone.
-    game.world.spawn((
-        Creature {
-            species: species.id.clone(),
-        },
-        Position {
-            x: start.x + 2,
-            y: start.y - 8,
-        },
-        Stats {
-            hp: 1,
-            max_hp: 1,
-            atk: 1,
-            def: 1,
-        },
-    ));
+    let just_off = spawn_marker_creature(&mut game, start, 4, -1);
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
-        Some(InspectTarget::Creature(diagonal_ish)),
-        "a creature that leans mostly north shouldn't win the eastward search"
+        None,
+        "one tile off the row is off the ray"
+    );
+
+    game.world.get_mut::<Position>(just_off).unwrap().y = start.y;
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(just_off)),
+        "and the same creature on the row is found, so the misses were the ray"
+    );
+}
+
+/// The nearer thing on the ray hides everything behind it, whichever kinds
+/// they are. Distinct from `the_inspector_returns_whichever_of_the_two_kinds_
+/// is_nearer`, which asserts nearest-wins; this asserts the far one is
+/// *never* the answer, which is what makes the ray a line of sight rather
+/// than a search.
+#[test]
+fn a_nearer_thing_on_the_ray_shadows_a_farther_one() {
+    let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    let near_creature = spawn_marker_creature(&mut game, start, 2, 0);
+    let far_structure = spawn_marker_structure(&mut game, start, 5, 0);
+    let found = game.find_target_in_direction(1, 0, 10);
+    assert_eq!(found, Some(InspectTarget::Creature(near_creature)));
+    assert_ne!(
+        found,
+        Some(InspectTarget::Structure(far_structure)),
+        "the structure is behind the creature and must stay hidden"
+    );
+
+    // Swap which kind is in front; the shadowing must not care.
+    game.world.get_mut::<Position>(near_creature).unwrap().x = start.x + 7;
+    let found = game.find_target_in_direction(1, 0, 10);
+    assert_eq!(found, Some(InspectTarget::Structure(far_structure)));
+    assert_ne!(found, Some(InspectTarget::Creature(near_creature)));
+}
+
+/// The bound is inclusive, and one tile past it finds nothing. Sharper than
+/// `find_target_in_direction_respects_max_range`, which straddles the bound
+/// at 5-vs-10 and so would pass against an off-by-one.
+#[test]
+fn find_target_in_direction_stops_exactly_at_the_range_bound() {
+    let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 12);
+
+    let creature = spawn_marker_creature(&mut game, start, 10, 0);
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(creature)),
+        "a creature exactly at the bound is within it"
+    );
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 9),
+        None,
+        "and one tile past the bound is out of reach"
+    );
+}
+
+/// Bevy's query iteration order is not stable, so a scan that resolved a tie
+/// by "whichever came back first" could name a different thing between runs
+/// or after a reload — the trap `assembler_system`'s `(x, y)` sort exists to
+/// prevent. `find_target_in_direction` orders candidates by
+/// `(step, kind, entity)`, a total order with no first-of-equals for the
+/// iteration order to leak through.
+///
+/// The two worlds spawn the structure and the creature in *opposite* orders
+/// on purpose. Spawned the same way round, this would pass on iteration
+/// order alone and prove nothing, which is the same reason the assembler's
+/// test seeds its competitors backwards.
+#[test]
+fn two_things_on_one_tile_resolve_the_same_way_however_they_were_spawned() {
+    let build = |structure_first: bool| {
+        let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+        clear_creatures_east_of_player(&mut game, start, 10);
+        if structure_first {
+            spawn_marker_structure(&mut game, start, 3, 0);
+            spawn_marker_creature(&mut game, start, 3, 0);
+        } else {
+            spawn_marker_creature(&mut game, start, 3, 0);
+            spawn_marker_structure(&mut game, start, 3, 0);
+        }
+        game.find_target_in_direction(1, 0, 10)
+    };
+
+    let structure_first = build(true);
+    let creature_first = build(false);
+    assert!(
+        matches!(structure_first, Some(InspectTarget::Structure(_))),
+        "a tile holding both names the structure, which is the thing the map \
+         draws there"
+    );
+    assert!(
+        matches!(creature_first, Some(InspectTarget::Structure(_))),
+        "and it does so whichever order they were spawned in"
+    );
+}
+
+/// The ray runs forward only. Nothing covered straight-behind before — the
+/// deleted cone test only established that leaning the *wrong* way lost a
+/// contest, never that a thing directly behind you is unreachable.
+#[test]
+fn find_target_in_direction_never_looks_behind_the_player() {
+    let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    let behind = spawn_marker_creature(&mut game, start, -3, 0);
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        None,
+        "a creature to the west is not found by an eastward scan"
+    );
+    assert_eq!(
+        game.find_target_in_direction(-1, 0, 10),
+        Some(InspectTarget::Creature(behind)),
+        "and turning round finds it, so the miss was the direction"
     );
 }
 
@@ -998,10 +1130,10 @@ fn a_structure_report_row_carries_its_stock_and_status() {
     assert!(home_row.output.is_empty());
 }
 
-/// A structure in the cone is a legitimate target now, so pointing at your
+/// A structure on the ray is a legitimate target, so pointing at your
 /// Refinery with nothing alive between you and it finds the Refinery.
 #[test]
-fn the_inspector_finds_a_structure_when_no_creature_is_in_the_cone() {
+fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
     let mut game = Game::new(1400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
@@ -1027,7 +1159,11 @@ fn the_inspector_finds_a_structure_when_no_creature_is_in_the_cone() {
 
 /// Nearest wins across *both* kinds, which is the whole reason one walk
 /// gathers them rather than two functions the caller picks between: with a
-/// creature and a structure both in the cone, neither kind gets priority.
+/// creature and a structure at different distances along the ray, the nearer
+/// one answers whichever kind it is. Kind decides nothing here — it is the
+/// tiebreak for two things on *one* tile, which
+/// `two_things_on_one_tile_resolve_the_same_way_however_they_were_spawned`
+/// covers.
 #[test]
 fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
     let mut game = Game::new(1401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1085,12 +1221,12 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
 }
 
 /// A creature two tiles east of the player and a structure five tiles east,
-/// both inside the default scan cone, with any wild leftovers in that cone
-/// cleared first — the shared fixture for every test asserting what the
-/// eastward scan finds and does not find. The creature is nearer so a
-/// surface scan resolves to it despite the structure also being in the
-/// cone. Returns the creature's entity, which is the only one either test
-/// needs to assert against by identity.
+/// both on the eastward ray, with any wild leftovers on that row cleared
+/// first — the shared fixture for every test asserting what the eastward
+/// scan finds and does not find. The creature is nearer so a surface scan
+/// resolves to it despite the structure also being on the ray. Returns the
+/// creature's entity, which is the only one either test needs to assert
+/// against by identity.
 fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
@@ -1131,8 +1267,8 @@ fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) 
 /// Stack, so an unguarded scan would report the base four frames overhead as
 /// lying off to your east. The whole function refuses underground now, so
 /// this no longer stops at "no structure" — nothing is found at all, and the
-/// creature this fixture put in the cone is proof the emptiness is the
-/// guard's doing, not an accident of an empty cone.
+/// creature this fixture put on the ray is proof the emptiness is the
+/// guard's doing, not an accident of an empty row.
 #[test]
 fn the_inspector_offers_no_structure_while_the_party_is_underground() {
     let (mut game, _creature) = game_with_structure_and_creature_east_of_player(1402);
@@ -1144,7 +1280,7 @@ fn the_inspector_offers_no_structure_while_the_party_is_underground() {
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
         None,
-        "structure and creature both sit in the cone, but the guard refuses \
+        "structure and creature both sit on the ray, but the guard refuses \
          underground regardless of kind"
     );
 }
@@ -1176,6 +1312,101 @@ fn the_inspector_scans_no_creature_while_the_party_is_underground() {
             "the inspector found something at ({dx}, {dy}) from four frames under it"
         );
     }
+}
+
+/// The arrangement the ray was built for, and untested before it.
+///
+/// A posted `GatherResource` worker stands *orthogonally adjacent* to its
+/// machine (`hauling::at_station`), so aiming at a machine from the side its
+/// worker is parked on used to hit the worker first — and a tamed program at
+/// its post is not drawn, so the scan resolved on a tile that looks empty
+/// while the machine's glyph sat under the cursor. The inspector now skips
+/// any program the map does not draw, so what it names is what you can see.
+///
+/// The final leg is what keeps this honest: walking the same program off its
+/// post makes it drawable, and then it *is* found. Without that, a scan that
+/// had simply stopped seeing creatures would pass.
+#[test]
+fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
+    let mut game = Game::new(1409, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    game.place_structure("mining_node", -4, 0).unwrap();
+
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = {
+        let (x, y) = (start.x - 4, start.y);
+        let mut query = game.world.query::<(Entity, &Position, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "mining_node")
+            .map(|(e, ..)| e)
+            .expect("the node was just deployed")
+    };
+
+    let worker = spawn_tamed(&mut game, 20, 5);
+    game.assign_cronjob(worker, node).unwrap();
+    // East of the node, so it stands between the player and the machine.
+    park_at_post(&mut game, worker, node);
+
+    assert_eq!(
+        game.find_target_in_direction(-1, 0, 10),
+        Some(InspectTarget::Structure(node)),
+        "aiming west names the machine, not the program parked in front of it"
+    );
+
+    // Off on an errand it is drawn, and then it is a legitimate target.
+    game.world.get_mut::<Position>(worker).unwrap().x = start.x - 1;
+    assert_eq!(
+        game.find_target_in_direction(-1, 0, 10),
+        Some(InspectTarget::Creature(worker)),
+        "a worker away from its post is drawn, so the inspector names it"
+    );
+}
+
+/// The structure's sheet is the one screen that can report on a program at
+/// its post, because a posted program is not drawn on the map and the
+/// inspector names only what is drawn — so aiming at the machine is the only
+/// way to reach it, and the row has to carry more than a name.
+#[test]
+fn a_structures_assignee_row_carries_its_workers_level_and_health() {
+    let mut game = Game::new(1410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    game.place_structure("mining_node", 1, 0).unwrap();
+
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = {
+        let (x, y) = (start.x + 1, start.y);
+        let mut query = game.world.query::<(Entity, &Position, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, p, s)| p.x == x && p.y == y && s.kind == "mining_node")
+            .map(|(e, ..)| e)
+            .expect("the node was just deployed")
+    };
+
+    let worker = spawn_tamed(&mut game, 20, 5);
+    set_level(&mut game, worker, 7);
+    game.assign_cronjob(worker, node).unwrap();
+    game.world.get_mut::<Stats>(worker).unwrap().hp = 3;
+
+    let row = game.structure_manifest(node).expect("the node has a row");
+    let posted = row
+        .assignees
+        .iter()
+        .find(|a| a.entity == worker)
+        .expect("the worker is listed");
+    assert_eq!(posted.level, Some(7));
+    let (hp, max_hp) = posted.hp.expect("a program has stats");
+    assert_eq!(hp, 3, "the row reports the health it actually has");
+    assert!(max_hp >= hp);
 }
 
 /// The detail screen and the `B` roster must never disagree about the same
@@ -1475,8 +1706,8 @@ fn the_manifest_shows_a_programs_zone_tier_against_the_players_own() {
     );
 }
 
-/// The direct demolish key aims at one tile, not down a line. `x`'s cone
-/// scan would let a single keypress take down something forty tiles off.
+/// The direct demolish key aims at one tile, not down a line. `x`'s ray
+/// would let a single keypress take down something across the base.
 #[test]
 fn adjacent_structure_finds_only_the_neighbouring_tile() {
     let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

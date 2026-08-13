@@ -122,30 +122,18 @@ fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
     assert_eq!(app.mode, Mode::Manifest, "cycling never leaves the screen");
 }
 
-/// A wild program near the player, and the cardinal direction it lies in.
-/// Found by scanning `view_entities` rather than guessing a direction, so the
-/// test doesn't depend on where a seed happened to put one.
+/// A wild program three tiles due east of the player, and the key that
+/// looks at it.
+///
+/// It *places* one rather than finding whichever the seed scattered nearby
+/// and deriving a dominant direction from it, which is what this did while
+/// `x` was a 90° cone: a program mostly-east-and-somewhat-north answered to
+/// `Right` back then and answers to nothing now. Placing it makes the
+/// fixture state the arrangement instead of inheriting one, and the returned
+/// key is a constant.
 fn a_wild_program_and_its_direction(app: &mut App) -> (Entity, GameKey) {
-    let game = app.game.as_mut().unwrap();
-    let player = game.player_status().position;
-    let wild = game
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .find(|e| e.is_hostile)
-        .expect("a fresh map has a wild program within scan radius");
-    let (dx, dy) = (wild.pos.0 - player.0, wild.pos.1 - player.1);
-    let key = if dx.abs() >= dy.abs() {
-        if dx > 0 {
-            GameKey::Right
-        } else {
-            GameKey::Left
-        }
-    } else if dy > 0 {
-        GameKey::Down
-    } else {
-        GameKey::Up
-    };
-    (wild.entity, key)
+    let wild = place_wild_program_east(app, 3);
+    (wild, GameKey::Right)
 }
 
 #[test]
@@ -237,6 +225,44 @@ fn inspecting_a_direction_still_lands_on_the_manifest() {
     assert!(
         app.pending_manifest.is_some(),
         "the inspected program is the manifest's subject"
+    );
+}
+
+/// The shipped reach, pinned at the seam that chooses it.
+///
+/// `find_target_in_direction` takes its range as a parameter so the engine's
+/// own tests stay immune to a retune, which leaves *which* number the game
+/// passes untested there. It used to pass `MENU_SCAN_RADIUS` — a menu
+/// window, 40 tiles, more than twice the map pane in either axis — so `x`
+/// named things the player could not see. This is what would fail if that
+/// came back.
+#[test]
+fn inspecting_a_direction_reaches_no_further_than_the_examine_range() {
+    use feral_processes_engine::tuning::EXAMINE_RANGE_TILES;
+
+    let mut app = test_app(79);
+    place_wild_program_east(&mut app, EXAMINE_RANGE_TILES + 1);
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "one tile past the reach is out of reach"
+    );
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Nothing in that direction."),
+        "and it says so rather than silently doing nothing"
+    );
+
+    let mut app = test_app(79);
+    place_wild_program_east(&mut app, EXAMINE_RANGE_TILES);
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.mode,
+        Mode::Manifest,
+        "and a program exactly at the reach is found, so the miss was the bound"
     );
 }
 

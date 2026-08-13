@@ -19,7 +19,7 @@ use super::*;
 fn companion_help() -> [String; 4] {
     [
         format!(
-            "Pick a program to add to your party (max {MAX_PARTY_SIZE}) - select a party member's own number to stand it down."
+            "P adds the highlighted program to your party (max {MAX_PARTY_SIZE}), or stands a member back down."
         ),
         "< and > move the highlighted member along the battle line; the front slot draws the most fire."
             .to_string(),
@@ -460,6 +460,18 @@ mod tests {
         assert!(
             companion_help().iter().any(|line| line.starts_with("E ")),
             "the roster must say which key opens a program's gear: {:?}",
+            companion_help()
+        );
+    }
+
+    /// Party membership is the one thing this screen is *for*, and since the
+    /// row shortcuts stopped toggling it there is nothing but this line to
+    /// point at the key. A player who never finds it never fields a party.
+    #[test]
+    fn the_companion_screen_names_the_party_key() {
+        assert!(
+            companion_help().iter().any(|line| line.starts_with("P ")),
+            "the roster must say which key stands a program in the party: {:?}",
             companion_help()
         );
     }

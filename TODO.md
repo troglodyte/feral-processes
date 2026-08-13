@@ -1,5 +1,4 @@
 # Todos
-1. companions in the 'party' list should show 'w|a|m' for equipped slots
 2. some ambiguity|routines for examining entities
 3. environment effects
 4. unorthodox solutions
@@ -12,7 +11,6 @@
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 13. one button to fuse all items
-14. compainions list, enter does nothing, P adds | removes from party
 15. rotten substrate, in stacks take 15% off health tunable
 
 # Bugs

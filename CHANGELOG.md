@@ -27,6 +27,23 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.17
+
+### The roster's row shortcuts stopped standing programs down
+
+`P` now adds the highlighted program to your party, or stands a member back
+down. A row's number or letter only moves the highlight, and Enter — a key
+this screen has never had a use for — does nothing at all.
+
+Every other action on the roster already worked this way: `<` and `>` shift a
+member along the battle line, `N` renames, `E` fits gear, all of them reading
+the highlight. Party membership was the exception and the only destructive
+one, so the screen answered a digit typed at the wrong moment by pulling a
+program out of the party, with nothing to undo it but noticing. The help
+lines name the new key, and `the_companion_screen_names_the_party_key` is
+what keeps them naming it — with the row shortcuts inert, that line is the
+only thing pointing at the one action this screen exists for.
+
 ## 0.8.16
 
 ### Counts read down a column instead of trailing the name

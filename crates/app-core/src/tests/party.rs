@@ -216,6 +216,117 @@ fn an_empty_rename_puts_the_species_name_back() {
     );
 }
 
+// --- Party membership ----------------------------------------------------
+
+/// Whether `entity` is standing in the active party right now.
+fn in_party(app: &mut App, entity: feral_processes_engine::Entity) -> bool {
+    app.game
+        .as_mut()
+        .unwrap()
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity == entity)
+        .expect("the program is still owned")
+        .party_slot
+        .is_some()
+}
+
+#[test]
+fn p_stands_the_highlighted_member_down_and_puts_it_back() {
+    let mut app = app_with_companions_in_the_party(780, 2);
+    let before = roster(&mut app);
+    open_via_menu(&mut app, 'p', "Companions");
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+
+    app.handle_key(GameKey::Char('P'));
+
+    assert_eq!(
+        app.status_line, None,
+        "standing a member down is never refused"
+    );
+    assert!(
+        !in_party(&mut app, before[1]),
+        "the highlighted member steps out"
+    );
+    assert!(
+        in_party(&mut app, before[0]),
+        "and the other one is left alone"
+    );
+    assert_eq!(
+        app.mode,
+        Mode::Companion,
+        "the screen stays open the way reordering does"
+    );
+
+    // Standing down reorders `owned_pets` — the party leads it — so find the
+    // row it moved to rather than assuming the highlight still names it.
+    let row = app
+        .game
+        .as_mut()
+        .unwrap()
+        .owned_pets()
+        .iter()
+        .position(|p| p.entity == before[1])
+        .unwrap();
+    app.menu_selected = row;
+    app.handle_key(GameKey::Char('P'));
+
+    assert_eq!(app.status_line, None, "and there is room to come back");
+    assert!(
+        in_party(&mut app, before[1]),
+        "the second press puts it back"
+    );
+}
+
+/// The whole of TODO 14: every action on this screen acts on the highlight,
+/// so a row shortcut only moves it. Before this change a stray digit stood a
+/// party member down on the spot.
+#[test]
+fn a_row_shortcut_only_moves_the_highlight() {
+    let mut app = app_with_companions_in_the_party(781, 2);
+    let before = roster(&mut app);
+    open_via_menu(&mut app, 'p', "Companions");
+
+    app.handle_key(GameKey::Char('2'));
+
+    assert_eq!(app.menu_selected, 1, "the digit picks the row");
+    assert!(
+        in_party(&mut app, before[0]) && in_party(&mut app, before[1]),
+        "and changes nothing about who is standing in the party"
+    );
+}
+
+#[test]
+fn enter_does_nothing_on_the_roster() {
+    let mut app = app_with_companions_in_the_party(782, 2);
+    let before = roster(&mut app);
+    open_via_menu(&mut app, 'p', "Companions");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.menu_selected, 0, "the highlight stays put");
+    assert!(
+        in_party(&mut app, before[0]) && in_party(&mut app, before[1]),
+        "and the party is untouched"
+    );
+    assert_eq!(app.mode, Mode::Companion, "Enter is not a way out either");
+    assert_eq!(app.status_line, None);
+}
+
+#[test]
+fn p_is_ignored_on_an_empty_roster() {
+    let mut app = test_app(783);
+    // Set directly, for the reason `the_hidden_key_is_ignored_on_an_empty_
+    // roster` gives: the party menu hides the row when there is nothing on it.
+    app.mode = Mode::Companion;
+
+    app.handle_key(GameKey::Char('P'));
+
+    assert_eq!(app.status_line, None, "no roster, nothing to say about it");
+    assert_eq!(app.mode, Mode::Companion);
+}
+
 // --- Companion equipment -------------------------------------------------
 
 /// Opens the roster and puts the highlight on the first program.

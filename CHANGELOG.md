@@ -27,6 +27,57 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.15
+
+### The research tree no longer finishes early
+
+Twenty-one nodes, 561 Research Data, and nothing about any of it gated on
+progress: every node was buyable from turn one if you were willing to wait,
+and Research Data survives a breach. So the tree was paced by patience alone,
+and it read as a checklist to clear rather than a set of decisions. You had
+everything researched long before the run was over.
+
+Raising the prices alone would have been the same checklist with a bigger
+number on it. **Twelve nodes now declare the zone they open in** — six at
+zone 2, six at zone 3 — and the ladder reprices from 561 to 1258.
+
+Below its zone a node is **still listed**, still priced, still described,
+and unbuyable at any balance; the row says what it is waiting on. That
+visibility is the point rather than an oversight. A zone-3 tier sitting in
+the menu while you are in zone 1 is the reason to go breach, and hiding it
+would mean a player who never breached never learns the tier is there. It is
+the same argument the upgrade menu already makes for a structure stalled at
+its zone ceiling. A node held up by both a prerequisite and a breach says
+both: *(needs Neural Interfacing, Zone 3)*.
+
+The opening nine nodes are **nearly untouched** — 129 Research Data becomes
+158. The complaint was that the tree finishes early, not that the first bench
+arrives early, and a base that cannot stand up its first machine is a worse
+opening rather than a slower one. The two dearest bands are where the change
+lands: 163 becomes 350, and 269 becomes 750.
+
+The tap is deliberately unchanged. A Research Node still pays a flat 1 per
+cycle into a bank with no ceiling, which means the ladder is the only thing
+bounding it — giving the tap a zone term would have paid out more at exactly
+the moment the gate released more to buy, cancelling the pacing this exists
+to create. What compounds instead is something already in the game: a
+Research Node is capped at Mk1 in zone 1, Mk2 in zone 2, Mk3 in zone 3, and
+its cycle succeeds 50% of the time at Mk1 against 90% at Mk5. The band you
+can buy earliest is the band you earn slowest, and every breach speeds the
+bank up at the same moment it releases more to spend it on.
+
+The bands are content: `min_zone` in `assets/research/*.ron`, one optional
+field that defaults to ungated. A mod's research file that never heard of it
+keeps parsing and ships a fully open tree exactly as before, and retuning
+which node sits in which band is a `.ron` edit with no code change. Two rules
+are enforced against the loaded tree rather than left to care — a node may
+not be gated below its own prerequisite, and nothing unlocking the Zone
+Portal may be gated at all, since that is the structure you reach the next
+zone *with*.
+
+**Existing saves load untouched.** The gate is on buying, not on having, so
+a save that already paid for a node keeps it whatever zone it is standing in.
+
 ## 0.8.14
 
 ### A breach now lands you somewhere

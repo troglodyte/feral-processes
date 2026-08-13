@@ -1,0 +1,9 @@
+// The rarest of the shipped set and the only one granting two
+// stats at a meaningful size.
+(
+    id: "of_recursion",
+    suffix: Some("of Recursion"),
+    stats: (atk: 2, def: 1),
+    slots: Some([Weapon, Module]),
+    weight: 5,
+)

@@ -1,0 +1,8 @@
+// Honed's armour twin, same weight and same reasoning.
+(
+    id: "reinforced",
+    prefix: Some("Reinforced"),
+    stats: (def: 2),
+    slots: Some([Armor]),
+    weight: 12,
+)

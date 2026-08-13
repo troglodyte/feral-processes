@@ -286,8 +286,23 @@ impl Game {
     /// a since-removed mod item produces.
     pub(crate) fn worn_bonus(&self, worn: &EquippedItem) -> Option<items::EquipmentStats> {
         let (_, base) = self.equipment_of(&worn.copy.item)?;
+        // The affix is added to the *base* before any scaling, so it grows
+        // with gear level and both tiers exactly as the item's own bonus
+        // does. Added after would make an affix worth steadily less as a run
+        // goes on, which is the opposite of what a rolled property is for —
+        // and would make a scavenged weapon with a good affix worthless
+        // after one breach.
+        let affixed = match self.affix_of(&worn.copy) {
+            Some(affix) => items::EquipmentStats {
+                atk: base.atk + affix.stats.atk,
+                def: base.def + affix.stats.def,
+                decompiler: base.decompiler + affix.stats.decompiler,
+            },
+            None => base,
+        };
         Some(
-            base.scaled_for_level(worn.level)
+            affixed
+                .scaled_for_level(worn.level)
                 .fused_for_tier(worn.copy.tier)
                 .for_rarity(worn.copy.rarity),
         )

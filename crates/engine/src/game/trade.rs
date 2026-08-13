@@ -144,15 +144,9 @@ impl Game {
         // player, and this line is the only warning either gets.
         let manifest = shelf
             .iter()
-            .map(|row| {
-                let rare = match row.copy.rarity.label() {
-                    Some(tier) => format!("{tier} "),
-                    None => String::new(),
-                };
-                match row.copy.tier {
-                    0 => format!("{} {rare}{}", row.qty, row.name),
-                    tier => format!("{} {rare}{} T{tier}", row.qty, row.name),
-                }
+            .map(|row| match row.copy.tier {
+                0 => format!("{} {}", row.qty, row.name),
+                tier => format!("{} {} T{tier}", row.qty, row.name),
             })
             .collect::<Vec<_>>()
             .join(", ");
@@ -189,7 +183,7 @@ impl Game {
                     .iter()
                     .filter_map(|(copy, qty)| {
                         Some(BuybackOption {
-                            name: self.item_name(&copy.item).to_string(),
+                            name: self.copy_name(copy),
                             copy: copy.clone(),
                             qty: *qty,
                             unit_cost: self.buyback_unit_cost(structure, &copy.item)?,

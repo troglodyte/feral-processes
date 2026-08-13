@@ -1199,6 +1199,7 @@ fn unequipping_a_rare_copy_leaves_no_bonus_behind() {
             item: weapon.clone(),
             rarity,
             tier: 0,
+            affix: None,
         };
         game.add_copies(&copy, 1);
         game.equip(player, &copy).unwrap();
@@ -1239,6 +1240,7 @@ fn a_rare_copy_is_worth_more_worn_than_a_plain_one() {
             item: weapon.clone(),
             rarity,
             tier: 0,
+            affix: None,
         };
         game.add_copies(&copy, 1);
         game.equip(player, &copy).unwrap();
@@ -1272,6 +1274,7 @@ fn a_rare_copy_will_not_fuse_with_a_plain_one() {
         item: armor,
         rarity: Rarity::Gold,
         tier: 0,
+        affix: None,
     };
     game.add_copies(&plain, 1);
     game.add_copies(&rare, 1);

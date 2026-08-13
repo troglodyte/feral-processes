@@ -86,7 +86,7 @@ pub(super) fn draw_trade_action_menu(
                 "[{}] {}  Sell {} x{}{} ({} {money} each)",
                 menu_shortcut(idx),
                 game.item_category(&row.copy.item).short_label(),
-                game.item_name(&row.copy.item),
+                game.copy_name(&row.copy),
                 row.qty,
                 tag,
                 game.sell_price(structure, &row.copy.item).unwrap_or(0)

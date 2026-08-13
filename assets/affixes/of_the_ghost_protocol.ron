@@ -1,0 +1,10 @@
+// DECOMP is player-only (a program never attempts a capture),
+// so this is deliberately kept off Weapon: the one slot a player is most
+// likely to hand to a companion is the one where this would be inert.
+(
+    id: "of_the_ghost_protocol",
+    suffix: Some("of Quiet Handshakes"),
+    stats: (decompiler: 2),
+    slots: Some([Module, Armor]),
+    weight: 8,
+)

@@ -28,12 +28,8 @@ pub(super) fn draw_erase_quantity(
         // copy is worth many plain ones — the prompt is the last chance to
         // notice which copy is highlighted.
         text_row(format!(
-            "Erase how many {}{}{}?",
-            match copy.rarity.label() {
-                Some(tier) => format!("{tier} "),
-                None => String::new(),
-            },
-            game.item_name(&copy.item),
+            "Erase how many {}{}?",
+            game.copy_name(&copy),
             match copy.tier {
                 0 => String::new(),
                 tier => format!(" {}", item_fusion_note(tier)),
@@ -96,7 +92,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
                 "[{}] {}  {} x{}{}",
                 menu_shortcut(i + 3),
                 game.item_category(&row.copy.item).short_label(),
-                game.item_name(&row.copy.item),
+                game.copy_name(&row.copy),
                 row.qty,
                 tag
             ),
@@ -164,7 +160,7 @@ fn equipped_summary(
     };
     format!(
         "{label}: {}{note} ({})",
-        game.item_name(&equipped.copy.item),
+        game.copy_name(&equipped.copy),
         stat_summary(mods)
     )
 }
@@ -246,7 +242,7 @@ pub(super) fn draw_item_describe(
     };
     let title = format!(
         "{}{}",
-        game.item_name(&copy.item),
+        game.copy_name(&copy),
         equip_preview_tag(game, &copy, zone_level)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
@@ -283,7 +279,7 @@ pub(super) fn draw_inventory_item_action(
     };
     let title = format!(
         "{}{}",
-        game.item_name(&copy.item),
+        game.copy_name(&copy),
         equip_preview_tag(game, &copy, zone_level)
     );
     let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];

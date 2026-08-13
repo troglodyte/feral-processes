@@ -2,7 +2,7 @@
 //! decompiling a defeated program into a companion.
 
 use crate::progression::StatRow;
-use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, WORK_RESOURCE_DROP};
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, WORK_RESOURCE_DROP};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
@@ -81,13 +81,97 @@ impl Game {
             return GearCopy::plain(item);
         }
         let rarity = self.roll_gear_rarity().max(floor);
+        let affix = self.roll_affix(&item);
         let copy = GearCopy {
             item,
             rarity,
             tier: 0,
+            affix,
         };
         self.add_copies(&copy, 1);
         copy
+    }
+
+    /// The affix a dropping copy of `item` rolls, or `None` — see
+    /// `affixes::AffixDef`.
+    ///
+    /// **Two rolls, deliberately separate**, the shape `roll_wild_routine`
+    /// already uses: `GEAR_AFFIX_CHANCE` decides whether there is an affix
+    /// at all, and the per-affix `weight` decides which. Folding them into
+    /// one would mean *adding* an affix to the game changed how often
+    /// affixes appear, so a mod could not add content without retuning.
+    ///
+    /// Independent of the rare tier, rather than gated behind it. Rarity is
+    /// the axis you read from the row colour and affixes are the axis you
+    /// read from the name, and coupling them would mean the overwhelming
+    /// majority of drops — the ordinary ones — stayed exactly as
+    /// featureless as they were, which is the complaint the whole feature
+    /// exists to answer.
+    ///
+    /// Spends no RNG draw when the item is not equippable or the eligible
+    /// pool is empty, for the reason `grant_gear_drop` spends none on a
+    /// material: an empty `assets/affixes/` must leave every seeded run
+    /// exactly where it was, which is what makes deleting the directory a
+    /// supported way to play.
+    fn roll_affix(&mut self, item: &ItemId) -> Option<AffixId> {
+        let slot = self.equipment_of(item)?.0;
+        let pool: Vec<(AffixId, u32)> = self
+            .world
+            .resource::<AffixDb>()
+            .pool_for(slot)
+            .into_iter()
+            .map(|def| (def.id.clone(), def.weight))
+            .collect();
+        let total: u32 = pool.iter().map(|(_, w)| w).sum();
+        if total == 0 {
+            return None;
+        }
+        let mut roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            if !rng.0.random_bool(GEAR_AFFIX_CHANCE) {
+                return None;
+            }
+            rng.0.random_range(0..total)
+        };
+        for (id, weight) in pool {
+            match roll.checked_sub(weight) {
+                Some(rest) => roll = rest,
+                None => return Some(id),
+            }
+        }
+        None
+    }
+
+    /// What `affix` is, if the copy has one and the build still knows it.
+    ///
+    /// The `and_then` is the whole compatibility story for a removed affix:
+    /// a save naming one the build no longer has reads as unaffixed rather
+    /// than failing to load, the same shape `recognized_routines` gives a
+    /// removed ability. Every reader goes through here.
+    pub(crate) fn affix_of(&self, copy: &GearCopy) -> Option<&crate::affixes::AffixDef> {
+        copy.affix
+            .as_ref()
+            .and_then(|id| self.world.resource::<AffixDb>().get(id))
+    }
+
+    /// What this copy is called: its affix's decoration of the item name,
+    /// with the rare tier in front.
+    ///
+    /// **The one place a copy's name is built.** `Rarity::label` makes the
+    /// same argument for the tier word alone; this is that plus the affix,
+    /// and it is the engine's job rather than a renderer's so the inventory,
+    /// the swap picker, the trade screen and a drop line cannot come to
+    /// disagree about what a copy is called.
+    pub fn copy_name(&self, copy: &GearCopy) -> String {
+        let base = self.item_name(&copy.item);
+        let named = match self.affix_of(copy) {
+            Some(affix) => affix.decorate(base),
+            None => base.to_string(),
+        };
+        match copy.rarity.label() {
+            Some(tier) => format!("{tier} {named}"),
+            None => named,
+        }
     }
 
     /// How a dropped copy reads in its loot line: the tier's word, the item
@@ -97,10 +181,11 @@ impl Game {
     /// opened a screen, so it is also the only place a rare tier can be
     /// noticed at the moment it is earned — the row colour is a screen away.
     pub(crate) fn drop_label(&self, copy: &GearCopy) -> String {
-        match copy.rarity.label() {
-            Some(tier) => format!("{tier} {}", self.item_name_tagged(&copy.item)),
-            None => self.item_name_tagged(&copy.item),
-        }
+        format!(
+            "{} [{}]",
+            self.copy_name(copy),
+            self.item_category(&copy.item).short_label()
+        )
     }
 
     /// Defeated (not tamed) rogue programs drop whatever resource their

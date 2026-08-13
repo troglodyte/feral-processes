@@ -140,12 +140,6 @@ pub fn equip_preview_tag(game: &Game, copy: &GearCopy, zone_level: u32) -> Strin
     if !summary.is_empty() {
         parts.push(summary);
     }
-    // The rare tier before the fusion tier, because it is the property the
-    // copy was *found* with and the one the row colour is most likely to be
-    // showing — see `render/mod.rs::tier_color`, where fusion outranks it.
-    if let Some(tier) = copy.rarity.label() {
-        parts.push(tier.to_string());
-    }
     if copy.tier > 0 {
         let maxed = if copy.tier >= MAX_FUSIONS {
             " - maxed"
@@ -294,10 +288,10 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
             // the numbers. Both columns are fixed width — see
             // `SWAP_NAME_COLUMN` — so this is also what keeps either from
             // pushing the other's content out of view.
-            let name = match copy.rarity.label() {
-                Some(tier) => format!("{tier} {}", game.item_name(&copy.item)),
-                None => game.item_name(&copy.item).to_string(),
-            };
+            // Through the engine's one name-builder, so this column cannot
+            // come to disagree with a drop line or the trade screen about
+            // what a copy is called.
+            let name = game.copy_name(copy);
             let stats = match copy.tier {
                 0 => stat_summary(mods),
                 tier => format!("{} {}", stat_summary(mods), item_fusion_note(tier)),

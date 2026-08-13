@@ -20,6 +20,19 @@ impl Game {
         self.world.resource::<ItemDb>().all().cloned().collect()
     }
 
+    /// Every affix the game knows about — the mirror of `item_defs`, and
+    /// the one door to `AffixDb` from outside that module. `cfg(test)` for
+    /// the same reason: no screen lists affixes on their own, they are only
+    /// ever seen through a copy that rolled one.
+    #[cfg(test)]
+    pub(crate) fn affix_defs(&self) -> Vec<crate::affixes::AffixDef> {
+        self.world
+            .resource::<crate::affixes::AffixDb>()
+            .all()
+            .cloned()
+            .collect()
+    }
+
     /// One item definition by id, or `None` if nothing declares it.
     ///
     /// Returns a clone rather than a borrow because its callers go on to

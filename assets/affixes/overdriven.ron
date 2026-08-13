@@ -1,0 +1,8 @@
+// The loud version of Honed, at half the weight.
+(
+    id: "overdriven",
+    prefix: Some("Overdriven"),
+    stats: (atk: 3),
+    slots: Some([Weapon]),
+    weight: 6,
+)

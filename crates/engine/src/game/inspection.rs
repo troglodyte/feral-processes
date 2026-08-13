@@ -641,10 +641,9 @@ impl Game {
         let mods = self.worn_bonus(&worn)?;
         Some(ManifestEquipSlot {
             slot: slot.label().to_string(),
-            item_name: self.item_name(&worn.copy.item).to_string(),
+            item_name: self.copy_name(&worn.copy),
             gear_level: worn.level,
             fusion_tier: worn.copy.tier,
-            rarity: worn.copy.rarity,
             atk: mods.atk,
             def: mods.def,
             decompiler: mods.decompiler,

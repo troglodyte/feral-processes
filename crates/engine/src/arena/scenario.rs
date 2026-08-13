@@ -11,6 +11,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::affixes::AffixId;
 use crate::components::Rarity;
 use crate::items::{GearCopy, ItemId};
 use crate::species::SpeciesId;
@@ -123,6 +124,11 @@ pub struct EquipSpec {
     pub tier: u32,
     #[serde(default)]
     pub rarity: Rarity,
+    /// An affix by id, or none. Authorable for the same reason `rarity` is:
+    /// an affix is rolled on a *drop*, and a staged fight drops nothing, so
+    /// this is the only way to measure what one is worth.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
 }
 
 impl EquipSpec {
@@ -135,6 +141,7 @@ impl EquipSpec {
             item: self.item.clone(),
             rarity: self.rarity,
             tier: self.tier,
+            affix: self.affix.clone(),
         }
     }
 }

@@ -1091,10 +1091,6 @@ pub struct ManifestEquipSlot {
     pub item_name: String,
     pub gear_level: u32,
     pub fusion_tier: u32,
-    /// The rare tier of the copy actually worn — see `items::GearCopy`.
-    /// Carried beside `fusion_tier` rather than folded into it: the two are
-    /// independent, and the sheet colours by one while listing the other.
-    pub rarity: Rarity,
     pub atk: i32,
     pub def: i32,
     pub decompiler: i32,

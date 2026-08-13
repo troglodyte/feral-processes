@@ -1,3 +1,4 @@
+use crate::affixes::AffixId;
 use crate::components::Rarity;
 use crate::tuning::{
     GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, ITEM_FUSION_BONUS_PER_TIER,
@@ -179,6 +180,18 @@ pub struct GearCopy {
     /// How many times this copy has been fused — see `Game::fuse_item`.
     #[serde(default)]
     pub tier: u32,
+    /// The affix this copy rolled when it dropped, if any — see
+    /// `affixes::AffixDef` and `Game::grant_gear_drop`. It decides both the
+    /// generated name and an extra flat stat bonus.
+    ///
+    /// `#[serde(default)]` on a field of a *named* struct, so it is purely
+    /// additive: a save written before affixes existed loads with every copy
+    /// unaffixed, which is what it had. An id naming an affix the build no
+    /// longer has is not an error either — `Game::affix_of` simply finds
+    /// nothing and the copy reads as unaffixed, the same shape
+    /// `recognized_routines` gives a removed ability.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
 }
 
 impl GearCopy {
@@ -189,6 +202,7 @@ impl GearCopy {
             item,
             rarity: Rarity::Ordinary,
             tier: 0,
+            affix: None,
         }
     }
 
@@ -201,7 +215,7 @@ impl GearCopy {
     /// A fourth property added to a copy joins the `&&` here and nowhere
     /// else.
     pub fn is_plain(&self) -> bool {
-        self.rarity == Rarity::Ordinary && self.tier == 0
+        self.rarity == Rarity::Ordinary && self.tier == 0 && self.affix.is_none()
     }
 }
 

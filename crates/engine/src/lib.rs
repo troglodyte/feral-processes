@@ -1,5 +1,6 @@
 pub mod abilities;
 pub mod achievements;
+pub mod affixes;
 pub mod arena;
 pub mod balance_sim;
 pub mod battle;
@@ -38,6 +39,7 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget};
+use affixes::{AffixDb, AffixId};
 use battle::{
     ActionKind, ActionOption, AllyOption, BattleAction, EnemyGroup, PartyCommand, PartyCommandKind,
     SpecialOption, TargetSpec,

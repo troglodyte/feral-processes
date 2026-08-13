@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::affixes::AffixId;
 use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::GearCopy;
 use crate::items::{EquipmentSlot, ItemId};
@@ -36,16 +37,22 @@ pub struct PlayerSave {
     /// what it had.
     #[serde(default)]
     pub weapon_rarity: Rarity,
+    #[serde(default)]
+    pub weapon_affix: Option<AffixId>,
     pub armor: Option<ItemId>,
     pub armor_level: u32,
     pub armor_fusion_tier: u32,
     #[serde(default)]
     pub armor_rarity: Rarity,
+    #[serde(default)]
+    pub armor_affix: Option<AffixId>,
     pub module: Option<ItemId>,
     pub module_level: u32,
     pub module_fusion_tier: u32,
     #[serde(default)]
     pub module_rarity: Rarity,
+    #[serde(default)]
+    pub module_affix: Option<AffixId>,
     /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
     /// Which perks have been bought, and at what level (see
@@ -258,6 +265,9 @@ pub struct EquippedItemSave {
     /// tiers loads with every worn copy ordinary, which is what it was.
     #[serde(default)]
     pub rarity: Rarity,
+    /// The affix on the worn copy — additive for the same reason.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -680,14 +690,17 @@ mod tests {
                 weapon_level: 1,
                 weapon_fusion_tier: 0,
                 weapon_rarity: Rarity::Ordinary,
+                weapon_affix: None,
                 armor: None,
                 armor_level: 1,
                 armor_fusion_tier: 0,
                 armor_rarity: Rarity::Ordinary,
+                armor_affix: None,
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
                 module_rarity: Rarity::Ordinary,
+                module_affix: None,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
                 perk_points: 0,

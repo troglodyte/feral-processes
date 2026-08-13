@@ -712,21 +712,26 @@ fn a_dropped_weapon_can_roll_a_rare_tier() {
         game.grant_gear_drop(weapon.clone(), Rarity::Ordinary);
     }
 
-    let rare: Vec<Rarity> = game
+    let special: Vec<GearCopy> = game
         .world
         .get::<GearCopies>(player)
         .expect("the player carries the special-copy store")
         .copies
         .iter()
-        .map(|(copy, _)| copy.rarity)
+        .map(|(copy, _)| copy.clone())
         .collect();
     assert!(
-        !rare.is_empty(),
+        special.iter().any(|c| c.rarity != Rarity::Ordinary),
         "2000 drops rolled no rare tier at all — is the roll wired up?"
     );
+    // The store rule, not the rarity rule: a copy is here because
+    // `is_plain` said no, and an *ordinary* copy carrying an affix is a
+    // perfectly good reason for that. Asserting "everything here is rare"
+    // was right while rarity was the only special property and became wrong
+    // the moment affixes landed — which is why this now asks the predicate.
     assert!(
-        rare.iter().all(|r| *r != Rarity::Ordinary),
-        "an ordinary copy must live in Inventory, not the special store: {rare:?}"
+        special.iter().all(|c| !c.is_plain()),
+        "a plain copy must live in Inventory, not the special store: {special:?}"
     );
 }
 
@@ -824,5 +829,146 @@ fn crafted_gear_is_never_rare() {
             .unwrap_or(0),
         0,
         "crafting must never produce a rare copy"
+    );
+}
+
+/// Affixes are rolled independently of the rare tier, so most affixed
+/// drops are *ordinary* copies — which is the point: rarity is the chase
+/// and affixes are the variety, and gating one behind the other would leave
+/// the 96.5% of drops that roll no tier exactly as featureless as before.
+#[test]
+fn a_dropped_weapon_can_roll_an_affix_without_a_rare_tier() {
+    let mut game = Game::new(515, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let weapon = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("shipped assets include equippable gear")
+        .id;
+
+    for _ in 0..400 {
+        game.grant_gear_drop(weapon.clone(), Rarity::Ordinary);
+    }
+
+    let copies: Vec<GearCopy> = game
+        .world
+        .get::<GearCopies>(player)
+        .expect("the player carries the special-copy store")
+        .copies
+        .iter()
+        .map(|(copy, _)| copy.clone())
+        .collect();
+    assert!(
+        copies
+            .iter()
+            .any(|c| c.affix.is_some() && c.rarity == Rarity::Ordinary),
+        "an affix must be reachable without a rare tier: {copies:?}"
+    );
+    assert!(
+        copies.iter().filter(|c| c.affix.is_some()).count() > 1,
+        "400 drops at GEAR_AFFIX_CHANCE should yield several affixes"
+    );
+}
+
+/// Every affix the copy names must resolve, and the generated name must
+/// actually contain the affix's word — a name that silently dropped it
+/// would leave the player a stat bonus with no visible source, which is the
+/// exact fault `AffixDef::fault` refuses a file for.
+#[test]
+fn an_affixed_copys_name_carries_both_its_word_and_its_tier() {
+    let game = Game::new(516, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    let slot = game.equipment_of(&weapon).expect("it is equippable").0;
+    let affix = game
+        .affix_defs()
+        .into_iter()
+        .find(|d| d.fits(slot))
+        .expect("the shipped set has a weapon-eligible affix");
+
+    let plain = GearCopy::plain(weapon.clone());
+    let dressed = GearCopy {
+        item: weapon.clone(),
+        rarity: Rarity::Gold,
+        tier: 0,
+        affix: Some(affix.id.clone()),
+    };
+
+    let bare = game.copy_name(&plain);
+    let full = game.copy_name(&dressed);
+    let word = affix
+        .prefix
+        .clone()
+        .or_else(|| affix.suffix.clone())
+        .expect("a loaded affix has one or the other");
+
+    assert_eq!(
+        bare,
+        game.item_name(&weapon),
+        "a plain copy is just its name"
+    );
+    assert!(
+        full.contains(&word),
+        "{full:?} lost the affix word {word:?}"
+    );
+    assert!(
+        full.contains(Rarity::Gold.label().unwrap()),
+        "{full:?} lost the rare tier"
+    );
+    assert!(
+        full.contains(game.item_name(&weapon)),
+        "{full:?} lost the item's own name"
+    );
+}
+
+/// An affix is worth stats, not just a name, and it is added to the base
+/// *before* scaling — so it grows with gear level and both tiers rather
+/// than dwindling into irrelevance over a run.
+#[test]
+fn an_affix_is_worth_more_than_its_name() {
+    let mut game = Game::new(517, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    let slot = game.equipment_of(&weapon).expect("it is equippable").0;
+    let affix = game
+        .affix_defs()
+        .into_iter()
+        .find(|d| d.fits(slot) && d.stats.atk > 0)
+        .expect("the shipped set has a weapon affix granting ATK");
+
+    let worn_atk = |game: &mut Game, copy: GearCopy| {
+        game.add_copies(&copy, 1);
+        game.equip(player, &copy).unwrap();
+        let atk = game.world.get::<Stats>(player).unwrap().atk;
+        game.unequip(player, EquipmentSlot::Weapon).unwrap();
+        game.take_copies(&copy, 1);
+        atk
+    };
+
+    let plain = worn_atk(&mut game, GearCopy::plain(weapon.clone()));
+    let affixed = worn_atk(
+        &mut game,
+        GearCopy {
+            item: weapon.clone(),
+            rarity: Rarity::Ordinary,
+            tier: 0,
+            affix: Some(affix.id.clone()),
+        },
+    );
+    assert!(
+        affixed > plain,
+        "an affix granting +{} ATK changed nothing worn ({plain} -> {affixed})",
+        affix.stats.atk
+    );
+
+    // And unequipping it leaves nothing behind — the same symmetry rarity
+    // has, reached by a third property. `worn_atk` unequips before
+    // returning, so by here the player is back to base either way; if the
+    // affix leaked into `Stats`, the two passes above would have started
+    // from different footings and this would not hold.
+    let bare_again = worn_atk(&mut game, GearCopy::plain(weapon.clone()));
+    assert_eq!(
+        bare_again, plain,
+        "wearing and removing an affixed copy shifted the player's base ATK"
     );
 }

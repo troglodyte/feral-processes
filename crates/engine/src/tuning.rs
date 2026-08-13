@@ -1181,6 +1181,18 @@ pub const SURFACE_BOSS_LOOT_DROPS: u32 = 2;
 /// *this fight was worth it* rather than *this fight took longer*.
 pub const SURFACE_BOSS_LOOT_RARITY_FLOOR: Rarity = Rarity::Silver;
 
+/// How often a dropped piece of gear carries an affix — see
+/// `Game::roll_affix` and `affixes::AffixDef`.
+///
+/// Much commoner than a rare tier, and independently rolled, because the two
+/// answer different halves of the same complaint. A rare tier is the *chase*:
+/// rare enough that seeing one is an event, which at about 3.5% across the
+/// whole ladder means most drops never have one. An affix is the *variety*:
+/// at roughly one drop in five, it is what stops the other 96.5% being the
+/// same item you already have four of. Set this as rare as a tier and
+/// ordinary drops stay exactly as featureless as they were.
+pub const GEAR_AFFIX_CHANCE: f64 = 0.20;
+
 /// Chance a habitat spawn roll (see `Game::try_spawn_habitat_creature`)
 /// produces a Nest instead of an ordinary pack, for a species that has
 /// `SpeciesDef::can_nest` set. Only rolled at all when `can_nest` is

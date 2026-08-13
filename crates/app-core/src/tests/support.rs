@@ -642,5 +642,6 @@ pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
         item: item.clone(),
         rarity: Rarity::Ordinary,
         tier,
+        affix: None,
     }
 }

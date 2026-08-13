@@ -36,12 +36,14 @@ fn worn_from_save(
     level: u32,
     fusion_tier: u32,
     rarity: Rarity,
+    affix: Option<AffixId>,
 ) -> Option<EquippedItem> {
     Some(EquippedItem {
         copy: GearCopy {
             item: item?,
             rarity,
             tier: fusion_tier,
+            affix,
         },
         level,
     })
@@ -54,6 +56,7 @@ fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
         level: worn.level,
         fusion_tier: worn.copy.tier,
         rarity: worn.copy.rarity,
+        affix: worn.copy.affix.clone(),
     }
 }
 
@@ -74,6 +77,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            affixes: affix_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -88,6 +92,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(affix_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
@@ -224,6 +229,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            affixes: affix_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -251,6 +257,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(affix_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(world_map);
@@ -277,6 +284,7 @@ impl Game {
                                 item,
                                 rarity: Rarity::Ordinary,
                                 tier,
+                                affix: None,
                             },
                             qty,
                         )
@@ -348,18 +356,21 @@ impl Game {
                         data.player.weapon_level,
                         data.player.weapon_fusion_tier,
                         data.player.weapon_rarity,
+                        data.player.weapon_affix.clone(),
                     ),
                     armor: worn_from_save(
                         data.player.armor,
                         data.player.armor_level,
                         data.player.armor_fusion_tier,
                         data.player.armor_rarity,
+                        data.player.armor_affix.clone(),
                     ),
                     module: worn_from_save(
                         data.player.module,
                         data.player.module_level,
                         data.player.module_fusion_tier,
                         data.player.module_rarity,
+                        data.player.module_affix.clone(),
                     ),
                 },
                 Inventory {
@@ -389,6 +400,7 @@ impl Game {
                                 item,
                                 rarity: Rarity::Ordinary,
                                 tier,
+                                affix: None,
                             },
                             qty,
                         )
@@ -535,6 +547,7 @@ impl Game {
                         saved.level,
                         saved.fusion_tier,
                         saved.rarity,
+                        saved.affix,
                     );
                 }
                 entity.insert(worn);
@@ -905,6 +918,7 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
+                weapon_affix: equipment.weapon.as_ref().and_then(|e| e.copy.affix.clone()),
                 armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
                 armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
                 armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -913,6 +927,7 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
+                armor_affix: equipment.armor.as_ref().and_then(|e| e.copy.affix.clone()),
                 module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
                 module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
                 module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -921,6 +936,7 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
+                module_affix: equipment.module.as_ref().and_then(|e| e.copy.affix.clone()),
                 // The legacy store is never written again — see its doc in
                 // `save.rs`. It is `skip_serializing_if` empty, so a save
                 // from here on carries only `gear_copies`.
@@ -1162,6 +1178,7 @@ struct AssetDbs {
     research: ResearchDb,
     items: ItemDb,
     perks: PerkDb,
+    affixes: AffixDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -1202,6 +1219,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // An absent directory is silent and leaves the db empty, which is the
+    // pre-affix game — see `AffixDb`.
+    let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
+    warnings.extend(affix_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.
@@ -1247,6 +1268,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         research,
         items,
         perks,
+        affixes,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

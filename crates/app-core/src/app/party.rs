@@ -3,11 +3,15 @@
 use crate::*;
 
 impl App {
-    /// Lists every tamed program you own, wherever it is — pressing a party
-    /// member's number stands it down, pressing any other program's number
-    /// adds it to the party (up to `MAX_PARTY_SIZE` at once). `<` and `>`
-    /// shift the highlighted member along the battle line instead of
-    /// changing who's on it.
+    /// Lists every tamed program you own, wherever it is. Every action on
+    /// this screen acts on the highlight — `P` adds the highlighted program
+    /// to the party or stands it down again, `<` and `>` shift it along the
+    /// battle line, `N`/`E`/`W` rename, gear and wield it — so a row's
+    /// number or letter *only* moves the highlight.
+    ///
+    /// It used to toggle party membership on the spot, which meant a stray
+    /// digit, or an Enter aimed at a screen that has never had one, stood a
+    /// party member down with nothing to undo it but noticing.
     pub(crate) fn handle_companion_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -34,20 +38,47 @@ impl App {
             self.open_companion_equip();
             return;
         }
+        if key == GameKey::Char('P') {
+            self.toggle_party_member();
+            return;
+        }
 
         let Some(game) = &mut self.game else { return };
-        let candidates = game.owned_pets();
-        if let Some(idx) = self.selected_index(key, candidates.len()) {
-            let candidate = &candidates[idx];
-            let Some(game) = &mut self.game else { return };
-            if candidate.party_slot.is_some() {
-                game.remove_companion(candidate.entity);
-                self.status_line = None;
-            } else {
-                match game.add_companion(candidate.entity) {
-                    Ok(()) => self.status_line = None,
-                    Err(e) => self.status_line = Some(e),
-                }
+        let rows = game.owned_pets().len();
+        // Highlight only. Enter resolves to `menu_selected.min(len - 1)`, so
+        // it reassigns the highlight to itself — inert, which is what this
+        // screen wants it to be.
+        if let Some(idx) = self.selected_index(key, rows) {
+            self.menu_selected = idx;
+        }
+    }
+
+    /// Stands the highlighted program in the party, or stands it down if it
+    /// is already there. Bound to an uppercase key for the reason `W`, `N`
+    /// and `E` are: uppercase reaches app-core as a distinct key, so it can
+    /// never collide with `menu_shortcut`'s digits-then-lowercase scheme
+    /// however large the roster grows.
+    ///
+    /// Standing down is never refused; joining is, once the party is full,
+    /// and that refusal is the one thing on this screen with something to
+    /// say, so it goes to the status line.
+    fn toggle_party_member(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some((entity, member)) = game
+            .owned_pets()
+            .get(row)
+            .map(|p| (p.entity, p.party_slot.is_some()))
+        else {
+            return;
+        };
+        if member {
+            game.remove_companion(entity);
+            self.status_line = None;
+        } else {
+            match game.add_companion(entity) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
             }
         }
     }

@@ -27,6 +27,48 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.16
+
+### Counts read down a column instead of trailing the name
+
+Every screen that prints a quantity now leads with it — the inventory list,
+the base pane's cargo column, a trader's sell and buyback rows, and the Stack
+market's — instead of appending `x3` after the item name. The column pads to
+three digits, so the names form a straight left edge and a stack of 4 is
+distinguishable from a stack of 40 at a glance rather than by reading to the
+end of each row.
+
+`qty_column` is the one definition of that column, and it lives in app-core
+beside `equip_preview_tag`, which those same five screens already share. A
+count that read one way on the screen you checked and another on the screen
+you sell from is what costs a player a copy they meant to keep. It grows past
+three digits rather than truncating: a wrong quantity is worse than a wide
+row.
+
+### A program's gear is readable from the list it's in
+
+The roster and the status panel now carry a `w|a|m` cell per program — one
+letter per filled equipment slot, a dot holding the place of an empty one.
+Both screens get it from one function, so a loadout cannot read one way in
+the panel and another in the roster you opened from it.
+
+The cell is fixed width for the reason it exists at all. These lists include
+programs you never open a gear screen for — a posted worker, a bench-warmer —
+so "which of these is still bare" has to be answerable by scanning down a
+column, and a cell that shrank when a slot was empty would leave nothing to
+scan. It sits directly after the stats and ahead of every optional tag
+(quality, fusion depth, the wield mark, the activity), because those come and
+go per row and a column placed after one of them lines up only with the rows
+that happen to carry it.
+
+### Fixed
+
+Nothing. Two overflow measurements came out of this work and neither is
+fixed: the widest shipped inventory row and the widest roster row both run
+off the right edge of their popup, by 68px and 393px. Both predate these
+changes and both are recorded in `TODO.md` — the fix in each case is a
+decision about which tag loses, not a shorter one.
+
 ## 0.8.15
 
 ### The research tree no longer finishes early

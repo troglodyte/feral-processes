@@ -1,8 +1,9 @@
 # Learned enemy battle policy — training report
 
 **Date:** 2026-08-09
-**Spec:** `docs/superpowers/specs/2026-08-09-enemy-battle-policy-design.md`
-**Plan:** `docs/superpowers/plans/2026-08-09-enemy-battle-policy.md`
+**Spec:** `docs/superpowers/archive/specs/2026-08-09-enemy-battle-policy-design.md`
+**Plan:** deleted 2026-08-13 with the rest of `plans/`; in git history at
+`docs/superpowers/plans/2026-08-09-enemy-battle-policy.md`
 
 Three training runs were made. **The first two are not what shipped**, and
 why they were rejected is the more useful half of this report.

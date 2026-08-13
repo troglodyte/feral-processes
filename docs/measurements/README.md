@@ -2,12 +2,15 @@
 
 What the instruments said, and when. One file per question answered.
 
-This is not a plans directory and not a specs directory. `docs/superpowers/`
-holds those, and its own lesson — recorded in `CLAUDE.md` under **Process
-weight** — is that ~35,000 lines of write-once prose accumulated there and
-essentially none of it was ever read twice. A measurement is different in
-one specific way that earns it a home: **the data it came from is usually
-gone.** Telemetry sweeps are hundreds of megabytes and gitignored; a
+This is not a plans directory and not a specs directory.
+`docs/superpowers/archive/specs/` holds the specs, and its own lesson —
+recorded in `CLAUDE.md` under **Process weight** — is that ~58,000 lines of
+write-once prose accumulated there and essentially none of it was ever read
+twice. The 46 implementation plans were deleted outright on 2026-08-13 for
+exactly that reason; git history is their archive. A measurement is
+different in one specific way that earns it a home: **the data it came from
+is usually gone.** Telemetry sweeps are hundreds of megabytes and
+gitignored; a
 `Game::new` seed reproduces a world but not the run someone played. If the
 number is not written down it has to be re-measured, and re-measuring costs
 CPU-hours and a person's afternoon.

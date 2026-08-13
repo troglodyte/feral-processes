@@ -1553,7 +1553,7 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
 
 /// Pins the deviation recorded in `nest_aggro_tick`'s "field-absence"
 /// branch (and the matching "Implementation note" in
-/// docs/superpowers/specs/2026-08-03-nest-aggression-design.md): standing
+/// docs/superpowers/archive/specs/2026-08-03-nest-aggression-design.md): standing
 /// inside the base slab empties the pursuit field outright, for *any*
 /// pursuer, not just one already too far away to matter. Standing on the
 /// platform's interior makes every one of the player's own neighbours

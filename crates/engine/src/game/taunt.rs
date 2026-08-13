@@ -2,7 +2,7 @@
 //!
 //! Bound to a key no screen in the game names — see
 //! `crates/engine/EASTER_EGGS.md`, and the design argument in
-//! `docs/superpowers/specs/2026-08-06-easter-eggs-design.md`.
+//! `docs/superpowers/archive/specs/2026-08-06-easter-eggs-design.md`.
 //!
 //! Pure flavour: no turn, no round, no effect on the fight. Nudging
 //! anything real — `capture_chance` was the obvious candidate — would put a

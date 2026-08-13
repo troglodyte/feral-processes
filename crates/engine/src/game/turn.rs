@@ -243,7 +243,7 @@ impl Game {
             // chase actually is, not just whichever guardian was closest.
             // See the "Implementation note" under "Pathing: one distance
             // field per tick" in
-            // docs/superpowers/specs/2026-08-03-nest-aggression-design.md.
+            // docs/superpowers/archive/specs/2026-08-03-nest-aggression-design.md.
             if !field.contains_key(&(pos.x, pos.y)) {
                 self.world.entity_mut(pursuer).remove::<Pursuing>();
                 continue;

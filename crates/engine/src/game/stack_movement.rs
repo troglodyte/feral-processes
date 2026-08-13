@@ -4,7 +4,7 @@
 //! Everything a frame offers the player otherwise either *reads* the maze
 //! (the view cone, the map, a breakpoint) or is *inflicted* by it (a fault,
 //! corrupted ground). These two act on it. The design argument is in
-//! `docs/superpowers/specs/2026-08-05-stack-movement-routines-design.md`.
+//! `docs/superpowers/archive/specs/2026-08-05-stack-movement-routines-design.md`.
 //!
 //! Both are cast through `Game::cast_field_routine`, which owns the ordering
 //! rule they share with every other field routine: every refusal lands

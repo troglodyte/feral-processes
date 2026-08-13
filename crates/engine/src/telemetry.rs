@@ -4,7 +4,7 @@
 //! `resources::BattleTelemetry` at the five combat seams, and app-core is
 //! the only crate that turns one into a line of text. That split is why
 //! `serde_json` is app-core's dependency and not the engine's — see
-//! `docs/superpowers/specs/2026-08-09-battle-telemetry-design.md`.
+//! `docs/superpowers/archive/specs/2026-08-09-battle-telemetry-design.md`.
 
 use serde::{Deserialize, Serialize};
 

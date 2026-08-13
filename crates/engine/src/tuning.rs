@@ -962,7 +962,7 @@ pub const STACK_DEPTH_STAT_STEP: f32 = 0.35;
 //
 // Trace rises with what the party *takes* from a stack and escalates what
 // comes for them. The design argument for every number below is in
-// `docs/superpowers/specs/2026-07-31-the-stack-design.md`, "Phase 2".
+// `docs/superpowers/archive/specs/2026-07-31-the-stack-design.md`, "Phase 2".
 //
 // Walking is free, deliberately. A time-driven meter would tax exploration
 // and map-making, rewarding the beeline and punishing the careful player —

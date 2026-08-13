@@ -63,11 +63,11 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
     for row in &view.sells {
         rows.push(tier_row(
             format!(
-                "[{}] {}  Sell {} x{} ({} {money} each)",
+                "[{}] {} {}  Sell {} ({} {money} each)",
                 menu_shortcut(idx),
+                qty_column(row.qty),
                 game.item_category(&row.copy.item).short_label(),
                 row.name,
-                row.qty,
                 row.unit_price
             ),
             idx == selected,

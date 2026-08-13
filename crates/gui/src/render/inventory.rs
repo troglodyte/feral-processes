@@ -89,11 +89,11 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         // ordinary spares, which is the whole point of the screen.
         rows.push(tier_row(
             format!(
-                "[{}] {}  {} x{}{}",
+                "[{}] {} {}  {}{}",
                 menu_shortcut(i + 3),
+                qty_column(row.qty),
                 game.item_category(&row.copy.item).short_label(),
                 game.copy_name(&row.copy),
-                row.qty,
                 tag
             ),
             selected == i + 3,
@@ -294,8 +294,10 @@ mod tests {
     use super::equipped_summary;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
+    use feral_processes_app_core::{equip_preview_tag, menu_shortcut, qty_column};
     use feral_processes_engine::components::Rarity;
-    use feral_processes_engine::items::EquipmentSlot;
+    use feral_processes_engine::items::{EquipmentSlot, GearCopy};
+    use feral_processes_engine::tuning::MAX_FUSIONS;
     use feral_processes_engine::{DifficultyMode, Game, save};
 
     /// **The equipped panel prints what the player is actually wearing.**
@@ -334,6 +336,80 @@ mod tests {
             "the panel disagrees with what the player is wearing ({} ATK): {summary}",
             real.atk
         );
+    }
+
+    /// **The widest inventory row the shipped assets can build still fits.**
+    ///
+    /// The row leads with `qty_column` now, so every row is wider than it
+    /// was, and the popup never wraps or clips horizontally — an overflowing
+    /// row simply runs off the right edge, taking the equip tag with it.
+    ///
+    /// Built from `item_defs` × `affix_defs` rather than hand-written, which
+    /// is the difference between a census and a fixture: the widest row is a
+    /// property of the assets, so a long item name or affix added later has
+    /// to fail here rather than be caught by eye.
+    ///
+    /// **A maxed copy is excluded, and that is a known overflow rather than
+    /// a carve-out for convenience.** `equip_preview_tag` appends
+    /// `" - maxed"` at `MAX_FUSIONS` on the stated grounds that this screen
+    /// has the room, and measured it does not: a Gold, affixed, maxed
+    /// Singularity Matrix runs 1311px into a 1243px body at zone 10. It ran
+    /// the same width before the quantity moved to the front — the count
+    /// simply changed ends — so it is recorded in `TODO.md` rather than
+    /// fixed here, since the fix is a decision about that tag.
+    #[test]
+    fn no_shipped_inventory_row_overflows_its_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(31, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        // The deepest zone `balance_sim` sweeps to, which is where the stat
+        // figures in the tag are widest, on the rarest copy.
+        let zone = 10;
+        let affixes: Vec<Option<_>> = std::iter::once(None)
+            .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+            .collect();
+        let widest = game
+            .item_defs()
+            .iter()
+            .flat_map(|def| {
+                affixes.iter().flat_map(move |affix| {
+                    let def = def.clone();
+                    (0..MAX_FUSIONS).map(move |tier| GearCopy {
+                        item: def.id.clone().into(),
+                        rarity: Rarity::Gold,
+                        tier,
+                        affix: affix.clone(),
+                    })
+                })
+            })
+            .map(|copy| {
+                format!(
+                    // A four-digit count rather than the three the column
+                    // reserves: the buffer is unbounded and a long run's
+                    // scrap pile reaches it, at which point the row grows.
+                    "[{}] {} {}  {}{}",
+                    menu_shortcut(35),
+                    qty_column(1234),
+                    game.item_category(&copy.item).short_label(),
+                    game.copy_name(&copy),
+                    equip_preview_tag(&game, &copy, zone)
+                )
+            })
+            .max_by_key(|row| row.chars().count())
+            .expect("the shipped assets define items");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
+            assert!(
+                drawn <= room,
+                "the widest inventory row overflows by {:.0}px \
+                 ({drawn:.0} into {room:.0}):\n{widest}",
+                drawn - room
+            );
+        });
     }
 
     /// A rare tier is drawn as a *word* in front of the item name, and

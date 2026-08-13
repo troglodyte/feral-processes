@@ -302,6 +302,29 @@ fn a_swap_row_carries_its_items_fusion_tier() {
     );
 }
 
+/// The column is what makes a quantity-first row readable: the whole point
+/// of leading with the number is that the names beneath each other line up,
+/// and they only do if one carried unit and a hundred take the same width.
+#[test]
+fn the_quantity_column_is_one_width_whatever_the_count() {
+    let one = qty_column(1);
+    assert!(one.ends_with('x'), "reads as a count, got: {one}");
+    assert!(
+        one.trim_start().starts_with('1'),
+        "the padding is on the left, got: {one}"
+    );
+    for qty in [1, 9, 12, 140] {
+        assert_eq!(
+            qty_column(qty).chars().count(),
+            one.chars().count(),
+            "{qty} does not sit in the same column as 1"
+        );
+    }
+    // Past the column it grows rather than truncating — a wrong number is
+    // worse than a widened row.
+    assert_eq!(qty_column(1234), "1234x");
+}
+
 #[test]
 fn item_fusion_note_is_the_bare_fraction() {
     assert_eq!(item_fusion_note(0), "");

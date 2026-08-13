@@ -83,11 +83,11 @@ pub(super) fn draw_trade_action_menu(
         let tag = equip_preview_tag(game, &row.copy, status.zone);
         rows.push(tier_row(
             format!(
-                "[{}] {}  Sell {} x{}{} ({} {money} each)",
+                "[{}] {} {}  Sell {}{} ({} {money} each)",
                 menu_shortcut(idx),
+                qty_column(row.qty),
                 game.item_category(&row.copy.item).short_label(),
                 game.copy_name(&row.copy),
-                row.qty,
                 tag,
                 game.sell_price(structure, &row.copy.item).unwrap_or(0)
             ),
@@ -126,12 +126,12 @@ pub(super) fn draw_trade_action_menu(
             let tag = equip_preview_tag(game, &row.copy, status.zone);
             rows.push(item_row(
                 format!(
-                    "[{}] {}  Buy back {}{} x{} ({} {money} each)",
+                    "[{}] {} {}  Buy back {}{} ({} {money} each)",
                     menu_shortcut(idx),
+                    qty_column(row.qty),
                     game.item_category(&row.copy.item).short_label(),
                     row.name,
                     tag,
-                    row.qty,
                     row.unit_cost
                 ),
                 idx == selected,

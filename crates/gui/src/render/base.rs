@@ -1145,7 +1145,11 @@ fn draw_status_panel(
             tier => format!(" {}", item_fusion_note(tier)),
         };
         painter.ui(
-            format!("{}{tier} x{}", game.copy_name(&row.copy), row.qty),
+            format!(
+                "{} {}{tier}",
+                qty_column(row.qty),
+                game.copy_name(&row.copy)
+            ),
             x + m.inset,
             cy,
             m.font_size,

@@ -148,6 +148,29 @@ pub fn equip_preview_tag(game: &Game, copy: &GearCopy, zone_level: u32) -> Strin
     format!(" ({})", parts.join(" "))
 }
 
+/// How many of a thing the player is carrying, as the leading column every
+/// cargo row starts with — `"  3x"`, `"140x"`.
+///
+/// It leads the row so the count is the first thing read on a screen whose
+/// whole subject is how much you have, and it is padded so the item names
+/// beneath each other form a straight edge; an unpadded count ragged-lefts
+/// the entire list. `QTY_COLUMN` is three digits because the buffer is
+/// unbounded and a four-digit stack of scrap is reachable — that row simply
+/// grows, since a truncated quantity would be a wrong one.
+///
+/// Lives here rather than in the renderer because five screens print it: the
+/// inventory list, the base pane's cargo column, a trader's sell and buyback
+/// rows, and the Stack market's. They already shared the tag beside it (see
+/// `equip_preview_tag`), and a count that reads differently on the screen you
+/// sell from than on the one you checked is exactly the drift that costs a
+/// player a copy they meant to keep.
+pub fn qty_column(qty: u32) -> String {
+    format!("{qty:>QTY_COLUMN$}x")
+}
+
+/// Digits `qty_column` reserves. See its doc for why three.
+const QTY_COLUMN: usize = 3;
+
 /// An item's fusion depth as the compact note a column has room for —
 /// `"T2/3"`, or empty for an unfused item. Gear shares `MAX_FUSIONS` with
 /// programs (see `Game::fuse_item`), and this is the one place that

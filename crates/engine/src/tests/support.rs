@@ -371,6 +371,12 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // would quietly fight under the uniform baseline while the shipped
         // one fought under the weights — a difference no test would name.
         "policies",
+        // Same argument: without these every zone past the first would
+        // generate at the neutral shape, so a modded install would be a
+        // different world from the shipped one for a reason nothing said
+        // out loud. `assets_dir_with_sectors` is how a test asks for a
+        // *different* pool, including an empty one.
+        "sectors",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();
@@ -420,6 +426,27 @@ pub(super) fn modded_assets_dir(
 /// have needed one, and widening its signature for a single caller isn't
 /// worth the churn across its other ~20 call sites. Cleanup is the
 /// `ScratchAssets` guard's, not the caller's.
+/// A scratch install whose `sectors/` directory holds exactly `files` and
+/// nothing else.
+///
+/// Two things need this, and they are opposite ends of the same question.
+/// `&[]` gives an install with **no** sectors, which is the pre-sector game
+/// and the only way to assert that absence is still supported. A single file
+/// gives an install where every zone past the first is *that* sector, which
+/// takes the derivation out of the picture when what is under test is the
+/// wiring — `tests::sectors` already covers which sector a zone gets.
+pub(super) fn assets_dir_with_sectors(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let sectors = dir.join("sectors");
+    std::fs::remove_dir_all(&sectors).unwrap();
+    std::fs::create_dir_all(&sectors).unwrap();
+    for (name, body) in files {
+        std::fs::write(sectors.join(name), body).unwrap();
+    }
+    dir
+}
+
 pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);

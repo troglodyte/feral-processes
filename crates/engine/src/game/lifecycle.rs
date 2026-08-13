@@ -83,7 +83,10 @@ impl Game {
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
-        let mut world_map = WorldMap::new(seed);
+        // Zone 1 is always neutral, but this still routes through the one
+        // door rather than assuming so — `for_zone` owns that rule, and a
+        // second copy of it here is where the two would drift.
+        let mut world_map = crate::sectors::map_for_zone(seed, ZoneLevel::default().0, &sector_db);
         let start = find_walkable_start(&mut world_map);
 
         let mut world = World::new();
@@ -237,7 +240,11 @@ impl Game {
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
-        let mut world_map = WorldMap::new(data.seed);
+        // Both inputs come off the save, which is the whole reason a sector
+        // needs no field of its own. Rebuilding at a different shape would
+        // regenerate every unwalked chunk differently and could strand the
+        // party inside rock.
+        let mut world_map = crate::sectors::map_for_zone(data.seed, data.zone, &sector_db);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
         world_map.restore_overrides(overrides);
 

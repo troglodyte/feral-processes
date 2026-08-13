@@ -504,7 +504,11 @@ impl Game {
             .resource::<WorldMap>()
             .seed()
             .wrapping_add(0x9E37_79B9);
-        let mut new_map = WorldMap::new(new_seed);
+        let mut new_map = crate::sectors::map_for_zone(
+            new_seed,
+            new_level,
+            self.world.resource::<crate::sectors::SectorDb>(),
+        );
         let start = find_walkable_start(&mut new_map);
         self.world.insert_resource(new_map);
         self.world.insert_resource(ZoneSpawnPoint {

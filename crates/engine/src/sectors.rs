@@ -324,6 +324,20 @@ pub fn for_zone(seed: u32, zone: u32, db: &SectorDb) -> Option<&SectorDef> {
     Some(pool[index(sector_seed(seed, zone), pool.len())])
 }
 
+/// The map zone `zone` of the world seeded `seed` generates from.
+///
+/// The one door: deriving a sector and then applying its shape are a single
+/// step here so no construction site can do the first and forget the second.
+/// Three sites build a map for real play — `Game::new`, `Game::load` and
+/// `Game::enter_next_zone` — and they must agree, because a load that
+/// rebuilt at a different shape would regenerate every unwalked chunk
+/// differently and could strand a party inside rock. A fourth goes through
+/// here, not beside it.
+pub fn map_for_zone(seed: u32, zone: u32, db: &SectorDb) -> WorldMap {
+    let shape = for_zone(seed, zone, db).map_or(SectorShape::NEUTRAL, |def| def.shape());
+    WorldMap::with_shape(seed, shape)
+}
+
 /// Folds the world seed and the zone number into the value `index` reduces.
 ///
 /// FNV-1a, from the same offset basis `stack::FrameSpec::rng_seed` starts

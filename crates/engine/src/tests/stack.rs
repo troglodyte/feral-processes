@@ -4125,7 +4125,7 @@ fn a_market_never_lists_an_exclusive_routine_as_an_ordinary_rung() {
 /// test would be a coin flip dressed up as an assertion.
 #[test]
 fn the_deep_stack_carries_exclusive_disks_and_the_shallow_one_barely_does() {
-    let mut game = game_at_a_market();
+    let game = game_at_a_market();
     let pos = game.stack_pos().unwrap();
 
     // Swept over the *entrance*, not over `frames`: `FrameSpec::rng_seed`

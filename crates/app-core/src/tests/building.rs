@@ -304,3 +304,175 @@ fn the_demolish_key_is_refused_underground() {
         "a refused key says why rather than doing nothing"
     );
 }
+
+/// The roster is where you go to find out what is *idle*; making the player
+/// back out to a program-first picker to act on what they just found is the
+/// friction Enter removes.
+#[test]
+fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
+    let mut app = app_inside_a_small_base_with_programs(244, false, 1);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        node_row(&mut app),
+        app.menu_selected,
+        "precondition: the node is the highlighted row"
+    );
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::StructureAssign);
+}
+
+/// Picking a program posts it and drops the player back on the roster with
+/// the same structure highlighted — the payoff being that the assignee it
+/// just gained is on screen, which is the whole reason the roster was open.
+#[test]
+fn staffing_from_the_roster_posts_the_program_and_returns_to_that_row() {
+    let mut app = app_inside_a_small_base_with_programs(245, false, 1);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+    let row = app.menu_selected;
+    app.handle_key(GameKey::Enter);
+
+    let program = app
+        .staffing()
+        .expect("the picker is open")
+        .rows
+        .iter()
+        .position(|r| r.program.is_some())
+        .expect("the player owns a program to post");
+    app.handle_key(GameKey::Char(menu_shortcut(program)));
+
+    assert_eq!(
+        app.mode,
+        Mode::Structures,
+        "back to the screen it came from"
+    );
+    assert_eq!(app.menu_selected, row, "on the structure that was staffed");
+    let node = app.game.as_mut().unwrap().structure_report().remove(row);
+    assert_eq!(node.kind, "mining_node", "sanity: the right row");
+    assert_eq!(
+        node.assignees.len(),
+        1,
+        "the node should now be worked: {:?}",
+        app.status_line
+    );
+}
+
+/// Esc is a way back into the roster, not out of it: the pick was a
+/// side-trip from a screen the player was reading.
+#[test]
+fn esc_from_the_staffing_picker_returns_to_the_roster() {
+    let mut app = app_inside_a_small_base_with_programs(246, false, 1);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureAssign);
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Structures);
+}
+
+/// The roster lists everything standing, and most of it takes no worker.
+/// Enter on a Home has to say so rather than be a dead key — the roster
+/// cannot filter those rows out the way `App::upgradeable_structures` can,
+/// because showing the whole base is what the screen is for.
+#[test]
+fn enter_on_a_row_that_takes_no_worker_says_so() {
+    let mut app = app_inside_a_small_base_with_programs(247, false, 1);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    assert!(
+        app.game.as_mut().unwrap().structure_report()[app.menu_selected].is_home,
+        "precondition: the roster opens on the Home"
+    );
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Structures, "the picker must not open");
+    assert!(
+        app.status_line.is_some(),
+        "a refused key says why rather than doing nothing"
+    );
+}
+
+/// `Game::work_structure` refuses unless the player is orthogonally beside
+/// the structure, and the roster is zone-wide — so the row that offers it
+/// appears only where it would be accepted, rather than being offered and
+/// then refused.
+#[test]
+fn working_it_yourself_is_offered_only_from_the_next_tile() {
+    let mut app = app_inside_a_small_base_with_programs(248, false, 1);
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
+    assert!(
+        app.staffing()
+            .unwrap()
+            .rows
+            .iter()
+            .any(|r| r.program.is_none()),
+        "the player is standing right beside this node"
+    );
+
+    // The Compiler in this fixture sits 30 tiles off, which is the same
+    // question asked of a structure the player is nowhere near.
+    let mut far = app_owning_a_program_and_a_compiler(249, &[]);
+    open_via_menu(&mut far, 'b', "Structure roster");
+    let compiler = far
+        .game
+        .as_mut()
+        .unwrap()
+        .structure_report()
+        .iter()
+        .position(|s| s.kind == "compiler")
+        .expect("the fixture deploys one");
+    far.menu_selected = compiler;
+    far.handle_key(GameKey::Enter);
+    assert_eq!(far.mode, Mode::StructureAssign, "a Compiler takes a worker");
+    assert!(
+        far.staffing()
+            .unwrap()
+            .rows
+            .iter()
+            .all(|r| r.program.is_some()),
+        "you cannot work something you are not standing next to"
+    );
+}
+
+/// The roster reads the same underground, but `assign_cronjob` and
+/// `work_structure` are both behind `require_surface` — `Position` is pinned
+/// to the entrance tile down there, so posting would measure a walk from the
+/// wrong end of the map. Refused at the keypress, like the demolish key.
+#[test]
+fn the_roster_does_not_staff_anything_underground() {
+    let mut app = app_inside_a_small_base_with_programs(250, true, 1);
+    assert!(
+        app.game.as_ref().is_some_and(|g| g.is_underground()),
+        "precondition: the fixture really went down"
+    );
+    open_via_menu(&mut app, 'b', "Structure roster");
+    app.handle_key(GameKey::Down);
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Structures,
+        "the picker must not even open down here"
+    );
+}
+
+/// The roster sorts the Home first and the node after it, so one Down from
+/// the opening row is the workable structure — asserted rather than assumed,
+/// since every staffing test above rides on it.
+fn node_row(app: &mut App) -> usize {
+    app.game
+        .as_mut()
+        .unwrap()
+        .structure_report()
+        .iter()
+        .position(|s| s.kind == "mining_node")
+        .expect("the fixture deploys one")
+}

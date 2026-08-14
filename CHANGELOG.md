@@ -27,6 +27,42 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.20
+
+### Staff a machine from the screen that told you it was idle
+
+The structure roster now does something. Highlight a machine, press Enter,
+and pick who works it — the roster is the only screen that shows the whole
+base at once, and it has always drawn an unstaffed machine in yellow, so it
+is where you find out that something is sitting idle. Until now the only
+thing you could do about that was close it, open the base menu, pick a
+program, and pick the machine again from a different list.
+
+Picking drops you straight back on the roster, on the same row, with the
+program you just posted listed under it. That is the point of doing it here:
+the answer appears where you were already looking, and staffing three idle
+machines is three presses of Enter rather than three round trips through a
+menu.
+
+The list leads with **Yourself**, which puts you on the machine by hand —
+offered only when you are standing on one of the four tiles beside it, since
+that is the only place working it yourself has ever been allowed. Everything
+else on the list is a program you own, shown with the same level, power and
+current errand the cronjob picker shows.
+
+The old flows are untouched. "Assign a cronjob" still answers *where do I put
+this program*, which is the right question when you have a program in mind;
+the roster answers *who goes on this*, which is the right question when you
+have just spotted an idle node. Posting a guard stays on its own screen, and
+Enter on something that takes no worker — your Home, a Shield — says so
+rather than doing nothing.
+
+Underground the roster still reads exactly as before, but Enter does nothing:
+while you are in the Stack the game holds your position at the entrance tile
+you climbed in through, so a posting made from down there would measure its
+walk from the wrong end of the map. The hint at the foot of the screen stops
+offering the key rather than refusing it after the fact.
+
 ## 0.8.19
 
 ### A base you build outward

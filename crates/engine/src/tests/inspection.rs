@@ -1056,6 +1056,47 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
     );
 }
 
+/// `distance` is Chebyshev and `Game::work_structure` refuses anything the
+/// player is not *orthogonally* beside, so the two answers genuinely differ
+/// on a diagonal — which is the case a screen filtering its "work it
+/// yourself" row on `distance <= 1` would get wrong.
+#[test]
+fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
+    let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, -1, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    game.place_structure("mining_node", 1, 0).unwrap();
+
+    let node_at = |game: &mut Game| {
+        game.structure_report()
+            .into_iter()
+            .find(|s| s.kind == "mining_node")
+            .expect("the node was just deployed")
+    };
+
+    let player = game.player_entity();
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x = 2;
+    pos.y = 1;
+    let node = node_at(&mut game);
+    assert_eq!(
+        node.distance, 1,
+        "one diagonal step is Chebyshev distance 1"
+    );
+    assert!(
+        !node.player_adjacent,
+        "a diagonal is not a tile the node can be worked from"
+    );
+
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x = 2;
+    pos.y = 0;
+    assert!(node_at(&mut game).player_adjacent, "one orthogonal step is");
+}
+
 /// The Home leads, so the roster opens on the thing the rest of the base is
 /// measured from, and identical structures sit together rather than being
 /// interleaved by distance.

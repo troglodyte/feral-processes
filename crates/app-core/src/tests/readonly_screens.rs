@@ -1,6 +1,10 @@
 //! The three screens you open, read, and close: the message history, the
-//! structure roster and the recipe chains. None takes an action, which is
-//! most of what these tests are checking.
+//! structure roster and the recipe chains. Reading one costs no game time,
+//! which is most of what these tests are checking.
+//!
+//! The roster is the one that is no longer purely read-only — Enter staffs
+//! the highlighted structure, which `tests::building` covers. What stays true
+//! of it here is that *looking* is free.
 
 use super::support::*;
 use crate::*;
@@ -109,11 +113,15 @@ fn up_and_down_scroll_the_roster_without_leaving_it() {
     assert_eq!(app.mode, Mode::Structures);
 }
 
-/// Read-only means read-only: no tick, and nothing to resolve. A screen that
-/// advanced the clock would let the player pass time by staring at a list —
-/// and raids, needs and cronjobs all run off that clock.
+/// Looking is free: no tick, and nothing to resolve. A screen that advanced
+/// the clock would let the player pass time by staring at a list — and raids,
+/// needs and cronjobs all run off that clock.
+///
+/// Scrolling only. Enter on the roster is now an action with its own cost and
+/// its own tests, so pressing it here would be asserting that a *refusal*
+/// doesn't tick, which is a weaker claim wearing this one's name.
 #[test]
-fn neither_screen_advances_the_game() {
+fn scrolling_a_list_does_not_advance_the_game() {
     let mut app = app_owning_a_program_and_a_compiler(94, &[]);
     let before = app.game.as_ref().unwrap().current_tick();
     app.handle_key(GameKey::Char('L'));
@@ -122,8 +130,6 @@ fn neither_screen_advances_the_game() {
         GameKey::Down,
         GameKey::Down,
         GameKey::Up,
-        GameKey::Enter,
-        GameKey::Char('1'),
         GameKey::Esc,
         GameKey::Esc,
     ] {
@@ -137,22 +143,16 @@ fn neither_screen_advances_the_game() {
     );
 }
 
-/// Nothing on either screen is selectable, so the keys that commit a choice
+/// Nothing on the history is selectable, so the keys that commit a choice
 /// everywhere else have nothing to commit here and must not be mistaken for
 /// a way out either.
 #[test]
-fn enter_and_row_shortcuts_do_nothing_on_either_screen() {
+fn enter_and_row_shortcuts_do_nothing_on_the_history() {
     let mut app = app_owning_a_program_and_a_compiler(95, &[]);
     app.handle_key(GameKey::Char('L'));
     for key in [GameKey::Enter, GameKey::Char('1'), GameKey::Char('a')] {
         app.handle_key(key);
         assert_eq!(app.mode, Mode::History, "{key:?} should do nothing here");
-    }
-    app.handle_key(GameKey::Esc);
-    open_via_menu(&mut app, 'b', "Structure roster");
-    for key in [GameKey::Enter, GameKey::Char('1'), GameKey::Char('a')] {
-        app.handle_key(key);
-        assert_eq!(app.mode, Mode::Structures, "{key:?} should do nothing here");
     }
 }
 

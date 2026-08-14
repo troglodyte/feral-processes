@@ -703,10 +703,23 @@ pub(crate) fn open_via_menu(app: &mut App, group: char, label: &str) {
 /// point here: the direct demolish key has to tell a Home from anything else
 /// and both from an empty tile, which is three neighbours of one tile.
 pub(crate) fn app_inside_a_small_base(seed: u32, underground: bool) -> App {
+    app_inside_a_small_base_with_programs(seed, underground, 0)
+}
+
+/// The same base with `programs` tamed programs standing on the player's own
+/// tile — what staffing the node from the roster needs, since the roster
+/// shows a base and the picker offers a roster, and neither existing fixture
+/// had both halves.
+pub(crate) fn app_inside_a_small_base_with_programs(
+    seed: u32,
+    underground: bool,
+    programs: usize,
+) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("small_base", seed);
     let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
@@ -719,6 +732,39 @@ pub(crate) fn app_inside_a_small_base(seed: u32, underground: bool) -> App {
             tier: None,
             stock_input: Vec::new(),
             stock_output: Vec::new(),
+        });
+    }
+    for _ in 0..programs {
+        data.creatures.push(CreatureSave {
+            species: species.clone(),
+            position: (px, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            def: 1,
+            tamed: true,
+            level: 1,
+            xp: 0,
+            xp_to_next: 20,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 1,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            routines: Vec::new(),
+            field_buffs: Vec::new(),
+            nest_position: None,
+            pursuing: false,
+            carrying: None,
+            rarity: Default::default(),
+            equipment: Vec::new(),
         });
     }
     if underground {

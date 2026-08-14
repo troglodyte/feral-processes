@@ -3,6 +3,21 @@
 
 use crate::*;
 
+/// The transitions that re-enter a list the player was already in, and so
+/// must not have their highlight reset to the top of it. Every other mode
+/// change starts fresh — see `App::handle_key`.
+///
+/// Both of these are a screen backing out into the one that opened it, and in
+/// both the returning handler has already put `menu_selected` on the row the
+/// side-trip was about: `leave_manifest` on whoever the sheet was showing,
+/// `leave_staffing` on the structure that was staffed.
+fn keeps_highlight(before: Mode, after: Mode) -> bool {
+    matches!(
+        (before, after),
+        (Mode::Manifest, Mode::ManifestPick) | (Mode::StructureAssign, Mode::Structures)
+    )
+}
+
 impl App {
     /// Shared Up/Down/Enter handling layered on top of every menu's direct
     /// row shortcuts — this doesn't replace them, it's just another way to
@@ -152,6 +167,7 @@ impl App {
             Mode::Research => self.handle_research_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Structures => self.handle_structures_key(key),
+            Mode::StructureAssign => self.handle_structure_assign_key(key),
             Mode::Recipes => self.handle_recipes_key(key),
             Mode::Help => self.handle_help_key(),
             Mode::FrameMap => self.handle_frame_map_key(),
@@ -168,12 +184,7 @@ impl App {
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever
         // row happened to be highlighted on a previous, unrelated menu.
-        // Backing out of a manifest to its picker is the one exception: it
-        // is the same list re-entered, and `leave_manifest` has already put
-        // the highlight on whoever the sheet was showing.
-        if self.mode != mode_before
-            && !(mode_before == Mode::Manifest && self.mode == Mode::ManifestPick)
-        {
+        if self.mode != mode_before && !keeps_highlight(mode_before, self.mode) {
             self.menu_selected = self.opening_row();
         }
         // A group menu's origin only outlives the screen it opened. Landing

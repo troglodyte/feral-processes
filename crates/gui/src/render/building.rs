@@ -149,33 +149,79 @@ pub(super) fn draw_worker_menu(
         rows.push(text_row("(no compiled programs nearby)"));
     }
     for (i, w) in workers.iter().enumerate() {
-        let pet = pets.iter().find(|p| p.entity == w.entity);
-        let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
-        let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
-        let fusions = pet.map(|p| p.fusions).unwrap_or(0);
-        let rarity = pet.map(|p| p.rarity).unwrap_or_default();
-        rows.push(with_icon(
-            tier_row(
-                format!(
-                    "[{}] {}{}{} at ({}, {}){}{}",
-                    menu_shortcut(i),
-                    w.label,
-                    w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-                    power,
-                    w.pos.0,
-                    w.pos.1,
-                    fusion_tag(fusions),
-                    activity
-                ),
-                i == selected,
-                fusions,
-                rarity,
-            ),
-            w.glyph,
-            glyph_color(w.color),
-        ));
+        rows.push(worker_row(&pets, w, i, i == selected));
     }
     draw_popup(title, PopupSize::Large, &rows, painter, m);
+}
+
+/// One program's row in a posting picker, drawn at menu row `index`.
+///
+/// Shared by the program-first picker above and the roster's staffing picker
+/// below rather than written twice: the two lists are the same candidates
+/// reached from opposite ends, and a player comparing them has to be reading
+/// the same numbers. `index` is a parameter because the staffing picker can
+/// carry a "Yourself" row ahead of the programs, which shifts every shortcut.
+fn worker_row(pets: &[PetInfo], w: &EntityView, index: usize, selected: bool) -> Row {
+    let pet = pets.iter().find(|p| p.entity == w.entity);
+    let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
+    let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
+    let fusions = pet.map(|p| p.fusions).unwrap_or(0);
+    let rarity = pet.map(|p| p.rarity).unwrap_or_default();
+    with_icon(
+        tier_row(
+            format!(
+                "[{}] {}{}{} at ({}, {}){}{}",
+                menu_shortcut(index),
+                w.label,
+                w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
+                power,
+                w.pos.0,
+                w.pos.1,
+                fusion_tag(fusions),
+                activity
+            ),
+            selected,
+            fusions,
+            rarity,
+        ),
+        w.glyph,
+        glyph_color(w.color),
+    )
+}
+
+/// The roster's staffing picker: who goes on the structure highlighted there.
+///
+/// The mirror of `draw_worker_menu` — same candidates, reached from the
+/// structure instead of the program — with one row it cannot have. `Yourself`
+/// is offered only where `Game::work_structure` would accept it, which
+/// `App::staffing` has already decided; this draws the list it is handed
+/// rather than filtering again, so the row the handler acts on is the row
+/// under the highlight.
+pub(super) fn draw_staffing_menu(
+    game: &mut Game,
+    staffing: &Staffing,
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let pets = game.owned_pets();
+    let mut rows = vec![text_row(format!(
+        "Who works the {}? (Esc to cancel; Up/Down + Enter also work)",
+        staffing.target
+    ))];
+    if staffing.rows.is_empty() {
+        rows.push(text_row("(nobody to put on it — compile a program first)"));
+    }
+    for (i, row) in staffing.rows.iter().enumerate() {
+        rows.push(match &row.program {
+            Some(w) => worker_row(&pets, w, i, i == selected),
+            None => item_row(
+                format!("[{}] Yourself — work it by hand", menu_shortcut(i)),
+                i == selected,
+            ),
+        });
+    }
+    draw_popup("Staff Structure", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_structure_menu(
@@ -411,7 +457,14 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row("Up/Down to scroll, Esc to close."));
+    // Enter is surface-only, matching `App::handle_structures_key` — the
+    // roster still reads underground, so the hint has to stop advertising a
+    // key that would only be refused down there.
+    rows.push(text_row(if game.is_underground() {
+        "Up/Down to scroll, Esc to close."
+    } else {
+        "Up/Down to scroll, Enter to staff, Esc to close."
+    }));
     draw_popup("Structures", PopupSize::Large, &rows, painter, m);
 }
 

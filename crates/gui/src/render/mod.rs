@@ -7,9 +7,9 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, DevConsoleRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, TradeChoice,
-    equip_preview_tag, equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut,
-    qty_column, stat_summary,
+    App, ArenaRow, DevConsoleRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode, Staffing,
+    TradeChoice, equip_preview_tag, equip_swap_rows, inventory_item_actions, item_fusion_note,
+    menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId};
@@ -54,7 +54,8 @@ use battle::{
 };
 use building::{
     draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
-    draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu, draw_worker_menu,
+    draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
+    draw_worker_menu,
 };
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
@@ -529,6 +530,10 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::PartyMenu => app.party_menu_rows(),
         _ => Vec::new(),
     };
+    let staffing = match app.mode {
+        Mode::StructureAssign => app.staffing(),
+        _ => None,
+    };
     let scanned = match app.mode {
         Mode::Cronjob | Mode::Guard => app.nearby_programs(),
         Mode::CronjobStructure | Mode::WorkStructure => app.workable_structures(),
@@ -727,6 +732,11 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::Research => draw_research_menu(game, selected, painter, m),
         Mode::History => draw_history(game, selected, painter, m),
         Mode::Structures => draw_structures(game, selected, painter, m),
+        Mode::StructureAssign => {
+            if let Some(staffing) = &staffing {
+                draw_staffing_menu(game, staffing, selected, painter, m);
+            }
+        }
         Mode::Recipes => draw_recipes(game, selected, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, painter, m),
         _ => {}

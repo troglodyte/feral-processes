@@ -110,6 +110,7 @@ pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
             carrying: None,
             rarity: Default::default(),
             equipment: Vec::new(),
+            staff: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -171,6 +172,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         carrying: None,
         rarity: Default::default(),
         equipment: Vec::new(),
+        staff: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -260,6 +262,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         carrying: None,
         rarity: Default::default(),
         equipment: Vec::new(),
+        staff: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -343,6 +346,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         carrying: None,
         rarity: Default::default(),
         equipment: Vec::new(),
+        staff: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -469,6 +473,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             carrying: None,
             rarity: Default::default(),
             equipment: Vec::new(),
+            staff: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -543,6 +548,7 @@ pub(crate) fn app_with_companions_and_cargo(
             carrying: None,
             rarity: Default::default(),
             equipment: Vec::new(),
+            staff: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -765,6 +771,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             carrying: None,
             rarity: Default::default(),
             equipment: Vec::new(),
+            staff: false,
         });
     }
     if underground {

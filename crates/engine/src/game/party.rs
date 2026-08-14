@@ -391,11 +391,100 @@ impl Game {
             let name = self.creature_label(creature);
             self.log(format!("You lower {name} and it takes its own footing."));
         }
-        self.world.entity_mut(creature).remove::<Task>();
+        // Both halves of the party/staff exclusion, and the `Task` half is
+        // not enough on its own: a program left marked `BaseStaff` would be
+        // re-posted by `schedule_base_labour` on the very next tick, so the
+        // marker has to come off with the job it authorises.
+        self.world
+            .entity_mut(creature)
+            .remove::<Task>()
+            .remove::<BaseStaff>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
         self.log(format!("{name} falls in alongside you."));
         Ok(())
+    }
+
+    /// Gives `creature`, a tamed program you own, to the base — see
+    /// `components::BaseStaff`. From here the work order scheduler decides
+    /// where it stands; the player does not post it by hand.
+    ///
+    /// Staff and party are disjoint sets, so this stands the program down
+    /// as a companion exactly as `assign_cronjob` used to. Every refusal
+    /// runs before anything is written, the same ordering argument
+    /// `install_routine` makes about the disk.
+    pub fn assign_base_staff(&mut self, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let owner = self
+            .world
+            .get::<Tamed>(creature)
+            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
+            .owner;
+        if owner != self.player_entity() {
+            return Err("You don't control that program.".into());
+        }
+        if self.world.get::<BaseStaff>(creature).is_some() {
+            return Err("That program is already assigned to the base.".into());
+        }
+        // Same door `add_companion` closes from the other side: a wielded
+        // program is a weapon in your hands, not a body in the base.
+        if self.wielded_program() == Some(creature) {
+            self.world.insert_resource(WieldedProgram(None));
+            let name = self.creature_label(creature);
+            self.log(format!("You lower {name} and it takes its own footing."));
+        }
+        if self.world.resource::<Party>().0.contains(&creature) {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|&e| e != creature);
+            self.log_base("It stands down as your companion to work the base.");
+        }
+        self.world.entity_mut(creature).insert(BaseStaff);
+        let name = self.creature_label(creature);
+        self.log_base(format!("{name} reports to the base."));
+        Ok(())
+    }
+
+    /// Takes `creature` back off the base staff. Its posting goes with it —
+    /// a program off the pool is not one the scheduler may move, so leaving
+    /// the `Task` behind would strand a body on a machine nothing was
+    /// tracking.
+    pub fn release_base_staff(&mut self, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self.world.get::<BaseStaff>(creature).is_none() {
+            return Err("That program isn't on the base staff.".into());
+        }
+        self.world
+            .entity_mut(creature)
+            .remove::<BaseStaff>()
+            .remove::<Task>()
+            .remove::<Carrying>();
+        let name = self.creature_label(creature);
+        self.log_base(format!("{name} stands down from the base."));
+        Ok(())
+    }
+
+    /// Every program on the base staff, in a **stable total order**.
+    ///
+    /// Sorted rather than left in query order for the reason
+    /// `assembler_system` sorts its machines: bevy's iteration order is not
+    /// stable, and a scheduler that filled wants in a different order
+    /// between runs is a flaky test and a base that behaves differently
+    /// after a reload.
+    pub fn base_staff(&self) -> Vec<Entity> {
+        let mut staff: Vec<Entity> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.contains::<BaseStaff>() && e.contains::<Tamed>())
+            .map(|e| e.id())
+            .collect();
+        staff.sort();
+        staff
     }
 
     /// Equips `creature`, a tamed program you own, as your weapon (see

@@ -606,6 +606,16 @@ impl Game {
                     party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
                     pending_cronjobs.push((creature_id, cronjob));
+                    // The absorption rule, and it is deliberately keyed on
+                    // holding a job rather than on `c.staff`: a base staffed
+                    // by hand before work orders existed has no flag on disk
+                    // and would otherwise be stood down wholesale by the
+                    // first load after the feature shipped. This is a
+                    // load-path rule, not a migration — it costs no version
+                    // bump and no tool.
+                    entity.insert(BaseStaff);
+                } else if c.staff {
+                    entity.insert(BaseStaff);
                 }
             } else {
                 entity.insert((Hostile, WanderAi::default()));
@@ -767,6 +777,10 @@ impl Game {
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let wielded = self.wielded_program();
+        // Gathered up front rather than queried per creature: the creature
+        // query below is at bevy's 15-element ceiling already, and this is
+        // the same shape `party_entities` and `wielded` take for it.
+        let staff = self.base_staff();
         let mut creatures = Vec::new();
         let mut creature_query = self.world.query::<(
             Entity,
@@ -875,6 +889,7 @@ impl Game {
                             .collect()
                     })
                     .unwrap_or_default(),
+                staff: staff.contains(&entity),
             });
         }
 

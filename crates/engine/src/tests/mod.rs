@@ -50,4 +50,5 @@ mod throw;
 mod trade;
 mod turn;
 mod wielded;
+mod work_orders;
 mod zone;

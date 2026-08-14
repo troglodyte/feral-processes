@@ -238,6 +238,20 @@ pub struct CreatureSave {
     /// through, which is the migration path.
     #[serde(default)]
     pub equipment: Vec<(EquipmentSlot, EquippedItemSave)>,
+    /// Whether this program has been given to the base rather than kept in
+    /// the party — see `components::BaseStaff`. Only meaningful when
+    /// `tamed` is true.
+    ///
+    /// Additive, named and defaulted, so a save written before work orders
+    /// existed loads with it false and cost **no `SAVE_FORMAT_VERSION`
+    /// bump** — the save has been field-named RON since v29, which is what
+    /// retired migrations for exactly this shape of change. Such a file
+    /// still comes back with a working base: `Game::load` marks anything
+    /// holding a `Task` as staff regardless of what this says, because a
+    /// base staffed by hand before the feature shipped must not be stood
+    /// down by loading it.
+    #[serde(default)]
+    pub staff: bool,
 }
 
 /// A worn item on disk. Deliberately **not** `components::EquippedItem`,
@@ -776,6 +790,7 @@ mod tests {
             carrying: None,
             rarity: Rarity::Ordinary,
             equipment: Vec::new(),
+            staff: false,
         }
     }
 

@@ -1,0 +1,8 @@
+(
+    id: "deep_sounding",
+    name: "Deep Sounding",
+    description: "Nothing has come back up from the fifth frame with a reading worth having. Get down there and stand in it.",
+    objective: Descend(depth: 5),
+    reward: [Credits(95), Item("core_fragment", 20), Xp(260)],
+    min_zone: 3,
+)

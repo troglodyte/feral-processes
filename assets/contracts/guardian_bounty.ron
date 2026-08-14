@@ -1,0 +1,8 @@
+(
+    id: "guardian_bounty",
+    name: "Guardian Bounty",
+    description: "A Wintermute is holding the bottom of a stack and nothing gets past it. End one, wherever you find it.",
+    objective: Terminate(species: Some("wintermute"), count: 1),
+    reward: [Credits(130), Item("ice_breaker", 2), Xp(340)],
+    min_zone: 4,
+)

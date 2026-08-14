@@ -1,0 +1,8 @@
+(
+    id: "annealed_stock",
+    name: "Annealed Stock",
+    description: "Cores that have been through the fire hold their shape. Deliver six Annealed Cores.",
+    objective: Deliver(item: "annealed_core", count: 6),
+    reward: [Credits(100), Item("core_fragment", 20), Xp(250)],
+    min_zone: 4,
+)

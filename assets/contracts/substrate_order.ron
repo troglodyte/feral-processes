@@ -1,0 +1,8 @@
+(
+    id: "substrate_order",
+    name: "Substrate Order",
+    description: "Blank stock, unetched and unclaimed — the Broker will take eight Blank Substrates and ask nothing about them.",
+    objective: Deliver(item: "blank_substrate", count: 8),
+    reward: [Credits(70), Item("routine_disk", 1), Xp(170)],
+    min_zone: 3,
+)

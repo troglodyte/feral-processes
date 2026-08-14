@@ -1,0 +1,9 @@
+(
+    id: "worm_cull",
+    name: "Worm Cull",
+    description: "Worms are boring through the sector faster than anyone can patch it. Cull eight.",
+    objective: Terminate(species: Some("worm"), count: 8),
+    reward: [Credits(65), Xp(190)],
+    min_zone: 2,
+    repeatable: true,
+)

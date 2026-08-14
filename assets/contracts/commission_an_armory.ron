@@ -1,0 +1,8 @@
+(
+    id: "commission_an_armory",
+    name: "Commission an Armory",
+    description: "The Broker would rather buy plate from this sector than haul it in. Build an Armory and keep it standing.",
+    objective: Build(structure: "armory"),
+    reward: [Credits(80), Item("hardened_shell", 1), Xp(210)],
+    min_zone: 3,
+)

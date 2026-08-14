@@ -1,0 +1,9 @@
+(
+    id: "block_order",
+    name: "Block Order",
+    description: "The Broker is building something and will not say what. Deliver eight Bytecode Blocks.",
+    objective: Deliver(item: "bytecode_block", count: 8),
+    reward: [Credits(40), Xp(100)],
+    min_zone: 1,
+    repeatable: true,
+)

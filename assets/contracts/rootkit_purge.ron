@@ -1,0 +1,8 @@
+(
+    id: "rootkit_purge",
+    name: "Rootkit Purge",
+    description: "Something is sitting under the sector's floor and answering for it. Purge six rootkits.",
+    objective: Terminate(species: Some("rootkit"), count: 6),
+    reward: [Credits(85), Item("ice_breaker", 1), Xp(230)],
+    min_zone: 3,
+)

@@ -1,0 +1,8 @@
+(
+    id: "keep_the_lights_on",
+    name: "Keep the Lights On",
+    description: "Nothing out here runs on goodwill. Build a Power Conduit and keep it standing.",
+    objective: Build(structure: "power_conduit"),
+    reward: [Credits(40), Item("power_cell", 6), Xp(120)],
+    min_zone: 1,
+)

@@ -1554,6 +1554,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
         trace: 0,
+        contracts: Vec::new(),
+        contracts_done: Vec::new(),
     };
     let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));
     save::save_to_file(&path, &data).unwrap();

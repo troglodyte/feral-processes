@@ -146,10 +146,20 @@ impl ContractDb {
     /// species or structure an objective names *exists* is not checked here —
     /// no other db is in hand, exactly as `AchievementDb::load_dir` defers its
     /// `StartingProgram` check. The shipped set is covered by its census test.
+    ///
+    /// An absent directory is silent and leaves the db empty, the rule
+    /// `AffixDb` and `SectorDb` already follow: an install without contracts
+    /// is the pre-contract game, and a board with nothing on it is a
+    /// supported way to play rather than a failure to start.
     pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = ContractDb::default();
         let mut warnings = Vec::new();
-        for entry in std::fs::read_dir(dir)? {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((db, warnings)),
+            Err(e) => return Err(e),
+        };
+        for entry in entries {
             let path = entry?.path();
             if path.extension().and_then(|e| e.to_str()) != Some("ron") {
                 continue;

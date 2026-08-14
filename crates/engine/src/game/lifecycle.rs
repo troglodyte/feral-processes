@@ -71,6 +71,7 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
+            contracts: contract_db,
             descriptions: description_db,
             species: species_db,
             structures: structure_db,
@@ -129,6 +130,8 @@ impl Game {
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(achievement_db);
+        world.insert_resource(contract_db);
+        world.insert_resource(crate::resources::ActiveContracts::default());
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on
@@ -228,6 +231,7 @@ impl Game {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
+            contracts: contract_db,
             descriptions: description_db,
             species: species_db,
             structures: structure_db,
@@ -319,6 +323,11 @@ impl Game {
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(achievement_db);
+        world.insert_resource(contract_db);
+        world.insert_resource(crate::resources::ActiveContracts {
+            active: data.contracts,
+            done: data.contracts_done,
+        });
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on
@@ -1007,6 +1016,16 @@ impl Game {
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
             trace: self.trace(),
+            contracts: self
+                .world
+                .resource::<crate::resources::ActiveContracts>()
+                .active
+                .clone(),
+            contracts_done: self
+                .world
+                .resource::<crate::resources::ActiveContracts>()
+                .done
+                .clone(),
         };
         save::save_to_file(path, &data)
     }
@@ -1189,6 +1208,7 @@ impl Game {
 struct AssetDbs {
     abilities: AbilityDb,
     achievements: crate::achievements::AchievementDb,
+    contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
     species: SpeciesDb,
     structures: StructureDb,
@@ -1259,6 +1279,9 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (descriptions, description_warnings) =
         crate::descriptions::DescriptionDb::load_dir(&assets_dir.join("descriptions"))?;
     warnings.extend(description_warnings);
+    let (contracts, contract_warnings) =
+        crate::contracts::ContractDb::load_dir(&assets_dir.join("contracts"))?;
+    warnings.extend(contract_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -1286,6 +1309,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     Ok(AssetDbs {
         abilities,
         achievements,
+        contracts,
         descriptions,
         species,
         structures,

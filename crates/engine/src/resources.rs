@@ -406,6 +406,34 @@ pub struct RunFeats {
     pub bosses_defeated: Vec<String>,
 }
 
+/// One contract the run has taken on, and how far along it is.
+///
+/// Holds the **whole resolved `ContractDef`**, not an id plus parameters, for
+/// the argument `EquippedItem` stores an entire `GearCopy`: forgetting a
+/// property must not be expressible, and a contract file edited or deleted
+/// mid-run must not strand or silently rewrite one already accepted. A save
+/// naming a contract whose file is gone still finishes and still pays.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ActiveContract {
+    pub def: crate::contracts::ContractDef,
+    /// Counted against `Objective::target()`. Written by
+    /// `game::contracts::contract_system` and, for a `Deliver`, by
+    /// `Game::deliver_to_contract` — nothing else raises it.
+    pub progress: u32,
+    pub accepted_tick: u64,
+}
+
+/// What the run is holding and what it has finished.
+///
+/// Saved, unlike `RunFeats` — this *is* the accumulator that a per-tick drain
+/// queue feeds. `done` is what keeps a finished non-repeatable contract off
+/// the board for the rest of the run.
+#[derive(Resource, Default)]
+pub struct ActiveContracts {
+    pub active: Vec<ActiveContract>,
+    pub done: Vec<crate::contracts::ContractId>,
+}
+
 /// Achievements earned since the last time anyone wrote `profile.ron`.
 ///
 /// The engine decides what has been earned and app-core owns the path, so

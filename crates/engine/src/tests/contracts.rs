@@ -300,3 +300,159 @@ fn every_objective_variant_ships_at_least_once() {
          added for it is never walked in a real game: {seen:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Run state and the save round trip
+// ---------------------------------------------------------------------------
+
+use crate::contracts::ContractDef;
+use crate::resources::{ActiveContract, ActiveContracts};
+use crate::*;
+
+fn fresh() -> Game {
+    Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// A def built by hand rather than looked up, so a retune of the shipped set
+/// cannot move a test about the machinery.
+fn def(id: &str, objective: Objective, reward: Vec<Reward>) -> ContractDef {
+    ContractDef {
+        id: ContractId::from(id),
+        name: format!("Contract {id}"),
+        description: "d".to_string(),
+        objective,
+        reward,
+        min_zone: 0,
+        repeatable: false,
+    }
+}
+
+fn give(game: &mut Game, def: ContractDef, progress: u32) {
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<ActiveContracts>()
+        .active
+        .push(ActiveContract {
+            def,
+            progress,
+            accepted_tick: tick,
+        });
+}
+
+#[test]
+fn a_new_game_holds_no_contracts() {
+    let game = fresh();
+    let held = game.world.resource::<ActiveContracts>();
+    assert!(held.active.is_empty());
+    assert!(held.done.is_empty());
+}
+
+#[test]
+fn the_shipped_contracts_are_reachable_through_a_loaded_game() {
+    let game = fresh();
+    assert!(
+        game.world
+            .resource::<crate::contracts::ContractDb>()
+            .iter()
+            .count()
+            >= 8,
+        "the asset directory has to be registered, or the board has nothing to draw from"
+    );
+}
+
+#[test]
+fn active_contracts_survive_a_save_and_load() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "hunt",
+            Objective::Kill {
+                species: Some("drone".to_string()),
+                count: 6,
+            },
+            vec![Reward::Credits(40), Reward::Xp(120)],
+        ),
+        4,
+    );
+    give(
+        &mut game,
+        def(
+            "haul",
+            Objective::Deliver {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 25,
+            },
+            vec![Reward::Credits(35)],
+        ),
+        0,
+    );
+    game.world
+        .resource_mut::<ActiveContracts>()
+        .done
+        .push(ContractId::from("already_finished"));
+    let before = game.world.resource::<ActiveContracts>().active.clone();
+
+    let path =
+        std::env::temp_dir().join(format!("feral_contracts_save_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let held = loaded.world.resource::<ActiveContracts>();
+    assert_eq!(
+        held.active, before,
+        "progress, accepted_tick and the whole resolved def all travel"
+    );
+    assert_eq!(held.done, vec![ContractId::from("already_finished")]);
+}
+
+#[test]
+fn a_save_written_before_contracts_existed_still_loads() {
+    let mut game = fresh();
+    let path =
+        std::env::temp_dir().join(format!("feral_contracts_legacy_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+
+    // Strip the two fields back out, which is exactly the file a build
+    // without them wrote. Since v29 the payload is field-named RON, so this
+    // must load as empty vectors — no migration, and no version bump.
+    let text = std::fs::read_to_string(&path).unwrap();
+    let version = text.split_once('\n').unwrap().0.to_string();
+    let stripped: String = text
+        .lines()
+        .filter(|line| {
+            let t = line.trim();
+            !t.starts_with("contracts:") && !t.starts_with("contracts_done:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        stripped.lines().count() < text.lines().count(),
+        "the fields have to be present to strip, or this test proves nothing"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let held = loaded.world.resource::<ActiveContracts>();
+    assert!(held.active.is_empty());
+    assert!(held.done.is_empty());
+    assert_eq!(
+        version.trim().parse::<u32>().unwrap(),
+        crate::save::SAVE_FORMAT_VERSION,
+        "an additive field behind #[serde(default)] costs no version bump"
+    );
+}
+
+#[test]
+fn an_absent_contracts_directory_is_silent() {
+    let dir = std::env::temp_dir().join(format!("fp_contracts_absent_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (db, warnings) = ContractDb::load_dir(&dir).unwrap();
+    assert_eq!(db.iter().count(), 0);
+    assert!(
+        warnings.is_empty(),
+        "an install without contracts is the pre-contract game, not a fault: {warnings:?}"
+    );
+}

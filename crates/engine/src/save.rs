@@ -433,6 +433,22 @@ pub struct SaveData {
     /// parsing instead of needing re-capture.
     #[serde(default)]
     pub trace: u32,
+    /// Contracts the run is holding, with their progress — see
+    /// `resources::ActiveContracts`. Each carries the whole resolved
+    /// `ContractDef`, so a contract whose asset file has since been edited or
+    /// deleted still finishes and still pays exactly as it read when it was
+    /// accepted.
+    ///
+    /// `#[serde(default)]` is the whole compatibility story since v29: the
+    /// payload is field-named RON, so a file written before this field
+    /// existed loads it as empty and costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub contracts: Vec<crate::resources::ActiveContract>,
+    /// Which contracts this run has finished, so a non-repeatable one is not
+    /// offered again. Ids rather than defs: nothing needs to read a finished
+    /// contract's terms back.
+    #[serde(default)]
+    pub contracts_done: Vec<crate::contracts::ContractId>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -722,6 +738,8 @@ mod tests {
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
             trace: 0,
+            contracts: Vec::new(),
+            contracts_done: Vec::new(),
         }
     }
 

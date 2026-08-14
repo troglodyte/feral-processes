@@ -715,6 +715,24 @@ pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 /// "there's a link here" for no reason the player could have foreseen.
 pub const STACK_MIN_LINK_TILES: i32 = 5;
 
+/// How far out `Game::collapse_stack` will look for somewhere to put the
+/// link that replaces the one a beaten stack takes down with it.
+///
+/// The search walks Chebyshev rings outward from the collapsed tile and
+/// takes the first legal one, so this is a *bound on the search* rather than
+/// a distance the replacement is placed at: on ordinary ground it lands
+/// within a ring or two, and the reading the collapse wants is that the
+/// ground shifted right here rather than that a hole opened somewhere across
+/// the sector.
+///
+/// The bound exists because failing has to be possible to reason about. A
+/// zone with no link left is a run that can never breach again — `award_loot`
+/// underground is the game's only source of Portal Fragments — so a search
+/// that found nothing skips the collapse entirely and leaves the old link
+/// standing. Twenty rings is thousands of candidate tiles, which makes that
+/// branch a fail-safe rather than something a player will meet.
+pub const STACK_COLLAPSE_RELINK_TILES: i32 = 20;
+
 /// How many frames the shallowest stack runs before bottoming out.
 ///
 /// Two rather than one so even the on-ramp link has a descent in it: a

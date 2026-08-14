@@ -286,6 +286,17 @@ impl Game {
         // line. There is no roster left to draw them on either — the
         // screen is gone with `BattleState`.
         self.world.resource_mut::<BattleTimeline>().frames.clear();
-        self.world.remove_resource::<BattleState>();
+        let cleared_lair = self
+            .world
+            .remove_resource::<BattleState>()
+            .and_then(|battle| battle.cleared_lair);
+        // Last of the teardown, and below the prune deliberately: the
+        // collapse rewrites the locale and the sector's links, which is the
+        // fight's consequence rather than part of it, and its lines are
+        // pushed after the prune has run so they reach the map whatever kind
+        // they carry.
+        if let Some(entrance) = cleared_lair {
+            self.collapse_stack(entrance);
+        }
     }
 }

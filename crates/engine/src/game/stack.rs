@@ -12,8 +12,9 @@ use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
-    STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN, STACK_LINK_SCATTER_TILES,
-    STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES, STACK_TILES_PER_FRAME,
+    STACK_COLLAPSE_RELINK_TILES, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
+    STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
+    STACK_TILES_PER_FRAME,
 };
 use crate::*;
 
@@ -112,6 +113,23 @@ pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32), build_radius: i32)
     (STACK_FRAMES_MIN + extra).min(STACK_FRAMES_MAX)
 }
 
+/// The offset `along` steps clockwise around the Chebyshev ring of radius
+/// `band`, starting from its north-west corner. `along` runs `0..8 * band`,
+/// which is the ring's perimeter.
+///
+/// Shared by the two things that place a link on a ring — a zone's own
+/// scatter and the replacement a collapse puts down — so the two cannot
+/// disagree about what a ring is.
+pub(crate) fn ring_offset(band: i32, along: i32) -> (i32, i32) {
+    let side = 2 * band;
+    match along / side {
+        0 => (-band + along % side, -band),
+        1 => (band, -band + along % side),
+        2 => (band - along % side, band),
+        _ => (-band, band - along % side),
+    }
+}
+
 impl Game {
     /// Finds a `SurfaceLink` at `(x, y)`, if any — checked in
     /// `move_player` before the generic blocking-structure check, so walking
@@ -185,37 +203,40 @@ impl Game {
                 STACK_LINK_SCATTER_TILES
             };
             let band = rng.random_range(inner..=inner + width);
-            let along = rng.random_range(0..8 * band);
-            let side = 2 * band;
-            let (dx, dy) = match along / side {
-                0 => (-band + along % side, -band),
-                1 => (band, -band + along % side),
-                2 => (band - along % side, band),
-                _ => (-band, band - along % side),
-            };
+            let (dx, dy) = ring_offset(band, rng.random_range(0..8 * band));
             if dx.abs().max(dy.abs()) < STACK_MIN_LINK_TILES {
                 continue;
             }
             let (x, y) = (origin.x + dx, origin.y + dy);
-            let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
-            if !tile.walkable || tile.biome == Biome::Platform {
-                continue;
-            }
-            // A nest is checked before an entrance in `move_player`, so a
-            // link sharing a nest's tile is a link that can never be
-            // walked into — the bump attacks the nest instead, forever.
-            // Nests are already down by the time this runs, in both
-            // `Game::new` and `enter_next_zone`.
-            if self.find_surface_link_at(x, y).is_some()
-                || self.find_blocking_structure_at(x, y).is_some()
-                || self.find_nest_at(x, y).is_some()
-            {
+            if !self.link_site_free(x, y) {
                 continue;
             }
             self.spawn_entrance_at(x, y);
             placed += 1;
         }
         self.announce_surface_links(origin);
+    }
+
+    /// Whether a link may stand on `(x, y)` — the one statement of what a
+    /// link needs from the ground under it, shared by a zone's scatter and
+    /// by the replacement `collapse_stack` puts down.
+    ///
+    /// Platform tiles are refused rather than merely unlikely: the base is
+    /// the one safe ground in the game, and a hole down into the Stack in
+    /// the middle of it would undo that.
+    ///
+    /// A nest is checked before an entrance in `move_player`, so a link
+    /// sharing a nest's tile is a link that can never be walked into — the
+    /// bump attacks the nest instead, forever. Nests are already down by the
+    /// time a zone scatters its links, in both `Game::new` and
+    /// `enter_next_zone`.
+    fn link_site_free(&mut self, x: i32, y: i32) -> bool {
+        let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
+        tile.walkable
+            && tile.biome != Biome::Platform
+            && self.find_surface_link_at(x, y).is_none()
+            && self.find_blocking_structure_at(x, y).is_none()
+            && self.find_nest_at(x, y).is_none()
     }
 
     /// Logs what the arrival scan picks up: how many links are in the
@@ -421,6 +442,108 @@ impl Game {
         self.world.insert_resource(locale);
         self.world.insert_resource(stack);
         self.world.insert_resource(trace);
+    }
+
+    /// Ends the stack reached through `entrance`: the party is thrown out,
+    /// the way in caves in behind them, the run's record of the place goes
+    /// with it, and the ground opens somewhere else nearby.
+    ///
+    /// Called from `end_battle` against `BattleState::cleared_lair`, so the
+    /// party may already be on the surface by the time this runs — a
+    /// Forgiving reboot on the round the guardian fell gets there first.
+    /// Everything here is therefore written to work from either side, and
+    /// the ejection is the one part that checks.
+    ///
+    /// **The site is found before the old link comes down**, and that
+    /// ordering is the whole of the failure case. A zone with no link left
+    /// is a run that can never breach again, since `award_loot` underground
+    /// is the game's only source of Portal Fragments; that reads to a player
+    /// as a bad seed rather than as a bug. So a search that finds nowhere
+    /// legal skips the collapse entirely and leaves the stack standing —
+    /// `FrameMemory::cleared` is what holds the guardian down in that
+    /// branch, and it is the only branch where that record still has work to
+    /// do.
+    ///
+    /// The trade keeps the sector's link count flat, so nothing downstream
+    /// has to reason about a zone running dry.
+    pub(crate) fn collapse_stack(&mut self, entrance: (i32, i32)) {
+        let Some((nx, ny)) = self.replacement_link_site(entrance) else {
+            return;
+        };
+
+        if self.stack_pos().is_some_and(|pos| pos.entrance == entrance) {
+            self.clear_stack();
+            self.log_kind(
+                MessageKind::Outcome,
+                "The stack folds in on itself. You are flung up through \
+                 collapsing frames and land hard on open grid.",
+            );
+        }
+
+        if let Some(link) = self.find_surface_link_at(entrance.0, entrance.1) {
+            self.world.despawn(link);
+        }
+        // Keyed by `(link tile, depth)`, so this is every frame of the stack
+        // that just fell and nothing else. What it holds is the run's record
+        // of a place that no longer exists — see `resources::StackMemory`.
+        self.world
+            .resource_mut::<StackMemory>()
+            .0
+            .retain(|&(tile, _), _| tile != entrance);
+
+        self.spawn_entrance_at(nx, ny);
+        let (dx, dy) = (nx - entrance.0, ny - entrance.1);
+        self.log_kind(
+            MessageKind::Outcome,
+            format!(
+                "The ground answers somewhere else: a new link opens {} at {} tiles.",
+                bearing(dx, dy),
+                dx.abs().max(dy.abs()),
+            ),
+        );
+    }
+
+    /// The nearest legal tile to `from` a replacement link may stand on, or
+    /// `None` if there is none inside `STACK_COLLAPSE_RELINK_TILES`.
+    ///
+    /// Rings are walked outward and the first legal tile wins, so the
+    /// replacement opens as close to the collapse as the ground allows —
+    /// the reading being that this ground shifted, not that a hole appeared
+    /// across the sector. Where on a ring the walk *starts* is rolled, or
+    /// every collapse in the game would open its replacement due north-west.
+    ///
+    /// The roll is a local `StdRng` rather than `resources::GameRng` for the
+    /// reason `spawn_surface_links` gives: a draw from the shared stream
+    /// shifts every later roll in the run, which silently rewrites the
+    /// outcome of every seeded test in the suite. Salted off the collapsed
+    /// tile so two stacks finished in one zone do not answer alike. Nothing
+    /// needs this to be reproducible from the seed alone — unlike a frame,
+    /// the tile is world state and rides out in `SaveData::link_sites`.
+    fn replacement_link_site(&mut self, from: (i32, i32)) -> Option<(i32, i32)> {
+        const RELINK_SALT: u64 = 0xC0A1_5E5D;
+
+        let seed = self.world.resource::<WorldMap>().seed();
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let mut rng = StdRng::seed_from_u64(
+            ((seed as u64) << 32)
+                ^ ((from.0 as u32 as u64) << 16)
+                ^ (from.1 as u32 as u64)
+                ^ zone as u64
+                ^ RELINK_SALT,
+        );
+
+        for band in STACK_MIN_LINK_TILES..=STACK_COLLAPSE_RELINK_TILES {
+            let perimeter = 8 * band;
+            let start = rng.random_range(0..perimeter);
+            for step in 0..perimeter {
+                let (dx, dy) = ring_offset(band, (start + step) % perimeter);
+                let (x, y) = (from.0 + dx, from.1 + dy);
+                if self.link_site_free(x, y) {
+                    return Some((x, y));
+                }
+            }
+        }
+        None
     }
 
     /// Climbs out through the link the party walked in through.

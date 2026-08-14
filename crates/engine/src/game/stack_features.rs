@@ -223,9 +223,18 @@ impl Game {
             .is_some_and(|m| m.cleared)
     }
 
-    /// Records that this stack's guardian is down, so its lair does not
-    /// refill. Called from `award_loot`, which is the one place that knows a
-    /// hostile actually died rather than merely being fled from.
+    /// Records that this stack's guardian is down. Called from `award_loot`,
+    /// which is the one place that knows a hostile actually died rather than
+    /// merely being fled from.
+    ///
+    /// Two records, because they answer different questions at different
+    /// times. `FrameMemory::cleared` says the lair is spent, which is what
+    /// stops it refilling; `BattleState::cleared_lair` says *this fight*
+    /// finished a stack, which is what `end_battle` collapses it on. The
+    /// second cannot be re-derived from the first at teardown — see that
+    /// field's doc for the reboot that lands between the two moments — and
+    /// the first is what still holds the lair down in the one branch where
+    /// the collapse is skipped for want of anywhere to put a new link.
     pub(crate) fn mark_lair_cleared(&mut self) {
         let Some(pos) = self.stack_pos() else {
             return;
@@ -234,6 +243,9 @@ impl Game {
             return;
         }
         self.frame_memory_mut(pos).cleared = true;
+        if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
+            battle.cleared_lair = Some(pos.entrance);
+        }
     }
 
     /// Whether the cache on `cell` of the frame the party is in is still

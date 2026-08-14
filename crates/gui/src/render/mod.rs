@@ -17,9 +17,9 @@ use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, CraftRecipe, Entity, EntityView, Game, InventoryRow, LogEntry, MESSAGE_LOG_CAP,
-    MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep, ResearchState,
-    StructureReport,
+    Assignee, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow, LogEntry,
+    MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep,
+    ResearchState, StructureReport,
 };
 
 mod arena;
@@ -27,6 +27,7 @@ mod bars;
 mod base;
 mod battle;
 mod building;
+mod contracts;
 mod crafting;
 mod field;
 mod frame_map;
@@ -57,6 +58,7 @@ use building::{
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
     draw_worker_menu,
 };
+use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
@@ -534,6 +536,14 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::StructureAssign => app.staffing(),
         _ => None,
     };
+    // Through `App::contract_sections` and not off the engine directly, for
+    // `group_rows`' reason one line up: the handler resolves a row number
+    // against these two lists, so a renderer with its own copy would act on a
+    // different contract from the one under the highlight.
+    let (contract_active, contract_offers) = match app.mode {
+        Mode::Contracts => app.contract_sections(),
+        _ => (Vec::new(), Vec::new()),
+    };
     let scanned = match app.mode {
         Mode::Cronjob | Mode::Guard => app.nearby_programs(),
         Mode::CronjobStructure | Mode::WorkStructure => app.workable_structures(),
@@ -730,6 +740,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         }
         Mode::Perks => draw_perks_menu(game, selected, painter, m),
         Mode::Research => draw_research_menu(game, selected, painter, m),
+        Mode::Contracts => draw_contracts(&contract_active, &contract_offers, selected, painter, m),
         Mode::History => draw_history(game, selected, painter, m),
         Mode::Structures => draw_structures(game, selected, painter, m),
         Mode::StructureAssign => {

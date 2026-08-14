@@ -604,6 +604,7 @@ mod tests {
             is_boss: false,
             can_work: false,
             can_trade: false,
+            issues_contracts: false,
             structure_worker: None,
             worker_away_from_post: false,
             structure_attended: false,

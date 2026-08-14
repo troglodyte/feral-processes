@@ -234,6 +234,22 @@ impl Game {
             .collect()
     }
 
+    /// Every authored contract, worded, at zero progress — the whole
+    /// catalogue rather than one board's three.
+    ///
+    /// Exists for the renderer's width census, which has to measure the
+    /// widest row the shipped assets can *ever* build rather than whichever
+    /// three a seed happened to roll. Engine-side for the reason every other
+    /// wording is: the row a census measures has to be the row the screen
+    /// draws, or it is measuring a copy.
+    pub fn contract_catalogue(&self) -> Vec<crate::views::ContractRow> {
+        self.world
+            .resource::<crate::contracts::ContractDb>()
+            .iter()
+            .map(|def| self.contract_row(def, 0))
+            .collect()
+    }
+
     /// Which authored contracts this run could be offered right now, in the
     /// db's stable id order — the pool the board draws its slots from.
     ///

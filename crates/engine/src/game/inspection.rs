@@ -1,7 +1,7 @@
 //! Looking at the world without changing it: the tile and entity views the
 //! renderer draws, plus inspect and symlink targeting.
 
-use crate::game::hauling::at_station;
+use crate::game::base::hauling::at_station;
 use crate::tuning::{
     DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_COMPANION_REFACTORS,
     MAX_FUSIONS,
@@ -517,7 +517,7 @@ impl Game {
             else {
                 continue;
             };
-            for (dx, dy) in crate::game::collect::ORTHOGONAL {
+            for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
                 let Some((neighbour, neighbour_kind)) = by_tile.get(&(pos.x + dx, pos.y + dy))
                 else {
                     continue;

@@ -284,10 +284,10 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     );
 
     tick_until(&mut game, 40, |g| {
-        game::hauling::at_station(*g.world.get::<Position>(worker).unwrap(), node_pos)
+        game::base::hauling::at_station(*g.world.get::<Position>(worker).unwrap(), node_pos)
     });
     assert!(
-        game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
         "it should arrive"
     );
     game.tick();

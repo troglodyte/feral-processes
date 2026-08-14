@@ -214,7 +214,7 @@ impl Game {
                 systems::task_progress_system,
                 systems::player_gather_system,
                 systems::assembler_system,
-                crate::game::hauling::haul_step_system,
+                crate::game::base::hauling::haul_step_system,
             )
                 .chain(),
             difficulty::death_handling_system,

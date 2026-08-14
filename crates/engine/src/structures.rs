@@ -199,7 +199,7 @@ pub struct StructureDef {
     #[serde(default = "default_output_capacity")]
     pub capacity: u32,
     /// Whether a posted program may empty a clogged machine's buffer into
-    /// this structure — see `game::hauling`. A flag rather than "has a
+    /// this structure — see `game::base::hauling`. A flag rather than "has a
     /// `Stock` and runs no job", because *every* deployed structure has a
     /// `Stock`: that rule would make a Home, a Shield and a Data Cache all
     /// depots. `#[serde(default)]` so existing structure files (including

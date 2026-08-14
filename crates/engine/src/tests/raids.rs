@@ -1,7 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
-use crate::game::upkeep::DEV_HIT_DAMAGE_PERCENT;
+use crate::game::base::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{
     FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
     RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,

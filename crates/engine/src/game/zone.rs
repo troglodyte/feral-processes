@@ -361,7 +361,7 @@ impl Game {
     pub(crate) fn structure_tiles(&mut self) -> std::collections::HashSet<(i32, i32)> {
         let mut query = self.world.query_filtered::<&Position, With<Structure>>();
         let positions: Vec<Position> = query.iter(&self.world).copied().collect();
-        crate::game::hauling::structure_tiles(positions.into_iter())
+        crate::game::base::hauling::structure_tiles(positions.into_iter())
     }
 
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {

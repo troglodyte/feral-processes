@@ -2167,13 +2167,13 @@ fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     game.assign_cronjob(worker, node).unwrap();
 
     for _ in 0..200 {
-        if game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
+        if game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
             break;
         }
         game.tick();
     }
     assert!(
-        game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
         "a worker posted from one edge of a full-size base must reach the other"
     );
     let _ = std::fs::remove_dir_all(&dir);

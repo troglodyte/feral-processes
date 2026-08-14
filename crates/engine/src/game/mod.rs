@@ -6,9 +6,8 @@
 //! `Game`.
 
 pub(crate) mod achievements;
-pub(crate) mod building;
+pub(crate) mod base;
 pub(crate) mod catalog;
-pub(crate) mod collect;
 pub(crate) mod combat;
 pub(crate) mod combat_damage;
 pub(crate) mod combat_enemy;
@@ -21,7 +20,6 @@ pub(crate) mod contracts;
 pub(crate) mod crafting;
 pub(crate) mod descriptions;
 pub(crate) mod field;
-pub(crate) mod hauling;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;
 pub(crate) mod listen;
@@ -43,5 +41,4 @@ pub(crate) mod trace;
 pub(crate) mod trade;
 pub(crate) mod turn;
 pub(crate) mod unlocks;
-pub(crate) mod upkeep;
 pub(crate) mod zone;

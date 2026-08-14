@@ -444,7 +444,7 @@ impl Stock {
 ///
 /// The *only* stored hauling state, and deliberately so. Where the worker is
 /// headed (the nearest depot while carrying, its own machine otherwise) and
-/// whether it has arrived (`game::hauling::at_station`) are both derived
+/// whether it has arrived (`game::base::hauling::at_station`) are both derived
 /// from `Position`, so there is one source of truth and no state field that
 /// can desync into a worker standing at its machine insisting it is still
 /// walking.
@@ -460,7 +460,7 @@ pub struct Carrying {
 }
 
 /// A posted program that found no route to where it is trying to get. Set and
-/// cleared every tick by `game::hauling::haul_step_system`, the one system
+/// cleared every tick by `game::base::hauling::haul_step_system`, the one system
 /// that walks a field and so the only one that can know.
 ///
 /// A cache of that tick's answer rather than stored state, and not saved for

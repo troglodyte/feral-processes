@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use crate::game::collect::ORTHOGONAL;
+use crate::game::base::collect::ORTHOGONAL;
 use crate::game::pursuit::walk_field;
 use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;

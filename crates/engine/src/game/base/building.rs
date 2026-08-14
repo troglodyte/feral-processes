@@ -1,7 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
-use crate::game::hauling;
+use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
 use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;

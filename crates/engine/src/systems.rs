@@ -8,7 +8,7 @@ use crate::components::{
     ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
     WanderAi, field_buff_power_of,
 };
-use crate::game::hauling::at_station;
+use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
@@ -815,7 +815,7 @@ pub fn assembler_system(
             for (item, per_batch) in recipe {
                 let cap = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
                 let mut want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
-                for (dx, dy) in crate::game::collect::ORTHOGONAL {
+                for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
                     if want == 0 {
                         break;
                     }

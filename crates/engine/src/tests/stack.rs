@@ -2025,8 +2025,8 @@ fn logged(game: &Game, needle: &str) -> bool {
 #[test]
 fn a_link_further_from_the_arrival_point_runs_deeper() {
     let spawn = (100, -50);
-    let near = crate::game::stack::frames_for((105, -50), spawn);
-    let far = crate::game::stack::frames_for((138, -50), spawn);
+    let near = crate::game::stack::frames_for((105, -50), spawn, 0);
+    let far = crate::game::stack::frames_for((138, -50), spawn, 0);
     assert_eq!(
         near,
         crate::tuning::STACK_FRAMES_MIN,
@@ -2042,7 +2042,7 @@ fn a_link_further_from_the_arrival_point_runs_deeper() {
 
 #[test]
 fn stack_depth_is_capped_however_far_out_the_link_sits() {
-    let frames = crate::game::stack::frames_for((10_000, 10_000), (0, 0));
+    let frames = crate::game::stack::frames_for((10_000, 10_000), (0, 0), 0);
     assert_eq!(frames, crate::tuning::STACK_FRAMES_MAX);
 }
 
@@ -2200,24 +2200,40 @@ fn entrance_placement_is_a_pure_function_of_the_seed_and_zone() {
 }
 
 /// The bug this guards: with every entrance scattered to the full radius,
-/// most seeds put all three off screen on arrival, and nothing told the
-/// player links existed at all. At the default zoom the map pane shows
-/// roughly +/-16 by +/-9 tiles.
+/// most seeds put all three far off and nothing told the player links
+/// existed at all. At the default zoom the map pane shows roughly +/-16 by
+/// +/-9 tiles, which is what "still a trip" is measured against below.
 const OPENING_VIEW_HALF_W: i32 = 16;
 const OPENING_VIEW_HALF_H: i32 = 9;
 
+/// Every zone opens with one link on the doorstep — drawn from the ring
+/// just outside the base slab, so the on-ramp survives a base that has
+/// grown over the box it used to be drawn from.
+///
+/// This used to assert the link was *on screen*, and that promise died with
+/// the growing base: at `MAX_BUILD_RADIUS_TILES` the slab is wider than the
+/// pane is tall, so the nearest ground a link may stand on is already past
+/// the bottom of it. `announce_surface_links` is what makes the layer
+/// discoverable now, so the scan is asserted here beside the distance.
 #[test]
-fn every_seed_puts_one_link_inside_the_opening_view() {
+fn every_seed_puts_one_link_on_the_doorstep() {
+    let reach =
+        crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME + 1 + crate::tuning::STACK_NEAREST_LINK_TILES;
     for seed in [16u32, 43, 77, 101, 2024, 7, 999, 31337] {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let origin = *game.world.get::<Position>(game.player_entity()).unwrap();
-        let visible = entrance_tiles(&mut game).into_iter().any(|(x, y)| {
-            (x - origin.x).abs() <= OPENING_VIEW_HALF_W
-                && (y - origin.y).abs() <= OPENING_VIEW_HALF_H
-        });
+        let nearest = entrance_tiles(&mut game)
+            .into_iter()
+            .map(|(x, y)| (x - origin.x).abs().max((y - origin.y).abs()))
+            .min()
+            .unwrap_or(i32::MAX);
         assert!(
-            visible,
-            "seed {seed} starts the player with no link on screen and no way to know one exists"
+            nearest <= reach,
+            "seed {seed} put its nearest link {nearest} tiles out, past the on-ramp ring"
+        );
+        assert!(
+            logged(&game, "Deep scan:"),
+            "seed {seed} never told the player links exist"
         );
     }
 }
@@ -4402,5 +4418,80 @@ fn a_refused_purchase_spends_nothing() {
         game.etched_disks_of(&ability),
         RoutineScope::One.disks(),
         "the disk is in the pack, waiting for a slot to free up"
+    );
+}
+
+/// The failure this is here to prevent ends runs, and it does not look like
+/// a bug from inside the game — it looks like a bad seed.
+///
+/// `spawn_surface_links` places the *first* link of a zone from a small box
+/// around the arrival point and widens to `STACK_LINK_SCATTER_TILES` only
+/// once one is down, against an attempt budget shared across all three. So
+/// an on-ramp that can never land does not cost you the first link; it
+/// spends every attempt failing to place it and the zone gets **none**. No
+/// links means no Stack, and `award_loot` underground is the game's only
+/// source of Portal Fragments, so the run can never breach again.
+///
+/// A slab swallows that box as it grows: the largest `|dx| + |dy|` inside
+/// it is twice `STACK_NEAREST_LINK_TILES`, and the corner cut spares a tile
+/// only while that exceeds `2 * radius - PLATFORM_CORNER_CUT`.
+#[test]
+fn a_fully_grown_base_still_gets_its_zones_links() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    for entrance in {
+        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        query.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(entrance);
+    }
+    // A base at its ceiling, stamped straight onto the resource: what is
+    // under test is the draw box against a wide slab, not how the slab got
+    // wide.
+    game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
+    game.world.resource_mut::<Platform>().radius = crate::tuning::MAX_BUILD_RADIUS_TILES;
+    let platform = *game.world.resource::<Platform>();
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        let r = crate::tuning::MAX_BUILD_RADIUS_TILES;
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if platform.covers(dx, dy) {
+                    map.set_override(
+                        ppos.x + dx,
+                        ppos.y + dy,
+                        Tile {
+                            biome: Biome::Platform,
+                            walkable: true,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    game.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
+
+    assert_eq!(
+        entrance_tiles(&mut game).len(),
+        crate::tuning::STACK_LINKS_PER_ZONE,
+        "a zone under a full-size base got fewer links than it owes"
+    );
+}
+
+/// Pushing the on-ramp out past the slab would otherwise make every stack
+/// deeper as the base grows — a difficulty change caused entirely by a
+/// cosmetic one. `frames_for` therefore measures from the edge of safe
+/// territory, the same correction `distance_from_danger_origin` already
+/// makes so the whole base counts as distance zero.
+#[test]
+fn a_growing_base_does_not_deepen_the_stack_under_its_nearest_link() {
+    let base = crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+    let grown = crate::tuning::MAX_BUILD_RADIUS_TILES;
+    let at_start = crate::game::stack::frames_for((base + 1, 0), (0, 0), base);
+    let at_ceiling = crate::game::stack::frames_for((grown + 1, 0), (0, 0), grown);
+    assert_eq!(
+        at_start, at_ceiling,
+        "the nearest link opens a deeper stack purely because the base grew"
     );
 }

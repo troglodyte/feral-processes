@@ -99,9 +99,16 @@ pub(crate) struct StackPos {
 /// The two then agree — a far link is deeper *and* fields harder programs
 /// — instead of a nearby hole occasionally being the deepest thing in the
 /// sector for no reason the player could have seen coming.
-pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32)) -> u32 {
+///
+/// `build_radius` is subtracted for that agreement to survive a base that
+/// grows: `distance_from_danger_origin` already makes exactly this
+/// correction, so the whole base counts as distance zero. Without it the
+/// on-ramp being pushed out to the slab's edge would deepen every stack in
+/// the sector as the player built Pillars — a difficulty change caused
+/// entirely by a cosmetic one.
+pub(crate) fn frames_for(tile: (i32, i32), spawn: (i32, i32), build_radius: i32) -> u32 {
     let distance = (tile.0 - spawn.0).abs().max((tile.1 - spawn.1).abs());
-    let extra = (distance / STACK_TILES_PER_FRAME).max(0) as u32;
+    let extra = ((distance - build_radius).max(0) / STACK_TILES_PER_FRAME) as u32;
     (STACK_FRAMES_MIN + extra).min(STACK_FRAMES_MAX)
 }
 
@@ -145,21 +152,44 @@ impl Game {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut rng = StdRng::seed_from_u64(((seed as u64) << 32) ^ zone as u64 ^ ENTRANCE_SALT);
 
+        // The on-ramp is drawn from the ring just outside the slab rather
+        // than from a box centred on the player, because the slab can eat
+        // that box outright: the largest `|dx| + |dy|` in it is twice
+        // `STACK_NEAREST_LINK_TILES`, and `Platform::covers` spares a tile
+        // only while that exceeds `2 * radius - PLATFORM_CORNER_CUT`. Since
+        // `reach` widens only once one link is down and the attempt budget
+        // is shared across all three, an on-ramp that can never land does
+        // not cost the zone its first link — it costs the zone every link,
+        // which ends the run's access to Portal Fragments and reads as a bad
+        // seed rather than as a bug.
+        let inner = self.world.resource::<Platform>().radius + 1;
+        let outer = inner + STACK_NEAREST_LINK_TILES;
+
         let mut placed = 0;
         let mut attempts = 0;
         while placed < count && attempts < count * 40 {
             attempts += 1;
-            // The first one lands inside the opening viewport; the rest
-            // scatter. See `STACK_NEAREST_LINK_TILES`.
-            let reach = if placed == 0 {
-                STACK_NEAREST_LINK_TILES
+            let (dx, dy) = if placed == 0 {
+                // A band of Chebyshev rings, walked rather than
+                // rejection-sampled: every attempt has to produce a
+                // candidate, since they are shared with the two links that
+                // follow.
+                let band = rng.random_range(inner..=outer);
+                let along = rng.random_range(0..8 * band);
+                let side = 2 * band;
+                match along / side {
+                    0 => (-band + along % side, -band),
+                    1 => (band, -band + along % side),
+                    2 => (band - along % side, band),
+                    _ => (-band, band - along % side),
+                }
             } else {
-                STACK_LINK_SCATTER_TILES
+                let reach = STACK_LINK_SCATTER_TILES;
+                (
+                    rng.random_range(-reach..=reach),
+                    rng.random_range(-reach..=reach),
+                )
             };
-            let (dx, dy) = (
-                rng.random_range(-reach..=reach),
-                rng.random_range(-reach..=reach),
-            );
             if dx.abs().max(dy.abs()) < STACK_MIN_LINK_TILES {
                 continue;
             }
@@ -285,10 +315,21 @@ impl Game {
     }
 
     /// How deep the stack under the link at `tile` runs — see
-    /// `frames_for`, which this feeds the zone's arrival point.
+    /// `frames_for`, which this feeds the zone's arrival point and the width
+    /// of the safe ground around it.
+    ///
+    /// The radius is the platform's or nothing, the same branch
+    /// `distance_from_danger_origin` takes: with no Home deployed there is no
+    /// safe territory to measure from and the walk is the whole distance.
     pub(crate) fn frames_at(&self, tile: (i32, i32)) -> u32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
-        frames_for(tile, (spawn.x, spawn.y))
+        let platform = self.world.resource::<Platform>();
+        let radius = if platform.center.is_some() {
+            platform.radius
+        } else {
+            0
+        };
+        frames_for(tile, (spawn.x, spawn.y), radius)
     }
 
     pub(crate) fn frame_spec(

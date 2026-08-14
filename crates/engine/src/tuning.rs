@@ -679,23 +679,30 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 /// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
 /// trip rather than a glance.
 ///
-/// It does *not* keep links off the base platform, though it used to claim
-/// so: `STACK_NEAREST_LINK_TILES` places the first link of every zone 5-8
-/// tiles out, against a slab of `MAX_BUILD_DISTANCE_FROM_HOME` 7. What
-/// actually holds that line is `Game::stamp_platform`, which despawns any
-/// link inside the slab, plus `spawn_surface_links` skipping
-/// `Biome::Platform` when the platform already exists.
+/// It does *not* keep links off the base platform, and neither does the
+/// on-ramp's ring by itself — that ring is measured from the slab that
+/// exists when the zone is generated, and a Home deployed afterwards moves
+/// the slab somewhere placement never saw. What holds the line is
+/// `Game::stamp_platform`, which despawns any link inside the slab, plus
+/// `spawn_surface_links` skipping `Biome::Platform` when the platform
+/// already exists.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
-/// How close the *first* link of a zone is placed.
+/// How far past the base's own edge the *first* link of a zone is placed —
+/// the width of the ring `Game::spawn_surface_links` draws its on-ramp from,
+/// starting one tile outside the slab.
 ///
-/// Measured against the map viewport rather than picked for feel: at the
-/// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
-/// this is off screen when the player materializes. With all three links
-/// scattered to `STACK_LINK_SCATTER_TILES`, most seeds put every one
-/// of them out of sight, and a player with no reason to think links exist
-/// has no reason to go looking. One always within the opening view is the
-/// on-ramp; the other two are still a trip.
+/// It means "on your doorstep", and it used to mean "on screen": the pane
+/// shows roughly ±16 by ±9 tiles at the default zoom, and a link inside that
+/// was how a player with no reason to think links exist found the first one.
+/// That promise cannot survive a base that grows — at
+/// `MAX_BUILD_RADIUS_TILES` the slab has eaten the viewport itself, so the
+/// nearest ground a link may stand on is already past the bottom of the
+/// pane. `Game::announce_surface_links` is what keeps the layer
+/// discoverable now: the arrival scan reports how many links the sector has
+/// and which way the nearest one lies, which does not depend on where the
+/// pane happens to end. The other two links are still a trip
+/// (`STACK_LINK_SCATTER_TILES`).
 pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 
 /// How close a link may get to where the player materializes.

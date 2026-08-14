@@ -476,6 +476,23 @@ pub struct BattleState {
     /// What the fight has paid out so far, held back until it ends — see
     /// `BattleRewards`.
     pub rewards: BattleRewards,
+    /// The entrance tile of the stack whose guardian went down in this
+    /// fight, which `Game::end_battle` collapses on the way out.
+    ///
+    /// Written by `Game::mark_lair_cleared`, at the one point that knows a
+    /// hostile actually died rather than being fled from. It is here rather
+    /// than re-derived at teardown because the two moments are not the same
+    /// one and a Forgiving reboot can land between them: the guardian falls,
+    /// its escort flatlines the player, and `difficulty::
+    /// death_handling_system` surfaces the party inside the trailing `tick`
+    /// — so by the time the fight ends there is no `Locale::Stack` left to
+    /// read an entrance off, and the stack would survive with a cleared lair
+    /// as a dud the player could re-enter forever.
+    ///
+    /// Same lifetime argument as `decompile_attempts` and `rewards`, and the
+    /// same payoff: battles are never serialised, so this needs no
+    /// `SAVE_FORMAT_VERSION` bump.
+    pub cleared_lair: Option<(i32, i32)>,
 }
 
 /// A fight's payout, accumulated per kill and announced once, by

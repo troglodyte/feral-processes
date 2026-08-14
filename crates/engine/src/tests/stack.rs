@@ -5,6 +5,7 @@ use super::support::*;
 use crate::game::stack::StackPos;
 use crate::resources::{CurrentStack, Locale};
 use crate::stack::{CellKind, Dir};
+use crate::tuning::{STACK_COLLAPSE_RELINK_TILES, STACK_MIN_LINK_TILES};
 use crate::*;
 
 fn game() -> Game {
@@ -1748,47 +1749,240 @@ fn shoving_at_a_wall_in_a_held_lair_does_not_rouse_the_guardian_again() {
     );
 }
 
-/// Beating the guardian has to clear the lair for good, or the bottom of a
-/// stack is a treadmill rather than an ending.
-#[test]
-fn killing_the_guardian_clears_the_lair_for_good() {
-    let mut game = game();
-    descend(&mut game);
-    // Overwhelming force, so this is testing what a win does rather than
-    // whether a level-1 party can manage one.
-    {
-        let player = game.player_entity();
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.max_hp = 100_000;
-        stats.hp = 100_000;
-        stats.atk = 100_000;
-        stats.def = 100_000;
-    }
+/// Puts the party at the bottom of a stack reached through a link that
+/// really stands on the map, and returns that link's tile.
+///
+/// `descend` fakes an entrance under the player's feet, which is enough for
+/// every test about walking a frame but not for one about the *entrance*:
+/// a zone scatters its links `STACK_MIN_LINK_TILES` clear of the arrival
+/// point, so the tile `descend` names has no `SurfaceLink` on it to
+/// collapse.
+fn descend_through_a_real_link(game: &mut Game) -> (i32, i32) {
+    let link = *entrance_tiles(game)
+        .first()
+        .expect("a fresh zone scatters links");
+    game.enter_stack(link.0, link.1);
+    link
+}
 
-    let lair = walk_into_the_lair(&mut game);
+/// Overwhelming force, so a test about what a win *does* is not also a test
+/// of whether a level-1 party can manage one.
+fn outclass_the_guardian(game: &mut Game) {
+    let player = game.player_entity();
+    let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+    stats.max_hp = 100_000;
+    stats.hp = 100_000;
+    stats.atk = 100_000;
+    stats.def = 100_000;
+}
+
+/// Walks into the lair and puts the guardian down.
+fn kill_the_guardian(game: &mut Game) {
+    outclass_the_guardian(game);
+    walk_into_the_lair(game);
     assert!(game.has_active_battle(), "the lair should have roused");
-
     let mut rounds = 0;
     while game.has_active_battle() && rounds < 60 {
-        player_attacks(&mut game);
+        player_attacks(game);
         rounds += 1;
     }
     assert!(!game.has_active_battle(), "60 rounds and it is still up");
+}
 
-    assert_eq!(
-        map_cell(&map(&game), lair.0, lair.1),
-        FrameMapCell::Floor,
-        "a cleared lair should stop being marked"
+/// Beating the guardian ends the stack: the party is thrown out, the way in
+/// caves in behind them, and the ground opens somewhere else. Without the
+/// last of those the sector loses a link every time one is finished, and
+/// `award_loot` underground is the game's only source of Portal Fragments.
+#[test]
+fn killing_the_guardian_collapses_the_stack() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    assert!(
+        !game.is_underground(),
+        "the collapse should have thrown the party out"
     );
+    let after = entrance_tiles(&mut game);
+    assert!(
+        !after.contains(&entrance),
+        "the entrance survived the stack it led into"
+    );
+    assert_eq!(
+        after.len(),
+        before.len(),
+        "the sector lost a link instead of trading one"
+    );
+    assert_ne!(after, before, "no replacement link appeared");
+}
+
+/// The run's record of a stack goes with the stack — and only that stack's.
+/// `StackMemory` is keyed by `(link tile, depth)`, so a wipe that reached
+/// wider would blank the map of every other stack the party has walked.
+#[test]
+fn a_collapsed_stack_is_forgotten() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let elsewhere = ((entrance.0 + 500), (entrance.1 + 500));
+    game.world
+        .resource_mut::<StackMemory>()
+        .0
+        .entry((elsewhere, 1))
+        .or_default()
+        .cleared = true;
+
+    kill_the_guardian(&mut game);
+
+    let memory = game.world.resource::<StackMemory>();
+    assert!(
+        !memory.0.keys().any(|&(tile, _)| tile == entrance),
+        "the collapsed stack's frames are still remembered"
+    );
+    assert!(
+        memory.0.contains_key(&(elsewhere, 1)),
+        "the wipe reached another stack's memory"
+    );
+}
+
+/// The replacement is held to the same ground rules as a zone's own links:
+/// walkable, off the base slab, and not sharing a tile with anything that
+/// would make walking onto it do something else.
+#[test]
+fn the_replacement_link_stands_on_ground_a_link_may_stand_on() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    let new = *entrance_tiles(&mut game)
+        .iter()
+        .find(|t| !before.contains(t))
+        .expect("a replacement link should have appeared");
+    let tile = game.world.resource_mut::<WorldMap>().tile(new.0, new.1);
+    assert!(tile.walkable, "the replacement landed on unwalkable ground");
+    assert_ne!(
+        tile.biome,
+        Biome::Platform,
+        "the replacement opened a hole in the base slab"
+    );
+    assert!(game.find_nest_at(new.0, new.1).is_none());
+    assert!(game.find_blocking_structure_at(new.0, new.1).is_none());
+    assert!(
+        (new.0 - entrance.0).abs().max((new.1 - entrance.1).abs()) >= STACK_MIN_LINK_TILES,
+        "the replacement opened on top of the collapse"
+    );
+}
+
+/// The kill and the teardown are not the same moment, and a Forgiving reboot
+/// can land between them: the guardian falls, its escort flatlines the
+/// player, and `difficulty::death_handling_system` throws the party out
+/// before the fight ends. Read positionally at teardown there is no
+/// `Locale::Stack` left to name the entrance, and the stack would survive
+/// with a cleared lair — a dud the player could re-enter forever.
+///
+/// Staged rather than played: an escort needs zone 2, and the interleaving
+/// needs the player to drop on the exact round the guardian does.
+#[test]
+fn a_guardian_killed_before_a_reboot_still_collapses_the_stack() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    outlast_the_guardian(&mut game);
+    walk_into_the_lair(&mut game);
+    assert!(game.has_active_battle(), "the lair should have roused");
+
+    game.mark_lair_cleared();
+    let (locale, current, trace) = crate::game::stack::surfaced();
+    game.world.insert_resource(locale);
+    game.world.insert_resource(current);
+    game.world.insert_resource(trace);
+
+    flee_until_clear(&mut game);
+
+    assert!(
+        !entrance_tiles(&mut game).contains(&entrance),
+        "the stack outlived a guardian that died in it"
+    );
+}
+
+/// Running from the guardian leaves it standing, and the stack with it —
+/// the collapse is what beating it buys.
+#[test]
+fn fleeing_the_guardian_leaves_the_stack_standing() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    outlast_the_guardian(&mut game);
+    walk_into_the_lair(&mut game);
+    assert!(game.has_active_battle(), "the lair should have roused");
+
+    flee_until_clear(&mut game);
+
+    assert!(game.is_underground(), "a jack-out is not a collapse");
+    assert!(
+        entrance_tiles(&mut game).contains(&entrance),
+        "fleeing collapsed the stack"
+    );
+}
+
+/// With nowhere legal to put the replacement, nothing collapses at all.
+///
+/// Deleting a link with nothing to trade for it is how a zone loses its last
+/// one, and `award_loot` underground is the game's only source of Portal
+/// Fragments — a run that can never breach again, reading to the player as a
+/// bad seed rather than as a bug. So the site is found first and the old link
+/// only comes down once there is somewhere to put a new one.
+///
+/// This is also the one branch where `FrameMemory::cleared` is still doing
+/// work: the party walks out of a stack that survived them, and the guardian
+/// has to stay down.
+#[test]
+fn with_nowhere_to_put_a_new_link_the_stack_does_not_collapse() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    // Only the band the search actually walks. Overriding the entrance tile
+    // too would rewrite the biome `pick_lair_species` reads off it, and the
+    // lair would field nothing to kill.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        let reach = STACK_COLLAPSE_RELINK_TILES;
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                if dx.abs().max(dy.abs()) < STACK_MIN_LINK_TILES {
+                    continue;
+                }
+                map.set_override(
+                    entrance.0 + dx,
+                    entrance.1 + dy,
+                    Tile {
+                        biome: Biome::BlackIce,
+                        walkable: false,
+                    },
+                );
+            }
+        }
+    }
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    assert!(game.is_underground(), "a skipped collapse still ejected");
+    assert_eq!(
+        entrance_tiles(&mut game),
+        before,
+        "the sector lost a link with nothing to trade for it"
+    );
+
     // Counting the lair's own line rather than asserting no battle at all:
     // an ordinary encounter can roll on any step, and would otherwise fail
     // this test at random.
-    let before = roused_count(&game);
+    let roused = roused_count(&game);
     game.step_back();
     game.step_forward();
     assert_eq!(
         roused_count(&game),
-        before,
+        roused,
         "the guardian roused again after being killed"
     );
 }
@@ -1803,43 +1997,30 @@ fn roused_count(game: &Game) -> usize {
         .count()
 }
 
+/// A collapse is world state rather than a view of it: the link entities go
+/// through `SaveData::link_sites`, so a reload has to hand back the sector
+/// the party left rather than the one the seed would draw fresh.
 #[test]
-fn a_cleared_lair_stays_cleared_across_a_save_and_load() {
+fn a_collapsed_stack_stays_collapsed_across_a_save_and_load() {
     let assets = test_assets_dir();
-    let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.enter_stack(pos.x, pos.y);
-    {
-        let player = game.player_entity();
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.max_hp = 100_000;
-        stats.hp = 100_000;
-        stats.atk = 100_000;
-        stats.def = 100_000;
-    }
-    walk_into_the_lair(&mut game);
-    let mut rounds = 0;
-    while game.has_active_battle() && rounds < 60 {
-        player_attacks(&mut game);
-        rounds += 1;
-    }
-    assert!(!game.has_active_battle());
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    kill_the_guardian(&mut game);
+    let after = entrance_tiles(&mut game);
+    assert!(!after.contains(&entrance), "the stack did not collapse");
 
     let path = std::env::temp_dir().join(format!(
-        "feral_processes_lair_cleared_{}.bin",
+        "feral_processes_stack_collapse_{}.bin",
         std::process::id()
     ));
     game.save(&path).unwrap();
     let mut loaded = Game::load(&path, &assets).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let before = roused_count(&loaded);
-    loaded.step_back();
-    loaded.step_forward();
     assert_eq!(
-        roused_count(&loaded),
-        before,
-        "loading refilled a lair the party had already cleared"
+        entrance_tiles(&mut loaded),
+        after,
+        "loading rebuilt the link the collapse took down"
     );
 }
 

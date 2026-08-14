@@ -665,6 +665,30 @@ impl Game {
                     .into(),
             });
         }
+        self.post_worker(worker, structure, from);
+        self.log_base("Cronjob scheduled.");
+        self.tick();
+        Ok(())
+    }
+
+    /// Everything posting a program to a machine *does*, with none of what
+    /// decides whether it may — `assign_cronjob` above is those refusals
+    /// plus a call to this, and `schedule_base_labour` calls it directly
+    /// having answered the same questions its own way.
+    ///
+    /// Split so the scheduler drives the mechanism that already exists
+    /// rather than growing a second one: the same `Task`, the same
+    /// `CronjobSave`, the same hauling, the same `work_ticks_for` rate
+    /// baked in at assignment. That is what makes an existing save's
+    /// postings survive and keeps the walk-in, the depot errand and the
+    /// `Stranded` marker working without being reasoned about again.
+    ///
+    /// `from` is where the program sets off, and both callers pass the
+    /// player's tile. A tamed program's `Position` is the tile it was
+    /// beaten on and is never written again (`views.rs` says so), so
+    /// posting is the moment it starts meaning something and therefore the
+    /// moment to make it true.
+    pub(crate) fn post_worker(&mut self, worker: Entity, structure: Entity, from: Position) {
         if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
             *pos = from;
         }
@@ -684,9 +708,6 @@ impl Game {
             progress: 0,
             required: ticks,
         });
-        self.log_base("Cronjob scheduled.");
-        self.tick();
-        Ok(())
     }
 
     /// Posts `worker` (a tamed program you own) to guard `structure`

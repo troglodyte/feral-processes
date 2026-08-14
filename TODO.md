@@ -15,7 +15,7 @@
 15. show equipped slots on main battle page
 17. extract a routine screen should show a list of routines to extract per entity
 20. too easy to level up, lets slow that down a bit
-
+21. missions, quests
 
 # Bugs
 8. attacking groups of enemies shouldn't pull in nearby bosses

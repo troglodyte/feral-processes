@@ -27,6 +27,33 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.25
+
+### The extract picker names what each program is carrying
+
+Breaking a program down destroys it for exactly one of its routines, and
+until now the screen that asked you to choose said nothing about what was
+inside any of them — the only way to find out was to open each program in
+turn and back out again. Each row now carries its kit on the line beneath
+it:
+
+```
+  s [a] Sprite Lv7
+        Patch Routine (known), Static Burst
+  g [b] Glitch Lv4 ++
+        Priority Boost (known), Overclock (known)
+```
+
+The `(known)` tag is the part that decides it. Extraction *refuses* a
+routine you already know, so a program whose whole kit is tagged is worth
+nothing on the block — and that was invisible until you had walked two
+screens in to find it.
+
+The list is the same call the next page makes, so the two cannot describe a
+program two ways, and the routines shed onto their own lines rather than
+running off the popup's right edge. That wrapping is now one piece of code
+shared with the fuse picker, which grew the same lines a release ago.
+
 ## 0.8.24
 
 ### The battle roster says what each member is wearing

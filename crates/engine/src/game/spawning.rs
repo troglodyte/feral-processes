@@ -2,9 +2,9 @@
 //! creatures.
 
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, INITIAL_SPAWN_SCATTER_TILES, MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS,
-    MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE,
-    NEST_TETHER_RADIUS, OPENING_RING_TILES, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
+    BOSS_SPAWN_CHANCE, INITIAL_SPAWN_SCATTER_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
+    NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS,
+    OPENING_RING_TILES, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
@@ -380,8 +380,9 @@ impl Game {
     pub(crate) fn distance_from_danger_origin(&self, x: i32, y: i32) -> i32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
-        if self.world.resource::<Platform>().center.is_some() {
-            (dist - MAX_BUILD_DISTANCE_FROM_HOME).max(0)
+        let platform = self.world.resource::<Platform>();
+        if platform.center.is_some() {
+            (dist - platform.radius).max(0)
         } else {
             dist
         }
@@ -566,13 +567,14 @@ impl Game {
     pub(crate) fn spawn_initial_creatures(&mut self, count: usize) {
         let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         // A base platform lists no habitat species, so every roll landing
-        // inside one is a guaranteed miss. The platform is exactly as wide
-        // as the default scatter and the player materializes at its center,
-        // so without pushing the scatter out past its edge a zone breached
-        // into with a base would be born completely empty.
+        // inside one is a guaranteed miss. The player materializes at the
+        // platform's centre, so without pushing the scatter out past its
+        // edge a zone breached into with a base would be born completely
+        // empty — and the edge moves, since a base grows.
+        let platform = *self.world.resource::<Platform>();
         let reach = INITIAL_SPAWN_SCATTER_TILES
-            + if self.world.resource::<Platform>().center.is_some() {
-                MAX_BUILD_DISTANCE_FROM_HOME
+            + if platform.center.is_some() {
+                platform.radius
             } else {
                 0
             };

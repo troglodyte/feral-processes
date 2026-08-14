@@ -13,7 +13,7 @@
 # ingredient` holds to one input apiece.
 S = [
  # id               name             glyph color    build cost                                 kind        makes / does                    ticks cap  feeder          upgrade
- ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 7",     None, None, None,          None),
+ ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 4 and up", None, None, None,          None),
  ("mining_node",    "Mining Node",    "$", "Brown",  [("core_fragment", 12)],                   "producer", "core_fragment",                    10, None, None,          10),
  ("log_scraper",    "Log Scraper",    "T", "Cyan",   [("core_fragment", 14)],                   "producer", "raw_trace",                        10, None, None,          10),
  ("research_node",  "Research Node",  "R", "Cyan",   [("core_fragment", 10)],                   "producer", "research_data",                    14, None, None,          10),
@@ -34,7 +34,8 @@ S = [
  ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs empty full machines into it",None, 100, None,        None),
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12),
- ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick within 7 tiles",  None, None, None,          None),
+ ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None),
+ ("heap_pillar",    "Heap Pillar",    "I", "Cyan",   [("core_fragment", 14)],                   "utility",  "+1 tile of base radius, max 5",   None, None, None,          None),
  ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None),
 ]
 K = "id name glyph color cost kind does ticks cap feeder upgrade".split()
@@ -112,12 +113,13 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-06 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-13 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Everything below must be deployed on the base slab — within 7 tiles of a Home,
+Everything below must be deployed on the base slab — within 4 tiles of a Home,
 minus the chamfer taken off each of the slab's four corners — and demolishing
-the Home cascades to the rest. A structure named by no research file is
+the Home cascades to the rest. Each Heap Pillar pushes that radius out by one,
+and five is all a grid will hold, so a base tops out at 19x19. A structure named by no research file is
 buildable from turn one; the [research tree](research.md) gates the machines
 that automate a base, not the base itself.
 

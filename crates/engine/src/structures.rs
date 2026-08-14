@@ -276,6 +276,32 @@ pub struct StructureDef {
     /// existed.
     #[serde(default)]
     pub pet_slot_bonus: u32,
+    /// How many tiles this structure widens the base platform by while it's
+    /// deployed (see `Game::build_radius`). Stacks additively across every
+    /// deployed structure that sets it, so each Heap Pillar creeps the edge
+    /// out by another tile, up to `tuning::MAX_BUILD_RADIUS_TILES`.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// contribute nothing, same as before it existed.
+    ///
+    /// Anything setting this is refused by `remove_structure` outside a Home
+    /// cascade: growth is irreversible, which is what removes the question of
+    /// what happens to structures left standing outside a shrinking slab.
+    #[serde(default)]
+    pub build_radius_bonus: i32,
+    /// How many of this structure may stand at once. `0` — the default, and
+    /// what every shipped structure but the Heap Pillar leaves it at — means
+    /// no limit, so an existing file and any mod that never heard of the
+    /// field is unaffected.
+    ///
+    /// This is where a structure whose *effect accumulates* is bounded, and
+    /// the Pillar is the case it exists for: bounding growth by
+    /// `MAX_BUILD_RADIUS_TILES` alone puts the limit ninety-six purchases
+    /// away, which is no limit a player will ever meet. A count is the knob
+    /// worth tuning, and it lives here rather than in `tuning.rs` because it
+    /// is a property of the structure — a mod adds a capped structure by
+    /// setting a number, not by editing the engine.
+    #[serde(default)]
+    pub max_deployed: u32,
     /// If set, `Game::rest` is only allowed while the player stands within
     /// this structure's `radius` — resting has no other way to happen.
     /// `#[serde(default)]` so existing structure files (including mods)

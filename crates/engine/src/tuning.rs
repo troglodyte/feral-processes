@@ -145,13 +145,21 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// its zone, and underground of its depth. What survives is a pocket, not
 /// a curve.
 ///
-/// Set to `MAX_BUILD_DISTANCE_FROM_HOME` so the ring is exactly your base
-/// and its doorstep, and travels with the base for free once a Home is
-/// placed. An explicit radius rather than "wherever the curves say a fight
-/// is one program", which is how the ring used to be spelled: with fixed
-/// zone scaling that condition is true across the whole of zone 1, so the
-/// old spelling would have silently made the entire zone a nursery.
-pub const OPENING_RING_TILES: i32 = MAX_BUILD_DISTANCE_FROM_HOME;
+/// Its own literal, and deliberately *not* `MAX_BUILD_DISTANCE_FROM_HOME`,
+/// which is what it used to be. That spelling made the ring exactly your
+/// base and its doorstep, travelling with the base for free — an argument
+/// that only held while the base was one fixed size. It is now a starting
+/// size a Heap Pillar grows, so a derived ring would shrink the nursery to
+/// 4 for the opening minutes and then *widen* it every time the player
+/// builds, which is a difficulty knob keyed to base geometry: precisely the
+/// thing removed on 2026-08-05 when distance stopped scaling anything.
+/// 7 keeps the ring the size it has always been and stops it moving.
+///
+/// An explicit radius rather than "wherever the curves say a fight is one
+/// program", which is how the ring used to be spelled before that: with
+/// fixed zone scaling that condition is true across the whole of zone 1, so
+/// the old spelling would have silently made the entire zone a nursery.
+pub const OPENING_RING_TILES: i32 = 7;
 
 /// How far `x` looks along the row or column the player is facing
 /// (`Game::find_target_in_direction`).
@@ -671,23 +679,30 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 /// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
 /// trip rather than a glance.
 ///
-/// It does *not* keep links off the base platform, though it used to claim
-/// so: `STACK_NEAREST_LINK_TILES` places the first link of every zone 5-8
-/// tiles out, against a slab of `MAX_BUILD_DISTANCE_FROM_HOME` 7. What
-/// actually holds that line is `Game::stamp_platform`, which despawns any
-/// link inside the slab, plus `spawn_surface_links` skipping
-/// `Biome::Platform` when the platform already exists.
+/// It does *not* keep links off the base platform, and neither does the
+/// on-ramp's ring by itself — that ring is measured from the slab that
+/// exists when the zone is generated, and a Home deployed afterwards moves
+/// the slab somewhere placement never saw. What holds the line is
+/// `Game::stamp_platform`, which despawns any link inside the slab, plus
+/// `spawn_surface_links` skipping `Biome::Platform` when the platform
+/// already exists.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
-/// How close the *first* link of a zone is placed.
+/// How far past the base's own edge the *first* link of a zone is placed —
+/// the width of the ring `Game::spawn_surface_links` draws its on-ramp from,
+/// starting one tile outside the slab.
 ///
-/// Measured against the map viewport rather than picked for feel: at the
-/// default zoom the pane shows roughly ±16 by ±9 tiles, so anything past
-/// this is off screen when the player materializes. With all three links
-/// scattered to `STACK_LINK_SCATTER_TILES`, most seeds put every one
-/// of them out of sight, and a player with no reason to think links exist
-/// has no reason to go looking. One always within the opening view is the
-/// on-ramp; the other two are still a trip.
+/// It means "on your doorstep", and it used to mean "on screen": the pane
+/// shows roughly ±16 by ±9 tiles at the default zoom, and a link inside that
+/// was how a player with no reason to think links exist found the first one.
+/// That promise cannot survive a base that grows — at
+/// `MAX_BUILD_RADIUS_TILES` the slab has eaten the viewport itself, so the
+/// nearest ground a link may stand on is already past the bottom of the
+/// pane. `Game::announce_surface_links` is what keeps the layer
+/// discoverable now: the arrival scan reports how many links the sector has
+/// and which way the nearest one lies, which does not depend on where the
+/// pane happens to end. The other two links are still a trip
+/// (`STACK_LINK_SCATTER_TILES`).
 pub const STACK_NEAREST_LINK_TILES: i32 = 8;
 
 /// How close a link may get to where the player materializes.
@@ -1503,12 +1518,39 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 pub const HAUL_CARRY_CAPACITY: u32 = 5;
 
 /// How far a hauling program's cost field reaches, centred on the tile it is
-/// walking to. Twice `MAX_BUILD_DISTANCE_FROM_HOME`, because two structures
-/// in one base can sit at opposite corners of that box and a worker may be
-/// standing just outside it. Bounding the search is what stops a walk toward
-/// something unreachable generating chunks forever on a lazily-generated
-/// infinite map — the same reason `pursuit_field` bounds its successors.
-pub const HAUL_WALK_RADIUS: i32 = MAX_BUILD_DISTANCE_FROM_HOME * 2;
+/// walking to — twice the *live* build radius, because two structures in one
+/// base can sit at opposite corners of the slab and a worker may be standing
+/// just outside it. A constant is what this used to be, and it cannot be one
+/// any more: a base grown past the starting radius would refuse postings
+/// across its own width, and `hauling::post_reach` is the single predicate
+/// the cronjob menu and the assignment share, so a posting the menu accepted
+/// would be one that never arrived.
+///
+/// Bounding the search at all is what stops a walk toward something
+/// unreachable generating chunks forever on a lazily-generated infinite map
+/// — the same reason `pursuit_field` bounds its successors.
+///
+/// `HAUL_WALK_MAX_TILES` is the second bound, and it is a performance floor
+/// rather than a design one. The field is a Dijkstra search over a disc, so
+/// its cost is quadratic in the reach, and the reach is twice the radius —
+/// which makes it quartic in base size. Measured in a debug build, one
+/// posted worker walking, per tick: 8 ms at radius 10, 28 ms at 20, 65 ms
+/// at 30, and **764 ms at the ceiling of 100**. A tick is a keypress, and
+/// several workers walk at once, so the far end of that is not a game.
+///
+/// Capping the reach keeps `post_reach` and `haul_step_system` in agreement,
+/// because both read this one function: on a base wider than the cap allows,
+/// the cronjob menu refuses a post the walker could not have completed and
+/// says to get closer, rather than accepting one that never arrives.
+pub fn haul_walk_radius(build_radius: i32) -> i32 {
+    (build_radius * 2).min(HAUL_WALK_MAX_TILES)
+}
+
+/// The furthest a hauling program's walk field ever reaches, however wide
+/// the base — see `haul_walk_radius` for the measurements behind it. Set so
+/// a base up to radius 30 is crossable end to end, which is three times the
+/// size the Heap Pillar's cost makes routine.
+pub const HAUL_WALK_MAX_TILES: i32 = 60;
 
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch
@@ -1659,11 +1701,52 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// Every non-Home structure must be deployed within this many tiles (per
-/// axis, same box-radius style as `StructureDef::power_regen`'s
-/// `radius`) of the Home structure — a base clusters around its Home
-/// rather than sprawling across the map.
-pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 7;
+/// The radius a base *starts* at, not the radius it has: every non-Home
+/// structure must be deployed within `Game::build_radius` tiles (per axis,
+/// same box-radius style as `StructureDef::power_regen`'s `radius`) of the
+/// Home, and that live value is this constant plus every deployed
+/// structure's `StructureDef::build_radius_bonus`, clamped to
+/// `MAX_BUILD_RADIUS_TILES`. Read the live one anywhere the answer is about
+/// a base that exists; this one only says where a fresh Home begins.
+///
+/// A 9x9 slab of ~69 buildable tiles, halved from the 15x15 it was until
+/// the Heap Pillar shipped. The opening base is deliberately cramped —
+/// growth is the feature, and a base that starts at its final size can
+/// never read as a settlement that grew.
+pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
+
+/// The widest a base can ever get: `Game::build_radius` clamps here no
+/// matter how many `build_radius_bonus` structures are deployed. A 201x201
+/// slab, which is not a balance figure — it is a backstop, deliberately far
+/// past anything a run will build.
+///
+/// **This is not the knob that decides how big a base gets.** Ninety-six
+/// Heap Pillars is what the ceiling costs, and the Pillar's price is what
+/// actually paces growth. The constant exists because two things need a
+/// bound rather than a live radius: `Game::clear_platform` sweeps this box
+/// when a Home comes down, since it has to cover the largest slab that
+/// could ever have existed rather than the current shape, and nothing
+/// downstream should have to reason about an unbounded footprint.
+///
+/// It was 10 until 2026-08-13, on two arguments that no longer hold. One
+/// was that the 31x31 base predating 2026-07-24 had been judged too big —
+/// but that was a base handed to you, and this one is bought a ring at a
+/// time. The other was the Stack on-ramp: a slab wide enough swallowed the
+/// box a zone's links were drawn from, which starved the zone of links
+/// entirely. That is fixed at the source — every link now draws from the
+/// ring *outside* the slab, not from a box the slab can eat — so the cap
+/// is no longer holding anything up.
+///
+/// Two costs scale with the square of a real base's radius and are worth
+/// knowing before anyone builds toward this: `stamp_platform` writes a tile
+/// override per slab tile and the save carries every one of them, and
+/// `haul_walk_radius` doubles it into a Dijkstra field a walking worker
+/// rebuilds each tick.
+///
+/// Two asset radii are pinned to this rather than to the starting radius —
+/// the Home's `enables_rest` and the Recharger Node's `power_regen` — so
+/// "covers the whole base" stays true of a base that has grown.
+pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 
 /// How deep each of the base slab's four corners is chamfered, in diagonal
 /// steps — the slab is the box above with `Platform::covers` trimming a

@@ -1,7 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, haul_walk_radius};
 use crate::*;
 
 #[test]
@@ -899,9 +899,9 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         .as_ref()
         .expect("the Recharger Node should regenerate Power");
     assert_eq!(regen.per_tick, 1.0);
-    assert_eq!(
-        regen.radius, MAX_BUILD_DISTANCE_FROM_HOME,
-        "the Recharger Node should cover the whole base"
+    assert!(
+        regen.radius >= MAX_BUILD_DISTANCE_FROM_HOME,
+        "the Recharger Node should at least cover the base it is first built on"
     );
     assert!(
         def.enables_rest.is_none(),
@@ -934,7 +934,8 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    spawn_recharger_node(&mut game, MAX_BUILD_DISTANCE_FROM_HOME + 1, 0);
+    let reach = recharger_reach(&game);
+    spawn_recharger_node(&mut game, reach + 1, 0);
 
     game.wait();
 
@@ -1504,7 +1505,7 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 /// again — `views.rs` says so and `render/base.rs` refuses to draw a
 /// companion because of it. So the stale tile can be anywhere the player has
 /// ever fought, and a walk measured from it strands a worker outside
-/// `HAUL_WALK_RADIUS` of its own machine: `haul_step_system` finds it absent
+/// `haul_walk_radius` of its own machine: `haul_step_system` finds it absent
 /// from the field, steps nowhere this tick and every tick after, and the
 /// cronjob produces nothing for the rest of the run while looking scheduled.
 #[test]
@@ -1520,7 +1521,8 @@ fn a_posted_program_starts_from_the_player() {
         .unwrap() = player_pos;
     // Tamed far enough out that the old rule would have refused it outright,
     // and far enough that it could never have walked in.
-    let worker = spawn_tamed_on_map(&mut game, 3, 4 + HAUL_WALK_RADIUS + 5);
+    let reach = haul_walk_radius(game.build_radius());
+    let worker = spawn_tamed_on_map(&mut game, 3, 4 + reach + 5);
 
     game.assign_cronjob(worker, structure)
         .expect("a program you are carrying can be posted wherever you are standing");
@@ -1540,12 +1542,13 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed_on_map(&mut game, 3, 3);
+    let reach = haul_walk_radius(game.build_radius());
     *game
         .world
         .get_mut::<Position>(game.player_entity())
         .unwrap() = Position {
         x: 3,
-        y: 4 + HAUL_WALK_RADIUS + 5,
+        y: 4 + reach + 5,
     };
 
     let err = game
@@ -1969,4 +1972,672 @@ fn a_wild_program_will_not_wander_onto_the_base_slab() {
             pos.y
         );
     }
+}
+
+/// A structure whose only job is to widen the slab — the shape the Heap
+/// Pillar ships in, written here as a mod so the derivation is under test
+/// before any shipped asset sets the field.
+const WIDENING_PILLAR: &str = r#"(
+    id: "test_pillar",
+    name: "Test Pillar",
+    description: "Widens the base by one tile.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 1,
+)"#;
+
+/// A bonus that lands a base on `GROWN_RADIUS` in one structure, so a
+/// fixture wanting a grown base does not have to count out six Pillars.
+const GROWN_PILLAR: &str = r#"(
+    id: "test_grown_pillar",
+    name: "Test Grown Pillar",
+    description: "Widens the base to a realistic grown size.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 6,
+)"#;
+
+/// The same, with a bonus far past the ceiling — the clamp is what is under
+/// test, not how many structures fit on a slab.
+const HUGE_PILLAR: &str = r#"(
+    id: "test_huge_pillar",
+    name: "Test Huge Pillar",
+    description: "Widens the base absurdly.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 99,
+)"#;
+
+fn game_with_pillar(tag: &str, body: &str) -> Game {
+    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", body);
+    let game = Game::new(700, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    game
+}
+
+/// Spawns `kind` as a deployed structure at `(x, y)` without going through
+/// `place_structure`, which would refuse anything outside the very radius
+/// under test.
+fn spawn_structure_of(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: StructureId::from(kind),
+            },
+            Position { x, y },
+        ))
+        .id()
+}
+
+#[test]
+fn a_base_with_nothing_deployed_is_the_starting_radius() {
+    let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "a fresh run builds at the starting radius"
+    );
+}
+
+#[test]
+fn each_deployed_widening_structure_adds_its_bonus() {
+    let mut game = game_with_pillar("build_radius_sum", WIDENING_PILLAR);
+    spawn_structure_of(&mut game, "test_pillar", 1, 0);
+    spawn_structure_of(&mut game, "test_pillar", 2, 0);
+
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_DISTANCE_FROM_HOME + 2,
+        "the bonus stacks additively across deployed structures"
+    );
+}
+
+#[test]
+fn the_build_radius_clamps_at_its_ceiling() {
+    let mut game = game_with_pillar("build_radius_clamp", HUGE_PILLAR);
+    spawn_structure_of(&mut game, "test_huge_pillar", 1, 0);
+
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_RADIUS_TILES,
+        "no amount of bonus takes a base past the ceiling"
+    );
+}
+
+/// The claim that buys the whole design: because the radius is derived from
+/// deployed structures rather than stored, it comes back on load with no
+/// save-format change at all — this must pass at the current
+/// `SAVE_FORMAT_VERSION`.
+#[test]
+fn a_widened_footprint_survives_a_save_and_load() {
+    let dir =
+        assets_dir_with_extra_structure("build_radius_save", "test_pillar.ron", WIDENING_PILLAR);
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    spawn_structure_of(&mut game, "test_pillar", 1, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    game.stamp_platform(home.x, home.y);
+    let before = game.world.resource::<Platform>().radius;
+    assert_eq!(
+        before,
+        MAX_BUILD_DISTANCE_FROM_HOME + 1,
+        "precondition: the Pillar widened the live footprint"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_build_radius_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        loaded.world.resource::<Platform>().radius,
+        before,
+        "the radius is rediscovered from the structures the save already carries"
+    );
+}
+
+/// The reach the shipped Recharger Node def declares.
+fn recharger_reach(game: &Game) -> i32 {
+    game.structure_defs()
+        .into_iter()
+        .find(|d| d.id == "recharger_node")
+        .and_then(|d| d.power_regen.map(|r| r.radius))
+        .expect("the Recharger Node regenerates Power")
+}
+
+/// How wide a base these fixtures call "grown". Deliberately not
+/// `MAX_BUILD_RADIUS_TILES`, which is a backstop rather than a target: at the
+/// ceiling a stamp lays 40,401 tiles and a hauling walk searches four times
+/// that, which measures the pathological case and costs the suite minutes.
+const GROWN_RADIUS: i32 = 10;
+
+/// A base grown to `GROWN_RADIUS`, with the Pillar's bonus taken in one
+/// structure rather than counted out one at a time.
+fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
+    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", GROWN_PILLAR);
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    spawn_structure_of(&mut game, "test_grown_pillar", 1, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    game.stamp_platform(home.x, home.y);
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        GROWN_RADIUS,
+        "precondition: the base is grown well past its start"
+    );
+    (game, dir)
+}
+
+/// A posting the cronjob menu accepts has to be a posting that arrives, and
+/// the walk that delivers it is bounded by a radius. Left on the old
+/// constant, a fully grown base refuses postings across its own width — a
+/// machine you can see from your Home and cannot staff.
+#[test]
+fn a_program_walks_across_a_fully_grown_base_to_its_post() {
+    let (mut game, dir) = fully_grown_base("grown_base_walk", 702);
+    let r = GROWN_RADIUS;
+    game.place_structure("mining_node", r, 0).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = game
+        .find_blocking_structure_at(ppos.x + r, ppos.y)
+        .expect("the node was just deployed");
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    let worker = spawn_tamed(&mut game, 500, 3);
+
+    // Posted from the opposite edge of the slab: the whole width of the base
+    // separates the program from its machine.
+    stand_player_at(&mut game, ppos.x - r, ppos.y);
+    game.assign_cronjob(worker, node).unwrap();
+
+    for _ in 0..200 {
+        if game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        "a worker posted from one edge of a full-size base must reach the other"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Halving the starting radius put every existing save in the position a
+/// pre-corner-cut save was already in: a slab in `tile_overrides` wider than
+/// anything the current shape claims. Demolishing the Home has to take all
+/// of it, or the run keeps a ring of orphan floor around nothing forever.
+#[test]
+fn demolishing_a_home_clears_floor_wider_than_the_current_radius() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    // The slab a save written before the halving carries, laid straight
+    // into the map because `stamp_platform` derives its own radius and can
+    // no longer produce one this wide.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+            for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+                map.set_override(
+                    home.x + dx,
+                    home.y + dy,
+                    Tile {
+                        biome: Biome::Platform,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    game.clear_platform();
+
+    let mut map = game.world.resource_mut::<WorldMap>();
+    for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+        for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+            assert_ne!(
+                map.tile(home.x + dx, home.y + dy).biome,
+                Biome::Platform,
+                "orphan floor left at ({dx}, {dy})"
+            );
+        }
+    }
+}
+
+/// A base with the Heap Pillar researched and the fragments to buy a few.
+fn base_ready_for_pillars(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    game.world
+        .resource_mut::<Research>()
+        .0
+        .insert("heap_allocation".to_string());
+    game
+}
+
+#[test]
+fn a_heap_pillar_lays_floor_one_tile_past_the_old_edge() {
+    let mut game = base_ready_for_pillars(710);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    assert_ne!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + edge + 1, home.y)
+            .biome,
+        Biome::Platform,
+        "precondition: the ring beyond the edge is still wild ground"
+    );
+
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        edge + 1,
+        "a Pillar widens the live footprint"
+    );
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + edge + 1, home.y)
+            .biome,
+        Biome::Platform,
+        "and the new ring gets floor, so it can be built on"
+    );
+}
+
+#[test]
+fn the_new_ring_is_buildable_and_the_one_past_it_is_not() {
+    let mut game = base_ready_for_pillars(711);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
+
+    game.place_structure("mining_node", edge, 0)
+        .expect("the ring a Pillar just laid is base ground like any other");
+    let err = game
+        .place_structure("mining_node", edge + 1, 0)
+        .expect_err("one tile past the new edge is still outside the base");
+    assert!(
+        err.contains("Too far from Home"),
+        "unexpected refusal: {err}"
+    );
+}
+
+/// Growth may swallow a link, the same way deploying a Home over one always
+/// has — `stamp_platform` despawns any link inside the slab it lays. What it
+/// may not do is swallow the *last* one, which is what the refusal is
+/// actually for: `award_loot` underground is the only source of Portal
+/// Fragments, so a zone with no link left is a run that can never breach.
+#[test]
+fn a_pillar_may_bury_a_link_while_the_zone_has_another() {
+    let mut game = base_ready_for_pillars(712);
+    let home = game.home_position().expect("the fixture just placed one");
+    let doomed = (home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1, home.y);
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
+    for (x, y) in [doomed, (home.x + 200, home.y)] {
+        game.world.spawn((SurfaceLink, Position { x, y }));
+    }
+
+    game.place_structure("heap_pillar", 1, 0)
+        .expect("a link is not worth stopping the base growing while another remains");
+
+    assert!(
+        game.find_surface_link_at(doomed.0, doomed.1).is_none(),
+        "the ground the base claimed took the link with it"
+    );
+}
+
+/// The last link is the one that cannot go, and the refusal has to come
+/// before anything is spent — the same ordering `install_routine` keeps
+/// between checking knowledge and taking the disk. Asserting the refusal
+/// alone would pass against a build that charged for it, which is the half
+/// that matters.
+#[test]
+fn a_pillar_over_a_zones_last_link_is_refused_and_costs_nothing() {
+    let mut game = base_ready_for_pillars(712);
+    let home = game.home_position().expect("the fixture just placed one");
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
+    game.world.spawn((
+        SurfaceLink,
+        Position {
+            x: home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1,
+            y: home.y,
+        },
+    ));
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    let err = game
+        .place_structure("heap_pillar", 1, 0)
+        .expect_err("burying the only way down would end the run's breaches");
+
+    assert!(err.contains("link"), "unexpected refusal: {err}");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a refused build must not have spent anything"
+    );
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "and must not have widened the base either"
+    );
+}
+
+/// Growth is irreversible, which is what removes the whole shrink question:
+/// no orphaned outer structures, no partial `clear_platform`, no state the
+/// build rules say is impossible. The Home cascade is the one exception,
+/// because there the base is coming down entirely.
+#[test]
+fn a_pillar_cannot_be_demolished_except_with_its_home() {
+    let mut game = base_ready_for_pillars(713);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let pillar = game
+        .find_blocking_structure_at(ppos.x + 1, ppos.y)
+        .expect("the Pillar was just deployed");
+
+    game.remove_structure(pillar)
+        .expect_err("a Pillar cannot come down on its own");
+    assert!(
+        game.world.get::<Structure>(pillar).is_some(),
+        "the refused demolition left it standing"
+    );
+
+    let home = game
+        .find_blocking_structure_at(ppos.x, ppos.y)
+        .expect("the Home is on the player's tile");
+    game.remove_structure(home)
+        .expect("demolishing the Home cascades over everything, Pillars included");
+    assert!(
+        game.world.get::<Structure>(pillar).is_none(),
+        "the cascade must take the Pillar with it"
+    );
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "no Home means no slab, so the radius resets"
+    );
+}
+
+/// Breaching despawns no structures — the base travels, repositioned around
+/// the new spawn point — so the Pillars travel with it and `enter_next_zone`
+/// re-stamps at the right size with no code of its own. This asserts the
+/// consequence rather than the mechanism, which is what would catch a later
+/// change that starts rebuilding the slab from the constant.
+#[test]
+fn a_widened_base_breaches_at_the_size_it_had() {
+    let mut game = base_ready_for_pillars(714);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    game.place_structure("heap_pillar", 2, 0).unwrap();
+    let grown = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    assert_eq!(game.world.resource::<Platform>().radius, grown);
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        grown,
+        "the base arrived in the next sector smaller than it left"
+    );
+    let home = game
+        .home_position()
+        .expect("the base travels rather than being rebuilt");
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + grown, home.y)
+            .biome,
+        Biome::Platform,
+        "and the new zone's slab was stamped at the grown size"
+    );
+}
+
+/// A shipped Pillar's radius through the real save path, where the modded
+/// fixture above proves the derivation and this proves the asset.
+#[test]
+fn a_shipped_pillars_width_survives_a_save_and_load() {
+    let mut game = base_ready_for_pillars(715);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let before = game.world.resource::<Platform>().radius;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_heap_pillar_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.world.resource::<Platform>().radius, before);
+}
+
+/// The slab always covers every structure standing on it.
+///
+/// Inert for any base built under the current rules — `place_structure`
+/// refuses anything outside the footprint, so the outermost structure is
+/// never further out than the radius already is. What it is for is a base
+/// built under *older* rules: halving the starting radius left every
+/// existing save with a 15x15 slab of stamped floor against a buildable 9x9,
+/// which is 156 tiles that look exactly like base and refuse to be built on,
+/// with the player standing on one of them.
+///
+/// It has to live in `build_radius` rather than in the load path, because
+/// `enter_next_zone` re-stamps from that derivation — a load-path fix would
+/// hand the base back and take it away again at the next breach.
+#[test]
+fn the_slab_covers_the_structures_standing_on_it() {
+    let mut game = base_ready_for_pillars(716);
+    let home = game.home_position().expect("the fixture just placed one");
+    let reach = MAX_BUILD_DISTANCE_FROM_HOME + 3;
+    // Spawned rather than deployed: `place_structure` would refuse the very
+    // position a legacy save is full of.
+    spawn_structure_of(&mut game, "data_cache", home.x + reach, home.y);
+
+    assert_eq!(
+        game.build_radius(),
+        reach,
+        "a base is at least as wide as the structures standing on it"
+    );
+
+    game.enter_next_zone();
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        reach,
+        "and it stays that wide through a breach, where the re-stamp happens"
+    );
+}
+
+/// The floor term never lifts a base past its ceiling, and it is a floor
+/// rather than a second budget: `max(start + bonuses, outermost)` cannot
+/// grow a base by building an ordinary structure at its own edge, because
+/// there `outermost` is only ever equal to the radius already in force.
+///
+/// The cost, which is real and worth knowing: on a base already wider than
+/// the starting radius, a Pillar buys nothing until the bonuses have caught
+/// up with the width it came in at. Only a save written before the starting
+/// radius was halved can be in that position, and it corrects itself.
+#[test]
+fn the_structure_floor_is_a_floor_and_not_a_second_budget() {
+    let mut game = base_ready_for_pillars(717);
+    let home = game.home_position().expect("the fixture just placed one");
+    spawn_structure_of(
+        &mut game,
+        "data_cache",
+        home.x + MAX_BUILD_RADIUS_TILES + 50,
+        home.y,
+    );
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_RADIUS_TILES,
+        "nothing takes a base past its ceiling, however far out a structure sits"
+    );
+
+    let mut game = base_ready_for_pillars(718);
+    let home = game.home_position().expect("the fixture just placed one");
+    let legacy = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    spawn_structure_of(&mut game, "data_cache", home.x + legacy, home.y);
+
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        legacy,
+        "a Pillar is absorbed while the bonuses are still under the width \
+         the base came in at"
+    );
+    game.place_structure("heap_pillar", 2, 0).unwrap();
+    game.place_structure("heap_pillar", 3, 0).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        legacy + 1,
+        "and starts paying again the moment they pass it"
+    );
+}
+
+/// Building an ordinary structure at the very edge must not widen the base.
+#[test]
+fn a_structure_at_the_edge_does_not_grow_the_base() {
+    let mut game = base_ready_for_pillars(719);
+    let before = game.build_radius();
+    game.place_structure("data_cache", MAX_BUILD_DISTANCE_FROM_HOME, 0)
+        .expect("the slab edge is buildable ground");
+    assert_eq!(
+        game.build_radius(),
+        before,
+        "the floor term is a floor, not a ratchet you can walk outward"
+    );
+}
+
+/// The link refusal has to ask what the radius would actually *become*, not
+/// assume the bonus lands whole.
+///
+/// On a base already wider than the starting radius the bonus is absorbed,
+/// so the ring the refusal was scanning is ground the base was never going
+/// to claim — and a link out there refused a Pillar that would not have
+/// touched it. Measured on the `chains` template: radius 7, a link at
+/// (6, -8) eight tiles out, and every placement refused.
+#[test]
+fn a_link_past_a_pillars_actual_reach_does_not_refuse_it() {
+    let mut game = base_ready_for_pillars(720);
+    let home = game.home_position().expect("the fixture just placed one");
+    let legacy = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    spawn_structure_of(&mut game, "data_cache", home.x + legacy, home.y);
+    // Re-stamped because that is what the load path does: the cached radius
+    // the refusal reads is otherwise still the one from Home placement, and
+    // the test would pass against the bug.
+    game.stamp_platform(home.x, home.y);
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        legacy,
+        "precondition: a legacy-wide base"
+    );
+    // One tile beyond the widest this base could be after a single Pillar,
+    // whose bonus this base absorbs entirely.
+    game.world.spawn((
+        SurfaceLink,
+        Position {
+            x: home.x + legacy + 1,
+            y: home.y,
+        },
+    ));
+
+    game.place_structure("heap_pillar", 1, 0)
+        .expect("a link outside the ground the base would claim is not in the way");
+}
+
+/// A structure can declare how many of it may stand at once, and the Heap
+/// Pillar is the first to use it: growth is bounded by a number you can
+/// tune in the asset rather than by the backstop radius.
+#[test]
+fn a_capped_structure_refuses_the_one_past_its_limit_and_costs_nothing() {
+    let mut game = base_ready_for_pillars(721);
+    // The zone's own links are not what is under test here, and this world
+    // has one five tiles out that would refuse the first Pillar.
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
+    let cap = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "heap_pillar")
+        .expect("heap_pillar.ron ships")
+        .max_deployed;
+    assert!(cap > 0, "the Pillar declares a limit");
+
+    // Placed in a ring around the player so each one has its own free tile.
+    let mut spots = (1..=4)
+        .flat_map(|d| [(d, 0), (-d, 0), (0, d), (0, -d)])
+        .filter(|&(dx, dy)| (dx, dy) != (0, 0));
+    for i in 0..cap {
+        let (dx, dy) = spots.next().expect("enough free ground for the cap");
+        game.place_structure("heap_pillar", dx, dy)
+            .unwrap_or_else(|e| panic!("pillar {i} refused: {e}"));
+    }
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let (dx, dy) = spots.next().unwrap();
+    let err = game
+        .place_structure("heap_pillar", dx, dy)
+        .expect_err("one past the limit must be refused");
+
+    assert!(
+        err.to_lowercase().contains("heap pillar"),
+        "the refusal should name what is capped: {err}"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a refused build must not have spent anything"
+    );
+}
+
+/// Every other structure is uncapped, and stays that way by defaulting —
+/// an existing file and any mod that never heard of the field is unlimited.
+#[test]
+fn a_structure_that_declares_no_limit_is_unlimited() {
+    let game = Game::new(722, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let capped: Vec<String> = game
+        .structure_defs()
+        .into_iter()
+        .filter(|d| d.max_deployed > 0)
+        .map(|d| d.id.to_string())
+        .collect();
+    assert_eq!(
+        capped,
+        vec!["heap_pillar".to_string()],
+        "only the Pillar is capped; the field defaults to no limit"
+    );
 }

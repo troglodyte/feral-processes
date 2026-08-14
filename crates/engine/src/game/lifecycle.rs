@@ -682,9 +682,15 @@ impl Game {
         }
 
         // The slab's tiles come back through SaveData::tile_overrides; only
-        // its center needs rediscovering, and the Home's position is it.
+        // its center and width need rediscovering, and the restored
+        // structures are both — the Home's position for one, and every
+        // `build_radius_bonus` among them for the other. Structures are
+        // already back by this point, so `build_radius` is correct here.
         if let Some(home) = game.home_position() {
-            game.world.resource_mut::<Platform>().center = Some((home.x, home.y));
+            let radius = game.build_radius();
+            let mut platform = game.world.resource_mut::<Platform>();
+            platform.center = Some((home.x, home.y));
+            platform.radius = radius;
         }
 
         // Reconnect each restored cronjob to its target structure now that

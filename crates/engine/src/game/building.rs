@@ -3,7 +3,7 @@
 
 use crate::game::hauling;
 use crate::structures::UpgradeDef;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
+use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
 impl Game {
@@ -33,9 +33,11 @@ impl Game {
 
         if structure_id != HOME_STRUCTURE_ID {
             let home = self.home_position().expect("checked above: a Home exists");
-            if !Platform::covers(x - home.x, y - home.y) {
+            let platform = *self.world.resource::<Platform>();
+            if !platform.covers(x - home.x, y - home.y) {
+                let radius = platform.radius;
                 return Err(format!(
-                    "Too far from Home — structures must be built within {MAX_BUILD_DISTANCE_FROM_HOME} tiles of it."
+                    "Too far from Home — structures must be built within {radius} tiles of it."
                 ));
             }
         }
@@ -54,6 +56,47 @@ impl Game {
         }
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
+        }
+        // Before the materials check, with the other refusals: a structure
+        // whose effect accumulates is bounded by a count rather than by
+        // whatever downstream constant its effect happens to clamp against,
+        // because that constant is not a limit a player ever meets.
+        if def.max_deployed > 0 {
+            let standing = self.count_structures(&def.id);
+            if standing >= def.max_deployed {
+                return Err(format!(
+                    "You already have {standing} {}{} — that's as many as this grid will hold.",
+                    def.name,
+                    if standing == 1 { "" } else { "s" }
+                ));
+            }
+        }
+
+        // A structure that widens the slab claims a ring of ground, and
+        // `stamp_platform` obliterates everything standing in what it
+        // claims. A wild program or a nest going that way is the price of
+        // growth; a link is the way down to the only source of Portal
+        // Fragments in the game, so it is refused instead. Only the new ring
+        // needs scanning — the existing slab has no links in it by
+        // construction — and the refusal comes before the materials check,
+        // the same ordering `install_routine` keeps between checking
+        // knowledge and taking the disk.
+        if def.build_radius_bonus > 0
+            && let Some(home) = self.home_position()
+        {
+            let radius = self.build_radius();
+            let grown = self.build_radius_with(def.build_radius_bonus);
+            let buried = self.links_in_ring(home, radius, grown);
+            if !buried.is_empty() && self.count_surface_links() == buried.len() {
+                return Err(
+                    "That would bury the last link in this sector, and the Stack is the \
+                     only place Portal Fragments come from. Grow the base another way."
+                        .into(),
+                );
+            }
+            for (lx, ly) in &buried {
+                self.log_base(format!("The expansion buries the link at ({lx}, {ly})."));
+            }
         }
         let build_cost = self.structure_build_cost(&def);
         // Every shortfall at once, and each with its numbers: the build menu
@@ -122,12 +165,65 @@ impl Game {
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
         }
+        // Re-laying the inner slab writes the same overrides to the same
+        // tiles, so stamping again is idempotent and the only visible effect
+        // is that the new ring gets floor.
         if def.id == HOME_STRUCTURE_ID {
             self.stamp_platform(x, y);
+        } else if def.build_radius_bonus > 0
+            && let Some(home) = self.home_position()
+        {
+            self.stamp_platform(home.x, home.y);
         }
         self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
+    }
+
+    /// How many of `kind` are deployed right now.
+    fn count_structures(&mut self, kind: &StructureId) -> u32 {
+        let mut query = self.world.query::<&Structure>();
+        query.iter(&self.world).filter(|s| &s.kind == kind).count() as u32
+    }
+
+    /// Every `SurfaceLink` standing in the ground a slab of `radius` would
+    /// claim by reaching `grown`.
+    ///
+    /// These are not refused for existing — `stamp_platform` despawns any
+    /// link inside the slab it lays, which is what deploying a Home over one
+    /// has always done, and growing the base is the same act one ring at a
+    /// time. What the caller checks is that they are not *all* of them.
+    ///
+    /// Both radii are passed in rather than one and a bonus, because a base
+    /// already wider than the starting radius absorbs a Pillar's bonus
+    /// entirely — see `build_radius_with`, which is the only thing that
+    /// knows that. Asked of the ring rather than the whole box because the
+    /// existing slab has no links in it by construction: `stamp_platform`
+    /// despawns any it covers, so a hit inside it would be a bug elsewhere
+    /// rather than anything this should act on.
+    fn links_in_ring(&mut self, home: Position, radius: i32, grown: i32) -> Vec<(i32, i32)> {
+        let grown = Platform {
+            center: Some((home.x, home.y)),
+            radius: grown,
+        };
+        let current = Platform {
+            center: Some((home.x, home.y)),
+            radius,
+        };
+        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
+        query
+            .iter(&self.world)
+            .map(|p| (p.x - home.x, p.y - home.y))
+            .filter(|&(dx, dy)| grown.covers(dx, dy) && !current.covers(dx, dy))
+            .map(|(dx, dy)| (home.x + dx, home.y + dy))
+            .collect()
+    }
+
+    /// How many Stack links this zone has left — the thing a growing base
+    /// must not take the last of.
+    fn count_surface_links(&mut self) -> usize {
+        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
+        query.iter(&self.world).count()
     }
 
     /// The highest tier a structure with this `upgrade` path can currently
@@ -263,6 +359,23 @@ impl Game {
             .kind
             .clone();
         let is_home = kind == HOME_STRUCTURE_ID;
+        // Growth is one-way, and that is what removes the shrink question
+        // entirely: there is no state where structures stand outside the
+        // slab, no partial `clear_platform`, and nothing the build rules say
+        // is impossible. The Home cascade below is the one exception,
+        // because there the whole base is coming down and the radius resets
+        // to nothing anyway.
+        if !is_home
+            && self
+                .world
+                .resource::<StructureDb>()
+                .get(&kind)
+                .is_some_and(|d| d.build_radius_bonus > 0)
+        {
+            return Err(
+                "That's holding the base's address space open — it can't be taken down.".into(),
+            );
+        }
         let removed_name = self
             .world
             .resource::<StructureDb>()
@@ -534,8 +647,11 @@ impl Game {
         // the structure's current worker to pay for a cronjob that produces
         // nothing.
         let blocked = self.structure_tiles();
+        let build_radius = self.build_radius();
         let mut map = self.world.resource_mut::<WorldMap>();
-        if let Err(reason) = hauling::post_reach(&mut map, from, structure_pos, &blocked) {
+        if let Err(reason) =
+            hauling::post_reach(&mut map, from, structure_pos, &blocked, build_radius)
+        {
             // Two errands, not one. A structure the base has been built around
             // needs digging out; one with no route may just need you to walk
             // over to it. Saying "too far" for both sent players walking at a

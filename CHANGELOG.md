@@ -27,6 +27,84 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.19
+
+### A base you build outward
+
+A base starts half the size it used to — a 9x9 slab of about 69 buildable
+tiles rather than 15x15 — and the **Heap Pillar** grows it back, one ring at
+a time. Build one and the edge creeps out a tile in every direction; build
+another and it creeps again, up to five of them — a base ends at 19x19,
+better than twice the ground it opens with. Five is a number in the
+structure's own file rather than in the engine, so it is one edit to change
+and any structure can declare a limit the same way. It costs 14 Core
+Fragments, sits behind a new research node (Heap Allocation, 30 Research Data
+off Power Grid), and cannot be demolished.
+
+Like anything else, a Pillar is deployed onto one of the four tiles beside
+you, so growing the base is a walk-and-build loop rather than a menu you
+hold down.
+
+The complaint this answers is feel rather than capacity. A real base does not
+fill 213 tiles, so the old slab was the same size in the first minute of a
+run as in the tenth hour and nothing you did ever made it bigger. Growing in
+single-tile steps is the whole of the settlement reading: the edge moves
+often, by a little, and you are the reason.
+
+Irreversibility is the design rather than a limitation. A Pillar that could
+come down would leave structures standing outside a shrinking slab, and there
+is no good answer to that — so there is no shrinking slab. Demolishing your
+Home still cascades over everything, Pillars included, and the base resets to
+its starting size.
+
+Growth claims the ground it takes, exactly as deploying a Home always has:
+wild programs and nests in the new ring go, and so does a Stack link, with a
+line in the log naming the tile. The one thing it will not bury is the
+sector's **last** link — the Stack is the only place Portal Fragments come
+from, so a base that swallowed the last way down would end the run's
+breaches — and that refusal comes before it charges you.
+
+Two knock-on fixes come with it, and one of them would have ended runs. A
+zone's Stack links were drawn from boxes around your arrival point, and a
+slab wide enough swallows those boxes whole — at which point the placement
+loop spends its whole shared attempt budget failing to land the first link
+and the sector gets **none at all**. No links means no Stack, no Stack means
+no Portal Fragments, and the run can never breach again; it would have read
+as a bad seed rather than as a bug. Every link is now drawn from a band
+starting just outside the base, whatever size the base is — the on-ramp from
+a narrow band and the other two from a wide one — which also repairs a
+squeeze that existed at the old radius.
+
+One thing a very large base does change: a program can only be posted to a
+machine within sixty tiles of where you are standing. The walk a posted
+program takes is a search whose cost grows with the square of its reach, and
+past that point a single walking worker costs more per turn than the turn is
+worth. The cronjob menu refuses the post rather than accepting one that
+never arrives, and tells you to get closer. And stack depth is measured from the edge of
+your base rather than from its centre, so growing does not quietly make every
+descent in the sector deeper.
+
+The opening nursery is unchanged at 7 tiles. It used to be defined *as* the
+build radius, which would have shrunk it for the opening minutes and then
+widened it every time you built a Pillar — a difficulty knob keyed to base
+geometry, which is the thing removed when distance stopped scaling anything.
+Home's rest radius and the Recharger Node's reach now cover a fully grown
+base instead of a fixed 7 tiles.
+
+Existing saves load untouched, and keep the base they already had. Nothing
+about the footprint is stored — a base's width is rediscovered from the
+structures a save already carries, under a rule that holds everywhere: the
+slab always covers every structure standing on it. Without that, a base
+built before this release would have kept its old floor while only the inner
+9x9 accepted a building, which on a real save meant 156 tiles that looked
+exactly like base and refused to be built on, with you standing on one of
+them. The one wrinkle, and it costs real Core Fragments so it is worth stating
+plainly: on a base built before this release, a Pillar buys **nothing** until
+the bonuses have caught up with the width that base already had. A base
+sitting at the old radius of 7 absorbs three of them before the fourth moves
+anything. Only a pre-release save can be in that position, and a base built
+from here grows on the first one.
+
 ## 0.8.18
 
 ### Rotten substrate can kill you now

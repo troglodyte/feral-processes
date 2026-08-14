@@ -1,6 +1,7 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES};
 use crate::*;
 
 impl Game {
@@ -424,6 +425,79 @@ impl Game {
             .map(|def| def.pet_slot_bonus)
             .sum();
         BASE_PET_CAPACITY + bonus as usize
+    }
+
+    /// How wide the base platform is right now: `MAX_BUILD_DISTANCE_FROM_HOME`
+    /// plus every deployed structure's `build_radius_bonus`, clamped to
+    /// `MAX_BUILD_RADIUS_TILES`. The same shape as `pet_capacity` over
+    /// `pet_slot_bonus`, and derived on each call for the same reason: a
+    /// Pillar lost with its Home shrinks the base back with no invalidation
+    /// step, and the save format stays unchanged because nothing stores this.
+    ///
+    /// `Platform::radius` caches the answer, because the footprint has to be
+    /// readable from `&self` while this needs `&mut self` to query. That
+    /// cache is written at exactly the three sites that write
+    /// `Platform::center` — `stamp_platform`, `clear_platform` and the load
+    /// path — and a fourth writer means the design has drifted.
+    ///
+    /// The floor under all of it is that **the slab always covers every
+    /// structure standing on it**. That is inert for any base built under
+    /// the current rules — `place_structure` refuses anything outside the
+    /// footprint, so the outermost structure is never further out than the
+    /// radius already is, which is also why an ordinary structure built at
+    /// the very edge cannot ratchet the base outward. What it is for is a
+    /// base built under *older* rules: halving the starting radius left
+    /// every existing save with its old slab of stamped floor against a
+    /// buildable box less than half the size, tiles that look exactly like
+    /// base and refuse to be built on. It belongs here rather than in the
+    /// load path because `enter_next_zone` re-stamps from this derivation,
+    /// so a load-path fix would hand the base back and take it away again at
+    /// the next breach.
+    ///
+    /// Known cost: on a base that arrived wider than the starting radius, a
+    /// Pillar is absorbed until the bonuses catch up with the width it came
+    /// in at. Only a pre-halving save can be in that position, and it
+    /// corrects itself.
+    pub fn build_radius(&mut self) -> i32 {
+        self.build_radius_with(0)
+    }
+
+    /// `build_radius` as it would read with `extra` more `build_radius_bonus`
+    /// deployed — what `place_structure` asks before letting a Pillar claim
+    /// ground, so the refusal is measured against the radius the base would
+    /// actually reach.
+    ///
+    /// A parameter rather than a second expression at the call site: the two
+    /// diverged the moment the covering floor above landed, because a base
+    /// already wider than the starting radius *absorbs* the bonus and grows
+    /// by nothing. `radius + bonus` then names ground the base was never
+    /// going to claim, and a link out there refused a Pillar that would not
+    /// have touched it.
+    pub(crate) fn build_radius_with(&mut self, extra: i32) -> i32 {
+        let home = self.home_position();
+        let mut query = self.world.query::<(&Structure, &Position)>();
+        let deployed: Vec<(StructureId, Position)> = query
+            .iter(&self.world)
+            .map(|(s, p)| (s.kind.clone(), *p))
+            .collect();
+        let db = self.world.resource::<StructureDb>();
+        let bonus: i32 = deployed
+            .iter()
+            .filter_map(|(k, _)| db.get(k.as_str()))
+            .map(|def| def.build_radius_bonus)
+            .sum();
+        let covering = home
+            .map(|h| {
+                deployed
+                    .iter()
+                    .map(|(_, p)| (p.x - h.x).abs().max((p.y - h.y).abs()))
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        (MAX_BUILD_DISTANCE_FROM_HOME + bonus + extra)
+            .max(covering)
+            .min(MAX_BUILD_RADIUS_TILES)
     }
 
     /// How many tamed programs the player currently owns, wherever they are —

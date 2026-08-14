@@ -147,9 +147,9 @@ fn rest_fully_heals_and_restores_fatigue() {
 /// anyway.
 ///
 /// This only bites on the slab's *outer ring*: `home.ron` sets
-/// `enables_rest`'s radius to exactly `MAX_BUILD_DISTANCE_FROM_HOME`, the
-/// same radius `stamp_platform` stamps, so nearly everywhere rest works is
-/// also inside the platform's interior — where decision 4's base-disband
+/// `enables_rest`'s radius well past the radius a base starts at, so rest is
+/// enabled everywhere the opening slab reaches, and everywhere inside the
+/// platform's interior — where decision 4's base-disband
 /// rule (see `standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian`
 /// in `tests/zone.rs`) would strip the pursuer's `Pursuing` before it ever
 /// got close. Standing exactly on the edge (Chebyshev `half` from Home)
@@ -506,13 +506,14 @@ fn home_enables_rest_across_the_whole_base_footprint() {
         .into_iter()
         .find(|d| d.id == "home")
         .expect("home.ron should load");
-    assert_eq!(
+    assert!(
         def.enables_rest
             .as_ref()
             .expect("Home should be the rest gate")
-            .radius,
-        MAX_BUILD_DISTANCE_FROM_HOME,
-        "Home's rest radius should cover exactly the base footprint"
+            .radius
+            >= MAX_BUILD_DISTANCE_FROM_HOME,
+        "Home's rest radius should at least cover the base it anchors at its \
+         starting size"
     );
 }
 

@@ -1,0 +1,15 @@
+// The first of the three affixes that charge for what they grant, and the
+// shape all three take: a stat on the slot no clean affix will put it on,
+// paid for on that slot's own axis.
+//
+// Nothing else grants ATK on armour. That is what keeps a drawback worth
+// rolling against a calibration ceiling of +3 — an affix that merely
+// undercut Hardened would be strictly worse than Hardened and no player
+// would ever want it, however common it was.
+(
+    id: "volatile",
+    prefix: Some("Volatile"),
+    stats: (atk: 2, def: -1),
+    slots: Some([Armor]),
+    weight: 6,
+)

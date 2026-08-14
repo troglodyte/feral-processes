@@ -1,0 +1,9 @@
+// Honed's reading on a Module, and Shimmed's opposite number. See Shimmed
+// for why the Module pool wanted both.
+(
+    id: "rigged",
+    prefix: Some("Rigged"),
+    stats: (atk: 2),
+    slots: Some([Module]),
+    weight: 9,
+)

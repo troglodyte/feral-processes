@@ -1,0 +1,16 @@
+// The rarest of the set, and the only affix worth four points across two
+// stats — of Recursion, the clean ceiling, is worth three. What buys the
+// fourth is the DECOMP, and no single stat passes +2, so the calibration
+// ceiling stands.
+//
+// Its cost is the player's alone: a program never attempts a capture, so
+// DECOMP does nothing on a companion (see of Quiet Handshakes). A copy of
+// this handed across is a copy whose drawback is inert — which is the one
+// piece of texture in the set that rewards owning two of something, and
+// the reason it takes any slot rather than the Module a player keeps.
+(
+    id: "of_hot_swap",
+    suffix: Some("of Hot Swap"),
+    stats: (atk: 2, def: 2, decompiler: -1),
+    weight: 4,
+)

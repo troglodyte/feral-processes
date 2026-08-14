@@ -6,6 +6,7 @@
 pub(crate) mod support;
 
 mod achievements;
+mod affixes;
 mod assets;
 mod battle_timeline;
 mod building;

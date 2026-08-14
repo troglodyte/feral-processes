@@ -1,0 +1,12 @@
+// DECOMP had exactly one affix and it granted two points, so a capture
+// build's only affix roll was an uncommon one. This is its floor: the
+// small, common version, off Weapon for the reason its bigger sibling is
+// (a weapon is the slot most likely to end up on a companion, where DECOMP
+// does nothing at all).
+(
+    id: "patched",
+    prefix: Some("Patched"),
+    stats: (decompiler: 1),
+    slots: Some([Module, Armor]),
+    weight: 11,
+)

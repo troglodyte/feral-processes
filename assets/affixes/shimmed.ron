@@ -1,0 +1,10 @@
+// Reinforced's reading on a Module. The Module pool was the thinnest of
+// the three by some way, so its rolls repeated where a Weapon's varied;
+// this and Rigged are the pair that give it Honed and Reinforced's shape.
+(
+    id: "shimmed",
+    prefix: Some("Shimmed"),
+    stats: (def: 2),
+    slots: Some([Module]),
+    weight: 10,
+)

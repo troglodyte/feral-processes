@@ -459,6 +459,21 @@ impl Game {
     /// in at. Only a pre-halving save can be in that position, and it
     /// corrects itself.
     pub fn build_radius(&mut self) -> i32 {
+        self.build_radius_with(0)
+    }
+
+    /// `build_radius` as it would read with `extra` more `build_radius_bonus`
+    /// deployed — what `place_structure` asks before letting a Pillar claim
+    /// ground, so the refusal is measured against the radius the base would
+    /// actually reach.
+    ///
+    /// A parameter rather than a second expression at the call site: the two
+    /// diverged the moment the covering floor above landed, because a base
+    /// already wider than the starting radius *absorbs* the bonus and grows
+    /// by nothing. `radius + bonus` then names ground the base was never
+    /// going to claim, and a link out there refused a Pillar that would not
+    /// have touched it.
+    pub(crate) fn build_radius_with(&mut self, extra: i32) -> i32 {
         let home = self.home_position();
         let mut query = self.world.query::<(&Structure, &Position)>();
         let deployed: Vec<(StructureId, Position)> = query
@@ -480,7 +495,7 @@ impl Game {
                     .unwrap_or(0)
             })
             .unwrap_or(0);
-        (MAX_BUILD_DISTANCE_FROM_HOME + bonus)
+        (MAX_BUILD_DISTANCE_FROM_HOME + bonus + extra)
             .max(covering)
             .min(MAX_BUILD_RADIUS_TILES)
     }

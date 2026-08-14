@@ -3,7 +3,7 @@
 
 use crate::game::hauling;
 use crate::structures::UpgradeDef;
-use crate::tuning::{MAX_BUILD_RADIUS_TILES, STRUCTURE_REMOVAL_REFUND_PERCENT};
+use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
 impl Game {
@@ -69,8 +69,9 @@ impl Game {
         if def.build_radius_bonus > 0
             && let Some(home) = self.home_position()
         {
-            let radius = self.world.resource::<Platform>().radius;
-            if let Some((lx, ly)) = self.link_in_ring(home, radius, def.build_radius_bonus) {
+            let radius = self.build_radius();
+            let grown = self.build_radius_with(def.build_radius_bonus);
+            if let Some((lx, ly)) = self.link_in_ring(home, radius, grown) {
                 return Err(format!(
                     "A link sits at ({lx}, {ly}), inside the ground that would be claimed — \
                      the base can't grow over it."
@@ -160,16 +161,19 @@ impl Game {
     }
 
     /// The first `SurfaceLink` standing in the ground a slab of `radius`
-    /// would claim by growing `bonus` tiles, if any.
+    /// would claim by reaching `grown`, if any.
     ///
-    /// Asked of the ring rather than the whole box because the existing slab
-    /// has no links in it by construction — `stamp_platform` despawns any it
-    /// covers — so a hit inside it would be a bug elsewhere, not a reason to
-    /// refuse this build.
-    fn link_in_ring(&mut self, home: Position, radius: i32, bonus: i32) -> Option<(i32, i32)> {
+    /// Both radii are passed in rather than one and a bonus, because a base
+    /// already wider than the starting radius absorbs a Pillar's bonus
+    /// entirely — see `build_radius_with`, which is the only thing that
+    /// knows that. Asked of the ring rather than the whole box because the
+    /// existing slab has no links in it by construction: `stamp_platform`
+    /// despawns any it covers, so a hit inside it would be a bug elsewhere
+    /// rather than a reason to refuse this build.
+    fn link_in_ring(&mut self, home: Position, radius: i32, grown: i32) -> Option<(i32, i32)> {
         let grown = Platform {
             center: Some((home.x, home.y)),
-            radius: (radius + bonus).min(MAX_BUILD_RADIUS_TILES),
+            radius: grown,
         };
         let current = Platform {
             center: Some((home.x, home.y)),

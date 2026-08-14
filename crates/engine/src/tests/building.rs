@@ -2466,3 +2466,40 @@ fn a_structure_at_the_edge_does_not_grow_the_base() {
         "the floor term is a floor, not a ratchet you can walk outward"
     );
 }
+
+/// The link refusal has to ask what the radius would actually *become*, not
+/// assume the bonus lands whole.
+///
+/// On a base already wider than the starting radius the bonus is absorbed,
+/// so the ring the refusal was scanning is ground the base was never going
+/// to claim — and a link out there refused a Pillar that would not have
+/// touched it. Measured on the `chains` template: radius 7, a link at
+/// (6, -8) eight tiles out, and every placement refused.
+#[test]
+fn a_link_past_a_pillars_actual_reach_does_not_refuse_it() {
+    let mut game = base_ready_for_pillars(720);
+    let home = game.home_position().expect("the fixture just placed one");
+    let legacy = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    spawn_structure_of(&mut game, "data_cache", home.x + legacy, home.y);
+    // Re-stamped because that is what the load path does: the cached radius
+    // the refusal reads is otherwise still the one from Home placement, and
+    // the test would pass against the bug.
+    game.stamp_platform(home.x, home.y);
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        legacy,
+        "precondition: a legacy-wide base"
+    );
+    // One tile beyond the widest this base could be after a single Pillar,
+    // whose bonus this base absorbs entirely.
+    game.world.spawn((
+        SurfaceLink,
+        Position {
+            x: home.x + legacy + 1,
+            y: home.y,
+        },
+    ));
+
+    game.place_structure("heap_pillar", 1, 0)
+        .expect("a link outside the ground the base would claim is not in the way");
+}

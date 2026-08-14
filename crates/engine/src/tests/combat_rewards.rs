@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::tuning::{
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
+    TEARDOWN_SALVAGE_PER_LEVEL,
 };
 use crate::*;
 
@@ -46,6 +47,62 @@ fn a_boss(game: &Game) -> SpeciesDef {
         .into_iter()
         .find(|s| s.is_boss)
         .expect("at least one boss species should exist in assets/species for this test")
+}
+
+/// Teardown adds to the quantity a kill drops rather than rolling again, so
+/// the perk cannot shift the shared RNG stream — every seeded spawn and
+/// combat test downstream of a kill would move with it if it did. Asserts an
+/// exact delta between two kills of the same species for that reason: a
+/// second draw would show up here as a difference the perk's flat term can't
+/// explain.
+#[test]
+fn teardown_adds_flat_salvage_to_a_kill_without_rerolling() {
+    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.work_resource.is_some())
+        .expect("at least one species should have a work_resource for this test");
+    let resource = species.work_resource.clone().unwrap();
+    let carried = |g: &Game| g.world.get::<Inventory>(player).unwrap().count(&resource);
+
+    let unperked = {
+        let wild = corpse_of(&mut game, &species.id);
+        let before = carried(&game);
+        game.award_loot(wild);
+        carried(&game) - before
+    };
+
+    // Same seed, same species, same call — so a second game replays the
+    // identical roll and the only difference is the perk.
+    let mut perked_game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let perked_player = perked_game.player_entity();
+    perked_game
+        .world
+        .get_mut::<Perks>(perked_player)
+        .unwrap()
+        .points = 20;
+    perked_game.unlock_perk(Perk::Teardown).unwrap();
+    let wild = corpse_of(&mut perked_game, &species.id);
+    let before = perked_game
+        .world
+        .get::<Inventory>(perked_player)
+        .unwrap()
+        .count(&resource);
+    perked_game.award_loot(wild);
+    let perked = perked_game
+        .world
+        .get::<Inventory>(perked_player)
+        .unwrap()
+        .count(&resource)
+        - before;
+
+    assert_eq!(
+        perked,
+        unperked + TEARDOWN_SALVAGE_PER_LEVEL,
+        "one level should add exactly its flat term to the same roll"
+    );
 }
 
 #[test]

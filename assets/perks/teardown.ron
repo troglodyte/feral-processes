@@ -1,0 +1,6 @@
+(
+    id: Teardown,
+    name: "Teardown",
+    description: "You strip a dead process to the frame. +1 work resource from every program you defeat, per level.",
+    cost: 4,
+)

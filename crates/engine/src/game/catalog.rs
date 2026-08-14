@@ -1,7 +1,9 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES};
+use crate::tuning::{
+    MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, PROCESS_POOL_SLOTS_PER_LEVEL,
+};
 use crate::*;
 
 impl Game {
@@ -409,9 +411,12 @@ impl Game {
 
     /// How many tamed programs the player may own in total right now:
     /// `BASE_PET_CAPACITY` plus every deployed structure's `pet_slot_bonus`
-    /// (a Data Cache adds five). Derived on each call rather than cached, so a
-    /// cache lost to a raid shrinks the limit with no invalidation step and
-    /// the save format stays unchanged.
+    /// (a Data Cache adds five), plus `Perk::ProcessPool`. Derived on each
+    /// call rather than cached, so a cache lost to a raid shrinks the limit
+    /// with no invalidation step and the save format stays unchanged.
+    ///
+    /// The perk is the one term a raid cannot take back, which is the whole
+    /// of what it sells: slots that don't depend on a building standing.
     pub fn pet_capacity(&self) -> usize {
         let kinds: Vec<StructureId> = self
             .world
@@ -424,7 +429,9 @@ impl Game {
             .filter_map(|k| db.get(k.as_str()))
             .map(|def| def.pet_slot_bonus)
             .sum();
-        BASE_PET_CAPACITY + bonus as usize
+        BASE_PET_CAPACITY
+            + bonus as usize
+            + self.player_perk_level(Perk::ProcessPool) as usize * PROCESS_POOL_SLOTS_PER_LEVEL
     }
 
     /// How wide the base platform is right now: `MAX_BUILD_DISTANCE_FROM_HOME`

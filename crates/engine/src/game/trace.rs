@@ -21,8 +21,8 @@
 
 use crate::resources::{Trace, TraceBand};
 use crate::tuning::{
-    TRACE_ENCOUNTER_MULT, TRACE_GROUP_MULT, TRACE_HUNTED, TRACE_NOTICED, TRACE_STAT_MULT,
-    TRACE_TRACED,
+    OBFUSCATION_REDUCTION_PER_LEVEL, TRACE_ENCOUNTER_MULT, TRACE_GROUP_MULT, TRACE_HUNTED,
+    TRACE_NOTICED, TRACE_STAT_MULT, TRACE_TRACED,
 };
 use crate::*;
 
@@ -72,6 +72,23 @@ impl Game {
         TRACE_GROUP_MULT[self.trace_band().index()]
     }
 
+    /// `amount` after `Perk::Obfuscation`'s reduction, floored at 1 whenever
+    /// there was anything to reduce.
+    ///
+    /// The floor is the design: Trace is the Stack's only escalation
+    /// pressure, so however many levels are stacked, descending still costs
+    /// something. A level count past the point the reduction reaches 1.0
+    /// saturates the cast to 0 and the clamp lifts it back to 1, which is
+    /// why the arithmetic needs no ceiling of its own.
+    fn obfuscated(&self, amount: u32) -> u32 {
+        let level = self.player_perk_level(Perk::Obfuscation);
+        if level == 0 || amount == 0 {
+            return amount;
+        }
+        let kept = 1.0 - OBFUSCATION_REDUCTION_PER_LEVEL * level as f32;
+        ((amount as f32 * kept).round() as u32).clamp(1, amount)
+    }
+
     /// The one way Trace goes up, and the only place that knows a band was
     /// crossed.
     ///
@@ -86,10 +103,15 @@ impl Game {
     ///
     /// Crossings are monotonic — nothing lowers Trace, and it resets only on
     /// leaving the Stack — so only a rise is ever announced.
+    ///
+    /// A third thing lives here for the same reason as the first:
+    /// `Perk::Obfuscation` reduces every source at once, so the perk is read
+    /// where the sources meet rather than at each of them.
     pub(crate) fn raise_trace(&mut self, amount: u32) {
         if !self.is_underground() {
             return;
         }
+        let amount = self.obfuscated(amount);
         let before = TraceBand::from_trace(self.trace());
         let raised = self.trace().saturating_add(amount);
         self.world.insert_resource(Trace(raised));

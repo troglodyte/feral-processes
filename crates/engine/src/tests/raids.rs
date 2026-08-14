@@ -3,8 +3,8 @@
 use super::support::*;
 use crate::game::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{
-    MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE, RAID_DEFENDER_DAMAGE,
-    STRUCTURE_REGEN_INTERVAL,
+    FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
+    RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -1149,6 +1149,44 @@ fn a_patch_node_adds_its_tier_to_every_structures_regen() {
     assert_eq!(
         game.world.get::<Durability>(structure).unwrap().hp,
         10 + per_tier
+    );
+}
+
+/// The base's third repair source, and the only one that isn't a building or
+/// a posted program. A base with no Patch Node repairs nothing at all — that
+/// is the case `structure_regen`'s early return covers and the case the perk
+/// is for — so this asserts against a total of zero rather than against a
+/// rate it might merely be adding to.
+#[test]
+fn failover_repairs_the_base_with_no_patch_node_standing() {
+    let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 10, max_hp: 30 },
+        ))
+        .id();
+    assert_eq!(
+        game.total_repair_rate(),
+        0,
+        "nothing standing should repair, or the perk isn't what's measured"
+    );
+
+    let player = game.player_entity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+    game.unlock_perk(Perk::Failover).unwrap();
+    game.world.resource_mut::<GameClock>().tick = STRUCTURE_REGEN_INTERVAL;
+
+    game.structure_regen();
+
+    assert_eq!(
+        game.world.get::<Durability>(structure).unwrap().hp,
+        10 + FAILOVER_REPAIR_PER_LEVEL,
+        "the perk has to reach past structure_regen's no-repairers early return"
     );
 }
 

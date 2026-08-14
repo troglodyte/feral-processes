@@ -6,7 +6,7 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 **This directory is a catalogue, not a content directory.** Unlike species,
 structures, items and abilities, you cannot add a perk by dropping in a new
-file — the twelve that exist are fixed, and each file here only controls what
+file — the sixteen that exist are fixed, and each file here only controls what
 one of them is *called*, how it *reads*, and what it *costs*. A file naming
 anything else fails to parse and is skipped.
 
@@ -16,12 +16,27 @@ to consume; a perk is a hook into a particular formula, and no two hook into
 the same one. Keen Scavenger reaches into the mining roll, Low Power Mode into
 the hunger-decay multiplier, Exploit Focus into the decompile chance's HP
 term, Lean Compiler into recipe costs, Attacker/Defender/Buffer write
-straight to your stats at purchase time, and the five `*_affinity` perks each
+straight to your stats at purchase time, Obfuscation into what a Trace source
+costs, Process Pool into the roster capacity, Teardown into a kill's salvage,
+Failover into the base-wide repair rate, and the five `*_affinity` perks each
 multiply one `AffinityKind` category's magnitude for your own casts only —
 see below. There is no `effect:` field that could cover those without
-becoming a programming language. So a thirteenth perk means a new `Perk`
+becoming a programming language. So a seventeenth perk means a new `Perk`
 variant in `crates/engine/src/perks.rs` plus a hook wherever its effect
 belongs — see the repo's `CLAUDE.md`.
+
+**Four of the sixteen reach subsystems the rest never touch.** Obfuscation
+reduces what every Trace source adds while you are in the Stack, floored so a
+source always costs *something* — deliberately unlike Low Power Mode, which
+is allowed to stop hunger draining entirely, because Trace is the Stack's
+only escalation pressure. Process Pool adds roster slots through the same
+`pet_capacity` a Data Cache feeds, so what it buys survives losing the
+building. Teardown adds a flat amount to the work resource a defeated program
+drops. Failover adds to the base-wide repair rate, which means a base with no
+Patch Node standing stops taking permanent sweep damage. Their magnitudes are
+`OBFUSCATION_REDUCTION_PER_LEVEL`, `PROCESS_POOL_SLOTS_PER_LEVEL`,
+`TEARDOWN_SALVAGE_PER_LEVEL` and `FAILOVER_REPAIR_PER_LEVEL` in
+`crates/engine/src/tuning.rs`.
 
 **The five `*_affinity` perks share two magnitudes, not five.** Payload
 Tuning, Field Medic, Overclocker, Corruption Vector and Siphon Protocol each
@@ -62,7 +77,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
 
 ```ron
 (
-    // Which perk this file describes. One of exactly these twelve, written
+    // Which perk this file describes. One of exactly these sixteen, written
     // as a bare identifier (not a quoted string):
     //
     //   KeenScavenger   raises a mining node's per-cycle success chance
@@ -79,6 +94,11 @@ say so in the `description` too — nothing keeps the two in sync for you.
     //                   (saps included — they're negative-power buffs)
     //   DebuffAffinity  raises your own Debuff-category ability magnitude
     //   DrainAffinity   raises your own Drain-category ability damage
+    //   Obfuscation     cuts what every Trace source costs in the Stack,
+    //                   floored so a source always costs something
+    //   ProcessPool     raises how many tamed programs you may own
+    //   Teardown        raises the work resource a defeated program drops
+    //   Failover        repairs your structures with no Patch Node standing
     //
     // Two files naming the same perk is not an error; the last one loaded
     // wins, and which that is depends on directory order — so don't.

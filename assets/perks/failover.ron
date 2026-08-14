@@ -1,0 +1,6 @@
+(
+    id: Failover,
+    name: "Failover",
+    description: "Your base patches itself while you are away. +1 Durability restored to every damaged structure each repair interval, per level, with or without a Patch Node standing.",
+    cost: 2,
+)

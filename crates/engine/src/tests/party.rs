@@ -1,7 +1,7 @@
 //! The roster: capacity, membership, companion status, and fusing programs together.
 
 use super::support::*;
-use crate::tuning::MAX_FUSIONS;
+use crate::tuning::{MAX_FUSIONS, PROCESS_POOL_SLOTS_PER_LEVEL};
 use crate::*;
 
 #[test]
@@ -14,6 +14,27 @@ fn pet_capacity_grows_with_each_deployed_data_cache() {
 
     spawn_data_cache(&mut game, 2);
     assert_eq!(game.pet_capacity(), BASE_PET_CAPACITY + 10, "caches stack");
+}
+
+/// The roster's second source of slots, and the only one that isn't a
+/// structure. It reads through the same `pet_capacity` the Data Cache does,
+/// so a base that loses its caches keeps whatever the perk bought.
+#[test]
+fn process_pool_adds_a_roster_slot_per_level() {
+    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let base = game.pet_capacity();
+    game.world.get_mut::<Perks>(player).unwrap().points = 20;
+
+    game.unlock_perk(Perk::ProcessPool).unwrap();
+    assert_eq!(game.pet_capacity(), base + PROCESS_POOL_SLOTS_PER_LEVEL);
+
+    game.unlock_perk(Perk::ProcessPool).unwrap();
+    assert_eq!(
+        game.pet_capacity(),
+        base + PROCESS_POOL_SLOTS_PER_LEVEL * 2,
+        "levels stack the way a second Data Cache does"
+    );
 }
 
 #[test]

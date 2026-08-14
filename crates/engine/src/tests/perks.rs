@@ -405,7 +405,12 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[9], Perk::BuffAffinity);
     assert_eq!(all[10], Perk::DebuffAffinity);
     assert_eq!(all[11], Perk::DrainAffinity);
-    assert_eq!(all.len(), 12);
+    // And the same again for the four subsystem perks appended after them.
+    assert_eq!(all[12], Perk::Obfuscation);
+    assert_eq!(all[13], Perk::ProcessPool);
+    assert_eq!(all[14], Perk::Teardown);
+    assert_eq!(all[15], Perk::Failover);
+    assert_eq!(all.len(), 16);
 }
 
 #[test]

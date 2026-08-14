@@ -90,6 +90,13 @@ set is checked by a test; a mod is not.
 over at the Broker, and it takes only as many as the contract still needs.
 Everything else is measured wherever you are, including four frames down.
 
+Don't name a **banked** item (`ItemDef::banked` — Research Data is the shipped
+one). A bank shares `Inventory` with cargo, so the hand-over quietly works,
+but the player is never shown the row: every cargo screen omits it, so they
+are asked for something they cannot see themselves holding, and paying it
+spends research progress rather than stock. The shipped set is checked by
+`a_shipped_delivery_never_asks_for_the_bank`; a mod is not.
+
 There is deliberately no `Tame` objective: a program joins the roster through
 two doors rather than one, and neither is as cleanly funnelled as a kill.
 

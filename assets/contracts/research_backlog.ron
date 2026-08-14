@@ -1,8 +1,8 @@
 (
     id: "research_backlog",
     name: "Research Backlog",
-    description: "Someone upstream wants readings they never bothered to take. Deliver ten Research Data.",
-    objective: Deliver(item: "research_data", count: 10),
+    description: "Someone upstream wants readings they never bothered to take, transcribed and stacked. Deliver ten Logic Wafers.",
+    objective: Deliver(item: "logic_wafer", count: 10),
     reward: [Credits(70), Item("ice_breaker", 2), Xp(160)],
     min_zone: 2,
 )

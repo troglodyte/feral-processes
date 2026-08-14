@@ -285,6 +285,28 @@ fn the_shipped_contracts_name_things_that_exist() {
 }
 
 #[test]
+fn a_shipped_delivery_never_asks_for_the_bank() {
+    let assets = test_assets_dir();
+    let (contracts, _) = shipped_contracts();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items")).unwrap();
+
+    for def in contracts.iter() {
+        let Objective::Deliver { item, .. } = &def.objective else {
+            continue;
+        };
+        assert!(
+            !items.get(item.as_str()).is_some_and(|d| d.banked),
+            "{} asks for {item}, which is banked. A bank shares `Inventory` \
+             with cargo, so the hand-over would silently work — while \
+             `PlayerStatus::inventory` omits the row, so the player is asked \
+             for something no cargo screen will ever show them, and paying it \
+             spends research progress rather than stock.",
+            def.id
+        );
+    }
+}
+
+#[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
     let mut seen = [false; 5];

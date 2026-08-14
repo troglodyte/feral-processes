@@ -27,6 +27,70 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.30
+
+### Rolled contracts
+
+The Broker's board was eight authored contracts and nothing else, so a long
+run saw the same offers come round again. It now also carries **templates**:
+contracts with holes in them, filled in against whatever the sector can
+actually supply.
+
+```
+  Offered
+  [1] Hunt: Sub-Process - Terminate 9 Sub-Process - pays 63 Credits, 180 XP
+  [2] Requisition: Blank Substrate - Deliver 14 Blank Substrate - pays 28 Credits, 70 XP
+  [3] Sounding: Frame 4 - Stand 4 frames down a Stack - pays 45 Credits, 180 XP
+```
+
+A rolled contract is not a second kind of contract. It becomes exactly the
+thing an authored file parses into, so it is accepted, tracked, finished and
+paid by the same code — an authored contract is simply a template with no free
+variables. Five ship, one per objective shape, and `assets/contracts/README.md`
+documents the format for mods.
+
+**A rolled contract is always finishable.** It draws its species from the
+programs living on your base's doorstep, its delivery from stock this sector
+can actually produce, and its structure from what you have unlocked and do not
+already own. When a sector can supply nothing valid, the template rolls nothing
+and the slot goes to something else — an empty slot beats an errand you cannot
+run. Offers stay put across a save and load, like the rest of the board.
+
+### Contracts you had already finished
+
+Fixed: the board could offer a contract the run had **already met**, which paid
+out in full the moment you accepted it. A base with a Refinery standing was
+offered *Stand Up a Refinery* — 45 Credits, five Power Cells and 140 XP for
+pressing a key — and a run in sector 3 was offered *Reach sector 3*. Both
+shipped in 0.8.29.
+
+### Deliveries are bulk goods only
+
+A delivery is asked for by the score, so it now names only cheap, accumulable
+stock rather than anything in the catalogue. Without this a Requisition could
+ask for twenty etched Routine Disks, which is a run's worth of research stated
+as an errand. Portal Fragments were never askable and still are not: they are
+the breaching currency, and their only source is a boss at the bottom of a
+stack.
+
+### Terminate, not Kill
+
+`Objective::Kill` is now `Objective::Terminate`, in the asset schema and in the
+line you read on the contracts screen — "Terminate 6 Drone" rather than
+"Defeat 6 Drone". A mod naming `Kill` needs the one-word edit.
+
+This does **not** bump the save format. The variant is serialised inside a
+contract you are holding, so the only save it could break is one carrying an
+accepted contract — and contracts shipped one release ago behind a research
+buy and a build, so no such save exists. Bumping would have refused every real
+save to protect a file that cannot be written.
+
+### For testers
+
+`cargo run -- --template contracts` opens standing at a Broker, in the `chains`
+world with its research unlocked and its cargo deep, so the loop can be played
+without first buying Contract Brokerage and building the Broker.
+
 ## 0.8.29
 
 ### Contracts

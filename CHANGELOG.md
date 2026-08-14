@@ -27,6 +27,26 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.22
+
+### The fuse picker names what each program is carrying
+
+Fusing two programs builds the result's routines fresh from its species, so
+anything installed on either parent — researched, extracted, swapped in off
+a disk — is gone. The game said so, but only on the last page of the flow,
+after both picks were already made.
+
+Both pickers now say it while the picks are still free. Each candidate
+carries its routines on the line beneath its stats:
+
+```
+[a] Kestrel Lv6 - HP 22/28  ATK 8  DEF 5  PWR 19 (in party)
+       Hyperthread Single v1.0, Sandbox
+```
+
+A full six-slot kit is wider than the popup, so a long list wraps onto
+further lines rather than running off the right edge.
+
 ## 0.8.21
 
 ### A fight tells you what it paid at the end, not between the blows

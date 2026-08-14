@@ -47,7 +47,7 @@ loses its progress; it is not banked.
     description: "Drones have settled in the shallows around the base. Thin them out before they multiply.",
 
     // What finishes it. Exactly one of the five below.
-    objective: Kill(species: Some("drone"), count: 6),
+    objective: Terminate(species: Some("drone"), count: 6),
 
     // What it pays, in full, once. One or more of the three below.
     reward: [Credits(40), Xp(120)],
@@ -69,14 +69,14 @@ loses its progress; it is not banked.
 
 | Written as | Finished when |
 |---|---|
-| `Kill(species: Some("drone"), count: 6)` | six of that species die |
-| `Kill(species: None, count: 12)` | twelve of anything die |
+| `Terminate(species: Some("drone"), count: 6)` | six of that species die |
+| `Terminate(species: None, count: 12)` | twelve of anything die |
 | `Deliver(item: "core_fragment", count: 25)` | you hand that many over at a Broker |
 | `Descend(depth: 3)` | the party stands in a Stack frame 3 or more levels down |
 | `Breach(zone: 3)` | the run reaches sector 3 or deeper |
 | `Build(structure: "refinery")` | one of those is deployed |
 
-`Kill` names a species id from `assets/species/`; `Deliver` an item id from
+`Terminate` names a species id from `assets/species/`; `Deliver` an item id from
 `assets/items/`; `Build` a structure id from `assets/structures/`. An id
 naming nothing is not refused at load — no other database is in hand there —
 so it costs you an unfinishable contract rather than a warning. The shipped

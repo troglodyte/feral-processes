@@ -2,7 +2,7 @@
     id: "thin_the_swarm",
     name: "Thin the Swarm",
     description: "The sector is crowded. Bring the local population down, whatever it is made of.",
-    objective: Kill(species: None, count: 12),
+    objective: Terminate(species: None, count: 12),
     reward: [Credits(60), Xp(180)],
     min_zone: 1,
     repeatable: true,

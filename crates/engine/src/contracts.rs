@@ -54,14 +54,14 @@ impl std::fmt::Display for ContractId {
 /// What a contract asks for.
 ///
 /// Four of the five are state-shaped and are evaluated by polling, which is
-/// why this whole feature costs exactly one new call site: only `Kill` is
+/// why this whole feature costs exactly one new call site: only `Terminate` is
 /// event-shaped, and it is recorded into `resources::RunFeats` by `award_loot`
 /// the way `Trigger::BossDefeated` already is.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Objective {
     /// `None` means any kill; `Some(species_id)` names one, as
     /// `Trigger::BossDefeated` does.
-    Kill { species: Option<String>, count: u32 },
+    Terminate { species: Option<String>, count: u32 },
     /// Items handed over at the Broker. The one objective whose progress does
     /// not come from `contract_system` — see `Game::deliver_to_contract`.
     Deliver { item: ItemId, count: u32 },
@@ -82,7 +82,7 @@ impl Objective {
     /// rule and no caller branches on the variant to ask "am I done".
     pub fn target(&self) -> u32 {
         match self {
-            Objective::Kill { count, .. } | Objective::Deliver { count, .. } => *count,
+            Objective::Terminate { count, .. } | Objective::Deliver { count, .. } => *count,
             Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => 1,
         }
     }

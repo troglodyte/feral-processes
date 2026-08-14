@@ -29,15 +29,15 @@ fn every_objective_variant_parses_and_states_its_target() {
         "variants",
         &[
             (
-                "kill.ron",
-                r#"(id: "kill", name: "Kill", description: "d",
-                    objective: Kill(species: Some("drone"), count: 6),
+                "terminate.ron",
+                r#"(id: "terminate", name: "Terminate", description: "d",
+                    objective: Terminate(species: Some("drone"), count: 6),
                     reward: [Credits(40)])"#,
             ),
             (
-                "kill_any.ron",
-                r#"(id: "kill_any", name: "Any", description: "d",
-                    objective: Kill(species: None, count: 3),
+                "terminate_any.ron",
+                r#"(id: "terminate_any", name: "Any", description: "d",
+                    objective: Terminate(species: None, count: 3),
                     reward: [Xp(50)])"#,
             ),
             (
@@ -71,8 +71,8 @@ fn every_objective_variant_parses_and_states_its_target() {
     assert_eq!(db.iter().count(), 6);
 
     let target = |id: &str| db.get(&ContractId::from(id)).unwrap().objective.target();
-    assert_eq!(target("kill"), 6, "a counting objective targets its count");
-    assert_eq!(target("kill_any"), 3);
+    assert_eq!(target("terminate"), 6, "a counting objective targets its count");
+    assert_eq!(target("terminate_any"), 3);
     assert_eq!(target("deliver"), 4);
     assert_eq!(
         target("descend"),
@@ -84,8 +84,8 @@ fn every_objective_variant_parses_and_states_its_target() {
     assert_eq!(target("build"), 1);
 
     assert_eq!(
-        db.get(&ContractId::from("kill")).unwrap().objective,
-        Objective::Kill {
+        db.get(&ContractId::from("terminate")).unwrap().objective,
+        Objective::Terminate {
             species: Some("drone".to_string()),
             count: 6
         }
@@ -246,7 +246,7 @@ fn the_shipped_contracts_name_things_that_exist() {
                 "{} asks for an item that does not exist: {item}",
                 def.id
             ),
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some(id), ..
             } => assert!(
                 species.get(id).is_some(),
@@ -286,7 +286,7 @@ fn every_objective_variant_ships_at_least_once() {
     let mut seen = [false; 5];
     for def in contracts.iter() {
         let slot = match &def.objective {
-            Objective::Kill { .. } => 0,
+            Objective::Terminate { .. } => 0,
             Objective::Deliver { .. } => 1,
             Objective::Descend { .. } => 2,
             Objective::Breach { .. } => 3,
@@ -367,7 +367,7 @@ fn active_contracts_survive_a_save_and_load() {
         &mut game,
         def(
             "hunt",
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some("drone".to_string()),
                 count: 6,
             },
@@ -528,7 +528,7 @@ fn a_named_kill_contract_advances_only_on_that_species() {
         &mut game,
         def(
             "drones",
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some("drone".to_string()),
                 count: 3,
             },
@@ -553,7 +553,7 @@ fn an_unnamed_kill_contract_advances_on_anything() {
         &mut game,
         def(
             "anything",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 5,
             },
@@ -575,7 +575,7 @@ fn progress_never_runs_past_the_target() {
         &mut game,
         def(
             "two",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 2,
             },
@@ -768,7 +768,7 @@ fn give_finished(game: &mut Game, id: &str, reward: Vec<Reward>) {
         game,
         def(
             id,
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 1,
             },
@@ -1143,7 +1143,7 @@ fn active_contracts_read_anywhere_including_underground() {
         &mut game,
         def(
             "held",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 4,
             },

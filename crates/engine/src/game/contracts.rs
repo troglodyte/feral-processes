@@ -45,7 +45,7 @@ pub fn contract_system(
     for contract in &mut held.active {
         let target = contract.def.objective.target();
         let advance = match &contract.def.objective {
-            Objective::Kill { species, count: _ } => feats
+            Objective::Terminate { species, count: _ } => feats
                 .kills
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
@@ -333,7 +333,7 @@ impl Game {
     /// same reason `Game::copy_name` exists.
     fn objective_line(&self, objective: &Objective) -> String {
         match objective {
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some(id),
                 count,
             } => {
@@ -343,12 +343,12 @@ impl Game {
                     .get(id)
                     .map(|def| def.name.clone())
                     .unwrap_or_else(|| id.clone());
-                format!("Defeat {count} {name}")
+                format!("Terminate {count} {name}")
             }
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count,
-            } => format!("Defeat {count} wild programs"),
+            } => format!("Terminate {count} wild programs"),
             Objective::Deliver { item, count } => {
                 format!("Deliver {count} {}", self.item_name(item))
             }

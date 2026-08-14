@@ -19,6 +19,7 @@ mod combat_rewards;
 mod combat_specials;
 mod combat_status;
 mod combat_targeting;
+mod contracts;
 mod crafting;
 mod descriptions;
 mod easter_eggs;

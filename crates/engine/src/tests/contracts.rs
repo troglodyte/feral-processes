@@ -749,3 +749,137 @@ fn a_deliver_contract_is_untouched_by_the_system() {
     }
     assert_eq!(progress_of(&game, "haul"), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Completion and payout
+// ---------------------------------------------------------------------------
+
+fn carried(game: &Game, item: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&crate::items::ItemId::from(item))
+}
+
+/// A contract already at its target, so the settle is what is under test
+/// rather than the counting.
+fn give_finished(game: &mut Game, id: &str, reward: Vec<Reward>) {
+    give(
+        game,
+        def(
+            id,
+            Objective::Kill {
+                species: None,
+                count: 1,
+            },
+            reward,
+        ),
+        1,
+    );
+}
+
+#[test]
+fn a_finished_contract_pays_each_reward_once_and_is_filed_as_done() {
+    let mut game = fresh();
+    let credits_before = carried(&game, "credits");
+    let cells_before = carried(&game, "power_cell");
+    let xp_before = game
+        .world
+        .get::<Experience>(game.player_entity())
+        .unwrap()
+        .xp;
+
+    give_finished(
+        &mut game,
+        "paid",
+        vec![
+            Reward::Credits(40),
+            Reward::Item(crate::items::ItemId::from("power_cell"), 3),
+            Reward::Xp(25),
+        ],
+    );
+    game.tick();
+
+    assert_eq!(carried(&game, "credits"), credits_before + 40);
+    assert_eq!(carried(&game, "power_cell"), cells_before + 3);
+    assert!(
+        game.world
+            .get::<Experience>(game.player_entity())
+            .unwrap()
+            .xp
+            > xp_before
+            || game
+                .world
+                .get::<Experience>(game.player_entity())
+                .unwrap()
+                .level
+                > 1,
+        "XP goes through award_player_xp, so a level-up full-heals as it does from a kill"
+    );
+
+    let held = game.world.resource::<ActiveContracts>();
+    assert!(held.active.is_empty(), "a finished contract is not held");
+    assert_eq!(held.done, vec![ContractId::from("paid")]);
+}
+
+#[test]
+fn a_finished_contract_does_not_pay_twice() {
+    let mut game = fresh();
+    give_finished(&mut game, "once", vec![Reward::Credits(40)]);
+    let before = carried(&game, "credits");
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert_eq!(carried(&game, "credits"), before + 40);
+}
+
+#[test]
+fn a_gear_reward_is_always_ordinary() {
+    let mut game = fresh();
+    give_finished(
+        &mut game,
+        "gear",
+        vec![Reward::Item(crate::items::ItemId::from("kinetic_edge"), 1)],
+    );
+    game.tick();
+
+    // The sibling of `crafted_gear_is_never_rare`. `Game::grant_gear_drop` is
+    // the one door a copy above Ordinary enters the game by, and a contract
+    // payout is closer to made gear than found gear — so the plain copy lands
+    // in `Inventory`, and `GearCopies` (the special-copy store) stays empty.
+    assert_eq!(carried(&game, "kinetic_edge"), 1);
+    assert!(
+        game.world
+            .get::<GearCopies>(game.player_entity())
+            .unwrap()
+            .copies
+            .is_empty(),
+        "a contract must not mint a rare or fused copy"
+    );
+}
+
+#[test]
+fn a_completion_announced_mid_battle_survives_the_prune() {
+    let mut game = fresh();
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+    game.world.resource_mut::<MessageLog>().open_battle();
+
+    give_finished(&mut game, "midfight", vec![Reward::Credits(5)]);
+    game.tick();
+    game.world
+        .resource_mut::<MessageLog>()
+        .retain_outcomes_since_battle();
+
+    let lines = game.world.resource::<MessageLog>();
+    assert!(
+        lines
+            .recent(50)
+            .iter()
+            .any(|line| line.text.contains("Contract midfight")),
+        "a plain log() is Info and is deleted when the battle ends — the one \
+         moment the player is least able to notice a payout arriving: {:?}",
+        lines.recent(50).iter().map(|l| &l.text).collect::<Vec<_>>()
+    );
+}

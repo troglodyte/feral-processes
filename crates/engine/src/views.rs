@@ -670,6 +670,12 @@ pub struct PartySlotView {
     /// Whether this slot is in the front line, which draws more enemy fire
     /// — see `FRONT_SLOTS`. Soft ranks: a back slot is still targetable.
     pub front: bool,
+    /// Which of this member's three equipment slots are filled, as the same
+    /// fixed-width `w|a|m` cell `Game::gear_tag` builds for the roster and
+    /// the status panel. Pre-formatted for the reason `EntityView::gear` is
+    /// — a loadout must read one way wherever it is shown, and a fight is
+    /// exactly where a member found to be wearing nothing matters most.
+    pub gear: String,
 }
 
 pub struct BattleView {

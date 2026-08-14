@@ -341,10 +341,10 @@ impl Game {
     /// used both for a nest's initial guardians (`spawn_nest`) and for
     /// respawns (`nest_respawn_tick`, which needs the returned entity to
     /// mark a guardian `Pursuing` when it respawns at a besieged nest).
-    /// Walkability isn't rechecked for the offset tile, matching the
-    /// existing looseness `try_spawn_habitat_creature` already has for
-    /// pack members. `None` only if `species_id` isn't in `SpeciesDb`,
-    /// mirroring `spawn_wild_creature`'s own defensive `Option`.
+    /// The offset goes through `scatter_open_tile`, so a guardian is never
+    /// placed on ground its own tether would then trap it on. `None` only
+    /// if `species_id` isn't in `SpeciesDb`, mirroring
+    /// `spawn_wild_creature`'s own defensive `Option`.
     pub(crate) fn spawn_nest_guardian(
         &mut self,
         nest: Entity,
@@ -352,13 +352,7 @@ impl Game {
         nest_x: i32,
         nest_y: i32,
     ) -> Option<Entity> {
-        let (gx, gy) = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            (
-                nest_x + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
-                nest_y + rng.0.random_range(-NEST_TETHER_RADIUS..=NEST_TETHER_RADIUS),
-            )
-        };
+        let (gx, gy) = self.scatter_open_tile(nest_x, nest_y, NEST_TETHER_RADIUS);
         let guardian = self.spawn_wild_creature(species_id, gx, gy)?;
         self.world
             .entity_mut(guardian)
@@ -905,6 +899,44 @@ impl Game {
         Some(candidates[idx].clone())
     }
 
+    /// A tile within `radius` of `(x, y)` that a hostile can both stand on
+    /// and step off — the single scatter rule for every creature placed at
+    /// an offset from a validated anchor.
+    ///
+    /// Placement and movement used to disagree. Only the *anchor* of a
+    /// spawn roll was ever checked (`habitat_pools`, and `walkable` at
+    /// that), while `wander_ai_system` and `pursuit_field` both step only
+    /// onto `Tile::open_to_hostiles`. A pack member or nest guardian
+    /// scattered across a biome boundary onto DataVoid, or onto the base
+    /// slab, therefore had no legal move for the rest of the run — and a
+    /// guardian's tether meant nothing could displace it off, either.
+    ///
+    /// It spends exactly one draw per axis whatever the outcome, rather
+    /// than resampling until a tile passes: the shared `GameRng` stream is
+    /// what every seeded spawn test is written against, and a variable
+    /// number of draws would move all of them for a reason unrelated to
+    /// what they assert. The anchor is the fallback because it is the one
+    /// tile already known to be legal.
+    fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
+        let (ox, oy) = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            (
+                x + rng.0.random_range(-radius..=radius),
+                y + rng.0.random_range(-radius..=radius),
+            )
+        };
+        if self
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(ox, oy)
+            .open_to_hostiles()
+        {
+            (ox, oy)
+        } else {
+            (x, y)
+        }
+    }
+
     /// Places `size` members of one species around `(x, y)`: the first on
     /// the tile itself, the rest scattered within `swarm_radius` of it.
     fn spawn_group(
@@ -921,16 +953,11 @@ impl Game {
         let mut spawned = Vec::new();
         for i in 0..size {
             // The first member anchors the roll's own tile; the rest
-            // cluster loosely around it (walkability isn't rechecked for
-            // these — same looseness the rest of spawning already has).
+            // cluster around it, on ground they can actually leave.
             let (gx, gy) = if i == 0 {
                 (x, y)
             } else {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                (
-                    x + rng.0.random_range(-radius..=radius),
-                    y + rng.0.random_range(-radius..=radius),
-                )
+                self.scatter_open_tile(x, y, radius)
             };
             spawned.extend(self.spawn_wild_creature_scaled(species_id, gx, gy, esc.stat_mult));
         }

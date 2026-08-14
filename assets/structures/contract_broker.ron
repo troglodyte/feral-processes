@@ -1,0 +1,10 @@
+(
+    id: "contract_broker",
+    name: "Contract Broker",
+    description: "Posts work. Stand beside it to see what the sector is paying for, take up to three jobs at once, and hand over anything a delivery contract asks for. What it offers rotates on its own.",
+    glyph: '!',
+    color: Yellow,
+    build_cost: [("core_fragment", 14)],
+    work: None,
+    issues_contracts: true,
+)

@@ -883,3 +883,81 @@ fn a_completion_announced_mid_battle_survives_the_prune() {
         lines.recent(50).iter().map(|l| &l.text).collect::<Vec<_>>()
     );
 }
+
+// ---------------------------------------------------------------------------
+// The Contract Broker
+// ---------------------------------------------------------------------------
+
+/// Deploys a structure of `kind` at `(x, y)` without paying for it or asking
+/// whether the base reaches — what is under test is the flag, not building.
+fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            Glyph {
+                ch: '!',
+                color: GlyphColor::Yellow,
+            },
+        ))
+        .id()
+}
+
+#[test]
+fn the_shipped_broker_is_the_one_structure_that_issues_contracts() {
+    let game = fresh();
+    let defs = game.structure_defs();
+    let brokers: Vec<&str> = defs
+        .iter()
+        .filter(|d| d.issues_contracts)
+        .map(|d| d.id.as_str())
+        .collect();
+    assert_eq!(
+        brokers,
+        vec!["contract_broker"],
+        "exactly one shipped structure issues contracts"
+    );
+}
+
+#[test]
+fn a_deployed_broker_reports_the_flag_and_nothing_else_does() {
+    let mut game = fresh();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    deploy(&mut game, "contract_broker", pos.x + 1, pos.y);
+    deploy(&mut game, "mining_node", pos.x + 2, pos.y);
+
+    let views = game.view_entities(10, 10);
+    let broker = views
+        .iter()
+        .find(|v| v.issues_contracts)
+        .expect("the Broker reports the flag");
+    assert_eq!(broker.pos, (pos.x + 1, pos.y));
+    assert_eq!(
+        views.iter().filter(|v| v.issues_contracts).count(),
+        1,
+        "a mining node is not a Broker"
+    );
+}
+
+#[test]
+fn the_broker_is_unlocked_by_a_reachable_research_node() {
+    let game = fresh();
+    let node = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .all()
+        .find(|d| d.unlocks_structures.iter().any(|s| s == "contract_broker"))
+        .expect("something in the tree has to unlock the Broker, or it is unbuildable");
+    assert!(
+        node.requires.is_empty()
+            || node.requires.iter().all(|r| game
+                .world
+                .resource::<crate::research::ResearchDb>()
+                .get(r)
+                .is_some()),
+        "{} names a prerequisite that does not exist",
+        node.id
+    );
+}

@@ -159,3 +159,18 @@ pub(crate) fn reward_label(reward: &Reward) -> String {
         Reward::Xp(n) => format!("{n} XP"),
     }
 }
+
+impl Game {
+    /// Whether `entity` is a deployed Contract Broker. The one predicate for
+    /// it, so the `EntityView` flag a frontend scans for and the board's own
+    /// range check cannot disagree about what counts as a Broker.
+    pub(crate) fn issues_contracts(&self, entity: Entity) -> bool {
+        let Some(kind) = self.world.get::<Structure>(entity).map(|s| &s.kind) else {
+            return false;
+        };
+        self.world
+            .resource::<crate::structures::StructureDb>()
+            .get(kind)
+            .is_some_and(|def| def.issues_contracts)
+    }
+}

@@ -436,6 +436,11 @@ pub struct EntityView {
     /// Whether this (structure) entity is a trading post (see
     /// `StructureDef::trade`).
     pub can_trade: bool,
+    /// Whether this (structure) entity is a Contract Broker (see
+    /// `StructureDef::issues_contracts`). The same shape `can_trade` has, and
+    /// read the same way — a frontend finds a Broker by scanning for this
+    /// rather than by naming the structure id.
+    pub issues_contracts: bool,
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,

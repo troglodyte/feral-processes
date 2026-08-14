@@ -177,6 +177,18 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (fused copies included) and supplies.
     zone_portal: true,
 
+    // Optional; can be left out entirely (defaults to false). If true, this
+    // structure is a Contract Broker: standing near it opens the contracts
+    // screen with what the sector is currently offering, and it is where a
+    // `Deliver` contract's items are handed over. See
+    // `assets/contracts/README.md` for what a contract is.
+    //
+    // A plain flag rather than a block, because a Broker has nothing to
+    // configure: what it offers is derived from the world seed, the sector
+    // and the clock, not authored on the building. Several Brokers therefore
+    // all show the same board.
+    issues_contracts: true,
+
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t`) with
     // it to sell any inventory item (except the trade currency itself), or

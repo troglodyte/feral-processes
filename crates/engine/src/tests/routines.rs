@@ -254,6 +254,34 @@ fn a_routine_naming_a_since_removed_ability_is_dropped_on_load_with_a_warning() 
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The etch picker has to say what is already in cargo, or a player burns a
+/// blank on a routine they are carrying three disks of. The count comes off
+/// `etched_disks_of` — the same figure `install_disk` refuses on — so the
+/// screen and the refusal cannot disagree about how many you hold.
+#[test]
+fn the_etch_picker_counts_disks_already_held() {
+    let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    teach_routine(&mut game, "sandbox");
+    teach_routine(&mut game, "priority_boost");
+    give_disks(&mut game, 3);
+    game.etch_disk("sandbox").unwrap();
+    game.etch_disk("sandbox").unwrap();
+
+    let rows = game.etchable_routines();
+    let held = |id: &str| {
+        rows.iter()
+            .find(|r| r.ability == id)
+            .unwrap_or_else(|| panic!("{id} is offered"))
+            .held
+    };
+    assert_eq!(held("sandbox"), 2, "two etched disks are two disks held");
+    assert_eq!(
+        held("priority_boost"),
+        0,
+        "a routine you know but hold no disk of reads zero, not one"
+    );
+}
+
 #[test]
 fn a_known_routine_is_offered_with_the_abilitys_own_text() {
     let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

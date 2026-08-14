@@ -42,6 +42,9 @@ pub fn contract_system(
         Locale::Surface => 0,
     };
 
+    let standing: Vec<crate::structures::StructureId> =
+        structures.iter().map(|s| s.kind.clone()).collect();
+
     for contract in &mut held.active {
         let target = contract.def.objective.target();
         let advance = match &contract.def.objective {
@@ -50,13 +53,13 @@ pub fn contract_system(
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
                 .count() as u32,
-            Objective::Descend { depth: want } => u32::from(depth >= *want),
-            Objective::Breach { zone: want } => u32::from(zone.0 >= *want),
-            Objective::Build { structure } => {
-                u32::from(structures.iter().any(|s| s.kind == *structure))
-            }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
+            // The three state-shaped ones advance by exactly the predicate
+            // `Game::offerable` refuses a board slot on, so a contract cannot
+            // be offered in a state that would finish it and then fail to
+            // finish once taken.
+            state => u32::from(state.already_met(depth, zone.0, &standing)),
         };
         contract.progress = contract.progress.saturating_add(advance).min(target);
     }
@@ -391,11 +394,7 @@ impl Game {
     /// finishes a `Build` the moment one is deployed, so naming something the
     /// player already owns pays out on acceptance.
     fn commissionable_structures(&self) -> Vec<(crate::structures::StructureId, String)> {
-        let standing: Vec<crate::structures::StructureId> = self
-            .world
-            .iter_entities()
-            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
-            .collect();
+        let standing = self.standing_structures();
         self.buildable_structure_defs()
             .into_iter()
             .filter(|def| !standing.contains(&def.id))
@@ -410,12 +409,39 @@ impl Game {
     /// a rolled one have to be filtered by exactly the same rule — a rolled
     /// contract that survived a filter the authored ones don't would reappear
     /// on the board after it had been finished.
+    #[cfg(test)]
+    pub(crate) fn offerable_contracts_for_test(&self, def: &crate::contracts::ContractDef) -> bool {
+        self.offerable(def)
+    }
+
     fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
         let zone = self.world.resource::<ZoneLevel>().0;
         let held = self.world.resource::<ActiveContracts>();
-        def.min_zone <= zone
-            && !held.active.iter().any(|c| c.def.id == def.id)
-            && (def.repeatable || !held.done.contains(&def.id))
+        if def.min_zone > zone {
+            return false;
+        }
+        if held.active.iter().any(|c| c.def.id == def.id) {
+            return false;
+        }
+        if held.done.contains(&def.id) && !def.repeatable {
+            return false;
+        }
+        // Never offer something the run has already done. A board is only read
+        // on the surface, so the depth here is always 0 and a `Descend` can
+        // never be pre-met — `Breach` and `Build` are the live cases, and both
+        // shipped authored contracts that could hit them.
+        !def.objective
+            .already_met(0, zone, &self.standing_structures())
+    }
+
+    /// Every deployed structure's kind. Collected rather than queried lazily
+    /// because both readers want to ask about several contracts against one
+    /// snapshot.
+    fn standing_structures(&self) -> Vec<crate::structures::StructureId> {
+        self.world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect()
     }
 
     /// Every contract the run currently holds. Always available, board or not:

@@ -88,6 +88,29 @@ impl Objective {
             Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => 1,
         }
     }
+
+    /// Whether the run already meets this objective, so accepting it would
+    /// pay out on the spot.
+    ///
+    /// The one statement of it, and it has two readers that must not drift:
+    /// `contract_system` advances the three state-shaped objectives by exactly
+    /// this, and `Game::offerable` refuses to put one on the board while it is
+    /// already true. They were one expression in the system alone until a
+    /// board was read against the `contracts` template and offered
+    /// *Stand Up a Refinery* to a base with a Refinery standing in it — 45
+    /// Credits, 5 Power Cells and 140 XP for pressing a key — and offered
+    /// *Reach sector 3* to a run already in sector 3.
+    ///
+    /// The two counting objectives are never already met: a contract asking
+    /// for zero of something is refused at load.
+    pub fn already_met(&self, depth: u32, zone: u32, standing: &[StructureId]) -> bool {
+        match self {
+            Objective::Terminate { .. } | Objective::Deliver { .. } => false,
+            Objective::Descend { depth: want } => depth >= *want,
+            Objective::Breach { zone: want } => zone >= *want,
+            Objective::Build { structure } => standing.contains(structure),
+        }
+    }
 }
 
 /// What a contract pays. A `Vec<Reward>` rather than one, because a contract

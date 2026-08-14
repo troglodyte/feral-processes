@@ -1023,9 +1023,8 @@ fn reading_the_board_spends_no_shared_rng() {
     let mut read = fresh();
     deploy_broker(&mut read);
 
-    let draw = |game: &mut Game| -> u32 {
-        game.world.resource_mut::<GameRng>().0.random_range(0..1000)
-    };
+    let draw =
+        |game: &mut Game| -> u32 { game.world.resource_mut::<GameRng>().0.random_range(0..1000) };
 
     assert_eq!(
         draw(&mut untouched),
@@ -1902,4 +1901,75 @@ fn the_catalogue_covers_the_widest_row_a_template_can_roll() {
         catalogue.iter().any(|row| row.id.as_str().contains('#')),
         "and what it reaches is the rolled rows"
     );
+}
+
+#[test]
+fn a_contract_the_run_has_already_done_is_never_offered() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    deploy_broker(&mut game);
+
+    // Both cases are real: the `contracts` dev-save offered *Stand Up a
+    // Refinery* to a base with a Refinery already standing, and *Push the
+    // Sector* (reach sector 3) to a run already in sector 3. Either paid out
+    // in full for pressing a key.
+    let refinery = def(
+        "already_built",
+        Objective::Build {
+            structure: "refinery".to_string(),
+        },
+        vec![Reward::Credits(45)],
+    );
+    let breached = def(
+        "already_breached",
+        Objective::Breach { zone: 1 },
+        vec![Reward::Credits(120)],
+    );
+    assert!(
+        game.offerable_contracts_for_test(&refinery),
+        "with no Refinery standing it is a real contract"
+    );
+    assert!(!game.offerable_contracts_for_test(&breached), "zone 1 >= 1");
+
+    deploy(&mut game, "refinery", 3, 0);
+    assert!(
+        !game.offerable_contracts_for_test(&refinery),
+        "a Build of something already deployed completes on acceptance"
+    );
+}
+
+#[test]
+fn no_shipped_contract_or_template_can_be_offered_already_finished() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    deploy_broker(&mut game);
+    // The state that actually reproduces it, and the one the `contracts`
+    // dev-save is in: sector 3 with a Refinery standing, which pre-meets the
+    // shipped `push_the_sector` and `stand_up_a_refinery` respectively. In a
+    // fresh zone-1 game with an empty base neither can be met, and this
+    // census passes against the bug.
+    set_zone(&mut game, 3);
+    deploy(&mut game, "refinery", 3, 0);
+
+    for _ in 0..12 {
+        let offers = board_ids(&mut game);
+        for id in offers {
+            assert_eq!(game.accept_contract(&id), Ok(()), "{id}");
+            // A contract does not settle on acceptance — `contract_system`
+            // raises the progress and `settle_contracts` pays, both inside a
+            // tick. Without one here the census never reaches the failure it
+            // is for, which is how it first passed against the bug.
+            game.wait();
+            let done = game.world.resource::<ActiveContracts>().done.clone();
+            assert!(
+                !done.contains(&id),
+                "{id} finished on the tick after it was accepted — it was \
+                 offered in a state that already met it"
+            );
+            game.abandon_contract(&id);
+        }
+        for _ in 0..crate::tuning::CONTRACT_REFRESH_CYCLES {
+            game.tick();
+        }
+    }
 }

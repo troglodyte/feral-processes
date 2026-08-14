@@ -10,7 +10,6 @@
 10. when a stack boss is defeated, the stack should collapse, and the player gets kicked out, and the entrance is deleted (no need to keep in memory), new stack appears somewhere nearby
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
-13. one button to fuse all items
 20. too easy to level up, lets slow that down a bit
 21. missions, quests
 

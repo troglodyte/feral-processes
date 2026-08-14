@@ -1,12 +1,14 @@
 # Perk catalogue
 
 Every perk a player can buy, charted from `assets/perks/` and
-`crates/engine/src/tuning.rs`. Twelve of them, and there will be twelve until
-someone writes Rust.
+`crates/engine/src/tuning.rs`. 16 of them, and there will be 16
+until someone writes Rust.
 
 **These numbers are a transcription, not a read.** They were copied out on
-2026-08-05 and will drift the moment either source is edited; regenerate the
-page rather than trusting it blind.
+2026-08-14 and will drift the moment either source is edited; regenerate the
+page rather than trusting it blind. The Attacker and Defender rows spent a
+release saying +3 against a `tuning.rs` that said 2, which is what this
+warning is about.
 
 This is the one page in `docs/` that has to reach across the moddable seam,
 because a perk is deliberately split in half. What it is **called**, how it
@@ -18,11 +20,11 @@ dearer but never stronger.
 
 | | |
 |---|---|
-| perks | 12 |
-| prices | 2 and 3 Perk Points |
-| one level of everything | 27 points |
+| perks | 16 |
+| prices | 2 and 3 and 4 Perk Points |
+| one level of everything | 39 points |
 | points earned | 1 per player level, plus up to 5 from the [achievement ladder](achievements.md) |
-| affinity perks | 5 of 12, sharing two rates |
+| affinity perks | 5 of 16, sharing two rates |
 
 ## The catalogue
 
@@ -36,37 +38,47 @@ positionally, so this order is load-bearing: append, never reorder.
 | `LowPowerMode` | Low Power Mode | 2 | -1pp Power drain, floor 0 | the hunger-decay multiplier |
 | `ExploitFocus` | Exploit Focus | 3 | -3pp of the target's HP penalty | taming::capture_chance |
 | `LeanCompiler` | Lean Compiler | 3 | -1 of each ingredient, floor 1 | Game::craft_recipes' costs |
-| `Attacker` | Attacker | 2 | +3 ATK, permanent | a direct Stats write at purchase |
-| `Defender` | Defender | 2 | +3 DEF, permanent | a direct Stats write at purchase |
+| `Attacker` | Attacker | 2 | +2 ATK, permanent | a direct Stats write at purchase |
+| `Defender` | Defender | 2 | +2 DEF, permanent | a direct Stats write at purchase |
 | `Buffer` | Buffer | 3 | +1% max Integrity, at least +10 | a direct Stats write, plus a full heal |
 | `DamageAffinity` | Payload Tuning | 2 | +15% Damage magnitude | the player's own casts only |
 | `HealAffinity` | Field Medic | 2 | +5% Heal magnitude | the player's own casts only |
 | `BuffAffinity` | Overclocker | 2 | +5% Buff magnitude | the player's own casts only |
 | `DebuffAffinity` | Corruption Vector | 2 | +5% Debuff magnitude | the player's own casts only |
 | `DrainAffinity` | Siphon Protocol | 2 | +15% Drain damage | the player's own casts only |
+| `Obfuscation` | Obfuscation | 3 | -10% to every Trace rise, floor 1 | Game::raise_trace |
+| `ProcessPool` | Process Pool | 3 | +1 tamed program you may own | Game::pet_capacity |
+| `Teardown` | Teardown | 4 | +1 work resource per kill | Game::award_loot |
+| `Failover` | Failover | 2 | +1 Durability per repair interval | Game::total_repair_rate |
 
 ## Price
 
 ```
 PERK POINT PRICE
 
-3  Exploit Focus, Lean Compiler, Buffer
-2  Keen Scavenger, Low Power Mode, Attacker, Defender, Payload Tuning, Field Medic, Overclocker, Corruption Vector, Siphon Protocol
+4  Teardown
+3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool
+2  Keen Scavenger, Low Power Mode, Attacker, Defender, Payload Tuning, Field Medic, Overclocker, Corruption Vector, Siphon Protocol, Failover
 
-one level of all 12: 27 points
+one level of all 16: 39 points
 ```
 
-Only three perks cost 3, and what they have in common is that they change a
-*rate* rather than a number: Buffer scales with the Integrity you already
-have, Lean Compiler pays out on every craft for the rest of the run, and
-Exploit Focus is worth more the healthier the program you are trying to take.
-The nine at 2 are flat.
+What the perks at 3 have in common is that they change a *rate* rather than a
+number: Buffer scales with the Integrity you already have, Lean Compiler pays
+out on every craft for the rest of the run, Exploit Focus is worth more the
+healthier the program you are trying to take, Obfuscation is a proportion of
+whatever you were about to spend, and Process Pool raises a ceiling every
+later program is measured against. The ones at 2 are flat.
 
-Note what 27 points means against how they arrive. A Perk Point is
+Teardown is alone at 4 because it is the steepest thing in the catalogue
+relative to what it modifies: a kill drops 2-4 work resources, so a single
+level is worth between a third and a half again of every fight in the run.
+
+Note what 39 points means against how they arrive. A Perk Point is
 1 per player level and at most 5 more from a fully cleared
-profile, so buying one level of all twelve is most of the first thirty levels
-of a run. Perks are not a shopping list to complete; they are a shape to
-commit to.
+profile, so buying one level of each is most of the first forty levels of a
+run. Perks are not a shopping list to complete; they are a shape to commit
+to.
 
 ## Where the magnitudes live
 
@@ -76,24 +88,28 @@ commit to.
 | Low Power Mode | `LOW_POWER_MODE_REDUCTION_PER_LEVEL = 0.01` |
 | Exploit Focus | `EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL = 0.03` |
 | Lean Compiler | `LEAN_COMPILER_DISCOUNT_PER_LEVEL = 1` |
-| Attacker | `ATTACKER_BONUS_PER_LEVEL = 3` |
-| Defender | `DEFENDER_BONUS_PER_LEVEL = 3` |
+| Attacker | `ATTACKER_BONUS_PER_LEVEL = 2` |
+| Defender | `DEFENDER_BONUS_PER_LEVEL = 2` |
 | Buffer | `BUFFER_BONUS_PERCENT_PER_LEVEL = 0.01` |
 | Payload Tuning | `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED` |
 | Field Medic | `AFFINITY_PERK_BONUS_PER_LEVEL` |
 | Overclocker | `AFFINITY_PERK_BONUS_PER_LEVEL` |
 | Corruption Vector | `AFFINITY_PERK_BONUS_PER_LEVEL` |
 | Siphon Protocol | `AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED` |
+| Obfuscation | `OBFUSCATION_REDUCTION_PER_LEVEL = 0.10` |
+| Process Pool | `PROCESS_POOL_SLOTS_PER_LEVEL = 1` |
+| Teardown | `TEARDOWN_SALVAGE_PER_LEVEL = 1` |
+| Failover | `FAILOVER_REPAIR_PER_LEVEL = 1` |
 
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why a thirteenth perk is a new `Perk` variant plus
+has no `effect:` field and why a seventeenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks
 
-These are the one place the twelve *do* share a shape: each multiplies one
+These are the one place the 16 *do* share a shape: each multiplies one
 `AffinityKind` category — Damage, Heal, Buff, Debuff, Drain — for the player's
 own ability casts. Never a companion's: a companion's affinity is its species'
 business, and a party-wide perk would multiply against it.

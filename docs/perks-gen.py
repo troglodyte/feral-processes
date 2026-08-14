@@ -15,14 +15,18 @@ P = [
  ("LowPowerMode",   "Low Power Mode",    2, "-1pp Power drain, floor 0",             "LOW_POWER_MODE_REDUCTION_PER_LEVEL = 0.01", "the hunger-decay multiplier"),
  ("ExploitFocus",   "Exploit Focus",     3, "-3pp of the target's HP penalty",       "EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL = 0.03", "taming::capture_chance"),
  ("LeanCompiler",   "Lean Compiler",     3, "-1 of each ingredient, floor 1",        "LEAN_COMPILER_DISCOUNT_PER_LEVEL = 1",      "Game::craft_recipes' costs"),
- ("Attacker",       "Attacker",          2, "+3 ATK, permanent",                     "ATTACKER_BONUS_PER_LEVEL = 3",              "a direct Stats write at purchase"),
- ("Defender",       "Defender",          2, "+3 DEF, permanent",                     "DEFENDER_BONUS_PER_LEVEL = 3",              "a direct Stats write at purchase"),
+ ("Attacker",       "Attacker",          2, "+2 ATK, permanent",                     "ATTACKER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
+ ("Defender",       "Defender",          2, "+2 DEF, permanent",                     "DEFENDER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
  ("Buffer",         "Buffer",            3, "+1% max Integrity, at least +10",       "BUFFER_BONUS_PERCENT_PER_LEVEL = 0.01",     "a direct Stats write, plus a full heal"),
  ("DamageAffinity", "Payload Tuning",    2, "+15% Damage magnitude",                 "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own casts only"),
  ("HealAffinity",   "Field Medic",       2, "+5% Heal magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
  ("BuffAffinity",   "Overclocker",       2, "+5% Buff magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
  ("DebuffAffinity", "Corruption Vector", 2, "+5% Debuff magnitude",                  "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
  ("DrainAffinity",  "Siphon Protocol",   2, "+15% Drain damage",                     "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own casts only"),
+ ("Obfuscation",    "Obfuscation",       3, "-10% to every Trace rise, floor 1",     "OBFUSCATION_REDUCTION_PER_LEVEL = 0.10",    "Game::raise_trace"),
+ ("ProcessPool",    "Process Pool",      3, "+1 tamed program you may own",          "PROCESS_POOL_SLOTS_PER_LEVEL = 1",          "Game::pet_capacity"),
+ ("Teardown",       "Teardown",          4, "+1 work resource per kill",             "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::award_loot"),
+ ("Failover",       "Failover",          2, "+1 Durability per repair interval",     "FAILOVER_REPAIR_PER_LEVEL = 1",             "Game::total_repair_rate"),
 ]
 K = "variant name cost effect const hook".split()
 R = [dict(zip(K, r)) for r in P]
@@ -70,12 +74,14 @@ def affinity_ramp(width=40):
 doc = f"""# Perk catalogue
 
 Every perk a player can buy, charted from `assets/perks/` and
-`crates/engine/src/tuning.rs`. Twelve of them, and there will be twelve until
-someone writes Rust.
+`crates/engine/src/tuning.rs`. {len(R)} of them, and there will be {len(R)}
+until someone writes Rust.
 
 **These numbers are a transcription, not a read.** They were copied out on
-2026-08-05 and will drift the moment either source is edited; regenerate the
-page rather than trusting it blind.
+2026-08-14 and will drift the moment either source is edited; regenerate the
+page rather than trusting it blind. The Attacker and Defender rows spent a
+release saying +3 against a `tuning.rs` that said 2, which is what this
+warning is about.
 
 This is the one page in `docs/` that has to reach across the moddable seam,
 because a perk is deliberately split in half. What it is **called**, how it
@@ -88,7 +94,7 @@ dearer but never stronger.
 | | |
 |---|---|
 | perks | {len(R)} |
-| prices | {" and ".join(str(c) for c in sorted({r["cost"] for r in R}))} Perk Points |
+| prices | {", ".join(str(c) for c in sorted({r["cost"] for r in R})[:-1])} and {sorted({r["cost"] for r in R})[-1]} Perk Points |
 | one level of everything | {one_of_each} points |
 | points earned | {POINTS_PER_LEVEL} per player level, plus up to 5 from the [achievement ladder](achievements.md) |
 | affinity perks | {len(AFF_RATE)} of {len(R)}, sharing two rates |
@@ -107,17 +113,22 @@ positionally, so this order is load-bearing: append, never reorder.
 
 {price_ladder()}
 
-Only three perks cost 3, and what they have in common is that they change a
-*rate* rather than a number: Buffer scales with the Integrity you already
-have, Lean Compiler pays out on every craft for the rest of the run, and
-Exploit Focus is worth more the healthier the program you are trying to take.
-The nine at 2 are flat.
+What the perks at 3 have in common is that they change a *rate* rather than a
+number: Buffer scales with the Integrity you already have, Lean Compiler pays
+out on every craft for the rest of the run, Exploit Focus is worth more the
+healthier the program you are trying to take, Obfuscation is a proportion of
+whatever you were about to spend, and Process Pool raises a ceiling every
+later program is measured against. The ones at 2 are flat.
+
+Teardown is alone at 4 because it is the steepest thing in the catalogue
+relative to what it modifies: a kill drops 2-4 work resources, so a single
+level is worth between a third and a half again of every fight in the run.
 
 Note what {one_of_each} points means against how they arrive. A Perk Point is
 {POINTS_PER_LEVEL} per player level and at most 5 more from a fully cleared
-profile, so buying one level of all twelve is most of the first thirty levels
-of a run. Perks are not a shopping list to complete; they are a shape to
-commit to.
+profile, so buying one level of each is most of the first forty levels of a
+run. Perks are not a shopping list to complete; they are a shape to commit
+to.
 
 ## Where the magnitudes live
 
@@ -128,12 +139,12 @@ commit to.
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why a thirteenth perk is a new `Perk` variant plus
+has no `effect:` field and why a seventeenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks
 
-These are the one place the twelve *do* share a shape: each multiplies one
+These are the one place the {len(R)} *do* share a shape: each multiplies one
 `AffinityKind` category — Damage, Heal, Buff, Debuff, Drain — for the player's
 own ability casts. Never a companion's: a companion's affinity is its species'
 business, and a party-wide perk would multiply against it.

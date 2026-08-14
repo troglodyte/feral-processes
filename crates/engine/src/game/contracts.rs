@@ -334,15 +334,28 @@ impl Game {
         pools
     }
 
-    /// Items a rolled `Deliver` may ask for: anything the player can make,
-    /// anything a machine they could build prints, and anything dropped by a
-    /// program that lives on their doorstep.
+    /// Items a rolled `Deliver` may ask for: cheap bulk stock the player can
+    /// make, that a machine they could build prints, or that a program on
+    /// their doorstep drops.
     ///
-    /// Two exclusions, both deliberate. **Portal Fragments** are the breaching
-    /// currency and the game's only source of them is a boss underground; a
-    /// contract that ate a stack's worth would be a run the player cannot
-    /// breach out of. The **trade currency** is money, and a delivery paid in
-    /// Credits for Credits is a contract that reads as broken.
+    /// A delivery is asked for **by the score**, and that is what both filters
+    /// are about. `ItemCategory::Material` is the "what you hoard" bucket, so
+    /// it rules out anything worn, drunk or spent as currency — and a `Deliver`
+    /// reads plain `Inventory`, which is by definition the plain-copy store, so
+    /// asking for gear would be asking for the one thing that may not be
+    /// sitting in it. The value ceiling is the rest: `ItemDef::value`'s ladder
+    /// runs printable 1 → scavenged 3-8 → standard 12-16 → researched 20-60 →
+    /// premium 80-120, and only the bottom rungs are things a base accumulates
+    /// twenty of. Without it a Requisition asked for twenty etched Routine
+    /// Disks — a run's worth of research, stated as an errand.
+    ///
+    /// Portal Fragments fall out of the first filter, since `role` makes them
+    /// `Currency`. That matters more than it looks: they are the breaching
+    /// currency, their only source is a boss underground, and a contract
+    /// eating a stack's worth is a run that cannot breach out.
+    /// `a_rolled_delivery_never_asks_for_the_breaching_currency` asserts the
+    /// outcome rather than the mechanism, so a later retune of `role` cannot
+    /// quietly reopen it.
     fn deliverable_items(&self, species: &[(String, String)]) -> Vec<(ItemId, String)> {
         let structures = self.world.resource::<crate::structures::StructureDb>();
         let printed: Vec<ItemId> = structures
@@ -355,11 +368,11 @@ impl Game {
                     .chain(def.assembles.iter().map(|a| a.item.clone()))
             })
             .collect();
-        let currency = self.trade_currency();
         self.world
             .resource::<crate::items_db::ItemDb>()
             .all()
-            .filter(|def| def.id.as_str() != ids::PORTAL_FRAGMENT && def.id != currency)
+            .filter(|def| def.category() == crate::items::ItemCategory::Material)
+            .filter(|def| self.item_value(&def.id) <= crate::tuning::CONTRACT_MAX_DELIVER_VALUE)
             .filter(|def| {
                 def.craftable.is_some()
                     || printed.contains(&def.id)
@@ -425,11 +438,45 @@ impl Game {
     /// wording is: the row a census measures has to be the row the screen
     /// draws, or it is measuring a copy.
     pub fn contract_catalogue(&self) -> Vec<crate::views::ContractRow> {
-        self.world
-            .resource::<crate::contracts::ContractDb>()
-            .iter()
+        let db = self.world.resource::<crate::contracts::ContractDb>();
+        let widest = self.widest_pools();
+        db.iter()
             .map(|def| self.contract_row(def, 0))
+            .chain(
+                db.templates()
+                    .filter_map(|t| t.widest(&widest))
+                    .map(|def| self.contract_row(&def, 0)),
+            )
             .collect()
+    }
+
+    /// The pools at their widest: every species, item and structure the assets
+    /// define rather than what one sector supplies, and sector 0 so a rolled
+    /// `Breach` is not floored out of its range.
+    ///
+    /// Only `contract_catalogue` wants this, and only because the width census
+    /// has to measure the widest row the shipped assets can *ever* build. It
+    /// is an upper bound rather than a reachable board — a row it flags as
+    /// overflowing is one to shorten, which is right whether or not that exact
+    /// roll can happen.
+    fn widest_pools(&self) -> crate::contracts::TemplatePools {
+        let species: Vec<(String, String)> = self
+            .world
+            .resource::<crate::species::SpeciesDb>()
+            .all()
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect();
+        crate::contracts::TemplatePools {
+            items: self.deliverable_items(&species),
+            structures: self
+                .world
+                .resource::<crate::structures::StructureDb>()
+                .all()
+                .map(|def| (def.id.clone(), def.name.clone()))
+                .collect(),
+            species,
+            zone: 0,
+        }
     }
 
     /// Which authored contracts this run could be offered right now, in the

@@ -1841,3 +1841,66 @@ fn deleting_a_template_does_not_reshuffle_what_the_others_rolled() {
          a template file cannot silently rewrite what the others offered"
     );
 }
+
+#[test]
+fn a_rolled_delivery_never_asks_for_the_breaching_currency() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(
+        !pools
+            .items
+            .iter()
+            .any(|(id, _)| id.as_str() == crate::items::ids::PORTAL_FRAGMENT),
+        "Portal Fragments are the breaching currency and the only source of \
+         them is a boss underground — a contract eating a stack's worth is a \
+         run that can never breach again. Asserted as an outcome rather than \
+         against the filter that currently produces it."
+    );
+}
+
+#[test]
+fn a_rolled_delivery_asks_only_for_bulk_stock() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(!pools.items.is_empty(), "there is stock to ask for");
+    for (id, name) in &pools.items {
+        let def = game
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .get(id.as_str())
+            .unwrap();
+        assert_eq!(
+            def.category(),
+            crate::items::ItemCategory::Material,
+            "{name} is not something a base hoards, and a Deliver reads plain \
+             Inventory — which is by definition the plain-copy store"
+        );
+        assert!(
+            game.item_value(id) <= crate::tuning::CONTRACT_MAX_DELIVER_VALUE,
+            "{name} is worth {} — a delivery is asked for by the score, and \
+             twenty of anything past the scavenged band is a run's worth of \
+             work stated as an errand",
+            game.item_value(id)
+        );
+    }
+}
+
+#[test]
+fn the_catalogue_covers_the_widest_row_a_template_can_roll() {
+    let game = fresh();
+    let authored = game.world.resource::<ContractDb>().iter().count();
+    let catalogue = game.contract_catalogue();
+
+    assert!(
+        catalogue.len() > authored,
+        "the renderer's width census measures this, so it has to reach past \
+         the authored set — otherwise a template able to roll a longer name \
+         than any authored contract stops being covered at all"
+    );
+    assert!(
+        catalogue.iter().any(|row| row.id.as_str().contains('#')),
+        "and what it reaches is the rolled rows"
+    );
+}

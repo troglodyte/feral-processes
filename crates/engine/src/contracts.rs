@@ -222,10 +222,26 @@ impl ContractTemplate {
     /// here produces, or a structure already standing is unfinishable or
     /// finishes on acceptance, and either is worse than an empty slot.
     pub fn roll(&self, rng: &mut StdRng, pools: &TemplatePools) -> Option<ContractDef> {
+        self.fill(&mut Choose::Random(rng), pools)
+    }
+
+    /// The same roll taken at its **widest** — the longest-named candidate and
+    /// the top of every range.
+    ///
+    /// Exists for the renderer's width census, which has to measure the widest
+    /// row the shipped assets can ever build rather than whichever one a seed
+    /// happened to produce. It shares `fill` with the real roll rather than
+    /// repeating its five arms, because a census measuring a second copy of
+    /// the construction is measuring the copy rather than the game.
+    pub fn widest(&self, pools: &TemplatePools) -> Option<ContractDef> {
+        self.fill(&mut Choose::Widest, pools)
+    }
+
+    fn fill(&self, choose: &mut Choose, pools: &TemplatePools) -> Option<ContractDef> {
         let (objective, slug, target_name, magnitude) = match &self.objective {
             TemplateObjective::Terminate { count } => {
-                let (id, name) = pick(rng, &pools.species)?;
-                let count = draw(rng, *count, 1)?;
+                let (id, name) = choose.pick(&pools.species)?;
+                let count = choose.draw(*count, 1)?;
                 (
                     Objective::Terminate {
                         species: Some(id.clone()),
@@ -237,8 +253,8 @@ impl ContractTemplate {
                 )
             }
             TemplateObjective::Deliver { count } => {
-                let (id, name) = pick(rng, &pools.items)?;
-                let count = draw(rng, *count, 1)?;
+                let (id, name) = choose.pick(&pools.items)?;
+                let count = choose.draw(*count, 1)?;
                 (
                     Objective::Deliver {
                         item: id.clone(),
@@ -252,7 +268,7 @@ impl ContractTemplate {
             // Depth 0 is the surface, and progress is `depth >= want`, so a
             // rolled 0 would finish the moment it was accepted.
             TemplateObjective::Descend { depth } => {
-                let depth = draw(rng, *depth, 1)?;
+                let depth = choose.draw(*depth, 1)?;
                 (
                     Objective::Descend { depth },
                     format!("d{depth}"),
@@ -263,7 +279,7 @@ impl ContractTemplate {
             // Same trap one sector over: `zone.0 >= want` is already true for
             // anything at or below where the run has reached.
             TemplateObjective::Breach { zone } => {
-                let zone = draw(rng, *zone, pools.zone.saturating_add(1))?;
+                let zone = choose.draw(*zone, pools.zone.saturating_add(1))?;
                 (
                     Objective::Breach { zone },
                     format!("z{zone}"),
@@ -272,7 +288,7 @@ impl ContractTemplate {
                 )
             }
             TemplateObjective::Build => {
-                let (id, name) = pick(rng, &pools.structures)?;
+                let (id, name) = choose.pick(&pools.structures)?;
                 (
                     Objective::Build {
                         structure: id.clone(),
@@ -309,17 +325,41 @@ impl ContractTemplate {
     }
 }
 
-/// One candidate from a pool, or `None` when the sector supplies none.
-fn pick<'a, T>(rng: &mut StdRng, pool: &'a [(T, String)]) -> Option<&'a (T, String)> {
-    (!pool.is_empty()).then(|| &pool[rng.random_range(0..pool.len())])
+/// How a template's free variables get their values. The two callers differ in
+/// exactly this and agree on everything else, so it is a parameter rather than
+/// a second copy of `fill`'s five arms.
+enum Choose<'a> {
+    /// A board's offer.
+    Random(&'a mut StdRng),
+    /// The renderer's width census.
+    Widest,
 }
 
-/// A number from an inclusive authored range, raised to `floor` first. `None`
-/// when the floor has eaten the range — which is a real answer rather than an
-/// error: a `Breach(2, 6)` template simply has nothing to offer in sector 6.
-fn draw(rng: &mut StdRng, (lo, hi): (u32, u32), floor: u32) -> Option<u32> {
-    let lo = lo.max(floor);
-    (lo <= hi).then(|| rng.random_range(lo..=hi))
+impl Choose<'_> {
+    /// One candidate from a pool, or `None` when the sector supplies none.
+    fn pick<'p, T>(&mut self, pool: &'p [(T, String)]) -> Option<&'p (T, String)> {
+        match self {
+            Choose::Random(rng) => {
+                (!pool.is_empty()).then(|| &pool[rng.random_range(0..pool.len())])
+            }
+            Choose::Widest => pool.iter().max_by_key(|(_, name)| name.chars().count()),
+        }
+    }
+
+    /// A number from an inclusive authored range, raised to `floor` first.
+    /// `None` when the floor has eaten the range — a real answer rather than an
+    /// error: a `Breach(2, 6)` template simply has nothing to offer in sector 6.
+    fn draw(&mut self, (lo, hi): (u32, u32), floor: u32) -> Option<u32> {
+        let lo = lo.max(floor);
+        if lo > hi {
+            return None;
+        }
+        Some(match self {
+            Choose::Random(rng) => rng.random_range(lo..=hi),
+            // The top of the range is the most digits it can print.
+            Choose::Widest => hi,
+        })
+    }
 }
 
 #[derive(Resource, Default)]

@@ -14,8 +14,10 @@
 
 use bevy_ecs::prelude::*;
 
+use rand::prelude::*;
+
 use crate::Game;
-use crate::components::Structure;
+use crate::components::{Position, Structure};
 use crate::contracts::{Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
@@ -135,32 +137,29 @@ impl Game {
                 }
             }
         }
-        let paid = contract
-            .def
-            .reward
-            .iter()
-            .map(reward_label)
-            .collect::<Vec<_>>()
-            .join(", ");
+        let paid = self.reward_line(&contract.def.reward);
         self.log_kind(
             MessageKind::Loot,
-            format!("Contract {} paid: {paid}", contract.def.id),
+            format!("{} paid {paid}.", contract.def.name),
         );
     }
-}
 
-/// How a reward reads in the completion line. Engine-side for the reason
-/// `views::ContractRow` composes its own wording: two screens must not word
-/// one contract differently.
-pub(crate) fn reward_label(reward: &Reward) -> String {
-    match reward {
-        Reward::Credits(n) => format!("{n} Credits"),
-        Reward::Item(item, n) => format!("{n}x {item}"),
-        Reward::Xp(n) => format!("{n} XP"),
+    /// How a contract's whole payout reads. The completion line and both
+    /// screens go through this rather than each wording a `Reward` itself —
+    /// `views::ContractRow`'s argument, and the reason item ids are resolved
+    /// to display names here and nowhere downstream.
+    fn reward_line(&self, reward: &[Reward]) -> String {
+        reward
+            .iter()
+            .map(|r| match r {
+                Reward::Credits(n) => format!("{n} {}", self.item_name(&self.trade_currency())),
+                Reward::Item(item, n) => format!("{n} {}", self.item_name(item)),
+                Reward::Xp(n) => format!("{n} XP"),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
     }
-}
 
-impl Game {
     /// Whether `entity` is a deployed Contract Broker. The one predicate for
     /// it, so the `EntityView` flag a frontend scans for and the board's own
     /// range check cannot disagree about what counts as a Broker.
@@ -172,5 +171,181 @@ impl Game {
             .resource::<crate::structures::StructureDb>()
             .get(kind)
             .is_some_and(|def| def.issues_contracts)
+    }
+}
+
+/// Salts the board's seed so what a sector is offering does not correlate
+/// with anything else derived from the same world seed. Its own named
+/// constant, per `FrameSpec::salted`'s rule — one scheme, not a second seed
+/// source that could collide with the Stack's.
+const CONTRACT_BOARD_SALT: u64 = 0xC0A7_7AC7_5EED_0001;
+
+impl Game {
+    /// What a Broker within `CONTRACT_BOARD_RANGE_TILES` is offering, or
+    /// `None` if there is no Broker in reach.
+    ///
+    /// One call answers both "is there a board" and "what is on it", so no
+    /// screen asks those separately and then disagrees — `Game::stack_market`'s
+    /// contract.
+    ///
+    /// **Offers are derived, never stored.** A local `StdRng` seeded from the
+    /// world seed, the sector and the epoch, exactly as `market_offers` is
+    /// seeded off `FrameSpec` and for the same forced reason: the player is
+    /// shown an offer before they accept it, so the answer has to survive a
+    /// save and load, and `GameRng`'s stream position is not persisted. Four
+    /// properties come free — the board survives a reload with no save field,
+    /// reading it spends no `GameRng` draw and so shifts nobody's stream, it
+    /// cannot be rerolled by save-scumming, and it rotates on its own.
+    ///
+    /// `None` underground, and that is not an oversight: the player's
+    /// `Position` is pinned to the surface entrance tile the whole time they
+    /// are down there, so a range check made from it would put the party at a
+    /// Broker they are four frames below. `active_contracts` is what reads
+    /// anywhere.
+    pub fn contract_board(&mut self) -> Option<Vec<crate::views::ContractRow>> {
+        if self.is_underground() || !self.broker_in_range() {
+            return None;
+        }
+        let mut pool = self.offerable_contracts();
+        let mut rng = StdRng::seed_from_u64(self.board_seed());
+        let mut rows = Vec::new();
+        for _ in 0..crate::tuning::CONTRACT_BOARD_SLOTS.min(pool.len()) {
+            let id = pool.swap_remove(rng.random_range(0..pool.len()));
+            if let Some(def) = self
+                .world
+                .resource::<crate::contracts::ContractDb>()
+                .get(&id)
+            {
+                rows.push(self.contract_row(def, 0));
+            }
+        }
+        Some(rows)
+    }
+
+    /// Every contract the run currently holds. Always available, board or not:
+    /// what you have taken is readable anywhere, including four frames down.
+    pub fn active_contracts(&self) -> Vec<crate::views::ContractRow> {
+        self.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .map(|held| self.contract_row(&held.def, held.progress))
+            .collect()
+    }
+
+    /// Which authored contracts this run could be offered right now, in the
+    /// db's stable id order — the pool the board draws its slots from.
+    ///
+    /// Named rather than inlined so a test can ask what is offerable without
+    /// depending on which three the roll happened to pick, and so the filter
+    /// itself is stated once: this sector's level, minus anything already in
+    /// hand, minus anything finished that does not repeat.
+    pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractId> {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let held = self.world.resource::<ActiveContracts>();
+        self.world
+            .resource::<crate::contracts::ContractDb>()
+            .iter()
+            .filter(|def| def.min_zone <= zone)
+            .filter(|def| !held.active.iter().any(|c| c.def.id == def.id))
+            .filter(|def| def.repeatable || !held.done.contains(&def.id))
+            .map(|def| def.id.clone())
+            .collect()
+    }
+
+    /// Whether a Contract Broker is close enough to deal with.
+    fn broker_in_range(&mut self) -> bool {
+        let Some(here) = self.world.get::<Position>(self.player_entity()).copied() else {
+            return false;
+        };
+        let reach = crate::tuning::CONTRACT_BOARD_RANGE_TILES;
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<Structure>>();
+        let near: Vec<Entity> = query
+            .iter(&self.world)
+            .filter(|(_, pos)| (pos.x - here.x).abs() <= reach && (pos.y - here.y).abs() <= reach)
+            .map(|(entity, _)| entity)
+            .collect();
+        near.into_iter().any(|entity| self.issues_contracts(entity))
+    }
+
+    /// The board's seed: the world seed, the sector and the epoch, folded
+    /// FNV-1a a byte at a time.
+    ///
+    /// Byte-at-a-time rather than one XOR-and-multiply per word, for
+    /// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves low
+    /// output bits a fixed function of the input, and consecutive epochs
+    /// differ in exactly one low bit.
+    fn board_seed(&self) -> u64 {
+        let epoch = self.current_tick() / crate::tuning::CONTRACT_REFRESH_CYCLES as u64;
+        let mut h = 0xcbf2_9ce4_8422_2325_u64;
+        for word in [
+            self.world.resource::<crate::world::WorldMap>().seed() as u64,
+            self.world.resource::<ZoneLevel>().0 as u64,
+            epoch,
+            CONTRACT_BOARD_SALT,
+        ] {
+            for byte in word.to_le_bytes() {
+                h ^= byte as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        h
+    }
+
+    /// One contract, worded for a screen.
+    fn contract_row(
+        &self,
+        def: &crate::contracts::ContractDef,
+        progress: u32,
+    ) -> crate::views::ContractRow {
+        crate::views::ContractRow {
+            id: def.id.clone(),
+            name: def.name.clone(),
+            description: def.description.clone(),
+            objective_line: self.objective_line(&def.objective),
+            reward_line: self.reward_line(&def.reward),
+            progress,
+            target: def.objective.target(),
+        }
+    }
+
+    /// What an objective asks, in the player's words. Item and species ids
+    /// are resolved to their display names here rather than shown raw — the
+    /// same reason `Game::copy_name` exists.
+    fn objective_line(&self, objective: &Objective) -> String {
+        match objective {
+            Objective::Kill {
+                species: Some(id),
+                count,
+            } => {
+                let name = self
+                    .world
+                    .resource::<crate::species::SpeciesDb>()
+                    .get(id)
+                    .map(|def| def.name.clone())
+                    .unwrap_or_else(|| id.clone());
+                format!("Defeat {count} {name}")
+            }
+            Objective::Kill {
+                species: None,
+                count,
+            } => format!("Defeat {count} wild programs"),
+            Objective::Deliver { item, count } => {
+                format!("Deliver {count} {}", self.item_name(item))
+            }
+            Objective::Descend { depth } => format!("Stand {depth} frames down a Stack"),
+            Objective::Breach { zone } => format!("Reach sector {zone}"),
+            Objective::Build { structure } => {
+                let name = self
+                    .world
+                    .resource::<crate::structures::StructureDb>()
+                    .get(structure)
+                    .map(|def| def.name.clone())
+                    .unwrap_or_else(|| structure.clone());
+                format!("Build a {name}")
+            }
+        }
     }
 }

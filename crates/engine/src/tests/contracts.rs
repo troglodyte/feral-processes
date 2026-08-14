@@ -961,3 +961,207 @@ fn the_broker_is_unlocked_by_a_reachable_research_node() {
         node.id
     );
 }
+
+// ---------------------------------------------------------------------------
+// The derived board
+// ---------------------------------------------------------------------------
+
+/// A Broker one tile from the player, which is where a board is read from.
+fn deploy_broker(game: &mut Game) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    deploy(game, "contract_broker", pos.x + 1, pos.y);
+}
+
+fn board_ids(game: &mut Game) -> Vec<ContractId> {
+    game.contract_board()
+        .expect("a Broker is deployed")
+        .into_iter()
+        .map(|row| row.id)
+        .collect()
+}
+
+#[test]
+fn there_is_no_board_without_a_broker() {
+    let mut game = fresh();
+    assert!(
+        game.contract_board().is_none(),
+        "one call answers both `is there a board` and `what is on it`, so no \
+         screen asks those separately and then disagrees"
+    );
+    deploy_broker(&mut game);
+    assert!(game.contract_board().is_some());
+}
+
+#[test]
+fn the_same_board_comes_back_after_a_save_and_load() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let before = board_ids(&mut game);
+    assert!(!before.is_empty(), "the shipped set fills a zone-1 board");
+
+    let path =
+        std::env::temp_dir().join(format!("feral_contract_board_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        board_ids(&mut loaded),
+        before,
+        "the whole reason the board is derived rather than saved: the player \
+         is shown an offer before they accept it"
+    );
+}
+
+#[test]
+fn reading_the_board_spends_no_shared_rng() {
+    let mut untouched = fresh();
+    let mut read = fresh();
+    deploy_broker(&mut read);
+
+    let draw = |game: &mut Game| -> u32 {
+        use rand::Rng;
+        game.world.resource_mut::<GameRng>().0.random_range(0..1000)
+    };
+
+    assert_eq!(
+        draw(&mut untouched),
+        draw(&mut read),
+        "same seed, same stream"
+    );
+    let _ = read.contract_board();
+    assert_eq!(
+        draw(&mut untouched),
+        draw(&mut read),
+        "opening a screen must not shift the run's RNG stream — the failure \
+         this repo has been bitten by three times"
+    );
+}
+
+#[test]
+fn the_board_rotates_with_the_epoch() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let before = board_ids(&mut game);
+
+    game.world.resource_mut::<GameClock>().tick += crate::tuning::CONTRACT_REFRESH_CYCLES as u64;
+    let after = board_ids(&mut game);
+    assert_ne!(
+        before, after,
+        "the offers stand for an epoch and then re-derive; a board that never \
+         moved would read as static"
+    );
+}
+
+#[test]
+fn a_contract_above_the_current_zone_is_not_offered() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let zone = game.world.resource::<ZoneLevel>().0;
+    let offered = board_ids(&mut game);
+    for id in offered {
+        let min_zone = game
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .get(&id)
+            .map(|d| d.min_zone)
+            .unwrap_or(0);
+        assert!(
+            min_zone <= zone,
+            "{id} needs zone {min_zone} and the run is in {zone}"
+        );
+    }
+}
+
+#[test]
+fn an_active_or_finished_contract_is_not_offered_again() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let offered = board_ids(&mut game);
+    let taken = offered.first().cloned().expect("the board has offers");
+
+    let def = game
+        .world
+        .resource::<crate::contracts::ContractDb>()
+        .get(&taken)
+        .cloned()
+        .unwrap();
+    give(&mut game, def.clone(), 0);
+    assert!(
+        !board_ids(&mut game).contains(&taken),
+        "a contract already in hand is not offered again"
+    );
+
+    game.world.resource_mut::<ActiveContracts>().active.clear();
+    game.world
+        .resource_mut::<ActiveContracts>()
+        .done
+        .push(taken.clone());
+    let after_done = board_ids(&mut game);
+    if def.repeatable {
+        assert!(
+            after_done.contains(&taken),
+            "a repeatable contract comes back once it is finished"
+        );
+    } else {
+        assert!(
+            !after_done.contains(&taken),
+            "a finished one-shot contract is done for the run"
+        );
+    }
+}
+
+#[test]
+fn a_repeatable_contract_returns_to_the_board_and_a_one_shot_does_not() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let db = game.world.resource::<crate::contracts::ContractDb>();
+    let repeatable = db
+        .iter()
+        .find(|d| d.repeatable && d.min_zone <= 1)
+        .map(|d| d.id.clone())
+        .expect("the shipped set has a repeatable contract available in zone 1");
+    let one_shot = db
+        .iter()
+        .find(|d| !d.repeatable && d.min_zone <= 1)
+        .map(|d| d.id.clone())
+        .expect("and a one-shot one");
+
+    game.world.resource_mut::<ActiveContracts>().done = vec![repeatable.clone(), one_shot.clone()];
+
+    // Widen the pool to the whole catalogue so this is not a test about which
+    // three the roll happened to pick.
+    let offerable = game.offerable_contracts();
+    assert!(offerable.contains(&repeatable));
+    assert!(!offerable.contains(&one_shot));
+}
+
+#[test]
+fn active_contracts_read_anywhere_including_underground() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "held",
+            Objective::Kill {
+                species: None,
+                count: 4,
+            },
+            vec![Reward::Credits(10)],
+        ),
+        2,
+    );
+    set_depth(&mut game, 2);
+
+    let rows = game.active_contracts();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].progress, 2);
+    assert_eq!(rows[0].target, 4);
+    assert!(!rows[0].objective_line.is_empty());
+    assert!(!rows[0].reward_line.is_empty());
+    assert!(
+        game.contract_board().is_none(),
+        "a Broker on the surface is not in reach from four frames down — the \
+         player's Position is pinned to the entrance tile the whole time"
+    );
+}

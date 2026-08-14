@@ -1,0 +1,6 @@
+(
+    id: Obfuscation,
+    name: "Obfuscation",
+    description: "You move through the Stack wearing someone else's signature. Everything you do down there raises Trace 10% less per level — never to nothing.",
+    cost: 3,
+)

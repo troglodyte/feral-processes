@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// hunger-decay multiplier to `taming::capture_chance`'s HP penalty to a
 /// direct `Stats` write, and there is no shared shape to express in data the way
 /// `SpeciesDef` or `ItemDef` have one. So a modder can rename, re-describe
-/// and re-price the twelve perks, but a new perk is still a new variant here
+/// and re-price the sixteen perks, but a new perk is still a new variant here
 /// plus a hook wherever its effect belongs — see `CLAUDE.md`.
 ///
 /// The catalogue keys off this enum rather than a string id so that a `.ron`
@@ -85,6 +85,27 @@ pub enum Perk {
     /// As `DamageAffinity`, for `Drain`'s damage. Its `heal_fraction`
     /// rides the damage dealt and is not scaled again.
     DrainAffinity,
+    /// Cuts what each source adds to Trace by
+    /// `OBFUSCATION_REDUCTION_PER_LEVEL` per level, floored so a rise is
+    /// never cancelled outright. Deliberately unlike `LowPowerMode`, which
+    /// is allowed to stop hunger draining entirely: Power has a structural
+    /// answer already (a Recharger Node deletes it), while Trace is the
+    /// Stack's only escalation pressure, so a perk that zeroed it would
+    /// turn depth into free ground.
+    Obfuscation,
+    /// +`PROCESS_POOL_SLOTS_PER_LEVEL` roster slots per level, through the
+    /// same `Game::pet_capacity` a Data Cache's `pet_slot_bonus` feeds — so
+    /// what the perk buys survives losing the structures.
+    ProcessPool,
+    /// Adds `TEARDOWN_SALVAGE_PER_LEVEL` per level to the work resource a
+    /// kill drops, on top of the `WORK_RESOURCE_DROP` roll rather than as a
+    /// second draw: the shared `GameRng` stream must not move, or every
+    /// seeded spawn and combat test downstream of a kill moves with it.
+    Teardown,
+    /// Adds `FAILOVER_REPAIR_PER_LEVEL` per level to the base-wide repair
+    /// rate (`Game::total_repair_rate`), which is what a Patch Node
+    /// contributes to — so a base with no repairer at all still mends.
+    Failover,
 }
 
 impl Perk {
@@ -92,7 +113,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 12] {
+    pub fn all() -> [Perk; 16] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -106,11 +127,15 @@ impl Perk {
             Perk::BuffAffinity,
             Perk::DebuffAffinity,
             Perk::DrainAffinity,
+            Perk::Obfuscation,
+            Perk::ProcessPool,
+            Perk::Teardown,
+            Perk::Failover,
         ]
     }
 
     /// Which affinity category this perk multiplies, or `None` for the
-    /// seven perks that do something else entirely. The one hook all five
+    /// eleven perks that do something else entirely. The one hook all five
     /// affinity perks share — they have a common shape, unlike the perks
     /// above them, so they get a common mapping rather than five bespoke
     /// arms in `unlock_perk`.

@@ -1904,6 +1904,62 @@ pub const BUFFER_BONUS_PERCENT_PER_LEVEL: f32 = 0.01;
 /// this.
 pub const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
 
+/// Fraction of an incoming Trace rise `Perk::Obfuscation` cancels, per level.
+///
+/// A proportion rather than a flat subtraction because what raises Trace runs
+/// from `TRACE_PER_KILL` (2) to `TRACE_PER_BREAKPOINT` (25): a flat term large
+/// enough to be felt against a breakpoint would zero every kill in the game,
+/// and one small enough to leave a kill alone would be invisible against the
+/// rest. Five levels therefore halves the whole schedule rather than deleting
+/// its cheap half.
+///
+/// The rate has to clear rounding to be worth anything, which is what sets
+/// it: `Game::obfuscated` rounds, so a level shows up only once the source
+/// times the reduction reaches a half. At 0.10 that is one level against a
+/// cache (10) or a breakpoint (25) and three against a kill (2). At 0.05 a
+/// cache took two levels to move at all — the first purchase bought
+/// literally nothing on every source but the breakpoint, which is not a
+/// perk anyone would buy a second level of.
+///
+/// `Game::obfuscated` floors the result at 1, so however many levels are
+/// stacked a source still costs something — see `Perk::Obfuscation` for why
+/// that floor is not the same call `LOW_POWER_MODE_REDUCTION_PER_LEVEL` makes.
+/// Ten levels is where every source reaches that floor, which at
+/// `assets/perks/obfuscation.ron`'s price is thirty levels' worth of Perk
+/// Points spent on nothing else.
+pub const OBFUSCATION_REDUCTION_PER_LEVEL: f32 = 0.10;
+
+/// Roster slots `Perk::ProcessPool` adds per level, on top of
+/// `BASE_PET_CAPACITY` (3) and any deployed `pet_slot_bonus`.
+///
+/// A whole slot per level against a base of 3 is the largest step any perk
+/// takes, and it is priced accordingly in `assets/perks/process_pool.ron`: a
+/// Data Cache is worth 5 slots for a building's materials, so the perk is the
+/// expensive way to the same place, bought when there is nothing to build
+/// with.
+pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
+
+/// Work resource `Perk::Teardown` adds to a kill's drop, per level, on top of
+/// the `WORK_RESOURCE_DROP` roll (2..=4).
+///
+/// This is a permanent income *rate*, not a loop — nothing here mints value
+/// out of nothing, and it is bounded by how many fights the player takes,
+/// which is what makes it the salvage perk rather than a trader one. It is
+/// still the steepest thing in this section relative to what it modifies
+/// (+33% to +50% at a single level), so it carries the highest price in the
+/// catalogue.
+pub const TEARDOWN_SALVAGE_PER_LEVEL: u32 = 1;
+
+/// Durability `Perk::Failover` adds to `Game::total_repair_rate` per level,
+/// restored to every damaged structure each `STRUCTURE_REGEN_INTERVAL`.
+///
+/// Sized against the Patch Node's `repair.per_tier` rather than against
+/// `RAID_DAMAGE`: this is the same rate a building contributes, so a level is
+/// deliberately a fraction of what deploying one is worth. What the perk
+/// actually buys is that a base with no Patch Node standing stops taking
+/// permanent damage at all.
+pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Routine slots
 // ─────────────────────────────────────────────────────────────────────────

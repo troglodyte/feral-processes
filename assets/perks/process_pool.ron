@@ -1,0 +1,6 @@
+(
+    id: ProcessPool,
+    name: "Process Pool",
+    description: "You keep more threads alive at once. +1 tamed program you may own per level, and no sweep can take it back.",
+    cost: 3,
+)

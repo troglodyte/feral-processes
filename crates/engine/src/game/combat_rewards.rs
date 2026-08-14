@@ -2,7 +2,9 @@
 //! decompiling a defeated program into a companion.
 
 use crate::progression::StatRow;
-use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, WORK_RESOURCE_DROP};
+use crate::tuning::{
+    DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, TEARDOWN_SALVAGE_PER_LEVEL, WORK_RESOURCE_DROP,
+};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
@@ -380,9 +382,14 @@ impl Game {
         };
 
         if let Some(resource) = &species.work_resource {
+            // Added to the roll rather than drawn for: a second draw here
+            // would shift the shared `GameRng` stream on essentially every
+            // fight in the game, which is the same trap
+            // `grant_gear_drop`'s early return exists to avoid.
+            let bonus = TEARDOWN_SALVAGE_PER_LEVEL * self.player_perk_level(Perk::Teardown);
             let qty = {
                 let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(WORK_RESOURCE_DROP)
+                rng.0.random_range(WORK_RESOURCE_DROP) + bonus
             };
             let landed = self.grant_loot(resource.clone(), qty);
             self.record_drop(GearCopy::plain(resource.clone()), landed);

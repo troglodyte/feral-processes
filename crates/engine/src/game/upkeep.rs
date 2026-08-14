@@ -3,8 +3,8 @@
 
 use crate::species::AffinityClass;
 use crate::tuning::{
-    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
+    BASTION_DEF_MULTIPLIER, FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL,
+    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -113,6 +113,7 @@ impl Game {
     /// invalidation step, the same way `pet_capacity` handles a lost Data
     /// Cache.
     pub(crate) fn total_repair_rate(&mut self) -> u32 {
+        let perk = FAILOVER_REPAIR_PER_LEVEL * self.player_perk_level(Perk::Failover);
         let repairers: Vec<(StructureId, u32)> = {
             let mut query = self.world.query::<(&Structure, Option<&StructureTier>)>();
             query
@@ -125,7 +126,8 @@ impl Game {
             .iter()
             .filter_map(|(kind, tier)| Some((db.get(kind.as_str())?.repair?, tier)))
             .map(|(repair, tier)| repair.per_tier * tier)
-            .sum()
+            .sum::<u32>()
+            + perk
     }
 
     /// Advances every `Nest`'s `pending_respawns` countdown by one tick,

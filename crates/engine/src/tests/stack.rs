@@ -2796,6 +2796,49 @@ fn set_depth(game: &mut Game, depth: u32) {
     });
 }
 
+/// Trace is the Stack's only escalation pressure — it drives the encounter
+/// rate, enemy stats and group size through `TRACE_*_MULT` — so unlike
+/// `Perk::LowPowerMode`, which is allowed to stop hunger draining entirely,
+/// Obfuscation must never be buyable to a standstill. The second half is the
+/// half that matters: enough levels to cancel the rise outright still leaves
+/// the meter climbing.
+#[test]
+fn obfuscation_slows_trace_but_can_never_stop_it() {
+    let mut game = game();
+    descend(&mut game);
+    let player = game.player_entity();
+
+    set_trace(&mut game, 0);
+    game.raise_trace(crate::tuning::TRACE_PER_CACHE);
+    let unperked = trace(&game);
+    assert!(unperked > 1, "the rise has to have room to be reduced");
+
+    let buy = |game: &mut Game| {
+        game.world.get_mut::<Perks>(player).unwrap().points = 100;
+        game.unlock_perk(Perk::Obfuscation).unwrap();
+    };
+
+    buy(&mut game);
+    set_trace(&mut game, 0);
+    game.raise_trace(crate::tuning::TRACE_PER_CACHE);
+    let perked = trace(&game);
+    assert!(
+        perked < unperked,
+        "one level should shave the rise: {perked} vs {unperked}"
+    );
+
+    for _ in 0..(1.0 / crate::tuning::OBFUSCATION_REDUCTION_PER_LEVEL).ceil() as u32 {
+        buy(&mut game);
+    }
+    set_trace(&mut game, 0);
+    game.raise_trace(crate::tuning::TRACE_PER_CACHE);
+    assert_eq!(
+        trace(&game),
+        1,
+        "past the point the reduction cancels the rise, Trace must still climb"
+    );
+}
+
 /// The reason Trace is a resource and not a field on the `Locale::Stack`
 /// variant. `descend_to` and `ascend_to` each *construct* a fresh variant
 /// rather than mutating the live one, so a field there is silently zeroed on

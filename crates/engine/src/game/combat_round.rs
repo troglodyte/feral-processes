@@ -513,6 +513,7 @@ impl Game {
                         .as_ref()
                         .map(|action| self.action_label(entity, action)),
                     front: slot < FRONT_SLOTS,
+                    gear: self.gear_tag(entity),
                 })
             })
             .collect();

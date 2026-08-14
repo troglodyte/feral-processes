@@ -74,6 +74,9 @@ const DECOMP_W: usize = 6;
 /// `FATIGUE` itself is the widest thing in the column — `100/100` fits under
 /// it exactly, which `the_fatigue_column_holds_its_place` pins.
 const FATIGUE_W: usize = 7;
+/// `w|a|m` — three slot marks and the two separators between them. Fixed by
+/// construction, since `Game::gear_tag` holds an empty slot open with a dot.
+const GEAR_W: usize = 5;
 /// The one line shape both rosters and both headers are built from, so a
 /// column cannot move in a row without moving in its header too.
 fn roster_line(
@@ -105,11 +108,17 @@ fn hostile_tail(status: &str, decomp: &str) -> String {
     format!("{} {}", cell(status, STATUS_W), right(decomp, DECOMP_W))
 }
 
-/// The party roster's counterpart: a fixed FATIGUE cell, then the ragged
-/// ACTION column. Composed here for the reason `hostile_tail` is — the
-/// header and every row are built from one set of widths or they drift.
-fn party_tail(fatigue: &str, action: &str) -> String {
-    format!("{} {}", right(fatigue, FATIGUE_W), action)
+/// The party roster's counterpart: a fixed GEAR cell, a fixed FATIGUE cell,
+/// then the ragged ACTION column. Composed here for the reason `hostile_tail`
+/// is — the header and every row are built from one set of widths or they
+/// drift.
+fn party_tail(gear: &str, fatigue: &str, action: &str) -> String {
+    format!(
+        "{} {} {}",
+        cell(gear, GEAR_W),
+        right(fatigue, FATIGUE_W),
+        action
+    )
 }
 
 /// The FATIGUE cell: what this member has left to spend on routines, or a
@@ -159,7 +168,7 @@ fn party_header() -> String {
         "ATK",
         "DEF",
         "POS",
-        &party_tail("FATIGUE", "ACTION"),
+        &party_tail("GEAR", "FATIGUE", "ACTION"),
     )
 }
 
@@ -385,6 +394,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 // rather than getting a fixed cell of its own that would be
                 // empty on almost every row.
                 &party_tail(
+                    &p.gear,
                     &fatigue_cell(p.fatigue),
                     &format!(
                         "{}{}",
@@ -628,7 +638,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail(&fatigue_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -637,7 +647,7 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail(&fatigue_cell(None), "Defend"),
+                &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
             ),
         ];
         for line in &lines {
@@ -649,8 +659,8 @@ mod tests {
         }
         assert!(at(&lines[0], TAIL_COL).starts_with("STATUS"));
         assert!(at(&lines[1], TAIL_COL).starts_with("BLEEDING"));
-        assert!(at(&lines[3], TAIL_COL).starts_with("FATIGUE"));
-        assert!(at(&lines[4], TAIL_COL).starts_with(" 62/100"));
+        assert!(at(&lines[3], TAIL_COL).starts_with("GEAR"));
+        assert!(at(&lines[4], TAIL_COL).starts_with("w|a|m"));
     }
 
     /// A whole roster block, character-exact. The other tests assert the
@@ -713,7 +723,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail(&fatigue_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -722,15 +732,15 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail(&fatigue_cell(None), "Defend"),
+                &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
             ),
         ]
         .join("\n");
         assert_eq!(
             block,
-            "   NAME               HP        ATK DEF POS     FATIGUE ACTION\n\
-             >1 You                21/30      11   6 FRONT    62/100 Attack A\n\
-             \u{20}2 Sparkgrub          18/18       7   3 FRONT         — Defend"
+            "   NAME               HP        ATK DEF POS     GEAR  FATIGUE ACTION\n\
+             >1 You                21/30      11   6 FRONT   w|a|m  62/100 Attack A\n\
+             \u{20}2 Sparkgrub          18/18       7   3 FRONT   w|.|.       — Defend"
         );
     }
 
@@ -781,14 +791,58 @@ mod tests {
         assert_eq!(at(&row, TAIL_COL + STATUS_W + 1), "     —");
     }
 
+    /// Where FATIGUE begins: the party tail leads with the fixed GEAR cell,
+    /// so everything behind it is offset by that cell and its separator.
+    const FATIGUE_COL: usize = TAIL_COL + GEAR_W + 1;
+
     /// And each header label sits over the column it names.
     #[test]
     fn the_header_labels_sit_over_their_columns() {
         let h = party_header();
         assert!(at(&h, MARK_W).starts_with("NAME"));
         assert!(at(&h, MARK_W + NAME_W + 1).starts_with("HP"));
-        assert!(at(&h, TAIL_COL).starts_with("FATIGUE"));
-        assert!(at(&h, TAIL_COL + FATIGUE_W + 1).starts_with("ACTION"));
+        assert!(at(&h, TAIL_COL).starts_with("GEAR"));
+        assert!(at(&h, FATIGUE_COL).starts_with("FATIGUE"));
+        assert!(at(&h, FATIGUE_COL + FATIGUE_W + 1).starts_with("ACTION"));
+    }
+
+    /// The loadout cell is fixed-width, so a member wearing nothing holds
+    /// the same three marks open as one in full gear and FATIGUE does not
+    /// shift between the two rows. Fully worn and fully bare are the two
+    /// extremes; there is nothing wider than either.
+    #[test]
+    fn the_gear_column_holds_its_place() {
+        let geared = roster_row(
+            ">1 ",
+            "You",
+            "21/30",
+            11,
+            6,
+            "FRONT",
+            &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
+        );
+        let bare = roster_row(
+            " 2 ",
+            "Sparkgrub",
+            "18/18",
+            7,
+            3,
+            "FRONT",
+            &party_tail(".|.|.", &fatigue_cell(None), "Defend"),
+        );
+        assert_eq!(
+            at(&geared, TAIL_COL)
+                .chars()
+                .take(GEAR_W)
+                .collect::<String>(),
+            "w|a|m"
+        );
+        assert_eq!(
+            at(&bare, TAIL_COL).chars().take(GEAR_W).collect::<String>(),
+            ".|.|."
+        );
+        assert!(at(&geared, FATIGUE_COL).starts_with(" 62/100"));
+        assert!(at(&bare, FATIGUE_COL).starts_with("      —"));
     }
 
     /// FATIGUE is a fixed cell in the party tail, so ACTION starts at the
@@ -797,7 +851,7 @@ mod tests {
     /// widening it.
     #[test]
     fn the_fatigue_column_holds_its_place() {
-        const ACTION_COL: usize = TAIL_COL + FATIGUE_W + 1;
+        const ACTION_COL: usize = FATIGUE_COL + FATIGUE_W + 1;
         let you = roster_row(
             ">1 ",
             "You",
@@ -805,7 +859,11 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail(&fatigue_cell(Some(NEED_MAX)), "Special: Null Route"),
+            &party_tail(
+                "w|a|m",
+                &fatigue_cell(Some(NEED_MAX)),
+                "Special: Null Route",
+            ),
         );
         let pet = roster_row(
             " 2 ",
@@ -814,18 +872,18 @@ mod tests {
             7,
             3,
             "FRONT",
-            &party_tail(&fatigue_cell(None), "Defend"),
+            &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
         );
         assert_eq!(fatigue_cell(Some(NEED_MAX)).chars().count(), FATIGUE_W);
         assert_eq!(
-            at(&you, TAIL_COL)
+            at(&you, FATIGUE_COL)
                 .chars()
                 .take(FATIGUE_W)
                 .collect::<String>(),
             "100/100"
         );
         assert_eq!(
-            at(&pet, TAIL_COL)
+            at(&pet, FATIGUE_COL)
                 .chars()
                 .take(FATIGUE_W)
                 .collect::<String>(),

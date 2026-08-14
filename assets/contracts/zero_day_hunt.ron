@@ -1,0 +1,8 @@
+(
+    id: "zero_day_hunt",
+    name: "Zero Day Hunt",
+    description: "Eight ZeroDays are loose in the static and nobody upstream wants their names written down. Hunt them.",
+    objective: Terminate(species: Some("zero_day"), count: 8),
+    reward: [Credits(140), Item("routine_disk", 2), Xp(380)],
+    min_zone: 5,
+)

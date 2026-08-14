@@ -1,0 +1,8 @@
+(
+    id: "the_far_sector",
+    name: "The Far Sector",
+    description: "Everything the Broker knows runs out around sector 6. Get there and it will call the ledger settled.",
+    objective: Breach(zone: 6),
+    reward: [Credits(150), Xp(400)],
+    min_zone: 4,
+)

@@ -1,0 +1,8 @@
+(
+    id: "raise_a_shield",
+    name: "Raise a Shield",
+    description: "The sweeps come whether you are ready or not. Build a Shield and keep it standing.",
+    objective: Build(structure: "shield"),
+    reward: [Credits(60), Xp(160)],
+    min_zone: 2,
+)

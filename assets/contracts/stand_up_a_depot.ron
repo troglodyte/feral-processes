@@ -1,0 +1,8 @@
+(
+    id: "stand_up_a_depot",
+    name: "Stand Up a Depot",
+    description: "A base that cannot put anything down cannot keep working. Build a Depot and keep it standing.",
+    objective: Build(structure: "depot"),
+    reward: [Credits(35), Item("core_fragment", 10), Xp(110)],
+    min_zone: 1,
+)

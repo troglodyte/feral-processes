@@ -1,0 +1,9 @@
+(
+    id: "coil_order",
+    name: "Coil Order",
+    description: "Half the sector's patch work is stalled for want of winding. Deliver eight Charge Coils.",
+    objective: Deliver(item: "charge_coil", count: 8),
+    reward: [Credits(55), Xp(140)],
+    min_zone: 2,
+    repeatable: true,
+)

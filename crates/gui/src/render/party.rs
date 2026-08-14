@@ -167,11 +167,6 @@ fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
     )
 }
 
-/// What a routine line is indented by: the glyph slot `with_icon` reserves
-/// inside the row above, plus the width of its `[x] ` shortcut, so the
-/// routines sit under the program's name rather than under its icon.
-const FUSE_ROUTINE_INDENT: &str = "       ";
-
 /// One fuse candidate's lines: the stat row its shortcut selects, then the
 /// routines it is carrying underneath.
 ///
@@ -180,25 +175,19 @@ const FUSE_ROUTINE_INDENT: &str = "       ";
 /// page says so at the end of the flow, and this is that answer while both
 /// picks are still free.
 ///
-/// They shed onto their own lines rather than joining the stat row for the
-/// reason `craft_rows` states: `draw_row` clamps a row vertically and nothing
-/// clamps it horizontally, and six slots of shipped routine names run well
-/// past the popup's edge. A program carrying nothing gets no line at all,
-/// which is what `wrap_text` of an empty list already returns.
+/// They shed onto their own lines through `continuation_lines` rather than
+/// joining the stat row, for the reason `craft_rows` states: `draw_row`
+/// clamps a row vertically and nothing clamps it horizontally, and six slots
+/// of shipped routine names run well past the popup's edge. A program
+/// carrying nothing gets no line at all, which is what wrapping an empty
+/// list already returns.
 ///
 /// Returns the lines rather than drawing them so their width is measurable
 /// without a window — see `the_widest_shipped_routine_kit_fits_the_fuse_picker`.
 /// The stat row is always present, so a caller may take it unconditionally.
 fn fuse_candidate_rows(num: char, p: &PetInfo, routines: &[String]) -> Vec<String> {
     std::iter::once(fuse_candidate_label(num, p))
-        .chain(
-            wrap_text(
-                &routines.join(", "),
-                ROW_WRAP_COLUMNS - FUSE_ROUTINE_INDENT.len(),
-            )
-            .into_iter()
-            .map(|line| format!("{FUSE_ROUTINE_INDENT}{line}")),
-        )
+        .chain(continuation_lines(&routines.join(", ")))
         .collect()
 }
 
@@ -452,28 +441,7 @@ mod tests {
         });
     }
 
-    fn pet(name: &str, gear: &str) -> PetInfo {
-        PetInfo {
-            entity: Entity::PLACEHOLDER,
-            glyph: 'p',
-            color: GlyphColor::White,
-            name: name.to_string(),
-            level: 6,
-            hp: 22,
-            max_hp: 28,
-            atk: 8,
-            def: 5,
-            power: 19,
-            party_slot: Some(0),
-            activity: "in party".to_string(),
-            quality: None,
-            fusions: 0,
-            refactors: 0,
-            rarity: Rarity::Ordinary,
-            wielded: false,
-            gear: gear.to_string(),
-        }
-    }
+    use super::super::test_pet as pet;
 
     /// The roster is where a program's gear is *fitted*, so it is also where
     /// the player is deciding which one to fit next — and the list is the

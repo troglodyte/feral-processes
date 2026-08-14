@@ -12,8 +12,6 @@
 12. next zone unlocks are research -> upgrade base to zone 2
 13. one button to fuse all items
 14. When selecting a non-combat routine to run on a party member, show their stats on the 'run a routine' popup
-15. show equipped slots on main battle page
-17. extract a routine screen should show a list of routines to extract per entity
 20. too easy to level up, lets slow that down a bit
 21. missions, quests
 

@@ -755,6 +755,34 @@ fn activity_tag(activity: &str) -> String {
     format!(" ({activity})")
 }
 
+/// A stand-in program for the row builders that take one. Shared rather than
+/// restated per screen: several of these tests measure a real row's *width*,
+/// so a second fixture with a shorter name would quietly weaken whichever
+/// census copied it.
+#[cfg(test)]
+pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
+    PetInfo {
+        entity: Entity::PLACEHOLDER,
+        glyph: 'p',
+        color: GlyphColor::White,
+        name: name.to_string(),
+        level: 6,
+        hp: 22,
+        max_hp: 28,
+        atk: 8,
+        def: 5,
+        power: 19,
+        party_slot: Some(0),
+        activity: "in party".to_string(),
+        quality: None,
+        fusions: 0,
+        refactors: 0,
+        rarity: Rarity::Ordinary,
+        wielded: false,
+        gear: gear.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

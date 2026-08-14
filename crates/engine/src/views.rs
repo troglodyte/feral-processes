@@ -457,6 +457,22 @@ pub struct EntityView {
     /// machine's glyph: a base at rest should read as buildings, with motion
     /// the only thing that draws the eye.
     pub worker_away_from_post: bool,
+    /// Whether this entity's `Position` is a tile the sim actually keeps up
+    /// to date — the input `views::drawn_on_surface_map` takes, and the
+    /// wider question `worker_away_from_post` above is one answer to.
+    ///
+    /// Three tamed programs have an honest tile and each for its own
+    /// reason: a worker walking to or from its post (`haul_step_system`
+    /// moves it), an idle base staff member (`schedule_base_labour` parks it
+    /// on a ring around the Home every tick), and nothing else. A guard
+    /// keeps whatever tile it was on when it took the job, and a party
+    /// companion keeps the tile it was beaten on — neither is ever written
+    /// again, so drawing either would claim it is somewhere it isn't.
+    ///
+    /// Distinct from `worker_away_from_post`, which stayed narrow because a
+    /// frontend marks "someone is on this job" with it: an idle program is
+    /// on no job, so widening that field would have put the mark on it.
+    pub position_is_honest: bool,
     /// If this is a structure, whether a posted program is standing at it
     /// right now — a guard (which never moves, so always) or a worker that
     /// has not stepped off on an errand.
@@ -523,11 +539,17 @@ pub struct EntityView {
 /// so that what the player can *see* and what the inspector can *name* are
 /// the same set.
 ///
-/// It says: everything untamed is drawn, and a tamed program only while it
-/// is out on an errand. `EntityView::worker_away_from_post` above carries
-/// the reasoning; the short of it is that a worker is the only tamed program
-/// whose `Position` the sim keeps honest, so drawing any other would claim
+/// It says: everything untamed is drawn, and a tamed program only while its
+/// `Position` is one the sim keeps honest — drawing any other would claim
 /// it is somewhere it isn't.
+///
+/// The second parameter widened from "is this worker away from its post" on
+/// 2026-08-14, when base staff arrived. Two kinds of tamed program now have
+/// an honest tile: one walking to or from a post, and one **idle in the
+/// base**, which `schedule_base_labour` parks on a ring around the Home
+/// every tick. A party companion still has neither — its `Position` is the
+/// tile it was beaten on, written at capture and never again — so it is
+/// still not drawn. `EntityView::position_is_honest` is the value.
 ///
 /// **A pure function shared by two crates rather than a condition written
 /// twice.** `render/base.rs` filters the map with it, and
@@ -536,8 +558,8 @@ pub struct EntityView {
 /// parked in front of it — a program with no glyph on screen — while the
 /// machine's own glyph sat under the cursor. Per `CLAUDE.md`, a claim that
 /// two places use the same rule has to be a call, not a comment.
-pub fn drawn_on_surface_map(is_tamed: bool, worker_away_from_post: bool) -> bool {
-    !is_tamed || worker_away_from_post
+pub fn drawn_on_surface_map(is_tamed: bool, position_is_honest: bool) -> bool {
+    !is_tamed || position_is_honest
 }
 
 /// One structure on the roster screen — see `Game::structure_report`.

@@ -929,3 +929,119 @@ fn standing_jobs_survive_a_save_but_not_a_demolition() {
     let second = spawn_machine_at(&mut game, "research_node", 2, 0);
     assert_eq!(game.standing_job(second), None);
 }
+
+// ---------------------------------------------------------------------
+// Task 6: idle staff on the map
+// ---------------------------------------------------------------------
+
+use crate::game::base::work_orders::park_tile;
+
+#[test]
+fn park_tile_is_a_pure_function_of_its_arguments() {
+    let home = Position { x: 4, y: 7 };
+
+    assert_eq!(park_tile(home, 0, 12), park_tile(home, 0, 12));
+    assert_eq!(park_tile(home, 3, 99), park_tile(home, 3, 99));
+}
+
+#[test]
+fn two_staff_park_on_different_tiles_at_the_same_tick() {
+    let home = Position { x: 0, y: 0 };
+
+    assert_ne!(park_tile(home, 0, 5), park_tile(home, 1, 5));
+}
+
+#[test]
+fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 0);
+    let staff = hire(&mut game, 2);
+    let radius = game.build_radius();
+    let home_entity = find_home(&mut game).unwrap();
+    let home = *game.world.get::<Position>(home_entity).unwrap();
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    for worker in staff {
+        let pos = *game.world.get::<Position>(worker).unwrap();
+        assert!(
+            (pos.x - home.x).abs().max((pos.y - home.y).abs()) <= radius,
+            "an idle program loiters inside the base, not off in the wild"
+        );
+        assert_ne!(
+            (pos.x, pos.y),
+            (node_pos.x, node_pos.y),
+            "and never on a tile a structure stands on"
+        );
+    }
+}
+
+/// The map and the inspector must stay the same set — that is the whole
+/// reason `drawn_on_surface_map` is one function called by both.
+#[test]
+fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    // `spawn_tamed_on_map` rather than `spawn_tamed`: `view_entities` draws
+    // from `Glyph`, and a program without one is invisible for reasons that
+    // have nothing to do with this rule.
+    let idle = spawn_tamed_on_map(&mut game, 5, 5);
+    game.assign_base_staff(idle).unwrap();
+    let companion = spawn_tamed_on_map(&mut game, 6, 5);
+    game.add_companion(companion).unwrap();
+    game.tick();
+
+    let drawn: Vec<Entity> = game
+        .view_entities(40, 40)
+        .into_iter()
+        .filter(|e| views::drawn_on_surface_map(e.is_tamed, e.position_is_honest))
+        .map(|e| e.entity)
+        .collect();
+
+    assert!(drawn.contains(&idle), "idle staff are on the map");
+    assert!(
+        !drawn.contains(&companion),
+        "a party companion has no honest tile of its own, so it is not"
+    );
+
+    // Line the idle program up east of the player and confirm `x` names it.
+    let player = game.player_entity();
+    let here = *game.world.get::<Position>(player).unwrap();
+    let mut pos = game.world.get_mut::<Position>(idle).unwrap();
+    pos.x = here.x + 2;
+    pos.y = here.y;
+    assert!(
+        game.find_target_in_direction(1, 0, 8).is_some(),
+        "what the map draws is what the inspector can name"
+    );
+}
+
+/// The scheduler draws **no** RNG — not `GameRng`, not a local `StdRng`.
+/// `CLAUDE.md` records three occasions where a shifted stream silently
+/// rewrote a seeded test in an unrelated file, and idle staff milling
+/// every tick would shift it harder than anything currently in the game.
+#[test]
+fn idle_staff_take_no_rng_draws() {
+    let sample = |staff_count: usize| {
+        let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game, 0, 1);
+        hire(&mut game, staff_count);
+        for _ in 0..20 {
+            game.tick();
+        }
+        // Any draw off the shared stream lands here, and its value is a
+        // pure function of how many draws came before it.
+        let mut rng = game.world.resource_mut::<resources::GameRng>();
+        rand::RngExt::random_range(&mut rng.0, 0..1_000_000u32)
+    };
+
+    assert_eq!(
+        sample(0),
+        sample(3),
+        "three idle programs milling for twenty ticks must not move the stream"
+    );
+}

@@ -101,9 +101,8 @@ impl Game {
     /// and not currently standing at it — see
     /// `EntityView::worker_away_from_post`, which is this value.
     ///
-    /// A function rather than the inline expression it was, because
-    /// `find_target_in_direction` needs the same answer to decide whether the
-    /// map draws a program before naming it.
+    /// A function rather than the inline expression it was, because the
+    /// frontend's "someone is on this job" mark reads the same answer.
     pub(crate) fn worker_away_from_post(&self, entity: Entity) -> bool {
         self.world.get::<Tamed>(entity).is_some()
             && self.world.get::<Task>(entity).is_some_and(|t| {
@@ -114,6 +113,24 @@ impl Game {
                         .zip(self.world.get::<Position>(t.target))
                         .is_some_and(|(pos, station)| !at_station(*pos, *station))
             })
+    }
+
+    /// Whether `entity`'s `Position` is a tile the sim keeps up to date —
+    /// see `EntityView::position_is_honest`, which is this value, and
+    /// `views::drawn_on_surface_map`, which is what consumes it.
+    ///
+    /// Wider than `worker_away_from_post` above by exactly one case: an
+    /// idle base staff member, which `schedule_base_labour` parks on a ring
+    /// around the Home every tick. A guard and a party companion keep
+    /// whatever tile they were on when they took the job, and neither is
+    /// written again.
+    pub(crate) fn position_is_honest(&self, entity: Entity) -> bool {
+        if self.world.get::<Tamed>(entity).is_none() {
+            return true;
+        }
+        self.worker_away_from_post(entity)
+            || (self.world.get::<BaseStaff>(entity).is_some()
+                && self.world.get::<Task>(entity).is_none())
     }
 
     /// The first creature or structure along the row or column the player is
@@ -216,7 +233,7 @@ impl Game {
         };
         candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
             let tamed = self.world.get::<Tamed>(e).is_some();
-            drawn_on_surface_map(tamed, self.worker_away_from_post(e)).then_some((
+            drawn_on_surface_map(tamed, self.position_is_honest(e)).then_some((
                 step,
                 CREATURE_ON_TILE,
                 e,
@@ -412,6 +429,7 @@ impl Game {
                     None
                 };
                 let worker_away_from_post = self.worker_away_from_post(entity);
+                let position_is_honest = self.position_is_honest(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
                 let output_stranded = is_structure
                     && !anywhere_to_unload
@@ -460,6 +478,7 @@ impl Game {
                     issues_contracts,
                     structure_worker,
                     worker_away_from_post,
+                    position_is_honest,
                     structure_attended,
                     output_stranded,
                     hp_fraction,
@@ -861,6 +880,7 @@ impl Game {
                     issues_contracts: false,
                     structure_worker: None,
                     worker_away_from_post: false,
+                    position_is_honest: true,
                     structure_attended: false,
                     output_stranded: false,
                     hp_fraction: None,

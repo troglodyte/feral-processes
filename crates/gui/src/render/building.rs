@@ -607,6 +607,7 @@ mod tests {
             issues_contracts: false,
             structure_worker: None,
             worker_away_from_post: false,
+            position_is_honest: true,
             structure_attended: false,
             output_stranded: false,
             hp_fraction: None,

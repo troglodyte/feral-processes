@@ -661,7 +661,7 @@ fn draw_surface_map(
         // Through the engine's predicate rather than spelled out here,
         // because `Game::find_target_in_direction` filters its ray with the
         // same rule so that `x` can only name what this draws.
-        .filter(|e| drawn_on_surface_map(e.is_tamed, e.worker_away_from_post))
+        .filter(|e| drawn_on_surface_map(e.is_tamed, e.position_is_honest))
         .collect();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());

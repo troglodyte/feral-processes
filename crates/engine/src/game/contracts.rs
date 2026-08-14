@@ -17,8 +17,9 @@ use bevy_ecs::prelude::*;
 use rand::prelude::*;
 
 use crate::Game;
+use crate::components::Inventory;
 use crate::components::{Position, Structure};
-use crate::contracts::{Objective, Reward};
+use crate::contracts::{ContractId, Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
 
@@ -347,5 +348,157 @@ impl Game {
                 format!("Build a {name}")
             }
         }
+    }
+}
+
+/// Why a contract action was refused. Typed rather than a `String` because
+/// each of these leaves the player a different errand, and app-core words
+/// them for the screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContractRefusal {
+    /// `MAX_ACTIVE_CONTRACTS` are already held. Refused rather than silently
+    /// capped — the "no silent caps" rule.
+    TooMany,
+    AlreadyActive,
+    /// Finished this run, and not `repeatable`.
+    AlreadyDone,
+    /// No Broker in reach, or this contract is not on that Broker's board —
+    /// and, for a delivery, not one the run is holding.
+    NotOffered,
+    /// Nothing in cargo that the contract asks for.
+    NothingToDeliver,
+}
+
+impl Game {
+    /// Takes a contract off the board in front of the player.
+    ///
+    /// Every refusal is checked before anything is written, the ordering
+    /// `use_symlink` and `install_routine` follow — a refused acceptance must
+    /// leave the run exactly as it found it.
+    pub fn accept_contract(&mut self, id: &ContractId) -> Result<(), ContractRefusal> {
+        let Some(board) = self.contract_board() else {
+            return Err(ContractRefusal::NotOffered);
+        };
+        {
+            let held = self.world.resource::<ActiveContracts>();
+            if held.active.iter().any(|c| c.def.id == *id) {
+                return Err(ContractRefusal::AlreadyActive);
+            }
+            if held.done.contains(id)
+                && !self
+                    .world
+                    .resource::<crate::contracts::ContractDb>()
+                    .get(id)
+                    .is_some_and(|def| def.repeatable)
+            {
+                return Err(ContractRefusal::AlreadyDone);
+            }
+            if held.active.len() >= crate::tuning::MAX_ACTIVE_CONTRACTS {
+                return Err(ContractRefusal::TooMany);
+            }
+        }
+        if !board.iter().any(|row| row.id == *id) {
+            return Err(ContractRefusal::NotOffered);
+        }
+        let Some(def) = self
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .get(id)
+            .cloned()
+        else {
+            return Err(ContractRefusal::NotOffered);
+        };
+
+        let accepted_tick = self.current_tick();
+        let name = def.name.clone();
+        self.world.resource_mut::<ActiveContracts>().active.push(
+            crate::resources::ActiveContract {
+                def,
+                progress: 0,
+                accepted_tick,
+            },
+        );
+        self.log_kind(MessageKind::Outcome, format!("Contract taken: {name}."));
+        Ok(())
+    }
+
+    /// Gives a contract back. Returns whether anything was abandoned.
+    ///
+    /// Progress is lost rather than banked, and the id is **not** filed under
+    /// `done`: giving up is not finishing, and a contract handed back has to
+    /// be takeable again.
+    pub fn abandon_contract(&mut self, id: &ContractId) -> bool {
+        let mut held = self.world.resource_mut::<ActiveContracts>();
+        let Some(idx) = held.active.iter().position(|c| c.def.id == *id) else {
+            return false;
+        };
+        let name = held.active.remove(idx).def.name;
+        self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
+        true
+    }
+
+    /// Hands over as many of a `Deliver` objective's items as it still needs,
+    /// and returns how many were taken.
+    ///
+    /// The one place a `Deliver` objective's progress moves — `contract_system`
+    /// deliberately does not poll cargo for it. It takes **only up to what the
+    /// contract still needs**, or the player would lose cargo to a contract
+    /// that was already satisfied, and it completes through
+    /// `complete_contract` when that fills it so delivery and the polled
+    /// objectives share one completion path.
+    ///
+    /// Every refusal lands before any item leaves cargo.
+    pub fn deliver_to_contract(&mut self, id: &ContractId) -> Result<u32, ContractRefusal> {
+        if self.contract_board().is_none() {
+            return Err(ContractRefusal::NotOffered);
+        }
+        let Some((idx, item, wanted)) = self
+            .world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .enumerate()
+            .find_map(|(idx, held)| match &held.def.objective {
+                Objective::Deliver { item, count } if held.def.id == *id => {
+                    Some((idx, item.clone(), count.saturating_sub(held.progress)))
+                }
+                _ => None,
+            })
+        else {
+            return Err(ContractRefusal::NotOffered);
+        };
+
+        let player = self.player_entity();
+        let carrying = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&item))
+            .unwrap_or(0);
+        let taken = carrying.min(wanted);
+        if taken == 0 {
+            return Err(ContractRefusal::NothingToDeliver);
+        }
+
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(item.clone(), taken);
+        let name = self.item_name(&item).to_string();
+        {
+            let mut held = self.world.resource_mut::<ActiveContracts>();
+            held.active[idx].progress += taken;
+        }
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("You hand over {taken} {name}."),
+        );
+        let filled = {
+            let held = self.world.resource::<ActiveContracts>();
+            held.active[idx].progress >= held.active[idx].def.objective.target()
+        };
+        if filled {
+            self.complete_contract(idx);
+        }
+        Ok(taken)
     }
 }

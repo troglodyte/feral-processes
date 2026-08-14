@@ -1024,7 +1024,6 @@ fn reading_the_board_spends_no_shared_rng() {
     deploy_broker(&mut read);
 
     let draw = |game: &mut Game| -> u32 {
-        use rand::Rng;
         game.world.resource_mut::<GameRng>().0.random_range(0..1000)
     };
 

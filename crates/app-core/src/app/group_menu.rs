@@ -59,8 +59,25 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        label: "Assign a cronjob",
-        target: Mode::Cronjob,
+        // Surface-only for the reason every scan row is, and the engine
+        // agrees rather than trusting the flag: `queue_work_order` calls
+        // `Game::require_surface`. The screen is read-only but it *claims
+        // something about where the base is*, which is the test
+        // `find_target_in_direction` established — a report answered from a
+        // `Position` pinned to the surface entrance tile would describe a
+        // base four frames overhead.
+        label: "Work orders",
+        target: Mode::WorkOrders,
+        surface_only: true,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| !g.work_orders().is_empty() || !g.orderable_items().is_empty())
+        },
+    },
+    GroupEntry {
+        label: "Base staff",
+        target: Mode::BaseStaff,
         surface_only: true,
         available: |app| !app.nearby_programs().is_empty(),
     },
@@ -69,12 +86,6 @@ const BASE_ROWS: &[GroupEntry] = &[
         target: Mode::WorkStructure,
         surface_only: true,
         available: |app| !app.workable_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Post a guard",
-        target: Mode::Guard,
-        surface_only: true,
-        available: |app| !app.nearby_programs().is_empty(),
     },
     GroupEntry {
         label: "Upgrade a structure",
@@ -240,9 +251,9 @@ impl App {
     /// screen it opens would have at least one row of its own.
     ///
     /// That second clause deliberately asks only the *first* screen a row
-    /// opens. "Assign a cronjob" can therefore list a program and then land
-    /// on an empty structure picker — a cheap mistake rather than a dead
-    /// end, since Esc backs out into the menu (see `App::close_screen`).
+    /// opens. "Work orders" can therefore open on a queue and then land on
+    /// an empty item picker — a cheap mistake rather than a dead end, since
+    /// Esc backs out into the menu (see `App::close_screen`).
     /// Asking the whole chain would need a bespoke predicate per row, which
     /// is the duplication this table exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {

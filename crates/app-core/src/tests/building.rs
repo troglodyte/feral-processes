@@ -324,40 +324,33 @@ fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
     assert_eq!(app.mode, Mode::StructureAssign);
 }
 
-/// Picking a program posts it and drops the player back on the roster with
-/// the same structure highlighted — the payoff being that the assignee it
-/// just gained is on screen, which is the whole reason the roster was open.
+/// Setting a standing job leaves the screen up, so the player can set both
+/// on one machine — a toggle is not a commitment the way posting was.
 #[test]
-fn staffing_from_the_roster_posts_the_program_and_returns_to_that_row() {
+fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
     let mut app = app_inside_a_small_base_with_programs(245, false, 1);
     open_via_menu(&mut app, 'b', "Structure roster");
     app.handle_key(GameKey::Down);
     let row = app.menu_selected;
     app.handle_key(GameKey::Enter);
 
-    let program = app
+    let toggle = app
         .staffing()
-        .expect("the picker is open")
+        .expect("the toggles are open")
         .rows
         .iter()
-        .position(|r| r.program.is_some())
-        .expect("the player owns a program to post");
-    app.handle_key(GameKey::Char(menu_shortcut(program)));
+        .position(|r| r.kind == StaffAction::StandingWork)
+        .expect("a Mining Node can be kept running");
+    app.handle_key(GameKey::Char(menu_shortcut(toggle)));
 
-    assert_eq!(
-        app.mode,
-        Mode::Structures,
-        "back to the screen it came from"
-    );
-    assert_eq!(app.menu_selected, row, "on the structure that was staffed");
-    let node = app.game.as_mut().unwrap().structure_report().remove(row);
-    assert_eq!(node.kind, "mining_node", "sanity: the right row");
-    assert_eq!(
-        node.assignees.len(),
-        1,
-        "the node should now be worked: {:?}",
+    assert_eq!(app.mode, Mode::StructureAssign, "still on the toggles");
+    assert!(
+        app.staffing().unwrap().rows[toggle].on == Some(true),
+        "the instruction stuck: {:?}",
         app.status_line
     );
+    let node = app.game.as_mut().unwrap().structure_report().remove(row);
+    assert_eq!(node.kind, "mining_node", "sanity: the right row");
 }
 
 /// Esc is a way back into the roster, not out of it: the pick was a
@@ -412,7 +405,7 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
             .unwrap()
             .rows
             .iter()
-            .any(|r| r.program.is_none()),
+            .any(|r| r.kind == StaffAction::WorkYourself),
         "the player is standing right beside this node"
     );
 
@@ -436,13 +429,13 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
             .unwrap()
             .rows
             .iter()
-            .all(|r| r.program.is_some()),
+            .all(|r| r.kind != StaffAction::WorkYourself),
         "you cannot work something you are not standing next to"
     );
 }
 
-/// The roster reads the same underground, but `assign_cronjob` and
-/// `work_structure` are both behind `require_surface` — `Position` is pinned
+/// The roster reads the same underground, but `work_structure` is behind
+/// `require_surface` — `Position` is pinned
 /// to the entrance tile down there, so posting would measure a walk from the
 /// wrong end of the map. Refused at the keypress, like the demolish key.
 #[test]

@@ -26,9 +26,8 @@ fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
     let mut app = test_app(4002);
     let rows = labels(&app.base_menu_rows());
     for absent in [
-        "Assign a cronjob",
+        "Base staff",
         "Work a structure yourself",
-        "Post a guard",
         "Upgrade a structure",
         "Demolish a structure",
     ] {
@@ -41,14 +40,14 @@ fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
     assert!(rows.contains(&"Research"), "{rows:?}");
 }
 
-/// A program parked in range makes the two rows that pick a program appear,
-/// and only those — the structure-side rows still have nothing to offer.
+/// A program the player owns makes the row that hands one to the base
+/// appear, and only that — the structure-side rows still have nothing to
+/// offer.
 #[test]
 fn a_program_in_range_brings_back_the_rows_that_need_one() {
     let mut app = app_owning_a_program_and_a_compiler(4003, &[]);
     let rows = labels(&app.base_menu_rows());
-    assert!(rows.contains(&"Assign a cronjob"), "{rows:?}");
-    assert!(rows.contains(&"Post a guard"), "{rows:?}");
+    assert!(rows.contains(&"Base staff"), "{rows:?}");
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
@@ -62,9 +61,9 @@ fn underground_the_base_menu_drops_its_surface_only_rows() {
     let rows = labels(&app.base_menu_rows());
     for absent in [
         "Deploy a structure",
-        "Assign a cronjob",
+        "Base staff",
+        "Work orders",
         "Work a structure yourself",
-        "Post a guard",
         "Upgrade a structure",
         "Demolish a structure",
     ] {
@@ -287,5 +286,46 @@ fn refactoring_works_underground() {
     assert!(
         labels(&app.party_menu_rows()).contains(&"Refactor a program"),
         "a refactor reaches no zone-map state through Position, so it is not surface-only"
+    );
+}
+
+/// Manual posting is gone: the base says *what to make*, and works out who
+/// stands where itself. The two rows that used to pick a program and then a
+/// structure are replaced by one that queues an order and one that hands a
+/// program to the base.
+#[test]
+fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
+    let mut app = app_owning_a_program_and_a_compiler(4030, &[]);
+    let rows = labels(&app.base_menu_rows());
+
+    assert!(!rows.contains(&"Assign a cronjob"), "{rows:?}");
+    assert!(!rows.contains(&"Post a guard"), "{rows:?}");
+    assert!(rows.contains(&"Base staff"), "{rows:?}");
+    assert!(
+        rows.contains(&"Work a structure yourself"),
+        "the player is not staff, and that flow is untouched: {rows:?}"
+    );
+}
+
+/// The Work orders row asks the same question its screen does — a base with
+/// nothing orderable would open on an empty list, which is the drift the
+/// `available` closure exists to prevent.
+#[test]
+fn the_work_orders_row_appears_once_something_is_orderable() {
+    let mut app = test_app(4031);
+    assert!(
+        !labels(&app.base_menu_rows()).contains(&"Work orders"),
+        "nothing is deployed, so nothing can be ordered"
+    );
+
+    // A Mining Node makes Core Fragments out of nothing on a timer, so it
+    // is orderable the moment it is standing. An assembler with no feeder
+    // beside it deliberately is not — `chain_break` refuses a line that can
+    // never be fed, and this row asks the same question the queue does.
+    let mut app = app_inside_a_small_base_with_programs(4032, false, 1);
+    assert!(
+        labels(&app.base_menu_rows()).contains(&"Work orders"),
+        "a deployed extractor makes its product orderable: {:?}",
+        labels(&app.base_menu_rows())
     );
 }

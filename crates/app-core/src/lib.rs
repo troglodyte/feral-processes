@@ -10,7 +10,7 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
-pub use app::building::{StaffRow, Staffing};
+pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -35,7 +35,7 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::{
     AchievementRow, BattleView, ContractRefusal, ContractRow, DifficultyMode, Entity, EntityView,
     FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, ProgramSaleOption, SlotShift,
+    MessageSource, ProgramSaleOption, SlotShift, WorkOrderReport,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -647,14 +647,29 @@ pub enum Mode {
     DevConsole,
     Craft,
     CraftQuantity,
-    Cronjob,
-    CronjobStructure,
+    /// The work order queue and its status — what the base has been told
+    /// to hold, how close it is, and which machine each order is waiting
+    /// on. Enter on the trailing row queues another; Backspace drops the
+    /// highlighted one, which unwinds nothing because nothing was wound.
+    ///
+    /// This and `Mode::BaseStaff` replaced `Mode::Cronjob`/`Mode::Guard` on
+    /// 2026-08-14. Posting a program to a machine by hand is gone: the
+    /// player says what to make and the base works out who stands where.
+    WorkOrders,
+    /// Picking what to order — `Game::orderable_items`, which asks the same
+    /// chain question `queue_work_order` refuses on, so the picker cannot
+    /// offer a row the queue would reject.
+    WorkOrderPick,
+    /// How many of it. Digits and Enter, like `Mode::CraftQuantity`.
+    WorkOrderQuantity,
+    /// Moving programs into and out of the base staff pool — see
+    /// `components::BaseStaff`. Staff and party are disjoint sets, so a row
+    /// says which side a program is on and Enter moves it.
+    BaseStaff,
     /// Picking a nearby structure for the *player* to work themselves rather
-    /// than posting a program to it — see `Game::work_structure`. Same
-    /// `can_work` list `CronjobStructure` offers.
+    /// than posting a program to it — see `Game::work_structure`. The player
+    /// is not staff, so this flow is untouched by work orders.
     WorkStructure,
-    Guard,
-    GuardStructure,
     /// Lists nearby structures to demolish (see `App::pending_remove_structure`).
     /// Picking the Home moves to `Mode::RemoveConfirm` instead of demolishing
     /// immediately, since it cascades; anything else is removed right away.
@@ -936,11 +951,11 @@ impl Mode {
             | Mode::BuildDirection
             | Mode::Craft
             | Mode::CraftQuantity
-            | Mode::Cronjob
-            | Mode::CronjobStructure
+            | Mode::WorkOrders
+            | Mode::WorkOrderPick
+            | Mode::WorkOrderQuantity
+            | Mode::BaseStaff
             | Mode::WorkStructure
-            | Mode::Guard
-            | Mode::GuardStructure
             | Mode::Remove
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
@@ -1118,10 +1133,8 @@ pub struct App {
     /// because that screen names it: the build menu's row is off screen by
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
-    pending_worker: Option<Entity>,
-    /// Which structure `Mode::StructureAssign` is staffing — the row that was
-    /// highlighted on the roster. The mirror of `pending_worker`, which the
-    /// program-first flow fills in instead.
+    /// Which structure `Mode::StructureAssign` is setting standing orders on
+    /// — the row that was highlighted on the roster.
     pending_post_structure: Option<Entity>,
     /// Which group menu opened the screen that is up, if one did — where
     /// `App::close_screen` sends Esc. `None` for a screen reached straight
@@ -1236,6 +1249,12 @@ pub struct App {
     pub pending_craft: Option<ItemId>,
     /// Digits typed so far on the craft-quantity page.
     pub craft_quantity_input: String,
+    /// The item picked in `Mode::WorkOrderPick`, awaiting a quantity from
+    /// `Mode::WorkOrderQuantity` before `Game::queue_work_order` is called.
+    /// The same two-page shape the compile flow uses.
+    pub pending_order: Option<ItemId>,
+    /// Digits typed so far on the work-order quantity page.
+    pub order_quantity_input: String,
     /// The trading post picked in `Mode::Trade`, awaiting a line-item pick
     /// from `Mode::TradeAction`.
     pub pending_trade_structure: Option<Entity>,

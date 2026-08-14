@@ -1596,3 +1596,89 @@ pub(super) fn held_any(game: &Game, item: &ItemId) -> u32 {
         .unwrap_or(0);
     plain + special
 }
+
+/// Posting a program to a machine by hand, **as a test fixture only**.
+///
+/// This was `Game::assign_cronjob`, a player action, until work orders
+/// landed on 2026-08-14: the scheduler decides who stands where now, and
+/// the menu row and the engine method both went. It survives here because
+/// roughly fifty tests about hauling, upkeep, inspection and the manifest
+/// need a program *on* a machine and have nothing to say about how it got
+/// there — standing up a work order and a staff pool in each of them would
+/// be fixture noise that hides what they are actually asserting.
+///
+/// **Composed from the shipping primitives, never a copy of the removed
+/// body.** `require_surface`, `accepts_a_program`, `post_reach` and
+/// `post_worker` are the same four the scheduler goes through, so a test
+/// that passes here is a test about a posting the live game could make.
+/// A hand-copied body would be the second copy `CLAUDE.md` records drifting
+/// four times.
+impl Game {
+    pub(super) fn assign_cronjob(
+        &mut self,
+        worker: Entity,
+        structure: Entity,
+    ) -> Result<(), String> {
+        self.require_surface()?;
+        if !self.accepts_a_program(structure) {
+            return Err("That structure can't be worked.".into());
+        }
+        let from = *self
+            .world
+            .get::<Position>(self.player_entity())
+            .ok_or_else(|| "You aren't anywhere you can post a program from.".to_string())?;
+        let target = *self
+            .world
+            .get::<Position>(structure)
+            .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
+        let blocked = self.structure_tiles();
+        let build_radius = self.build_radius();
+        {
+            let mut map = self.world.resource_mut::<WorldMap>();
+            // The two errands stay distinct, as they were: a machine the
+            // base has been built around needs digging out, one with no
+            // route may just need you to walk over to it.
+            crate::game::base::hauling::post_reach(&mut map, from, target, &blocked, build_radius)
+                .map_err(|reason| match reason {
+                    crate::game::base::hauling::NoPost::BoxedIn => {
+                        "That structure is walled in — nothing can stand next to it.".to_string()
+                    }
+                    crate::game::base::hauling::NoPost::NoRoute => {
+                        "No route to that structure from here.".to_string()
+                    }
+                })?;
+        }
+        self.post_worker(worker, structure, from);
+        // The live scheduler runs inside `tick_inner` and cannot tick again;
+        // the removed player action did, and the tests written against it
+        // count ticks from that point. Keeping it is what makes this a
+        // faithful stand-in rather than a subtly faster one.
+        self.tick();
+        Ok(())
+    }
+
+    pub(super) fn assign_guard(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
+        self.require_surface()?;
+        // The live route to a guard post is `Game::set_standing_job`, which
+        // carries this same refusal — asked here so the fixture cannot
+        // create a post the game would not.
+        let kind = self
+            .world
+            .get::<Structure>(structure)
+            .ok_or_else(|| "That's not a structure.".to_string())?
+            .kind
+            .clone();
+        if let Some(name) = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .filter(|def| !def.raidable)
+            .map(|def| def.name.clone())
+        {
+            return Err(format!("{name} can't be raided — it doesn't need a guard."));
+        }
+        self.post_guard(worker, structure);
+        self.tick();
+        Ok(())
+    }
+}

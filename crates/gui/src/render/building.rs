@@ -2,6 +2,7 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_app_core::{BaseStaffRow, WorkOrderRow};
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -129,99 +130,207 @@ pub(super) fn draw_build_direction(
     draw_popup("Deploy Direction", PopupSize::Large, &rows, painter, m);
 }
 
-pub(super) fn draw_worker_menu(
-    game: &mut Game,
-    workers: &[EntityView],
-    title: &str,
-    prompt: &str,
-    selected: usize,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    // `view_entities` doesn't carry a raw power number, only a level and
-    // an HP fraction — cross-reference `owned_pets` for it, same as the
-    // fuse menu does.
-    let pets = game.owned_pets();
-    let mut rows = vec![text_row(format!(
-        "{prompt} (Esc to cancel; Up/Down + Enter also work)"
-    ))];
-    if workers.is_empty() {
-        rows.push(text_row("(no compiled programs nearby)"));
-    }
-    for (i, w) in workers.iter().enumerate() {
-        rows.push(worker_row(&pets, w, i, i == selected));
-    }
-    draw_popup(title, PopupSize::Large, &rows, painter, m);
-}
-
-/// One program's row in a posting picker, drawn at menu row `index`.
+/// The roster's standing-instruction toggles for the structure highlighted
+/// there: keep it running, keep it guarded, or work it yourself right now.
 ///
-/// Shared by the program-first picker above and the roster's staffing picker
-/// below rather than written twice: the two lists are the same candidates
-/// reached from opposite ends, and a player comparing them has to be reading
-/// the same numbers. `index` is a parameter because the staffing picker can
-/// carry a "Yourself" row ahead of the programs, which shifts every shortcut.
-fn worker_row(pets: &[PetInfo], w: &EntityView, index: usize, selected: bool) -> Row {
-    let pet = pets.iter().find(|p| p.entity == w.entity);
-    let power = pet.map(|p| format!(" PWR {}", p.power)).unwrap_or_default();
-    let activity = pet.map(|p| activity_tag(&p.activity)).unwrap_or_default();
-    let fusions = pet.map(|p| p.fusions).unwrap_or(0);
-    let rarity = pet.map(|p| p.rarity).unwrap_or_default();
-    with_icon(
-        tier_row(
-            format!(
-                "[{}] {}{}{} at ({}, {}){}{}",
-                menu_shortcut(index),
-                w.label,
-                w.level.map(|l| format!(" Lv{l}")).unwrap_or_default(),
-                power,
-                w.pos.0,
-                w.pos.1,
-                fusion_tag(fusions),
-                activity
-            ),
-            selected,
-            fusions,
-            rarity,
-        ),
-        w.glyph,
-        glyph_color(w.color),
-    )
-}
-
-/// The roster's staffing picker: who goes on the structure highlighted there.
-///
-/// The mirror of `draw_worker_menu` — same candidates, reached from the
-/// structure instead of the program — with one row it cannot have. `Yourself`
-/// is offered only where `Game::work_structure` would accept it, which
-/// `App::staffing` has already decided; this draws the list it is handed
-/// rather than filtering again, so the row the handler acts on is the row
-/// under the highlight.
+/// Which rows exist is `App::staffing`'s decision — it asks the same two
+/// questions `Game::set_standing_job` and `Game::work_structure` refuse on —
+/// and this draws the list it is handed rather than filtering again, so the
+/// row the handler acts on is the row under the highlight.
 pub(super) fn draw_staffing_menu(
-    game: &mut Game,
     staffing: &Staffing,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let pets = game.owned_pets();
     let mut rows = vec![text_row(format!(
-        "Who works the {}? (Esc to cancel; Up/Down + Enter also work)",
+        "Standing orders for the {} (Esc to close; Up/Down + Enter also work)",
         staffing.target
     ))];
     if staffing.rows.is_empty() {
-        rows.push(text_row("(nobody to put on it — compile a program first)"));
+        rows.push(text_row("(nothing to say about this one)"));
     }
     for (i, row) in staffing.rows.iter().enumerate() {
-        rows.push(match &row.program {
-            Some(w) => worker_row(&pets, w, i, i == selected),
-            None => item_row(
-                format!("[{}] Yourself — work it by hand", menu_shortcut(i)),
-                i == selected,
-            ),
-        });
+        let mark = match row.on {
+            Some(true) => "[x] ",
+            Some(false) => "[ ] ",
+            None => "",
+        };
+        rows.push(item_row(
+            format!("[{}] {mark}{}", menu_shortcut(i), row.label),
+            i == selected,
+        ));
     }
-    draw_popup("Staff Structure", PopupSize::Large, &rows, painter, m);
+    rows.push(text_row(
+        "A standing job is filled only by a program no work order needs.",
+    ));
+    draw_popup("Standing Orders", PopupSize::Large, &rows, painter, m);
+}
+
+/// The work order queue and its status: what the base has been told to
+/// hold, how close it is, and which machine each order is waiting on.
+///
+/// The machine lines under an order are `Game::work_order_report`'s, which
+/// is the scheduler's own `wants` walk — so what is on screen is what the
+/// base believes by construction rather than by a comment claiming the two
+/// agree.
+pub(super) fn draw_work_orders(
+    rows_in: &[WorkOrderRow],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row(
+        "Enter to queue an order, Backspace to drop one, Esc to close",
+    )];
+    if rows_in.is_empty() {
+        rows.push(text_row("(nothing the base can make yet)"));
+    }
+    for (i, row) in rows_in.iter().enumerate() {
+        let mut lines = work_order_lines(row, i, i == selected).into_iter();
+        if let Some(head) = lines.next() {
+            rows.push(item_row(head, i == selected));
+        }
+        rows.extend(lines.map(text_row));
+    }
+    draw_popup("Work Orders", PopupSize::Large, &rows, painter, m);
+}
+
+/// One work order's lines: the order itself, then a line per machine in the
+/// chain — or the sentence naming why it is stalled.
+///
+/// A pure function of the row rather than pushed straight into the popup,
+/// so a headless test can measure how wide the widest of them runs.
+/// `draw_row` clamps a row vertically and never horizontally, so nothing
+/// else would catch a line that runs off the body.
+fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<String> {
+    let Some(order) = &row.order else {
+        return vec![format!("[{}] New work order...", menu_shortcut(index))];
+    };
+    let state = if order.stalled { "  STALLED" } else { "" };
+    let mut lines = vec![format!(
+        "[{}] {}  {}/{}{state}",
+        menu_shortcut(index),
+        order.label,
+        order.have,
+        order.target
+    )];
+    // Through `continuation_lines` rather than an inline `format!`: a
+    // stalled order's reason is a whole sentence and a machine line carries
+    // three names, and either can outrun the popup body.
+    if let Some(why) = &order.blocked_by {
+        lines.extend(continuation_lines(why));
+        return lines;
+    }
+    if order.machines.is_empty() {
+        lines.extend(continuation_lines("waiting — nothing to do here yet"));
+    }
+    for machine in &order.machines {
+        let who = match &machine.worker {
+            Some(name) => name.clone(),
+            None => "no one".to_string(),
+        };
+        let short = machine
+            .short_of
+            .as_ref()
+            .map(|s| format!(", short of {s}"))
+            .unwrap_or_default();
+        lines.extend(continuation_lines(&format!(
+            "{} — {who}{short}",
+            machine.label
+        )));
+    }
+    lines
+}
+
+/// Picking what to order — `Game::orderable_items`, which asks the same
+/// chain question the queue refuses on, so nothing here can be rejected.
+pub(super) fn draw_work_order_pick(
+    items: &[(ItemId, String)],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row(
+        "What should the base hold? (Esc to cancel; Up/Down + Enter also work)",
+    )];
+    if items.is_empty() {
+        rows.push(text_row("(nothing the base can make — deploy a machine)"));
+    }
+    for (i, (_, name)) in items.iter().enumerate() {
+        rows.push(item_row(
+            format!("[{}] {name}", menu_shortcut(i)),
+            i == selected,
+        ));
+    }
+    draw_popup("New Work Order", PopupSize::Large, &rows, painter, m);
+}
+
+/// How many of it. The same two-page shape the compile flow uses.
+pub(super) fn draw_work_order_quantity(
+    game: &Game,
+    item: Option<ItemId>,
+    typed: &str,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let name = item
+        .as_ref()
+        .map(|i| game.item_name(i).to_string())
+        .unwrap_or_default();
+    let shown = if typed.is_empty() { "1" } else { typed };
+    let rows = vec![
+        text_row(format!("How many {name} should the base hold?")),
+        text_row(format!("  {shown}")),
+        text_row("Digits then Enter. Esc to go back."),
+        text_row("An order is a target, not a batch — what you already hold counts."),
+    ];
+    draw_popup("Order Quantity", PopupSize::Small, &rows, painter, m);
+}
+
+/// Moving programs across the party/staff line. One key, because the two
+/// states are exclusive by construction and there is never a third thing to
+/// pick.
+pub(super) fn draw_base_staff(
+    game: &mut Game,
+    staff_rows: &[BaseStaffRow],
+    selected: usize,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let pets = game.owned_pets();
+    let mut rows = vec![text_row(
+        "Enter moves a program between your party and the base. Esc to close.",
+    )];
+    if staff_rows.is_empty() {
+        rows.push(text_row("(no compiled programs — beat one first)"));
+    }
+    for (i, row) in staff_rows.iter().enumerate() {
+        let side = match &row.doing {
+            Some(doing) => format!("base, {doing}"),
+            None => "party".to_string(),
+        };
+        rows.push(with_icon(
+            tier_row(
+                format!("[{}] {} — {side}", menu_shortcut(i), row.program.label),
+                i == selected,
+                pets.iter()
+                    .find(|p| p.entity == row.program.entity)
+                    .map(|p| p.fusions)
+                    .unwrap_or(0),
+                pets.iter()
+                    .find(|p| p.entity == row.program.entity)
+                    .map(|p| p.rarity)
+                    .unwrap_or_default(),
+            ),
+            row.program.glyph,
+            glyph_color(row.program.color),
+        ));
+    }
+    rows.push(text_row(
+        "Base staff are posted automatically by your work orders.",
+    ));
+    draw_popup("Base Staff", PopupSize::Large, &rows, painter, m);
 }
 
 pub(super) fn draw_structure_menu(
@@ -719,5 +828,65 @@ mod tests {
                 "an assignee row is {text_w}px inside a {box_w}px sheet: {line:?}"
             );
         });
+    }
+}
+
+#[cfg(test)]
+mod work_order_tests {
+    use super::*;
+    use feral_processes_engine::items::ItemId;
+    use feral_processes_engine::{WorkOrderMachine, WorkOrderReport};
+
+    /// The widest row this screen can draw is a machine line carrying a
+    /// machine name, a worker name and a shortfall — and the runner-up is a
+    /// stalled order's whole sentence. `draw_row` clamps a row vertically
+    /// and **never horizontally**, so a row past the popup body simply runs
+    /// off it; two shipped screens already do that because nobody measured.
+    #[test]
+    fn no_work_order_row_runs_past_the_popup_body() {
+        let report = WorkOrderReport {
+            item: ItemId::from("routine_disk"),
+            label: "Routine Disk".to_string(),
+            have: 2,
+            target: 30,
+            stalled: false,
+            blocked_by: None,
+            machines: vec![WorkOrderMachine {
+                entity: Entity::PLACEHOLDER,
+                label: "Annealing Node".to_string(),
+                worker: Some("Sub-Process Lv12".to_string()),
+                short_of: Some("Blank Substrate".to_string()),
+                depth: 2,
+            }],
+        };
+        let stalled = WorkOrderReport {
+            stalled: true,
+            blocked_by: Some(
+                "Nothing beside the Annealing Node is making Blank Substrate — a machine can \
+                 only take what a neighbour has finished."
+                    .to_string(),
+            ),
+            machines: Vec::new(),
+            ..report.clone()
+        };
+        let rows = [
+            WorkOrderRow {
+                order: Some(report),
+            },
+            WorkOrderRow {
+                order: Some(stalled),
+            },
+            WorkOrderRow { order: None },
+        ];
+
+        for row in &rows {
+            for line in work_order_lines(row, 0, false) {
+                assert!(
+                    line.chars().count() <= ROW_WRAP_COLUMNS,
+                    "a {} char row runs past the {ROW_WRAP_COLUMNS} column body: {line:?}",
+                    line.chars().count()
+                );
+            }
+        }
     }
 }

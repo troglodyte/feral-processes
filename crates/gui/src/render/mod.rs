@@ -54,9 +54,9 @@ use battle::{
     draw_battle_target_menu,
 };
 use building::{
-    draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
+    draw_base_staff, draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
-    draw_worker_menu,
+    draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
@@ -547,10 +547,25 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         _ => (Vec::new(), Vec::new()),
     };
     let scanned = match app.mode {
-        Mode::Cronjob | Mode::Guard => app.nearby_programs(),
-        Mode::CronjobStructure | Mode::WorkStructure => app.workable_structures(),
-        Mode::GuardStructure | Mode::Remove => app.nearby_structures(),
+        Mode::WorkStructure => app.workable_structures(),
+        Mode::Remove => app.nearby_structures(),
         Mode::Upgrade => app.upgradeable_structures(),
+        _ => Vec::new(),
+    };
+    // Row counts are app-core's and rows are gui's, the way the history
+    // screen and the structure roster already work: a renderer that rebuilt
+    // these lists itself would be right until the first hidden row and then
+    // draw a different one from the one under the highlight.
+    let work_orders = match app.mode {
+        Mode::WorkOrders => app.work_order_rows(),
+        _ => Vec::new(),
+    };
+    let orderable = match app.mode {
+        Mode::WorkOrderPick => app.orderable_items(),
+        _ => Vec::new(),
+    };
+    let base_staff = match app.mode {
+        Mode::BaseStaff => app.base_staff_rows(),
         _ => Vec::new(),
     };
     let Some(game) = &mut app.game else { return };
@@ -577,44 +592,20 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
-        Mode::Cronjob => draw_worker_menu(
+        Mode::WorkOrders => draw_work_orders(&work_orders, selected, painter, m),
+        Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, painter, m),
+        Mode::WorkOrderQuantity => draw_work_order_quantity(
             game,
-            &scanned,
-            "Assign Cronjob",
-            "Assign which program to a cronjob?",
-            selected,
+            app.pending_order.clone(),
+            &app.order_quantity_input,
             painter,
             m,
         ),
-        Mode::CronjobStructure => draw_structure_menu(
-            &scanned,
-            "Assign Cronjob",
-            "Cronjob which structure?",
-            selected,
-            painter,
-            m,
-        ),
+        Mode::BaseStaff => draw_base_staff(game, &base_staff, selected, painter, m),
         Mode::WorkStructure => draw_structure_menu(
             &scanned,
             "Work",
             "Work which structure yourself?",
-            selected,
-            painter,
-            m,
-        ),
-        Mode::Guard => draw_worker_menu(
-            game,
-            &scanned,
-            "Assign Guard",
-            "Assign which program to guard duty?",
-            selected,
-            painter,
-            m,
-        ),
-        Mode::GuardStructure => draw_structure_menu(
-            &scanned,
-            "Assign Guard",
-            "Guard which structure? Any structure qualifies.",
             selected,
             painter,
             m,
@@ -747,7 +738,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::Structures => draw_structures(game, selected, painter, m),
         Mode::StructureAssign => {
             if let Some(staffing) = &staffing {
-                draw_staffing_menu(game, staffing, selected, painter, m);
+                draw_staffing_menu(staffing, selected, painter, m);
             }
         }
         Mode::Recipes => draw_recipes(game, selected, painter, m),

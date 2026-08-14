@@ -24,6 +24,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::game::base::collect::ORTHOGONAL;
+use crate::game::base::hauling;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
 use crate::*;
@@ -537,7 +538,29 @@ impl Game {
             .get::<Position>(self.player_entity())
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
+        let blocked = self.structure_tiles();
+        let build_radius = self.build_radius();
         for (post, kind) in remaining {
+            if idle.is_empty() {
+                break;
+            }
+            if kind == TaskKind::GatherResource
+                && !self.can_walk_to_post(from, post, &blocked, build_radius)
+            {
+                // A machine the base has been built around, or one with no
+                // route from where the player is standing. **Skipped rather
+                // than filled**: `hauling::post_reach` is the one predicate
+                // for "is this a posting that arrives", and it used to be
+                // `assign_cronjob`'s — a menu that offered a post the walker
+                // could never complete. The scheduler inherits the question
+                // rather than dropping it, because a body sent to an
+                // unreachable machine is a body lost for the rest of the
+                // run: it would sit `Stranded` forever while the order it
+                // was meant to work went unstaffed. Left unfilled, the
+                // machine reads as idle on the status screen and the body
+                // goes to the next want instead.
+                continue;
+            }
             let Some(worker) = idle.pop() else {
                 break;
             };
@@ -546,6 +569,23 @@ impl Game {
                 TaskKind::Guard => self.post_guard(worker, post),
             }
         }
+    }
+
+    /// Whether a program setting off from `from` could actually reach a post
+    /// at `machine` — `hauling::post_reach`, the same question
+    /// `haul_step_system` asks when it walks one.
+    fn can_walk_to_post(
+        &mut self,
+        from: Position,
+        machine: Entity,
+        blocked: &std::collections::HashSet<(i32, i32)>,
+        build_radius: i32,
+    ) -> bool {
+        let Some(target) = self.world.get::<Position>(machine).copied() else {
+            return false;
+        };
+        let mut map = self.world.resource_mut::<WorldMap>();
+        hauling::post_reach(&mut map, from, target, blocked, build_radius).is_ok()
     }
 
     /// Walks every staff member with no post to its parking tile.
@@ -625,6 +665,28 @@ impl Game {
             entity.remove::<StandingJob>();
         }
         Ok(())
+    }
+
+    /// What a base staff member is doing right now, for the staff screen —
+    /// the machine it is on, what it is guarding, or that it is waiting.
+    ///
+    /// Derived from the live `Task` rather than tracked, like everything
+    /// else here: the scheduler moves a body whenever the answer changes,
+    /// so a stored one would be a tick behind at best.
+    pub fn staff_activity(&self, worker: Entity) -> String {
+        let Some(task) = self.world.get::<Task>(worker) else {
+            return "idle".to_string();
+        };
+        let name = self
+            .world
+            .get::<Structure>(task.target)
+            .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
+            .map(|def| def.name.clone())
+            .unwrap_or_else(|| "something".to_string());
+        match task.kind {
+            TaskKind::GatherResource => format!("working the {name}"),
+            TaskKind::Guard => format!("guarding the {name}"),
+        }
     }
 
     pub fn standing_job(&self, structure: Entity) -> Option<(bool, bool)> {
@@ -726,6 +788,25 @@ impl Game {
             .push(WorkOrder { item, qty });
         self.log_base(format!("Work order filed: {qty} x {name}."));
         Ok(())
+    }
+
+    /// Every item this base could actually be told to make, as
+    /// `(id, display name)` in name order.
+    ///
+    /// The list a frontend offers, and it asks `chain_break` — the same
+    /// question `queue_work_order` refuses on — so the picker cannot list a
+    /// row the queue would then reject. That is the rule
+    /// `App::base_menu_rows` holds for a menu whose rows are hidden
+    /// dynamically, one level down.
+    pub fn orderable_items(&self) -> Vec<(ItemId, String)> {
+        let mut rows: Vec<(ItemId, String)> = self
+            .item_defs()
+            .into_iter()
+            .filter(|def| chain_break(self, &def.id).is_none())
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect();
+        rows.sort_by(|a, b| a.1.cmp(&b.1));
+        rows
     }
 
     /// Drops the order at `index`, shifting the ones behind it up.

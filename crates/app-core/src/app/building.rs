@@ -3,43 +3,69 @@
 use crate::*;
 
 /// What `Mode::StructureAssign` is showing: the structure picked on the
-/// roster, and everyone who could be put on it.
+/// roster, and the standing instructions that can be set on it.
 ///
 /// The name travels with the rows because this popup covers the roster row it
-/// was opened from — a picker headed "Assign Cronjob" with nothing else on it
-/// would leave the player guessing which machine they were pointing at.
+/// was opened from — a picker with nothing else on it would leave the player
+/// guessing which machine they were pointing at.
+///
+/// **This was a program picker until 2026-08-14.** Posting a program to a
+/// machine by hand is gone: `schedule_base_labour` decides who stands where,
+/// and what a player says about a particular machine is now "keep this one
+/// running" or "keep this one guarded". The spec's phrasing is the argument
+/// — the question "should this machine always be working" belongs to the
+/// machine, so it is a toggle on the structure screen rather than a menu
+/// row of its own.
 pub struct Staffing {
     pub target: String,
     pub rows: Vec<StaffRow>,
 }
 
-/// One candidate to work the structure highlighted on the roster — see
-/// `App::staffing` and `Mode::StructureAssign`.
+/// One standing instruction that can be toggled on the structure highlighted
+/// on the roster — see `App::staffing` and `components::StandingJob`.
 ///
-/// A row rather than a bare `Entity` because one of them is not an entity at
-/// all: `None` is the player working the machine themselves. Keeping both in
-/// one ordered list is what stops the renderer and the handler disagreeing
-/// about which index means what, the same rule `App::base_menu_rows` holds
-/// for a menu whose rows are hidden dynamically.
+/// A row rather than a bare bool because one of them is not a standing job
+/// at all: the "work it yourself" row calls `Game::work_structure`, since
+/// the player is not staff and the scheduler never moves them. Keeping all
+/// of them in one ordered list is what stops the renderer and the handler
+/// disagreeing about which index means what, the same rule
+/// `App::base_menu_rows` holds for a menu whose rows are hidden dynamically.
 #[derive(Clone)]
 pub struct StaffRow {
-    /// The program to post, or `None` on the row that puts *you* on it.
-    /// Carries the whole view so the picker can show a program's level,
-    /// health and activity the way `Mode::Cronjob`'s does.
-    pub program: Option<EntityView>,
+    pub label: String,
+    pub kind: StaffAction,
+    /// Whether the instruction is currently set — `None` on a row that is
+    /// an action rather than a toggle.
+    pub on: Option<bool>,
+}
+
+/// What a `StaffRow` does when picked.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StaffAction {
+    /// Toggle `StandingJob::work` — keep a body on this machine whenever no
+    /// order needs it elsewhere.
+    StandingWork,
+    /// Toggle `StandingJob::guard`.
+    StandingGuard,
+    /// Work it yourself, right now. Not a standing anything.
+    WorkYourself,
 }
 
 impl App {
-    /// Who can be put on `pending_post_structure`: yourself if you are
-    /// standing beside it, then every program you own.
+    /// What can be said about `pending_post_structure`: the two standing
+    /// instructions it can carry, and — if you are standing beside it — the
+    /// offer to work it yourself.
     ///
     /// The "yourself" row is filtered on `StructureReport::player_adjacent`
     /// rather than offered everywhere and refused, matching
     /// `App::upgradeable_structures` — `Game::work_structure` takes only the
     /// four orthogonal neighbours, and the roster is zone-wide, so on almost
-    /// every row that offer would be a dead end. It leads because it is the
-    /// answer that needs nothing: a player who owns no programs yet can still
-    /// start a machine from here.
+    /// every row that offer would be a dead end.
+    ///
+    /// A standing *work* job is offered only where a program could be
+    /// posted, and a standing *guard* only where a sweep could land — the
+    /// same two questions `Game::set_standing_job` refuses on, asked here so
+    /// the screen cannot list a row the engine would reject.
     pub fn staffing(&mut self) -> Option<Staffing> {
         let structure = self.pending_post_structure?;
         let row = self
@@ -49,24 +75,44 @@ impl App {
             .unwrap_or_default()
             .into_iter()
             .find(|s| s.entity == structure)?;
-        let mut rows: Vec<StaffRow> = row
-            .player_adjacent
-            .then_some(StaffRow { program: None })
-            .into_iter()
-            .collect();
-        rows.extend(
-            self.nearby_programs()
-                .into_iter()
-                .map(|v| StaffRow { program: Some(v) }),
-        );
+        let (work, guard) = self
+            .game
+            .as_ref()
+            .and_then(|g| g.standing_job(structure))
+            .unwrap_or((false, false));
+        let mut rows = Vec::new();
+        if row.workable {
+            rows.push(StaffRow {
+                label: "Keep this machine running".to_string(),
+                kind: StaffAction::StandingWork,
+                on: Some(work),
+            });
+        }
+        if row.durability.is_some() {
+            rows.push(StaffRow {
+                label: "Keep a guard on this".to_string(),
+                kind: StaffAction::StandingGuard,
+                on: Some(guard),
+            });
+        }
+        if row.player_adjacent {
+            rows.push(StaffRow {
+                label: "Work it yourself".to_string(),
+                kind: StaffAction::WorkYourself,
+                on: None,
+            });
+        }
         Some(Staffing {
             target: row.label,
             rows,
         })
     }
 
-    /// Posts whoever was picked to the structure the roster was showing, and
-    /// goes back to that row — see `Mode::StructureAssign`.
+    /// Applies whichever instruction was picked to the structure the roster
+    /// was showing, and goes back to that row — see `Mode::StructureAssign`.
+    ///
+    /// A toggle stays on the screen so a player can set both; working it
+    /// yourself leaves, because it spends the turn.
     pub(crate) fn handle_structure_assign_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.leave_staffing();
@@ -80,14 +126,27 @@ impl App {
         let Some(idx) = self.selected_index(key, rows.len()) else {
             return;
         };
-        let worker = rows[idx].program.as_ref().map(|v| v.entity);
+        let (work, guard) = self
+            .game
+            .as_ref()
+            .and_then(|g| g.standing_job(structure))
+            .unwrap_or((false, false));
+        let kind = rows[idx].kind;
         let Some(game) = &mut self.game else { return };
-        let outcome = match worker {
-            Some(worker) => game.assign_cronjob(worker, structure),
-            None => game.work_structure(structure),
-        };
-        self.status_line = outcome.err();
-        self.leave_staffing();
+        match kind {
+            StaffAction::StandingWork => {
+                self.status_line = game.set_standing_job(structure, !work, guard).err();
+                self.menu_selected = idx;
+            }
+            StaffAction::StandingGuard => {
+                self.status_line = game.set_standing_job(structure, work, !guard).err();
+                self.menu_selected = idx;
+            }
+            StaffAction::WorkYourself => {
+                self.status_line = game.work_structure(structure).err();
+                self.leave_staffing();
+            }
+        }
     }
 
     /// Back to the roster, on the structure that was being staffed. Looked up
@@ -207,44 +266,9 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    pub(crate) fn handle_cronjob_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
-        let workers = self.nearby_programs();
-        if let Some(idx) = self.selected_index(key, workers.len()) {
-            self.pending_worker = Some(workers[idx].entity);
-            self.mode = Mode::CronjobStructure;
-        }
-    }
-
-    pub(crate) fn handle_cronjob_structure_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.pending_worker = None;
-            self.close_screen();
-            return;
-        }
-        let Some(worker) = self.pending_worker else {
-            self.mode = Mode::Playing;
-            return;
-        };
-        let structures = self.workable_structures();
-        if let Some(idx) = self.selected_index(key, structures.len()) {
-            let Some(game) = &mut self.game else { return };
-            match game.assign_cronjob(worker, structures[idx].entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
-            self.pending_worker = None;
-            self.mode = Mode::Playing;
-        }
-    }
-
     /// Picks a nearby workable structure for the player to work themselves —
-    /// `App::workable_structures`, the same list `Mode::CronjobStructure`
-    /// offers, since it is the same job either way (see
-    /// `Game::work_structure`).
+    /// see `Game::work_structure`. **The player is not staff**, so this flow
+    /// survived work orders untouched: the scheduler never moves you.
     pub(crate) fn handle_work_structure_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -257,40 +281,6 @@ impl App {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
-            self.mode = Mode::Playing;
-        }
-    }
-
-    pub(crate) fn handle_guard_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
-        let workers = self.nearby_programs();
-        if let Some(idx) = self.selected_index(key, workers.len()) {
-            self.pending_worker = Some(workers[idx].entity);
-            self.mode = Mode::GuardStructure;
-        }
-    }
-
-    pub(crate) fn handle_guard_structure_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.pending_worker = None;
-            self.close_screen();
-            return;
-        }
-        let Some(worker) = self.pending_worker else {
-            self.mode = Mode::Playing;
-            return;
-        };
-        let structures = self.nearby_structures();
-        if let Some(idx) = self.selected_index(key, structures.len()) {
-            let Some(game) = &mut self.game else { return };
-            match game.assign_guard(worker, structures[idx].entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
-            self.pending_worker = None;
             self.mode = Mode::Playing;
         }
     }
@@ -423,5 +413,191 @@ impl App {
             }
             self.mode = Mode::Playing;
         }
+    }
+}
+
+/// One row on `Mode::WorkOrders` — either a queued order or the trailing
+/// row that starts a new one.
+///
+/// A row rather than a bare report, for the reason `StaffRow` is one: the
+/// "new order" row is not an order at all, and keeping both in one ordered
+/// list is what stops the renderer and the handler disagreeing about which
+/// index means what. That is the rule `App::base_menu_rows` holds for a
+/// menu whose rows are hidden dynamically, one screen down.
+#[derive(Clone)]
+pub struct WorkOrderRow {
+    /// The order this row reports, or `None` on the trailing "new order"
+    /// row.
+    pub order: Option<WorkOrderReport>,
+}
+
+/// One row on `Mode::BaseStaff`: a program you own, and which side of the
+/// party/staff split it is currently on.
+#[derive(Clone)]
+pub struct BaseStaffRow {
+    pub program: EntityView,
+    pub on_staff: bool,
+    /// What it is doing right now — "Mining Node", "guarding Shield",
+    /// "idle" — or `None` for a program that is not staff at all.
+    pub doing: Option<String>,
+}
+
+impl App {
+    /// The work order screen's rows: every queued order, then the row that
+    /// queues another.
+    ///
+    /// The trailing row is dropped when nothing is orderable, so the screen
+    /// never offers a picker that would open empty — the same question
+    /// `BASE_ROWS`'s `available` closure asks one level up.
+    pub fn work_order_rows(&mut self) -> Vec<WorkOrderRow> {
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
+        let mut rows: Vec<WorkOrderRow> = game
+            .work_order_report()
+            .into_iter()
+            .map(|report| WorkOrderRow {
+                order: Some(report),
+            })
+            .collect();
+        if !game.orderable_items().is_empty() {
+            rows.push(WorkOrderRow { order: None });
+        }
+        rows
+    }
+
+    /// Enter on the trailing row queues another order; Backspace drops the
+    /// highlighted one.
+    ///
+    /// Cancelling needs no confirmation because it **unwinds nothing** —
+    /// there are no per-machine targets to roll back and no reserved stock
+    /// to release, so the next tick simply derives a different answer and
+    /// re-queueing costs a keypress.
+    pub(crate) fn handle_work_orders_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let rows = self.work_order_rows();
+        if key == GameKey::Backspace {
+            if self.menu_selected < rows.len() && rows[self.menu_selected].order.is_some() {
+                let index = self.menu_selected;
+                if let Some(game) = &mut self.game {
+                    self.status_line = game.cancel_work_order(index).err();
+                }
+                self.menu_selected = self.menu_selected.saturating_sub(1);
+            }
+            return;
+        }
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        if rows[idx].order.is_none() {
+            self.pending_order = None;
+            self.order_quantity_input.clear();
+            self.mode = Mode::WorkOrderPick;
+            self.menu_selected = 0;
+        }
+    }
+
+    /// What the base could be told to make — `Game::orderable_items`, which
+    /// asks the same chain question `queue_work_order` refuses on, so this
+    /// picker cannot offer a row the queue would then reject.
+    pub fn orderable_items(&self) -> Vec<(ItemId, String)> {
+        self.game
+            .as_ref()
+            .map(|g| g.orderable_items())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn handle_work_order_pick_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.mode = Mode::WorkOrders;
+            self.menu_selected = 0;
+            return;
+        }
+        let items = self.orderable_items();
+        if let Some(idx) = self.selected_index(key, items.len()) {
+            self.pending_order = Some(items[idx].0.clone());
+            self.order_quantity_input.clear();
+            self.mode = Mode::WorkOrderQuantity;
+        }
+    }
+
+    /// Digits and Enter, the shape `Mode::CraftQuantity` already uses.
+    pub(crate) fn handle_work_order_quantity_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
+                self.pending_order = None;
+                self.order_quantity_input.clear();
+                self.mode = Mode::WorkOrderPick;
+            }
+            GameKey::Backspace => {
+                self.order_quantity_input.pop();
+            }
+            GameKey::Char(c) if c.is_ascii_digit() && self.order_quantity_input.len() < 4 => {
+                self.order_quantity_input.push(c);
+            }
+            GameKey::Enter => {
+                let Some(item) = self.pending_order.take() else {
+                    self.mode = Mode::WorkOrders;
+                    return;
+                };
+                let qty: u32 = self.order_quantity_input.parse().unwrap_or(1).max(1);
+                self.order_quantity_input.clear();
+                if let Some(game) = &mut self.game {
+                    self.status_line = game.queue_work_order(item, qty).err();
+                }
+                self.mode = Mode::WorkOrders;
+                self.menu_selected = 0;
+            }
+            _ => {}
+        }
+    }
+
+    /// Every program the player owns, with which side of the party/staff
+    /// split it is on and what it is doing.
+    pub fn base_staff_rows(&mut self) -> Vec<BaseStaffRow> {
+        let programs = self.nearby_programs();
+        let Some(game) = &self.game else {
+            return Vec::new();
+        };
+        let staff = game.base_staff();
+        programs
+            .into_iter()
+            .map(|program| {
+                let on_staff = staff.contains(&program.entity);
+                BaseStaffRow {
+                    doing: on_staff.then(|| game.staff_activity(program.entity)),
+                    on_staff,
+                    program,
+                }
+            })
+            .collect()
+    }
+
+    /// Enter moves the highlighted program across the party/staff line.
+    ///
+    /// One key rather than two rows, because the two states are exclusive
+    /// by construction — `Game::assign_base_staff` drops a program out of
+    /// `Party` and `add_companion` clears its `BaseStaff` — so there is
+    /// never a third thing to pick.
+    pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let rows = self.base_staff_rows();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let (entity, on_staff) = (rows[idx].program.entity, rows[idx].on_staff);
+        let Some(game) = &mut self.game else { return };
+        self.status_line = if on_staff {
+            game.release_base_staff(entity).err()
+        } else {
+            game.assign_base_staff(entity).err()
+        };
+        self.menu_selected = idx;
     }
 }

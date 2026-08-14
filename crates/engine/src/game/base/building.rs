@@ -608,69 +608,6 @@ impl Game {
         Some(holder)
     }
 
-    pub fn assign_cronjob(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        self.require_surface()?;
-        let owner = self
-            .world
-            .get::<Tamed>(worker)
-            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
-            .owner;
-        if owner != self.player_entity() {
-            return Err("You don't control that program.".into());
-        }
-        if !self.accepts_a_program(structure) {
-            return Err("That structure can't be worked.".into());
-        }
-        // The program sets off from wherever *you* are standing, because that
-        // is where it has been all along. A tamed program's `Position` is the
-        // tile it was beaten on and is never written again — `views.rs`
-        // states it, and `render/base.rs` refuses to draw a companion for
-        // exactly that reason. Posting is the moment the tile starts meaning
-        // something (`haul_step_system` walks it from here on), so it is also
-        // the moment to make it true. Measuring the walk from the stale tile
-        // instead would strand a program tamed further out than
-        // `HAUL_WALK_RADIUS`, which is the bug this replaced.
-        let from = *self
-            .world
-            .get::<Position>(self.player_entity())
-            .ok_or_else(|| "You aren't anywhere you can post a program from.".to_string())?;
-        let structure_pos = *self
-            .world
-            .get::<Position>(structure)
-            .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
-        // Checked before anything is spent, for the reason `install_routine`
-        // checks knowledge before taking the disk: accepting a post the
-        // program can never walk to would stand a companion down and displace
-        // the structure's current worker to pay for a cronjob that produces
-        // nothing.
-        let blocked = self.structure_tiles();
-        let build_radius = self.build_radius();
-        let mut map = self.world.resource_mut::<WorldMap>();
-        if let Err(reason) =
-            hauling::post_reach(&mut map, from, structure_pos, &blocked, build_radius)
-        {
-            // Two errands, not one. A structure the base has been built around
-            // needs digging out; one with no route may just need you to walk
-            // over to it. Saying "too far" for both sent players walking at a
-            // machine they were already standing beside.
-            return Err(match reason {
-                hauling::NoPost::BoxedIn => "That structure is walled in — nothing can stand \
-                     next to it. Demolish something beside it first."
-                    .into(),
-                hauling::NoPost::NoRoute => "No route to that structure from here — get closer, \
-                     or clear a path to it."
-                    .into(),
-            });
-        }
-        self.post_worker(worker, structure, from);
-        self.log_base("Cronjob scheduled.");
-        self.tick();
-        Ok(())
-    }
-
     /// Everything posting a program to a machine *does*, with none of what
     /// decides whether it may — `assign_cronjob` above is those refusals
     /// plus a call to this, and `schedule_base_labour` calls it directly
@@ -720,40 +657,6 @@ impl Game {
     /// raids can't target at all (`StructureDef::raidable`, e.g. Home) is
     /// refused, since a guard there would wait forever for a raid that never
     /// comes.
-    pub fn assign_guard(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        self.require_surface()?;
-        let owner = self
-            .world
-            .get::<Tamed>(worker)
-            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
-            .owner;
-        if owner != self.player_entity() {
-            return Err("You don't control that program.".into());
-        }
-        let kind = self
-            .world
-            .get::<Structure>(structure)
-            .ok_or_else(|| "That's not a structure.".to_string())?
-            .kind
-            .clone();
-        let unraidable = self
-            .world
-            .resource::<StructureDb>()
-            .get(&kind)
-            .filter(|def| !def.raidable)
-            .map(|def| def.name.clone());
-        if let Some(name) = unraidable {
-            return Err(format!("{name} can't be raided — it doesn't need a guard."));
-        }
-        self.post_guard(worker, structure);
-        self.log_base("It takes up a defensive position.");
-        self.tick();
-        Ok(())
-    }
-
     /// `post_worker`'s counterpart for a guard post, split for the same
     /// reason: the scheduler fills a standing guard job and has answered
     /// the refusals above its own way.

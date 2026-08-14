@@ -181,6 +181,21 @@ impl Game {
 /// source that could collide with the Stack's.
 const CONTRACT_BOARD_SALT: u64 = 0xC0A7_7AC7_5EED_0001;
 
+/// FNV-1a, a byte at a time — the one folding scheme this feature salts with,
+/// shared by the board's own seed and each template's.
+///
+/// Byte-at-a-time rather than one XOR-and-multiply per word, for
+/// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves low output
+/// bits a fixed function of the input, and consecutive epochs differ in
+/// exactly one low bit.
+pub(crate) fn fold(mut h: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        h ^= *byte as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 impl Game {
     /// What a Broker within `CONTRACT_BOARD_RANGE_TILES` is offering, or
     /// `None` if there is no Broker in reach.
@@ -224,12 +239,170 @@ impl Game {
             return None;
         }
         let mut pool = self.offerable_contracts();
+        pool.extend(self.rolled_contracts());
         let mut rng = StdRng::seed_from_u64(self.board_seed());
         let mut defs = Vec::new();
         for _ in 0..crate::tuning::CONTRACT_BOARD_SLOTS.min(pool.len()) {
             defs.push(pool.swap_remove(rng.random_range(0..pool.len())));
         }
         Some(defs)
+    }
+
+    /// Every template rolled once against this sector, keeping the ones that
+    /// came out finishable and offerable.
+    ///
+    /// Each template rolls from its **own** `StdRng`, salted off the board seed
+    /// with the template's id, rather than all of them sharing the board's
+    /// stream. That is `FrameSpec::salted`'s rule and it buys something
+    /// concrete here: a template that rolls nothing spends no draws, so adding
+    /// or deleting a template file cannot reshuffle what the others offered.
+    fn rolled_contracts(&mut self) -> Vec<crate::contracts::ContractDef> {
+        let pools = self.template_pools();
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let seed = self.board_seed();
+        let templates: Vec<crate::contracts::ContractTemplate> = self
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .templates()
+            .filter(|t| t.min_zone <= zone)
+            .cloned()
+            .collect();
+        templates
+            .iter()
+            .filter_map(|t| {
+                let mut rng = StdRng::seed_from_u64(fold(seed, t.id.as_str().as_bytes()));
+                t.roll(&mut rng, &pools)
+            })
+            .filter(|def| self.offerable(def))
+            .collect()
+    }
+
+    /// What this sector can supply a rolled contract with.
+    ///
+    /// The species half is read from the Chebyshev ring **just outside the
+    /// base slab**, not from the Home tile itself: `stamp_platform` lays
+    /// `Biome::Platform` across the whole footprint and no shipped species
+    /// lists it as a habitat — that is the entire mechanism behind a base
+    /// being a safe haven, so the anchor tile's own pool is empty by
+    /// construction. The band just outside the slab is where
+    /// `spawn_surface_links` draws its on-ramp from, for the same reason and
+    /// through the same `stack::ring_offset`.
+    ///
+    /// Sampled at `CONTRACT_HABITAT_SAMPLES` evenly-spaced points rather than
+    /// walked whole, because `contract_board` sits on a per-frame path — both
+    /// the contracts screen and the base menu's row test call it — and the ring
+    /// grows with a base that can reach `MAX_BUILD_RADIUS_TILES`.
+    pub(crate) fn template_pools(&mut self) -> crate::contracts::TemplatePools {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let mut pools = crate::contracts::TemplatePools {
+            species: Vec::new(),
+            items: Vec::new(),
+            structures: Vec::new(),
+            zone,
+        };
+        // Only the species half needs an anchor tile. A run with no Home has
+        // no doorstep to read, so it is offered no Hunt — but it can still be
+        // asked to deliver or to build, neither of which is a question about
+        // the ground.
+        if let Some((cx, cy)) = self.world.resource::<crate::resources::Platform>().center {
+            let band = self.build_radius() + 1;
+            let perimeter = 8 * band;
+            let samples = crate::tuning::CONTRACT_HABITAT_SAMPLES.min(perimeter);
+            let mut species: Vec<String> = Vec::new();
+            for i in 0..samples {
+                let (dx, dy) = crate::game::stack::ring_offset(band, i * perimeter / samples);
+                if let Some((ordinary, _bosses)) = self.habitat_pools(cx + dx, cy + dy) {
+                    species.extend(ordinary);
+                }
+            }
+            species.sort();
+            species.dedup();
+
+            let species_db = self.world.resource::<crate::species::SpeciesDb>();
+            pools.species = species
+                .into_iter()
+                .filter_map(|id| {
+                    species_db
+                        .get(&id)
+                        .map(|def| (id.clone(), def.name.clone()))
+                })
+                .collect();
+        }
+
+        pools.items = self.deliverable_items(&pools.species);
+        pools.structures = self.commissionable_structures();
+        pools
+    }
+
+    /// Items a rolled `Deliver` may ask for: anything the player can make,
+    /// anything a machine they could build prints, and anything dropped by a
+    /// program that lives on their doorstep.
+    ///
+    /// Two exclusions, both deliberate. **Portal Fragments** are the breaching
+    /// currency and the game's only source of them is a boss underground; a
+    /// contract that ate a stack's worth would be a run the player cannot
+    /// breach out of. The **trade currency** is money, and a delivery paid in
+    /// Credits for Credits is a contract that reads as broken.
+    fn deliverable_items(&self, species: &[(String, String)]) -> Vec<(ItemId, String)> {
+        let structures = self.world.resource::<crate::structures::StructureDb>();
+        let printed: Vec<ItemId> = structures
+            .all()
+            .filter(|def| self.structure_unlocked(&def.id))
+            .flat_map(|def| {
+                def.work
+                    .iter()
+                    .map(|w| w.produces.clone())
+                    .chain(def.assembles.iter().map(|a| a.item.clone()))
+            })
+            .collect();
+        let currency = self.trade_currency();
+        self.world
+            .resource::<crate::items_db::ItemDb>()
+            .all()
+            .filter(|def| def.id.as_str() != ids::PORTAL_FRAGMENT && def.id != currency)
+            .filter(|def| {
+                def.craftable.is_some()
+                    || printed.contains(&def.id)
+                    || def
+                        .droppable
+                        .iter()
+                        .flatten()
+                        .any(|(from, _)| species.iter().any(|(id, _)| id == from.as_str()))
+            })
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect()
+    }
+
+    /// Structures a rolled `Build` may ask for: unlocked, and **not already
+    /// standing**. The second half is the validity rule — `contract_system`
+    /// finishes a `Build` the moment one is deployed, so naming something the
+    /// player already owns pays out on acceptance.
+    fn commissionable_structures(&self) -> Vec<(crate::structures::StructureId, String)> {
+        let standing: Vec<crate::structures::StructureId> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect();
+        self.buildable_structure_defs()
+            .into_iter()
+            .filter(|def| !standing.contains(&def.id))
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect()
+    }
+
+    /// Whether the run could be offered `def` right now: this sector's level,
+    /// not already in hand, and not finished-and-not-repeatable.
+    ///
+    /// One predicate rather than two copies, because an authored contract and
+    /// a rolled one have to be filtered by exactly the same rule — a rolled
+    /// contract that survived a filter the authored ones don't would reappear
+    /// on the board after it had been finished.
+    fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let held = self.world.resource::<ActiveContracts>();
+        def.min_zone <= zone
+            && !held.active.iter().any(|c| c.def.id == def.id)
+            && (def.repeatable || !held.done.contains(&def.id))
     }
 
     /// Every contract the run currently holds. Always available, board or not:
@@ -267,14 +440,10 @@ impl Game {
     /// itself is stated once: this sector's level, minus anything already in
     /// hand, minus anything finished that does not repeat.
     pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractDef> {
-        let zone = self.world.resource::<ZoneLevel>().0;
-        let held = self.world.resource::<ActiveContracts>();
         self.world
             .resource::<crate::contracts::ContractDb>()
             .iter()
-            .filter(|def| def.min_zone <= zone)
-            .filter(|def| !held.active.iter().any(|c| c.def.id == def.id))
-            .filter(|def| def.repeatable || !held.done.contains(&def.id))
+            .filter(|def| self.offerable(def))
             .cloned()
             .collect()
     }
@@ -312,10 +481,7 @@ impl Game {
             epoch,
             CONTRACT_BOARD_SALT,
         ] {
-            for byte in word.to_le_bytes() {
-                h ^= byte as u64;
-                h = h.wrapping_mul(0x0000_0100_0000_01b3);
-            }
+            h = fold(h, &word.to_le_bytes());
         }
         h
     }

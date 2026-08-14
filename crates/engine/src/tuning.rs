@@ -1552,6 +1552,17 @@ pub const CONTRACT_REFRESH_CYCLES: u32 = 400;
 /// board being readable from across the base.
 pub const CONTRACT_BOARD_RANGE_TILES: i32 = 2;
 
+/// How many points around the base's doorstep a rolled contract samples to
+/// decide which programs live in this sector.
+///
+/// A sample rather than a walk because `Game::contract_board` is on a
+/// per-frame path — the contracts screen and the base menu's row test both
+/// call it — while the ring it walks grows with a base that can reach
+/// `MAX_BUILD_RADIUS_TILES`. Biome features run about 25 tiles across at
+/// `WorldMap::classify`'s noise scale, so 32 points stay inside one feature
+/// apiece out to the widest base the game allows.
+pub const CONTRACT_HABITAT_SAMPLES: i32 = 32;
+
 // ---------------------------------------------------------------------------
 // Production chains
 // ---------------------------------------------------------------------------

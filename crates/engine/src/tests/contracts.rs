@@ -1084,13 +1084,15 @@ fn an_active_or_finished_contract_is_not_offered_again() {
     let offered = board_ids(&mut game);
     let taken = offered.first().cloned().expect("the board has offers");
 
-    let def = game
+    // Through `repeatable` and `accept_contract` rather than a db lookup: the
+    // first offer may be a rolled contract, which has no entry in the db at
+    // all, and reaching for one is the exact bug the board-carries-the-def
+    // shape exists to remove.
+    let repeatable = game
         .world
         .resource::<crate::contracts::ContractDb>()
-        .get(&taken)
-        .cloned()
-        .unwrap();
-    give(&mut game, def.clone(), 0);
+        .repeatable(&taken);
+    assert_eq!(game.accept_contract(&taken), Ok(()));
     assert!(
         !board_ids(&mut game).contains(&taken),
         "a contract already in hand is not offered again"
@@ -1102,7 +1104,7 @@ fn an_active_or_finished_contract_is_not_offered_again() {
         .done
         .push(taken.clone());
     let after_done = board_ids(&mut game);
-    if def.repeatable {
+    if repeatable {
         assert!(
             after_done.contains(&taken),
             "a repeatable contract comes back once it is finished"
@@ -1676,5 +1678,166 @@ fn a_rolled_id_names_the_template_it_came_from_and_the_roll_that_made_it() {
         ContractId::from("hunt#drone-6"),
         "the same roll has to produce the same id, or the board would offer a \
          different contract after a reload"
+    );
+}
+
+/// The shipped templates, loaded through a real game.
+#[test]
+fn the_shipped_templates_reach_a_loaded_game() {
+    let game = fresh();
+    let db = game.world.resource::<ContractDb>();
+    let ids: Vec<&str> = db.templates().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec!["commission", "expansion", "hunt", "requisition", "sounding"],
+        "one template per objective shape, in the db's stable id order"
+    );
+}
+
+#[test]
+fn every_shipped_template_rolls_something_finishable_in_a_fresh_sector() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(
+        !pools.species.is_empty(),
+        "the base's doorstep has to field programs, or a Hunt can never roll — \
+         the Home tile itself is Biome::Platform and fields none by design"
+    );
+    assert!(!pools.items.is_empty(), "and something to deliver");
+    assert!(!pools.structures.is_empty(), "and something left to build");
+
+    let templates: Vec<_> = game
+        .world
+        .resource::<ContractDb>()
+        .templates()
+        .cloned()
+        .collect();
+    for t in templates {
+        // Zone 1, so `expansion` (min_zone 2) is not yet on offer; it is
+        // still asked to roll, since a template that cannot roll at all is a
+        // template that would never appear.
+        let rolled = t.roll(&mut rng(), &pools);
+        assert!(
+            rolled.is_some(),
+            "{} rolls nothing against a fresh sector",
+            t.id
+        );
+    }
+}
+
+#[test]
+fn a_rolled_contract_can_be_accepted() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+
+    // Walk the epochs until a rolled contract surfaces on the board, rather
+    // than depending on which three slots one seed happened to pick.
+    let mut rolled = None;
+    for _ in 0..40 {
+        if let Some(id) = board_ids(&mut game)
+            .into_iter()
+            .find(|id| id.as_str().contains('#'))
+        {
+            rolled = Some(id);
+            break;
+        }
+        for _ in 0..crate::tuning::CONTRACT_REFRESH_CYCLES {
+            game.tick();
+        }
+    }
+    let id = rolled.expect("the shipped templates reach a zone-1 board");
+
+    assert_eq!(
+        game.accept_contract(&id),
+        Ok(()),
+        "the regression this whole shape exists for: every step of the accept \
+         path used to re-resolve the def out of ContractDb by id, which a \
+         rolled contract has no entry in — so it was refused as NotOffered \
+         while sitting visibly on the board"
+    );
+    let held = game.world.resource::<ActiveContracts>();
+    assert_eq!(held.active.len(), 1);
+    assert_eq!(held.active[0].def.id, id);
+}
+
+#[test]
+fn the_same_rolled_contract_comes_back_after_a_save_and_load() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let before = board_ids(&mut game);
+    assert!(
+        before.iter().any(|id| id.as_str().contains('#')),
+        "this test is only worth anything if a rolled contract is on the board"
+    );
+
+    let path = std::env::temp_dir().join(format!("feral_rolled_board_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        board_ids(&mut loaded),
+        before,
+        "a rolled offer is shown before it is accepted, so it has to survive a \
+         reload — which is why nothing about it is drawn from GameRng"
+    );
+}
+
+#[test]
+fn a_rolled_contract_inherits_its_templates_repeatability() {
+    let game = fresh();
+    let db = game.world.resource::<ContractDb>();
+    assert!(
+        db.repeatable(&ContractId::from("hunt#drone-6")),
+        "hunt is repeatable, so every contract it rolls is"
+    );
+    assert!(
+        !db.repeatable(&ContractId::from("commission#refinery")),
+        "commission is not"
+    );
+    assert!(
+        !db.repeatable(&ContractId::from("gone#drone-6")),
+        "a template deleted mid-run leaves the run's own copy to finish it, \
+         and nothing to put back on a board"
+    );
+}
+
+#[test]
+fn deleting_a_template_does_not_reshuffle_what_the_others_rolled() {
+    let mut game = fresh();
+    let pools = game.template_pools();
+    let seed = 99u64;
+
+    let templates: Vec<_> = game
+        .world
+        .resource::<ContractDb>()
+        .templates()
+        .cloned()
+        .collect();
+    let roll_all = |set: &[crate::contracts::ContractTemplate]| -> Vec<ContractId> {
+        set.iter()
+            .filter_map(|t| {
+                let mut r = StdRng::seed_from_u64(crate::game::contracts::fold(
+                    seed,
+                    t.id.as_str().as_bytes(),
+                ));
+                t.roll(&mut r, &pools).map(|def| def.id)
+            })
+            .collect()
+    };
+
+    let all = roll_all(&templates);
+    let without_first: Vec<_> = templates[1..].to_vec();
+    let survivors: Vec<ContractId> = all
+        .iter()
+        .filter(|id| !id.as_str().starts_with(templates[0].id.as_str()))
+        .cloned()
+        .collect();
+    assert_eq!(
+        roll_all(&without_first),
+        survivors,
+        "each template rolls from its own salted stream, so adding or removing \
+         a template file cannot silently rewrite what the others offered"
     );
 }

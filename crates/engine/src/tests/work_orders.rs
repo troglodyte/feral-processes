@@ -804,3 +804,128 @@ fn a_base_with_no_staff_queues_and_reports_without_posting_or_panicking() {
     assert_eq!(game.work_orders().len(), 1);
     assert!(game.base_staff().is_empty());
 }
+
+// ---------------------------------------------------------------------
+// Task 5: standing jobs
+// ---------------------------------------------------------------------
+
+/// A standing job is what keeps a machine running with no order behind it
+/// — the Research Node is the case it exists for, since a banked payout
+/// can never be ordered against at all.
+#[test]
+fn a_standing_work_job_is_filled_when_no_order_needs_the_body() {
+    let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 0);
+    let staff = hire(&mut game, 1);
+    game.set_standing_job(node, true, false).unwrap();
+
+    game.tick();
+
+    assert_eq!(posted_at(&game, staff[0]), Some(node));
+}
+
+/// Standing jobs sit at the **lowest** priority, after whatever order is
+/// being worked, so a spare body fills one and a needed body does not.
+#[test]
+fn a_standing_job_yields_the_body_to_an_order_and_takes_it_back_after() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 3);
+    let staff = hire(&mut game, 1);
+    game.set_standing_job(node, true, false).unwrap();
+    game.tick();
+    assert_eq!(posted_at(&game, staff[0]), Some(node), "precondition");
+
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.tick();
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "an order outranks a standing job for a scarce body"
+    );
+
+    game.cancel_work_order(0).unwrap();
+    game.tick();
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(node),
+        "and the standing job takes it back once the order is gone"
+    );
+}
+
+/// A guard produces nothing, so no `can_progress` walk can ever ask for
+/// one — a standing guard is the only way a post survives the sweep that
+/// makes it worth having.
+#[test]
+fn a_standing_guard_is_filled_and_refilled_after_a_sweep() {
+    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let shield = spawn_machine_at(&mut game, "shield", 2, 0);
+    let staff = hire(&mut game, 1);
+    game.set_standing_job(shield, false, true).unwrap();
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(staff[0]).map(|t| t.kind),
+        Some(TaskKind::Guard),
+        "the post is a guard post, not a cronjob"
+    );
+
+    // The guard is stood down by hand, as a sweep's aftermath might.
+    game.world.entity_mut(staff[0]).remove::<Task>();
+    game.tick();
+
+    assert_eq!(posted_at(&game, staff[0]), Some(shield), "and it re-fills");
+}
+
+#[test]
+fn a_guard_job_on_an_unraidable_structure_is_refused() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let home = find_home(&mut game).expect("the Home is standing");
+
+    let err = game
+        .set_standing_job(home, false, true)
+        .expect_err("a Home cannot be swept, so it does not need a guard");
+
+    assert!(!err.is_empty());
+    assert_eq!(game.standing_job(home), None);
+}
+
+/// The flags live on the structure entity, deliberately the opposite of
+/// `BuybackLedger`: a shelf outlives its building on purpose, a job order
+/// must not — a Shield rebuilt on the footprint of a demolished one should
+/// not inherit a standing guard nobody asked for.
+#[test]
+fn standing_jobs_survive_a_save_but_not_a_demolition() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 0);
+    game.set_standing_job(node, true, false).unwrap();
+
+    let path = save_path("standing");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let restored = loaded
+        .world
+        .iter_entities()
+        .find(|e| {
+            e.get::<Structure>()
+                .is_some_and(|s| s.kind == "research_node")
+        })
+        .map(|e| e.id())
+        .expect("the node comes back");
+    assert_eq!(loaded.standing_job(restored), Some((true, false)));
+
+    // Rebuilt on the same tile, the replacement carries no job order.
+    let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let first = spawn_machine_at(&mut game, "research_node", 2, 0);
+    game.set_standing_job(first, true, false).unwrap();
+    game.world.entity_mut(first).despawn();
+    let second = spawn_machine_at(&mut game, "research_node", 2, 0);
+    assert_eq!(game.standing_job(second), None);
+}

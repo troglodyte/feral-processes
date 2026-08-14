@@ -271,6 +271,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         tier: None,
         stock_input: Vec::new(),
         stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -358,6 +360,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             tier: None,
             stock_input: Vec::new(),
             stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -738,6 +742,8 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             tier: None,
             stock_input: Vec::new(),
             stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
         });
     }
     for _ in 0..programs {
@@ -827,6 +833,8 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         tier: None,
         stock_input: Vec::new(),
         stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
     });
     if underground {
         data.locale = Locale::Stack {

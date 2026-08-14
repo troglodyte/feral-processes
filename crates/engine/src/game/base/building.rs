@@ -748,6 +748,19 @@ impl Game {
         if let Some(name) = unraidable {
             return Err(format!("{name} can't be raided — it doesn't need a guard."));
         }
+        self.post_guard(worker, structure);
+        self.log_base("It takes up a defensive position.");
+        self.tick();
+        Ok(())
+    }
+
+    /// `post_worker`'s counterpart for a guard post, split for the same
+    /// reason: the scheduler fills a standing guard job and has answered
+    /// the refusals above its own way.
+    ///
+    /// No `work_ticks_for` and no `Position` write — guarding produces
+    /// nothing, so there is no cycle to rate and no station to walk to.
+    pub(crate) fn post_guard(&mut self, worker: Entity, structure: Entity) {
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world
                 .resource_mut::<Party>()
@@ -762,8 +775,5 @@ impl Game {
             progress: 0,
             required: 0,
         });
-        self.log_base("It takes up a defensive position.");
-        self.tick();
-        Ok(())
     }
 }

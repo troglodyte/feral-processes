@@ -346,6 +346,18 @@ pub struct StructureSave {
     pub stock_input: Vec<(ItemId, u32)>,
     #[serde(default)]
     pub stock_output: Vec<(ItemId, u32)>,
+    /// The two halves of `components::StandingJob` — keep this machine
+    /// worked, and keep this structure guarded, whether or not an order
+    /// asks for it.
+    ///
+    /// Two flat bools rather than the component, matching how
+    /// `EquippedItemSave` keeps a worn copy flat: a nested struct is a
+    /// shape change RON cannot absorb, while a defaulted bool is free.
+    /// Additive and defaulted, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub standing_work: bool,
+    #[serde(default)]
+    pub standing_guard: bool,
 }
 
 /// One trading post's buyback shelf on disk: the trader kind and tile that

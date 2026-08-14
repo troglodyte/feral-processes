@@ -53,8 +53,8 @@ use components::{
     Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile,
     Inventory, MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position,
     Potential, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn,
-    Stats, StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink,
-    Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier,
+    SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::contracts::ContractRefusal;
 pub use game::stack_view::ExamineDir;

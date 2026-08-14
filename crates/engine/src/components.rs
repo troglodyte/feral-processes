@@ -191,6 +191,28 @@ pub struct Tamed {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BaseStaff;
 
+/// A standing instruction on a **structure**: keep this one worked, or
+/// keep it guarded, whether or not any work order asks for it.
+///
+/// Standing jobs sit at the lowest priority in
+/// `game::base::work_orders::schedule_base_labour`'s want list, so they are
+/// filled only by a body no order needs and yield that body the moment one
+/// does. They are what keeps a Research Node running at all — a banked
+/// payout reaches no output buffer, so no order can ever be placed against
+/// research — and the only way a guard post survives the sweep that makes
+/// it worth having.
+///
+/// On the structure entity rather than in a resource keyed by tile, which
+/// is the deliberate opposite of `resources::BuybackLedger`. A shelf
+/// outlives its building on purpose; a job order must not — a Shield
+/// rebuilt on the footprint of a demolished one should not inherit a
+/// standing guard nobody asked for.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StandingJob {
+    pub work: bool,
+    pub guard: bool,
+}
+
 /// An item sitting in an `Equipment` slot: *which copy* went on, and the
 /// gear level its stat bonus was scaled for when it did.
 ///

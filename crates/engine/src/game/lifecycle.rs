@@ -682,6 +682,15 @@ impl Game {
             if def.runs_a_job() {
                 entity.insert(MachineStatus::default());
             }
+            // Absent rather than defaulted when neither flag is set, so
+            // "has a standing job" stays readable as the component's
+            // presence — the same invariant `Equipment` keeps.
+            if s.standing_work || s.standing_guard {
+                entity.insert(StandingJob {
+                    work: s.standing_work,
+                    guard: s.standing_guard,
+                });
+            }
             // Rebuilt from the def rather than from the save: with the
             // deposit pool gone, a node carries nothing per-instance that a
             // `.ron` file doesn't already say. What the node *produced* is
@@ -902,11 +911,13 @@ impl Game {
             Option<&Durability>,
             Option<&StructureTier>,
             Option<&Stock>,
+            Option<&StandingJob>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock) in structure_query.iter(&self.world) {
+        for (structure, pos, durability, tier, stock, standing) in structure_query.iter(&self.world)
+        {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                 map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
                     .unwrap_or_default()
@@ -918,6 +929,8 @@ impl Game {
                 tier: tier.map(|t| t.0),
                 stock_input: encode(stock.map(|s| &s.input)),
                 stock_output: encode(stock.map(|s| &s.output)),
+                standing_work: standing.is_some_and(|j| j.work),
+                standing_guard: standing.is_some_and(|j| j.guard),
             });
         }
 

@@ -409,7 +409,26 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let wanted = self.settle_orders();
+        let mut wanted: Vec<(Entity, TaskKind)> = self
+            .settle_orders()
+            .into_iter()
+            .map(|(machine, _)| (machine, TaskKind::GatherResource))
+            .collect();
+        // Standing jobs, appended after the worked order and therefore at
+        // the lowest priority: a spare body fills one, a needed body does
+        // not. A work job is still gated on `can_progress` — a standing
+        // instruction says "keep this running", not "stand here regardless"
+        // — while a guard job is not, because guarding produces nothing and
+        // there is no cycle for a buffer to stall.
+        for (structure, kind) in self.standing_wants() {
+            if wanted.iter().any(|&(e, _)| e == structure) {
+                continue;
+            }
+            if kind == TaskKind::GatherResource && !can_progress(self, structure) {
+                continue;
+            }
+            wanted.push((structure, kind));
+        }
         let staff = self.base_staff();
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
@@ -417,68 +436,159 @@ impl Game {
             // in it, which is a different errand from an order being stuck.
             return;
         }
-        let wanted_machines: std::collections::HashSet<Entity> =
-            wanted.iter().map(|&(e, _)| e).collect();
-        // Machines already being worked, by anyone — the player's own
-        // `work_structure` task counts, since a machine with a body on it
-        // does not need a second.
-        let taken: std::collections::HashSet<Entity> = self
+        // Posts already covered by somebody the scheduler may not move —
+        // the player's own `work_structure` task, or a program posted by
+        // hand outside the pool. A post with a body on it does not need a
+        // second, and this is the only body the scheduler treats as
+        // permanent.
+        let outsiders: Vec<(Entity, TaskKind)> = self
             .world
             .iter_entities()
+            .filter(|e| !e.contains::<BaseStaff>())
             .filter_map(|e| e.get::<Task>())
-            .filter(|t| matches!(t.kind, TaskKind::GatherResource))
-            .map(|t| t.target)
+            .map(|t| (t.target, t.kind))
             .collect();
-        let unfilled: Vec<(Entity, u32)> = wanted
-            .into_iter()
-            .filter(|(m, _)| !taken.contains(m))
+        wanted.retain(|post| !outsiders.contains(post));
+
+        // The staff are fewer than the posts most of the time, so the list
+        // is cut to what can actually be filled — **in priority order**,
+        // which is what makes an order outrank a standing job for a scarce
+        // body. Deciding the whole assignment first and diffing against
+        // what is posted is what lets the priority rule and the anti-thrash
+        // rule both hold: filling greedily around the postings that already
+        // exist would leave a body on a standing job while an order went
+        // unworked, because the body was already somewhere "wanted".
+        wanted.truncate(staff.len());
+
+        // **The scheduler never takes a body off a post unless it has
+        // somewhere better to put it.** With every wanted post already
+        // filled there is no gain in moving anyone, and real harm in it: a
+        // base whose queue has run dry — or one loaded from a save written
+        // before work orders existed, whose workers were all posted by hand
+        // — would otherwise be stood down wholesale on the first tick,
+        // which is the exact regression `Game::load`'s absorption rule
+        // exists to prevent.
+        let posted: Vec<(Entity, TaskKind)> = staff
+            .iter()
+            .filter_map(|&e| self.world.get::<Task>(e))
+            .map(|t| (t.target, t.kind))
             .collect();
-        // **The scheduler never takes a body off a machine unless it has
-        // somewhere better to put it.** With nothing left to fill there is
-        // no gain in moving anyone, and real harm in it: a base whose queue
-        // has run dry — or one loaded from a save written before work
-        // orders existed, whose workers were all posted by hand — would
-        // otherwise be stood down wholesale on the first tick, which is the
-        // exact regression `Game::load`'s absorption rule exists to
-        // prevent. Standing jobs are how a machine is deliberately kept
-        // running with no order behind it.
-        if unfilled.is_empty() {
+        if wanted.iter().all(|post| posted.contains(post)) {
             return;
         }
 
-        // Step 4. Only `BaseStaff` is ever unposted — the player's own
-        // `work_structure` task and anything posted by hand outside the pool
-        // are not the scheduler's to move.
+        // Step 3 and step 4 in one pass: anyone already standing at a post
+        // the assignment keeps stays exactly where they are (that is the
+        // anti-thrash rule, and it is what stops a cronjob's progress being
+        // restarted from zero every tick); everyone else is freed.
         let mut idle = Vec::new();
+        let mut remaining = wanted.clone();
         for &worker in &staff {
-            match self.world.get::<Task>(worker).map(|t| t.target) {
-                None => idle.push(worker),
-                Some(target) if !wanted_machines.contains(&target) => {
+            let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
+            match held.and_then(|post| remaining.iter().position(|&p| p == post)) {
+                Some(index) => {
+                    remaining.remove(index);
+                }
+                None => {
                     self.world
                         .entity_mut(worker)
                         .remove::<Task>()
                         .remove::<Carrying>();
                     idle.push(worker);
                 }
-                // Step 3: posted where a want still exists, so it stays
-                // exactly where it is. This is the anti-thrash rule.
-                Some(_) => {}
             }
         }
         idle.reverse();
 
-        // Step 5, deepest first.
+        // Step 5, deepest first — and standing jobs last, since they were
+        // appended after the order's wants and the list is not re-sorted.
         let from = self
             .world
             .get::<Position>(self.player_entity())
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
-        for (machine, _) in unfilled {
+        for (post, kind) in remaining {
             let Some(worker) = idle.pop() else {
                 break;
             };
-            self.post_worker(worker, machine, from);
+            match kind {
+                TaskKind::GatherResource => self.post_worker(worker, post, from),
+                TaskKind::Guard => self.post_guard(worker, post),
+            }
         }
+    }
+
+    /// Sets or clears the standing instructions on `structure` — see
+    /// `components::StandingJob`.
+    ///
+    /// A guard job on something that cannot be swept is refused, and by
+    /// exactly the check `assign_guard` already carries rather than a
+    /// restatement of it: the same question deserves the same sentence.
+    pub fn set_standing_job(
+        &mut self,
+        structure: Entity,
+        work: bool,
+        guard: bool,
+    ) -> Result<(), String> {
+        let kind = self
+            .world
+            .get::<Structure>(structure)
+            .ok_or_else(|| "That's not a structure.".to_string())?
+            .kind
+            .clone();
+        if guard {
+            let unraidable = self
+                .world
+                .resource::<StructureDb>()
+                .get(&kind)
+                .filter(|def| !def.raidable)
+                .map(|def| def.name.clone());
+            if let Some(name) = unraidable {
+                return Err(format!("{name} can't be raided — it doesn't need a guard."));
+            }
+        }
+        if work && !self.accepts_a_program(structure) {
+            return Err("That structure can't be worked.".into());
+        }
+        let mut entity = self.world.entity_mut(structure);
+        if work || guard {
+            entity.insert(StandingJob { work, guard });
+        } else {
+            entity.remove::<StandingJob>();
+        }
+        Ok(())
+    }
+
+    pub fn standing_job(&self, structure: Entity) -> Option<(bool, bool)> {
+        self.world
+            .get::<StandingJob>(structure)
+            .map(|j| (j.work, j.guard))
+    }
+
+    /// Every standing job in the base, in a stable tile order.
+    ///
+    /// Appended **after** whatever order is being worked and at the lowest
+    /// priority, so a Research Node or a guarded Shield is filled only by a
+    /// body no order needs — and gives that body up the moment one does.
+    fn standing_wants(&self) -> Vec<(Entity, TaskKind)> {
+        let mut jobs: Vec<(i32, i32, Entity, TaskKind)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let job = e.get::<StandingJob>()?;
+                let pos = e.get::<Position>()?;
+                let kind = if job.work {
+                    TaskKind::GatherResource
+                } else if job.guard {
+                    TaskKind::Guard
+                } else {
+                    return None;
+                };
+                Some((pos.x, pos.y, e.id(), kind))
+            })
+            .collect();
+        jobs.sort_by_key(|&(x, y, e, _)| (x, y, e));
+        jobs.into_iter().map(|(_, _, e, k)| (e, k)).collect()
     }
 
     /// Steps 1 and 2: pop every completed order off the front, skip a

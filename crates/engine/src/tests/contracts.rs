@@ -1,6 +1,7 @@
 //! Contracts: the catalogue, the run state, the one system that advances
 //! progress, and the board a Contract Broker derives.
 
+use super::support::*;
 use crate::contracts::{ContractDb, ContractId, Objective, Reward};
 
 /// A temp directory of `.ron` files to load a `ContractDb` out of. Tagged as
@@ -209,4 +210,93 @@ fn a_contract_that_pays_nothing_is_refused() {
         "a contract paying nothing is a mistake that reads as a working file: {warnings:?}"
     );
     assert_eq!(db.iter().count(), 0);
+}
+
+/// The shipped set, loaded from the real `assets/contracts/`.
+fn shipped_contracts() -> (ContractDb, Vec<String>) {
+    ContractDb::load_dir(&test_assets_dir().join("contracts")).unwrap()
+}
+
+#[test]
+fn the_shipped_contracts_name_things_that_exist() {
+    let assets = test_assets_dir();
+    let (contracts, warnings) = shipped_contracts();
+    assert!(
+        warnings.is_empty(),
+        "shipped contracts should all parse: {warnings:?}"
+    );
+    assert!(contracts.iter().count() >= 8, "the shipped set is authored");
+
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items")).unwrap();
+    let (structures, _) =
+        crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (species, _) =
+        crate::species::SpeciesDb::load_dir(&assets.join("species"), &abilities).unwrap();
+
+    for def in contracts.iter() {
+        assert!(
+            !def.description.is_empty(),
+            "{} needs a description — it is the only place a player is told what to do",
+            def.id
+        );
+        match &def.objective {
+            Objective::Deliver { item, .. } => assert!(
+                items.get(item.as_str()).is_some(),
+                "{} asks for an item that does not exist: {item}",
+                def.id
+            ),
+            Objective::Kill {
+                species: Some(id), ..
+            } => assert!(
+                species.get(id).is_some(),
+                "{} names a species that does not exist: {id}",
+                def.id
+            ),
+            Objective::Build { structure } => assert!(
+                structures.get(structure).is_some(),
+                "{} names a structure that does not exist: {structure}",
+                def.id
+            ),
+            _ => {}
+        }
+        for reward in &def.reward {
+            if let Reward::Item(item, _) = reward {
+                assert!(
+                    items.get(item.as_str()).is_some(),
+                    "{} pays an item that does not exist: {item}",
+                    def.id
+                );
+                assert_ne!(
+                    item.as_str(),
+                    crate::items::ids::PORTAL_FRAGMENT,
+                    "{} pays Portal Fragments. `Reward::PortalFragments` does not exist on \
+                     purpose; `Reward::Item` is the same thing through the back door, and \
+                     breaching stays earned by fighting and descending.",
+                    def.id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn every_objective_variant_ships_at_least_once() {
+    let (contracts, _) = shipped_contracts();
+    let mut seen = [false; 5];
+    for def in contracts.iter() {
+        let slot = match &def.objective {
+            Objective::Kill { .. } => 0,
+            Objective::Deliver { .. } => 1,
+            Objective::Descend { .. } => 2,
+            Objective::Breach { .. } => 3,
+            Objective::Build { .. } => 4,
+        };
+        seen[slot] = true;
+    }
+    assert!(
+        seen.iter().all(|&s| s),
+        "every objective variant needs shipped content exercising it, or a code path \
+         added for it is never walked in a real game: {seen:?}"
+    );
 }

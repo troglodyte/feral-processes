@@ -1,0 +1,8 @@
+(
+    id: "glitch_sweep",
+    name: "Glitch Sweep",
+    description: "Glitches are corrupting everything they touch out here. Clear eight of them.",
+    objective: Kill(species: Some("glitch"), count: 8),
+    reward: [Credits(90), Xp(240)],
+    min_zone: 3,
+)

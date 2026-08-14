@@ -27,6 +27,59 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.33
+
+### Ten more affixes, three of which charge you for the privilege
+
+The affix pool shipped with eight entries, and two facts about it made a
+find repeat sooner than it should have. Only four could land on a Module, so
+the slot you keep for yourself was the one whose drops varied least. And
+DECOMP had exactly one affix in the whole set, at two points — so a capture
+build's only roll was an uncommon one, with no small common version beneath
+it the way ATK and DEF both had.
+
+Ten more, filling both:
+
+| Affix | Grants | Slots |
+|---|---|---|
+| Tempered | +1 ATK | any |
+| Patched | +1 DECOMP | Module, Armor |
+| Shimmed | +2 DEF | Module |
+| Rigged | +2 ATK | Module |
+| of Deep Cache | +1 DEF +1 DECOMP | Module, Armor |
+| of Sidechannel | +1 ATK +1 DECOMP | Module |
+| Volatile | +2 ATK **-1 DEF** | Armor |
+| of Deadlock | +2 DEF **-1 ATK** | Weapon |
+| of Cold Boot | +1 ATK +2 DEF | Armor, Module |
+| of Hot Swap | +2 ATK +2 DEF **-1 DECOMP** | any |
+
+The last three are new in kind: an affix may now cost you something. With
+only three stats in the game and a calibration ceiling of +3 on any one of
+them, a drawback that merely undercut an existing affix would be strictly
+worse than it and nobody would ever want it, however common it was. So each
+of the three puts a stat on a slot no clean affix will — ATK on armour, DEF
+on a weapon — and bills that slot's own axis for it. Nothing in the set
+grants four points across two stats without one; `of Hot Swap` does, and
+pays for it in a capture skill your companions do not have, so a copy of it
+handed to a program costs nothing at all.
+
+A drawback scales with the run, because the affix is folded into the base
+before gear level is applied — a cost that quietly stopped mattering after a
+breach would read as a free upgrade rather than as a choice. Fusion and rare
+tiers deliberately do *not* deepen it: those are what you spend to improve a
+copy, and spending to make your own gear worse on one axis is a trade nobody
+would take.
+
+Two smaller consequences. An affix that grants nothing positive is now
+refused at load with a warning, the way one granting no stats at all always
+was — a mod's pure penalty is a roll no player has a reason to keep. And
+every slot is now asserted to have something to roll, since a slot with an
+empty pool is one where drops stay exactly as interchangeable as they were
+before affixes existed.
+
+Saves are unaffected: a copy that never rolled one of these still names the
+affix it has, or none.
+
 ## 0.8.32
 
 ### Four perks that leave the player's own body

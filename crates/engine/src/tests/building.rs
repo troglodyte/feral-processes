@@ -2055,3 +2055,39 @@ fn the_build_radius_clamps_at_its_ceiling() {
         "no amount of bonus takes a base past the ceiling"
     );
 }
+
+/// The claim that buys the whole design: because the radius is derived from
+/// deployed structures rather than stored, it comes back on load with no
+/// save-format change at all — this must pass at the current
+/// `SAVE_FORMAT_VERSION`.
+#[test]
+fn a_widened_footprint_survives_a_save_and_load() {
+    let dir =
+        assets_dir_with_extra_structure("build_radius_save", "test_pillar.ron", WIDENING_PILLAR);
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    spawn_structure_of(&mut game, "test_pillar", 1, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    game.stamp_platform(home.x, home.y);
+    let before = game.world.resource::<Platform>().radius;
+    assert_eq!(
+        before,
+        MAX_BUILD_DISTANCE_FROM_HOME + 1,
+        "precondition: the Pillar widened the live footprint"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_build_radius_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        loaded.world.resource::<Platform>().radius,
+        before,
+        "the radius is rediscovered from the structures the save already carries"
+    );
+}

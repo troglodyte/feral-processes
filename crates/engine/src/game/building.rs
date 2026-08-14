@@ -3,7 +3,7 @@
 
 use crate::game::hauling;
 use crate::structures::UpgradeDef;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STRUCTURE_REMOVAL_REFUND_PERCENT};
+use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
 impl Game {
@@ -33,9 +33,11 @@ impl Game {
 
         if structure_id != HOME_STRUCTURE_ID {
             let home = self.home_position().expect("checked above: a Home exists");
-            if !Platform::covers(x - home.x, y - home.y) {
+            let platform = *self.world.resource::<Platform>();
+            if !platform.covers(x - home.x, y - home.y) {
+                let radius = platform.radius;
                 return Err(format!(
-                    "Too far from Home — structures must be built within {MAX_BUILD_DISTANCE_FROM_HOME} tiles of it."
+                    "Too far from Home — structures must be built within {radius} tiles of it."
                 ));
             }
         }

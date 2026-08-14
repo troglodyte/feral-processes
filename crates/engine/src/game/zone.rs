@@ -241,11 +241,16 @@ impl Game {
     /// every hostile and nest standing inside is obliterated. Deploying a
     /// Home and breaching into a new zone are the only callers.
     pub(crate) fn stamp_platform(&mut self, cx: i32, cy: i32) {
+        // Computed before the map borrow: `build_radius` needs `&mut self`
+        // and the stamping loop holds `WorldMap` across its whole run.
+        let radius = self.build_radius();
+        self.world.resource_mut::<Platform>().radius = radius;
+        let platform = *self.world.resource::<Platform>();
         {
             let mut map = self.world.resource_mut::<WorldMap>();
-            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
-                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
-                    if !Platform::covers(dx, dy) {
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    if !platform.covers(dx, dy) {
                         continue;
                     }
                     map.set_override(
@@ -260,7 +265,7 @@ impl Game {
             }
         }
 
-        let inside = |p: &Position| Platform::covers(p.x - cx, p.y - cy);
+        let inside = |p: &Position| platform.covers(p.x - cx, p.y - cy);
         let hostiles: Vec<Entity> = {
             let mut query = self
                 .world
@@ -297,8 +302,9 @@ impl Game {
         // `spawn_surface_links` runs, and that skips `Biome::Platform`
         // outright. It is not a rare collision, which is why it is worth
         // sweeping rather than trusting placement: `STACK_NEAREST_LINK_TILES`
-        // puts a zone's first link 5-8 tiles from where the player arrives,
-        // against a slab of `MAX_BUILD_DISTANCE_FROM_HOME` 7.
+        // puts a zone's first link just outside whatever slab existed when
+        // the zone was generated, and deploying a Home afterwards moves the
+        // slab somewhere the link placement never saw.
         let links: Vec<Entity> = {
             let mut query = self
                 .world
@@ -329,15 +335,18 @@ impl Game {
         let Some((cx, cy)) = self.world.resource::<Platform>().center else {
             return;
         };
+        let radius = self.world.resource::<Platform>().radius;
         {
             let mut map = self.world.resource_mut::<WorldMap>();
-            for dy in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
-                for dx in -MAX_BUILD_DISTANCE_FROM_HOME..=MAX_BUILD_DISTANCE_FROM_HOME {
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
                     map.clear_override(cx + dx, cy + dy);
                 }
             }
         }
-        self.world.resource_mut::<Platform>().center = None;
+        let mut platform = self.world.resource_mut::<Platform>();
+        platform.center = None;
+        platform.radius = MAX_BUILD_DISTANCE_FROM_HOME;
     }
 
     /// Every tile a deployed structure stands on — the set a hauler's walk

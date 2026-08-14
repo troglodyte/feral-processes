@@ -584,38 +584,58 @@ pub enum SlotShift {
     Back,
 }
 
-/// Center of the player's base platform — the slab of `Biome::Platform`
-/// stamped across `MAX_BUILD_DISTANCE_FROM_HOME` when a Home is deployed.
-/// `None` until the run's first Home goes down, which is why the opening
-/// minutes of a run scale danger exactly as they did before platforms
-/// existed.
+/// Center and current width of the player's base platform — the slab of
+/// `Biome::Platform` stamped when a Home is deployed. `center` is `None`
+/// until the run's first Home goes down, which is why the opening minutes
+/// of a run scale danger exactly as they did before platforms existed.
 ///
 /// Exists as a resource rather than being looked up from the Home entity
 /// because `Game::distance_stat_multiplier` and `Game::max_group_size` take
-/// `&self`, while querying for the Home needs `&mut self`.
+/// `&self`, while querying for the Home needs `&mut self`. `radius` is here
+/// for exactly that reason too: it is *derived*, by `Game::build_radius`
+/// over every deployed structure's `build_radius_bonus`, and cached here so
+/// the footprint stays readable from `&self`.
 ///
-/// Deliberately not serialized: it's reconstructed on load from the Home's
-/// own position, which `save::SaveData::structures` already carries.
-#[derive(Resource, Default, Clone, Copy)]
+/// Both fields are written at the same three sites and nowhere else —
+/// `Game::stamp_platform`, `Game::clear_platform`, and the load path in
+/// `game/lifecycle.rs`. A fourth writer means the cache can disagree with
+/// the structures it is derived from.
+///
+/// Deliberately not serialized: `center` is reconstructed on load from the
+/// Home's own position and `radius` from the deployed structures, both of
+/// which `save::SaveData::structures` already carries. That is what lets the
+/// base grow with no save-format change.
+#[derive(Resource, Clone, Copy)]
 pub struct Platform {
     pub center: Option<(i32, i32)>,
+    pub radius: i32,
+}
+
+impl Default for Platform {
+    fn default() -> Self {
+        Self {
+            center: None,
+            radius: MAX_BUILD_DISTANCE_FROM_HOME,
+        }
+    }
 }
 
 impl Platform {
     /// Whether a tile `(dx, dy)` from the Home is part of the slab: the
-    /// build box with `PLATFORM_CORNER_CUT` diagonal steps trimmed off each
-    /// corner.
+    /// build box at the current `radius`, with `PLATFORM_CORNER_CUT`
+    /// diagonal steps trimmed off each corner.
     ///
-    /// The one statement of the base's footprint, and deliberately a
-    /// function of the offset rather than of the resource — `stamp_platform`
-    /// lays the floor, `clear_platform` takes it up, and `place_structure`
-    /// decides what may stand on it, and a shape one of the three disagreed
-    /// about would put a machine on wild ground at a cut corner or leave
-    /// orphan floor behind a demolished Home.
-    pub(crate) fn covers(dx: i32, dy: i32) -> bool {
-        dx.abs() <= MAX_BUILD_DISTANCE_FROM_HOME
-            && dy.abs() <= MAX_BUILD_DISTANCE_FROM_HOME
-            && dx.abs() + dy.abs() <= 2 * MAX_BUILD_DISTANCE_FROM_HOME - PLATFORM_CORNER_CUT
+    /// The one statement of the base's footprint — `stamp_platform` lays the
+    /// floor, `clear_platform` takes it up, and `place_structure` decides
+    /// what may stand on it, and a shape one of the three disagreed about
+    /// would put a machine on wild ground at a cut corner or leave orphan
+    /// floor behind a demolished Home. It reads the resource's own radius
+    /// rather than the starting constant, so those three stay in step with
+    /// each other *and* with a base that has grown.
+    pub(crate) fn covers(&self, dx: i32, dy: i32) -> bool {
+        dx.abs() <= self.radius
+            && dy.abs() <= self.radius
+            && dx.abs() + dy.abs() <= 2 * self.radius - PLATFORM_CORNER_CUT
     }
 }
 

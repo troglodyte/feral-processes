@@ -2375,3 +2375,94 @@ fn a_shipped_pillars_width_survives_a_save_and_load() {
 
     assert_eq!(loaded.world.resource::<Platform>().radius, before);
 }
+
+/// The slab always covers every structure standing on it.
+///
+/// Inert for any base built under the current rules — `place_structure`
+/// refuses anything outside the footprint, so the outermost structure is
+/// never further out than the radius already is. What it is for is a base
+/// built under *older* rules: halving the starting radius left every
+/// existing save with a 15x15 slab of stamped floor against a buildable 9x9,
+/// which is 156 tiles that look exactly like base and refuse to be built on,
+/// with the player standing on one of them.
+///
+/// It has to live in `build_radius` rather than in the load path, because
+/// `enter_next_zone` re-stamps from that derivation — a load-path fix would
+/// hand the base back and take it away again at the next breach.
+#[test]
+fn the_slab_covers_the_structures_standing_on_it() {
+    let mut game = base_ready_for_pillars(716);
+    let home = game.home_position().expect("the fixture just placed one");
+    let reach = MAX_BUILD_DISTANCE_FROM_HOME + 3;
+    // Spawned rather than deployed: `place_structure` would refuse the very
+    // position a legacy save is full of.
+    spawn_structure_of(&mut game, "data_cache", home.x + reach, home.y);
+
+    assert_eq!(
+        game.build_radius(),
+        reach,
+        "a base is at least as wide as the structures standing on it"
+    );
+
+    game.enter_next_zone();
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        reach,
+        "and it stays that wide through a breach, where the re-stamp happens"
+    );
+}
+
+/// The floor term never lifts a base past its ceiling, and it is a floor
+/// rather than a second budget: `max(start + bonuses, outermost)` cannot
+/// grow a base by building an ordinary structure at its own edge, because
+/// there `outermost` is only ever equal to the radius already in force.
+///
+/// The cost, which is real and worth knowing: on a base already wider than
+/// the starting radius, a Pillar buys nothing until the bonuses have caught
+/// up with the width it came in at. Only a save written before the starting
+/// radius was halved can be in that position, and it corrects itself.
+#[test]
+fn the_structure_floor_is_a_floor_and_not_a_second_budget() {
+    let mut game = base_ready_for_pillars(717);
+    let home = game.home_position().expect("the fixture just placed one");
+    spawn_structure_of(&mut game, "data_cache", home.x + 50, home.y);
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_RADIUS_TILES,
+        "nothing takes a base past its ceiling, however far out a structure sits"
+    );
+
+    let mut game = base_ready_for_pillars(718);
+    let home = game.home_position().expect("the fixture just placed one");
+    let legacy = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    spawn_structure_of(&mut game, "data_cache", home.x + legacy, home.y);
+
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        legacy,
+        "a Pillar is absorbed while the bonuses are still under the width \
+         the base came in at"
+    );
+    game.place_structure("heap_pillar", 2, 0).unwrap();
+    game.place_structure("heap_pillar", 3, 0).unwrap();
+    assert_eq!(
+        game.build_radius(),
+        legacy + 1,
+        "and starts paying again the moment they pass it"
+    );
+}
+
+/// Building an ordinary structure at the very edge must not widen the base.
+#[test]
+fn a_structure_at_the_edge_does_not_grow_the_base() {
+    let mut game = base_ready_for_pillars(719);
+    let before = game.build_radius();
+    game.place_structure("data_cache", MAX_BUILD_DISTANCE_FROM_HOME, 0)
+        .expect("the slab edge is buildable ground");
+    assert_eq!(
+        game.build_radius(),
+        before,
+        "the floor term is a floor, not a ratchet you can walk outward"
+    );
+}

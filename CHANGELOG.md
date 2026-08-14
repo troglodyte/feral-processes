@@ -75,8 +75,15 @@ geometry, which is the thing removed when distance stopped scaling anything.
 Home's rest radius and the Recharger Node's reach now cover a fully grown
 base instead of a fixed 7 tiles.
 
-Existing saves load untouched: nothing about the footprint is stored, so a
-base's width is rediscovered from the structures a save already carries.
+Existing saves load untouched, and keep the base they already had. Nothing
+about the footprint is stored — a base's width is rediscovered from the
+structures a save already carries, under a rule that holds everywhere: the
+slab always covers every structure standing on it. Without that, a base
+built before this release would have kept its old floor while only the inner
+9x9 accepted a building, which on a real save meant 156 tiles that looked
+exactly like base and refused to be built on, with you standing on one of
+them. The one wrinkle, on such a base only: your first Pillars are absorbed
+until they catch up with the width the base already had.
 
 ## 0.8.18
 

@@ -2243,6 +2243,7 @@
         "field_ops",
         "firewall",
         "fortification",
+        "heap_allocation",
         "kernel_privileges",
         "monofilament",
         "neural_amp",

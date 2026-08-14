@@ -439,19 +439,50 @@ impl Game {
     /// cache is written at exactly the three sites that write
     /// `Platform::center` — `stamp_platform`, `clear_platform` and the load
     /// path — and a fourth writer means the design has drifted.
+    ///
+    /// The floor under all of it is that **the slab always covers every
+    /// structure standing on it**. That is inert for any base built under
+    /// the current rules — `place_structure` refuses anything outside the
+    /// footprint, so the outermost structure is never further out than the
+    /// radius already is, which is also why an ordinary structure built at
+    /// the very edge cannot ratchet the base outward. What it is for is a
+    /// base built under *older* rules: halving the starting radius left
+    /// every existing save with its old slab of stamped floor against a
+    /// buildable box less than half the size, tiles that look exactly like
+    /// base and refuse to be built on. It belongs here rather than in the
+    /// load path because `enter_next_zone` re-stamps from this derivation,
+    /// so a load-path fix would hand the base back and take it away again at
+    /// the next breach.
+    ///
+    /// Known cost: on a base that arrived wider than the starting radius, a
+    /// Pillar is absorbed until the bonuses catch up with the width it came
+    /// in at. Only a pre-halving save can be in that position, and it
+    /// corrects itself.
     pub fn build_radius(&mut self) -> i32 {
-        let kinds: Vec<StructureId> = self
-            .world
-            .iter_entities()
-            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+        let home = self.home_position();
+        let mut query = self.world.query::<(&Structure, &Position)>();
+        let deployed: Vec<(StructureId, Position)> = query
+            .iter(&self.world)
+            .map(|(s, p)| (s.kind.clone(), *p))
             .collect();
         let db = self.world.resource::<StructureDb>();
-        let bonus: i32 = kinds
+        let bonus: i32 = deployed
             .iter()
-            .filter_map(|k| db.get(k.as_str()))
+            .filter_map(|(k, _)| db.get(k.as_str()))
             .map(|def| def.build_radius_bonus)
             .sum();
-        (MAX_BUILD_DISTANCE_FROM_HOME + bonus).min(MAX_BUILD_RADIUS_TILES)
+        let covering = home
+            .map(|h| {
+                deployed
+                    .iter()
+                    .map(|(_, p)| (p.x - h.x).abs().max((p.y - h.y).abs()))
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0);
+        (MAX_BUILD_DISTANCE_FROM_HOME + bonus)
+            .max(covering)
+            .min(MAX_BUILD_RADIUS_TILES)
     }
 
     /// How many tamed programs the player currently owns, wherever they are —

@@ -241,6 +241,7 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
         finished: false,
         player_won: false,
         decompile_attempts: std::collections::HashMap::new(),
+        rewards: BattleRewards::default(),
     });
 }
 

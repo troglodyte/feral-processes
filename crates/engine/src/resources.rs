@@ -473,6 +473,74 @@ pub struct BattleState {
     /// despawns: an `Entity` carries a generation, so a recycled index is a
     /// different `Entity` and a stale key can never alias a live target.
     pub decompile_attempts: HashMap<Entity, u32>,
+    /// What the fight has paid out so far, held back until it ends — see
+    /// `BattleRewards`.
+    pub rewards: BattleRewards,
+}
+
+/// A fight's payout, accumulated per kill and announced once, by
+/// `Game::settle_rewards` at the top of `end_battle`.
+///
+/// **Only the announcement waits.** Every reward here has already been
+/// granted by the time it is recorded: a level-up full-heals inside
+/// `progression::add_xp` and the killing blow is usually the level, so
+/// deferring the award itself would move fight outcomes and every arena and
+/// `balance_sim` number with them. What this removes is a loot line and an
+/// XP line landing between every pair of blows.
+///
+/// It lives on `BattleState` for the lifetime `decompile_attempts` wants and
+/// for the same two payoffs: battles are never serialised, so it costs no
+/// `SAVE_FORMAT_VERSION` bump, and it is not a `Resource` of its own, so it
+/// cannot shift bevy's query iteration order under an unrelated test.
+/// `Game::end_battle` takes it out before dropping the resource, which is
+/// what makes a win and a jack-out pay through one path.
+#[derive(Default)]
+pub struct BattleRewards {
+    /// Every copy that dropped, merged by copy. Held in the order things
+    /// fell and sorted by `settle_rewards` on the way out, so the same haul
+    /// reads the same way however the kills happened to order it.
+    ///
+    /// `(GearCopy, u32)` is `BuybackLedger`'s shape and carries its argument:
+    /// two copies that differ are not two of a thing, so an Overclocked
+    /// weapon is tallied apart from a plain one rather than summed into it.
+    /// A material is a `GearCopy::plain`, which is what lets salvage and gear
+    /// share one row format.
+    pub drops: Vec<(crate::items::GearCopy, u32)>,
+    pub player: XpTally,
+    /// Keyed by entity rather than by name: a companion that died winning the
+    /// fight is still in `Party` when `settle_rewards` runs and is gone by
+    /// the time `end_battle` returns, so the name is resolved at flush.
+    pub companions: Vec<(Entity, XpTally)>,
+}
+
+/// One fighter's experience over a whole fight.
+///
+/// The deltas sum because `progression::LevelGain::stat_rows` recovers each
+/// row's "before" by subtracting the delta from the stats as they stand *now*
+/// — hand it the whole fight's delta and it reports the whole fight's range,
+/// with nothing snapshotted at the start of the battle.
+#[derive(Clone, Default)]
+pub struct XpTally {
+    pub xp: u32,
+    pub gain: crate::progression::LevelGain,
+    /// Perk Points and Decompiler skill are the player's alone, and neither
+    /// is anything `add_xp` computes — see `Game::award_player_xp`.
+    pub perk_points: u32,
+    pub decompiler: i32,
+}
+
+impl XpTally {
+    /// Folds one kill's experience into a fight's running total.
+    pub fn absorb(&mut self, other: &XpTally) {
+        self.xp += other.xp;
+        self.gain.absorb(other.gain);
+        self.perk_points += other.perk_points;
+        self.decompiler += other.decompiler;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.xp == 0 && self.gain.levels == 0
+    }
 }
 
 /// What the battle roster looked like at one point in the current round's

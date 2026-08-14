@@ -188,6 +188,180 @@ impl Game {
         )
     }
 
+    /// Adds `qty` copies of `copy` to this fight's salvage tally — or, with
+    /// no fight to hold one, announces it where it happened.
+    ///
+    /// The fallback is not dead weight even though nothing in the game
+    /// reaches `award_loot` outside a battle today. It routes through
+    /// `announce_drops`, the same formatter the tally flushes through, so the
+    /// two can never come to word a drop differently; and it is what stops
+    /// the next caller that *is* outside a fight from paying the player
+    /// silently. `a_drop_outside_a_battle_is_announced_at_once` holds it.
+    pub(crate) fn record_drop(&mut self, copy: GearCopy, qty: u32) {
+        if qty == 0 {
+            return;
+        }
+        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+            self.announce_drops(&[(copy, qty)]);
+            return;
+        };
+        let drops = &mut battle.rewards.drops;
+        match drops.iter_mut().find(|(held, _)| *held == copy) {
+            Some(row) => row.1 += qty,
+            None => drops.push((copy, qty)),
+        }
+    }
+
+    /// Folds `tally` into `companion`'s row of this fight's rewards,
+    /// reporting whether there was a fight to fold it into.
+    pub(crate) fn record_companion_xp(&mut self, companion: Entity, tally: &XpTally) -> bool {
+        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+            return false;
+        };
+        let rows = &mut battle.rewards.companions;
+        match rows.iter_mut().find(|(entity, _)| *entity == companion) {
+            Some((_, held)) => held.absorb(tally),
+            None => rows.push((companion, tally.clone())),
+        }
+        true
+    }
+
+    /// The salvage tally: a header, then one row per distinct copy.
+    ///
+    /// A row apiece rather than one comma-joined line because app-core's
+    /// `pane_rows` draws a `LogLine` as exactly one row and never wraps it,
+    /// so a joined line's width would grow with the number of things that
+    /// dropped and run off the right edge — which is `TODO.md`'s bug 3
+    /// reached from a new direction. It is also the shape a level-up's stat
+    /// block already uses, so the indent already reads as "belongs to the
+    /// line above".
+    ///
+    /// `MessageKind::Loot` on every row is load-bearing at both ends: it is
+    /// one of the four kinds `retain_outcomes_since_battle` keeps, so the
+    /// tally survives onto the map, and it is what the log filter and the
+    /// colour table read.
+    fn announce_drops(&mut self, drops: &[(GearCopy, u32)]) {
+        if drops.is_empty() {
+            return;
+        }
+        self.log_kind(MessageKind::Loot, "Salvage:");
+        for (copy, qty) in drops {
+            let row = format!("  {qty} {}", self.drop_label(copy));
+            self.log_kind(MessageKind::Loot, row);
+        }
+    }
+
+    /// The player's line for the whole fight, and the stat block under it.
+    ///
+    /// Every "before" is recovered by subtracting the tally's delta from the
+    /// value as it stands now, so nothing had to be snapshotted when the
+    /// fight opened. That is safe for the three stats because a battle
+    /// cannot change `max_hp`/`atk`/`def` by any other route — `apply_damage`
+    /// moves `hp` alone, and `unequip` refuses while a battle is live.
+    fn announce_player_xp(&mut self, tally: &XpTally) {
+        if tally.is_empty() {
+            return;
+        }
+        let player = self.player_entity();
+        let Some(stats) = self.world.get::<Stats>(player).copied() else {
+            return;
+        };
+        if tally.gain.levels == 0 {
+            self.log_kind(MessageKind::Outcome, format!("You gain {} XP.", tally.xp));
+            return;
+        }
+        let mut rows = tally.gain.stat_rows(&stats).to_vec();
+        if tally.perk_points > 0 {
+            let now = self
+                .world
+                .get::<Perks>(player)
+                .map(|p| p.points)
+                .unwrap_or(0) as i32;
+            rows.push(StatRow::new(
+                "Perk Points",
+                now - tally.perk_points as i32,
+                now,
+            ));
+        }
+        if tally.decompiler != 0 {
+            let now = self
+                .world
+                .get::<Decompiler>(player)
+                .map(|d| d.skill)
+                .unwrap_or(0);
+            rows.push(StatRow::new("Decompiler", now - tally.decompiler, now));
+        }
+        let level = self
+            .world
+            .get::<Experience>(player)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        self.log_kind(
+            MessageKind::LevelUp,
+            format!("You gain {} XP, reaching level {level}.", tally.xp),
+        );
+        for line in progression::stat_block(&rows) {
+            self.log_kind(MessageKind::LevelUp, line);
+        }
+    }
+
+    /// A companion's line, and only if it levelled — the same restraint
+    /// `award_party_xp` has always shown, for the same reason: a busy fight
+    /// with a full roster would otherwise close on a line per member saying
+    /// nothing happened.
+    fn announce_companion_xp(&mut self, companion: Entity, tally: &XpTally) {
+        if tally.gain.levels == 0 {
+            return;
+        }
+        let Some(stats) = self.world.get::<Stats>(companion).copied() else {
+            return;
+        };
+        let level = self
+            .world
+            .get::<Experience>(companion)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let name = self.creature_label(companion);
+        self.log_kind(
+            MessageKind::LevelUp,
+            format!("{name} gains {} XP, reaching level {level}.", tally.xp),
+        );
+        for line in progression::stat_block(&tally.gain.stat_rows(&stats)) {
+            self.log_kind(MessageKind::LevelUp, line);
+        }
+    }
+
+    /// Announces what the fight paid: one salvage tally, then one XP line per
+    /// fighter that earned anything.
+    ///
+    /// Called at the top of `end_battle`, which puts it ahead of two things
+    /// deliberately. Ahead of `dissolve_tamed_program`, because a companion
+    /// that died winning the fight is dropped from `Party` and despawned
+    /// there, and this is the last moment its levels can be named at all.
+    /// And ahead of `retain_outcomes_since_battle`, whose four surviving
+    /// kinds are exactly the ones these lines carry — a tally written after
+    /// the prune would be in the right place and the wrong order.
+    ///
+    /// One flush point covers a win and a jack-out alike, because
+    /// `end_battle` is the only place `BattleState` is dropped: you keep what
+    /// you killed before you ran.
+    pub(crate) fn settle_rewards(&mut self) {
+        let mut rewards = {
+            let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+                return;
+            };
+            std::mem::take(&mut battle.rewards)
+        };
+        // Sorted rather than left in the order things fell, so the same haul
+        // reads the same way however the kills happened to order it.
+        rewards.drops.sort_by(|a, b| a.0.cmp(&b.0));
+        self.announce_drops(&rewards.drops);
+        self.announce_player_xp(&rewards.player);
+        for (companion, tally) in &rewards.companions {
+            self.announce_companion_xp(*companion, tally);
+        }
+    }
+
     /// Defeated (not tamed) rogue programs drop whatever resource their
     /// species is associated with, if any.
     ///
@@ -211,12 +385,7 @@ impl Game {
                 rng.0.random_range(WORK_RESOURCE_DROP)
             };
             let landed = self.grant_loot(resource.clone(), qty);
-            if landed > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("It drops {} {}.", landed, self.item_name_tagged(resource)),
-                );
-            }
+            self.record_drop(GearCopy::plain(resource.clone()), landed);
         }
 
         for (item, chance) in self.equipment_drops_for(&species) {
@@ -226,10 +395,7 @@ impl Game {
             };
             if roll {
                 let copy = self.grant_gear_drop(item, Rarity::Ordinary);
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("It also drops a {}!", self.drop_label(&copy)),
-                );
+                self.record_drop(copy, 1);
             }
         }
 
@@ -268,12 +434,7 @@ impl Game {
             rng.0.random_range(STACK_BOSS_PORTAL_FRAGMENT_DROP) * depth
         };
         let landed = self.grant_loot(self.craft_currency(), qty);
-        if landed > 0 {
-            self.log_kind(
-                MessageKind::Loot,
-                format!("Its crash leaves behind a cache of {landed} portal fragments!"),
-            );
-        }
+        self.record_drop(GearCopy::plain(self.craft_currency()), landed);
     }
 
     /// What a boss killed on the surface pays instead: gear from
@@ -294,10 +455,7 @@ impl Game {
                 pool[rng.0.random_range(0..pool.len())].clone()
             };
             let copy = self.grant_gear_drop(item, SURFACE_BOSS_LOOT_RARITY_FLOOR);
-            self.log_kind(
-                MessageKind::Loot,
-                format!("Its crash spills a {}!", self.drop_label(&copy)),
-            );
+            self.record_drop(copy, 1);
         }
     }
 
@@ -365,7 +523,7 @@ impl Game {
         // regardless of whether `player` here is the player themself (the
         // only caller today, but the parameter doesn't guarantee it).
         let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
-        let (gain, new_level, grown) = {
+        let (gain, new_level) = {
             let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
             let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, player) else {
                 return;
@@ -379,37 +537,46 @@ impl Game {
                 None,
                 xp_boost_pct,
             );
-            (gain, exp.level, *stats)
+            (gain, exp.level)
+        };
+        let mut tally = XpTally {
+            xp: amount,
+            gain,
+            ..XpTally::default()
         };
         if gain.levels > 0 {
-            // The player's block runs longer than a companion's: a level also
+            // The player's tally runs longer than a companion's: a level also
             // pays a Perk Point and a point of Decompiler skill, and neither
             // was announced anywhere before this, so a player could bank
             // points for a run without learning they had any.
-            let mut rows = gain.stat_rows(&grown).to_vec();
             if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
-                let before = perks.points;
-                perks.points += PERK_POINTS_PER_LEVEL * gain.levels;
-                rows.push(StatRow::new(
-                    "Perk Points",
-                    before as i32,
-                    perks.points as i32,
-                ));
+                tally.perk_points = PERK_POINTS_PER_LEVEL * gain.levels;
+                perks.points += tally.perk_points;
             }
             if let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player) {
-                let before = decompiler.skill;
-                decompiler.skill += DECOMPILER_SKILL_PER_LEVEL * gain.levels as i32;
-                rows.push(StatRow::new("Decompiler", before, decompiler.skill));
+                tally.decompiler = DECOMPILER_SKILL_PER_LEVEL * gain.levels as i32;
+                decompiler.skill += tally.decompiler;
             }
+        }
+        // The level itself is announced where it happens and the totals wait
+        // for `settle_rewards`: `add_xp` full-heals on a level, so a player
+        // watching their HP snap back mid-fight needs the cause on screen
+        // then. Outside a battle there is nothing to wait for, and the tally
+        // is announced on the spot through the same formatter — see
+        // `record_drop` for why that fallback is a formatter call rather than
+        // a second wording.
+        let stored = self
+            .world
+            .get_resource_mut::<BattleState>()
+            .map(|mut b| b.rewards.player.absorb(&tally))
+            .is_some();
+        if !stored {
+            self.announce_player_xp(&tally);
+        } else if gain.levels > 0 {
             self.log_kind(
                 MessageKind::LevelUp,
-                format!("You gain {amount} XP and reach level {new_level}!"),
+                format!("You reach level {new_level}!"),
             );
-            for line in progression::stat_block(&rows) {
-                self.log_kind(MessageKind::LevelUp, line);
-            }
-        } else {
-            self.log_kind(MessageKind::Outcome, format!("You gain {amount} XP."));
         }
         self.award_party_xp(amount / PARTY_XP_DIVISOR);
     }
@@ -445,35 +612,41 @@ impl Game {
                 .get::<Experience>(companion)
                 .map(|e| e.level)
                 .unwrap_or(1);
-            let (gain, grown) = {
+            let gain = {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
                     continue;
                 };
-                let gain = progression::add_xp(
+                progression::add_xp(
                     &mut exp,
                     &mut stats,
                     amount,
                     growth_multiplier,
                     Some(crate::tuning::CREATURE_MAX_LEVEL),
                     xp_boost_pct,
-                );
-                (gain, *stats)
+                )
             };
             let level = self
                 .world
                 .get::<Experience>(companion)
                 .map(|e| e.level)
                 .unwrap_or(before_level);
-            if gain.levels > 0 {
+            let tally = XpTally {
+                xp: amount,
+                gain,
+                ..XpTally::default()
+            };
+            let stored = self.record_companion_xp(companion, &tally);
+            if !stored {
+                self.announce_companion_xp(companion, &tally);
+            } else if gain.levels > 0 {
                 let name = self.creature_label(companion);
                 self.log_kind(
                     MessageKind::LevelUp,
-                    format!("{name} gains {amount} XP and levels up to {level}!"),
+                    format!("{name} reaches level {level}!"),
                 );
-                for line in progression::stat_block(&gain.stat_rows(&grown)) {
-                    self.log_kind(MessageKind::LevelUp, line);
-                }
+            }
+            if gain.levels > 0 {
                 self.install_unlocked_routines(companion, before_level, level);
             }
         }

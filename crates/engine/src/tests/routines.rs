@@ -768,6 +768,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         finished: false,
         player_won: false,
         decompile_attempts: std::collections::HashMap::new(),
+        rewards: BattleRewards::default(),
     });
 
     let player_decompile = game

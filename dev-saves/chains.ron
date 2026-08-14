@@ -1207,7 +1207,7 @@
         ),
         (
             kind: "research_node",
-            position: (2, -1),
+            position: (0, 1),
             resource_amount: Some(1),
             durability: Some(30),
             tier: Some(1),
@@ -1228,7 +1228,7 @@
         ),
         (
             kind: "data_cache",
-            position: (3, -1),
+            position: (1, 1),
             resource_amount: None,
             durability: Some(30),
             tier: None,

@@ -113,3 +113,47 @@ fn the_extract_flow_requires_confirmation_before_the_program_is_destroyed() {
         "confirming consumes it"
     );
 }
+
+/// The etch screen used to be reachable only through *Install a routine* →
+/// a holder → an **empty** slot → `[e]`. Every routine slot in the game
+/// starts full, so a player who had never popped one out could not reach it
+/// at all — and it is where blanks turn into the disks that fill slots.
+#[test]
+fn the_party_menu_opens_the_etch_screen_and_esc_comes_straight_back() {
+    let mut app = test_app(65);
+    open_via_menu(&mut app, 'p', "Etch a routine disk");
+    assert_eq!(app.mode, Mode::RoutineEtch);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::PartyMenu,
+        "Esc returns to the menu that opened it, not into the install flow"
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// The `[e]` shortcut is the other way in, and it has to unwind differently:
+/// a player who came here mid-install is still holding a slot to fill.
+#[test]
+fn escaping_the_etch_screen_reached_with_e_lands_back_on_the_install_list() {
+    let mut app = test_app(66);
+    open_via_menu(&mut app, 'p', "Install a routine");
+    app.handle_key(GameKey::Char('1')); // You
+    app.handle_key(GameKey::Char('1')); // pop the innate routine out
+    app.handle_key(GameKey::Char('1')); // the slot it vacated
+    assert_eq!(app.mode, Mode::RoutineInstall);
+    app.handle_key(GameKey::Char('e'));
+    assert_eq!(app.mode, Mode::RoutineEtch);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::RoutineInstall);
+    // And the rest of the chain is undisturbed — the `[e]` detour must not
+    // consume the origin the party menu left behind.
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Routines);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::RoutineTarget);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::PartyMenu);
+}

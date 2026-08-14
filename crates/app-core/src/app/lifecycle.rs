@@ -36,6 +36,7 @@ impl App {
             pending_worker: None,
             pending_post_structure: None,
             menu_origin: None,
+            etch_return: None,
             pending_remove_structure: None,
             pending_manifest: None,
             pending_structure_manifest: None,

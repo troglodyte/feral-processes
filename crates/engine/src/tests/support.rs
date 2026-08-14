@@ -457,6 +457,22 @@ pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str)
     dir
 }
 
+/// A scratch install carrying one extra item *and* one extra structure —
+/// the pair a modded machine needs, since a machine runs its product's own
+/// `craftable.cost` and there is no recipe on the structure to write
+/// instead.
+pub(super) fn assets_dir_with_extra_machine(
+    tag: &str,
+    item: (&str, &str),
+    structure: (&str, &str),
+) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    std::fs::write(dir.join("items").join(item.0), item.1).unwrap();
+    std::fs::write(dir.join("structures").join(structure.0), structure.1).unwrap();
+    dir
+}
+
 /// A scratch install carrying one extra achievement on top of the shipped
 /// ladder, for cases that need a rung the real assets deliberately don't have.
 pub(super) fn scratch_assets_with_achievement(id: &str, body: &str) -> ScratchAssets {

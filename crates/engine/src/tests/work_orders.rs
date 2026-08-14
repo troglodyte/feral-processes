@@ -330,3 +330,255 @@ fn a_save_written_before_work_orders_existed_still_loads() {
         "a file written before the feature loads with no orders, not a parse error"
     );
 }
+
+// ---------------------------------------------------------------------
+// Task 3: can_progress and wants
+// ---------------------------------------------------------------------
+
+use crate::game::base::work_orders::{base_holding, can_progress, wants};
+
+/// Fills `machine`'s output to its capacity, which is what clogging is.
+fn clog(game: &mut Game, machine: Entity) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    let room = stock.output_room();
+    *stock
+        .output
+        .entry(ItemId::from(ids::CORE_FRAGMENT))
+        .or_default() += room;
+}
+
+fn put_output(game: &mut Game, machine: Entity, item: &str, qty: u32) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    *stock.output.entry(ItemId::from(item)).or_default() += qty;
+}
+
+fn put_input(game: &mut Game, machine: Entity, item: &str, qty: u32) {
+    let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+    *stock.input.entry(ItemId::from(item)).or_default() += qty;
+}
+
+#[test]
+fn a_clogged_machine_cannot_progress() {
+    let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+
+    assert!(
+        can_progress(&game, mine),
+        "precondition: an empty extractor has room"
+    );
+    clog(&mut game, mine);
+
+    assert!(
+        !can_progress(&game, mine),
+        "a machine with no output room is what releases its worker"
+    );
+}
+
+#[test]
+fn an_assembler_with_nothing_beside_it_holding_its_ingredient_cannot_progress() {
+    let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    let _ = mine;
+
+    assert!(
+        !can_progress(&game, lathe),
+        "an empty input and an empty feeder is a starved machine"
+    );
+}
+
+/// The case that decides the whole feature: an assembler with an empty
+/// input whose *feeder* holds the ingredient can progress, because
+/// staffing it is what makes it pull. `assembler_system`'s pull phase sits
+/// behind the "is anyone posted here" gate, so a Lathe with nobody on it
+/// never fills its own input — meaning "input is empty" is not the same
+/// question as "this machine has nothing to do".
+#[test]
+fn an_assembler_whose_feeder_holds_the_ingredient_can_progress() {
+    let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+
+    assert!(
+        can_progress(&game, lathe),
+        "a full feeder beside it is work waiting to be done"
+    );
+}
+
+#[test]
+fn an_assembler_with_a_stocked_input_can_progress_with_no_feeder_at_all() {
+    let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
+    put_input(&mut game, lathe, ids::CORE_FRAGMENT, 8);
+
+    assert!(can_progress(&game, lathe));
+}
+
+/// On a base with every buffer empty, the top of the line is the only thing
+/// with anything to do — a body on the Lathe would stand there pulling from
+/// an empty Mining Node — so that is the only machine that wants one.
+#[test]
+fn on_an_empty_base_only_the_top_of_the_line_wants_a_body() {
+    let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    let order = crate::game::base::work_orders::WorkOrder {
+        item: ItemId::from("routine_disk"),
+        qty: 3,
+    };
+
+    let order_of: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
+
+    assert_eq!(order_of, vec![mine]);
+}
+
+/// Once each stage has something to work on, the whole line wants bodies —
+/// **deepest first**, which is what makes a lone body work upstream and a
+/// full roster spread down the chain rather than crowding its far end.
+#[test]
+fn wants_orders_a_running_line_upstream_first() {
+    let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 10);
+    let order = crate::game::base::work_orders::WorkOrder {
+        item: ItemId::from("routine_disk"),
+        qty: 3,
+    };
+
+    let order_of: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
+
+    assert_eq!(
+        order_of,
+        vec![mine, lathe, press],
+        "the deepest requirement is what needs a body first"
+    );
+}
+
+/// A modded two-ingredient item, and the machine that builds it. No shipped
+/// `assembles` recipe has more than one ingredient — that is a deliberate
+/// property of the shipped items, so a chain is a straight line — but the
+/// engine's multi-input support is real and mods may ship one, which is the
+/// same reason `chains::a_machine_short_one_of_its_two_ingredients_stays_
+/// starved` exists.
+///
+/// Its two ingredients put one Mining Node down two branches of very
+/// different lengths — straight in as a Core Fragment, and three links away
+/// through the Routine Disk line. The **order** of the two is load-bearing
+/// to the test rather than to the game: the long branch is walked first, so
+/// an implementation that kept the *last* depth it saw rather than the
+/// deepest records 1 instead of 3 and the assertion catches it. Swap them
+/// and the mutation becomes invisible.
+const SHARED_FEEDER_ITEM: &str = r#"(
+    id: "test_widget",
+    name: "Test Widget",
+    description: "A modded two-ingredient item, for tests.",
+    value: Some(20),
+    craftable: Some((cost: [("routine_disk", 1), ("core_fragment", 1)], requires_structure: Some("widget_bench"))),
+)"#;
+
+const SHARED_FEEDER_ASSEMBLER: &str = r#"(
+    id: "widget_bench",
+    name: "Widget Bench",
+    description: "A modded two-ingredient assembler, for tests.",
+    glyph: 'W',
+    color: Magenta,
+    build_cost: [],
+    work: None,
+    capacity: 20,
+    assembles: Some((item: "test_widget", ticks_per_unit: 12)),
+)"#;
+
+/// A machine reached down two paths is kept once, at its deepest position
+/// — otherwise a shared feeder is staffed second on behalf of the short
+/// branch while the long one still needs it first, and a lone body works
+/// the wrong end of the line.
+///
+/// The layout, with the Widget Bench as the ordered item's producer:
+///
+/// ```text
+///   Mining ── Lathe          Mining feeds the Bench directly (depth 1)
+///      │        │            and the Lathe, three links round (depth 3)
+///   Bench ── Disk Press
+/// ```
+///
+/// Note the geometry is not free: two orthogonally adjacent tiles share no
+/// common orthogonal neighbour, so a feeder can never sit beside both a
+/// bench and the machine that bench feeds. A shared feeder at *differing*
+/// depths therefore needs the long way round, which is what this is.
+#[test]
+fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
+    let dir = assets_dir_with_extra_machine(
+        "wo_shared_feeder",
+        ("test_widget.ron", SHARED_FEEDER_ITEM),
+        ("widget_bench.ron", SHARED_FEEDER_ASSEMBLER),
+    );
+    let mut game = Game::new(25, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 4, 4);
+    let bench = spawn_machine_at(&mut game, "widget_bench", 0, 0);
+    let mine = spawn_machine_at(&mut game, "mining_node", 0, 1);
+    let press = spawn_machine_at(&mut game, "disk_press", 1, 0);
+    let lathe = spawn_machine_at(&mut game, "lathe", 1, 1);
+    // Every stage stocked, so every machine has work and the whole line is
+    // in the answer — with empty buffers only the feeder would be, and
+    // "kept once at its deepest" would be vacuously true.
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    put_output(&mut game, press, "routine_disk", 4);
+
+    let order = crate::game::base::work_orders::WorkOrder {
+        item: ItemId::from("test_widget"),
+        qty: 1,
+    };
+    let list = wants(&game, &order);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        list.iter().filter(|(e, _)| *e == mine).count(),
+        1,
+        "the shared feeder appears once, not once per branch"
+    );
+    let depth_of = |e: Entity| list.iter().find(|(m, _)| *m == e).unwrap().1;
+    assert_eq!(depth_of(bench), 0);
+    assert_eq!(depth_of(press), 1);
+    assert_eq!(depth_of(lathe), 2);
+    assert_eq!(
+        depth_of(mine),
+        3,
+        "the feeder is kept at the deepest position it was reached at, not the last"
+    );
+    assert_eq!(
+        list[0].0, mine,
+        "so it is what a lone body is sent to first"
+    );
+}
+
+#[test]
+fn base_holding_counts_depots_and_machine_outputs_but_not_your_pockets() {
+    let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let depot = spawn_machine_at(&mut game, "depot", 4, 0);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 7);
+    put_output(&mut game, depot, ids::CORE_FRAGMENT, 5);
+    let carried = game
+        .world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .items
+        .iter()
+        .find(|(i, _)| i.as_str() == ids::CORE_FRAGMENT)
+        .map(|(_, q)| *q)
+        .unwrap_or(0);
+    assert!(carried > 0, "precondition: the player starts holding some");
+
+    assert_eq!(
+        base_holding(&game, &ItemId::from(ids::CORE_FRAGMENT)),
+        12,
+        "what the base holds, not what you are carrying"
+    );
+}

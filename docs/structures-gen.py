@@ -30,6 +30,7 @@ S = [
  ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None),
  ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None),
  ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None),
+ ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 14)],                   "utility",  "posts contracts, takes deliveries",None, None, None,         None),
  ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None),
  ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs empty full machines into it",None, 100, None,        None),
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None),
@@ -113,7 +114,7 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-13 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-14 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed on the base slab — within 4 tiles of a Home,

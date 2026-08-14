@@ -10,7 +10,6 @@
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 20. too easy to level up, lets slow that down a bit
-21. missions, quests
 
 # Bugs
 8. attacking groups of enemies shouldn't pull in nearby bosses

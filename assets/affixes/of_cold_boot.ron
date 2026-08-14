@@ -1,0 +1,10 @@
+// of Recursion read from the other end — the same two stats at the same
+// total, weighted toward staying up rather than toward putting something
+// down, and on the two slots of Recursion does not take.
+(
+    id: "of_cold_boot",
+    suffix: Some("of Cold Boot"),
+    stats: (atk: 1, def: 2),
+    slots: Some([Armor, Module]),
+    weight: 5,
+)

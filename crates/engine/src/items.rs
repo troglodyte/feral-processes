@@ -319,12 +319,22 @@ impl EquipmentStats {
     /// so the floor is what makes a fusion observable rather than a
     /// silent loss of two items. A stat sitting at zero stays at zero: the
     /// floor sharpens what an item does and does not hand it a new stat.
+    ///
+    /// A stat sitting *below* zero stays where it is too, which is the same
+    /// rule `for_rarity` states and reachable by the same route: a drawback
+    /// affix (`assets/affixes/README.md`) is folded into the base, so a copy
+    /// can carry a negative on an axis its item never had. Scaling that
+    /// would make improving a copy deepen its penalty — you would spend
+    /// `ITEM_FUSION_COST` copies to make the thing you own worse on one
+    /// axis, which is not a trade the affix was authored to offer.
     pub(crate) fn fused_for_tier(self, tier: u32) -> EquipmentStats {
         let factor = 1.0 + ITEM_FUSION_BONUS_PER_TIER * tier as f64;
         let floor = ITEM_FUSION_MIN_BONUS_PER_TIER * tier as i32;
         let scale = |v: i32| {
-            let scaled = (v as f64 * factor).round() as i32;
-            if v > 0 { scaled.max(v + floor) } else { scaled }
+            if v <= 0 {
+                return v;
+            }
+            ((v as f64 * factor).round() as i32).max(v + floor)
         };
         EquipmentStats {
             atk: scale(self.atk),
@@ -385,6 +395,7 @@ impl EquipmentStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tuning::MAX_FUSIONS;
 
     #[test]
     fn scaled_for_level_adds_100_percent_of_base_per_level_above_1() {
@@ -413,6 +424,30 @@ mod tests {
             base.scaled_for_level(0).atk,
             4,
             "level 0 should clamp to level 1's unscaled base"
+        );
+    }
+
+    /// Neither investable axis may deepen a drawback. A copy's penalty is
+    /// part of its base and so grows with gear level like everything else,
+    /// but fusing it or rolling it at a rare tier are things the *player*
+    /// spends on — and spending to make a copy worse on one axis is the
+    /// trade nobody would take. See `assets/affixes/README.md`.
+    #[test]
+    fn neither_fusion_nor_a_rare_tier_deepens_a_penalty() {
+        let charged = EquipmentStats {
+            atk: 4,
+            def: 0,
+            decompiler: -2,
+        };
+        assert_eq!(
+            charged.fused_for_tier(MAX_FUSIONS).decompiler,
+            -2,
+            "a fusion deepened the penalty it was bought to improve past"
+        );
+        assert_eq!(charged.for_rarity(Rarity::Prismatic).decompiler, -2);
+        assert!(
+            charged.fused_for_tier(MAX_FUSIONS).atk > 4,
+            "the bonus axis must still be worth fusing for"
         );
     }
 

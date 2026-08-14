@@ -57,6 +57,11 @@ pub struct AffixDef {
     /// scaling. Added rather than multiplied, so an affix is worth the same
     /// on a cheap item as an expensive one — which is what lets a scavenged
     /// weapon with a good affix stay interesting after a breach.
+    ///
+    /// A component may be **negative**: a drawback beside a bonus is a
+    /// shipped affix shape, and folding it in here is what makes the cost
+    /// scale with the run rather than dwindling out of relevance. What
+    /// `fault` refuses is an affix with no positive component at all.
     #[serde(default)]
     pub stats: EquipmentStats,
     /// Which slots this affix may land on, or every slot when omitted. An
@@ -111,6 +116,13 @@ impl AffixDef {
         }
         if self.stats.atk == 0 && self.stats.def == 0 && self.stats.decompiler == 0 {
             return Some("grants no stats, so it would rename an item and nothing else");
+        }
+        // A penalty is legal *beside* a bonus — that trade is a shipped
+        // affix shape. A penalty on its own is not: nothing weighs it, so
+        // the copy that rolled it is one no player has a reason to equip,
+        // and the roll that produced it was a wasted one.
+        if self.stats.atk <= 0 && self.stats.def <= 0 && self.stats.decompiler <= 0 {
+            return Some("grants no positive stat, so it is a cost with nothing to weigh it");
         }
         if self.slots.as_ref().is_some_and(|s| s.is_empty()) {
             return Some("allows no slots, so it could never be rolled");

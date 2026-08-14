@@ -1,0 +1,10 @@
+// Scavenged's twin on the other axis, and the second half of the floor:
+// between them, the commonest thing an affix can be is one flat point, and
+// seeing anything else registers as luck. Any slot for the same reason
+// Scavenged is — a floor with a slot rule is not a floor.
+(
+    id: "tempered",
+    prefix: Some("Tempered"),
+    stats: (atk: 1),
+    weight: 13,
+)

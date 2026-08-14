@@ -31,8 +31,13 @@ property `assets/policies/enemy_battle.ron` has.
     suffix: Some("of Static"),
     // prefix: Some("Honed"),
 
-    // Required, and at least one stat must be non-zero — an affix that only
-    // renames an item is refused at load for the reason above.
+    // Required, and at least one stat must be POSITIVE. An affix that only
+    // renames an item is refused at load for the reason above; so is one
+    // that only charges, since nothing weighs its cost and no player would
+    // ever equip the copy that rolled it.
+    //
+    // A negative stat alongside a positive one is fine, and three shipped
+    // affixes use it — see "Drawbacks" below.
     //
     // Added to the item's own bonus BEFORE any scaling, so it grows with
     // gear level, fusion tier and rare tier exactly as the item's own stats
@@ -83,19 +88,69 @@ gear. Crafting and buying never roll either — made gear is deliberately plain.
 The shipped set runs 1 to 3 points on one or two stats, weighted so the
 smallest is the commonest:
 
-| Affix | Grants | Weight |
-|---|---|---|
-| `scavenged` | +1 DEF, any slot | 14 |
-| `honed` / `reinforced` | +2 ATK / +2 DEF | 12 |
-| `of_static` | +1 ATK +1 DEF, any slot | 10 |
-| `of_the_ghost_protocol` | +2 DECOMP | 8 |
-| `overdriven` / `hardened` | +3 ATK / +3 DEF | 6 |
-| `of_recursion` | +2 ATK +1 DEF | 5 |
+| Affix | Grants | Slots | Weight |
+|---|---|---|---|
+| `scavenged` | +1 DEF | any | 14 |
+| `tempered` | +1 ATK | any | 13 |
+| `honed` / `reinforced` | +2 ATK / +2 DEF | Weapon / Armor | 12 |
+| `patched` | +1 DECOMP | Module, Armor | 11 |
+| `of_static` | +1 ATK +1 DEF | any | 10 |
+| `shimmed` | +2 DEF | Module | 10 |
+| `rigged` | +2 ATK | Module | 9 |
+| `of_the_ghost_protocol` | +2 DECOMP | Module, Armor | 8 |
+| `of_deep_cache` | +1 DEF +1 DECOMP | Module, Armor | 7 |
+| `overdriven` / `hardened` | +3 ATK / +3 DEF | Weapon / Armor | 6 |
+| `of_sidechannel` | +1 ATK +1 DECOMP | Module | 6 |
+| `volatile` | +2 ATK **-1 DEF** | Armor | 6 |
+| `of_deadlock` | +2 DEF **-1 ATK** | Weapon | 6 |
+| `of_recursion` | +2 ATK +1 DEF | Weapon, Module | 5 |
+| `of_cold_boot` | +1 ATK +2 DEF | Armor, Module | 5 |
+| `of_hot_swap` | +2 ATK +2 DEF **-1 DECOMP** | any | 4 |
 
 For scale: shipped gear grants 1–4 points a stat, and `GEAR_LEVEL_STEP` adds
 100% of base per gear level. So +2 is about what one gear level is worth on a
 scavenged weapon — a real find early, a rounding error late. Author well past
 +4 and an affix stops being a bonus and starts being the item.
+
+**No single stat passes +3**, and `every_shipped_affix_pays_and_none_pays_
+past_the_calibration` (`crates/engine/src/tests/affixes.rs`) is what holds
+that against a retune. The ceiling is on the *stat*, not on the affix: a
+drawback pays for a fourth point across two of them without reaching for a
+fifth on either.
+
+Slots are the other half of the calibration and are easy to skew by
+accident. Every slot must have something to roll — an empty pool leaves that
+slot's drops as interchangeable as they were before affixes existed, which
+is the complaint the feature answers — and `every_slot_has_something_to_roll`
+asserts it. Module is the slot that goes thin without anyone noticing,
+because it is the one no affix is *obviously* about.
+
+## Drawbacks
+
+Three shipped affixes charge for what they grant. The rule that makes one
+worth rolling is not the size of the bonus — with a +3 ceiling, an affix
+that merely undercut `hardened` would be strictly worse than `hardened` and
+nobody would want it however common it was. It is the **slot**: each of the
+three puts a stat somewhere no clean affix will, and bills the slot's own
+axis for it. ATK on armour, DEF on a weapon, and a fourth point across two
+stats paid for in DECOMP.
+
+Three consequences follow from where the penalty is applied, and all three
+are deliberate:
+
+- **A drawback grows with the run.** The affix is folded into the base
+  before `Game::copy_bonus`'s three scaling axes, so the cost scales with
+  gear level exactly as the bonus does. Applied afterwards it would quietly
+  stop costing anything after a breach or two, which reads as a free upgrade
+  rather than as a choice.
+- **Neither fusion nor a rare tier deepens it.** Those are what a player
+  *spends* to improve a copy, and spending to make your own gear worse on
+  one axis is a trade nobody would take. `EquipmentStats::fused_for_tier`
+  and `for_rarity` both leave a value at or below zero exactly where it is.
+- **A DECOMP penalty is inert on a companion.** A program never attempts a
+  capture, so `of_hot_swap` costs the player nothing on gear they hand
+  across — which is the one place in the set where owning two copies of
+  something is worth more than owning one.
 
 ## Removing one
 

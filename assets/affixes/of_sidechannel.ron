@@ -1,0 +1,10 @@
+// The aggressive half of the same build, and Module-only: a Module is the
+// slot a player keeps for themselves, which is the only place both of
+// these stats are worth anything at once.
+(
+    id: "of_sidechannel",
+    suffix: Some("of Sidechannel"),
+    stats: (atk: 1, decompiler: 1),
+    slots: Some([Module]),
+    weight: 6,
+)

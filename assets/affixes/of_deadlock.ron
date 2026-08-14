@@ -1,0 +1,10 @@
+// Volatile's mirror: DEF on a weapon, which no clean affix grants, paid
+// for in the ATK a weapon is otherwise entirely about. See Volatile for
+// why a drawback has to reach a slot the clean set doesn't.
+(
+    id: "of_deadlock",
+    suffix: Some("of Deadlock"),
+    stats: (atk: -1, def: 2),
+    slots: Some([Weapon]),
+    weight: 6,
+)

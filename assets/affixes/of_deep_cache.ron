@@ -1,0 +1,10 @@
+// The defensive half of a capture build: the two stats a player who wants
+// a fight to last long enough to decompile something actually wants
+// together. Off Weapon for the DECOMP reason Patched records.
+(
+    id: "of_deep_cache",
+    suffix: Some("of Deep Cache"),
+    stats: (def: 1, decompiler: 1),
+    slots: Some([Module, Armor]),
+    weight: 7,
+)

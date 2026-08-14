@@ -15,6 +15,7 @@ N = [
  # id                    name                  zone cost requires             unlocks (kind, [ids])
  ("automation",          "Automation",           0,   8, [],                  ("structures", ["compiler"])),
  ("commerce",            "Isometric Commerce",   0,  14, [],                  ("structures", ["market"])),
+ ("contract_brokerage",  "Contract Brokerage",   0,  10, [],                  ("structures", ["contract_broker"])),
  ("power_grid",          "Power Grid",           0,  10, [],                  ("structures", ["power_conduit"])),
  ("armor_bench",         "Reactive Armor",       0,  24, ["automation"],      ("structures", ["armory"])),
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),
@@ -153,7 +154,7 @@ Every shipped research node in feral-processes, charted from its own file in
 `assets/research/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/research/*.ron` on 2026-08-13 and will drift the moment one of those
+`assets/research/*.ron` on 2026-08-14 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Research Data is the currency, and it comes from one place: a Research Node

@@ -1,10 +1,10 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 24 of them.
+`assets/structures/`. 25 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-13 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-14 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed on the base slab — within 4 tiles of a Home,
@@ -16,10 +16,10 @@ that automate a base, not the base itself.
 
 | | |
 |---|---|
-| structures | 24 |
+| structures | 25 |
 | producers (make something from nothing, on a timer) | 4 |
 | assemblers (consume a neighbour's output) | 11 |
-| utility | 9 |
+| utility | 10 |
 | upgradeable | 5, all to Mk5 |
 | built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
 
@@ -44,6 +44,7 @@ that automate a base, not the base itself.
 | `A` | Annealing Node | 16 `core_fragment` | 20 | `annealed_core` |
 | `X` | Refactor Bench | 22 `core_fragment`, 4 `annealed_core` | 10 | `recompile_kernel` |
 | `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
+| `!` | Contract Broker | 14 `core_fragment` | - | posts contracts, takes deliveries |
 | `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
 | `D` | Depot | 12 `core_fragment` | 100 | programs empty full machines into it |
 | `^` | Shield | 16 `core_fragment` | - | -2 sweep damage, base-wide |

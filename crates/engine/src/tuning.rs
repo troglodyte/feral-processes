@@ -1516,6 +1516,43 @@ pub const MEDIC_REPAIR_PER_INTERVAL: u32 = 2;
 pub const FUSION_LESSER_STAT_DIVISOR: i32 = 2;
 
 // ---------------------------------------------------------------------------
+// Contracts
+// ---------------------------------------------------------------------------
+
+/// How many contracts a run may hold at once. Exceeding it is refused with
+/// `ContractRefusal::TooMany` rather than silently capped — the "no silent
+/// caps" rule.
+///
+/// 3 so a session has a shape without becoming a checklist: the point is to
+/// answer "and now?", not to hand the player a queue to work through.
+pub const MAX_ACTIVE_CONTRACTS: usize = 3;
+
+/// How many offers a Broker shows at once.
+pub const CONTRACT_BOARD_SLOTS: usize = 3;
+
+/// How many cycles a board's offers stand before the epoch advances and the
+/// board re-derives — see `Game::contract_board`.
+///
+/// An opening guess, and the one figure in this feature worth watching in
+/// play: with no deadlines and a long refresh, a player who takes nothing
+/// sees the same three offers for a long stretch and the board reads as
+/// static. Nothing instruments this — `balance_sim` cannot see a contract.
+pub const CONTRACT_REFRESH_CYCLES: u32 = 400;
+
+/// How close the player must stand to a Contract Broker to read its board.
+///
+/// **Engine tuning rather than the frontend's `MENU_SCAN_RADIUS`**, for
+/// `EXAMINE_RANGE_TILES`' reason above: that constant is a menu window, which
+/// is frontend policy, and borrowing it for a question about the game gives
+/// the wrong answer at 40 tiles. Whether a Broker is close enough to hand
+/// items to is a question about the game.
+///
+/// 2 is arm's length — the tile beside it and the diagonal past that, so a
+/// player standing at the corner of their own Broker is served without a
+/// board being readable from across the base.
+pub const CONTRACT_BOARD_RANGE_TILES: i32 = 2;
+
+// ---------------------------------------------------------------------------
 // Production chains
 // ---------------------------------------------------------------------------
 

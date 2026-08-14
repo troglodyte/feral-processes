@@ -27,6 +27,54 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.29
+
+### Contracts
+
+The game had no statement of what to do next. Research is a shopping list,
+achievements are cross-run and one-shot, and the zone ladder says only "go
+deeper" — so a player who had stood their base up and beaten a stack had no
+answer to "and now?" beyond doing it again one level down.
+
+Contracts are that answer. Build a **Contract Broker** (glyph `!`, unlocked by
+the new Contract Brokerage research node), stand beside it, and the sector
+tells you what it is paying for: thin out the drones, deliver twenty-five Core
+Fragments, stand three frames down a stack, breach to sector 3. Take up to
+three at once. Each pays in full when you finish it.
+
+```
+  Held
+  [1] Clear the Nursery - Defeat 6 Drone [4/6] - pays 40 Credits, 120 XP
+  [2] Fragment Quota - Deliver 25 Core Fragment [0/25] - pays 35 Credits, 90 XP
+  Offered
+  [3] First Descent - Stand 3 frames down a Stack - pays 50 Credits, 200 XP
+```
+
+**What a Broker offers is derived, not stored.** It comes off the world seed,
+the sector and the clock, so the same three offers come back after a save and
+load, cannot be rerolled by reloading, and rotate on their own as the run goes
+on. Contracts already taken or already finished drop off the board.
+
+Four of the five objectives finish themselves wherever you are, including four
+frames down — a contract you are holding is readable anywhere, even where
+there is no Broker in reach. Deliveries are the exception: those items are
+handed over at the Broker, and it takes only as many as the contract still
+needs.
+
+**This deliberately amends "progression is earned by fighting."** XP is a
+legal contract reward on any objective, including delivery and construction,
+so what advances you can be the thing the game asked for rather than whatever
+was nearest. What survives unchanged is the narrower rule underneath it:
+Portal Fragments are still earned only by fighting and descending. They are
+not a contract reward, and there is no variant for them to be one through.
+
+Contracts are data — `assets/contracts/*.ron`, one file per contract, with
+`assets/contracts/README.md` as the schema. Delete the directory and the
+board is empty, which is exactly the game as it was.
+
+The reward figures are opening guesses. `balance_sim` cannot see a contract at
+all, so nothing gates them but play.
+
 ## 0.8.28
 
 ### A beaten stack collapses behind you

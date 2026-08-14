@@ -1,0 +1,8 @@
+(
+    id: "first_descent",
+    name: "First Descent",
+    description: "Nobody has mapped the third frame of a stack in this sector. Get down there and stand in it.",
+    objective: Descend(depth: 3),
+    reward: [Credits(50), Xp(200)],
+    min_zone: 1,
+)

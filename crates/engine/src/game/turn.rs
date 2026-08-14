@@ -119,6 +119,11 @@ impl Game {
         }
         self.maybe_spawn_wild_creature();
         self.schedule.run(&mut self.world);
+        // Immediately after the schedule, which is where `contract_system`
+        // raised the progress this reads. Paying is `&mut Game` work — an
+        // inventory write and an XP grant — so it cannot live in the system
+        // that counts.
+        self.settle_contracts();
         self.structure_regen();
         self.raid_check();
         self.nest_respawn_tick();

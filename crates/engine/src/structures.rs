@@ -222,6 +222,14 @@ pub struct StructureDef {
     /// existed still parse (defaulting to no regeneration).
     #[serde(default)]
     pub power_regen: Option<PowerRegenDef>,
+    /// Whether this structure issues contracts — see
+    /// `Game::contract_board`. A plain `bool` rather than a block of its own,
+    /// because a Broker has no per-structure configuration: what it offers is
+    /// derived from the world seed, the sector and the clock, not authored on
+    /// the building. `#[serde(default)]` so every existing structure file,
+    /// including any mod, keeps parsing.
+    #[serde(default)]
+    pub issues_contracts: bool,
     /// If set, this structure is a symlink target: `Game::use_symlink` can
     /// teleport the player to it for this item cost, from anywhere on the
     /// map. `#[serde(default)]` so existing structure files written before

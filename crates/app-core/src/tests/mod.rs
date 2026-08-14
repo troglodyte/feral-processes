@@ -6,6 +6,7 @@ mod achievements;
 mod arena;
 mod battle;
 mod building;
+mod contracts;
 mod dev_console;
 mod field;
 mod fusion;

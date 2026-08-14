@@ -404,6 +404,44 @@ pub struct GameOver {
 #[derive(Resource, Default)]
 pub struct RunFeats {
     pub bosses_defeated: Vec<String>,
+    /// The species id of every creature killed this tick, for a contract's
+    /// `Objective::Kill`. Written beside `bosses_defeated` in `award_loot`,
+    /// so the two records cannot drift about what counts as a kill.
+    ///
+    /// A **separate field**, drained by `game::contracts::contract_system`
+    /// and by nothing else. Each field having exactly one drainer is what
+    /// removes any ordering dependency between the two systems: both are
+    /// registered unchained, and a shared queue would silently make that
+    /// unsound the moment one ate the other's events.
+    pub kills: Vec<String>,
+}
+
+/// One contract the run has taken on, and how far along it is.
+///
+/// Holds the **whole resolved `ContractDef`**, not an id plus parameters, for
+/// the argument `EquippedItem` stores an entire `GearCopy`: forgetting a
+/// property must not be expressible, and a contract file edited or deleted
+/// mid-run must not strand or silently rewrite one already accepted. A save
+/// naming a contract whose file is gone still finishes and still pays.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ActiveContract {
+    pub def: crate::contracts::ContractDef,
+    /// Counted against `Objective::target()`. Written by
+    /// `game::contracts::contract_system` and, for a `Deliver`, by
+    /// `Game::deliver_to_contract` — nothing else raises it.
+    pub progress: u32,
+    pub accepted_tick: u64,
+}
+
+/// What the run is holding and what it has finished.
+///
+/// Saved, unlike `RunFeats` — this *is* the accumulator that a per-tick drain
+/// queue feeds. `done` is what keeps a finished non-repeatable contract off
+/// the board for the rest of the run.
+#[derive(Resource, Default)]
+pub struct ActiveContracts {
+    pub active: Vec<ActiveContract>,
+    pub done: Vec<crate::contracts::ContractId>,
 }
 
 /// Achievements earned since the last time anyone wrote `profile.ron`.

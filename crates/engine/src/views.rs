@@ -436,6 +436,11 @@ pub struct EntityView {
     /// Whether this (structure) entity is a trading post (see
     /// `StructureDef::trade`).
     pub can_trade: bool,
+    /// Whether this (structure) entity is a Contract Broker (see
+    /// `StructureDef::issues_contracts`). The same shape `can_trade` has, and
+    /// read the same way — a frontend finds a Broker by scanning for this
+    /// rather than by naming the structure id.
+    pub issues_contracts: bool,
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,
@@ -1341,4 +1346,28 @@ pub struct EarnedSummary {
     pub permadeath: bool,
     /// Which stat the roll landed on, for a `Reward::RandomMainStat`.
     pub rolled_stat: Option<String>,
+}
+
+/// One contract, worded — an offer on a Broker's board or one the run is
+/// already holding. `Game::contract_board` and `Game::active_contracts`
+/// return these and renderers draw them verbatim.
+///
+/// The engine composes `objective_line` and `reward_line` rather than handing
+/// a renderer the `Objective` and `Reward` to word itself, for the reason
+/// `Game::copy_name` exists: two screens must not word one contract
+/// differently, and a drop line and the screen you open next disagreeing
+/// about what you just took is exactly the failure that costs.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ContractRow {
+    pub id: crate::contracts::ContractId,
+    pub name: String,
+    pub description: String,
+    /// What the objective asks, already worded.
+    pub objective_line: String,
+    pub reward_line: String,
+    /// 0 on an offer that has not been accepted.
+    pub progress: u32,
+    /// `Objective::target()` — every contract displays and completes through
+    /// one `progress >= target` rule.
+    pub target: u32,
 }

@@ -5,6 +5,7 @@ pub mod arena;
 pub mod balance_sim;
 pub mod battle;
 pub mod components;
+pub mod contracts;
 pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;
@@ -55,6 +56,7 @@ use components::{
     StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Tamed, Task,
     TaskKind, Temporary, WanderAi, ZonePortal,
 };
+pub use game::contracts::ContractRefusal;
 pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};

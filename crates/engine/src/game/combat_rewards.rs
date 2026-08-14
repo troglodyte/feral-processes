@@ -408,6 +408,17 @@ impl Game {
         // overwhelming majority of these calls come from.
         self.raise_trace(crate::tuning::TRACE_PER_KILL);
 
+        // Fourth consumer of the same guarantee, and the whole instrumentation
+        // cost of contracts: a `Kill` objective is the one thing about a
+        // contract that is event-shaped rather than polled. It sits beside the
+        // boss record below rather than anywhere else so the two cannot drift
+        // about what counts as a kill, and it is a separate field because each
+        // is drained by exactly one system.
+        self.world
+            .resource_mut::<crate::resources::RunFeats>()
+            .kills
+            .push(species_id.clone());
+
         if species.is_boss {
             // Third consumer of the same "it actually died" guarantee. The
             // record is all that happens here: what it earned is

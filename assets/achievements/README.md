@@ -71,8 +71,12 @@ probably not what you want.
 `BossDefeated` names a species id from `assets/species/`, and that species
 needs `is_boss: true` to be reachable at all. **Fleeing does not count** — the
 kill is recorded at the one point in combat that knows the boss actually died.
-There is deliberately no "kill N bosses in one run" trigger: counting within a
-run needs saved run state the game doesn't keep.
+There is deliberately no "kill N bosses in one run" trigger — but not, any
+longer, because it would be expensive. It used to say counting within a run
+needs saved run state the game doesn't keep; contracts added exactly that
+state (`resources::ActiveContracts`), so a counting trigger is now cheap. It
+is simply a separate feature, and belongs in its own change rather than
+riding in on this note.
 
 ### `reward`
 

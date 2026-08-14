@@ -403,6 +403,7 @@ impl Game {
                 let can_work = self.accepts_a_program(entity);
                 let machine_status = self.world.get::<MachineStatus>(entity).copied();
                 let can_trade = self.trade_options(entity).is_some();
+                let issues_contracts = self.issues_contracts(entity);
                 let structure_worker = if is_structure {
                     worker_by_structure
                         .get(&entity)
@@ -456,6 +457,7 @@ impl Game {
                     is_boss,
                     can_work,
                     can_trade,
+                    issues_contracts,
                     structure_worker,
                     worker_away_from_post,
                     structure_attended,
@@ -856,6 +858,7 @@ impl Game {
                     is_boss: false,
                     can_work: false,
                     can_trade: false,
+                    issues_contracts: false,
                     structure_worker: None,
                     worker_away_from_post: false,
                     structure_attended: false,

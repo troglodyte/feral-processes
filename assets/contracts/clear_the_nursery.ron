@@ -1,0 +1,8 @@
+(
+    id: "clear_the_nursery",
+    name: "Clear the Nursery",
+    description: "Drones have settled in the shallows around the base. Thin them out before they multiply.",
+    objective: Kill(species: Some("drone"), count: 6),
+    reward: [Credits(40), Xp(120)],
+    repeatable: true,
+)

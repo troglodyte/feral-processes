@@ -1,0 +1,8 @@
+(
+    id: "fragment_quota",
+    name: "Fragment Quota",
+    description: "The Broker is short on raw stock. Hand over twenty-five Core Fragments.",
+    objective: Deliver(item: "core_fragment", count: 25),
+    reward: [Credits(35), Xp(90)],
+    repeatable: true,
+)

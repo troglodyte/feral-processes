@@ -1,10 +1,10 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 22 of them.
+`assets/research/`. 23 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/research/*.ron` on 2026-08-13 and will drift the moment one of those
+`assets/research/*.ron` on 2026-08-14 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Research Data is the currency, and it comes from one place: a Research Node
@@ -14,13 +14,13 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 22 |
-| roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
+| nodes | 23 |
+| roots (need nothing) | 4 — Automation, Isometric Commerce, Contract Brokerage, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1288 |
+| total Research Data | 1298 |
 | cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (10), zone 2 (6), zone 3 (6) |
-| unlocks | 14 structures, 15 routines, 6 gear recipes |
+| zone bands | from turn one (11), zone 2 (6), zone 3 (6) |
+| unlocks | 15 structures, 15 routines, 6 gear recipes |
 
 ## What the zone gates
 
@@ -32,7 +32,7 @@ ever opening a portal.
 
 | Available | Nodes | Research Data | Which |
 |:---|---:|---:|:---|
-| from turn one | 10 | 188 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication, Heap Allocation |
+| from turn one | 11 | 198 | Automation, Contract Brokerage, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication, Heap Allocation |
 | zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
 | zone 3 | 6 | 750 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
 
@@ -77,6 +77,8 @@ Automation (8)
 
 Isometric Commerce (14)
 
+Contract Brokerage (10)
+
 Power Grid (10)
 |-- Fortification (18)
 `-- Heap Allocation (30)
@@ -102,6 +104,7 @@ there is no node you can reach two ways.
 | Node | Zone | Cost | Needs | Unlocks |
 |:---|---:|---:|:---|:---|
 | Automation | - | 8 | - | `compiler` |
+| Contract Brokerage | - | 10 | - | `contract_broker` |
 | Isometric Commerce | - | 14 | - | `market` |
 | Power Grid | - | 10 | - | `power_conduit` |
 | Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
@@ -137,6 +140,7 @@ unlocked first, so the real price of Monofilament Edge is its own
 CUMULATIVE COST FROM A STANDING START
 
 Automation              8  #.......................................
+Contract Brokerage     10  #.......................................
 Power Grid             10  #.......................................
 Isometric Commerce     14  ##......................................
 Fortification          28  ###.....................................

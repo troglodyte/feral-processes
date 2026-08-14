@@ -788,3 +788,34 @@ fn the_unequip_row_prices_the_affix_on_your_back() {
         row.label
     );
 }
+
+/// `U` in the pack fuses every matching pair at once, skipping the item
+/// action page and the `[U]` press per stack. Uppercase because
+/// `selected_index` reserves shifted letters for screen actions, and it is
+/// the same letter the per-item action uses.
+#[test]
+fn capital_u_in_the_inventory_fuses_every_matching_pair() {
+    let plating = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut app = app_at_a_trading_post(944, &[(ids::ABLATIVE_PLATING, 4)]);
+    app.mode = Mode::Inventory;
+
+    app.handle_key(GameKey::Char('U'));
+
+    let rows = app.game.as_ref().unwrap().player_status().inventory;
+    let at = |tier: u32| {
+        rows.iter()
+            .find(|r| r.copy.item == plating && r.copy.tier == tier)
+            .map(|r| r.qty)
+            .unwrap_or(0)
+    };
+    assert_eq!(at(1), 2, "four copies buy two T1s in one press");
+    assert_eq!(at(0), 0, "and nothing ordinary is left");
+    assert_eq!(app.mode, Mode::Inventory, "you stay in your pack");
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("fuse")),
+        "the fusion changes nothing visible behind the popup, so it reports: {:?}",
+        app.status_line
+    );
+}

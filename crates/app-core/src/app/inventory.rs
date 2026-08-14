@@ -29,6 +29,20 @@ impl App {
             return;
         }
 
+        // Fuses every matching pair in cargo for one turn, rather than the
+        // action page's `[U]` per stack. Uppercase for the reason `S` is:
+        // `selected_index` reserves shifted letters for screen actions, so
+        // this cannot also pick a row.
+        if key == GameKey::Char('U') {
+            if let Some(game) = &mut self.game {
+                self.status_line = Some(match game.fuse_all_items() {
+                    Ok(msg) => msg,
+                    Err(e) => e,
+                });
+            }
+            return;
+        }
+
         let Some(idx) = self.selected_index(key, total) else {
             return;
         };

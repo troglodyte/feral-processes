@@ -1303,3 +1303,100 @@ fn a_rare_copy_will_not_fuse_with_a_plain_one() {
         "the fused copy must still be Overclocked"
     );
 }
+
+/// **One pass, not a cascade.** Four copies come out as two T1s and stop —
+/// the T1s are not fused again into a T2. That falls out of the snapshot
+/// `fuse_all_items` iterates rather than being a rule enforced on top: a
+/// row it creates is not a row it was handed. The odd copy in the second
+/// stack is what pins that a stack is drained in pairs and the remainder
+/// is left alone.
+#[test]
+fn fusing_all_pairs_promotes_every_stack_once() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let core = ItemId::from(ids::OVERCLOCK_CORE);
+    let mut game = Game::new(9110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.add(armor.clone(), 4);
+        inv.add(core.clone(), 5);
+    }
+
+    game.fuse_all_items().unwrap();
+
+    assert_eq!(held_at(&game, &armor, 1), 2, "four copies buy two T1s");
+    assert_eq!(
+        held_at(&game, &armor, 2),
+        0,
+        "and are not fused on into a T2"
+    );
+    assert_eq!(held_at(&game, &armor, 0), 0, "with nothing left over");
+    assert_eq!(held_at(&game, &core, 1), 2, "five copies buy two T1s");
+    assert_eq!(
+        held_at(&game, &core, 0),
+        1,
+        "and leave the odd one ordinary"
+    );
+}
+
+/// The whole reason the key exists: the same fusions pressed one at a time
+/// charge a turn each, and a convenience key must not charge the player
+/// need decay, sweep pressure and spawn rolls for typing less.
+#[test]
+fn fusing_all_pairs_costs_one_tick() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(9111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 6);
+
+    let before = game.current_tick();
+    game.fuse_all_items().unwrap();
+
+    assert_eq!(held_at(&game, &armor, 1), 3, "three fusions happened");
+    assert_eq!(
+        game.current_tick() - before,
+        1,
+        "three fusions in one press cost one turn, not three"
+    );
+}
+
+/// A refusal spends nothing, the turn included — the same ordering every
+/// other refused action keeps.
+#[test]
+fn fusing_all_with_nothing_to_fuse_spends_no_tick() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // A lone copy of a piece of gear, plus whatever resources a new game
+    // starts with — none of it a matching pair.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 1);
+
+    let before = game.current_tick();
+    let err = game.fuse_all_items().unwrap_err();
+
+    assert!(err.contains("matching pair"), "got: {err}");
+    assert_eq!(game.current_tick(), before, "a refusal costs no turn");
+    assert_eq!(held_at(&game, &armor, 0), 1, "and spends nothing");
+}
+
+#[test]
+fn fusing_all_is_refused_during_a_battle() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(9113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(armor.clone(), 4);
+    let enemy = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![enemy]);
+
+    assert!(game.fuse_all_items().is_err());
+    assert_eq!(held_at(&game, &armor, 0), 4, "a refusal spends nothing");
+}

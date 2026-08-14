@@ -568,6 +568,20 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        let msg = self.fuse_copy(copy)?;
+        self.log(msg.clone());
+        self.tick();
+        Ok(msg)
+    }
+
+    /// One fusion, spending no turn and logging nothing.
+    ///
+    /// The split exists for `fuse_all_items`, which performs many fusions
+    /// for one keypress and owes the player one turn and one tally rather
+    /// than one of each per pair. Every refusal still sits above the first
+    /// `take_copies`, so a caller looping on this until it errors spends
+    /// nothing on the call that stops it.
+    fn fuse_copy(&mut self, copy: &GearCopy) -> Result<String, String> {
         let item = &copy.item;
         let Some((slot, _)) = self.equipment_of(item) else {
             return Err(format!("{} can't be fused.", self.item_name(item)));
@@ -635,9 +649,70 @@ impl Game {
             crate::tuning::ITEM_FUSION_COST,
             (fused_tier as f64 * crate::tuning::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
         );
-        self.log(msg.clone());
-        self.tick();
         Ok(msg)
+    }
+
+    /// Fuses every matching pair in cargo for one keypress and one turn.
+    ///
+    /// **One pass, not a cascade**: four ordinary copies come out as two
+    /// T1s rather than one T2. That is not a rule enforced on top of the
+    /// loop — it falls out of iterating a snapshot of the inventory taken
+    /// before any fusing starts, so the higher-tier rows this creates are
+    /// never rows it was handed. Looping `fuse_copy` on one copy therefore
+    /// drains that tier in pairs and stops, and it terminates because every
+    /// success removes at least one copy from the store it draws from.
+    ///
+    /// A worn copy still counts as one of its pair, exactly as it does for
+    /// a single `fuse_item` — the rule lives in `fuse_copy`, so pressing
+    /// this once and pressing `[U]` down the list are the same fusions.
+    ///
+    /// One turn total is the whole point: charging need decay, sweep
+    /// pressure and spawn rolls per pair would make the convenience key
+    /// cost more than the work it saves. A refusal spends no turn at all.
+    pub fn fuse_all_items(&mut self) -> Result<String, String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let rows: Vec<GearCopy> = self
+            .player_status()
+            .inventory
+            .into_iter()
+            .map(|row| row.copy)
+            .collect();
+
+        let mut tally: Vec<(GearCopy, u32)> = Vec::new();
+        for copy in rows {
+            let mut pairs = 0;
+            while self.fuse_copy(&copy).is_ok() {
+                pairs += 1;
+            }
+            if pairs > 0 {
+                tally.push((copy, pairs));
+            }
+        }
+        if tally.is_empty() {
+            return Err("Nothing in cargo has a matching pair to fuse.".into());
+        }
+
+        // A header plus one indented row apiece, the shape `announce_drops`
+        // uses and for its reason: a `LogLine` is drawn as exactly one row
+        // and never wrapped, so a joined line would grow with the haul.
+        let total: u32 = tally.iter().map(|(_, pairs)| pairs).sum();
+        let header = format!(
+            "You fuse {total} {}:",
+            if total == 1 { "pair" } else { "pairs" }
+        );
+        self.log(header.clone());
+        for (copy, pairs) in tally {
+            let row = format!(
+                "  {pairs} {} -> tier {}",
+                self.copy_name(&copy),
+                copy.tier + 1
+            );
+            self.log(row);
+        }
+        self.tick();
+        Ok(header)
     }
 
     /// Permanently removes `qty` of this copy from cargo. Only ever acts on

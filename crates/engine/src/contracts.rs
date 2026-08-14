@@ -9,6 +9,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use rand::prelude::*;
+
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
@@ -131,9 +133,199 @@ pub struct ContractDef {
     pub repeatable: bool,
 }
 
+/// Separates a template's id from the parameters a roll filled in —
+/// `hunt#drone-6`. Refused in an authored id at load, so the two id spaces
+/// cannot collide and `ContractDb::repeatable` can read a rolled contract's
+/// template straight back off its id.
+pub const ROLLED_ID_SEPARATOR: char = '#';
+
+/// What a template leaves open, mirroring `Objective` variant for variant with
+/// the numeric fields widened to inclusive ranges.
+///
+/// A parallel vocabulary is a copy to keep in step, so it earns its place by
+/// being the whole of what varies: which species, which item, which structure,
+/// and how many. Everything downstream — accepting, progressing, completing —
+/// sees only the `Objective` a roll produced and cannot tell it from an
+/// authored one.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TemplateObjective {
+    /// The species is drawn from the sector; a rolled Terminate always names
+    /// one, since "any wild program" needs no template to express.
+    Terminate {
+        count: (u32, u32),
+    },
+    Deliver {
+        count: (u32, u32),
+    },
+    Descend {
+        depth: (u32, u32),
+    },
+    Breach {
+        zone: (u32, u32),
+    },
+    /// The structure is drawn from the sector, so there is nothing numeric
+    /// left to range over.
+    Build,
+}
+
+/// What this sector can supply a rolled contract with, gathered by
+/// `Game::template_pools` and consumed by `ContractTemplate::roll`.
+///
+/// Passing the pools in rather than letting `roll` reach for a `Game` is what
+/// keeps the roll a pure function of `(rng, pools)` — testable without a world,
+/// and unable to spend a `GameRng` draw by accident. Each candidate carries its
+/// **display name** beside its id because the roll writes the name into the
+/// contract's description, and resolving ids to names anywhere but the engine
+/// is what `Game::copy_name` exists to prevent.
+pub struct TemplatePools {
+    pub species: Vec<(String, String)>,
+    pub items: Vec<(ItemId, String)>,
+    pub structures: Vec<(StructureId, String)>,
+    /// The sector the run is in, which is what a rolled `Breach` has to clear.
+    pub zone: u32,
+}
+
+/// A contract with free variables. `roll` fills them in and produces **the
+/// same `ContractDef`** an authored file parses into — an authored contract is
+/// a template with no free variables, so there is one accept path, one
+/// progress path and one completion path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContractTemplate {
+    /// The rolled contract's id is built from this and the roll, so it is a
+    /// prefix rather than an id in its own right.
+    pub id: ContractId,
+    /// `{target}` is replaced by the rolled species, item or structure's
+    /// display name, `{count}` by the number rolled. Both are optional; a
+    /// template with neither simply reads the same however it rolls.
+    pub name: String,
+    /// The one field a template cannot derive and must author with a hole in
+    /// it — `objective_line` already words the objective itself.
+    pub description: String,
+    pub objective: TemplateObjective,
+    /// Paid **per unit of `Objective::target()`**, so asking for ten pays ten
+    /// times and the three state-shaped objectives (which target 1) pay the
+    /// authored figure flat. Reusing `target()` rather than inventing a scale
+    /// is what keeps the rule to one sentence with no branch on the variant.
+    pub reward: Vec<Reward>,
+    #[serde(default)]
+    pub min_zone: u32,
+    #[serde(default)]
+    pub repeatable: bool,
+}
+
+impl ContractTemplate {
+    /// Rolls this template into a finishable contract, or `None` when the
+    /// sector can supply nothing valid.
+    ///
+    /// `None` rather than a clamped or partial contract is the whole point:
+    /// an objective naming a species that does not live here, an item nothing
+    /// here produces, or a structure already standing is unfinishable or
+    /// finishes on acceptance, and either is worse than an empty slot.
+    pub fn roll(&self, rng: &mut StdRng, pools: &TemplatePools) -> Option<ContractDef> {
+        let (objective, slug, target_name, magnitude) = match &self.objective {
+            TemplateObjective::Terminate { count } => {
+                let (id, name) = pick(rng, &pools.species)?;
+                let count = draw(rng, *count, 1)?;
+                (
+                    Objective::Terminate {
+                        species: Some(id.clone()),
+                        count,
+                    },
+                    format!("{id}-{count}"),
+                    name.clone(),
+                    count,
+                )
+            }
+            TemplateObjective::Deliver { count } => {
+                let (id, name) = pick(rng, &pools.items)?;
+                let count = draw(rng, *count, 1)?;
+                (
+                    Objective::Deliver {
+                        item: id.clone(),
+                        count,
+                    },
+                    format!("{id}-{count}"),
+                    name.clone(),
+                    count,
+                )
+            }
+            // Depth 0 is the surface, and progress is `depth >= want`, so a
+            // rolled 0 would finish the moment it was accepted.
+            TemplateObjective::Descend { depth } => {
+                let depth = draw(rng, *depth, 1)?;
+                (
+                    Objective::Descend { depth },
+                    format!("d{depth}"),
+                    String::new(),
+                    depth,
+                )
+            }
+            // Same trap one sector over: `zone.0 >= want` is already true for
+            // anything at or below where the run has reached.
+            TemplateObjective::Breach { zone } => {
+                let zone = draw(rng, *zone, pools.zone.saturating_add(1))?;
+                (
+                    Objective::Breach { zone },
+                    format!("z{zone}"),
+                    String::new(),
+                    zone,
+                )
+            }
+            TemplateObjective::Build => {
+                let (id, name) = pick(rng, &pools.structures)?;
+                (
+                    Objective::Build {
+                        structure: id.clone(),
+                    },
+                    id.to_string(),
+                    name.clone(),
+                    1,
+                )
+            }
+        };
+
+        let fill = |text: &str| {
+            text.replace("{count}", &magnitude.to_string())
+                .replace("{target}", &target_name)
+        };
+        let scale = objective.target();
+        Some(ContractDef {
+            id: ContractId::from(format!("{}{ROLLED_ID_SEPARATOR}{slug}", self.id)),
+            name: fill(&self.name),
+            description: fill(&self.description),
+            objective,
+            reward: self
+                .reward
+                .iter()
+                .map(|r| match r {
+                    Reward::Credits(n) => Reward::Credits(n.saturating_mul(scale)),
+                    Reward::Item(item, n) => Reward::Item(item.clone(), n.saturating_mul(scale)),
+                    Reward::Xp(n) => Reward::Xp(n.saturating_mul(scale)),
+                })
+                .collect(),
+            min_zone: self.min_zone,
+            repeatable: self.repeatable,
+        })
+    }
+}
+
+/// One candidate from a pool, or `None` when the sector supplies none.
+fn pick<'a, T>(rng: &mut StdRng, pool: &'a [(T, String)]) -> Option<&'a (T, String)> {
+    (!pool.is_empty()).then(|| &pool[rng.random_range(0..pool.len())])
+}
+
+/// A number from an inclusive authored range, raised to `floor` first. `None`
+/// when the floor has eaten the range — which is a real answer rather than an
+/// error: a `Breach(2, 6)` template simply has nothing to offer in sector 6.
+fn draw(rng: &mut StdRng, (lo, hi): (u32, u32), floor: u32) -> Option<u32> {
+    let lo = lo.max(floor);
+    (lo <= hi).then(|| rng.random_range(lo..=hi))
+}
+
 #[derive(Resource, Default)]
 pub struct ContractDb {
     defs: BTreeMap<ContractId, ContractDef>,
+    templates: BTreeMap<ContractId, ContractTemplate>,
 }
 
 impl ContractDb {
@@ -181,7 +373,44 @@ impl ContractDb {
                 Err(e) => warnings.push(format!("skipped invalid contract file {path:?}: {e}")),
             }
         }
+        db.load_templates(&dir.join("templates"), &mut warnings)?;
         Ok((db, warnings))
+    }
+
+    /// Loads `dir/templates/*.ron`. Absent is silent and leaves none, the same
+    /// rule the contract directory itself follows and for the same reason:
+    /// roughly sixty test fixtures build a partial assets tree, and the README
+    /// already promises that deleting the directory gives the game back as it
+    /// was without it.
+    fn load_templates(&mut self, dir: &Path, warnings: &mut Vec<String>) -> std::io::Result<()> {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path)?;
+            match ron::from_str::<ContractTemplate>(&text) {
+                Ok(template) => match template_complaint(&template) {
+                    Some(why) => {
+                        warnings.push(format!("skipped invalid contract template {path:?}: {why}"))
+                    }
+                    None if self.templates.contains_key(&template.id) => warnings.push(format!(
+                        "skipped invalid contract template {path:?}: id {} is already taken",
+                        template.id
+                    )),
+                    None => {
+                        self.templates.insert(template.id.clone(), template);
+                    }
+                },
+                Err(e) => warnings.push(format!("skipped invalid contract template {path:?}: {e}")),
+            }
+        }
+        Ok(())
     }
 
     pub fn get(&self, id: &ContractId) -> Option<&ContractDef> {
@@ -202,7 +431,26 @@ impl ContractDb {
     /// file or template has been deleted mid-run, and the run's own copy is
     /// what finishes it.
     pub fn repeatable(&self, id: &ContractId) -> bool {
-        self.defs.get(id).is_some_and(|def| def.repeatable)
+        if let Some(def) = self.defs.get(id) {
+            return def.repeatable;
+        }
+        match id.as_str().split_once(ROLLED_ID_SEPARATOR) {
+            Some((template, _)) => self
+                .templates
+                .get(&ContractId::from(template))
+                .is_some_and(|t| t.repeatable),
+            None => false,
+        }
+    }
+
+    pub fn template(&self, id: &ContractId) -> Option<&ContractTemplate> {
+        self.templates.get(id)
+    }
+
+    /// Every template, in id order — stable between runs for the same reason
+    /// `iter` is, since the board salts its roll off each template's id.
+    pub fn templates(&self) -> impl Iterator<Item = &ContractTemplate> {
+        self.templates.values()
     }
 
     /// Every authored contract, in id order. The board draws from this, so the
@@ -219,6 +467,13 @@ fn complaint(def: &ContractDef) -> Option<String> {
     if def.id.as_str().is_empty() {
         return Some("a contract needs an id".to_string());
     }
+    if def.id.as_str().contains(ROLLED_ID_SEPARATOR) {
+        return Some(format!(
+            "a contract id may not contain '{ROLLED_ID_SEPARATOR}': that is what \
+             separates a template from the parameters a roll filled in, and an \
+             authored id carrying one could collide with a rolled contract"
+        ));
+    }
     if def.reward.is_empty() {
         return Some(
             "a contract with no reward pays nothing; give it one or delete the file".to_string(),
@@ -230,6 +485,68 @@ fn complaint(def: &ContractDef) -> Option<String> {
         .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
     {
         return Some("a reward of 0 pays nothing; give it at least 1 or delete it".to_string());
+    }
+    None
+}
+
+/// Why `t` cannot be loaded, or `None` if it is fine.
+///
+/// The reward checks are the authored ones, applied to the **per-unit**
+/// figure: a template paying 0 a unit pays nothing however much it asks for.
+/// The two that are only a template's problem are an id that would collide
+/// with a rolled one, and a `{target}` hole in an objective that names nothing
+/// to fill it with — which would otherwise reach a player as the literal text.
+fn template_complaint(t: &ContractTemplate) -> Option<String> {
+    if t.id.as_str().is_empty() {
+        return Some("a contract template needs an id".to_string());
+    }
+    if t.id.as_str().contains(ROLLED_ID_SEPARATOR) {
+        return Some(format!(
+            "a contract template id may not contain '{ROLLED_ID_SEPARATOR}': it is \
+             the separator a rolled id is built with"
+        ));
+    }
+    if t.reward.is_empty() {
+        return Some(
+            "a template with no reward pays nothing; give it one or delete the file".to_string(),
+        );
+    }
+    if t.reward
+        .iter()
+        .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
+    {
+        return Some(
+            "a template reward of 0 pays nothing at any size; give it at least 1 or delete it"
+                .to_string(),
+        );
+    }
+    let names_a_target = match t.objective {
+        TemplateObjective::Terminate { .. }
+        | TemplateObjective::Deliver { .. }
+        | TemplateObjective::Build => true,
+        TemplateObjective::Descend { .. } | TemplateObjective::Breach { .. } => false,
+    };
+    if !names_a_target && (t.name.contains("{target}") || t.description.contains("{target}")) {
+        return Some(
+            "this objective rolls no species, item or structure, so there is \
+             nothing to put in a {target} hole"
+                .to_string(),
+        );
+    }
+    let range = match t.objective {
+        TemplateObjective::Terminate { count } | TemplateObjective::Deliver { count } => {
+            Some(count)
+        }
+        TemplateObjective::Descend { depth } => Some(depth),
+        TemplateObjective::Breach { zone } => Some(zone),
+        TemplateObjective::Build => None,
+    };
+    if let Some((lo, hi)) = range
+        && lo > hi
+    {
+        return Some(format!(
+            "the range ({lo}, {hi}) is back to front and can roll nothing"
+        ));
     }
     None
 }

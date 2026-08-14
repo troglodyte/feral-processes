@@ -1403,3 +1403,278 @@ fn delivering_against_a_contract_that_is_not_held_is_refused() {
         Err(ContractRefusal::NotOffered)
     );
 }
+
+// ---------------------------------------------------------------------------
+// Templates, and the contracts they roll
+// ---------------------------------------------------------------------------
+
+use crate::contracts::{ContractTemplate, TemplateObjective, TemplatePools};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+/// A contract directory with a `templates/` subdirectory beside the authored
+/// files, which is where `ContractDb::load_dir` looks for them.
+fn load_with_templates(
+    tag: &str,
+    contracts: &[(&str, &str)],
+    templates: &[(&str, &str)],
+) -> (ContractDb, Vec<String>) {
+    let dir = contract_dir(tag, contracts);
+    std::fs::create_dir_all(dir.join("templates")).unwrap();
+    for (name, body) in templates {
+        std::fs::write(dir.join("templates").join(name), body).unwrap();
+    }
+    let loaded = ContractDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    loaded
+}
+
+/// Pools with one of everything, so a roll has exactly one valid answer and a
+/// test never depends on which candidate a seed picked.
+fn one_of_each(zone: u32) -> TemplatePools {
+    TemplatePools {
+        species: vec![("drone".to_string(), "Drone".to_string())],
+        items: vec![(ItemId::from("core_fragment"), "Core Fragment".to_string())],
+        structures: vec![("refinery".to_string(), "Refinery".to_string())],
+        zone,
+    }
+}
+
+fn template(id: &str, objective: TemplateObjective, reward: Vec<Reward>) -> ContractTemplate {
+    ContractTemplate {
+        id: ContractId::from(id),
+        name: format!("Template {id}"),
+        description: "d".to_string(),
+        objective,
+        reward,
+        min_zone: 0,
+        repeatable: false,
+    }
+}
+
+fn rng() -> StdRng {
+    StdRng::seed_from_u64(42)
+}
+
+#[test]
+fn an_absent_templates_directory_is_silent_and_leaves_no_templates() {
+    let (db, warnings) = load(
+        "no_templates",
+        &[(
+            "one.ron",
+            r#"(id: "one", name: "One", description: "d",
+                objective: Breach(zone: 2), reward: [Credits(10)])"#,
+        )],
+    );
+    assert!(warnings.is_empty());
+    assert_eq!(
+        db.templates().count(),
+        0,
+        "an install with no templates is the pre-template game, exactly as an \
+         install with no contracts is the pre-contract one"
+    );
+}
+
+#[test]
+fn a_malformed_template_is_skipped_with_a_warning_rather_than_a_panic() {
+    let (db, warnings) = load_with_templates(
+        "bad_template",
+        &[],
+        &[
+            ("broken.ron", "(this is not ron"),
+            (
+                "fine.ron",
+                r#"(id: "hunt", name: "Hunt {target}", description: "d {count} {target}",
+                    objective: Terminate(count: (4, 8)), reward: [Credits(5)])"#,
+            ),
+        ],
+    );
+    assert_eq!(warnings.len(), 1, "one bad file, one warning: {warnings:?}");
+    assert_eq!(db.templates().count(), 1, "the good one still loads");
+}
+
+#[test]
+fn an_authored_id_may_not_contain_the_rolled_separator() {
+    let (db, warnings) = load(
+        "sep",
+        &[(
+            "clash.ron",
+            r#"(id: "hunt#drone-6", name: "Clash", description: "d",
+                objective: Breach(zone: 2), reward: [Credits(10)])"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0, "refused rather than loaded");
+    assert_eq!(warnings.len(), 1);
+    assert!(
+        warnings[0].contains('#'),
+        "the warning has to name the character: {warnings:?}"
+    );
+}
+
+#[test]
+fn a_rolled_terminate_names_a_species_the_sector_actually_fields() {
+    let t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (4, 8) },
+        vec![Reward::Credits(5)],
+    );
+    let def = t
+        .roll(&mut rng(), &one_of_each(1))
+        .expect("one valid answer");
+    match def.objective {
+        Objective::Terminate { species, count } => {
+            assert_eq!(species, Some("drone".to_string()));
+            assert!(
+                (4..=8).contains(&count),
+                "the rolled count stays inside the authored range, got {count}"
+            );
+        }
+        other => panic!("a Terminate template rolls a Terminate objective, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_rolled_contract_reads_its_own_parameters_back_in_its_name_and_description() {
+    let mut t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (6, 6) },
+        vec![Reward::Credits(5)],
+    );
+    t.name = "Hunt: {target}".to_string();
+    t.description = "Terminate {count} {target} out past the slab.".to_string();
+
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(def.name, "Hunt: Drone", "the display name, not the id");
+    assert_eq!(
+        def.description, "Terminate 6 Drone out past the slab.",
+        "the description is the one field a template cannot derive, so it \
+         authors the hole and the roll fills it"
+    );
+}
+
+#[test]
+fn a_rolled_build_never_names_a_structure_already_standing() {
+    let t = template("commission", TemplateObjective::Build, vec![Reward::Xp(50)]);
+    let mut pools = one_of_each(1);
+    pools.structures.clear();
+    assert!(
+        t.roll(&mut rng(), &pools).is_none(),
+        "with nothing left to build the template rolls nothing at all — a \
+         Build of something already deployed completes the instant it is \
+         accepted"
+    );
+}
+
+#[test]
+fn a_rolled_breach_always_targets_a_sector_deeper_than_this_one() {
+    let t = template(
+        "expansion",
+        TemplateObjective::Breach { zone: (2, 6) },
+        vec![Reward::Credits(100)],
+    );
+    for zone in 1..=6 {
+        let rolled = t.roll(&mut rng(), &one_of_each(zone));
+        match rolled {
+            Some(def) => match def.objective {
+                Objective::Breach { zone: want } => assert!(
+                    want > zone,
+                    "a Breach at or below the current sector completes on \
+                     acceptance; rolled {want} in zone {zone}"
+                ),
+                other => panic!("expected a Breach, got {other:?}"),
+            },
+            // Zone 6 has nothing above it inside the authored range, and an
+            // empty roll is the right answer rather than a clamped one.
+            None => assert_eq!(zone, 6),
+        }
+    }
+}
+
+#[test]
+fn a_rolled_descend_never_targets_the_surface() {
+    let t = template(
+        "sounding",
+        TemplateObjective::Descend { depth: (0, 4) },
+        vec![Reward::Xp(200)],
+    );
+    for seed in 0..32 {
+        let def = t
+            .roll(&mut StdRng::seed_from_u64(seed), &one_of_each(1))
+            .unwrap();
+        match def.objective {
+            Objective::Descend { depth } => assert!(
+                depth >= 1,
+                "depth 0 is the surface, and `depth >= want` makes it finish \
+                 on acceptance"
+            ),
+            other => panic!("expected a Descend, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_template_with_nothing_valid_to_name_rolls_nothing() {
+    let empty = TemplatePools {
+        species: vec![],
+        items: vec![],
+        structures: vec![],
+        zone: 1,
+    };
+    for objective in [
+        TemplateObjective::Terminate { count: (4, 8) },
+        TemplateObjective::Deliver { count: (4, 8) },
+        TemplateObjective::Build,
+    ] {
+        let t = template("t", objective, vec![Reward::Credits(5)]);
+        assert!(
+            t.roll(&mut rng(), &empty).is_none(),
+            "an unfinishable contract is worse than no contract"
+        );
+    }
+}
+
+#[test]
+fn a_rolled_reward_scales_with_how_much_the_contract_asks_for() {
+    let t = template(
+        "quota",
+        TemplateObjective::Deliver { count: (10, 10) },
+        vec![Reward::Credits(3), Reward::Xp(4)],
+    );
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.reward,
+        vec![Reward::Credits(30), Reward::Xp(40)],
+        "a template's reward is authored per unit of `objective.target()`, so \
+         asking for ten pays ten times — one rule, and the same one that \
+         already decides what `target()` means"
+    );
+
+    let flat = template(
+        "sounding",
+        TemplateObjective::Descend { depth: (3, 3) },
+        vec![Reward::Credits(50)],
+    );
+    let def = flat.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.reward,
+        vec![Reward::Credits(50)],
+        "a state-shaped objective targets 1, so it pays the authored figure \
+         flat — no separate rule for it"
+    );
+}
+
+#[test]
+fn a_rolled_id_names_the_template_it_came_from_and_the_roll_that_made_it() {
+    let t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (6, 6) },
+        vec![Reward::Credits(5)],
+    );
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.id,
+        ContractId::from("hunt#drone-6"),
+        "the same roll has to produce the same id, or the board would offer a \
+         different contract after a reload"
+    );
+}

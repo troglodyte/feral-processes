@@ -27,6 +27,55 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.32
+
+### Four perks that leave the player's own body
+
+The perk picker was lopsided. Seven of its twelve entries were your own stats
+and your own casts, and the other five reached mining, hunger, decompiling and
+crafting — so a perk was something you bought to hit harder, and never
+something you bought to change how the run worked. Four more, one each into
+the four systems the catalogue had never touched:
+
+```
+  [13] Obfuscation    3 pts   -10% to every Trace rise, floored
+  [14] Process Pool   3 pts   +1 tamed program you may own
+  [15] Teardown       4 pts   +1 work resource from every kill
+  [16] Failover       2 pts   +1 Durability per repair interval
+```
+
+**Obfuscation** makes the Stack quieter: everything that raises Trace — a
+kill, a cache, a seal, a breakpoint — costs 10% less per level. It can never
+buy silence. Low Power Mode is allowed to stop hunger draining entirely
+because a Recharger Node already deletes hunger as a cost, but Trace is the
+only pressure the Stack applies, so however many levels are stacked a source
+still costs something.
+
+**Process Pool** raises how many programs you may own, through the same
+capacity a Data Cache feeds — which means it is the slots a GC Entropy Sweep
+cannot take back.
+
+**Teardown** strips a defeated process to the frame: a kill drops 2-4 work
+resources, and each level adds one to that. It is the steepest thing in the
+catalogue relative to what it modifies, which is what the 4-point price is
+for, and it is bounded by the fights you take rather than by a machine that
+runs while you sleep.
+
+**Failover** repairs your base with no Patch Node standing. A base without one
+took sweep damage that was simply permanent; now it mends a point per repair
+interval per level.
+
+Perks are still half data: these four are named, described and priced in
+`assets/perks/`, and how much each gives per level stays in `tuning.rs`, where
+a mod cannot reach it.
+
+### The perk chart said +3 where the game said +2
+
+Fixed: `docs/perks.md` charted Attacker and Defender at +3 Attack and Defense
+per level against a game that has granted 2 since the curves were linearised.
+The page is a hand transcription rather than a parser, which is what its own
+staleness warning is about — the warning now names this case.
+
 ## 0.8.31
 
 ### Fifteen more contracts

@@ -29,15 +29,15 @@ fn every_objective_variant_parses_and_states_its_target() {
         "variants",
         &[
             (
-                "kill.ron",
-                r#"(id: "kill", name: "Kill", description: "d",
-                    objective: Kill(species: Some("drone"), count: 6),
+                "terminate.ron",
+                r#"(id: "terminate", name: "Terminate", description: "d",
+                    objective: Terminate(species: Some("drone"), count: 6),
                     reward: [Credits(40)])"#,
             ),
             (
-                "kill_any.ron",
-                r#"(id: "kill_any", name: "Any", description: "d",
-                    objective: Kill(species: None, count: 3),
+                "terminate_any.ron",
+                r#"(id: "terminate_any", name: "Any", description: "d",
+                    objective: Terminate(species: None, count: 3),
                     reward: [Xp(50)])"#,
             ),
             (
@@ -71,8 +71,12 @@ fn every_objective_variant_parses_and_states_its_target() {
     assert_eq!(db.iter().count(), 6);
 
     let target = |id: &str| db.get(&ContractId::from(id)).unwrap().objective.target();
-    assert_eq!(target("kill"), 6, "a counting objective targets its count");
-    assert_eq!(target("kill_any"), 3);
+    assert_eq!(
+        target("terminate"),
+        6,
+        "a counting objective targets its count"
+    );
+    assert_eq!(target("terminate_any"), 3);
     assert_eq!(target("deliver"), 4);
     assert_eq!(
         target("descend"),
@@ -84,8 +88,8 @@ fn every_objective_variant_parses_and_states_its_target() {
     assert_eq!(target("build"), 1);
 
     assert_eq!(
-        db.get(&ContractId::from("kill")).unwrap().objective,
-        Objective::Kill {
+        db.get(&ContractId::from("terminate")).unwrap().objective,
+        Objective::Terminate {
             species: Some("drone".to_string()),
             count: 6
         }
@@ -246,7 +250,7 @@ fn the_shipped_contracts_name_things_that_exist() {
                 "{} asks for an item that does not exist: {item}",
                 def.id
             ),
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some(id), ..
             } => assert!(
                 species.get(id).is_some(),
@@ -286,7 +290,7 @@ fn every_objective_variant_ships_at_least_once() {
     let mut seen = [false; 5];
     for def in contracts.iter() {
         let slot = match &def.objective {
-            Objective::Kill { .. } => 0,
+            Objective::Terminate { .. } => 0,
             Objective::Deliver { .. } => 1,
             Objective::Descend { .. } => 2,
             Objective::Breach { .. } => 3,
@@ -367,7 +371,7 @@ fn active_contracts_survive_a_save_and_load() {
         &mut game,
         def(
             "hunt",
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some("drone".to_string()),
                 count: 6,
             },
@@ -528,7 +532,7 @@ fn a_named_kill_contract_advances_only_on_that_species() {
         &mut game,
         def(
             "drones",
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some("drone".to_string()),
                 count: 3,
             },
@@ -553,7 +557,7 @@ fn an_unnamed_kill_contract_advances_on_anything() {
         &mut game,
         def(
             "anything",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 5,
             },
@@ -575,7 +579,7 @@ fn progress_never_runs_past_the_target() {
         &mut game,
         def(
             "two",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 2,
             },
@@ -768,7 +772,7 @@ fn give_finished(game: &mut Game, id: &str, reward: Vec<Reward>) {
         game,
         def(
             id,
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 1,
             },
@@ -1019,10 +1023,8 @@ fn reading_the_board_spends_no_shared_rng() {
     let mut read = fresh();
     deploy_broker(&mut read);
 
-    let draw = |game: &mut Game| -> u32 {
-        use rand::Rng;
-        game.world.resource_mut::<GameRng>().0.random_range(0..1000)
-    };
+    let draw =
+        |game: &mut Game| -> u32 { game.world.resource_mut::<GameRng>().0.random_range(0..1000) };
 
     assert_eq!(
         draw(&mut untouched),
@@ -1080,13 +1082,15 @@ fn an_active_or_finished_contract_is_not_offered_again() {
     let offered = board_ids(&mut game);
     let taken = offered.first().cloned().expect("the board has offers");
 
-    let def = game
+    // Through `repeatable` and `accept_contract` rather than a db lookup: the
+    // first offer may be a rolled contract, which has no entry in the db at
+    // all, and reaching for one is the exact bug the board-carries-the-def
+    // shape exists to remove.
+    let repeatable = game
         .world
         .resource::<crate::contracts::ContractDb>()
-        .get(&taken)
-        .cloned()
-        .unwrap();
-    give(&mut game, def.clone(), 0);
+        .repeatable(&taken);
+    assert_eq!(game.accept_contract(&taken), Ok(()));
     assert!(
         !board_ids(&mut game).contains(&taken),
         "a contract already in hand is not offered again"
@@ -1098,7 +1102,7 @@ fn an_active_or_finished_contract_is_not_offered_again() {
         .done
         .push(taken.clone());
     let after_done = board_ids(&mut game);
-    if def.repeatable {
+    if repeatable {
         assert!(
             after_done.contains(&taken),
             "a repeatable contract comes back once it is finished"
@@ -1131,7 +1135,11 @@ fn a_repeatable_contract_returns_to_the_board_and_a_one_shot_does_not() {
 
     // Widen the pool to the whole catalogue so this is not a test about which
     // three the roll happened to pick.
-    let offerable = game.offerable_contracts();
+    let offerable: Vec<_> = game
+        .offerable_contracts()
+        .into_iter()
+        .map(|def| def.id)
+        .collect();
     assert!(offerable.contains(&repeatable));
     assert!(!offerable.contains(&one_shot));
 }
@@ -1143,7 +1151,7 @@ fn active_contracts_read_anywhere_including_underground() {
         &mut game,
         def(
             "held",
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count: 4,
             },
@@ -1394,4 +1402,574 @@ fn delivering_against_a_contract_that_is_not_held_is_refused() {
         game.deliver_to_contract(&ContractId::from("quota")),
         Err(ContractRefusal::NotOffered)
     );
+}
+
+// ---------------------------------------------------------------------------
+// Templates, and the contracts they roll
+// ---------------------------------------------------------------------------
+
+use crate::contracts::{ContractTemplate, TemplateObjective, TemplatePools};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+/// A contract directory with a `templates/` subdirectory beside the authored
+/// files, which is where `ContractDb::load_dir` looks for them.
+fn load_with_templates(
+    tag: &str,
+    contracts: &[(&str, &str)],
+    templates: &[(&str, &str)],
+) -> (ContractDb, Vec<String>) {
+    let dir = contract_dir(tag, contracts);
+    std::fs::create_dir_all(dir.join("templates")).unwrap();
+    for (name, body) in templates {
+        std::fs::write(dir.join("templates").join(name), body).unwrap();
+    }
+    let loaded = ContractDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    loaded
+}
+
+/// Pools with one of everything, so a roll has exactly one valid answer and a
+/// test never depends on which candidate a seed picked.
+fn one_of_each(zone: u32) -> TemplatePools {
+    TemplatePools {
+        species: vec![("drone".to_string(), "Drone".to_string())],
+        items: vec![(ItemId::from("core_fragment"), "Core Fragment".to_string())],
+        structures: vec![("refinery".to_string(), "Refinery".to_string())],
+        zone,
+    }
+}
+
+fn template(id: &str, objective: TemplateObjective, reward: Vec<Reward>) -> ContractTemplate {
+    ContractTemplate {
+        id: ContractId::from(id),
+        name: format!("Template {id}"),
+        description: "d".to_string(),
+        objective,
+        reward,
+        min_zone: 0,
+        repeatable: false,
+    }
+}
+
+fn rng() -> StdRng {
+    StdRng::seed_from_u64(42)
+}
+
+#[test]
+fn an_absent_templates_directory_is_silent_and_leaves_no_templates() {
+    let (db, warnings) = load(
+        "no_templates",
+        &[(
+            "one.ron",
+            r#"(id: "one", name: "One", description: "d",
+                objective: Breach(zone: 2), reward: [Credits(10)])"#,
+        )],
+    );
+    assert!(warnings.is_empty());
+    assert_eq!(
+        db.templates().count(),
+        0,
+        "an install with no templates is the pre-template game, exactly as an \
+         install with no contracts is the pre-contract one"
+    );
+}
+
+#[test]
+fn a_malformed_template_is_skipped_with_a_warning_rather_than_a_panic() {
+    let (db, warnings) = load_with_templates(
+        "bad_template",
+        &[],
+        &[
+            ("broken.ron", "(this is not ron"),
+            (
+                "fine.ron",
+                r#"(id: "hunt", name: "Hunt {target}", description: "d {count} {target}",
+                    objective: Terminate(count: (4, 8)), reward: [Credits(5)])"#,
+            ),
+        ],
+    );
+    assert_eq!(warnings.len(), 1, "one bad file, one warning: {warnings:?}");
+    assert_eq!(db.templates().count(), 1, "the good one still loads");
+}
+
+#[test]
+fn an_authored_id_may_not_contain_the_rolled_separator() {
+    let (db, warnings) = load(
+        "sep",
+        &[(
+            "clash.ron",
+            r#"(id: "hunt#drone-6", name: "Clash", description: "d",
+                objective: Breach(zone: 2), reward: [Credits(10)])"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0, "refused rather than loaded");
+    assert_eq!(warnings.len(), 1);
+    assert!(
+        warnings[0].contains('#'),
+        "the warning has to name the character: {warnings:?}"
+    );
+}
+
+#[test]
+fn a_rolled_terminate_names_a_species_the_sector_actually_fields() {
+    let t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (4, 8) },
+        vec![Reward::Credits(5)],
+    );
+    let def = t
+        .roll(&mut rng(), &one_of_each(1))
+        .expect("one valid answer");
+    match def.objective {
+        Objective::Terminate { species, count } => {
+            assert_eq!(species, Some("drone".to_string()));
+            assert!(
+                (4..=8).contains(&count),
+                "the rolled count stays inside the authored range, got {count}"
+            );
+        }
+        other => panic!("a Terminate template rolls a Terminate objective, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_rolled_contract_reads_its_own_parameters_back_in_its_name_and_description() {
+    let mut t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (6, 6) },
+        vec![Reward::Credits(5)],
+    );
+    t.name = "Hunt: {target}".to_string();
+    t.description = "Terminate {count} {target} out past the slab.".to_string();
+
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(def.name, "Hunt: Drone", "the display name, not the id");
+    assert_eq!(
+        def.description, "Terminate 6 Drone out past the slab.",
+        "the description is the one field a template cannot derive, so it \
+         authors the hole and the roll fills it"
+    );
+}
+
+#[test]
+fn a_rolled_build_never_names_a_structure_already_standing() {
+    let t = template("commission", TemplateObjective::Build, vec![Reward::Xp(50)]);
+    let mut pools = one_of_each(1);
+    pools.structures.clear();
+    assert!(
+        t.roll(&mut rng(), &pools).is_none(),
+        "with nothing left to build the template rolls nothing at all — a \
+         Build of something already deployed completes the instant it is \
+         accepted"
+    );
+}
+
+#[test]
+fn a_rolled_breach_always_targets_a_sector_deeper_than_this_one() {
+    let t = template(
+        "expansion",
+        TemplateObjective::Breach { zone: (2, 6) },
+        vec![Reward::Credits(100)],
+    );
+    for zone in 1..=6 {
+        let rolled = t.roll(&mut rng(), &one_of_each(zone));
+        match rolled {
+            Some(def) => match def.objective {
+                Objective::Breach { zone: want } => assert!(
+                    want > zone,
+                    "a Breach at or below the current sector completes on \
+                     acceptance; rolled {want} in zone {zone}"
+                ),
+                other => panic!("expected a Breach, got {other:?}"),
+            },
+            // Zone 6 has nothing above it inside the authored range, and an
+            // empty roll is the right answer rather than a clamped one.
+            None => assert_eq!(zone, 6),
+        }
+    }
+}
+
+#[test]
+fn a_rolled_descend_never_targets_the_surface() {
+    let t = template(
+        "sounding",
+        TemplateObjective::Descend { depth: (0, 4) },
+        vec![Reward::Xp(200)],
+    );
+    for seed in 0..32 {
+        let def = t
+            .roll(&mut StdRng::seed_from_u64(seed), &one_of_each(1))
+            .unwrap();
+        match def.objective {
+            Objective::Descend { depth } => assert!(
+                depth >= 1,
+                "depth 0 is the surface, and `depth >= want` makes it finish \
+                 on acceptance"
+            ),
+            other => panic!("expected a Descend, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_template_with_nothing_valid_to_name_rolls_nothing() {
+    let empty = TemplatePools {
+        species: vec![],
+        items: vec![],
+        structures: vec![],
+        zone: 1,
+    };
+    for objective in [
+        TemplateObjective::Terminate { count: (4, 8) },
+        TemplateObjective::Deliver { count: (4, 8) },
+        TemplateObjective::Build,
+    ] {
+        let t = template("t", objective, vec![Reward::Credits(5)]);
+        assert!(
+            t.roll(&mut rng(), &empty).is_none(),
+            "an unfinishable contract is worse than no contract"
+        );
+    }
+}
+
+#[test]
+fn a_rolled_reward_scales_with_how_much_the_contract_asks_for() {
+    let t = template(
+        "quota",
+        TemplateObjective::Deliver { count: (10, 10) },
+        vec![Reward::Credits(3), Reward::Xp(4)],
+    );
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.reward,
+        vec![Reward::Credits(30), Reward::Xp(40)],
+        "a template's reward is authored per unit of `objective.target()`, so \
+         asking for ten pays ten times — one rule, and the same one that \
+         already decides what `target()` means"
+    );
+
+    let flat = template(
+        "sounding",
+        TemplateObjective::Descend { depth: (3, 3) },
+        vec![Reward::Credits(50)],
+    );
+    let def = flat.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.reward,
+        vec![Reward::Credits(50)],
+        "a state-shaped objective targets 1, so it pays the authored figure \
+         flat — no separate rule for it"
+    );
+}
+
+#[test]
+fn a_rolled_id_names_the_template_it_came_from_and_the_roll_that_made_it() {
+    let t = template(
+        "hunt",
+        TemplateObjective::Terminate { count: (6, 6) },
+        vec![Reward::Credits(5)],
+    );
+    let def = t.roll(&mut rng(), &one_of_each(1)).unwrap();
+    assert_eq!(
+        def.id,
+        ContractId::from("hunt#drone-6"),
+        "the same roll has to produce the same id, or the board would offer a \
+         different contract after a reload"
+    );
+}
+
+/// The shipped templates, loaded through a real game.
+#[test]
+fn the_shipped_templates_reach_a_loaded_game() {
+    let game = fresh();
+    let db = game.world.resource::<ContractDb>();
+    let ids: Vec<&str> = db.templates().map(|t| t.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        vec!["commission", "expansion", "hunt", "requisition", "sounding"],
+        "one template per objective shape, in the db's stable id order"
+    );
+}
+
+#[test]
+fn every_shipped_template_rolls_something_finishable_in_a_fresh_sector() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(
+        !pools.species.is_empty(),
+        "the base's doorstep has to field programs, or a Hunt can never roll — \
+         the Home tile itself is Biome::Platform and fields none by design"
+    );
+    assert!(!pools.items.is_empty(), "and something to deliver");
+    assert!(!pools.structures.is_empty(), "and something left to build");
+
+    let templates: Vec<_> = game
+        .world
+        .resource::<ContractDb>()
+        .templates()
+        .cloned()
+        .collect();
+    for t in templates {
+        // Zone 1, so `expansion` (min_zone 2) is not yet on offer; it is
+        // still asked to roll, since a template that cannot roll at all is a
+        // template that would never appear.
+        let rolled = t.roll(&mut rng(), &pools);
+        assert!(
+            rolled.is_some(),
+            "{} rolls nothing against a fresh sector",
+            t.id
+        );
+    }
+}
+
+#[test]
+fn a_rolled_contract_can_be_accepted() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+
+    // Walk the epochs until a rolled contract surfaces on the board, rather
+    // than depending on which three slots one seed happened to pick.
+    let mut rolled = None;
+    for _ in 0..40 {
+        if let Some(id) = board_ids(&mut game)
+            .into_iter()
+            .find(|id| id.as_str().contains('#'))
+        {
+            rolled = Some(id);
+            break;
+        }
+        for _ in 0..crate::tuning::CONTRACT_REFRESH_CYCLES {
+            game.tick();
+        }
+    }
+    let id = rolled.expect("the shipped templates reach a zone-1 board");
+
+    assert_eq!(
+        game.accept_contract(&id),
+        Ok(()),
+        "the regression this whole shape exists for: every step of the accept \
+         path used to re-resolve the def out of ContractDb by id, which a \
+         rolled contract has no entry in — so it was refused as NotOffered \
+         while sitting visibly on the board"
+    );
+    let held = game.world.resource::<ActiveContracts>();
+    assert_eq!(held.active.len(), 1);
+    assert_eq!(held.active[0].def.id, id);
+}
+
+#[test]
+fn the_same_rolled_contract_comes_back_after_a_save_and_load() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let before = board_ids(&mut game);
+    assert!(
+        before.iter().any(|id| id.as_str().contains('#')),
+        "this test is only worth anything if a rolled contract is on the board"
+    );
+
+    let path = std::env::temp_dir().join(format!("feral_rolled_board_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        board_ids(&mut loaded),
+        before,
+        "a rolled offer is shown before it is accepted, so it has to survive a \
+         reload — which is why nothing about it is drawn from GameRng"
+    );
+}
+
+#[test]
+fn a_rolled_contract_inherits_its_templates_repeatability() {
+    let game = fresh();
+    let db = game.world.resource::<ContractDb>();
+    assert!(
+        db.repeatable(&ContractId::from("hunt#drone-6")),
+        "hunt is repeatable, so every contract it rolls is"
+    );
+    assert!(
+        !db.repeatable(&ContractId::from("commission#refinery")),
+        "commission is not"
+    );
+    assert!(
+        !db.repeatable(&ContractId::from("gone#drone-6")),
+        "a template deleted mid-run leaves the run's own copy to finish it, \
+         and nothing to put back on a board"
+    );
+}
+
+#[test]
+fn deleting_a_template_does_not_reshuffle_what_the_others_rolled() {
+    let mut game = fresh();
+    let pools = game.template_pools();
+    let seed = 99u64;
+
+    let templates: Vec<_> = game
+        .world
+        .resource::<ContractDb>()
+        .templates()
+        .cloned()
+        .collect();
+    let roll_all = |set: &[crate::contracts::ContractTemplate]| -> Vec<ContractId> {
+        set.iter()
+            .filter_map(|t| {
+                let mut r = StdRng::seed_from_u64(crate::game::contracts::fold(
+                    seed,
+                    t.id.as_str().as_bytes(),
+                ));
+                t.roll(&mut r, &pools).map(|def| def.id)
+            })
+            .collect()
+    };
+
+    let all = roll_all(&templates);
+    let without_first: Vec<_> = templates[1..].to_vec();
+    let survivors: Vec<ContractId> = all
+        .iter()
+        .filter(|id| !id.as_str().starts_with(templates[0].id.as_str()))
+        .cloned()
+        .collect();
+    assert_eq!(
+        roll_all(&without_first),
+        survivors,
+        "each template rolls from its own salted stream, so adding or removing \
+         a template file cannot silently rewrite what the others offered"
+    );
+}
+
+#[test]
+fn a_rolled_delivery_never_asks_for_the_breaching_currency() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(
+        !pools
+            .items
+            .iter()
+            .any(|(id, _)| id.as_str() == crate::items::ids::PORTAL_FRAGMENT),
+        "Portal Fragments are the breaching currency and the only source of \
+         them is a boss underground — a contract eating a stack's worth is a \
+         run that can never breach again. Asserted as an outcome rather than \
+         against the filter that currently produces it."
+    );
+}
+
+#[test]
+fn a_rolled_delivery_asks_only_for_bulk_stock() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    let pools = game.template_pools();
+    assert!(!pools.items.is_empty(), "there is stock to ask for");
+    for (id, name) in &pools.items {
+        let def = game
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .get(id.as_str())
+            .unwrap();
+        assert_eq!(
+            def.category(),
+            crate::items::ItemCategory::Material,
+            "{name} is not something a base hoards, and a Deliver reads plain \
+             Inventory — which is by definition the plain-copy store"
+        );
+        assert!(
+            game.item_value(id) <= crate::tuning::CONTRACT_MAX_DELIVER_VALUE,
+            "{name} is worth {} — a delivery is asked for by the score, and \
+             twenty of anything past the scavenged band is a run's worth of \
+             work stated as an errand",
+            game.item_value(id)
+        );
+    }
+}
+
+#[test]
+fn the_catalogue_covers_the_widest_row_a_template_can_roll() {
+    let game = fresh();
+    let authored = game.world.resource::<ContractDb>().iter().count();
+    let catalogue = game.contract_catalogue();
+
+    assert!(
+        catalogue.len() > authored,
+        "the renderer's width census measures this, so it has to reach past \
+         the authored set — otherwise a template able to roll a longer name \
+         than any authored contract stops being covered at all"
+    );
+    assert!(
+        catalogue.iter().any(|row| row.id.as_str().contains('#')),
+        "and what it reaches is the rolled rows"
+    );
+}
+
+#[test]
+fn a_contract_the_run_has_already_done_is_never_offered() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    deploy_broker(&mut game);
+
+    // Both cases are real: the `contracts` dev-save offered *Stand Up a
+    // Refinery* to a base with a Refinery already standing, and *Push the
+    // Sector* (reach sector 3) to a run already in sector 3. Either paid out
+    // in full for pressing a key.
+    let refinery = def(
+        "already_built",
+        Objective::Build {
+            structure: "refinery".to_string(),
+        },
+        vec![Reward::Credits(45)],
+    );
+    let breached = def(
+        "already_breached",
+        Objective::Breach { zone: 1 },
+        vec![Reward::Credits(120)],
+    );
+    assert!(
+        game.offerable_contracts_for_test(&refinery),
+        "with no Refinery standing it is a real contract"
+    );
+    assert!(!game.offerable_contracts_for_test(&breached), "zone 1 >= 1");
+
+    deploy(&mut game, "refinery", 3, 0);
+    assert!(
+        !game.offerable_contracts_for_test(&refinery),
+        "a Build of something already deployed completes on acceptance"
+    );
+}
+
+#[test]
+fn no_shipped_contract_or_template_can_be_offered_already_finished() {
+    let mut game = fresh();
+    place_home(&mut game, 0, 1);
+    deploy_broker(&mut game);
+    // The state that actually reproduces it, and the one the `contracts`
+    // dev-save is in: sector 3 with a Refinery standing, which pre-meets the
+    // shipped `push_the_sector` and `stand_up_a_refinery` respectively. In a
+    // fresh zone-1 game with an empty base neither can be met, and this
+    // census passes against the bug.
+    set_zone(&mut game, 3);
+    deploy(&mut game, "refinery", 3, 0);
+
+    for _ in 0..12 {
+        let offers = board_ids(&mut game);
+        for id in offers {
+            assert_eq!(game.accept_contract(&id), Ok(()), "{id}");
+            // A contract does not settle on acceptance — `contract_system`
+            // raises the progress and `settle_contracts` pays, both inside a
+            // tick. Without one here the census never reaches the failure it
+            // is for, which is how it first passed against the bug.
+            game.wait();
+            let done = game.world.resource::<ActiveContracts>().done.clone();
+            assert!(
+                !done.contains(&id),
+                "{id} finished on the tick after it was accepted — it was \
+                 offered in a state that already met it"
+            );
+            game.abandon_contract(&id);
+        }
+        for _ in 0..crate::tuning::CONTRACT_REFRESH_CYCLES {
+            game.tick();
+        }
+    }
 }

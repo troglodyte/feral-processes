@@ -1,0 +1,8 @@
+(
+    id: "sounding",
+    name: "Sounding: Frame {count}",
+    description: "Nobody has taken readings from frame {count} of a stack in this sector. Get down there and stand in it.",
+    objective: Descend(depth: (2, 5)),
+    reward: [Credits(45), Xp(180)],
+    min_zone: 1,
+)

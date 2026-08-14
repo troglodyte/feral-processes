@@ -42,21 +42,24 @@ pub fn contract_system(
         Locale::Surface => 0,
     };
 
+    let standing: Vec<crate::structures::StructureId> =
+        structures.iter().map(|s| s.kind.clone()).collect();
+
     for contract in &mut held.active {
         let target = contract.def.objective.target();
         let advance = match &contract.def.objective {
-            Objective::Kill { species, count: _ } => feats
+            Objective::Terminate { species, count: _ } => feats
                 .kills
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
                 .count() as u32,
-            Objective::Descend { depth: want } => u32::from(depth >= *want),
-            Objective::Breach { zone: want } => u32::from(zone.0 >= *want),
-            Objective::Build { structure } => {
-                u32::from(structures.iter().any(|s| s.kind == *structure))
-            }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
+            // The three state-shaped ones advance by exactly the predicate
+            // `Game::offerable` refuses a board slot on, so a contract cannot
+            // be offered in a state that would finish it and then fail to
+            // finish once taken.
+            state => u32::from(state.already_met(depth, zone.0, &standing)),
         };
         contract.progress = contract.progress.saturating_add(advance).min(target);
     }
@@ -181,6 +184,21 @@ impl Game {
 /// source that could collide with the Stack's.
 const CONTRACT_BOARD_SALT: u64 = 0xC0A7_7AC7_5EED_0001;
 
+/// FNV-1a, a byte at a time — the one folding scheme this feature salts with,
+/// shared by the board's own seed and each template's.
+///
+/// Byte-at-a-time rather than one XOR-and-multiply per word, for
+/// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves low output
+/// bits a fixed function of the input, and consecutive epochs differ in
+/// exactly one low bit.
+pub(crate) fn fold(mut h: u64, bytes: &[u8]) -> u64 {
+    for byte in bytes {
+        h ^= *byte as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 impl Game {
     /// What a Broker within `CONTRACT_BOARD_RANGE_TILES` is offering, or
     /// `None` if there is no Broker in reach.
@@ -204,23 +222,226 @@ impl Game {
     /// Broker they are four frames below. `active_contracts` is what reads
     /// anywhere.
     pub fn contract_board(&mut self) -> Option<Vec<crate::views::ContractRow>> {
+        let defs = self.board_defs()?;
+        Some(defs.iter().map(|def| self.contract_row(def, 0)).collect())
+    }
+
+    /// The board as **definitions** rather than worded rows — what
+    /// `contract_board` renders and what `accept_contract` takes its copy from.
+    ///
+    /// Carrying the def rather than an id is the whole reason a rolled
+    /// contract works at all. Every step of the accept path used to re-resolve
+    /// the def out of `ContractDb` by id, which a rolled contract has no entry
+    /// in — so it would be refused as `NotOffered` while sitting visibly on the
+    /// board. `resources::ActiveContract` already stores the whole resolved
+    /// def, for a different reason (a file edited mid-run must not strand a
+    /// contract already accepted), and that is exactly the shape a rolled one
+    /// needs.
+    fn board_defs(&mut self) -> Option<Vec<crate::contracts::ContractDef>> {
         if self.is_underground() || !self.broker_in_range() {
             return None;
         }
         let mut pool = self.offerable_contracts();
+        pool.extend(self.rolled_contracts());
         let mut rng = StdRng::seed_from_u64(self.board_seed());
-        let mut rows = Vec::new();
+        let mut defs = Vec::new();
         for _ in 0..crate::tuning::CONTRACT_BOARD_SLOTS.min(pool.len()) {
-            let id = pool.swap_remove(rng.random_range(0..pool.len()));
-            if let Some(def) = self
-                .world
-                .resource::<crate::contracts::ContractDb>()
-                .get(&id)
-            {
-                rows.push(self.contract_row(def, 0));
-            }
+            defs.push(pool.swap_remove(rng.random_range(0..pool.len())));
         }
-        Some(rows)
+        Some(defs)
+    }
+
+    /// Every template rolled once against this sector, keeping the ones that
+    /// came out finishable and offerable.
+    ///
+    /// Each template rolls from its **own** `StdRng`, salted off the board seed
+    /// with the template's id, rather than all of them sharing the board's
+    /// stream. That is `FrameSpec::salted`'s rule and it buys something
+    /// concrete here: a template that rolls nothing spends no draws, so adding
+    /// or deleting a template file cannot reshuffle what the others offered.
+    fn rolled_contracts(&mut self) -> Vec<crate::contracts::ContractDef> {
+        let pools = self.template_pools();
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let seed = self.board_seed();
+        let templates: Vec<crate::contracts::ContractTemplate> = self
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .templates()
+            .filter(|t| t.min_zone <= zone)
+            .cloned()
+            .collect();
+        templates
+            .iter()
+            .filter_map(|t| {
+                let mut rng = StdRng::seed_from_u64(fold(seed, t.id.as_str().as_bytes()));
+                t.roll(&mut rng, &pools)
+            })
+            .filter(|def| self.offerable(def))
+            .collect()
+    }
+
+    /// What this sector can supply a rolled contract with.
+    ///
+    /// The species half is read from the Chebyshev ring **just outside the
+    /// base slab**, not from the Home tile itself: `stamp_platform` lays
+    /// `Biome::Platform` across the whole footprint and no shipped species
+    /// lists it as a habitat — that is the entire mechanism behind a base
+    /// being a safe haven, so the anchor tile's own pool is empty by
+    /// construction. The band just outside the slab is where
+    /// `spawn_surface_links` draws its on-ramp from, for the same reason and
+    /// through the same `stack::ring_offset`.
+    ///
+    /// Sampled at `CONTRACT_HABITAT_SAMPLES` evenly-spaced points rather than
+    /// walked whole, because `contract_board` sits on a per-frame path — both
+    /// the contracts screen and the base menu's row test call it — and the ring
+    /// grows with a base that can reach `MAX_BUILD_RADIUS_TILES`.
+    pub(crate) fn template_pools(&mut self) -> crate::contracts::TemplatePools {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let mut pools = crate::contracts::TemplatePools {
+            species: Vec::new(),
+            items: Vec::new(),
+            structures: Vec::new(),
+            zone,
+        };
+        // Only the species half needs an anchor tile. A run with no Home has
+        // no doorstep to read, so it is offered no Hunt — but it can still be
+        // asked to deliver or to build, neither of which is a question about
+        // the ground.
+        if let Some((cx, cy)) = self.world.resource::<crate::resources::Platform>().center {
+            let band = self.build_radius() + 1;
+            let perimeter = 8 * band;
+            let samples = crate::tuning::CONTRACT_HABITAT_SAMPLES.min(perimeter);
+            let mut species: Vec<String> = Vec::new();
+            for i in 0..samples {
+                let (dx, dy) = crate::game::stack::ring_offset(band, i * perimeter / samples);
+                if let Some((ordinary, _bosses)) = self.habitat_pools(cx + dx, cy + dy) {
+                    species.extend(ordinary);
+                }
+            }
+            species.sort();
+            species.dedup();
+
+            let species_db = self.world.resource::<crate::species::SpeciesDb>();
+            pools.species = species
+                .into_iter()
+                .filter_map(|id| {
+                    species_db
+                        .get(&id)
+                        .map(|def| (id.clone(), def.name.clone()))
+                })
+                .collect();
+        }
+
+        pools.items = self.deliverable_items(&pools.species);
+        pools.structures = self.commissionable_structures();
+        pools
+    }
+
+    /// Items a rolled `Deliver` may ask for: cheap bulk stock the player can
+    /// make, that a machine they could build prints, or that a program on
+    /// their doorstep drops.
+    ///
+    /// A delivery is asked for **by the score**, and that is what both filters
+    /// are about. `ItemCategory::Material` is the "what you hoard" bucket, so
+    /// it rules out anything worn, drunk or spent as currency — and a `Deliver`
+    /// reads plain `Inventory`, which is by definition the plain-copy store, so
+    /// asking for gear would be asking for the one thing that may not be
+    /// sitting in it. The value ceiling is the rest: `ItemDef::value`'s ladder
+    /// runs printable 1 → scavenged 3-8 → standard 12-16 → researched 20-60 →
+    /// premium 80-120, and only the bottom rungs are things a base accumulates
+    /// twenty of. Without it a Requisition asked for twenty etched Routine
+    /// Disks — a run's worth of research, stated as an errand.
+    ///
+    /// Portal Fragments fall out of the first filter, since `role` makes them
+    /// `Currency`. That matters more than it looks: they are the breaching
+    /// currency, their only source is a boss underground, and a contract
+    /// eating a stack's worth is a run that cannot breach out.
+    /// `a_rolled_delivery_never_asks_for_the_breaching_currency` asserts the
+    /// outcome rather than the mechanism, so a later retune of `role` cannot
+    /// quietly reopen it.
+    fn deliverable_items(&self, species: &[(String, String)]) -> Vec<(ItemId, String)> {
+        let structures = self.world.resource::<crate::structures::StructureDb>();
+        let printed: Vec<ItemId> = structures
+            .all()
+            .filter(|def| self.structure_unlocked(&def.id))
+            .flat_map(|def| {
+                def.work
+                    .iter()
+                    .map(|w| w.produces.clone())
+                    .chain(def.assembles.iter().map(|a| a.item.clone()))
+            })
+            .collect();
+        self.world
+            .resource::<crate::items_db::ItemDb>()
+            .all()
+            .filter(|def| def.category() == crate::items::ItemCategory::Material)
+            .filter(|def| self.item_value(&def.id) <= crate::tuning::CONTRACT_MAX_DELIVER_VALUE)
+            .filter(|def| {
+                def.craftable.is_some()
+                    || printed.contains(&def.id)
+                    || def
+                        .droppable
+                        .iter()
+                        .flatten()
+                        .any(|(from, _)| species.iter().any(|(id, _)| id == from.as_str()))
+            })
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect()
+    }
+
+    /// Structures a rolled `Build` may ask for: unlocked, and **not already
+    /// standing**. The second half is the validity rule — `contract_system`
+    /// finishes a `Build` the moment one is deployed, so naming something the
+    /// player already owns pays out on acceptance.
+    fn commissionable_structures(&self) -> Vec<(crate::structures::StructureId, String)> {
+        let standing = self.standing_structures();
+        self.buildable_structure_defs()
+            .into_iter()
+            .filter(|def| !standing.contains(&def.id))
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect()
+    }
+
+    /// Whether the run could be offered `def` right now: this sector's level,
+    /// not already in hand, and not finished-and-not-repeatable.
+    ///
+    /// One predicate rather than two copies, because an authored contract and
+    /// a rolled one have to be filtered by exactly the same rule — a rolled
+    /// contract that survived a filter the authored ones don't would reappear
+    /// on the board after it had been finished.
+    #[cfg(test)]
+    pub(crate) fn offerable_contracts_for_test(&self, def: &crate::contracts::ContractDef) -> bool {
+        self.offerable(def)
+    }
+
+    fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let held = self.world.resource::<ActiveContracts>();
+        if def.min_zone > zone {
+            return false;
+        }
+        if held.active.iter().any(|c| c.def.id == def.id) {
+            return false;
+        }
+        if held.done.contains(&def.id) && !def.repeatable {
+            return false;
+        }
+        // Never offer something the run has already done. A board is only read
+        // on the surface, so the depth here is always 0 and a `Descend` can
+        // never be pre-met — `Breach` and `Build` are the live cases, and both
+        // shipped authored contracts that could hit them.
+        !def.objective
+            .already_met(0, zone, &self.standing_structures())
+    }
+
+    /// Every deployed structure's kind. Collected rather than queried lazily
+    /// because both readers want to ask about several contracts against one
+    /// snapshot.
+    fn standing_structures(&self) -> Vec<crate::structures::StructureId> {
+        self.world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>().map(|s| s.kind.clone()))
+            .collect()
     }
 
     /// Every contract the run currently holds. Always available, board or not:
@@ -243,11 +464,45 @@ impl Game {
     /// wording is: the row a census measures has to be the row the screen
     /// draws, or it is measuring a copy.
     pub fn contract_catalogue(&self) -> Vec<crate::views::ContractRow> {
-        self.world
-            .resource::<crate::contracts::ContractDb>()
-            .iter()
+        let db = self.world.resource::<crate::contracts::ContractDb>();
+        let widest = self.widest_pools();
+        db.iter()
             .map(|def| self.contract_row(def, 0))
+            .chain(
+                db.templates()
+                    .filter_map(|t| t.widest(&widest))
+                    .map(|def| self.contract_row(&def, 0)),
+            )
             .collect()
+    }
+
+    /// The pools at their widest: every species, item and structure the assets
+    /// define rather than what one sector supplies, and sector 0 so a rolled
+    /// `Breach` is not floored out of its range.
+    ///
+    /// Only `contract_catalogue` wants this, and only because the width census
+    /// has to measure the widest row the shipped assets can *ever* build. It
+    /// is an upper bound rather than a reachable board — a row it flags as
+    /// overflowing is one to shorten, which is right whether or not that exact
+    /// roll can happen.
+    fn widest_pools(&self) -> crate::contracts::TemplatePools {
+        let species: Vec<(String, String)> = self
+            .world
+            .resource::<crate::species::SpeciesDb>()
+            .all()
+            .map(|def| (def.id.clone(), def.name.clone()))
+            .collect();
+        crate::contracts::TemplatePools {
+            items: self.deliverable_items(&species),
+            structures: self
+                .world
+                .resource::<crate::structures::StructureDb>()
+                .all()
+                .map(|def| (def.id.clone(), def.name.clone()))
+                .collect(),
+            species,
+            zone: 0,
+        }
     }
 
     /// Which authored contracts this run could be offered right now, in the
@@ -257,16 +512,12 @@ impl Game {
     /// depending on which three the roll happened to pick, and so the filter
     /// itself is stated once: this sector's level, minus anything already in
     /// hand, minus anything finished that does not repeat.
-    pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractId> {
-        let zone = self.world.resource::<ZoneLevel>().0;
-        let held = self.world.resource::<ActiveContracts>();
+    pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractDef> {
         self.world
             .resource::<crate::contracts::ContractDb>()
             .iter()
-            .filter(|def| def.min_zone <= zone)
-            .filter(|def| !held.active.iter().any(|c| c.def.id == def.id))
-            .filter(|def| def.repeatable || !held.done.contains(&def.id))
-            .map(|def| def.id.clone())
+            .filter(|def| self.offerable(def))
+            .cloned()
             .collect()
     }
 
@@ -303,10 +554,7 @@ impl Game {
             epoch,
             CONTRACT_BOARD_SALT,
         ] {
-            for byte in word.to_le_bytes() {
-                h ^= byte as u64;
-                h = h.wrapping_mul(0x0000_0100_0000_01b3);
-            }
+            h = fold(h, &word.to_le_bytes());
         }
         h
     }
@@ -333,7 +581,7 @@ impl Game {
     /// same reason `Game::copy_name` exists.
     fn objective_line(&self, objective: &Objective) -> String {
         match objective {
-            Objective::Kill {
+            Objective::Terminate {
                 species: Some(id),
                 count,
             } => {
@@ -343,12 +591,12 @@ impl Game {
                     .get(id)
                     .map(|def| def.name.clone())
                     .unwrap_or_else(|| id.clone());
-                format!("Defeat {count} {name}")
+                format!("Terminate {count} {name}")
             }
-            Objective::Kill {
+            Objective::Terminate {
                 species: None,
                 count,
-            } => format!("Defeat {count} wild programs"),
+            } => format!("Terminate {count} wild programs"),
             Objective::Deliver { item, count } => {
                 format!("Deliver {count} {}", self.item_name(item))
             }
@@ -392,36 +640,29 @@ impl Game {
     /// `use_symlink` and `install_routine` follow — a refused acceptance must
     /// leave the run exactly as it found it.
     pub fn accept_contract(&mut self, id: &ContractId) -> Result<(), ContractRefusal> {
-        let Some(board) = self.contract_board() else {
+        let Some(board) = self.board_defs() else {
             return Err(ContractRefusal::NotOffered);
         };
         {
+            let repeatable = self
+                .world
+                .resource::<crate::contracts::ContractDb>()
+                .repeatable(id);
             let held = self.world.resource::<ActiveContracts>();
             if held.active.iter().any(|c| c.def.id == *id) {
                 return Err(ContractRefusal::AlreadyActive);
             }
-            if held.done.contains(id)
-                && !self
-                    .world
-                    .resource::<crate::contracts::ContractDb>()
-                    .get(id)
-                    .is_some_and(|def| def.repeatable)
-            {
+            if held.done.contains(id) && !repeatable {
                 return Err(ContractRefusal::AlreadyDone);
             }
             if held.active.len() >= crate::tuning::MAX_ACTIVE_CONTRACTS {
                 return Err(ContractRefusal::TooMany);
             }
         }
-        if !board.iter().any(|row| row.id == *id) {
-            return Err(ContractRefusal::NotOffered);
-        }
-        let Some(def) = self
-            .world
-            .resource::<crate::contracts::ContractDb>()
-            .get(id)
-            .cloned()
-        else {
+        // The def comes off the board that was just built, never out of the db
+        // again — a rolled contract has no db entry, and looking it up a
+        // second time is what made one refusable while visibly on offer.
+        let Some(def) = board.into_iter().find(|def| def.id == *id) else {
             return Err(ContractRefusal::NotOffered);
         };
 

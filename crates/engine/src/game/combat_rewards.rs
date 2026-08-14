@@ -409,7 +409,7 @@ impl Game {
         self.raise_trace(crate::tuning::TRACE_PER_KILL);
 
         // Fourth consumer of the same guarantee, and the whole instrumentation
-        // cost of contracts: a `Kill` objective is the one thing about a
+        // cost of contracts: a `Terminate` objective is the one thing about a
         // contract that is event-shaped rather than polled. It sits beside the
         // boss record below rather than anywhere else so the two cannot drift
         // about what counts as a kill, and it is a separate field because each

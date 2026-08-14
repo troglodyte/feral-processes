@@ -270,6 +270,32 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `contracts` either: it exists so a session
+    /// testing the contracts loop starts *at a board*, and a Broker placed one
+    /// tile too far away would load perfectly and offer nothing. The research
+    /// buy and the build are exactly what the template is for skipping.
+    #[test]
+    fn the_contracts_template_starts_within_reach_of_a_board() {
+        let out = std::env::temp_dir().join("feral_processes_template_contracts_board.bin");
+        generate("contracts", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let board = game
+            .contract_board()
+            .expect("the template parks the player within CONTRACT_BOARD_RANGE_TILES of a Broker");
+        assert!(
+            !board.is_empty(),
+            "a Broker in reach with an empty board is a template that tests nothing"
+        );
+        assert!(
+            board.iter().any(|row| row.id.as_str().contains('#')),
+            "and the board has to carry a rolled contract, since that is the \
+             half a playtest cannot reach any other way: offers={:?}",
+            board.iter().map(|r| r.id.as_str()).collect::<Vec<_>>()
+        );
+    }
+
     /// Loading is not the bar for `chains`: it exists so that a session
     /// testing production chains starts with one *running*, and a template
     /// whose machines are misaligned by one tile would load perfectly and

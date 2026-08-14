@@ -1552,6 +1552,26 @@ pub const CONTRACT_REFRESH_CYCLES: u32 = 400;
 /// board being readable from across the base.
 pub const CONTRACT_BOARD_RANGE_TILES: i32 = 2;
 
+/// The dearest item a rolled `Deliver` may ask for, in `ItemDef::value`.
+///
+/// A delivery is asked for by the score, and `ItemDef::value`'s ladder runs
+/// printable 1 → scavenged 3-8 → standard 12-16 → researched 20-60 → premium
+/// 80-120. Only the bottom rungs are things a base accumulates twenty of, so
+/// this sits at the top of the scavenged band. Raising it puts researched
+/// goods on the board as bulk errands; an etched Routine Disk is 20.
+pub const CONTRACT_MAX_DELIVER_VALUE: u32 = 8;
+
+/// How many points around the base's doorstep a rolled contract samples to
+/// decide which programs live in this sector.
+///
+/// A sample rather than a walk because `Game::contract_board` is on a
+/// per-frame path — the contracts screen and the base menu's row test both
+/// call it — while the ring it walks grows with a base that can reach
+/// `MAX_BUILD_RADIUS_TILES`. Biome features run about 25 tiles across at
+/// `WorldMap::classify`'s noise scale, so 32 points stay inside one feature
+/// apiece out to the widest base the game allows.
+pub const CONTRACT_HABITAT_SAMPLES: i32 = 32;
+
 // ---------------------------------------------------------------------------
 // Production chains
 // ---------------------------------------------------------------------------

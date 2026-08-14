@@ -1,0 +1,8 @@
+(
+    id: "commission",
+    name: "Commission: {target}",
+    description: "The Broker wants a {target} standing in this sector, and is willing to cover the parts.",
+    objective: Build,
+    reward: [Credits(40), Xp(130)],
+    min_zone: 1,
+)

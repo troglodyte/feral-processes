@@ -1,0 +1,8 @@
+(
+    id: "expansion",
+    name: "Expansion: Sector {count}",
+    description: "Push outward. Reach sector {count} and the Broker will call the debt settled.",
+    objective: Breach(zone: (2, 6)),
+    reward: [Credits(110), Xp(280)],
+    min_zone: 2,
+)

@@ -27,6 +27,55 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.34
+
+### Three bugs where an index stood in for the thing it named
+
+All three were the same mistake wearing different clothes: a number that
+identified something by *where it sat* rather than by *what it was*, and
+then the thing moved.
+
+**An attack aimed at one group landed on another.** A planned action stored
+its target as a plain index into the enemy line, but a group that dies is
+dropped from that line the moment it dies, sliding everything behind it down
+one. Aim at the second group, watch a faster party member destroy the first,
+and your strike landed on the third — whoever had moved up into the slot you
+picked. The same fault at the tail end sent a plan aimed past the end of the
+line onto the front group instead, which is where it was most likely to be
+wasted on something already dying.
+
+A plan names a group, not a slot. It now resolves against the line as it
+stood when the plan was made, so the aim follows its group to wherever that
+group is now standing, or the turn is spent and nothing is hit. Spending it
+is deliberate: a heavy hit or a decompile going off on a target nobody
+picked is worse than a wasted turn, and a decompile in particular could burn
+an ICE Breaker on the wrong program entirely. The wielded program's proc
+answers the same aim as the strike that triggered it, rather than the
+shifted one.
+
+**Bumping a pack dragged in any boss standing near it.** Assembling the
+enemy side of a map fight sweeps in every hostile within a short radius of
+whatever you walked into, and that sweep had no idea what a boss was. Bosses
+roam the open map like anything else, so one that happened to be loitering
+beside an ordinary cluster joined the fight — which is the opposite of what
+being a boss means, since a boss is precisely the thing that arrives as its
+own fight with its own escort. It is now left out of the sweep. Walking into
+the boss itself still fights the boss, and the escort it brings with it is
+untouched.
+
+**Creatures spawned onto ground they could never leave.** A spawn checked
+that its anchor tile was walkable and then scattered the rest of the group
+around it without checking anything, while a creature's own movement is
+stricter than plain walkability — it refuses rock, and it refuses your base
+slab. A pack member or nest guardian scattered across a biome boundary
+therefore had no legal move for the rest of the run, and a nest guardian's
+tether meant nothing could ever push it off, either. Both now fall back to
+the anchor tile when the scatter lands somewhere unusable.
+
+That last one moves creatures around, which shifts the random stream a
+little further downstream. Nothing about a save is affected, and existing
+saves load unchanged.
+
 ## 0.8.33
 
 ### Ten more affixes, three of which charge you for the privilege

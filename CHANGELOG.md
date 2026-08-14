@@ -57,11 +57,12 @@ is no good answer to that — so there is no shrinking slab. Demolishing your
 Home still cascades over everything, Pillars included, and the base resets to
 its starting size.
 
-Two things a Pillar refuses to do. It will not grow over a Stack link, and
-the refusal comes before it charges you: the stamp obliterates whatever
-stands in the ground it claims, and a link is the way down to the only source
-of Portal Fragments in the game. It does still obliterate wild programs and
-nests in the ring it takes, exactly as deploying a Home always has.
+Growth claims the ground it takes, exactly as deploying a Home always has:
+wild programs and nests in the new ring go, and so does a Stack link, with a
+line in the log naming the tile. The one thing it will not bury is the
+sector's **last** link — the Stack is the only place Portal Fragments come
+from, so a base that swallowed the last way down would end the run's
+breaches — and that refusal comes before it charges you.
 
 Two knock-on fixes come with it, and one of them would have ended runs. A
 zone's Stack links were drawn from boxes around your arrival point, and a

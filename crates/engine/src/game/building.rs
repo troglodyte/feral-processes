@@ -86,11 +86,16 @@ impl Game {
         {
             let radius = self.build_radius();
             let grown = self.build_radius_with(def.build_radius_bonus);
-            if let Some((lx, ly)) = self.link_in_ring(home, radius, grown) {
-                return Err(format!(
-                    "A link sits at ({lx}, {ly}), inside the ground that would be claimed — \
-                     the base can't grow over it."
-                ));
+            let buried = self.links_in_ring(home, radius, grown);
+            if !buried.is_empty() && self.count_surface_links() == buried.len() {
+                return Err(
+                    "That would bury the last link in this sector, and the Stack is the \
+                     only place Portal Fragments come from. Grow the base another way."
+                        .into(),
+                );
+            }
+            for (lx, ly) in &buried {
+                self.log_base(format!("The expansion buries the link at ({lx}, {ly})."));
             }
         }
         let build_cost = self.structure_build_cost(&def);
@@ -181,8 +186,13 @@ impl Game {
         query.iter(&self.world).filter(|s| &s.kind == kind).count() as u32
     }
 
-    /// The first `SurfaceLink` standing in the ground a slab of `radius`
-    /// would claim by reaching `grown`, if any.
+    /// Every `SurfaceLink` standing in the ground a slab of `radius` would
+    /// claim by reaching `grown`.
+    ///
+    /// These are not refused for existing — `stamp_platform` despawns any
+    /// link inside the slab it lays, which is what deploying a Home over one
+    /// has always done, and growing the base is the same act one ring at a
+    /// time. What the caller checks is that they are not *all* of them.
     ///
     /// Both radii are passed in rather than one and a bonus, because a base
     /// already wider than the starting radius absorbs a Pillar's bonus
@@ -190,8 +200,8 @@ impl Game {
     /// knows that. Asked of the ring rather than the whole box because the
     /// existing slab has no links in it by construction: `stamp_platform`
     /// despawns any it covers, so a hit inside it would be a bug elsewhere
-    /// rather than a reason to refuse this build.
-    fn link_in_ring(&mut self, home: Position, radius: i32, grown: i32) -> Option<(i32, i32)> {
+    /// rather than anything this should act on.
+    fn links_in_ring(&mut self, home: Position, radius: i32, grown: i32) -> Vec<(i32, i32)> {
         let grown = Platform {
             center: Some((home.x, home.y)),
             radius: grown,
@@ -204,8 +214,16 @@ impl Game {
         query
             .iter(&self.world)
             .map(|p| (p.x - home.x, p.y - home.y))
-            .find(|&(dx, dy)| grown.covers(dx, dy) && !current.covers(dx, dy))
+            .filter(|&(dx, dy)| grown.covers(dx, dy) && !current.covers(dx, dy))
             .map(|(dx, dy)| (home.x + dx, home.y + dy))
+            .collect()
+    }
+
+    /// How many Stack links this zone has left — the thing a growing base
+    /// must not take the last of.
+    fn count_surface_links(&mut self) -> usize {
+        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
+        query.iter(&self.world).count()
     }
 
     /// The highest tier a structure with this `upgrade` path can currently

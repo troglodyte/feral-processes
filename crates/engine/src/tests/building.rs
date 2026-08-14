@@ -2284,14 +2284,50 @@ fn the_new_ring_is_buildable_and_the_one_past_it_is_not() {
     );
 }
 
-/// The refusal has to come before anything is spent — the same ordering
-/// `install_routine` keeps between checking knowledge and taking the disk.
-/// Asserting the refusal alone would pass against a build that charged for
-/// it, which is the half that matters.
+/// Growth may swallow a link, the same way deploying a Home over one always
+/// has — `stamp_platform` despawns any link inside the slab it lays. What it
+/// may not do is swallow the *last* one, which is what the refusal is
+/// actually for: `award_loot` underground is the only source of Portal
+/// Fragments, so a zone with no link left is a run that can never breach.
 #[test]
-fn a_pillar_whose_new_ring_holds_a_link_is_refused_and_costs_nothing() {
+fn a_pillar_may_bury_a_link_while_the_zone_has_another() {
     let mut game = base_ready_for_pillars(712);
     let home = game.home_position().expect("the fixture just placed one");
+    let doomed = (home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1, home.y);
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
+    for (x, y) in [doomed, (home.x + 200, home.y)] {
+        game.world.spawn((SurfaceLink, Position { x, y }));
+    }
+
+    game.place_structure("heap_pillar", 1, 0)
+        .expect("a link is not worth stopping the base growing while another remains");
+
+    assert!(
+        game.find_surface_link_at(doomed.0, doomed.1).is_none(),
+        "the ground the base claimed took the link with it"
+    );
+}
+
+/// The last link is the one that cannot go, and the refusal has to come
+/// before anything is spent — the same ordering `install_routine` keeps
+/// between checking knowledge and taking the disk. Asserting the refusal
+/// alone would pass against a build that charged for it, which is the half
+/// that matters.
+#[test]
+fn a_pillar_over_a_zones_last_link_is_refused_and_costs_nothing() {
+    let mut game = base_ready_for_pillars(712);
+    let home = game.home_position().expect("the fixture just placed one");
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
     game.world.spawn((
         SurfaceLink,
         Position {
@@ -2303,7 +2339,7 @@ fn a_pillar_whose_new_ring_holds_a_link_is_refused_and_costs_nothing() {
 
     let err = game
         .place_structure("heap_pillar", 1, 0)
-        .expect_err("growing the base over a link would swallow it");
+        .expect_err("burying the only way down would end the run's breaches");
 
     assert!(err.contains("link"), "unexpected refusal: {err}");
     assert_eq!(

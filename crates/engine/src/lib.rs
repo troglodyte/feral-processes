@@ -56,6 +56,7 @@ use components::{
     StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Tamed, Task,
     TaskKind, Temporary, WanderAi, ZonePortal,
 };
+pub use game::contracts::ContractRefusal;
 pub use game::stack_view::ExamineDir;
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};

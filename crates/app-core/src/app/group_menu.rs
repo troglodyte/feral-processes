@@ -109,6 +109,23 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Not surface-only, and deliberately so: the offers half asks
+        // `Game::contract_board`, which answers `None` underground on its own
+        // rather than through a `nearby_*` scan around a `Position` pinned to
+        // the surface entrance tile — so underground this reduces to "is
+        // anything in hand", which is exactly the question worth answering
+        // four frames down.
+        label: "Contracts",
+        target: Mode::Contracts,
+        surface_only: false,
+        available: |app| {
+            app.game.as_mut().is_some_and(|g| {
+                g.contract_board().is_some_and(|board| !board.is_empty())
+                    || !g.active_contracts().is_empty()
+            })
+        },
+    },
+    GroupEntry {
         // Not surface-only: the chains come off the loaded assets, not off a
         // scan around the player, so this one row means the same thing four
         // frames down as it does standing in the base.

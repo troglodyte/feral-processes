@@ -796,3 +796,43 @@ pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
         affix: None,
     }
 }
+
+/// A game with a Contract Broker one tile east of the player, so the
+/// contracts screen has a board on it. `underground` drops the party into a
+/// Stack frame afterwards, which is what makes the offers half go away while
+/// the active half stays.
+///
+/// Built by editing a save for the reason `app_at_trading_posts` is: the
+/// engine exposes no way to hand-place a structure from outside the crate.
+pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("broker", seed);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.structures.push(save::StructureSave {
+        kind: "contract_broker".to_string(),
+        position: (px + 1, py),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+    });
+    if underground {
+        data.locale = Locale::Stack {
+            depth: 1,
+            frames: 2,
+            x: 1,
+            y: 1,
+            facing: feral_processes_engine::stack::Dir::North,
+            entrance: data.player.position,
+        };
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app
+}

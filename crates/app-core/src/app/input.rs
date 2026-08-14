@@ -165,6 +165,7 @@ impl App {
             Mode::StackMarket => self.handle_stack_market_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
+            Mode::Contracts => self.handle_contracts_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),

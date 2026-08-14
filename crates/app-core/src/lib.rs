@@ -29,11 +29,13 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::components::Rarity;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
-use feral_processes_engine::tuning::{ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_FUSIONS};
+use feral_processes_engine::tuning::{
+    ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
+};
 use feral_processes_engine::{
-    AchievementRow, BattleView, DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget,
-    FieldCastTargetView, Game, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption,
-    SlotShift,
+    AchievementRow, BattleView, ContractRefusal, ContractRow, DifficultyMode, Entity, EntityView,
+    FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogLine, MESSAGE_LOG_CAP,
+    MessageSource, ProgramSaleOption, SlotShift,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -820,6 +822,15 @@ pub enum Mode {
     /// The research tree (see `Game::research_nodes`). Stays open after each
     /// unlock so several nodes can be taken in one visit.
     Research,
+    /// Contracts: what the run is holding, then what a Broker in range is
+    /// offering. Stays open after each verb so several can be taken in one
+    /// visit, as `Mode::Research` does.
+    ///
+    /// Not surface-only. The screen reaches no zone-map state through
+    /// `Position` — the offers half is `Game::contract_board`, which answers
+    /// `None` underground of its own accord — and reading what you have
+    /// taken four frames down is exactly when you want to.
+    Contracts,
     /// The message log in full, scrolled with Up/Down — the map's pane shows
     /// only its last few lines. Read-only, and bounded by what the engine
     /// keeps: `MESSAGE_LOG_CAP` lines, minus the blow-by-blow that
@@ -970,6 +981,7 @@ impl Mode {
             | Mode::StackMarket
             | Mode::Perks
             | Mode::Research
+            | Mode::Contracts
             | Mode::History
             | Mode::Structures
             | Mode::StructureAssign

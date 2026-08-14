@@ -235,6 +235,7 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
     let slots = game.world.resource::<Party>().0.len() + 1;
     game.world.insert_resource(BattleState {
         player,
+        round_targets: groups.iter().map(|g| g.members.clone()).collect(),
         groups,
         round: 1,
         planned: vec![None; slots],

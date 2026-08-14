@@ -787,6 +787,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         .id();
     game.world.insert_resource(BattleState {
         player,
+        round_targets: vec![vec![e1, e2]],
         groups: vec![EnemyGroup {
             species,
             members: vec![e1, e2],

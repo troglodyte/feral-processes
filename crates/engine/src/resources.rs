@@ -531,6 +531,25 @@ pub struct BattleState {
     /// same payoff: battles are never serialised, so this needs no
     /// `SAVE_FORMAT_VERSION` bump.
     pub cleared_lair: Option<(i32, i32)>,
+    /// Each group's members as they stood when this round's plan was made,
+    /// in the order the plan indexes them.
+    ///
+    /// A `BattleAction::Attack { group }` stores a plain index, but an
+    /// emptied group is dropped from `groups` mid-round (`remove_member`),
+    /// re-lettering everything behind it — so by the time a slower party
+    /// member acts, the index it planned against may name a *different*
+    /// group. This is what lets `Game::retarget` answer the question the
+    /// plan actually asked: it looks up the member set the player aimed at
+    /// and finds where that group is standing now, or `None` if it has
+    /// fallen. Members only ever leave a group, so any survivor identifies
+    /// it.
+    ///
+    /// Refreshed at the top of every round rather than tracked
+    /// incrementally: derived from the live groups, it cannot drift out of
+    /// step with them. Same lifetime argument as `decompile_attempts` —
+    /// battles are never serialised, so this needs no `SAVE_FORMAT_VERSION`
+    /// bump.
+    pub round_targets: Vec<Vec<Entity>>,
 }
 
 /// A fight's payout, accumulated per kill and announced once, by

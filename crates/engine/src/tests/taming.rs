@@ -555,7 +555,7 @@ fn attempts_against_one_group_do_not_help_against_another() {
     // Hand-built rather than through `insert_battle`, which goes via
     // `group_pack` — that caps at `enemy_group_ceiling()`, one group at
     // zone 1, and would drop the second group this test is entirely about.
-    let groups = [first, second]
+    let groups: Vec<battle::EnemyGroup> = [first, second]
         .iter()
         .map(|&e| battle::EnemyGroup {
             species: game.world.get::<Creature>(e).unwrap().species.clone(),
@@ -565,6 +565,7 @@ fn attempts_against_one_group_do_not_help_against_another() {
     let slots = game.world.resource::<Party>().0.len() + 1;
     game.world.insert_resource(BattleState {
         player,
+        round_targets: groups.iter().map(|g| g.members.clone()).collect(),
         groups,
         round: 1,
         planned: vec![None; slots],

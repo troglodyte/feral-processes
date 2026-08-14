@@ -3,7 +3,7 @@
 
 use crate::game::hauling;
 use crate::structures::UpgradeDef;
-use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
+use crate::tuning::{MAX_BUILD_RADIUS_TILES, STRUCTURE_REMOVAL_REFUND_PERCENT};
 use crate::*;
 
 impl Game {
@@ -56,6 +56,26 @@ impl Game {
         }
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
+        }
+        // A structure that widens the slab claims a ring of ground, and
+        // `stamp_platform` obliterates everything standing in what it
+        // claims. A wild program or a nest going that way is the price of
+        // growth; a link is the way down to the only source of Portal
+        // Fragments in the game, so it is refused instead. Only the new ring
+        // needs scanning — the existing slab has no links in it by
+        // construction — and the refusal comes before the materials check,
+        // the same ordering `install_routine` keeps between checking
+        // knowledge and taking the disk.
+        if def.build_radius_bonus > 0
+            && let Some(home) = self.home_position()
+        {
+            let radius = self.world.resource::<Platform>().radius;
+            if let Some((lx, ly)) = self.link_in_ring(home, radius, def.build_radius_bonus) {
+                return Err(format!(
+                    "A link sits at ({lx}, {ly}), inside the ground that would be claimed — \
+                     the base can't grow over it."
+                ));
+            }
         }
         let build_cost = self.structure_build_cost(&def);
         // Every shortfall at once, and each with its numbers: the build menu
@@ -124,12 +144,43 @@ impl Game {
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
         }
+        // Re-laying the inner slab writes the same overrides to the same
+        // tiles, so stamping again is idempotent and the only visible effect
+        // is that the new ring gets floor.
         if def.id == HOME_STRUCTURE_ID {
             self.stamp_platform(x, y);
+        } else if def.build_radius_bonus > 0
+            && let Some(home) = self.home_position()
+        {
+            self.stamp_platform(home.x, home.y);
         }
         self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
+    }
+
+    /// The first `SurfaceLink` standing in the ground a slab of `radius`
+    /// would claim by growing `bonus` tiles, if any.
+    ///
+    /// Asked of the ring rather than the whole box because the existing slab
+    /// has no links in it by construction — `stamp_platform` despawns any it
+    /// covers — so a hit inside it would be a bug elsewhere, not a reason to
+    /// refuse this build.
+    fn link_in_ring(&mut self, home: Position, radius: i32, bonus: i32) -> Option<(i32, i32)> {
+        let grown = Platform {
+            center: Some((home.x, home.y)),
+            radius: (radius + bonus).min(MAX_BUILD_RADIUS_TILES),
+        };
+        let current = Platform {
+            center: Some((home.x, home.y)),
+            radius,
+        };
+        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
+        query
+            .iter(&self.world)
+            .map(|p| (p.x - home.x, p.y - home.y))
+            .find(|&(dx, dy)| grown.covers(dx, dy) && !current.covers(dx, dy))
+            .map(|(dx, dy)| (home.x + dx, home.y + dy))
     }
 
     /// The highest tier a structure with this `upgrade` path can currently
@@ -265,6 +316,23 @@ impl Game {
             .kind
             .clone();
         let is_home = kind == HOME_STRUCTURE_ID;
+        // Growth is one-way, and that is what removes the shrink question
+        // entirely: there is no state where structures stand outside the
+        // slab, no partial `clear_platform`, and nothing the build rules say
+        // is impossible. The Home cascade below is the one exception,
+        // because there the whole base is coming down and the radius resets
+        // to nothing anyway.
+        if !is_home
+            && self
+                .world
+                .resource::<StructureDb>()
+                .get(&kind)
+                .is_some_and(|d| d.build_radius_bonus > 0)
+        {
+            return Err(
+                "That's holding the base's address space open — it can't be taken down.".into(),
+            );
+        }
         let removed_name = self
             .world
             .resource::<StructureDb>()

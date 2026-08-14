@@ -2190,3 +2190,188 @@ fn demolishing_a_home_clears_floor_wider_than_the_current_radius() {
         }
     }
 }
+
+/// A base with the Heap Pillar researched and the fragments to buy a few.
+fn base_ready_for_pillars(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    game.world
+        .resource_mut::<Research>()
+        .0
+        .insert("heap_allocation".to_string());
+    game
+}
+
+#[test]
+fn a_heap_pillar_lays_floor_one_tile_past_the_old_edge() {
+    let mut game = base_ready_for_pillars(710);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    assert_ne!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + edge + 1, home.y)
+            .biome,
+        Biome::Platform,
+        "precondition: the ring beyond the edge is still wild ground"
+    );
+
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        edge + 1,
+        "a Pillar widens the live footprint"
+    );
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + edge + 1, home.y)
+            .biome,
+        Biome::Platform,
+        "and the new ring gets floor, so it can be built on"
+    );
+}
+
+#[test]
+fn the_new_ring_is_buildable_and_the_one_past_it_is_not() {
+    let mut game = base_ready_for_pillars(711);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
+
+    game.place_structure("mining_node", edge, 0)
+        .expect("the ring a Pillar just laid is base ground like any other");
+    let err = game
+        .place_structure("mining_node", edge + 1, 0)
+        .expect_err("one tile past the new edge is still outside the base");
+    assert!(
+        err.contains("Too far from Home"),
+        "unexpected refusal: {err}"
+    );
+}
+
+/// The refusal has to come before anything is spent — the same ordering
+/// `install_routine` keeps between checking knowledge and taking the disk.
+/// Asserting the refusal alone would pass against a build that charged for
+/// it, which is the half that matters.
+#[test]
+fn a_pillar_whose_new_ring_holds_a_link_is_refused_and_costs_nothing() {
+    let mut game = base_ready_for_pillars(712);
+    let home = game.home_position().expect("the fixture just placed one");
+    game.world.spawn((
+        SurfaceLink,
+        Position {
+            x: home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1,
+            y: home.y,
+        },
+    ));
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    let err = game
+        .place_structure("heap_pillar", 1, 0)
+        .expect_err("growing the base over a link would swallow it");
+
+    assert!(err.contains("link"), "unexpected refusal: {err}");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a refused build must not have spent anything"
+    );
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "and must not have widened the base either"
+    );
+}
+
+/// Growth is irreversible, which is what removes the whole shrink question:
+/// no orphaned outer structures, no partial `clear_platform`, no state the
+/// build rules say is impossible. The Home cascade is the one exception,
+/// because there the base is coming down entirely.
+#[test]
+fn a_pillar_cannot_be_demolished_except_with_its_home() {
+    let mut game = base_ready_for_pillars(713);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let pillar = game
+        .find_blocking_structure_at(ppos.x + 1, ppos.y)
+        .expect("the Pillar was just deployed");
+
+    game.remove_structure(pillar)
+        .expect_err("a Pillar cannot come down on its own");
+    assert!(
+        game.world.get::<Structure>(pillar).is_some(),
+        "the refused demolition left it standing"
+    );
+
+    let home = game
+        .find_blocking_structure_at(ppos.x, ppos.y)
+        .expect("the Home is on the player's tile");
+    game.remove_structure(home)
+        .expect("demolishing the Home cascades over everything, Pillars included");
+    assert!(
+        game.world.get::<Structure>(pillar).is_none(),
+        "the cascade must take the Pillar with it"
+    );
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "no Home means no slab, so the radius resets"
+    );
+}
+
+/// Breaching despawns no structures — the base travels, repositioned around
+/// the new spawn point — so the Pillars travel with it and `enter_next_zone`
+/// re-stamps at the right size with no code of its own. This asserts the
+/// consequence rather than the mechanism, which is what would catch a later
+/// change that starts rebuilding the slab from the constant.
+#[test]
+fn a_widened_base_breaches_at_the_size_it_had() {
+    let mut game = base_ready_for_pillars(714);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    game.place_structure("heap_pillar", 2, 0).unwrap();
+    let grown = MAX_BUILD_DISTANCE_FROM_HOME + 2;
+    assert_eq!(game.world.resource::<Platform>().radius, grown);
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        grown,
+        "the base arrived in the next sector smaller than it left"
+    );
+    let home = game
+        .home_position()
+        .expect("the base travels rather than being rebuilt");
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + grown, home.y)
+            .biome,
+        Biome::Platform,
+        "and the new zone's slab was stamped at the grown size"
+    );
+}
+
+/// A shipped Pillar's radius through the real save path, where the modded
+/// fixture above proves the derivation and this proves the asset.
+#[test]
+fn a_shipped_pillars_width_survives_a_save_and_load() {
+    let mut game = base_ready_for_pillars(715);
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+    let before = game.world.resource::<Platform>().radius;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_heap_pillar_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.world.resource::<Platform>().radius, before);
+}

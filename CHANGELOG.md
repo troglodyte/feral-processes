@@ -27,6 +27,46 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.21
+
+### A fight tells you what it paid at the end, not between the blows
+
+Killing something used to interrupt the fight to tell you about it. Every
+kill put a loot line and an XP line into the battle log, so a pack of five
+scrolled the blow-by-blow past you behind ten lines of bookkeeping — and the
+one thing you actually wanted, what the whole fight came to, was scattered
+across all of them.
+
+A fight now closes with the answer. One salvage tally, with copies of the
+same thing counted together, and one experience line per fighter carrying
+the fight's total and the stats it bought:
+
+```
+The rogue program crashes and deletes itself!
+Salvage:
+  1 Bastion Lattice of Static [ARM]
+  1 Black ICE Pick [WEP]
+You gain 1717 XP, reaching level 23.
+  Max HP 318 → 354
+  ATK 46 → 49
+  DEF 42 → 45
+  Perk Points 0 → 3
+  Decompiler 9 → 12
+```
+
+Two things stay where they were. Nothing is *paid* any later than before —
+a level still lands on the kill that earns it, and still heals you there, so
+a fight plays out exactly as it did. And because a level heals you, reaching
+one is still announced the moment it happens, briefly: your HP bar snapping
+back to full mid-fight is something you need explained then, not afterwards.
+
+Running from a fight pays the tally too. You keep what you killed before
+you left.
+
+An Overclocked copy is counted apart from an ordinary one rather than summed
+into it, so the tally never tells you that you found two of a thing when one
+of them was the good one.
+
 ## 0.8.20
 
 ### Staff a machine from the screen that told you it was idle

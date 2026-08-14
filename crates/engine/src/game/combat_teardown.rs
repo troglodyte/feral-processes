@@ -196,7 +196,12 @@ impl Game {
     /// stepped up behind it. A freshly tamed program joining the party still
     /// Bleeding is the bug this guards.
     pub(crate) fn end_battle(&mut self, player: Entity, wild: Option<Entity>) {
-        // First, deliberately: `dissolve_tamed_program` below drops the dead
+        // Before the closing capture and everything after it: the tally has
+        // to be written while the dead are still nameable and while the
+        // prune at the bottom is still ahead of it. `settle_rewards` carries
+        // the full argument.
+        self.settle_rewards();
+        // First of the teardown proper, deliberately: `dissolve_tamed_program` below drops the dead
         // out of `Party` and despawns them, and a companion that died
         // winning the fight is the one thing the results page most needs to
         // report. A copy, not a live read — the entities are gone by the

@@ -172,10 +172,13 @@ fn a_drop_line_tags_the_items_category() {
     let wild = corpse_of(&mut game, &boss.id);
     game.award_loot(wild);
 
+    // Every row of the salvage tally but its header — a surface boss pays
+    // gear alongside its species' own rolls, so the equipment tags are in
+    // here among whatever materials it also dropped.
     let drops: Vec<String> = game
         .message_log(40)
         .into_iter()
-        .filter(|l| l.kind == MessageKind::Loot && l.text.starts_with("Its crash spills"))
+        .filter(|l| l.kind == MessageKind::Loot && l.text.starts_with("  "))
         .map(|l| l.text)
         .collect();
     assert!(
@@ -183,12 +186,12 @@ fn a_drop_line_tags_the_items_category() {
         "a surface boss should have spilled gear to tag, got: {:?}",
         game.message_log(40)
     );
-    for line in &drops {
-        assert!(
-            ["[WEP]", "[ARM]", "[MOD]"].iter().any(|t| line.contains(t)),
-            "a gear drop line should carry its equipment category tag, got: {line}"
-        );
-    }
+    assert!(
+        drops
+            .iter()
+            .any(|line| ["[WEP]", "[ARM]", "[MOD]"].iter().any(|t| line.contains(t))),
+        "a gear drop should carry its equipment category tag, got: {drops:?}"
+    );
 }
 
 #[test]
@@ -572,7 +575,7 @@ fn player_level_up_message_is_tagged_message_kind_level_up() {
     let tagged = game
         .message_log(10)
         .into_iter()
-        .any(|e| e.kind == MessageKind::LevelUp && e.text.contains("reach level"));
+        .any(|e| e.kind == MessageKind::LevelUp && e.text.contains("reaching level"));
     assert!(
         tagged,
         "leveling up should log a MessageKind::LevelUp line, got: {:?}",
@@ -970,5 +973,286 @@ fn an_affix_is_worth_more_than_its_name() {
     assert_eq!(
         bare_again, plain,
         "wearing and removing an affixed copy shifted the player's base ATK"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Consolidating a fight's payout into its closing lines.
+//
+// The awards themselves still land per kill — a level-up full-heals inside
+// `progression::add_xp` and the killing blow is usually the level, so moving
+// *when* they are granted would move fight outcomes. Only the announcement
+// waits.
+// ---------------------------------------------------------------------------
+
+/// A pack that actually drops something, in one group, with stats that make
+/// `finish_member` the whole of the fight.
+///
+/// Modelled on `support::battle_with_a_pack_of`, which takes the first
+/// species in the db rather than one carrying a `work_resource` — a pack
+/// that drops nothing has no salvage to consolidate. The zone and the
+/// distance are that fixture's and are load-bearing for the same reason: a
+/// group's size ceiling at a zone-1 spawn point is one member, so a pack
+/// asked for here would silently arrive as a single program.
+fn battle_with_a_dropping_pack(game: &mut Game, count: usize, hp: i32) -> (ItemId, Vec<Entity>) {
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.work_resource.is_some() && !s.is_boss)
+        .expect("at least one non-boss species should carry a work_resource");
+    let resource = species.work_resource.clone().unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let members: Vec<Entity> = (0..count)
+        .map(|i| {
+            game.world
+                .spawn((
+                    Creature {
+                        species: species.id.clone(),
+                    },
+                    Hostile,
+                    Position {
+                        x: spawn.x + 500 + i as i32,
+                        y: spawn.y,
+                    },
+                    Stats {
+                        hp,
+                        max_hp: hp,
+                        atk: 0,
+                        def: 0,
+                    },
+                    StatusEffects::default(),
+                ))
+                .id()
+        })
+        .collect();
+    insert_battle(game, player, members.clone());
+    assert_eq!(
+        game.world.resource::<BattleState>().groups[0].members.len(),
+        count,
+        "the pack was capped on the way in, so this fight has fewer kills than it asks for"
+    );
+    (resource, members)
+}
+
+fn log_texts(game: &Game) -> Vec<String> {
+    game.message_log(crate::MESSAGE_LOG_CAP)
+        .into_iter()
+        .map(|l| l.text)
+        .collect()
+}
+
+/// Three kills, one salvage tally — and it carries the whole fight's haul,
+/// not the last kill's.
+#[test]
+fn a_fight_reports_its_salvage_once() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let (resource, members) = battle_with_a_dropping_pack(&mut game, 3, 1);
+
+    let before = held(&game, &resource);
+    for _ in 0..members.len() {
+        game.finish_member(0, 0, player);
+    }
+    let gained = held(&game, &resource) - before;
+    assert!(gained >= 3, "three kills should each have paid a drop");
+
+    let lines = log_texts(&game);
+    assert_eq!(
+        lines.iter().filter(|t| *t == "Salvage:").count(),
+        1,
+        "expected exactly one salvage tally: {lines:#?}"
+    );
+    let row = format!("  {gained} {}", game.item_name_tagged(&resource));
+    assert!(
+        lines.contains(&row),
+        "expected the tally to merge all three drops into {row:?}: {lines:#?}"
+    );
+}
+
+/// ...and none of it reaches the log while the fight is still running.
+#[test]
+fn nothing_is_salvaged_until_the_fight_ends() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    battle_with_a_dropping_pack(&mut game, 3, 1);
+
+    game.finish_member(0, 0, player);
+    assert!(
+        game.world.get_resource::<BattleState>().is_some(),
+        "the fixture should leave two programs standing"
+    );
+    let loot: Vec<String> = game
+        .message_log(crate::MESSAGE_LOG_CAP)
+        .into_iter()
+        .filter(|l| l.kind == MessageKind::Loot)
+        .map(|l| l.text)
+        .collect();
+    assert!(
+        loot.is_empty(),
+        "a kill announced its drop mid-fight: {loot:#?}"
+    );
+}
+
+/// The player's XP is one line for the fight, carrying the sum.
+#[test]
+fn the_xp_line_carries_the_whole_fights_total() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // 1 HP apiece: a kill pays the victim's `max_hp` in XP, so this is three
+    // XP for the fight — comfortably under `XP_PER_LEVEL_STEP`, which keeps
+    // the plain no-level wording under test here rather than a level-up.
+    let (_, members) = battle_with_a_dropping_pack(&mut game, 3, 1);
+    for _ in 0..members.len() {
+        game.finish_member(0, 0, player);
+    }
+
+    let lines = log_texts(&game);
+    assert_eq!(
+        lines.iter().filter(|t| t.contains(" XP")).count(),
+        1,
+        "expected one XP line for the whole fight: {lines:#?}"
+    );
+    assert!(
+        lines.iter().any(|t| t == "You gain 3 XP."),
+        "expected the three kills summed into one line: {lines:#?}"
+    );
+}
+
+/// A level reached mid-fight is announced when it happens — the HP bar snaps
+/// to full at that moment (`progression::add_xp` heals on a level), and a
+/// player watching it needs the cause on screen then, not after the fight.
+/// The XP total and the stat block still wait for the tally.
+#[test]
+fn reaching_a_level_is_announced_while_the_fight_runs() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // 30 HP apiece against `XP_PER_LEVEL_STEP` of 20: the first kill levels.
+    battle_with_a_dropping_pack(&mut game, 3, 30);
+
+    game.finish_member(0, 0, player);
+    let mid = log_texts(&game);
+    assert!(
+        mid.iter().any(|t| t == "You reach level 2!"),
+        "a mid-fight level went unannounced: {mid:#?}"
+    );
+    assert!(
+        !mid.iter().any(|t| t.contains(" XP")),
+        "the XP total should wait for the tally: {mid:#?}"
+    );
+    assert!(
+        !mid.iter().any(|t| t.starts_with("  Max HP")),
+        "the stat block should wait for the tally: {mid:#?}"
+    );
+
+    game.finish_member(0, 0, player);
+    game.finish_member(0, 0, player);
+    let end = log_texts(&game);
+    assert!(
+        end.iter().any(|t| t == "You gain 90 XP, reaching level 3."),
+        "expected one XP line summing the fight: {end:#?}"
+    );
+    assert!(
+        end.iter().any(|t| t.starts_with("  Max HP")),
+        "expected the tally to carry the fight's stat block: {end:#?}"
+    );
+}
+
+/// You keep what you killed before you ran. `end_battle` is the one teardown
+/// for a win and a jack-out alike, so the tally is paid out either way.
+#[test]
+fn jacking_out_still_reports_what_was_killed() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let (resource, _) = battle_with_a_dropping_pack(&mut game, 3, 1);
+
+    let before = held(&game, &resource);
+    game.finish_member(0, 0, player);
+    let gained = held(&game, &resource) - before;
+    flee_until_clear(&mut game);
+
+    let lines = log_texts(&game);
+    assert!(
+        lines.iter().any(|t| *t == "Salvage:"),
+        "fleeing dropped the kill's payout on the floor: {lines:#?}"
+    );
+    let row = format!("  {gained} {}", game.item_name_tagged(&resource));
+    assert!(
+        lines.contains(&row),
+        "expected {row:?} in the tally after a jack-out: {lines:#?}"
+    );
+}
+
+/// With no battle to hold the tally, a drop is announced where it happens —
+/// through the same formatter, so the two paths cannot come to word it
+/// differently. Nothing in the game reaches `award_loot` outside a fight
+/// today; this is what stops the next thing that does from paying silently.
+#[test]
+fn a_drop_outside_a_battle_is_announced_at_once() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.work_resource.is_some() && !s.is_boss)
+        .expect("at least one non-boss species should carry a work_resource");
+    let resource = species.work_resource.clone().unwrap();
+    let corpse = corpse_of(&mut game, &species.id);
+
+    let before = held(&game, &resource);
+    game.award_loot(corpse);
+    let gained = held(&game, &resource) - before;
+
+    let lines = log_texts(&game);
+    assert!(lines.iter().any(|t| *t == "Salvage:"), "{lines:#?}");
+    assert!(
+        lines.contains(&format!("  {gained} {}", game.item_name_tagged(&resource))),
+        "{lines:#?}"
+    );
+}
+
+/// Two copies that differ get a row each, and two of the same get one row
+/// carrying both.
+///
+/// Driven through `record_drop` rather than through a fight, because no seed
+/// reliably drops one plain and one Gold copy of the same weapon —
+/// and the merge key is the whole point: keyed on the item alone, an
+/// Gold copy would be tallied as another ordinary one and the row
+/// colour a player reads the tier off would be a lie.
+#[test]
+fn a_rare_copy_is_tallied_apart_from_a_plain_one() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    battle_with_a_dropping_pack(&mut game, 1, 1);
+    let weapon = game
+        .world
+        .resource::<ItemDb>()
+        .all()
+        .find(|d| d.equipment.is_some())
+        .map(|d| d.id.clone())
+        .expect("at least one equippable item");
+    let plain = GearCopy::plain(weapon.clone());
+    let rare = GearCopy {
+        item: weapon.clone(),
+        rarity: Rarity::Gold,
+        tier: 0,
+        affix: None,
+    };
+
+    game.record_drop(plain.clone(), 1);
+    game.record_drop(rare.clone(), 1);
+    game.record_drop(plain.clone(), 2);
+    game.end_battle(player, None);
+
+    let lines = log_texts(&game);
+    let plain_row = format!("  3 {}", game.drop_label(&plain));
+    let rare_row = format!("  1 {}", game.drop_label(&rare));
+    assert!(
+        lines.contains(&plain_row),
+        "expected the two plain drops merged into {plain_row:?}: {lines:#?}"
+    );
+    assert!(
+        lines.contains(&rare_row),
+        "expected the rare copy on its own row as {rare_row:?}: {lines:#?}"
     );
 }

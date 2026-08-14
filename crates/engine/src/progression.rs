@@ -29,6 +29,20 @@ pub struct LevelGain {
 }
 
 impl LevelGain {
+    /// Folds another `add_xp`'s gain into this one, so a tally can cover a
+    /// whole fight rather than a single kill (see `resources::XpTally`).
+    ///
+    /// Plain summation is exactly right here because `stat_rows` recovers
+    /// each row's "before" by subtracting the delta from the stats as they
+    /// stand now: three kills' deltas summed, read against the stats after
+    /// the third, give the range across all three.
+    pub fn absorb(&mut self, other: LevelGain) {
+        self.levels += other.levels;
+        self.max_hp += other.max_hp;
+        self.atk += other.atk;
+        self.def += other.def;
+    }
+
     /// The three rows a level-up's stat block always has, measured against
     /// `stats` as they stand *after* the `add_xp` call that produced this —
     /// so each row's "before" is recovered by subtracting the delta rather

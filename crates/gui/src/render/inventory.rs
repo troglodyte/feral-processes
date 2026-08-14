@@ -103,7 +103,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     }
     rows.push(text_row(""));
     rows.push(text_row(
-        "[S] sell one to a trader in range; Esc to close; Up/Down + Enter also work",
+        "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
     ));
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }

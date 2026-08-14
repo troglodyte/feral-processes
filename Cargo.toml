@@ -8,7 +8,7 @@ members = ["crates/engine", "crates/app-core", "crates/gui", "crates/launcher"]
 # "Breaking" for this project means a save-format bump above all — see
 # `save::SAVE_FORMAT_VERSION` and the CHANGELOG.
 [workspace.package]
-version = "0.8.30"
+version = "0.8.31"
 edition = "2024"
 
 # Internal crates are declared once here so a version bump is a single edit.

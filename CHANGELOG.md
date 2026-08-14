@@ -27,6 +27,40 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.31
+
+### Fifteen more contracts
+
+The authored set was eight, thin enough that a board of three slots repeated
+itself inside an hour. It is now twenty-three, spread across every objective
+shape and banded by sector so what a Broker offers moves with the run:
+
+```
+  Offered
+  [1] Coil Order - Deliver 8 Charge Coil - pays 55 Credits, 140 XP
+  [2] Guardian Bounty - Terminate 1 Wintermute - pays 130 Credits, 2 ICE Breaker, 340 XP
+  [3] Deep Sounding - Stand 5 frames down a Stack - pays 95 Credits, 20 Core Fragment, 260 XP
+```
+
+Four of the fifteen are repeatable, so every band keeps something to grind
+rather than emptying as its one-offs are finished. Each names something the
+sector can actually supply: deliveries are bulk stock only, the builds are
+either ungated or behind research a run that deep bought long ago, and the
+deepest sounding stops at frame 5, since only a Stack link at the far edge of
+a sector's scatter runs any deeper.
+
+### The Research Backlog asked for the bank
+
+Fixed: *Research Backlog* asked you to deliver ten **Research Data**, which is
+banked progress rather than cargo. No cargo screen lists it — the research
+tree is the one place the number appears — so the errand read as impossible
+while quietly being payable out of research you had not spent yet. It now
+asks for ten Logic Wafers, which is the same readings transcribed.
+
+A banked item is no longer something a contract file can name by accident;
+`assets/contracts/README.md` states the rule for mods, and the shipped set is
+checked by a test.
+
 ## 0.8.30
 
 ### Rolled contracts

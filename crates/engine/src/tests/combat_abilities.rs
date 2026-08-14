@@ -1319,6 +1319,61 @@ fn a_hostile_routines_damage_line_logs_as_enemy_special_not_party_damage() {
     );
 }
 
+/// A heal is the one good thing that happens to the party mid-fight without
+/// being a gain (`Loot`) or a level, so it earns its own kind rather than
+/// sitting in `Info`'s dim chatter beside "you have no X".
+///
+/// The side split is the same one `hit_kind` makes two lines above: a
+/// hostile mending its own group is the party's bad news, so it stays on
+/// `EnemySpecial` and only the party's heal reads as good.
+#[test]
+fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
+    let mut game = Game::new(9202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 40;
+    }
+    let patch = crate::abilities::AbilityDef {
+        id: "test_patch".into(),
+        name: "Test Patch".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
+    };
+
+    game.use_ability(&patch, player, "You", &[player]);
+    let kinds = |game: &Game| -> Vec<MessageKind> {
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .filter(|l| l.text.contains("patches"))
+            .map(|l| l.kind)
+            .collect()
+    };
+    assert_eq!(
+        kinds(&game),
+        vec![MessageKind::Heal],
+        "the party's own heal is the line this kind exists for"
+    );
+
+    game.use_ability(&patch, enemies[0], "Crawler", &[enemies[0]]);
+    assert_eq!(
+        kinds(&game),
+        vec![MessageKind::Heal, MessageKind::EnemySpecial],
+        "a hostile mending itself is not good news and must not read as it"
+    );
+}
+
 /// A `test_medic` (support::TWO_ABILITY_SPECIES) with a heal affinity —
 /// same species, same `hot_patch`, one number different.
 const HEALER_WITH_AFFINITY: &str = r#"(

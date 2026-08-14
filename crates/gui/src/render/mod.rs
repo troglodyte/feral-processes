@@ -321,7 +321,9 @@ fn message_color(kind: MessageKind) -> Color {
     match kind {
         MessageKind::Info | MessageKind::Round | MessageKind::PartyDamage => TEXT_DIM,
         MessageKind::Loot => BLUE,
-        MessageKind::LevelUp => GREEN,
+        // Green with `LevelUp` on purpose: both are the party gaining, and
+        // the two are told apart by weight — a level is bold, a patch is not.
+        MessageKind::LevelUp | MessageKind::Heal => GREEN,
         MessageKind::Raid | MessageKind::EnemySpecial => ORANGE,
         MessageKind::EnemyAttack => RED,
         // A result reads at full brightness: it is the line still on screen
@@ -952,9 +954,10 @@ mod tests {
 
     /// The kinds a player is meant to tell apart at a glance mid-fight: what
     /// they gained, what the enemy did, which of the enemy's blows carried a
-    /// condition, their own hit, and how the fight came out. Sharing a colour
-    /// between any two of them defeats the point of the log being coloured at
-    /// all — and all five can sit in the battle pane at once.
+    /// condition, their own hit, Integrity coming back, and how the fight
+    /// came out. Sharing a colour between any two of them defeats the point
+    /// of the log being coloured at all — and all six can sit in the battle
+    /// pane at once.
     #[test]
     fn the_log_colours_a_player_reads_mid_fight_are_all_distinct() {
         let kinds = [
@@ -962,6 +965,7 @@ mod tests {
             MessageKind::EnemyAttack,
             MessageKind::EnemySpecial,
             MessageKind::PartyDamage,
+            MessageKind::Heal,
             MessageKind::Outcome,
         ];
         for (i, a) in kinds.iter().enumerate() {

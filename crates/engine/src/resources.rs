@@ -77,6 +77,13 @@ pub enum MessageKind {
     /// condition, or a carrier spending its round on an installed routine
     /// (see `Game::wild_routine_ready`).
     EnemySpecial,
+    /// Integrity restored to the *party* — deliberately not to a hostile,
+    /// which mends itself under `EnemySpecial` like its other routines,
+    /// since a kind is read as whose news a line is and not as what
+    /// mechanically happened. Narration rather than a result, so
+    /// `retain_outcomes_since_battle` drops it with the rest of the
+    /// blow-by-blow when the fight ends.
+    Heal,
 }
 
 /// Which of the two things the player is doing produced a line: running the

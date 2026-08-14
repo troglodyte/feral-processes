@@ -900,10 +900,19 @@ impl Game {
         // taken as a parameter, since a parameter would be a second source
         // of truth for something `ability_recipients` already determines
         // from `actor` via `is_hostile`.
-        let hit_kind = if self.is_hostile(actor) {
+        let hostile = self.is_hostile(actor);
+        let hit_kind = if hostile {
             MessageKind::EnemySpecial
         } else {
             MessageKind::PartyDamage
+        };
+        // Same split for the heal line, and for the same reason: a hostile
+        // mending its own group is the party's bad news, so only the
+        // party's own patch earns the kind that reads as good news.
+        let heal_kind = if hostile {
+            MessageKind::EnemySpecial
+        } else {
+            MessageKind::Heal
         };
         for &recipient in recipients {
             // A buff can land on the player or on a companion, so the log
@@ -935,7 +944,7 @@ impl Game {
                 AbilityEffect::Heal { power } => {
                     let power = abilities::scaled_hp_power(*power, level, affinity);
                     let restored = self.restore_hp(recipient, power);
-                    self.log(format!("{name} patches {on} for {restored} HP."));
+                    self.log_kind(heal_kind, format!("{name} patches {on} for {restored} HP."));
                 }
                 AbilityEffect::Debuff {
                     kind,

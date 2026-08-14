@@ -154,6 +154,71 @@ pub(super) fn draw_routine_etch(game: &Game, selected: usize, painter: &Painter,
     draw_popup("Etch Disk", PopupSize::Large, &rows, painter, m);
 }
 
+/// One extraction candidate's lines: the row its shortcut selects, then the
+/// routines the program is carrying underneath.
+///
+/// Extraction destroys the program for exactly one of those routines, and
+/// `Game::extract_routine` *refuses* one the player already knows — so a
+/// program whose whole kit is known is worth nothing on the block, and
+/// without this the only way to find that out is to open each program in
+/// turn. The `(known)` tag is what says it; the next page says the same
+/// thing about a single row with `(already known)`.
+///
+/// The routines shed onto their own lines through `continuation_lines`
+/// rather than joining the row, for the reason that function states. A
+/// program carrying nothing gets no line at all.
+///
+/// Returns the lines rather than drawing them so their width is measurable
+/// without a window — see `the_widest_shipped_routine_kit_fits_the_extract_picker`.
+/// The program's row is always present, so a caller may take it
+/// unconditionally.
+fn extract_candidate_rows(
+    num: char,
+    p: &PetInfo,
+    routines: &[ExtractableRoutineView],
+) -> Vec<String> {
+    let kit: Vec<String> = routines
+        .iter()
+        .map(|r| {
+            let known = if r.known { " (known)" } else { "" };
+            format!("{}{known}", r.name)
+        })
+        .collect();
+    std::iter::once(format!(
+        "[{num}] {} Lv{}{}",
+        p.name,
+        p.level,
+        fusion_tag(p.fusions)
+    ))
+    .chain(continuation_lines(&kit.join(", ")))
+    .collect()
+}
+
+/// Pushes one candidate's rows: the selectable program row, then its
+/// routines as dim unselected continuations. The same shape — and the same
+/// reasoning about the highlight and the scroll anchor — as
+/// `push_fuse_candidate`.
+fn push_extract_candidate(
+    rows: &mut Vec<Row>,
+    routines: &[ExtractableRoutineView],
+    i: usize,
+    p: &PetInfo,
+    selected: bool,
+) {
+    let mut lines = extract_candidate_rows(menu_shortcut(i), p, routines).into_iter();
+    let head = lines
+        .next()
+        .expect("extract_candidate_rows always emits the program's row");
+    rows.push(with_icon(
+        tier_row(head, selected, p.fusions, p.rarity),
+        p.glyph,
+        glyph_color(p.color),
+    ));
+    for line in lines {
+        rows.push(colored_item_row(line, false, TEXT_DIM));
+    }
+}
+
 pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
@@ -163,22 +228,8 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, 
         rows.push(text_row("(you need a Compiler standing somewhere first)"));
     }
     for (i, p) in programs.iter().enumerate() {
-        rows.push(with_icon(
-            tier_row(
-                format!(
-                    "[{}] {} Lv{}{}",
-                    menu_shortcut(i),
-                    p.name,
-                    p.level,
-                    fusion_tag(p.fusions)
-                ),
-                i == selected,
-                p.fusions,
-                p.rarity,
-            ),
-            p.glyph,
-            glyph_color(p.color),
-        ));
+        let routines = game.extractable_routines(p.entity);
+        push_extract_candidate(&mut rows, &routines, i, p, i == selected);
     }
     draw_popup("Extract", PopupSize::Large, &rows, painter, m);
 }
@@ -237,4 +288,100 @@ pub(super) fn draw_extract_confirm(
     }
     rows.push(text_row("Enter to confirm, Esc to back out."));
     draw_popup("Extract", PopupSize::Large, &rows, painter, m);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+
+    fn offered(name: &str, known: bool) -> ExtractableRoutineView {
+        ExtractableRoutineView {
+            ability: name.to_lowercase().replace(' ', "_"),
+            name: name.to_string(),
+            description: String::new(),
+            known,
+        }
+    }
+
+    /// The picker's whole job is choosing which program to destroy, and the
+    /// thing that decides it is what each one is carrying. `extract_routine`
+    /// refuses a routine already known, so a kit that is all `(known)` is a
+    /// program with nothing to give — the tag is the only thing on this
+    /// screen that says so.
+    #[test]
+    fn an_extract_candidate_names_its_routines_and_marks_the_known_ones() {
+        let lines = extract_candidate_rows(
+            'a',
+            &test_pet("Kestrel", "w|a|m"),
+            &[offered("Sandbox", false), offered("Patch Routine", true)],
+        );
+        assert!(lines[0].contains("Kestrel"), "{lines:?}");
+        assert!(
+            !lines[0].contains("Sandbox"),
+            "the row the eye scans stays the program: {lines:?}"
+        );
+        let under = lines[1..].join(" ");
+        assert!(
+            under.contains("Patch Routine (known)"),
+            "a routine already known is marked: {lines:?}"
+        );
+        assert!(
+            under.contains("Sandbox") && !under.contains("Sandbox (known)"),
+            "one not yet known is named plainly: {lines:?}"
+        );
+    }
+
+    /// A program carrying nothing gets no continuation line, rather than an
+    /// empty one that reads as a rendering fault.
+    #[test]
+    fn an_extract_candidate_with_no_routines_gets_no_line() {
+        let lines = extract_candidate_rows('a', &test_pet("Kestrel", "w|a|m"), &[]);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+    }
+
+    /// `draw_row` clamps a row vertically and nothing clamps it
+    /// horizontally, so the kit has to shed onto continuation lines rather
+    /// than off the right edge. The same census
+    /// `the_widest_shipped_routine_kit_fits_the_fuse_picker` runs, against
+    /// the worst case *this* screen can build — which is wider, because
+    /// every name here can carry a `(known)` tag the fuse picker has no
+    /// equivalent of.
+    ///
+    /// Measured against the real ability set rather than a literal, so an
+    /// author naming a routine longer fails this instead of shipping a line
+    /// that runs off the box.
+    #[test]
+    fn the_widest_shipped_routine_kit_fits_the_extract_picker() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = feral_processes_engine::abilities::AbilityDb::load_dir(&dir)
+            .expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let mut names: Vec<String> = db.all().map(|d| d.name.clone()).collect();
+        names.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+        names.truncate(feral_processes_engine::tuning::COMPANION_ROUTINE_SLOT_CAP as usize);
+        assert!(
+            names.len() > 1,
+            "the census found {} routines, so it is measuring nothing",
+            names.len()
+        );
+        let kit: Vec<ExtractableRoutineView> = names.iter().map(|n| offered(n, true)).collect();
+        let lines = extract_candidate_rows('a', &test_pet("Kestrel", "w|a|m"), &kit);
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "an extract candidate's line overflows the picker by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
 }

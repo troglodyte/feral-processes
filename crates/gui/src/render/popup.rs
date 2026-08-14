@@ -518,6 +518,30 @@ pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
 /// would have been fine.
 pub(super) const ROW_WRAP_COLUMNS: usize = 100;
 
+/// What a continuation line is indented by: the glyph slot `with_icon`
+/// reserves inside the row above, plus the width of its `[x] ` shortcut, so
+/// the detail sits under the row's name rather than under its icon.
+const ROW_CONTINUATION_INDENT: &str = "       ";
+
+/// A menu row's trailing detail, wrapped and indented onto its own lines
+/// under the row it belongs to — the shape `draw_craft_menu` gives a recipe
+/// and its cost, and the fuse and extract pickers a program and its
+/// routines.
+///
+/// One definition rather than one per screen because the indent is a fact
+/// about `with_icon`'s glyph slot and `menu_shortcut`'s bracket, which every
+/// caller shares, and because the wrap is what keeps a row inside the popup:
+/// `draw_row` clamps a row vertically and nothing clamps it horizontally.
+///
+/// Empty text yields no lines at all, so a caller with nothing to add gets
+/// no blank continuation.
+pub(super) fn continuation_lines(text: &str) -> Vec<String> {
+    wrap_text(text, ROW_WRAP_COLUMNS - ROW_CONTINUATION_INDENT.len())
+        .into_iter()
+        .map(|line| format!("{ROW_CONTINUATION_INDENT}{line}"))
+        .collect()
+}
+
 /// Greedy word wrap to `columns`, for prose too long to sit on one popup
 /// row — an item's authored description, chiefly.
 ///

@@ -27,6 +27,40 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.28
+
+### A beaten stack collapses behind you
+
+Killing a stack's guardian used to leave everything exactly as it was: the
+link still open, the frames still walkable, the lair a cleared room at the
+bottom of a maze with nothing left in it. The deepest thing you can do in the
+game ended with a long walk back up through rooms you had already emptied.
+
+It now ends the stack. The floor gives way, the party is flung up through
+collapsing frames onto open grid, and the link you walked in through caves in
+behind you. The run's record of the place goes with it — there is no map to
+come back to, because there is nowhere to come back to.
+
+```
+  The stack folds in on itself. You are flung up through collapsing
+  frames and land hard on open grid.
+  The ground answers somewhere else: a new link opens south-east at 7 tiles.
+```
+
+**The sector never loses a link.** The replacement opens on the nearest legal
+ground before the old one comes down, so a zone always has a way back
+underground — which matters more than it sounds, because a Stack boss is the
+only thing in the game that pays a Portal Fragment, and a zone with no link
+left is a run that can never breach again. The new stack's depth follows the
+same rule every link does, read off how far out it lands, so finishing a deep
+one nearby tends to hand you back a shallower one.
+
+The trade is that a collapse forfeits whatever you left behind: an unopened
+cache two frames up, a seal you never shouldered, an orphan in a dead end.
+The lair sits on the bottom frame, so you have walked the whole stack by the
+time you reach it — killing the guardian is now the deliberate end of that
+stack rather than a step you can walk back from.
+
 ## 0.8.27
 
 ### One key fuses every matching pair in cargo

@@ -7,7 +7,6 @@
 7. remove 'move abilities' and use routines
 8. more machine learning
 9. i want the description of what i'm seeing as i'm walking in the stack, not with x | examine
-10. when a stack boss is defeated, the stack should collapse, and the player gets kicked out, and the entrance is deleted (no need to keep in memory), new stack appears somewhere nearby
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 20. too easy to level up, lets slow that down a bit

@@ -428,7 +428,8 @@ impl Game {
     /// restore.
     ///
     /// Unnarrated, because the link is no longer the only way out —
-    /// `use_symlink` leaves by its own route and says so in its own words.
+    /// `use_symlink` and `collapse_stack` each leave by their own route and
+    /// say so in their own words.
     /// Trace resets here and nowhere else. That is safe for caches and seals
     /// — both are one-shot per stack and recorded in `FrameMemory`, so
     /// climbing out to shed Trace means returning to a stack with less left

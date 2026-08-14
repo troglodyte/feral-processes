@@ -1511,12 +1511,20 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 pub const HAUL_CARRY_CAPACITY: u32 = 5;
 
 /// How far a hauling program's cost field reaches, centred on the tile it is
-/// walking to. Twice `MAX_BUILD_DISTANCE_FROM_HOME`, because two structures
-/// in one base can sit at opposite corners of that box and a worker may be
-/// standing just outside it. Bounding the search is what stops a walk toward
-/// something unreachable generating chunks forever on a lazily-generated
-/// infinite map — the same reason `pursuit_field` bounds its successors.
-pub const HAUL_WALK_RADIUS: i32 = MAX_BUILD_DISTANCE_FROM_HOME * 2;
+/// walking to — twice the *live* build radius, because two structures in one
+/// base can sit at opposite corners of the slab and a worker may be standing
+/// just outside it. A constant is what this used to be, and it cannot be one
+/// any more: a base grown past the starting radius would refuse postings
+/// across its own width, and `hauling::post_reach` is the single predicate
+/// the cronjob menu and the assignment share, so a posting the menu accepted
+/// would be one that never arrived.
+///
+/// Bounding the search at all is what stops a walk toward something
+/// unreachable generating chunks forever on a lazily-generated infinite map
+/// — the same reason `pursuit_field` bounds its successors.
+pub fn haul_walk_radius(build_radius: i32) -> i32 {
+    build_radius * 2
+}
 
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch

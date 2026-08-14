@@ -3,9 +3,9 @@
 //! zone.
 
 use crate::tuning::{
-    MAX_BUILD_DISTANCE_FROM_HOME, NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS,
-    NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE,
-    STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP, initial_wild_population,
+    MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, NEST_CACHE_CREDIT_ZONE_BONUS,
+    NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT,
+    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP, initial_wild_population,
 };
 use crate::*;
 
@@ -326,20 +326,25 @@ impl Game {
     /// Called when the Home is demolished — the slab is defined as
     /// "centered on the current Home", so no Home means no slab.
     ///
-    /// Sweeps the whole build box rather than `Platform::covers`'s cut
-    /// shape, which is the one place the two deliberately disagree: nothing
-    /// else overrides terrain near a base, so clearing a tile that was never
-    /// stamped costs nothing, while a save written before the corners were
-    /// cut still has floor there and would otherwise keep it forever.
+    /// Sweeps `MAX_BUILD_RADIUS_TILES` rather than the live radius, and the
+    /// whole box rather than `Platform::covers`'s cut shape. This is the one
+    /// place the sweep and the footprint deliberately disagree, and it has to
+    /// be the *largest slab that could ever have existed*: nothing else
+    /// overrides terrain near a base, so clearing a tile that was never
+    /// stamped costs nothing, while floor the current shape does not claim
+    /// would otherwise be kept forever. Two ways to be in that position, and
+    /// the second is now the common one — a save written before the corners
+    /// were cut, and any save written before the starting radius was halved,
+    /// which carries a 15x15 slab in `tile_overrides` against a base that now
+    /// starts at 9x9.
     pub(crate) fn clear_platform(&mut self) {
         let Some((cx, cy)) = self.world.resource::<Platform>().center else {
             return;
         };
-        let radius = self.world.resource::<Platform>().radius;
         {
             let mut map = self.world.resource_mut::<WorldMap>();
-            for dy in -radius..=radius {
-                for dx in -radius..=radius {
+            for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+                for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
                     map.clear_override(cx + dx, cy + dy);
                 }
             }

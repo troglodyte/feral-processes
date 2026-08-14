@@ -1,7 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::{HAUL_WALK_RADIUS, MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, haul_walk_radius};
 use crate::*;
 
 #[test]
@@ -1504,7 +1504,7 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 /// again — `views.rs` says so and `render/base.rs` refuses to draw a
 /// companion because of it. So the stale tile can be anywhere the player has
 /// ever fought, and a walk measured from it strands a worker outside
-/// `HAUL_WALK_RADIUS` of its own machine: `haul_step_system` finds it absent
+/// `haul_walk_radius` of its own machine: `haul_step_system` finds it absent
 /// from the field, steps nowhere this tick and every tick after, and the
 /// cronjob produces nothing for the rest of the run while looking scheduled.
 #[test]
@@ -1520,7 +1520,8 @@ fn a_posted_program_starts_from_the_player() {
         .unwrap() = player_pos;
     // Tamed far enough out that the old rule would have refused it outright,
     // and far enough that it could never have walked in.
-    let worker = spawn_tamed_on_map(&mut game, 3, 4 + HAUL_WALK_RADIUS + 5);
+    let reach = haul_walk_radius(game.build_radius());
+    let worker = spawn_tamed_on_map(&mut game, 3, 4 + reach + 5);
 
     game.assign_cronjob(worker, structure)
         .expect("a program you are carrying can be posted wherever you are standing");
@@ -1540,12 +1541,13 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed_on_map(&mut game, 3, 3);
+    let reach = haul_walk_radius(game.build_radius());
     *game
         .world
         .get_mut::<Position>(game.player_entity())
         .unwrap() = Position {
         x: 3,
-        y: 4 + HAUL_WALK_RADIUS + 5,
+        y: 4 + reach + 5,
     };
 
     let err = game
@@ -2090,4 +2092,101 @@ fn a_widened_footprint_survives_a_save_and_load() {
         before,
         "the radius is rediscovered from the structures the save already carries"
     );
+}
+
+/// A base fully grown to `MAX_BUILD_RADIUS_TILES`, with the Pillar's bonus
+/// clamped rather than counted out one structure at a time.
+fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
+    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", HUGE_PILLAR);
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    spawn_structure_of(&mut game, "test_huge_pillar", 1, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    game.stamp_platform(home.x, home.y);
+    assert_eq!(
+        game.world.resource::<Platform>().radius,
+        MAX_BUILD_RADIUS_TILES,
+        "precondition: the base is at its ceiling"
+    );
+    (game, dir)
+}
+
+/// A posting the cronjob menu accepts has to be a posting that arrives, and
+/// the walk that delivers it is bounded by a radius. Left on the old
+/// constant, a fully grown base refuses postings across its own width — a
+/// machine you can see from your Home and cannot staff.
+#[test]
+fn a_program_walks_across_a_fully_grown_base_to_its_post() {
+    let (mut game, dir) = fully_grown_base("grown_base_walk", 702);
+    let r = MAX_BUILD_RADIUS_TILES;
+    game.place_structure("mining_node", r, 0).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let node = game
+        .find_blocking_structure_at(ppos.x + r, ppos.y)
+        .expect("the node was just deployed");
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    let worker = spawn_tamed(&mut game, 500, 3);
+
+    // Posted from the opposite edge of the slab: the whole width of the base
+    // separates the program from its machine.
+    stand_player_at(&mut game, ppos.x - r, ppos.y);
+    game.assign_cronjob(worker, node).unwrap();
+
+    for _ in 0..200 {
+        if game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos) {
+            break;
+        }
+        game.tick();
+    }
+    assert!(
+        game::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
+        "a worker posted from one edge of a full-size base must reach the other"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Halving the starting radius put every existing save in the position a
+/// pre-corner-cut save was already in: a slab in `tile_overrides` wider than
+/// anything the current shape claims. Demolishing the Home has to take all
+/// of it, or the run keeps a ring of orphan floor around nothing forever.
+#[test]
+fn demolishing_a_home_clears_floor_wider_than_the_current_radius() {
+    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    let home = game.home_position().expect("the fixture just placed one");
+    // The slab a save written before the halving carries, laid straight
+    // into the map because `stamp_platform` derives its own radius and can
+    // no longer produce one this wide.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+            for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+                map.set_override(
+                    home.x + dx,
+                    home.y + dy,
+                    Tile {
+                        biome: Biome::Platform,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+
+    game.clear_platform();
+
+    let mut map = game.world.resource_mut::<WorldMap>();
+    for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+        for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
+            assert_ne!(
+                map.tile(home.x + dx, home.y + dy).biome,
+                Biome::Platform,
+                "orphan floor left at ({dx}, {dy})"
+            );
+        }
+    }
 }

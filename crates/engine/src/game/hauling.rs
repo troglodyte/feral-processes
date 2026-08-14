@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use crate::game::collect::ORTHOGONAL;
 use crate::game::pursuit::walk_field;
-use crate::tuning::HAUL_WALK_RADIUS;
+use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;
 use crate::*;
 
@@ -131,7 +131,7 @@ pub(crate) enum NoPost {
     /// unoccupied — nothing can stand next to it at all.
     BoxedIn,
     /// A station exists, but no route reaches it from `from` within
-    /// `HAUL_WALK_RADIUS`: too far, or something is in the way.
+    /// `haul_walk_radius`: too far, or something is in the way.
     NoRoute,
 }
 
@@ -155,10 +155,12 @@ fn post_field(
     from: Position,
     structure: Position,
     blocked: &HashSet<(i32, i32)>,
+    build_radius: i32,
 ) -> Result<PostRoute, NoPost> {
     let station = station_tile(map, structure, from, blocked).ok_or(NoPost::BoxedIn)?;
     let start = (from.x, from.y);
-    let field = walk_field(map, (station.x, station.y), HAUL_WALK_RADIUS, |t, p| {
+    let reach = haul_walk_radius(build_radius);
+    let field = walk_field(map, (station.x, station.y), reach, |t, p| {
         t.walkable && (p == start || !blocked.contains(&p))
     });
     let here = *field.get(&start).ok_or(NoPost::NoRoute)?;
@@ -177,11 +179,12 @@ pub(crate) fn post_reach(
     from: Position,
     structure: Position,
     blocked: &HashSet<(i32, i32)>,
+    build_radius: i32,
 ) -> Result<(), NoPost> {
     if at_station(from, structure) {
         return Ok(());
     }
-    post_field(map, from, structure, blocked).map(|_| ())
+    post_field(map, from, structure, blocked, build_radius).map(|_| ())
 }
 
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
@@ -228,10 +231,15 @@ pub(crate) fn haul_step_system(
     mut structures: Query<HaulStructure, Without<Tamed>>,
     statuses: Query<&MachineStatus>,
     db: Res<StructureDb>,
+    platform: Res<Platform>,
     mut map: ResMut<WorldMap>,
     mut commands: Commands,
 ) {
     let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
+    // The cached radius rather than `Game::build_radius`: a system has no
+    // `Game`, and `Platform` is where that derivation is kept readable from
+    // a borrow this shallow.
+    let build_radius = platform.radius;
 
     // Rebuilt every tick rather than cached: this is the list that makes a
     // demolished or newly-filled depot stop being a destination without
@@ -322,7 +330,8 @@ pub(crate) fn haul_step_system(
         // wall of new buildings, a depot demolished behind one, or terrain
         // that changed. The worker stands still, and the marker is what turns
         // its machine's status from `Unstaffed` into `Stranded`.
-        let Ok((field, here)) = post_field(&mut map, worker_pos, dest_pos, &blocked) else {
+        let Ok((field, here)) = post_field(&mut map, worker_pos, dest_pos, &blocked, build_radius)
+        else {
             commands.entity(worker).insert(Stranded);
             continue;
         };

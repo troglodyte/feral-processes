@@ -536,8 +536,11 @@ impl Game {
         // the structure's current worker to pay for a cronjob that produces
         // nothing.
         let blocked = self.structure_tiles();
+        let build_radius = self.build_radius();
         let mut map = self.world.resource_mut::<WorldMap>();
-        if let Err(reason) = hauling::post_reach(&mut map, from, structure_pos, &blocked) {
+        if let Err(reason) =
+            hauling::post_reach(&mut map, from, structure_pos, &blocked, build_radius)
+        {
             // Two errands, not one. A structure the base has been built around
             // needs digging out; one with no route may just need you to walk
             // over to it. Saying "too far" for both sent players walking at a

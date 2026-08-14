@@ -2538,3 +2538,70 @@ fn a_link_past_a_pillars_actual_reach_does_not_refuse_it() {
     game.place_structure("heap_pillar", 1, 0)
         .expect("a link outside the ground the base would claim is not in the way");
 }
+
+/// A structure can declare how many of it may stand at once, and the Heap
+/// Pillar is the first to use it: growth is bounded by a number you can
+/// tune in the asset rather than by the backstop radius.
+#[test]
+fn a_capped_structure_refuses_the_one_past_its_limit_and_costs_nothing() {
+    let mut game = base_ready_for_pillars(721);
+    // The zone's own links are not what is under test here, and this world
+    // has one five tiles out that would refuse the first Pillar.
+    for link in {
+        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        q.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(link);
+    }
+    let cap = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "heap_pillar")
+        .expect("heap_pillar.ron ships")
+        .max_deployed;
+    assert!(cap > 0, "the Pillar declares a limit");
+
+    // Placed in a ring around the player so each one has its own free tile.
+    let mut spots = (1..=4)
+        .flat_map(|d| [(d, 0), (-d, 0), (0, d), (0, -d)])
+        .filter(|&(dx, dy)| (dx, dy) != (0, 0));
+    for i in 0..cap {
+        let (dx, dy) = spots.next().expect("enough free ground for the cap");
+        game.place_structure("heap_pillar", dx, dy)
+            .unwrap_or_else(|e| panic!("pillar {i} refused: {e}"));
+    }
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let (dx, dy) = spots.next().unwrap();
+    let err = game
+        .place_structure("heap_pillar", dx, dy)
+        .expect_err("one past the limit must be refused");
+
+    assert!(
+        err.to_lowercase().contains("heap pillar"),
+        "the refusal should name what is capped: {err}"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "a refused build must not have spent anything"
+    );
+}
+
+/// Every other structure is uncapped, and stays that way by defaulting —
+/// an existing file and any mod that never heard of the field is unlimited.
+#[test]
+fn a_structure_that_declares_no_limit_is_unlimited() {
+    let game = Game::new(722, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let capped: Vec<String> = game
+        .structure_defs()
+        .into_iter()
+        .filter(|d| d.max_deployed > 0)
+        .map(|d| d.id.to_string())
+        .collect();
+    assert_eq!(
+        capped,
+        vec!["heap_pillar".to_string()],
+        "only the Pillar is capped; the field defaults to no limit"
+    );
+}

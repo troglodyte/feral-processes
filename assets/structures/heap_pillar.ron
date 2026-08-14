@@ -1,11 +1,12 @@
 (
     id: "heap_pillar",
     name: "Heap Pillar",
-    description: "Claims another ring of address space for your base — the platform grows one tile in every direction. Permanent: a Pillar cannot be demolished, and nothing can be built where a link would be swallowed.",
+    description: "Claims another ring of address space for your base — the platform grows one tile in every direction. Five is all the grid will hold. Permanent: a Pillar cannot be demolished, and nothing can be built where a link would be swallowed.",
     glyph: 'I',
     color: Cyan,
     build_cost: [("core_fragment", 14)],
     work: None,
     raidable: false,
     build_radius_bonus: 1,
+    max_deployed: 5,
 )

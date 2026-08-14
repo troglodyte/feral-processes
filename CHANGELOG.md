@@ -34,11 +34,16 @@ first, separated by a rule.
 A base starts half the size it used to — a 9x9 slab of about 69 buildable
 tiles rather than 15x15 — and the **Heap Pillar** grows it back, one ring at
 a time. Build one and the edge creeps out a tile in every direction; build
-another and it creeps again. There is no practical ceiling — the Pillar's
-price is what paces it, and the hard backstop sits at 201x201, ninety-six
-Pillars away. It costs 14 Core
+another and it creeps again, up to five of them — a base ends at 19x19,
+better than twice the ground it opens with. Five is a number in the
+structure's own file rather than in the engine, so it is one edit to change
+and any structure can declare a limit the same way. It costs 14 Core
 Fragments, sits behind a new research node (Heap Allocation, 30 Research Data
 off Power Grid), and cannot be demolished.
+
+Like anything else, a Pillar is deployed onto one of the four tiles beside
+you, so growing the base is a walk-and-build loop rather than a menu you
+hold down.
 
 The complaint this answers is feel rather than capacity. A real base does not
 fill 213 tiles, so the old slab was the same size in the first minute of a

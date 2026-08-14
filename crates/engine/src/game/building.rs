@@ -57,6 +57,21 @@ impl Game {
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
         }
+        // Before the materials check, with the other refusals: a structure
+        // whose effect accumulates is bounded by a count rather than by
+        // whatever downstream constant its effect happens to clamp against,
+        // because that constant is not a limit a player ever meets.
+        if def.max_deployed > 0 {
+            let standing = self.count_structures(&def.id);
+            if standing >= def.max_deployed {
+                return Err(format!(
+                    "You already have {standing} {}{} — that's as many as this grid will hold.",
+                    def.name,
+                    if standing == 1 { "" } else { "s" }
+                ));
+            }
+        }
+
         // A structure that widens the slab claims a ring of ground, and
         // `stamp_platform` obliterates everything standing in what it
         // claims. A wild program or a nest going that way is the price of
@@ -158,6 +173,12 @@ impl Game {
         self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
+    }
+
+    /// How many of `kind` are deployed right now.
+    fn count_structures(&mut self, kind: &StructureId) -> u32 {
+        let mut query = self.world.query::<&Structure>();
+        query.iter(&self.world).filter(|s| &s.kind == kind).count() as u32
     }
 
     /// The first `SurfaceLink` standing in the ground a slab of `radius`

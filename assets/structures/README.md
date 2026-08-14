@@ -277,6 +277,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // sets it false, so no Durability and no sweep can take it down.
     build_radius_bonus: 1,
 
+    // Optional; can be left out entirely (defaults to 0, meaning no limit).
+    // How many of this structure may stand at once — the build is refused
+    // past it, before anything is spent. This is where a structure whose
+    // *effect accumulates* is bounded, and the Heap Pillar is what it exists
+    // for: `max_deployed: 5`, so a base grows five rings and no further.
+    // Bounding growth by the engine's backstop radius instead would put the
+    // limit ninety-six purchases away, which is no limit a player will ever
+    // meet. Every other shipped structure leaves this at 0.
+    max_deployed: 5,
+
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
     // the player stands within `radius` tiles of this structure — resting

@@ -82,8 +82,12 @@ slab always covers every structure standing on it. Without that, a base
 built before this release would have kept its old floor while only the inner
 9x9 accepted a building, which on a real save meant 156 tiles that looked
 exactly like base and refused to be built on, with you standing on one of
-them. The one wrinkle, on such a base only: your first Pillars are absorbed
-until they catch up with the width the base already had.
+them. The one wrinkle, and it costs real Core Fragments so it is worth stating
+plainly: on a base built before this release, a Pillar buys **nothing** until
+the bonuses have caught up with the width that base already had. A base
+sitting at the old radius of 7 absorbs three of them before the fourth moves
+anything. Only a pre-release save can be in that position, and a base built
+from here grows on the first one.
 
 ## 0.8.18
 

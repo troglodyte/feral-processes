@@ -1,7 +1,7 @@
 //! The turn loop: ticking, resting, waiting, and consuming items.
 
 use super::support::*;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, REST_TICKS};
+use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
 use crate::*;
 
 #[test]
@@ -147,8 +147,8 @@ fn rest_fully_heals_and_restores_fatigue() {
 /// anyway.
 ///
 /// This only bites on the slab's *outer ring*: `home.ron` sets
-/// `enables_rest`'s radius to `MAX_BUILD_RADIUS_TILES`, so rest is enabled
-/// everywhere the slab reaches at any size, and everywhere inside the
+/// `enables_rest`'s radius well past the radius a base starts at, so rest is
+/// enabled everywhere the opening slab reaches, and everywhere inside the
 /// platform's interior — where decision 4's base-disband
 /// rule (see `standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian`
 /// in `tests/zone.rs`) would strip the pursuer's `Pursuing` before it ever
@@ -506,13 +506,14 @@ fn home_enables_rest_across_the_whole_base_footprint() {
         .into_iter()
         .find(|d| d.id == "home")
         .expect("home.ron should load");
-    assert_eq!(
+    assert!(
         def.enables_rest
             .as_ref()
             .expect("Home should be the rest gate")
-            .radius,
-        MAX_BUILD_RADIUS_TILES,
-        "Home's rest radius should cover a fully grown base, not the size it starts at"
+            .radius
+            >= MAX_BUILD_DISTANCE_FROM_HOME,
+        "Home's rest radius should at least cover the base it anchors at its \
+         starting size"
     );
 }
 

@@ -34,7 +34,9 @@ first, separated by a rule.
 A base starts half the size it used to — a 9x9 slab of about 69 buildable
 tiles rather than 15x15 — and the **Heap Pillar** grows it back, one ring at
 a time. Build one and the edge creeps out a tile in every direction; build
-another and it creeps again, to a ceiling of 21x21. It costs 14 Core
+another and it creeps again. There is no practical ceiling — the Pillar's
+price is what paces it, and the hard backstop sits at 201x201, ninety-six
+Pillars away. It costs 14 Core
 Fragments, sits behind a new research node (Heap Allocation, 30 Research Data
 off Power Grid), and cannot be demolished.
 
@@ -57,14 +59,22 @@ of Portal Fragments in the game. It does still obliterate wild programs and
 nests in the ring it takes, exactly as deploying a Home always has.
 
 Two knock-on fixes come with it, and one of them would have ended runs. A
-zone's first Stack link was drawn from a small box around your arrival point,
-and a slab wide enough swallows that box whole — at which point the placement
-loop spends its whole shared attempt budget failing to land that first link
+zone's Stack links were drawn from boxes around your arrival point, and a
+slab wide enough swallows those boxes whole — at which point the placement
+loop spends its whole shared attempt budget failing to land the first link
 and the sector gets **none at all**. No links means no Stack, no Stack means
 no Portal Fragments, and the run can never breach again; it would have read
-as a bad seed rather than as a bug. The on-ramp now draws from the ring just
-outside the base, whatever size the base is, which also repairs a squeeze
-that existed at the old radius. And stack depth is measured from the edge of
+as a bad seed rather than as a bug. Every link is now drawn from a band
+starting just outside the base, whatever size the base is — the on-ramp from
+a narrow band and the other two from a wide one — which also repairs a
+squeeze that existed at the old radius.
+
+One thing a very large base does change: a program can only be posted to a
+machine within sixty tiles of where you are standing. The walk a posted
+program takes is a search whose cost grows with the square of its reach, and
+past that point a single walking worker costs more per turn than the turn is
+worth. The cronjob menu refuses the post rather than accepting one that
+never arrives, and tells you to get closer. And stack depth is measured from the edge of
 your base rather than from its centre, so growing does not quietly make every
 descent in the sector deeper.
 

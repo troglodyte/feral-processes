@@ -899,9 +899,9 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         .as_ref()
         .expect("the Recharger Node should regenerate Power");
     assert_eq!(regen.per_tick, 1.0);
-    assert_eq!(
-        regen.radius, MAX_BUILD_RADIUS_TILES,
-        "the Recharger Node should cover a fully grown base, not the size it starts at"
+    assert!(
+        regen.radius >= MAX_BUILD_DISTANCE_FROM_HOME,
+        "the Recharger Node should at least cover the base it is first built on"
     );
     assert!(
         def.enables_rest.is_none(),
@@ -934,7 +934,8 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    spawn_recharger_node(&mut game, MAX_BUILD_RADIUS_TILES + 1, 0);
+    let reach = recharger_reach(&game);
+    spawn_recharger_node(&mut game, reach + 1, 0);
 
     game.wait();
 
@@ -1988,6 +1989,20 @@ const WIDENING_PILLAR: &str = r#"(
     build_radius_bonus: 1,
 )"#;
 
+/// A bonus that lands a base on `GROWN_RADIUS` in one structure, so a
+/// fixture wanting a grown base does not have to count out six Pillars.
+const GROWN_PILLAR: &str = r#"(
+    id: "test_grown_pillar",
+    name: "Test Grown Pillar",
+    description: "Widens the base to a realistic grown size.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    build_radius_bonus: 6,
+)"#;
+
 /// The same, with a bonus far past the ceiling — the clamp is what is under
 /// test, not how many structures fit on a slab.
 const HUGE_PILLAR: &str = r#"(
@@ -2094,23 +2109,38 @@ fn a_widened_footprint_survives_a_save_and_load() {
     );
 }
 
-/// A base fully grown to `MAX_BUILD_RADIUS_TILES`, with the Pillar's bonus
-/// clamped rather than counted out one structure at a time.
+/// The reach the shipped Recharger Node def declares.
+fn recharger_reach(game: &Game) -> i32 {
+    game.structure_defs()
+        .into_iter()
+        .find(|d| d.id == "recharger_node")
+        .and_then(|d| d.power_regen.map(|r| r.radius))
+        .expect("the Recharger Node regenerates Power")
+}
+
+/// How wide a base these fixtures call "grown". Deliberately not
+/// `MAX_BUILD_RADIUS_TILES`, which is a backstop rather than a target: at the
+/// ceiling a stamp lays 40,401 tiles and a hauling walk searches four times
+/// that, which measures the pathological case and costs the suite minutes.
+const GROWN_RADIUS: i32 = 10;
+
+/// A base grown to `GROWN_RADIUS`, with the Pillar's bonus taken in one
+/// structure rather than counted out one at a time.
 fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
-    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", HUGE_PILLAR);
+    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", GROWN_PILLAR);
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
     place_home(&mut game, 0, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    spawn_structure_of(&mut game, "test_huge_pillar", 1, 0);
+    spawn_structure_of(&mut game, "test_grown_pillar", 1, 0);
     let home = game.home_position().expect("the fixture just placed one");
     game.stamp_platform(home.x, home.y);
     assert_eq!(
         game.world.resource::<Platform>().radius,
-        MAX_BUILD_RADIUS_TILES,
-        "precondition: the base is at its ceiling"
+        GROWN_RADIUS,
+        "precondition: the base is grown well past its start"
     );
     (game, dir)
 }
@@ -2122,7 +2152,7 @@ fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
 #[test]
 fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     let (mut game, dir) = fully_grown_base("grown_base_walk", 702);
-    let r = MAX_BUILD_RADIUS_TILES;
+    let r = GROWN_RADIUS;
     game.place_structure("mining_node", r, 0).unwrap();
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = game
@@ -2425,7 +2455,12 @@ fn the_slab_covers_the_structures_standing_on_it() {
 fn the_structure_floor_is_a_floor_and_not_a_second_budget() {
     let mut game = base_ready_for_pillars(717);
     let home = game.home_position().expect("the fixture just placed one");
-    spawn_structure_of(&mut game, "data_cache", home.x + 50, home.y);
+    spawn_structure_of(
+        &mut game,
+        "data_cache",
+        home.x + MAX_BUILD_RADIUS_TILES + 50,
+        home.y,
+    );
     assert_eq!(
         game.build_radius(),
         MAX_BUILD_RADIUS_TILES,

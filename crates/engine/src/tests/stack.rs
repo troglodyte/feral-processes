@@ -4449,11 +4449,14 @@ fn a_fully_grown_base_still_gets_its_zones_links() {
     // under test is the draw box against a wide slab, not how the slab got
     // wide.
     game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
-    game.world.resource_mut::<Platform>().radius = crate::tuning::MAX_BUILD_RADIUS_TILES;
+    // Well past the starting radius, but not the backstop ceiling: stamping
+    // 201x201 tiles measures the stamp rather than the draw.
+    const GROWN: i32 = 20;
+    game.world.resource_mut::<Platform>().radius = GROWN;
     let platform = *game.world.resource::<Platform>();
     {
         let mut map = game.world.resource_mut::<WorldMap>();
-        let r = crate::tuning::MAX_BUILD_RADIUS_TILES;
+        let r = GROWN;
         for dy in -r..=r {
             for dx in -r..=r {
                 if platform.covers(dx, dy) {
@@ -4493,5 +4496,50 @@ fn a_growing_base_does_not_deepen_the_stack_under_its_nearest_link() {
     assert_eq!(
         at_start, at_ceiling,
         "the nearest link opens a deeper stack purely because the base grew"
+    );
+}
+
+/// The same at the backstop ceiling, where the slab is 201x201 and every
+/// tile of the old draw box — and of the *scatter* box the other two links
+/// used — is platform. The band the links are drawn from starts outside the
+/// slab, so its size cannot matter; this is what says so.
+#[test]
+fn a_base_at_the_ceiling_still_gets_its_zones_links() {
+    let mut game = game();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    for entrance in {
+        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+        query.iter(&game.world).collect::<Vec<Entity>>()
+    } {
+        game.world.despawn(entrance);
+    }
+    let r = crate::tuning::MAX_BUILD_RADIUS_TILES;
+    game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
+    game.world.resource_mut::<Platform>().radius = r;
+    let platform = *game.world.resource::<Platform>();
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if platform.covers(dx, dy) {
+                    map.set_override(
+                        ppos.x + dx,
+                        ppos.y + dy,
+                        Tile {
+                            biome: Biome::Platform,
+                            walkable: true,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    game.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
+
+    assert_eq!(
+        entrance_tiles(&mut game).len(),
+        crate::tuning::STACK_LINKS_PER_ZONE,
+        "a zone under a base at the ceiling got fewer links than it owes"
     );
 }

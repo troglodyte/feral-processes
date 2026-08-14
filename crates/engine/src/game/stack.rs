@@ -163,32 +163,35 @@ impl Game {
         // which ends the run's access to Portal Fragments and reads as a bad
         // seed rather than as a bug.
         let inner = self.world.resource::<Platform>().radius + 1;
-        let outer = inner + STACK_NEAREST_LINK_TILES;
 
         let mut placed = 0;
         let mut attempts = 0;
         while placed < count && attempts < count * 40 {
             attempts += 1;
-            let (dx, dy) = if placed == 0 {
-                // A band of Chebyshev rings, walked rather than
-                // rejection-sampled: every attempt has to produce a
-                // candidate, since they are shared with the two links that
-                // follow.
-                let band = rng.random_range(inner..=outer);
-                let along = rng.random_range(0..8 * band);
-                let side = 2 * band;
-                match along / side {
-                    0 => (-band + along % side, -band),
-                    1 => (band, -band + along % side),
-                    2 => (band - along % side, band),
-                    _ => (-band, band - along % side),
-                }
+            // Every link is drawn from a band of Chebyshev rings starting
+            // one tile outside the slab — the on-ramp from a narrow band,
+            // the rest from a wide one. Both are measured *outward from the
+            // base* rather than from the arrival point, which is what makes
+            // them independent of how big the base has grown; a box centred
+            // on the player is a box the slab can eat, and the whole zone
+            // goes with it.
+            //
+            // The band is walked rather than rejection-sampled because every
+            // attempt has to produce a candidate: the budget is shared, so
+            // wasted draws come out of the links that follow.
+            let width = if placed == 0 {
+                STACK_NEAREST_LINK_TILES
             } else {
-                let reach = STACK_LINK_SCATTER_TILES;
-                (
-                    rng.random_range(-reach..=reach),
-                    rng.random_range(-reach..=reach),
-                )
+                STACK_LINK_SCATTER_TILES
+            };
+            let band = rng.random_range(inner..=inner + width);
+            let along = rng.random_range(0..8 * band);
+            let side = 2 * band;
+            let (dx, dy) = match along / side {
+                0 => (-band + along % side, -band),
+                1 => (band, -band + along % side),
+                2 => (band - along % side, band),
+                _ => (-band, band - along % side),
             };
             if dx.abs().max(dy.abs()) < STACK_MIN_LINK_TILES {
                 continue;

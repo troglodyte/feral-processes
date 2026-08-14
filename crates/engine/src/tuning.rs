@@ -1529,9 +1529,28 @@ pub const HAUL_CARRY_CAPACITY: u32 = 5;
 /// Bounding the search at all is what stops a walk toward something
 /// unreachable generating chunks forever on a lazily-generated infinite map
 /// — the same reason `pursuit_field` bounds its successors.
+///
+/// `HAUL_WALK_MAX_TILES` is the second bound, and it is a performance floor
+/// rather than a design one. The field is a Dijkstra search over a disc, so
+/// its cost is quadratic in the reach, and the reach is twice the radius —
+/// which makes it quartic in base size. Measured in a debug build, one
+/// posted worker walking, per tick: 8 ms at radius 10, 28 ms at 20, 65 ms
+/// at 30, and **764 ms at the ceiling of 100**. A tick is a keypress, and
+/// several workers walk at once, so the far end of that is not a game.
+///
+/// Capping the reach keeps `post_reach` and `haul_step_system` in agreement,
+/// because both read this one function: on a base wider than the cap allows,
+/// the cronjob menu refuses a post the walker could not have completed and
+/// says to get closer, rather than accepting one that never arrives.
 pub fn haul_walk_radius(build_radius: i32) -> i32 {
-    build_radius * 2
+    (build_radius * 2).min(HAUL_WALK_MAX_TILES)
 }
+
+/// The furthest a hauling program's walk field ever reaches, however wide
+/// the base — see `haul_walk_radius` for the measurements behind it. Set so
+/// a base up to radius 30 is crossable end to end, which is three times the
+/// size the Heap Pillar's cost makes routine.
+pub const HAUL_WALK_MAX_TILES: i32 = 60;
 
 /// How many full batches of each ingredient a machine will pull into its
 /// input before refusing more. Two, so a machine always has the next batch
@@ -1697,24 +1716,37 @@ pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
 /// The widest a base can ever get: `Game::build_radius` clamps here no
-/// matter how many `build_radius_bonus` structures are deployed. A 21x21
-/// slab — six Heap Pillars past the starting 9x9, and comfortably bigger
-/// than the 15x15 the base used to start at.
+/// matter how many `build_radius_bonus` structures are deployed. A 201x201
+/// slab, which is not a balance figure — it is a backstop, deliberately far
+/// past anything a run will build.
 ///
-/// The cap is not arbitrary in either direction. The 31x31 base that
-/// predates 2026-07-24 was judged too big and cut deliberately, so this
-/// stays well under it. Above it the slab starts eating the box
-/// `Game::spawn_surface_links` draws a zone's first link from: at radius 9
-/// every tile in that box is platform on every seed, and since the attempt
-/// budget is shared across all three links, an on-ramp that can never land
-/// starves the zone of links entirely. That is why the on-ramp draws from
-/// the ring *outside* the slab — but the cap is the second line of defence,
-/// and the reason nothing has to reason about a 40-tile-wide base.
+/// **This is not the knob that decides how big a base gets.** Ninety-six
+/// Heap Pillars is what the ceiling costs, and the Pillar's price is what
+/// actually paces growth. The constant exists because two things need a
+/// bound rather than a live radius: `Game::clear_platform` sweeps this box
+/// when a Home comes down, since it has to cover the largest slab that
+/// could ever have existed rather than the current shape, and nothing
+/// downstream should have to reason about an unbounded footprint.
+///
+/// It was 10 until 2026-08-13, on two arguments that no longer hold. One
+/// was that the 31x31 base predating 2026-07-24 had been judged too big —
+/// but that was a base handed to you, and this one is bought a ring at a
+/// time. The other was the Stack on-ramp: a slab wide enough swallowed the
+/// box a zone's links were drawn from, which starved the zone of links
+/// entirely. That is fixed at the source — every link now draws from the
+/// ring *outside* the slab, not from a box the slab can eat — so the cap
+/// is no longer holding anything up.
+///
+/// Two costs scale with the square of a real base's radius and are worth
+/// knowing before anyone builds toward this: `stamp_platform` writes a tile
+/// override per slab tile and the save carries every one of them, and
+/// `haul_walk_radius` doubles it into a Dijkstra field a walking worker
+/// rebuilds each tick.
 ///
 /// Two asset radii are pinned to this rather than to the starting radius —
 /// the Home's `enables_rest` and the Recharger Node's `power_regen` — so
 /// "covers the whole base" stays true of a base that has grown.
-pub const MAX_BUILD_RADIUS_TILES: i32 = 10;
+pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 
 /// How deep each of the base slab's four corners is chamfered, in diagonal
 /// steps — the slab is the box above with `Platform::covers` trimming a

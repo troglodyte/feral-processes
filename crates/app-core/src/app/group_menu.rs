@@ -159,6 +159,20 @@ const PARTY_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Its own row rather than only the `[e]` detour off the install
+        // screen: that detour opens from an *empty* slot, and every routine
+        // slot in the game starts full, so a player who had never popped one
+        // out could not reach the screen that makes disks at all.
+        label: "Etch a routine disk",
+        target: Mode::RoutineEtch,
+        surface_only: false,
+        available: |app| {
+            app.game
+                .as_ref()
+                .is_some_and(|g| !g.etchable_routines().is_empty())
+        },
+    },
+    GroupEntry {
         // Both halves matter: a program to spend an upgrade on, and an
         // upgrade to spend. Either missing leaves the second page empty.
         // Not `surface_only` — a refactor reaches no zone-map state through

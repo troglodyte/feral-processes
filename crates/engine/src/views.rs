@@ -964,6 +964,11 @@ pub struct KnownRoutineView {
     pub ability: crate::abilities::AbilityId,
     pub name: String,
     pub description: String,
+    /// Etched disks of this routine already in cargo — what the player would
+    /// be adding to rather than starting. Read off `Game::etched_disks_of`,
+    /// which is also what `Game::install_disk` refuses on, so the screen and
+    /// the refusal cannot report different numbers.
+    pub held: u32,
 }
 
 /// One row of the install picker — an etched Routine Disk in cargo, ready to

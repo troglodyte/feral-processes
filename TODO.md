@@ -14,15 +14,13 @@
 14. When selecting a non-combat routine to run on a party member, show their stats on the 'run a routine' popup
 15. show equipped slots on main battle page
 17. extract a routine screen should show a list of routines to extract per entity
-18. better etch disk screen, shows what we have currently, get there from the party screen as well
 20. too easy to level up, lets slow that down a bit
-
+21. missions, quests
 
 # Bugs
 8. attacking groups of enemies shouldn't pull in nearby bosses
 7. attacks to one group shouldn't overflow to next group, after that group has been defeated.
 6. entities spawning stuck on unmovable terrain
-5. etch screen, last item doesn't show what it does
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
 4. heals in battle log should be green
 1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest

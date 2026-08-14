@@ -1114,6 +1114,17 @@ pub struct App {
     /// `App::close_screen` sends Esc. `None` for a screen reached straight
     /// from the map, and cleared the moment the map is reached again.
     menu_origin: Option<Mode>,
+    /// Where Esc from `Mode::RoutineEtch` goes when it was reached with `[e]`
+    /// part-way through an install — `Some(Mode::RoutineInstall)`, the slot
+    /// the player is still holding open. `None` when the etch screen was
+    /// opened from the party menu in its own right, which falls back to
+    /// `App::close_screen`.
+    ///
+    /// Deliberately not `menu_origin`: that is a single slot already holding
+    /// `Mode::PartyMenu` for this chain, so borrowing it for the `[e]` detour
+    /// would make Esc out of `Mode::RoutineInstall` and `Mode::RoutineTarget`
+    /// skip the party menu on the way back to the map.
+    etch_return: Option<Mode>,
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,

@@ -137,6 +137,7 @@ impl Game {
                 ability: def.id.clone(),
                 name: def.name.clone(),
                 description: def.description.clone(),
+                held: self.etched_disks_of(&def.id),
             })
             .collect();
         rows.sort_by(|a, b| a.name.cmp(&b.name));

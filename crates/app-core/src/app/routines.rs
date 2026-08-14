@@ -60,6 +60,7 @@ impl App {
         }
         if key == GameKey::Char('e') {
             self.menu_selected = 0;
+            self.etch_return = Some(Mode::RoutineInstall);
             self.mode = Mode::RoutineEtch;
             return;
         }
@@ -87,10 +88,17 @@ impl App {
     /// `Mode::Research` does: a player who came here to make one disk
     /// usually came to make three, and the blanks are the only thing
     /// stopping them.
+    ///
+    /// Esc follows `App::etch_return` — back to the install screen for the
+    /// `[e]` detour, out to the party menu for the row that opens this
+    /// screen in its own right.
     pub(crate) fn handle_routine_etch_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.menu_selected = 0;
-            self.mode = Mode::RoutineInstall;
+            match self.etch_return.take() {
+                Some(mode) => self.mode = mode,
+                None => self.close_screen(),
+            }
             return;
         }
         let Some(known) = self.game.as_ref().map(|g| g.etchable_routines()) else {

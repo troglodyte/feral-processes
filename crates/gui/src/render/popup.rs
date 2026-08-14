@@ -140,13 +140,13 @@ pub(super) fn tier_row(s: impl Into<String>, selected: bool, fusions: u32, rarit
     }
 }
 
-/// `colored_item_row` for a row standing for `repeats` identical log lines —
-/// the history screen's folded rows (see `Game::message_history`). The count
-/// is drawn dim and set apart, so it reads as an annotation rather than as
-/// part of the line, and a row standing for one line carries nothing at all.
-pub(super) fn counted_item_row(
+/// `colored_item_row` carrying a trailing note about the row, drawn dim and
+/// set apart from the row's own text so it reads as an annotation rather than
+/// as part of the label. `None` carries nothing at all, which is what a row
+/// with nothing to annotate wants — a `×0` on every line is noise.
+pub(super) fn annotated_item_row(
     s: impl Into<String>,
-    repeats: usize,
+    suffix: Option<String>,
     selected: bool,
     color: Color,
 ) -> Row {
@@ -155,9 +155,26 @@ pub(super) fn counted_item_row(
         selected,
         bold: false,
         color,
-        suffix: (repeats > 1).then(|| format!("×{repeats}")),
+        suffix,
         icon: None,
     }
+}
+
+/// `annotated_item_row` for a row standing for `repeats` identical log lines —
+/// the history screen's folded rows (see `Game::message_history`). A row
+/// standing for one line carries nothing.
+pub(super) fn counted_item_row(
+    s: impl Into<String>,
+    repeats: usize,
+    selected: bool,
+    color: Color,
+) -> Row {
+    annotated_item_row(
+        s,
+        (repeats > 1).then(|| format!("×{repeats}")),
+        selected,
+        color,
+    )
 }
 
 /// `item_row` for a list of creatures — see `Row::Item::bold`.
@@ -765,6 +782,121 @@ mod tests {
                         l.offset,
                         l.offset + l.capacity
                     );
+                }
+            }
+        }
+    }
+
+    /// The four routine pickers' real rows for `n` entries with row
+    /// `selected` highlighted, each paired with what `popup_layout` is
+    /// allowed to pin below the list. Built through the shipping row
+    /// builders rather than restated here, for `build_menu_rows_fixture`'s
+    /// reason: a hand-written mirror would keep passing after the real one
+    /// drifted.
+    fn routine_rows_fixtures(n: usize, selected: usize) -> Vec<(&'static str, Vec<Row>, usize)> {
+        use super::super::routines::{
+            extract_pick_rows, routine_etch_rows, routine_install_rows, routine_slot_rows,
+        };
+        use feral_processes_engine::views::{
+            EtchedDiskView, ExtractableRoutineView, KnownRoutineView, RoutineSlotView,
+        };
+        let id = |i: usize| format!("routine_{i}");
+        let name = |i: usize| format!("Routine {i}");
+        let text = |i: usize| format!("What routine {i} does, at some length.");
+        vec![
+            (
+                "slots",
+                routine_slot_rows(
+                    &(0..n)
+                        .map(|i| RoutineSlotView {
+                            index: i,
+                            ability: Some(id(i)),
+                            name: name(i),
+                            description: text(i),
+                        })
+                        .collect::<Vec<_>>(),
+                    selected,
+                ),
+                0,
+            ),
+            (
+                "install",
+                routine_install_rows(
+                    &(0..n)
+                        .map(|i| EtchedDiskView {
+                            ability: id(i),
+                            name: name(i),
+                            description: text(i),
+                            exclusive: i % 3 == 0,
+                            qty: 1 + i as u32,
+                        })
+                        .collect::<Vec<_>>(),
+                    4,
+                    selected,
+                ),
+                // The blank line and the `[e]` legend are pinned on purpose.
+                2,
+            ),
+            (
+                "etch",
+                routine_etch_rows(
+                    &(0..n)
+                        .map(|i| KnownRoutineView {
+                            ability: id(i),
+                            name: name(i),
+                            description: text(i),
+                            held: i as u32 % 3,
+                        })
+                        .collect::<Vec<_>>(),
+                    4,
+                    selected,
+                ),
+                0,
+            ),
+            (
+                "extract",
+                extract_pick_rows(
+                    &(0..n)
+                        .map(|i| ExtractableRoutineView {
+                            ability: id(i),
+                            name: name(i),
+                            description: text(i),
+                            known: i % 2 == 0,
+                        })
+                        .collect::<Vec<_>>(),
+                    selected,
+                ),
+                0,
+            ),
+        ]
+    }
+
+    /// The reported bug: the last routine on the etch screen didn't show what
+    /// it does. The body is cut at the *last* `Row::Item` and everything after
+    /// it is pinned as a footer, so a description emitted as `Row::Text` fell
+    /// past that cut — drawn detached at the bottom of the popup, under the
+    /// scroll indicator, while every other description sat inline under its
+    /// own routine.
+    ///
+    /// Nothing may follow the last item row except a screen's own pinned
+    /// legend, which only the install picker has.
+    #[test]
+    fn every_routine_description_stays_inside_the_scrollable_body() {
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            for n in 1..14 {
+                for selected in [0, n - 1] {
+                    for (screen, rows, legend) in routine_rows_fixtures(n, selected) {
+                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        assert_eq!(
+                            l.footer.len(),
+                            legend,
+                            "at {window_h}px the {screen} picker with {n} rows pinned {} \
+                             row(s) below the list, not the {legend} it is allowed — a \
+                             description is detached from the routine it describes",
+                            l.footer.len()
+                        );
+                    }
                 }
             }
         }

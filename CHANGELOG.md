@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.23
+
+### The etch screen is somewhere you can get to, and says what you already hold
+
+Etching is where a blank Routine Disk becomes a routine you can install, and
+it was buried: the only way in was *Install a routine* → pick a holder →
+pick an **empty** slot → `e`. Every routine slot in the game starts full, so
+a player who had never popped one out could not reach it at all. The party
+menu now opens it directly.
+
+It also answers the question it exists to ask. A blank is spent for good, so
+each routine says how many finished disks of it are already in cargo — you
+find out you have three before you burn a fourth, not after:
+
+```
+Burn which routine onto a blank? The blank is gone either way.
+Blanks: 4
+
+[1] Bastion Single v1.0            ×2 held
+    +3 DEF to one ally for 3 rounds
+[2] Overclock Single
+    +4 ATK to one ally for 90 turns
+```
+
+**Fixed:** the last routine on that screen showed no description. The
+popup's scrolling list ends at its last pickable row and pins whatever
+follows to the bottom of the box, so the final description was drawn adrift
+under the scroll indicator instead of under the routine it belonged to. The
+slot panel, the install picker and the extraction picker all had it too, and
+all four are fixed together.
+
 ## 0.8.22
 
 ### The fuse picker names what each program is carrying

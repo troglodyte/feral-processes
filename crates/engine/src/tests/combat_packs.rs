@@ -325,12 +325,12 @@ fn wiping_the_front_group_promotes_the_group_behind_it() {
     );
 }
 
-/// A planned target can die earlier in the same round than the member
-/// who aimed at it, leaving a stale group index behind. Falling back to
-/// the front group is the difference between a wasted turn and an
-/// out-of-bounds panic.
+/// A planned target can die earlier in the same round than the member who
+/// aimed at it. A plan names a *group*, not a slot in a vector that
+/// re-letters under it, so the aim either follows that group to wherever it
+/// now sits or it fizzles — it never slides onto whoever moved up.
 #[test]
-fn a_stale_target_group_index_falls_back_to_the_front_group() {
+fn a_planned_target_follows_its_group_and_fizzles_when_that_group_dies() {
     let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let (x, y) = multi_group_ground(&mut game);
@@ -340,13 +340,46 @@ fn a_stale_target_group_index_falls_back_to_the_front_group() {
 
     assert_eq!(game.retarget(1), Some(1), "group 1 is standing");
 
-    game.world.get_mut::<Stats>(scrapper).unwrap().hp = 0;
-    game.finish_group_member(1, player);
+    // The *front* group falls, so everything behind it shifts down one.
+    game.world.get_mut::<Stats>(glitch).unwrap().hp = 0;
+    game.finish_group_member(0, player);
 
+    assert_eq!(
+        game.retarget(0),
+        None,
+        "the group that was aimed at is gone — the turn is spent, not redirected"
+    );
     assert_eq!(
         game.retarget(1),
         Some(0),
-        "a stale index must fall back to the lowest surviving group"
+        "the survivor kept its identity and is found at its new index"
+    );
+    assert!(
+        game.world.get::<Stats>(scrapper).is_some(),
+        "the scrapper is the group that must not be hit by the stale aim"
+    );
+}
+
+/// The other half of the same rule: when the group that dies is the *last*
+/// one, a stale aim has nowhere to slide to and must still fizzle rather
+/// than wrapping onto the front group.
+#[test]
+fn a_stale_target_group_index_does_not_wrap_onto_the_front_group() {
+    let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let (x, y) = multi_group_ground(&mut game);
+    let glitch = game.spawn_wild_creature("glitch", x, y).unwrap();
+    let scrapper = game.spawn_wild_creature("scrapper", x, y + 1).unwrap();
+    game.start_battle(vec![glitch, scrapper]);
+
+    game.world.get_mut::<Stats>(scrapper).unwrap().hp = 0;
+    game.finish_group_member(1, player);
+
+    assert_eq!(game.retarget(1), None);
+    assert_eq!(game.retarget(0), Some(0), "the front group is untouched");
+    assert!(
+        game.world.get::<Stats>(glitch).is_some(),
+        "the glitch must not inherit the aim meant for the scrapper"
     );
 }
 
@@ -547,4 +580,76 @@ fn begin_battle_opens_a_battle_around_pre_built_groups_without_capping_them() {
         !game.battle_log().is_empty(),
         "the intercept line should still open the pane"
     );
+}
+
+#[test]
+fn gather_pack_does_not_sweep_a_bystanding_boss_into_an_ordinary_fight() {
+    // A boss is `is_boss` because it *spawns as its own group*, and past
+    // zone 1 it brings its own escort — manufactured in `spawn_pack`, not
+    // gathered here. So a boss standing near an ordinary cluster is a
+    // separate fight, and bumping the cluster must not drag it in.
+    let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (ax, ay) = (spawn.x + 500, spawn.y);
+    let spawn_hostile = |game: &mut Game, species: &str, x: i32, y: i32| {
+        game.world
+            .spawn((
+                Creature {
+                    species: species.to_string(),
+                },
+                Hostile,
+                Position { x, y },
+                Stats {
+                    hp: 10,
+                    max_hp: 10,
+                    atk: 1,
+                    def: 0,
+                },
+            ))
+            .id()
+    };
+    let anchor = spawn_hostile(&mut game, "drone", ax, ay);
+    let neighbour = spawn_hostile(&mut game, "drone", ax + 1, ay);
+    let boss = spawn_hostile(&mut game, "overseer", ax, ay + 1);
+
+    let pack = game.gather_pack(anchor);
+
+    assert!(pack.contains(&anchor));
+    assert!(
+        pack.contains(&neighbour),
+        "an ordinary neighbour in range still joins the fight"
+    );
+    assert!(
+        !pack.contains(&boss),
+        "the boss standing beside the cluster is its own fight, not part of this one"
+    );
+}
+
+#[test]
+fn bumping_the_boss_itself_still_starts_the_boss_fight() {
+    // The filter is about what gets *swept in*, never about the anchor:
+    // walking into a boss has to fight the boss.
+    let mut game = Game::new(0, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (ax, ay) = (spawn.x + 500, spawn.y);
+    let boss = game
+        .world
+        .spawn((
+            Creature {
+                species: "overseer".to_string(),
+            },
+            Hostile,
+            Position { x: ax, y: ay },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 0,
+            },
+        ))
+        .id();
+
+    assert_eq!(game.gather_pack(boss), vec![boss]);
 }

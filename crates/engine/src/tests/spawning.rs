@@ -1865,6 +1865,22 @@ fn a_new_zone_is_seeded_past_the_arrival_bubble() {
 fn the_dev_console_ignores_the_density_target() {
     let mut game = Game::new(4245, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // Walkable ground across the whole box the roll can land in. Without
+    // it the test rests on the seed happening to pick a walkable tile, and
+    // a forced encounter that lands on rock spawns nothing for a reason
+    // that has nothing to do with density.
+    for dx in -WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES {
+        for dy in -WILD_SPAWN_RADIUS_TILES..=WILD_SPAWN_RADIUS_TILES {
+            game.world.resource_mut::<WorldMap>().set_override(
+                pos.x + dx,
+                pos.y + dy,
+                Tile {
+                    biome: Biome::OpenGrid,
+                    walkable: true,
+                },
+            );
+        }
+    }
     // Saturate the box well past the target with hand-placed hostiles.
     let species = game.species_defs().into_iter().next().unwrap().id;
     for i in 0..(WILD_LOCAL_DENSITY_TARGET * 2) {
@@ -2047,4 +2063,89 @@ fn a_shiny_spawn_has_its_stats_multiplied() {
         "an Overclocked spawn ({gold_hp} HP) should beat the luckiest \
          ordinary roll ({best_ordinary} HP)"
     );
+}
+
+/// Carves `(cx, cy)` open and walls the box around it, so every scattered
+/// offset lands somewhere a hostile can never step off.
+fn open_tile_in_a_sealed_box(game: &mut Game, cx: i32, cy: i32, half: i32) {
+    for dx in -half..=half {
+        for dy in -half..=half {
+            let open = dx == 0 && dy == 0;
+            game.world.resource_mut::<WorldMap>().set_override(
+                cx + dx,
+                cy + dy,
+                Tile {
+                    biome: if open {
+                        Biome::OpenGrid
+                    } else {
+                        Biome::DataVoid
+                    },
+                    walkable: open,
+                },
+            );
+        }
+    }
+}
+
+/// Placement and movement have to agree. `wander_ai_system` and
+/// `pursuit_field` both step only onto `Tile::open_to_hostiles`, so a
+/// guardian scattered onto rock across a biome boundary had no legal move
+/// for the rest of the run — and its tether meant it could never be
+/// displaced off it either.
+#[test]
+fn a_nest_guardian_is_never_placed_where_it_could_never_step() {
+    let mut game = Game::new(608, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = (200, 200);
+    open_tile_in_a_sealed_box(&mut game, nx, ny, NEST_TETHER_RADIUS + 2);
+
+    game.spawn_nest("scrapper", nx, ny);
+
+    let mut query = game.world.query_filtered::<&Position, With<NestGuardian>>();
+    let placed: Vec<Position> = query.iter(&game.world).copied().collect();
+    assert!(!placed.is_empty(), "the nest should have guardians");
+    for pos in placed {
+        assert!(
+            game.world
+                .resource_mut::<WorldMap>()
+                .tile(pos.x, pos.y)
+                .open_to_hostiles(),
+            "a guardian at ({}, {}) is standing where it can never step",
+            pos.x,
+            pos.y
+        );
+    }
+}
+
+/// The same gap on the other placement path: a pack's members after the
+/// first are scattered around the roll's anchor tile.
+#[test]
+fn a_pack_member_is_never_placed_where_it_could_never_step() {
+    let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Zone 1 packs are solo, and a lone spawn lands on the anchor tile
+    // whatever the fix does — the scattered members are the whole point.
+    game.world.resource_mut::<ZoneLevel>().0 = 3;
+    let (ax, ay) = (300, 300);
+    open_tile_in_a_sealed_box(&mut game, ax, ay, 12);
+
+    let pack = game.spawn_pack(
+        "scrapper",
+        false,
+        ax,
+        ay,
+        crate::game::spawning::SpawnEscalation::surface(),
+    );
+
+    assert!(pack.len() > 1, "the fixture needs a pack, not a lone spawn");
+    for e in pack {
+        let pos = *game.world.get::<Position>(e).unwrap();
+        assert!(
+            game.world
+                .resource_mut::<WorldMap>()
+                .tile(pos.x, pos.y)
+                .open_to_hostiles(),
+            "a pack member at ({}, {}) is standing where it can never step",
+            pos.x,
+            pos.y
+        );
+    }
 }

@@ -33,9 +33,6 @@
       shipped instead: bounded by fights taken, which is the spine.
 
 # Bugs
-8. attacking groups of enemies shouldn't pull in nearby bosses
-7. attacks to one group shouldn't overflow to next group, after that group has been defeated.
-6. entities spawning stuck on unmovable terrain
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
 4. heals in battle log should be green
 1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest

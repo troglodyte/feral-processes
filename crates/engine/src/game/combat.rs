@@ -94,17 +94,24 @@ impl Game {
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position), With<Hostile>>();
-        for (e, pos) in query.iter(&self.world) {
-            if e == anchor {
-                continue;
-            }
-            let dist = (pos.x - anchor_pos.x)
-                .abs()
-                .max((pos.y - anchor_pos.y).abs());
-            if dist <= radius {
-                pack.push(e);
-            }
-        }
+        let sweep: Vec<Entity> = query
+            .iter(&self.world)
+            .filter(|(e, pos)| {
+                *e != anchor
+                    && (pos.x - anchor_pos.x)
+                        .abs()
+                        .max((pos.y - anchor_pos.y).abs())
+                        <= radius
+            })
+            .map(|(e, _)| e)
+            .collect();
+        // A boss is `is_boss` because it *spawns as its own group*, and past
+        // zone 1 it arrives with an escort built for it in `spawn_pack`. It
+        // roams the open map like anything else (`try_spawn_habitat_creature`
+        // passes `allow_boss: true`), so without this it would be swept into
+        // whatever ordinary cluster it happened to be standing near. The
+        // anchor is exempt by construction: bumping a boss has to fight it.
+        pack.extend(sweep.into_iter().filter(|&e| !self.is_boss_creature(e)));
         pack.truncate(self.group_size_ceiling() * self.enemy_group_ceiling());
         pack
     }
@@ -190,6 +197,7 @@ impl Game {
         self.world.resource_mut::<MessageLog>().open_battle();
         self.world.insert_resource(BattleState {
             player,
+            round_targets: groups.iter().map(|g| g.members.clone()).collect(),
             groups,
             round: 1,
             planned: vec![None; slots],

@@ -9,17 +9,30 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
-    /// A planned target group may have died earlier in the round. Fall back
-    /// to the lowest surviving group rather than wasting the turn.
+    /// Resolves a *planned* group index against the groups as they stand
+    /// now, returning where that group is currently indexed — or `None` if
+    /// it has fallen, in which case the action is spent rather than
+    /// redirected.
+    ///
+    /// A planned index names a group, not a slot. An emptied group is
+    /// dropped from `BattleState::groups` the moment it dies, shifting
+    /// every group behind it down one, so an index alone stops meaning what
+    /// the player picked: aim at group B, watch A fall to a faster party
+    /// member, and the raw index would land on C. Matching on
+    /// `BattleState::round_targets` — the member sets captured when the
+    /// plan was made — is what makes the aim follow the group instead.
+    ///
+    /// The turn is deliberately wasted when the target is gone. Falling
+    /// back to the front group, which is what this used to do, is the
+    /// overflow itself: it spends a heavy hit or a decompile on something
+    /// nobody aimed at.
     pub(crate) fn retarget(&self, group: usize) -> Option<usize> {
-        let count = self.living_group_count();
-        if count == 0 {
-            None
-        } else if group < count {
-            Some(group)
-        } else {
-            Some(0)
-        }
+        let battle = self.world.get_resource::<BattleState>()?;
+        let planned = battle.round_targets.get(group)?;
+        battle
+            .groups
+            .iter()
+            .position(|g| g.members.iter().any(|m| planned.contains(m)))
     }
 
     /// Resolves the planned round: everyone rolls initiative, acts in
@@ -57,6 +70,11 @@ impl Game {
         self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
         let plan = self.world.resource::<BattleState>().planned.clone();
+        // Captured alongside the plan, and for the plan's sake: the indices
+        // in it are only meaningful against the groups as they stood when
+        // it was made. See `BattleState::round_targets`.
+        let mut battle = self.world.resource_mut::<BattleState>();
+        battle.round_targets = battle.groups.iter().map(|g| g.members.clone()).collect();
 
         // Bracing is a stance held for the whole round, not an action that
         // only pays off when you win initiative — so it is applied before
@@ -214,9 +232,6 @@ impl Game {
         });
         match action {
             BattleAction::Attack { group } => {
-                let Some(group) = self.retarget(group) else {
-                    return;
-                };
                 self.party_member_attacks(slot, entity, group, player);
             }
             BattleAction::Special { ability, target } => {
@@ -291,7 +306,15 @@ impl Game {
         group: usize,
         player: Entity,
     ) -> bool {
-        let Some(front) = self.front_of_group(group) else {
+        // `group` is the index the *plan* named, so it is resolved here and
+        // again for the proc below rather than being resolved once by the
+        // caller: a strike that empties its target re-letters the groups
+        // behind it, and the proc has to be answering the same aim, not the
+        // shifted one.
+        let Some(live) = self.retarget(group) else {
+            return false;
+        };
+        let Some(front) = self.front_of_group(live) else {
             return false;
         };
         let (move_name, move_power) = if slot == 0 {
@@ -321,7 +344,7 @@ impl Game {
             );
         }
 
-        if !self.creature_alive(front) && self.finish_group_member(group, player) {
+        if !self.creature_alive(front) && self.finish_group_member(live, player) {
             return true;
         }
         if slot == 0 {

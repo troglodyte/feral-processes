@@ -110,11 +110,14 @@ Recorded so the next survey doesn't rediscover them as opportunities.
   seam, `ItemDef::droppable`, is used by all 31 gear items and both are
   merged per kill (`Game::equipment_drops_for`). The item-side direction won;
   the species-side field is redundant, not neglected.
-- **`work_resource` does not gate cronjobs.** `Game::assign_cronjob`
-  (`game/building.rs:304`) checks ownership and `ResourceNode`, never species.
-  The field feeds drop tables (`game/combat_rewards.rs:50`) and the inspection
-  screen. Any program can work any node — 10 of 17 species have
-  `work_resource: None` and are not thereby unemployable.
+- **`work_resource` does not gate who works a machine.** It never did:
+  `Game::assign_cronjob` checked ownership and `ResourceNode`, never
+  species. That function is gone as of work orders (2026-08-14) and
+  `game::base::work_orders::schedule_base_labour` posts from the base staff
+  pool, which asks nothing about species either. The field feeds drop
+  tables (`game/combat_rewards.rs:50`) and the inspection screen. Any
+  program can work any node — 10 of 17 species have `work_resource: None`
+  and are not thereby unemployable.
 - **`DataVoid` and `BlackIce` having no species is correct.** Both are
   unwalkable barrier terrain (`world.rs:96`), and `assets/species/README.md`
   says so explicitly.

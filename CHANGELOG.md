@@ -27,6 +27,86 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.35
+
+### Work orders: the base staffs itself
+
+You used to staff the base one program at a time, forever. Open the base
+menu, pick a program, pick a structure, repeat — and then repeat it again
+every time a machine clogged, a worker was wanted elsewhere, or a chain
+needed its upstream link fed before its downstream one could run. That is
+not a decision, it is bookkeeping.
+
+**Now you say what you want made.** "3 Routine Disks" — and the base works
+out that this means Core Fragments through a Lathe into a Disk Press, and
+staffs itself in that order with whoever you have given it.
+
+An order is a **target level, not a production run**: three already sitting
+in a Depot satisfy it on the spot. Completion is measured across Depots and
+machine output buffers, because what the base *holds* is the question and
+where it holds it is not.
+
+**A work order stores an item and a quantity, and nothing else.** No
+per-machine plan, no unit targets, no progress counters. Which machines a
+line needs, in what order, and who is on each is recomputed from live world
+state every tick — the same call this game already makes for the build
+radius, a Broker's board, a Stack description and the wielded program's
+bonus. The status screen runs the scheduler's own walk, so what you read is
+what the base believes by construction rather than by a comment claiming
+the two agree. Multiplying the recipe tree through at queue time would have
+produced a tidier progress bar and a plan that is confidently wrong the
+moment a machine is demolished.
+
+An order is refused when it is placed if the line can never move, and the
+refusal names the break: the machine you have not built, or the link with
+no feeder beside it. Research is refused too, and not as a special case —
+Research Data is banked as it is gathered, so it reaches no output buffer
+and nothing can hold a stock of it. The Research Node is still staffed, as
+a standing job.
+
+### Base staff
+
+Programs are now on one side or the other: in your party, or in the base.
+The two are disjoint sets drawing on one roster, which makes explicit a
+choice that used to be a side effect of a menu action — every program at a
+machine is one absent from a fight.
+
+Staff with nothing to do loiter on a ring around the Home instead of being
+invisible, and `x` can name them, because what the map draws and what the
+inspector names is one rule.
+
+### Standing jobs
+
+A machine can be told to keep running, and a structure to keep a guard,
+whether or not an order asks for it. Standing jobs are filled only by a
+body no order needs, and give that body up the moment one does — which is
+how a Research Node gets worked at all, and the only way a guard post
+survives the sweep that makes it worth having.
+
+The toggle lives on the structure roster rather than in a menu of its own:
+the question "should this machine always be running" belongs to the
+machine.
+
+### What was removed
+
+"Assign a cronjob" and "Post a guard" are gone from the base menu, and the
+engine methods behind them are gone from the engine. **Working a structure
+yourself is untouched** — you are not staff, and the scheduler never moves
+you.
+
+An existing base keeps its workers. Any program holding a job when a save
+loads is absorbed into the staff pool rather than being stood down, and
+every new field is additive and defaulted, so **no save-format bump** and
+nothing to migrate.
+
+### Not gated by anything automatic
+
+`balance_sim` is RNG-free and models no base at all — it cannot see a work
+order, a posted program, or a production chain, and the arena models player
+combat. Nothing here is covered by an automatic balance gate, and the
+question it raises — whether automating staffing makes the base too
+productive for the zone curve — is answerable only by playing it.
+
 ## 0.8.34
 
 ### Three bugs where an index stood in for the thing it named

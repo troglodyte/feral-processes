@@ -145,11 +145,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // worker and no input item, unlike `work`.
     // Stacks additively across every in-range structure that sets it, and
     // clamps at full Power. This is how the Recharger Node works:
-    // `power_regen: Some((per_tick: 1.0, radius: 7))`, a radius chosen to
-    // cover a whole base (structures must be built within 7 tiles of Home).
+    // `power_regen: Some((per_tick: 1.0, radius: 10))`, a radius chosen to
+    // cover a base grown to its full size — see `build_radius_bonus` below.
     power_regen: Some((
         per_tick: 1.0,
-        radius: 7,
+        radius: 10,
     )),
 
     // Optional; can be left out entirely (defaults to no symlink). If set,
@@ -260,6 +260,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // own two more tamed programs (across party, cronjobs, and idle pets).
     pet_slot_bonus: 2,
 
+    // Optional; can be left out entirely (defaults to 0). How many tiles
+    // this structure widens the base platform by while it's deployed. The
+    // base's radius is `4 + the sum of this across every deployed
+    // structure`, capped at 10, so several of them stack and each lays one
+    // more ring of platform floor. This is how the Heap Pillar works:
+    // `build_radius_bonus: 1` with no `work` recipe.
+    //
+    // Two engine rules come with it, and neither is configurable. Deploying
+    // one is refused outright if a Stack link stands in the ground the new
+    // ring would claim — the stamp obliterates what it covers, and a link is
+    // the way down to the Stack. And a structure setting this cannot be
+    // demolished except in a Home's cascade: growth is one-way, so there is
+    // never a shrinking slab with structures left standing outside it. A mod
+    // setting `raidable: true` on one is on its own here; the shipped Pillar
+    // sets it false, so no Durability and no sweep can take it down.
+    build_radius_bonus: 1,
+
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
     // the player stands within `radius` tiles of this structure — resting
@@ -269,9 +286,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // before this field existed. The price sits with the structure that
     // grants rest rather than as a single global rate, so a modded
     // alternate rest structure can charge differently, or nothing. This is
-    // how Home works: `enables_rest: Some((radius: 7, cost: [("outlet", 1)]))`
-    // — a radius covering the whole base, priced at one Power Outlet.
-    enables_rest: Some((radius: 7, cost: [("outlet", 1)])),
+    // how Home works: `enables_rest: Some((radius: 10, cost: [("outlet", 1)]))`
+    // — a radius covering a base grown to its full size (see
+    // `build_radius_bonus`), priced at one Power Outlet.
+    enables_rest: Some((radius: 10, cost: [("outlet", 1)])),
 
     // Optional; can be left out entirely (defaults to a permanent
     // structure). If set, this structure automatically collapses once

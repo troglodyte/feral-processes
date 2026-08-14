@@ -27,6 +27,57 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.19
+
+### A base you build outward
+
+A base starts half the size it used to — a 9x9 slab of about 69 buildable
+tiles rather than 15x15 — and the **Heap Pillar** grows it back, one ring at
+a time. Build one and the edge creeps out a tile in every direction; build
+another and it creeps again, to a ceiling of 21x21. It costs 14 Core
+Fragments, sits behind a new research node (Heap Allocation, 30 Research Data
+off Power Grid), and cannot be demolished.
+
+The complaint this answers is feel rather than capacity. A real base does not
+fill 213 tiles, so the old slab was the same size in the first minute of a
+run as in the tenth hour and nothing you did ever made it bigger. Growing in
+single-tile steps is the whole of the settlement reading: the edge moves
+often, by a little, and you are the reason.
+
+Irreversibility is the design rather than a limitation. A Pillar that could
+come down would leave structures standing outside a shrinking slab, and there
+is no good answer to that — so there is no shrinking slab. Demolishing your
+Home still cascades over everything, Pillars included, and the base resets to
+its starting size.
+
+Two things a Pillar refuses to do. It will not grow over a Stack link, and
+the refusal comes before it charges you: the stamp obliterates whatever
+stands in the ground it claims, and a link is the way down to the only source
+of Portal Fragments in the game. It does still obliterate wild programs and
+nests in the ring it takes, exactly as deploying a Home always has.
+
+Two knock-on fixes come with it, and one of them would have ended runs. A
+zone's first Stack link was drawn from a small box around your arrival point,
+and a slab wide enough swallows that box whole — at which point the placement
+loop spends its whole shared attempt budget failing to land that first link
+and the sector gets **none at all**. No links means no Stack, no Stack means
+no Portal Fragments, and the run can never breach again; it would have read
+as a bad seed rather than as a bug. The on-ramp now draws from the ring just
+outside the base, whatever size the base is, which also repairs a squeeze
+that existed at the old radius. And stack depth is measured from the edge of
+your base rather than from its centre, so growing does not quietly make every
+descent in the sector deeper.
+
+The opening nursery is unchanged at 7 tiles. It used to be defined *as* the
+build radius, which would have shrunk it for the opening minutes and then
+widened it every time you built a Pillar — a difficulty knob keyed to base
+geometry, which is the thing removed when distance stopped scaling anything.
+Home's rest radius and the Recharger Node's reach now cover a fully grown
+base instead of a fixed 7 tiles.
+
+Existing saves load untouched: nothing about the footprint is stored, so a
+base's width is rediscovered from the structures a save already carries.
+
 ## 0.8.18
 
 ### Rotten substrate can kill you now

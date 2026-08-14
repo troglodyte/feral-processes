@@ -27,6 +27,22 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.24
+
+### The battle roster says what each member is wearing
+
+The party's side of the intrusion screen gains a `GEAR` column, between
+`POS` and `FATIGUE`, carrying the same `w|a|m` loadout cell the roster and
+the status panel already show — a letter per filled equipment slot, a dot
+for an empty one. A companion you kitted out and one you never got round to
+are now told apart in the place it costs you to find out the hard way.
+
+It is the engine's cell rather than one the renderer assembles, for the
+reason the other two screens' is: a loadout that reads one way in a fight
+and another on the sheet you set it from is worse than not showing it. And
+it is fixed-width by construction, so `FATIGUE` and `ACTION` sit at the same
+column whether a row is fully geared or completely bare.
+
 ## 0.8.23
 
 ### The etch screen is somewhere you can get to, and says what you already hold

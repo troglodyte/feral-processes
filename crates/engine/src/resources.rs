@@ -404,6 +404,16 @@ pub struct GameOver {
 #[derive(Resource, Default)]
 pub struct RunFeats {
     pub bosses_defeated: Vec<String>,
+    /// The species id of every creature killed this tick, for a contract's
+    /// `Objective::Kill`. Written beside `bosses_defeated` in `award_loot`,
+    /// so the two records cannot drift about what counts as a kill.
+    ///
+    /// A **separate field**, drained by `game::contracts::contract_system`
+    /// and by nothing else. Each field having exactly one drainer is what
+    /// removes any ordering dependency between the two systems: both are
+    /// registered unchained, and a shared queue would silently make that
+    /// unsound the moment one ate the other's events.
+    pub kills: Vec<String>,
 }
 
 /// One contract the run has taken on, and how far along it is.

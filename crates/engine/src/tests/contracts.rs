@@ -456,3 +456,46 @@ fn an_absent_contracts_directory_is_silent() {
         "an install without contracts is the pre-contract game, not a fault: {warnings:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The kill counter
+// ---------------------------------------------------------------------------
+
+/// `award_loot` directly rather than through a fight, for the reason
+/// `killing_a_boss_records_its_species` does the same: `RunFeats` is a
+/// per-tick drain queue, so a test that reads it after a resolved round sees
+/// an empty queue whether the record was ever made or not. That the record
+/// happens on a *real* kill is asserted in the `contract_system` tests, where
+/// the observable is contract progress rather than the queue.
+#[test]
+fn every_kill_records_its_species() {
+    let mut game = fresh();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game.spawn_wild_creature("drone", pos.x, pos.y).unwrap();
+    game.award_loot(wild);
+
+    assert_eq!(
+        game.world.resource::<crate::resources::RunFeats>().kills,
+        vec!["drone".to_string()],
+        "the one door every kill in the game passes through"
+    );
+}
+
+#[test]
+fn a_boss_kill_lands_in_both_fields() {
+    let mut game = fresh();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let boss = game.spawn_wild_creature("overseer", pos.x, pos.y).unwrap();
+    game.award_loot(boss);
+
+    let feats = game.world.resource::<crate::resources::RunFeats>();
+    assert_eq!(feats.bosses_defeated, vec!["overseer".to_string()]);
+    assert_eq!(
+        feats.kills,
+        vec!["overseer".to_string()],
+        "a boss is also a kill. The two fields are separate and each has \
+         exactly one drainer, which is what removes any ordering dependency \
+         between achievement_system and contract_system — merging them would \
+         silently make an unchained system order-sensitive."
+    );
+}

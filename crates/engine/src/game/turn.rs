@@ -118,6 +118,11 @@ impl Game {
             return;
         }
         self.maybe_spawn_wild_creature();
+        // Before the schedule, not after, so a body posted this tick makes
+        // progress this tick rather than standing at its machine for one.
+        // Beside `maybe_spawn_wild_creature` for the same reason that one is
+        // here: both are `&mut Game` work a bevy system cannot express.
+        self.schedule_base_labour();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an

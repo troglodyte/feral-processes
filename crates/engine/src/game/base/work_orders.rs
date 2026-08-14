@@ -379,6 +379,149 @@ pub(crate) fn base_holding(game: &Game, item: &ItemId) -> u32 {
 }
 
 impl Game {
+    /// One tick of base labour: complete what is done, drop what is no
+    /// longer wanted, fill what is.
+    ///
+    /// Deliberately a `&mut Game` method called from `tick_inner` rather
+    /// than a bevy system, because posting a program is `&mut Game` work —
+    /// it logs, reads structure defs through `work_ticks_for`, and writes
+    /// `Party`. It runs **immediately before** `schedule.run`, beside
+    /// `maybe_spawn_wild_creature`, so a body assigned this tick progresses
+    /// this tick rather than idling until the next one.
+    ///
+    /// The five steps and their order are load-bearing:
+    ///
+    /// 1. Take the front order. If base storage already holds its quantity
+    ///    the order is complete — pop it, announce it, take the next.
+    /// 2. Build its wants. If the walk yields nothing the order is
+    ///    **stalled**, not complete: leave it in the queue and take the next
+    ///    instead, so one dead order cannot freeze a base that could still
+    ///    work the three behind it.
+    /// 3. Leave in place any staff already posted where a want still exists.
+    /// 4. Unpost any staff whose machine no longer wants a body.
+    /// 5. Fill the remaining wants, deepest first, from **idle** staff only.
+    ///
+    /// Steps 3 and 5 together are the anti-thrash rule and are not
+    /// optional. A scheduler that rebuilt every posting each tick would walk
+    /// the whole roster across the base whenever a buffer changed by one
+    /// unit — and restart every cronjob's progress from zero doing it.
+    pub(crate) fn schedule_base_labour(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        let wanted = self.settle_orders();
+        let staff = self.base_staff();
+        if staff.is_empty() {
+            // A valid, quiet state: orders queue and report normally and
+            // nothing is posted. The status screen says the base has nobody
+            // in it, which is a different errand from an order being stuck.
+            return;
+        }
+        let wanted_machines: std::collections::HashSet<Entity> =
+            wanted.iter().map(|&(e, _)| e).collect();
+        // Machines already being worked, by anyone — the player's own
+        // `work_structure` task counts, since a machine with a body on it
+        // does not need a second.
+        let taken: std::collections::HashSet<Entity> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| e.get::<Task>())
+            .filter(|t| matches!(t.kind, TaskKind::GatherResource))
+            .map(|t| t.target)
+            .collect();
+        let unfilled: Vec<(Entity, u32)> = wanted
+            .into_iter()
+            .filter(|(m, _)| !taken.contains(m))
+            .collect();
+        // **The scheduler never takes a body off a machine unless it has
+        // somewhere better to put it.** With nothing left to fill there is
+        // no gain in moving anyone, and real harm in it: a base whose queue
+        // has run dry — or one loaded from a save written before work
+        // orders existed, whose workers were all posted by hand — would
+        // otherwise be stood down wholesale on the first tick, which is the
+        // exact regression `Game::load`'s absorption rule exists to
+        // prevent. Standing jobs are how a machine is deliberately kept
+        // running with no order behind it.
+        if unfilled.is_empty() {
+            return;
+        }
+
+        // Step 4. Only `BaseStaff` is ever unposted — the player's own
+        // `work_structure` task and anything posted by hand outside the pool
+        // are not the scheduler's to move.
+        let mut idle = Vec::new();
+        for &worker in &staff {
+            match self.world.get::<Task>(worker).map(|t| t.target) {
+                None => idle.push(worker),
+                Some(target) if !wanted_machines.contains(&target) => {
+                    self.world
+                        .entity_mut(worker)
+                        .remove::<Task>()
+                        .remove::<Carrying>();
+                    idle.push(worker);
+                }
+                // Step 3: posted where a want still exists, so it stays
+                // exactly where it is. This is the anti-thrash rule.
+                Some(_) => {}
+            }
+        }
+        idle.reverse();
+
+        // Step 5, deepest first.
+        let from = self
+            .world
+            .get::<Position>(self.player_entity())
+            .copied()
+            .unwrap_or(Position { x: 0, y: 0 });
+        for (machine, _) in unfilled {
+            let Some(worker) = idle.pop() else {
+                break;
+            };
+            self.post_worker(worker, machine, from);
+        }
+    }
+
+    /// Steps 1 and 2: pop every completed order off the front, skip a
+    /// stalled one, and return the want list of the first order that has
+    /// work in it.
+    ///
+    /// Returns empty when nothing is orderable — which is also what a base
+    /// with an empty queue looks like, and the two are the same instruction
+    /// to the caller.
+    fn settle_orders(&mut self) -> Vec<(Entity, u32)> {
+        let mut index = 0;
+        loop {
+            let Some(order) = self
+                .world
+                .resource::<resources::WorkOrders>()
+                .0
+                .get(index)
+                .cloned()
+            else {
+                return Vec::new();
+            };
+            if base_holding(self, &order.item) >= order.qty {
+                let name = self.item_name(&order.item).to_string();
+                let qty = order.qty;
+                self.world
+                    .resource_mut::<resources::WorkOrders>()
+                    .0
+                    .remove(index);
+                self.log_base(format!("Work order complete: {qty} x {name}."));
+                continue;
+            }
+            let list = wants(self, &order);
+            if list.is_empty() {
+                // Stalled. It keeps its place in the queue so the status
+                // screen can say which machine went missing; the player
+                // cancels it or rebuilds.
+                index += 1;
+                continue;
+            }
+            return list;
+        }
+    }
+
     /// Queues an order for `qty` of `item`, or names why the line for it can
     /// never move.
     ///

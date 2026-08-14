@@ -337,14 +337,16 @@ fn a_save_written_before_work_orders_existed_still_loads() {
 
 use crate::game::base::work_orders::{base_holding, can_progress, wants};
 
-/// Fills `machine`'s output to its capacity, which is what clogging is.
-fn clog(game: &mut Game, machine: Entity) {
+/// Fills `machine`'s output to its capacity with `item`, which is what
+/// clogging is.
+fn clog_with(game: &mut Game, machine: Entity, item: &str) {
     let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
     let room = stock.output_room();
-    *stock
-        .output
-        .entry(ItemId::from(ids::CORE_FRAGMENT))
-        .or_default() += room;
+    *stock.output.entry(ItemId::from(item)).or_default() += room;
+}
+
+fn clog(game: &mut Game, machine: Entity) {
+    clog_with(game, machine, ids::CORE_FRAGMENT);
 }
 
 fn put_output(game: &mut Game, machine: Entity, item: &str, qty: u32) {
@@ -581,4 +583,224 @@ fn base_holding_counts_depots_and_machine_outputs_but_not_your_pockets() {
         12,
         "what the base holds, not what you are carrying"
     );
+}
+
+// ---------------------------------------------------------------------
+// Task 4: the scheduler
+// ---------------------------------------------------------------------
+
+/// Where `worker` is currently posted, or `None` if it is idle.
+fn posted_at(game: &Game, worker: Entity) -> Option<Entity> {
+    game.world.get::<Task>(worker).map(|t| t.target)
+}
+
+/// `n` programs on the base staff, in the order `base_staff` will return
+/// them.
+fn hire(game: &mut Game, n: usize) -> Vec<Entity> {
+    let mut staff = Vec::new();
+    for _ in 0..n {
+        let worker = spawn_tamed(game, 10, 3);
+        game.assign_base_staff(worker).unwrap();
+        staff.push(worker);
+    }
+    staff.sort();
+    staff
+}
+
+#[test]
+fn one_staff_member_is_posted_to_the_top_of_the_line() {
+    let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "nothing else in the line has anything to do yet"
+    );
+    let _ = (lathe, press);
+}
+
+/// The whole of "work the deepest requirement until it is made, then move
+/// on", and it is not sequenced by the scheduler — it falls out of
+/// `can_progress` being false for a clogged machine.
+#[test]
+fn a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.tick();
+    assert_eq!(posted_at(&game, staff[0]), Some(mine), "precondition");
+
+    // The Mining Node fills its buffer and can do no more; the Lathe now
+    // has a feeder full of fragments.
+    clog(&mut game, mine);
+    game.tick();
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(lathe),
+        "a clogged machine stops wanting a body, so the body moves downstream"
+    );
+
+    // The Lathe fills its own buffer in turn, and the Mining Node fills the
+    // room the Lathe's pull just made in its. Both upstream machines are
+    // clogged and only the Press has room, so the Press is the one thing
+    // left in the base that a body can move.
+    //
+    // Re-clogging the Mining Node is not fussiness: a staffed Lathe drains
+    // its feeder, which is exactly what gives that feeder something to do
+    // again — a body cycles back upstream rather than marching one way down
+    // the line, and that is the behaviour, not a wrinkle in the fixture.
+    clog(&mut game, mine);
+    clog_with(&mut game, lathe, "blank_substrate");
+    game.tick();
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(press),
+        "and again, once the Lathe has filled up behind it"
+    );
+}
+
+#[test]
+fn three_staff_spread_across_a_running_line_without_doubling_up() {
+    let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    let staff = hire(&mut game, 3);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+
+    game.tick();
+
+    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    posts.sort();
+    let mut expected = vec![mine, lathe, press];
+    expected.sort();
+    assert_eq!(posts, expected, "one body per machine, no machine twice");
+}
+
+#[test]
+fn two_staff_take_the_two_deepest_machines() {
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+
+    game.tick();
+
+    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    posts.sort();
+    let mut expected = vec![mine, lathe];
+    expected.sort();
+    assert_eq!(
+        posts, expected,
+        "scarce bodies go upstream first; the Disk Press waits"
+    );
+    assert!(posts.iter().all(|&p| p != press));
+}
+
+/// An order is a **target level, not a production run** — three already in
+/// a Depot means the base has three, and the order is done before anyone
+/// is sent anywhere.
+#[test]
+fn an_order_the_base_already_holds_completes_without_staffing_anything() {
+    let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_mine, _lathe, _press) = lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 6, 0);
+    put_output(&mut game, depot, "routine_disk", 5);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    game.tick();
+
+    assert!(game.work_orders().is_empty(), "the order is popped");
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        None,
+        "and nobody was sent anywhere to fill an order the base already met"
+    );
+}
+
+/// Only *idle* staff are ever assigned and a program already posted where
+/// a want still exists is never moved. Without that rule the scheduler
+/// would walk the whole roster across the base whenever a buffer changed
+/// by one unit.
+#[test]
+fn a_posted_worker_is_not_moved_when_an_unrelated_buffer_changes() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 6, 0);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.tick();
+    assert_eq!(posted_at(&game, staff[0]), Some(mine), "precondition");
+    let progress_before = game.world.get::<Task>(staff[0]).unwrap().progress;
+
+    put_output(&mut game, depot, ids::POWER_CELL, 4);
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "an unrelated buffer moving is not a reason to walk the roster"
+    );
+    assert!(
+        game.world.get::<Task>(staff[0]).unwrap().progress >= progress_before,
+        "and the cronjob was not restarted from zero"
+    );
+}
+
+/// Queue-time refusal catches a broken line when the order is placed, but
+/// a machine can be demolished or swept to destruction after that. One
+/// dead order must not freeze a base that could still work the ones
+/// behind it.
+#[test]
+fn a_stalled_front_order_does_not_block_the_queue() {
+    let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, press) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 30)
+        .unwrap();
+
+    game.world.entity_mut(press).despawn();
+    game.tick();
+
+    assert_eq!(
+        game.work_orders().len(),
+        2,
+        "the stalled order stays listed rather than being silently dropped"
+    );
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "and the order behind it is worked"
+    );
+}
+
+#[test]
+fn a_base_with_no_staff_queues_and_reports_without_posting_or_panicking() {
+    let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    game.tick();
+    game.tick();
+
+    assert_eq!(game.work_orders().len(), 1);
+    assert!(game.base_staff().is_empty());
 }

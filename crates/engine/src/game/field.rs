@@ -100,14 +100,77 @@ impl Game {
     /// both call this rather than `routine_holders`, and `cast_field_routine`
     /// checks the same set again below so a picker bug can't hand the
     /// engine a target nothing will ever tick.
-    pub fn field_cast_targets(&mut self) -> Vec<RoutineHolderView> {
+    ///
+    /// `routine_index` is the same index space `cast_field_routine` takes —
+    /// the routine about to be cast, which is what decides each row's
+    /// `running` tag. An index naming no `FieldBuff` (either Stack movement
+    /// routine, or nothing at all) still lists the full roster, untagged:
+    /// the roster is a fact about the party and only the tag is a fact about
+    /// the pair.
+    pub fn field_cast_targets(&mut self, routine_index: usize) -> Vec<FieldCastTargetView> {
+        let kind = self.field_routine_buff_kind(routine_index);
         let player = self.player_entity();
-        let mut targets = vec![self.routine_holder_view(player, "You".to_string())];
+        let mut targets = vec![self.field_cast_target_view(player, "You".to_string(), kind)];
         for member in self.world.resource::<Party>().0.clone() {
             let name = self.creature_label(member);
-            targets.push(self.routine_holder_view(member, name));
+            targets.push(self.field_cast_target_view(member, name, kind));
         }
         targets
+    }
+
+    /// What kind of field buff `field_routines()[routine_index]` arms, or
+    /// `None` for an index naming a movement routine or nothing.
+    fn field_routine_buff_kind(&mut self, routine_index: usize) -> Option<FieldBuffKind> {
+        let ability = self.field_routines().get(routine_index)?.ability.clone();
+        match self.world.resource::<AbilityDb>().get(&ability)?.effect {
+            AbilityEffect::FieldBuff { kind, .. } => Some(kind),
+            _ => None,
+        }
+    }
+
+    /// One ally-picker row: the shared holder derivation, plus the stats the
+    /// buff is about to land on and the buff it would displace.
+    fn field_cast_target_view(
+        &mut self,
+        entity: Entity,
+        name: String,
+        kind: Option<FieldBuffKind>,
+    ) -> FieldCastTargetView {
+        let holder = self.routine_holder_view(entity, name);
+        let (hp, max_hp, atk, def, power) = self
+            .world
+            .get::<Stats>(entity)
+            .map(|s| (s.hp, s.max_hp, s.atk, s.def, s.power()))
+            .unwrap_or_default();
+        FieldCastTargetView {
+            entity: holder.entity,
+            glyph: holder.glyph,
+            color: holder.color,
+            name: holder.name,
+            level: holder.level,
+            hp,
+            max_hp,
+            atk,
+            def,
+            power,
+            running: kind.and_then(|kind| self.displaced_field_buff(entity, kind)),
+        }
+    }
+
+    /// The `Routine`-armed buff of `kind` on `entity` — what
+    /// `arm_field_buff` would displace. A `Consumable`-armed one of the same
+    /// kind is deliberately not it: that call leaves it running.
+    fn displaced_field_buff(&self, entity: Entity, kind: FieldBuffKind) -> Option<RunningBuffView> {
+        self.world
+            .get::<FieldBuff>(entity)?
+            .active
+            .iter()
+            .find(|b| b.source == BuffSource::Routine && b.kind == kind)
+            .map(|b| RunningBuffView {
+                name: b.name.clone(),
+                magnitude: b.kind.magnitude_label(b.power, b.interval),
+                remaining: b.remaining,
+            })
     }
 
     /// Whether `entity` is someone a `Creature`-scoped field buff can land

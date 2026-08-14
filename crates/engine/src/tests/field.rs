@@ -2,7 +2,9 @@
 //! `Game::cast_field_routine`.
 
 use super::support::*;
-use crate::components::{FieldBuff, FieldBuffKind, Needs, Perks, Routines};
+use crate::components::{
+    ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Needs, Perks, Routines,
+};
 use crate::resources::Party;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, CREATURE_MAX_LEVEL};
 use crate::*;
@@ -313,7 +315,7 @@ fn field_cast_targets_excludes_an_owned_program_outside_the_party() {
     game.add_companion(party_member).unwrap();
     let benched = spawn_tamed(&mut game, 10, 3);
 
-    let targets = game.field_cast_targets();
+    let targets = game.field_cast_targets(0);
 
     assert!(targets.iter().any(|t| t.entity == player));
     assert!(targets.iter().any(|t| t.entity == party_member));
@@ -327,6 +329,170 @@ fn field_cast_targets_excludes_an_owned_program_outside_the_party() {
         holders.iter().any(|h| h.entity == benched),
         "routine_holders (install/uninstall) still lists it — only casting narrows"
     );
+}
+
+/// Arms the player with the fixture's `OneAlly` field routine, so
+/// `field_routines()[0]` is it and `field_cast_targets(0)` is the picker
+/// that would follow.
+fn game_with_the_field_routine_installed() -> Game {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+    game
+}
+
+/// The picker's whole job is choosing a body for the buff, and every shipped
+/// `OneAlly` routine is about a stat: HP for Regen, ATK for Overclock, DEF
+/// and Mitigation for the other two. Without the numbers on the row, the
+/// only way to pick is to remember them.
+#[test]
+fn an_ally_picker_row_carries_the_targets_stats() {
+    let mut game = game_with_the_field_routine_installed();
+    let member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+    let stats = *game.world.get::<Stats>(member).unwrap();
+
+    let targets = game.field_cast_targets(0);
+    let row = targets
+        .iter()
+        .find(|t| t.entity == member)
+        .expect("the party member is offered");
+
+    assert_eq!((row.hp, row.max_hp), (stats.hp, stats.max_hp));
+    assert_eq!((row.atk, row.def), (stats.atk, stats.def));
+    assert_eq!(row.power, stats.power());
+}
+
+/// The player is a target too, and carries no `Creature` — the stats have to
+/// come off `Stats`, which both sides have, rather than off anything only a
+/// program owns.
+#[test]
+fn the_ally_pickers_player_row_carries_stats_too() {
+    let mut game = game_with_the_field_routine_installed();
+    let player = game.player_entity();
+    let stats = *game.world.get::<Stats>(player).unwrap();
+
+    let targets = game.field_cast_targets(0);
+    let row = targets
+        .iter()
+        .find(|t| t.entity == player)
+        .expect("the player is always offered");
+
+    assert_eq!((row.hp, row.max_hp), (stats.hp, stats.max_hp));
+    assert_eq!(row.atk, stats.atk);
+}
+
+/// `arm_field_buff` displaces a running `Routine` buff of the same kind, so
+/// casting on a target that already has one replaces it rather than stacking
+/// — and nothing else on this screen says so. The tag names the buff it
+/// would overwrite, because two different routines can arm one kind
+/// (Ablative Layer and Long Winter both arm Mitigation) and "already
+/// running" alone would not say which is about to go.
+#[test]
+fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
+    let mut game = game_with_the_field_routine_installed();
+    let member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+    game.arm_field_buff(
+        member,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Loop Single".to_string(),
+            power: 7,
+            remaining: 62,
+            interval: 4,
+            source: BuffSource::Routine,
+        },
+    );
+
+    let targets = game.field_cast_targets(0);
+    let running = targets
+        .iter()
+        .find(|t| t.entity == member)
+        .expect("the party member is offered")
+        .running
+        .as_ref()
+        .expect("a routine-armed Regen is exactly what this cast would replace");
+
+    assert_eq!(running.name, "Repair Loop Single");
+    assert_eq!(running.remaining, 62);
+    assert_eq!(
+        running.magnitude,
+        FieldBuffKind::Regen.magnitude_label(7, 4),
+        "the magnitude is the engine's to word, the same as the buff list's"
+    );
+
+    let player = game.player_entity();
+    assert!(
+        targets
+            .iter()
+            .find(|t| t.entity == player)
+            .expect("the player is always offered")
+            .running
+            .is_none(),
+        "a target carrying nothing of this kind gets no tag"
+    );
+}
+
+/// A buff of the same kind armed by a *consumable* is deliberately not
+/// named: `arm_field_buff` displaces `Consumable` and `Routine` entries
+/// separately, so this cast would leave it running. The tag says what is
+/// about to be overwritten, not what is running in general — which is the
+/// distinction that makes it worth reading.
+#[test]
+fn a_consumable_buff_of_the_same_kind_is_not_named_as_replaced() {
+    let mut game = game_with_the_field_routine_installed();
+    let member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+    game.arm_field_buff(
+        member,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Patch".to_string(),
+            power: 3,
+            remaining: 30,
+            interval: 1,
+            source: BuffSource::Consumable,
+        },
+    );
+
+    let targets = game.field_cast_targets(0);
+    assert!(
+        targets
+            .iter()
+            .find(|t| t.entity == member)
+            .expect("the party member is offered")
+            .running
+            .is_none()
+    );
+}
+
+/// The two Stack movement routines open no ally picker at all, and a routine
+/// index naming one carries no `FieldBuffKind` to compare against — the rows
+/// still list, untagged, rather than the call having to be unreachable.
+#[test]
+fn an_index_naming_no_field_buff_tags_nothing() {
+    let mut game = game_with_the_field_routine_installed();
+    let member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+    game.arm_field_buff(
+        member,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Loop Single".to_string(),
+            power: 7,
+            remaining: 62,
+            interval: 4,
+            source: BuffSource::Routine,
+        },
+    );
+
+    let targets = game.field_cast_targets(99);
+
+    assert_eq!(targets.len(), 2, "the roster is unaffected by the index");
+    assert!(targets.iter().all(|t| t.running.is_none()));
 }
 
 /// The picker narrowing above is a UX convenience, not the only guard: the

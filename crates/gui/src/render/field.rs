@@ -5,7 +5,7 @@
 use super::battle::cell;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::ActiveBuffView;
+use feral_processes_engine::{ActiveBuffView, FieldCastTargetView};
 
 /// Width of the buff name column, in monospace cells. Long enough for every
 /// shipped routine's name with room to spare; a name that overruns clips
@@ -244,22 +244,61 @@ pub(super) fn draw_field_cast_ally(
         return;
     };
     let mut rows = vec![text_row(format!("Run {} on whom?", routine.name))];
-    for (i, h) in game.field_cast_targets().into_iter().enumerate() {
+    for (i, t) in game.field_cast_targets(pending).into_iter().enumerate() {
+        let mut lines = field_cast_target_rows(menu_shortcut(i), &t).into_iter();
+        let head = lines
+            .next()
+            .expect("field_cast_target_rows always emits the target's row");
         rows.push(with_icon(
-            item_row(
-                format!("[{}] {} Lv{}", menu_shortcut(i), h.name, h.level),
-                i == selected,
-            ),
-            h.glyph,
-            glyph_color(h.color),
+            item_row(head, i == selected),
+            t.glyph,
+            glyph_color(t.color),
         ));
+        for line in lines {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
     }
     draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);
+}
+
+/// One ally-picker target's lines: the row its shortcut selects, priced with
+/// the stats the buff is about to land on, then the buff this cast would
+/// displace underneath.
+///
+/// The stats sit on the row itself in the format `fuse_candidate_label`
+/// already uses, because both screens are the same kind of decision — every
+/// `OneAlly` routine the game ships is about a stat, and the picker's job is
+/// choosing whose. The displaced buff goes to a continuation line instead:
+/// `arm_field_buff` drops a running `Routine` buff of the same kind, so the
+/// tag is the one thing on this screen saying the cast is a replacement
+/// rather than an addition — but it is also 30-odd cells of routine name and
+/// magnitude on a row already carrying five numbers, and `draw_row` clamps a
+/// row vertically and nothing clamps it horizontally. A target carrying
+/// nothing of the kind gets no line at all.
+///
+/// Returns the lines rather than drawing them so their width is measurable
+/// without a window — see `the_widest_ally_picker_row_fits_its_popup`.
+fn field_cast_target_rows(num: char, t: &FieldCastTargetView) -> Vec<String> {
+    let displaced = t.running.as_ref().map(|b| {
+        format!(
+            "replaces {} {} — {}t left",
+            b.name, b.magnitude, b.remaining
+        )
+    });
+    std::iter::once(format!(
+        "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}",
+        t.name, t.level, t.hp, t.max_hp, t.atk, t.def, t.power
+    ))
+    .chain(continuation_lines(displaced.as_deref().unwrap_or_default()))
+    .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+    use feral_processes_engine::RunningBuffView;
 
     fn buff(name: &str, magnitude: &str, remaining: u32, holder: Option<&str>) -> ActiveBuffView {
         ActiveBuffView {
@@ -450,5 +489,129 @@ mod tests {
         let rows = cap_rows(buff_rows(&buffs), 10);
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
+    }
+
+    fn target(name: &str, running: Option<RunningBuffView>) -> FieldCastTargetView {
+        FieldCastTargetView {
+            entity: Entity::PLACEHOLDER,
+            glyph: 'p',
+            color: GlyphColor::White,
+            name: name.to_string(),
+            level: 6,
+            hp: 22,
+            max_hp: 28,
+            atk: 8,
+            def: 5,
+            power: 19,
+            running,
+        }
+    }
+
+    /// Every `OneAlly` routine the game ships is about a stat — Regen about
+    /// HP, Overclock about ATK, the other two about DEF — so the numbers are
+    /// what the pick is actually made on. Without them the only way to
+    /// choose is to remember them.
+    #[test]
+    fn an_ally_picker_row_prices_the_target_by_its_stats() {
+        let lines = field_cast_target_rows('a', &target("Kestrel", None));
+
+        assert_eq!(lines.len(), 1, "nothing running means no second line");
+        assert!(lines[0].contains("[a] Kestrel Lv6"), "{lines:?}");
+        assert!(lines[0].contains("HP 22/28"), "{lines:?}");
+        assert!(lines[0].contains("ATK 8"), "{lines:?}");
+        assert!(lines[0].contains("DEF 5"), "{lines:?}");
+        assert!(lines[0].contains("PWR 19"), "{lines:?}");
+    }
+
+    /// The tag names the routine and how long it has left, because the cast
+    /// *replaces* it rather than stacking with it (`Game::arm_field_buff`)
+    /// — and two different routines can arm one kind, so "already running"
+    /// alone would not say which is about to go.
+    #[test]
+    fn an_ally_picker_row_says_what_the_cast_would_replace() {
+        let lines = field_cast_target_rows(
+            'b',
+            &target(
+                "Kestrel",
+                Some(RunningBuffView {
+                    name: "Repair Loop Single".to_string(),
+                    magnitude: "HP+7/4t".to_string(),
+                    remaining: 62,
+                }),
+            ),
+        );
+
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[1].contains("Repair Loop Single"), "{lines:?}");
+        assert!(lines[1].contains("HP+7/4t"), "{lines:?}");
+        assert!(lines[1].contains("62t"), "{lines:?}");
+        assert!(
+            lines[1].starts_with(' '),
+            "the tag is indented under the row it belongs to: {lines:?}"
+        );
+    }
+
+    /// Measured against the real ability set rather than a literal, so an
+    /// author naming a field routine longer fails this instead of shipping a
+    /// line that runs off the box.
+    ///
+    /// It bounds the *shipped* half only. A target's name is
+    /// `Game::creature_label`, which can carry a player-authored custom
+    /// name — the same unbounded row `TODO.md`'s Bug 2 records against the
+    /// Party popup, and no census over the assets can reach it.
+    #[test]
+    fn the_widest_ally_picker_row_fits_its_popup() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = feral_processes_engine::abilities::AbilityDb::load_dir(&dir)
+            .expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let widest = db
+            .all()
+            .filter(|d| {
+                matches!(
+                    d.effect,
+                    feral_processes_engine::abilities::AbilityEffect::FieldBuff { .. }
+                )
+            })
+            .max_by_key(|d| d.name.chars().count())
+            .expect("the shipped set has field buffs to name")
+            .name
+            .clone();
+
+        let lines = field_cast_target_rows(
+            'a',
+            &FieldCastTargetView {
+                // Four digits apiece: past anything reachable, so the census
+                // is not one level-up away from being wrong.
+                hp: 9999,
+                max_hp: 9999,
+                atk: 9999,
+                def: 9999,
+                power: 9999,
+                level: 99,
+                running: Some(RunningBuffView {
+                    name: widest,
+                    magnitude: "HP+9999/99t".to_string(),
+                    remaining: 9999,
+                }),
+                ..target("Overclocked Sentinel [z10]", None)
+            },
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "an ally-picker line overflows the popup by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
     }
 }

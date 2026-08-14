@@ -11,10 +11,13 @@ impl App {
     /// program here used to let a cast pay Power for a buff that ticked
     /// nowhere. `Game::cast_field_routine` checks the same narrower set
     /// again on its own, so this is a UX narrowing, not the only guard.
-    pub(crate) fn field_ally_options(&mut self) -> Vec<RoutineHolderView> {
+    ///
+    /// `routine` is the pending `field_routines` index, which is what lets a
+    /// row say the cast would displace a buff already running on that target.
+    pub(crate) fn field_ally_options(&mut self, routine: usize) -> Vec<FieldCastTargetView> {
         self.game
             .as_mut()
-            .map(|g| g.field_cast_targets())
+            .map(|g| g.field_cast_targets(routine))
             .unwrap_or_default()
     }
 
@@ -127,7 +130,7 @@ impl App {
             self.mode = Mode::FieldCast;
             return;
         };
-        let targets = self.field_ally_options();
+        let targets = self.field_ally_options(index);
         let Some(idx) = self.selected_index(key, targets.len()) else {
             return;
         };

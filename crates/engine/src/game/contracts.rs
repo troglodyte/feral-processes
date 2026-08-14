@@ -204,23 +204,32 @@ impl Game {
     /// Broker they are four frames below. `active_contracts` is what reads
     /// anywhere.
     pub fn contract_board(&mut self) -> Option<Vec<crate::views::ContractRow>> {
+        let defs = self.board_defs()?;
+        Some(defs.iter().map(|def| self.contract_row(def, 0)).collect())
+    }
+
+    /// The board as **definitions** rather than worded rows — what
+    /// `contract_board` renders and what `accept_contract` takes its copy from.
+    ///
+    /// Carrying the def rather than an id is the whole reason a rolled
+    /// contract works at all. Every step of the accept path used to re-resolve
+    /// the def out of `ContractDb` by id, which a rolled contract has no entry
+    /// in — so it would be refused as `NotOffered` while sitting visibly on the
+    /// board. `resources::ActiveContract` already stores the whole resolved
+    /// def, for a different reason (a file edited mid-run must not strand a
+    /// contract already accepted), and that is exactly the shape a rolled one
+    /// needs.
+    fn board_defs(&mut self) -> Option<Vec<crate::contracts::ContractDef>> {
         if self.is_underground() || !self.broker_in_range() {
             return None;
         }
         let mut pool = self.offerable_contracts();
         let mut rng = StdRng::seed_from_u64(self.board_seed());
-        let mut rows = Vec::new();
+        let mut defs = Vec::new();
         for _ in 0..crate::tuning::CONTRACT_BOARD_SLOTS.min(pool.len()) {
-            let id = pool.swap_remove(rng.random_range(0..pool.len()));
-            if let Some(def) = self
-                .world
-                .resource::<crate::contracts::ContractDb>()
-                .get(&id)
-            {
-                rows.push(self.contract_row(def, 0));
-            }
+            defs.push(pool.swap_remove(rng.random_range(0..pool.len())));
         }
-        Some(rows)
+        Some(defs)
     }
 
     /// Every contract the run currently holds. Always available, board or not:
@@ -257,7 +266,7 @@ impl Game {
     /// depending on which three the roll happened to pick, and so the filter
     /// itself is stated once: this sector's level, minus anything already in
     /// hand, minus anything finished that does not repeat.
-    pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractId> {
+    pub(crate) fn offerable_contracts(&self) -> Vec<crate::contracts::ContractDef> {
         let zone = self.world.resource::<ZoneLevel>().0;
         let held = self.world.resource::<ActiveContracts>();
         self.world
@@ -266,7 +275,7 @@ impl Game {
             .filter(|def| def.min_zone <= zone)
             .filter(|def| !held.active.iter().any(|c| c.def.id == def.id))
             .filter(|def| def.repeatable || !held.done.contains(&def.id))
-            .map(|def| def.id.clone())
+            .cloned()
             .collect()
     }
 
@@ -392,36 +401,29 @@ impl Game {
     /// `use_symlink` and `install_routine` follow — a refused acceptance must
     /// leave the run exactly as it found it.
     pub fn accept_contract(&mut self, id: &ContractId) -> Result<(), ContractRefusal> {
-        let Some(board) = self.contract_board() else {
+        let Some(board) = self.board_defs() else {
             return Err(ContractRefusal::NotOffered);
         };
         {
+            let repeatable = self
+                .world
+                .resource::<crate::contracts::ContractDb>()
+                .repeatable(id);
             let held = self.world.resource::<ActiveContracts>();
             if held.active.iter().any(|c| c.def.id == *id) {
                 return Err(ContractRefusal::AlreadyActive);
             }
-            if held.done.contains(id)
-                && !self
-                    .world
-                    .resource::<crate::contracts::ContractDb>()
-                    .get(id)
-                    .is_some_and(|def| def.repeatable)
-            {
+            if held.done.contains(id) && !repeatable {
                 return Err(ContractRefusal::AlreadyDone);
             }
             if held.active.len() >= crate::tuning::MAX_ACTIVE_CONTRACTS {
                 return Err(ContractRefusal::TooMany);
             }
         }
-        if !board.iter().any(|row| row.id == *id) {
-            return Err(ContractRefusal::NotOffered);
-        }
-        let Some(def) = self
-            .world
-            .resource::<crate::contracts::ContractDb>()
-            .get(id)
-            .cloned()
-        else {
+        // The def comes off the board that was just built, never out of the db
+        // again — a rolled contract has no db entry, and looking it up a
+        // second time is what made one refusable while visibly on offer.
+        let Some(def) = board.into_iter().find(|def| def.id == *id) else {
             return Err(ContractRefusal::NotOffered);
         };
 

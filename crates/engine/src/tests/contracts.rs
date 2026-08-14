@@ -71,7 +71,11 @@ fn every_objective_variant_parses_and_states_its_target() {
     assert_eq!(db.iter().count(), 6);
 
     let target = |id: &str| db.get(&ContractId::from(id)).unwrap().objective.target();
-    assert_eq!(target("terminate"), 6, "a counting objective targets its count");
+    assert_eq!(
+        target("terminate"),
+        6,
+        "a counting objective targets its count"
+    );
     assert_eq!(target("terminate_any"), 3);
     assert_eq!(target("deliver"), 4);
     assert_eq!(
@@ -1131,7 +1135,11 @@ fn a_repeatable_contract_returns_to_the_board_and_a_one_shot_does_not() {
 
     // Widen the pool to the whole catalogue so this is not a test about which
     // three the roll happened to pick.
-    let offerable = game.offerable_contracts();
+    let offerable: Vec<_> = game
+        .offerable_contracts()
+        .into_iter()
+        .map(|def| def.id)
+        .collect();
     assert!(offerable.contains(&repeatable));
     assert!(!offerable.contains(&one_shot));
 }

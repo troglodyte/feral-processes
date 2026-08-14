@@ -188,6 +188,23 @@ impl ContractDb {
         self.defs.get(id)
     }
 
+    /// Whether finishing `id` puts it back on the board.
+    ///
+    /// The one statement of it, because the answer has two sources: an
+    /// authored contract carries the flag itself, and a rolled one inherits
+    /// its template's. `accept_contract` asked the db directly before
+    /// templates existed, so a rolled id resolved to `None` and read as *not*
+    /// repeatable by accident — the right default, arrived at the wrong way,
+    /// and one that would have silently stopped honouring a repeatable
+    /// template.
+    ///
+    /// An id belonging to neither is not repeatable: that is a contract whose
+    /// file or template has been deleted mid-run, and the run's own copy is
+    /// what finishes it.
+    pub fn repeatable(&self, id: &ContractId) -> bool {
+        self.defs.get(id).is_some_and(|def| def.repeatable)
+    }
+
     /// Every authored contract, in id order. The board draws from this, so the
     /// order has to be stable between runs or a seeded board would not be.
     pub fn iter(&self) -> impl Iterator<Item = &ContractDef> {

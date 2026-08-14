@@ -125,7 +125,7 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     // the player and the party (`Game::tick_field_buffs`) — offering a
     // benched program here used to let a cast pay Power for a buff that
     // ticked nowhere, same bug as offering the wild neighbor would be.
-    let offered = app.field_ally_options();
+    let offered = app.field_ally_options(0);
     assert_eq!(
         offered.len(),
         1,

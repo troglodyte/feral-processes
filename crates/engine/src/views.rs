@@ -1061,6 +1061,54 @@ pub struct FieldRoutineView {
     pub second_pick: FieldCastPick,
 }
 
+/// One row of the ally picker a `OneAlly` field routine opens — you, then
+/// each active `Party` member, priced by the stats the buff is about to
+/// land on. See `Game::field_cast_targets`.
+///
+/// Its own type rather than more fields on `RoutineHolderView`, which is the
+/// *install* picker's row: that screen decides between free slots and this
+/// one decides between bodies, and `running` below is a fact about a
+/// (routine, target) pair that the shared `Game::routine_holder_view` has no
+/// routine to answer for. The glyph, name and level still come from that one
+/// builder, so the two pickers cannot describe the same holder two ways.
+pub struct FieldCastTargetView {
+    pub entity: Entity,
+    /// The map glyph and colour, for the reason `RoutineHolderView` carries
+    /// them: this list puts the player and their programs side by side.
+    pub glyph: char,
+    pub color: GlyphColor,
+    /// "You" for the player, the program's display name otherwise.
+    pub name: String,
+    pub level: u32,
+    pub hp: i32,
+    pub max_hp: i32,
+    pub atk: i32,
+    pub def: i32,
+    /// A rough overall-strength scalar — see `components::Stats::power`.
+    pub power: i32,
+    /// The buff this cast would *overwrite*, if any — see
+    /// `RunningBuffView`.
+    pub running: Option<RunningBuffView>,
+}
+
+/// The routine-armed field buff a pending cast would replace on one target.
+///
+/// `Game::arm_field_buff` displaces a running `Routine` buff of the same
+/// kind and leaves a `Consumable` one of that kind alone, so this is
+/// deliberately narrower than "what is running": it names what is about to
+/// go. `ActiveBuffView` is the buff *list's* row and carries a holder label
+/// this has no use for — here the row already names the holder.
+pub struct RunningBuffView {
+    /// `ActiveFieldBuff::name` — the routine that armed it. Two different
+    /// routines can arm one kind (Ablative Layer and Long Winter both arm
+    /// Mitigation), so "already running" alone would not say which is going.
+    pub name: String,
+    /// `FieldBuffKind::magnitude_label` of the power actually stored, the
+    /// same call `ActiveBuffView::magnitude` makes and for the same reason.
+    pub magnitude: String,
+    pub remaining: u32,
+}
+
 /// One row of the buff list — the map screen's field buffs plus, during a
 /// battle, any running `CombatBuff`. See `Game::active_buffs`.
 pub struct ActiveBuffView {

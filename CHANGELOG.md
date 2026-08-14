@@ -27,6 +27,33 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.26
+
+### The run-a-routine picker says who needs it
+
+Every field routine that lands on one ally is about a stat — Repair Loop
+about Integrity, Overclock about Attack, Hardened Shell and Ablative Layer
+about Defense. The screen that asked you to choose a body listed names and
+levels and nothing else, so the one decision it exists for had to be made
+from memory. Each row now carries the numbers the buff is about to touch:
+
+```
+  Run Overclock Single on whom?
+
+  @ [a] You Lv12 - HP 88/120  ATK 24  DEF 18  PWR 130
+  p [b] Kestrel Lv5 - HP 40/40  ATK 12  DEF 9  PWR 61
+  p [c] Sable Lv7 - HP 12/58  ATK 15  DEF 11  PWR 84
+          replaces Repair Loop Single HP+7/4t — 62t left
+```
+
+That last line is the other half. Running a routine on someone who already
+has one of the same kind *replaces* it rather than stacking with it, and
+nothing on the screen said so — so the tag names what is about to go, and
+names the routine rather than saying "already running", because two
+different routines can arm the same kind. It is deliberately narrower than
+"what is running": a buff armed by a consumable survives the cast, so
+listing it would be a lie about what you are about to lose.
+
 ## 0.8.25
 
 ### The extract picker names what each program is carrying

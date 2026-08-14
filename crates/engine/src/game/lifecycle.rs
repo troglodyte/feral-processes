@@ -222,6 +222,10 @@ impl Game {
             // and what it reads are counters every one of those has already
             // finished writing for this tick.
             crate::game::achievements::achievement_system,
+            // Unchained for the same reason, and safe beside the system above
+            // because the two drain different `RunFeats` fields: each field
+            // has exactly one drainer, so neither can eat the other's events.
+            crate::game::contracts::contract_system,
         ));
         schedule
     }

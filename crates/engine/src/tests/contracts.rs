@@ -499,3 +499,253 @@ fn a_boss_kill_lands_in_both_fields() {
          silently make an unchained system order-sensitive."
     );
 }
+
+// ---------------------------------------------------------------------------
+// contract_system — the one writer of progress
+// ---------------------------------------------------------------------------
+
+fn progress_of(game: &Game, id: &str) -> u32 {
+    game.world
+        .resource::<ActiveContracts>()
+        .active
+        .iter()
+        .find(|c| c.def.id == ContractId::from(id))
+        .expect("the contract is still active")
+        .progress
+}
+
+fn kill(game: &mut Game, species: &str) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game.spawn_wild_creature(species, pos.x, pos.y).unwrap();
+    game.award_loot(wild);
+    game.world.despawn(wild);
+}
+
+#[test]
+fn a_named_kill_contract_advances_only_on_that_species() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "drones",
+            Objective::Kill {
+                species: Some("drone".to_string()),
+                count: 3,
+            },
+            vec![Reward::Credits(10)],
+        ),
+        0,
+    );
+
+    kill(&mut game, "glitch");
+    game.tick();
+    assert_eq!(progress_of(&game, "drones"), 0, "a glitch is not a drone");
+
+    kill(&mut game, "drone");
+    game.tick();
+    assert_eq!(progress_of(&game, "drones"), 1);
+}
+
+#[test]
+fn an_unnamed_kill_contract_advances_on_anything() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "anything",
+            Objective::Kill {
+                species: None,
+                count: 5,
+            },
+            vec![Reward::Credits(10)],
+        ),
+        0,
+    );
+
+    kill(&mut game, "glitch");
+    kill(&mut game, "drone");
+    game.tick();
+    assert_eq!(progress_of(&game, "anything"), 2);
+}
+
+#[test]
+fn progress_never_runs_past_the_target() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "two",
+            Objective::Kill {
+                species: None,
+                count: 2,
+            },
+            vec![Reward::Credits(10)],
+        ),
+        0,
+    );
+    for _ in 0..4 {
+        kill(&mut game, "drone");
+    }
+    game.tick();
+    // The contract may have been settled and dropped by now; if it is still
+    // held, it must not be showing 4 of 2.
+    if let Some(held) = game
+        .world
+        .resource::<ActiveContracts>()
+        .active
+        .iter()
+        .find(|c| c.def.id == ContractId::from("two"))
+    {
+        assert_eq!(held.progress, 2, "a bar cannot be more than full");
+    }
+}
+
+#[test]
+fn a_descend_contract_reads_the_locale_and_never_a_surface_position() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "deep",
+            Objective::Descend { depth: 3 },
+            vec![Reward::Xp(10)],
+        ),
+        0,
+    );
+
+    // The regression that matters: a party standing a long way from origin
+    // on the *surface* has descended nowhere. `Position` is pinned to the
+    // entrance tile underground, so a depth taken from it is a surface
+    // coordinate — the trap `nest_aggro_tick` needs its guard for.
+    {
+        let player = game.player_entity();
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x = 60;
+        pos.y = 60;
+    }
+    game.tick();
+    assert_eq!(progress_of(&game, "deep"), 0);
+
+    // Two frames down is still not three.
+    set_depth(&mut game, 2);
+    game.tick();
+    assert_eq!(progress_of(&game, "deep"), 0);
+
+    set_depth(&mut game, 3);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .all(|c| c.def.id != ContractId::from("deep"))
+            || progress_of(&game, "deep") == 1
+    );
+}
+
+/// Rewrites `Locale` to a Stack frame at `depth` without walking one. What is
+/// under test is what the objective *reads*, not how the party got there.
+fn set_depth(game: &mut Game, depth: u32) {
+    *game.world.resource_mut::<crate::resources::Locale>() = crate::resources::Locale::Stack {
+        depth,
+        frames: 5,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    };
+}
+
+#[test]
+fn a_breach_contract_reads_the_zone() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "outward",
+            Objective::Breach { zone: 3 },
+            vec![Reward::Xp(10)],
+        ),
+        0,
+    );
+    game.tick();
+    assert_eq!(progress_of(&game, "outward"), 0);
+
+    set_zone(&mut game, 3);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .all(|c| c.def.id != ContractId::from("outward"))
+            || progress_of(&game, "outward") == 1
+    );
+}
+
+#[test]
+fn a_build_contract_advances_only_once_one_is_standing() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "refine",
+            Objective::Build {
+                structure: "refinery".to_string(),
+            },
+            vec![Reward::Xp(10)],
+        ),
+        0,
+    );
+    game.tick();
+    assert_eq!(progress_of(&game, "refine"), 0);
+
+    // A different structure is not the one asked for.
+    game.world.spawn((
+        Structure {
+            kind: "mining_node".to_string(),
+        },
+        Position { x: 3, y: 3 },
+    ));
+    game.tick();
+    assert_eq!(progress_of(&game, "refine"), 0);
+
+    game.world.spawn((
+        Structure {
+            kind: "refinery".to_string(),
+        },
+        Position { x: 4, y: 3 },
+    ));
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .all(|c| c.def.id != ContractId::from("refine"))
+            || progress_of(&game, "refine") == 1
+    );
+}
+
+#[test]
+fn a_deliver_contract_is_untouched_by_the_system() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "haul",
+            Objective::Deliver {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 4,
+            },
+            vec![Reward::Credits(10)],
+        ),
+        0,
+    );
+    // The player starts holding Core Fragments, so a system that polled cargo
+    // would advance this. Delivery is an act, not a state.
+    for _ in 0..3 {
+        game.tick();
+    }
+    assert_eq!(progress_of(&game, "haul"), 0);
+}

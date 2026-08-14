@@ -751,4 +751,93 @@ impl Game {
     pub fn work_orders(&self) -> &[WorkOrder] {
         &self.world.resource::<resources::WorkOrders>().0
     }
+
+    /// What every queued order is waiting on, in queue order.
+    ///
+    /// Built **by calling `wants`**, not by walking the chain a second
+    /// time. Per `CLAUDE.md`, a claim that two places use one rule has to
+    /// be a call and not a comment — and the copy that drifts is the one
+    /// nobody runs, which here would be the screen telling a player their
+    /// base is doing something it is not.
+    pub fn work_order_report(&self) -> Vec<views::WorkOrderReport> {
+        let db = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        self.work_orders()
+            .iter()
+            .map(|order| {
+                let machines = wants(self, order);
+                views::WorkOrderReport {
+                    item: order.item.clone(),
+                    label: self.item_name(&order.item).to_string(),
+                    have: base_holding(self, &order.item),
+                    target: order.qty,
+                    stalled: machines.is_empty(),
+                    blocked_by: machines
+                        .is_empty()
+                        .then(|| chain_break(self, &order.item))
+                        .flatten(),
+                    machines: machines
+                        .into_iter()
+                        .map(|(machine, depth)| views::WorkOrderMachine {
+                            entity: machine,
+                            label: self
+                                .world
+                                .get::<Structure>(machine)
+                                .and_then(|s| db.get(&s.kind))
+                                .map(|def| def.name.clone())
+                                .unwrap_or_default(),
+                            worker: self.posted_worker_name(machine),
+                            short_of: self.machine_shortfall(machine, db, items),
+                            depth,
+                        })
+                        .collect(),
+                }
+            })
+            .collect()
+    }
+
+    /// The name of whoever holds a `GatherResource` post at `machine`.
+    fn posted_worker_name(&self, machine: Entity) -> Option<String> {
+        let holder = self
+            .world
+            .iter_entities()
+            .find(|e| {
+                e.get::<Task>()
+                    .is_some_and(|t| t.target == machine && t.kind == TaskKind::GatherResource)
+            })?
+            .id();
+        Some(self.creature_label(holder))
+    }
+
+    /// The first ingredient `machine` cannot assemble a batch from, named
+    /// for the screen. `None` for an extractor, and for an assembler with
+    /// everything it needs within reach.
+    fn machine_shortfall(
+        &self,
+        machine: Entity,
+        db: &StructureDb,
+        items: &ItemDb,
+    ) -> Option<String> {
+        let def = self
+            .world
+            .get::<Structure>(machine)
+            .and_then(|s| db.get(&s.kind))?;
+        let recipe = assembly_recipe(def, items)?;
+        let stock = self.world.get::<Stock>(machine)?;
+        let pos = self.world.get::<Position>(machine).copied()?;
+        let by_tile = structures_by_tile(self);
+        recipe
+            .iter()
+            .find(|(item, per_batch)| {
+                let held = stock.input.get(item).copied().unwrap_or(0);
+                let beside: u32 = ORTHOGONAL
+                    .into_iter()
+                    .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
+                    .filter_map(|feeder| self.world.get::<Stock>(feeder))
+                    .map(|s| s.output.get(item).copied().unwrap_or(0))
+                    .sum();
+                held + beside < *per_batch
+            })
+            .map(|(item, _)| self.item_name(item).to_string())
+    }
 }

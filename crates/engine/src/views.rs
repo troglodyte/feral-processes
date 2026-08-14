@@ -562,6 +562,52 @@ pub fn drawn_on_surface_map(is_tamed: bool, position_is_honest: bool) -> bool {
     !is_tamed || position_is_honest
 }
 
+/// One work order on the status screen — see `Game::work_order_report`.
+///
+/// Every field is derived from live world state at the moment it is asked
+/// for, and none of it is stored: `machines` is literally the list
+/// `game::base::work_orders::wants` hands the scheduler, so what the player
+/// reads is what the scheduler believes *by construction* rather than by a
+/// comment claiming the two agree.
+#[derive(Clone, Debug)]
+pub struct WorkOrderReport {
+    pub item: ItemId,
+    pub label: String,
+    /// How many the **base** holds, across every Depot and machine output
+    /// buffer. Not the player's inventory — an order says what the base
+    /// should hold, and what you are carrying is yours.
+    pub have: u32,
+    pub target: u32,
+    /// Whether the walk found nothing to do at all: a machine demolished or
+    /// swept to destruction since the order was placed. A stalled order is
+    /// skipped rather than blocking the queue, and stays listed so this can
+    /// say so.
+    pub stalled: bool,
+    /// The sentence naming why, when `stalled` — the same one
+    /// `queue_work_order` would have refused the order with, so the screen
+    /// and the refusal cannot word the same break differently.
+    pub blocked_by: Option<String>,
+    /// The chain, deepest first. **Empty is not the same as stalled**: a
+    /// base with nobody in it reports its orders normally, because "nothing
+    /// is happening because you have no staff" and "nothing is happening
+    /// because a machine is gone" are different errands.
+    pub machines: Vec<WorkOrderMachine>,
+}
+
+/// One machine in a work order's chain — see `WorkOrderReport::machines`.
+#[derive(Clone, Debug)]
+pub struct WorkOrderMachine {
+    pub entity: Entity,
+    pub label: String,
+    /// Who is posted here, or `None` for a machine waiting on a body.
+    pub worker: Option<String>,
+    /// What this machine has not got enough of to run a batch, if anything.
+    pub short_of: Option<String>,
+    /// How far up the recipe tree from the ordered item this sits — 0 is
+    /// the machine that makes the ordered thing itself.
+    pub depth: u32,
+}
+
 /// One structure on the roster screen — see `Game::structure_report`.
 #[derive(Clone)]
 pub struct StructureReport {

@@ -1045,3 +1045,111 @@ fn idle_staff_take_no_rng_draws() {
         "three idle programs milling for twenty ticks must not move the stream"
     );
 }
+
+// ---------------------------------------------------------------------
+// Task 7: the status report
+// ---------------------------------------------------------------------
+
+/// The report's machine list is the same list the scheduler acts on, in
+/// the same order, for the same world — asserted against `wants` itself
+/// rather than a hardcoded expectation, so the two cannot drift. Per
+/// `CLAUDE.md`, a claim that two places use one rule has to be a call and
+/// not a comment.
+#[test]
+fn the_report_lists_exactly_what_the_scheduler_walks() {
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, _press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    let report = game.work_order_report();
+    let order = crate::game::base::work_orders::WorkOrder {
+        item: ItemId::from("routine_disk"),
+        qty: 3,
+    };
+    let walked: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
+
+    assert_eq!(report.len(), 1);
+    let listed: Vec<Entity> = report[0].machines.iter().map(|m| m.entity).collect();
+    assert_eq!(listed, walked);
+    assert!(!report[0].stalled);
+    assert_eq!(report[0].target, 3);
+}
+
+#[test]
+fn the_report_counts_what_the_base_holds_against_the_target() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 6, 0);
+    game.queue_work_order(ItemId::from("routine_disk"), 5)
+        .unwrap();
+    put_output(&mut game, depot, "routine_disk", 2);
+
+    let report = game.work_order_report();
+
+    assert_eq!((report[0].have, report[0].target), (2, 5));
+}
+
+#[test]
+fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    game.world.entity_mut(press).despawn();
+    let report = game.work_order_report();
+
+    assert!(report[0].stalled);
+    assert!(
+        report[0]
+            .blocked_by
+            .as_deref()
+            .is_some_and(|why| why.contains("Disk Press")),
+        "the screen has to say which machine went missing, got: {:?}",
+        report[0].blocked_by
+    );
+}
+
+/// A base with nobody in it and a base with a broken line are different
+/// errands, and the screen must not conflate them: the first reports its
+/// orders normally, and the fact that nothing is happening is answered by
+/// the empty staff pool rather than by the order.
+#[test]
+fn a_base_with_no_staff_reports_its_orders_normally_rather_than_stalled() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+
+    let report = game.work_order_report();
+
+    assert!(game.base_staff().is_empty(), "precondition");
+    assert!(!report[0].stalled);
+    assert!(report[0].blocked_by.is_none());
+    assert!(!report[0].machines.is_empty());
+}
+
+#[test]
+fn the_report_names_who_is_posted_on_each_machine() {
+    let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.tick();
+
+    let report = game.work_order_report();
+    let row = report[0]
+        .machines
+        .iter()
+        .find(|m| m.entity == mine)
+        .expect("the Mining Node is in the walk");
+
+    assert!(
+        row.worker.is_some(),
+        "a machine with a body on it says whose"
+    );
+}

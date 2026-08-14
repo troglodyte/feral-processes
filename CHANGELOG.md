@@ -27,6 +27,35 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.8.27
+
+### One key fuses every matching pair in cargo
+
+A long run leaves the buffer full of duplicate gear, and turning it into
+fused copies meant opening each stack's action page and pressing `[U]` once
+per pair — a dozen keypresses and a dozen turns for work with no decision in
+it. `[U]` on the inventory screen now does the lot at once:
+
+```
+  You fuse 5 pairs:
+    2 Ablative Plating -> tier 1
+    2 Kinetic Edge -> tier 1
+    1 Overclocked Arc Lance -> tier 2
+```
+
+It is **one pass, not a cascade**: four ordinary copies come out as two T1s
+rather than one T2, and an odd copy is left ordinary. What you get is one
+rung up the ladder for everything you had a pair of, which keeps the deeper
+tiers a choice about where to spend the spares rather than something a
+convenience key decides for you. A copy you are wearing still counts as one
+of its pair, exactly as it does on the per-item page, so pressing this once
+and pressing `[U]` down the list are the same fusions.
+
+The whole batch costs **one turn**, not one per pair. Charging need decay,
+sweep pressure and spawn rolls per fusion would make the shortcut cost more
+than the typing it saves. A press with nothing to fuse is refused and spends
+no turn at all.
+
 ## 0.8.26
 
 ### The run-a-routine picker says who needs it

@@ -609,6 +609,38 @@ pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
     (Stock::new(10_000), MachineStatus::default())
 }
 
+/// Deploys a working machine of `kind` at an absolute tile, with every
+/// component the def implies — `Stock` sized from the def, a
+/// `MachineStatus`, and a `ResourceNode` if it extracts.
+///
+/// The difference from `spawn_structure_at`, which spawns a bare
+/// `Structure` and `Position`: a chain test needs machines that can
+/// actually hold and pull stock, and a node short of `Stock` or
+/// `MachineStatus` is skipped by `task_progress_system`'s query and
+/// silently produces nothing.
+pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == kind)
+        .unwrap_or_else(|| panic!("{kind} should be a shipped structure"));
+    let mut entity = game.world.spawn((
+        Structure {
+            kind: def.id.clone(),
+        },
+        Position { x, y },
+        Stock::new(def.capacity),
+        MachineStatus::default(),
+    ));
+    if let Some(work) = &def.work {
+        entity.insert(ResourceNode {
+            resource: work.produces.clone(),
+            level: work.level,
+        });
+    }
+    entity.id()
+}
+
 /// Stands the player on `(x, y)`.
 ///
 /// `assign_cronjob` starts a posted program from the player's tile, so this

@@ -132,6 +132,7 @@ impl Game {
         world.insert_resource(achievement_db);
         world.insert_resource(contract_db);
         world.insert_resource(crate::resources::ActiveContracts::default());
+        world.insert_resource(crate::resources::WorkOrders::default());
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on
@@ -332,6 +333,7 @@ impl Game {
             active: data.contracts,
             done: data.contracts_done,
         });
+        world.insert_resource(crate::resources::WorkOrders(data.work_orders));
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on
@@ -1045,6 +1047,7 @@ impl Game {
                 .resource::<crate::resources::ActiveContracts>()
                 .done
                 .clone(),
+            work_orders: self.work_orders().to_vec(),
         };
         save::save_to_file(path, &data)
     }

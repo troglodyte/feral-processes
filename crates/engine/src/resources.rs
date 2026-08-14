@@ -451,6 +451,16 @@ pub struct ActiveContracts {
     pub done: Vec<crate::contracts::ContractId>,
 }
 
+/// What the base has been told to hold, front-first.
+///
+/// One order at a time, worked to completion, then the next — splitting
+/// staff across several live orders makes it impossible to read why a
+/// machine is idle. An order that has become unfillable is *skipped*
+/// rather than blocking the queue behind it, and stays listed so the
+/// status screen can say which machine went missing.
+#[derive(Resource, Default)]
+pub struct WorkOrders(pub Vec<crate::game::base::work_orders::WorkOrder>);
+
 /// Achievements earned since the last time anyone wrote `profile.ron`.
 ///
 /// The engine decides what has been earned and app-core owns the path, so

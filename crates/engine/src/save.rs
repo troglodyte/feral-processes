@@ -463,6 +463,18 @@ pub struct SaveData {
     /// contract's terms back.
     #[serde(default)]
     pub contracts_done: Vec<crate::contracts::ContractId>,
+    /// What the base has been told to hold — see `resources::WorkOrders`.
+    ///
+    /// The whole of the feature's state. Which machines a line needs, who
+    /// stands where and how far along it is are all derived from live world
+    /// state each tick, so none of that is here and none of it can go stale
+    /// against a base that has since been rebuilt.
+    ///
+    /// `#[serde(default)]` is the whole compatibility story since v29: a
+    /// file written before this field existed loads it as empty and costs no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub work_orders: Vec<crate::game::base::work_orders::WorkOrder>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -754,6 +766,7 @@ mod tests {
             trace: 0,
             contracts: Vec::new(),
             contracts_done: Vec::new(),
+            work_orders: Vec::new(),
         }
     }
 

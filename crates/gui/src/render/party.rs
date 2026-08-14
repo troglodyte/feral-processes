@@ -167,6 +167,73 @@ fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
     )
 }
 
+/// What a routine line is indented by: the glyph slot `with_icon` reserves
+/// inside the row above, plus the width of its `[x] ` shortcut, so the
+/// routines sit under the program's name rather than under its icon.
+const FUSE_ROUTINE_INDENT: &str = "       ";
+
+/// One fuse candidate's lines: the stat row its shortcut selects, then the
+/// routines it is carrying underneath.
+///
+/// Fusion derives the result's kit fresh from its species, so a candidate's
+/// installed routines are exactly what picking it puts at risk — the naming
+/// page says so at the end of the flow, and this is that answer while both
+/// picks are still free.
+///
+/// They shed onto their own lines rather than joining the stat row for the
+/// reason `craft_rows` states: `draw_row` clamps a row vertically and nothing
+/// clamps it horizontally, and six slots of shipped routine names run well
+/// past the popup's edge. A program carrying nothing gets no line at all,
+/// which is what `wrap_text` of an empty list already returns.
+///
+/// Returns the lines rather than drawing them so their width is measurable
+/// without a window — see `the_widest_shipped_routine_kit_fits_the_fuse_picker`.
+/// The stat row is always present, so a caller may take it unconditionally.
+fn fuse_candidate_rows(num: char, p: &PetInfo, routines: &[String]) -> Vec<String> {
+    std::iter::once(fuse_candidate_label(num, p))
+        .chain(
+            wrap_text(
+                &routines.join(", "),
+                ROW_WRAP_COLUMNS - FUSE_ROUTINE_INDENT.len(),
+            )
+            .into_iter()
+            .map(|line| format!("{FUSE_ROUTINE_INDENT}{line}")),
+        )
+        .collect()
+}
+
+/// The names filling `program`'s routine slots, empty ones dropped. One
+/// definition for both fuse pages, which have no reason to describe the same
+/// program's kit two ways.
+fn installed_routines(game: &Game, program: Entity) -> Vec<String> {
+    game.routine_view(program)
+        .into_iter()
+        .filter(|s| s.ability.is_some())
+        .map(|s| s.name)
+        .collect()
+}
+
+/// Pushes one candidate's rows: the selectable stat row, then its routines as
+/// dim unselected continuations — the same shape `draw_craft_menu` gives a
+/// recipe and its cost, and for the same reason. The highlight belongs on the
+/// line carrying the shortcut, and the popup's scroll anchor is the *first*
+/// selected `Item`, so these cannot disturb it.
+fn push_fuse_candidate(rows: &mut Vec<Row>, game: &Game, i: usize, p: &PetInfo, selected: bool) {
+    let mut lines =
+        fuse_candidate_rows(menu_shortcut(i), p, &installed_routines(game, p.entity)).into_iter();
+    let head = lines
+        .next()
+        .expect("fuse_candidate_rows always emits the stat row");
+    rows.push(with_icon(
+        tier_row(head, selected, p.fusions, p.rarity),
+        p.glyph,
+        glyph_color(p.color),
+    ));
+    for line in lines {
+        rows.push(colored_item_row(line, false, TEXT_DIM));
+    }
+}
+
 pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let candidates = game.owned_pets();
     let mut rows = vec![text_row("Fuse which program? Pick the first of two.")];
@@ -174,16 +241,7 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(you have no compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(with_icon(
-            tier_row(
-                fuse_candidate_label(menu_shortcut(i), p),
-                i == selected,
-                p.fusions,
-                p.rarity,
-            ),
-            p.glyph,
-            glyph_color(p.color),
-        ));
+        push_fuse_candidate(&mut rows, game, i, p, i == selected);
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
 }
@@ -210,16 +268,7 @@ pub(super) fn draw_fuse_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     for (i, p) in candidates.iter().enumerate() {
-        rows.push(with_icon(
-            tier_row(
-                fuse_candidate_label(menu_shortcut(i), p),
-                i == selected,
-                p.fusions,
-                p.rarity,
-            ),
-            p.glyph,
-            glyph_color(p.color),
-        ));
+        push_fuse_candidate(&mut rows, game, i, p, i == selected);
     }
     draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
 }
@@ -474,6 +523,70 @@ mod tests {
             "the roster must say which key stands a program in the party: {:?}",
             companion_help()
         );
+    }
+
+    /// Fusion derives the result's kit fresh from its species, so what a
+    /// candidate is carrying is exactly what picking it puts at risk. The
+    /// naming page already says so; this is that answer two keypresses
+    /// earlier, while both picks are still free.
+    #[test]
+    fn a_fuse_candidate_lists_its_routines_under_its_stat_row() {
+        let lines = fuse_candidate_rows(
+            'a',
+            &pet("Kestrel", "w|a|m"),
+            &["Sandbox".to_string(), "Hyperthread Single v1.0".to_string()],
+        );
+        assert!(lines[0].contains("Kestrel"), "{lines:?}");
+        assert!(
+            !lines[0].contains("Sandbox"),
+            "the stat row stays the row the eye scans: {lines:?}"
+        );
+        let under = lines[1..].join(" ");
+        assert!(
+            under.contains("Sandbox") && under.contains("Hyperthread Single v1.0"),
+            "every installed routine is named underneath: {lines:?}"
+        );
+    }
+
+    /// Same hazard the two censuses above document: `draw_row` clamps a row
+    /// vertically and nothing clamps it horizontally. Six slots
+    /// (`COMPANION_ROUTINE_SLOT_CAP`) of the widest shipped routine names run
+    /// well past a `PopupSize::Large` body on one line, so they have to shed
+    /// onto continuation lines rather than off the right edge.
+    ///
+    /// Measured against the real ability set at its worst case rather than a
+    /// literal, so an author naming a routine longer fails this instead of
+    /// shipping a line that runs off the box.
+    #[test]
+    fn the_widest_shipped_routine_kit_fits_the_fuse_picker() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = feral_processes_engine::abilities::AbilityDb::load_dir(&dir)
+            .expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let mut names: Vec<String> = db.all().map(|d| d.name.clone()).collect();
+        names.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+        names.truncate(feral_processes_engine::tuning::COMPANION_ROUTINE_SLOT_CAP as usize);
+        assert!(
+            names.len() > 1,
+            "the census found {} routines, so it is measuring nothing",
+            names.len()
+        );
+        let lines = fuse_candidate_rows('a', &pet("Kestrel", "w|a|m"), &names);
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a fuse candidate's line overflows the picker by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// The easter-egg census. Wielding a program as your weapon is

@@ -10,6 +10,7 @@
 mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
+pub use app::building::{StaffRow, Staffing};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -824,9 +825,27 @@ pub enum Mode {
     /// `MessageLog::retain_outcomes_since_battle` drops when a fight ends.
     History,
     /// Every structure in the zone and what is assigned to it — see
-    /// `Game::structure_report`. Read-only: assigning and demolishing stay
-    /// on their own screens.
+    /// `Game::structure_report`. Enter on a workable row staffs it
+    /// (`Mode::StructureAssign`); demolishing and upgrading stay on their own
+    /// screens, since neither is something you go looking for here.
+    ///
+    /// This screen was read-only until 2026-08-14, on the argument that it
+    /// shouldn't become a second way to assign. What that missed is the
+    /// direction the two screens are read in: the base menu's Cronjob row is
+    /// program-first and answers "where do I put this program", while the
+    /// roster is the only screen that shows the whole base at once and
+    /// colours an unstaffed machine yellow — so it is where you find out
+    /// *that* something is idle, and backing out to a program-first picker to
+    /// act on it was the friction. Both flows stay.
     Structures,
+    /// Picking who works the structure highlighted on the roster — see
+    /// `App::staff_rows`. The mirror of `Mode::CronjobStructure`, which
+    /// arrives with the program already chosen and picks the structure.
+    ///
+    /// Returns to `Mode::Structures` rather than the map, on that structure's
+    /// row: what the player is looking at is the base, and the assignee the
+    /// row just gained is the answer they opened the screen for.
+    StructureAssign,
     /// Every conversion a structure runs, expanded back to raw inputs — see
     /// `Game::recipe_chains`. Read-only, and reference data rather than a
     /// view of the base, so it reads the same underground as it does on the
@@ -952,6 +971,7 @@ impl Mode {
             | Mode::Research
             | Mode::History
             | Mode::Structures
+            | Mode::StructureAssign
             | Mode::Recipes
             | Mode::Help
             | Mode::FrameMap
@@ -1086,6 +1106,10 @@ pub struct App {
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
     pending_worker: Option<Entity>,
+    /// Which structure `Mode::StructureAssign` is staffing — the row that was
+    /// highlighted on the roster. The mirror of `pending_worker`, which the
+    /// program-first flow fills in instead.
+    pending_post_structure: Option<Entity>,
     /// Which group menu opened the screen that is up, if one did — where
     /// `App::close_screen` sends Esc. `None` for a screen reached straight
     /// from the map, and cleared the moment the map is reached again.

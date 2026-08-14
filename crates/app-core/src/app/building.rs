@@ -2,7 +2,113 @@
 
 use crate::*;
 
+/// What `Mode::StructureAssign` is showing: the structure picked on the
+/// roster, and everyone who could be put on it.
+///
+/// The name travels with the rows because this popup covers the roster row it
+/// was opened from — a picker headed "Assign Cronjob" with nothing else on it
+/// would leave the player guessing which machine they were pointing at.
+pub struct Staffing {
+    pub target: String,
+    pub rows: Vec<StaffRow>,
+}
+
+/// One candidate to work the structure highlighted on the roster — see
+/// `App::staffing` and `Mode::StructureAssign`.
+///
+/// A row rather than a bare `Entity` because one of them is not an entity at
+/// all: `None` is the player working the machine themselves. Keeping both in
+/// one ordered list is what stops the renderer and the handler disagreeing
+/// about which index means what, the same rule `App::base_menu_rows` holds
+/// for a menu whose rows are hidden dynamically.
+#[derive(Clone)]
+pub struct StaffRow {
+    /// The program to post, or `None` on the row that puts *you* on it.
+    /// Carries the whole view so the picker can show a program's level,
+    /// health and activity the way `Mode::Cronjob`'s does.
+    pub program: Option<EntityView>,
+}
+
 impl App {
+    /// Who can be put on `pending_post_structure`: yourself if you are
+    /// standing beside it, then every program you own.
+    ///
+    /// The "yourself" row is filtered on `StructureReport::player_adjacent`
+    /// rather than offered everywhere and refused, matching
+    /// `App::upgradeable_structures` — `Game::work_structure` takes only the
+    /// four orthogonal neighbours, and the roster is zone-wide, so on almost
+    /// every row that offer would be a dead end. It leads because it is the
+    /// answer that needs nothing: a player who owns no programs yet can still
+    /// start a machine from here.
+    pub fn staffing(&mut self) -> Option<Staffing> {
+        let structure = self.pending_post_structure?;
+        let row = self
+            .game
+            .as_mut()
+            .map(|g| g.structure_report())
+            .unwrap_or_default()
+            .into_iter()
+            .find(|s| s.entity == structure)?;
+        let mut rows: Vec<StaffRow> = row
+            .player_adjacent
+            .then_some(StaffRow { program: None })
+            .into_iter()
+            .collect();
+        rows.extend(
+            self.nearby_programs()
+                .into_iter()
+                .map(|v| StaffRow { program: Some(v) }),
+        );
+        Some(Staffing {
+            target: row.label,
+            rows,
+        })
+    }
+
+    /// Posts whoever was picked to the structure the roster was showing, and
+    /// goes back to that row — see `Mode::StructureAssign`.
+    pub(crate) fn handle_structure_assign_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.leave_staffing();
+            return;
+        }
+        let Some(structure) = self.pending_post_structure else {
+            self.mode = Mode::Structures;
+            return;
+        };
+        let rows = self.staffing().map(|s| s.rows).unwrap_or_default();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let worker = rows[idx].program.as_ref().map(|v| v.entity);
+        let Some(game) = &mut self.game else { return };
+        let outcome = match worker {
+            Some(worker) => game.assign_cronjob(worker, structure),
+            None => game.work_structure(structure),
+        };
+        self.status_line = outcome.err();
+        self.leave_staffing();
+    }
+
+    /// Back to the roster, on the structure that was being staffed. Looked up
+    /// by entity rather than by a remembered index because the roster is
+    /// rebuilt from `Game::structure_report` on the way back in.
+    fn leave_staffing(&mut self) {
+        let structure = self.pending_post_structure.take();
+        self.mode = Mode::Structures;
+        let Some(structure) = structure else { return };
+        if let Some(row) = self
+            .game
+            .as_mut()
+            .map(|g| g.structure_report())
+            .unwrap_or_default()
+            .iter()
+            .position(|s| s.entity == structure)
+        {
+            self.menu_selected = row;
+        }
+    }
+
     /// Every tamed program the player owns — the candidates for a cronjob or
     /// a guard posting.
     ///

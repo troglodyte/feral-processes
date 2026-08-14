@@ -144,21 +144,45 @@ impl App {
         self.scroll(key, rows);
     }
 
-    /// The structure roster. Read-only for the same reason the history is:
-    /// assigning a worker, demolishing and upgrading each have their own
-    /// screen, and this one exists to answer "what have I got, and what is on
-    /// it" without becoming a fourth way to do any of that.
+    /// The structure roster. Scrolls like the history, and Enter staffs the
+    /// highlighted structure — see `Mode::Structures` for why this one screen
+    /// acts where the other two read-only views don't.
+    ///
+    /// The refusals sit here rather than in the picker because the roster
+    /// cannot filter its rows the way `App::upgradeable_structures` does:
+    /// showing the whole base, workable or not, is what the screen is for. So
+    /// a row that takes no worker says so instead of opening a picker that
+    /// could only be refused on the far side.
     pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
-        let rows = self
+        let report = self
             .game
             .as_mut()
-            .map(|g| g.structure_report().len())
-            .unwrap_or(0);
-        self.scroll(key, rows);
+            .map(|g| g.structure_report())
+            .unwrap_or_default();
+        let Some(idx) = self.selected_index(key, report.len()) else {
+            return;
+        };
+        // `assign_cronjob` and `work_structure` are both behind
+        // `require_surface`: `Position` is pinned to the entrance tile down
+        // here, so a posting would measure its walk from the wrong end of the
+        // map. Refused at the keypress like the demolish key, rather than
+        // opening a picker whose every row is a dead end — the roster itself
+        // still reads fine underground, which is why it carries no
+        // `surface_only` flag in `BASE_ROWS`.
+        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
+            self.status_line = Some("Not from down here.".into());
+            return;
+        }
+        if !report[idx].workable {
+            self.status_line = Some("Nothing can be posted to that.".into());
+            return;
+        }
+        self.pending_post_structure = Some(report[idx].entity);
+        self.mode = Mode::StructureAssign;
     }
 
     /// The recipe chains. Scrolls by *chain* rather than by drawn line: the

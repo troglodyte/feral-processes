@@ -613,6 +613,7 @@ impl Game {
                         .get::<Durability>(entity)
                         .map(|d| (d.hp, d.max_hp)),
                     workable,
+                    player_adjacent: at_station(center, pos),
                     assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
                 }
             })

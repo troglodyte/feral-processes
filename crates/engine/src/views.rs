@@ -560,6 +560,16 @@ pub struct StructureReport {
     /// A workable structure with no assignees is idle and producing nothing,
     /// which is the one thing on this screen the player can act on.
     pub workable: bool,
+    /// Whether the player is standing on one of the four tiles this structure
+    /// can be worked from — `hauling::at_station`, the same question
+    /// `Game::work_structure` refuses on.
+    ///
+    /// Here rather than derived by a frontend from `distance`, because the
+    /// two disagree: `distance` is Chebyshev, so a diagonal neighbour is one
+    /// tile away and still not a tile you can work from. A screen offering
+    /// "work it yourself" filters on this, and per `CLAUDE.md` the rule is a
+    /// call rather than a second copy of the adjacency list.
+    pub player_adjacent: bool,
     /// What is staged in this structure's input buffer and waiting in its
     /// output buffer, as display-ready `(item name, count)` pairs.
     ///

@@ -34,6 +34,7 @@ impl App {
             quit: false,
             pending_structure: None,
             pending_worker: None,
+            pending_post_structure: None,
             menu_origin: None,
             pending_remove_structure: None,
             pending_manifest: None,

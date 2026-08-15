@@ -8,7 +8,6 @@
 8. more machine learning
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
-20. too easy to level up, lets slow that down a bit
 21. Four perk candidates considered on 2026-08-14 and passed on, each for a
     reason that is about the hook rather than about the idea. Recorded so the
     next batch doesn't re-derive them.

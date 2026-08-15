@@ -2,19 +2,30 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_engine::ResearchStatus;
+use feral_processes_engine::perks::{Perk, PerkDef};
 
-pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let status = game.player_status();
+/// The perk picker's rows. A perk's description is a *dim item row* rather
+/// than a `Row::Text`, and the help line sits in the header rather than under
+/// the list, for the reason `build_menu_rows` does the same: `popup_layout`
+/// cuts the scrollable body at the last `Row::Item` and pins everything after
+/// it, so a trailing `Row::Text` description is torn off the perk it belongs
+/// to and drawn at the foot of the box, where it neither scrolls nor sits
+/// under its own row. See `every_progression_description_stays_inside_the_
+/// scrollable_body`.
+pub(super) fn perks_menu_rows(
+    points: u32,
+    defs: &[PerkDef],
+    held: &[Perk],
+    selected: usize,
+) -> Vec<Row> {
     let mut rows = vec![
-        Row::TextColored(format!("Perk Points: {}", status.perk_points), CYAN),
+        Row::TextColored(format!("Perk Points: {points}"), CYAN),
+        text_row("Pick a row's key to buy another level. Esc to close"),
         text_row(""),
     ];
-    for (i, def) in game.perk_defs().iter().enumerate() {
-        let level = status
-            .unlocked_perks
-            .iter()
-            .filter(|p| **p == def.id)
-            .count();
+    for (i, def) in defs.iter().enumerate() {
+        let level = held.iter().filter(|p| **p == def.id).count();
         let tag = if level > 0 {
             format!(" (level {level})")
         } else {
@@ -30,12 +41,23 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
             ),
             i == selected,
         ));
-        rows.push(text_row(format!("    {}", def.description)));
+        rows.push(colored_item_row(
+            format!("    {}", def.description),
+            false,
+            TEXT_DIM,
+        ));
     }
-    rows.push(text_row(""));
-    rows.push(text_row(
-        "Pick a row's key to buy another level. Esc to close",
-    ));
+    rows
+}
+
+pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+    let status = game.player_status();
+    let rows = perks_menu_rows(
+        status.perk_points,
+        &game.perk_defs(),
+        &status.unlocked_perks,
+        selected,
+    );
     draw_popup("Perks", PopupSize::Large, &rows, painter, m);
 }
 
@@ -61,12 +83,12 @@ fn state_tag(state: &ResearchState) -> String {
     }
 }
 
-pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
-    let research_currency = game.research_currency();
-    let held = game.banked(&research_currency);
-    let nodes = game.research_nodes();
+/// The research picker's rows, in the shape `perks_menu_rows` documents and
+/// for the same reason: nothing may follow the last `Row::Item`.
+pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(format!("Research Data: {held}"), CYAN),
+        text_row("Pick a row's key to research it. Esc to close"),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
@@ -83,10 +105,20 @@ pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Pai
             ResearchState::Unlocked => spent_item_row(label, i == selected),
             _ => item_row(label, i == selected),
         });
-        rows.push(text_row(format!("    {}", node.description)));
+        rows.push(colored_item_row(
+            format!("    {}", node.description),
+            false,
+            TEXT_DIM,
+        ));
     }
-    rows.push(text_row(""));
-    rows.push(text_row("Pick a row's key to research it. Esc to close"));
+    rows
+}
+
+pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+    let research_currency = game.research_currency();
+    let held = game.banked(&research_currency);
+    let nodes = game.research_nodes();
+    let rows = research_menu_rows(held, &nodes, selected);
     draw_popup("Research", PopupSize::Large, &rows, painter, m);
 }
 

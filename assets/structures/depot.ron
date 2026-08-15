@@ -6,6 +6,6 @@
     color: Cyan,
     build_cost: [("core_fragment", 12)],
     work: None,
-    capacity: 100,
+    capacity: 200,
     stores: true,
 )

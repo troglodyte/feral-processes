@@ -926,6 +926,115 @@ mod tests {
         }
     }
 
+    /// The two progression pickers' real rows for `n` entries with row
+    /// `selected` highlighted, built through the shipping row builders for
+    /// `build_menu_rows_fixture`'s reason.
+    fn progression_rows_fixtures(n: usize, selected: usize) -> Vec<(&'static str, Vec<Row>)> {
+        use super::super::progression::{perks_menu_rows, research_menu_rows};
+        use feral_processes_engine::ResearchStatus;
+        use feral_processes_engine::perks::{Perk, PerkDef};
+        vec![
+            (
+                "perks",
+                perks_menu_rows(
+                    3,
+                    &(0..n)
+                        .map(|i| PerkDef {
+                            // Every shipped perk is a distinct variant, but the
+                            // row shape doesn't read the id beyond counting
+                            // levels, so one variant repeated is enough here.
+                            id: Perk::Attacker,
+                            name: format!("Perk {i}"),
+                            description: format!("What perk {i} does, at some length."),
+                            cost: 1 + i as u32,
+                        })
+                        .collect::<Vec<_>>(),
+                    &[Perk::Attacker],
+                    selected,
+                ),
+            ),
+            (
+                "research",
+                research_menu_rows(
+                    40,
+                    &(0..n)
+                        .map(|i| ResearchStatus {
+                            id: format!("node_{i}"),
+                            name: format!("Node {i}"),
+                            description: format!("What node {i} unlocks, at some length."),
+                            cost: 10 + i as u32,
+                            state: if i % 3 == 0 {
+                                ResearchState::Unlocked
+                            } else {
+                                ResearchState::Available
+                            },
+                            affordable: true,
+                        })
+                        .collect::<Vec<_>>(),
+                    selected,
+                ),
+            ),
+        ]
+    }
+
+    /// The reported bug: the last perk on the perk screen didn't show what it
+    /// does. Same cut as the build menu and the routine pickers above — the
+    /// body ends at the last `Row::Item`, so a trailing `Row::Text`
+    /// description was pinned as a footer and drawn at the foot of the box,
+    /// under a blank scroll indicator, never scrolling with the list it
+    /// belonged to.
+    ///
+    /// Nothing may follow the last item row on either picker.
+    #[test]
+    fn every_progression_description_stays_inside_the_scrollable_body() {
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            for n in 1..20 {
+                for selected in [0, n - 1] {
+                    for (screen, rows) in progression_rows_fixtures(n, selected) {
+                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        assert!(
+                            l.footer.is_empty(),
+                            "at {window_h}px the {screen} picker with {n} rows pinned {} \
+                             row(s) below the list — the last description is detached from \
+                             the row it describes",
+                            l.footer.len()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// And the selected row stays reachable: descriptions double the body's
+    /// length, so a capacity that only counted the perks themselves would
+    /// leave the last one unreachable.
+    #[test]
+    fn the_selected_progression_row_is_inside_the_visible_window() {
+        for window_h in WINDOW_HEIGHTS {
+            let m = ui_metrics(window_h);
+            for n in 1..20 {
+                for selected in 0..n {
+                    for (screen, rows) in progression_rows_fixtures(n, selected) {
+                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        let idx = l
+                            .body
+                            .iter()
+                            .position(|r| matches!(r, Row::Item { selected: true, .. }))
+                            .expect("the selected row is in the body");
+                        assert!(
+                            idx >= l.offset && idx < l.offset + l.capacity,
+                            "at {window_h}px, {screen} row {selected} of {n} sits at body \
+                             row {idx}, outside the window [{}, {})",
+                            l.offset,
+                            l.offset + l.capacity
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// A popup shrinks to fit its content, so a list the box has room for
     /// must never be reported as scrolling.
     ///

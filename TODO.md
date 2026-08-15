@@ -36,6 +36,3 @@
 
 # Bugs
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
-7. decompiling a stack's guardian clears nothing — taming spends no
-   `award_loot`, so the lair refills and the boss can be farmed. Found while
-   fixing bug 6.

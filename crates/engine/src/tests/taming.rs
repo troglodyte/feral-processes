@@ -436,6 +436,45 @@ fn a_boss_is_refused_as_a_decompile_target() {
     );
 }
 
+/// A lair's guardian is an encounter too, and for a second reason on top of
+/// the one above: walking off with it would leave the stack standing with
+/// nothing left to beat, since `FrameMemory::cleared` is written by
+/// `award_loot` and taming spends none. The boss refusal already covers
+/// every shipped guardian; this covers `pick_lair_species`'s fallback, the
+/// ordinary program a biome with no boss fields.
+#[test]
+fn a_lairs_guardian_is_refused_as_a_decompile_target() {
+    let mut game = Game::new(3111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    descend(&mut game);
+    let guardian = rouse_a_tameable_guardian(&mut game);
+    assert!(
+        !game.is_boss_creature(guardian),
+        "the fixture must field the fallback guardian — a boss is refused by the rule above"
+    );
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+    let ability = game
+        .battle_special_options(0)
+        .into_iter()
+        .find(|o| o.name.to_lowercase().contains("decompile"))
+        .expect("the player starts with decompile installed")
+        .index;
+
+    let err = game
+        .battle_set_action(
+            0,
+            BattleAction::Special {
+                ability,
+                target: crate::battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .expect_err("a lair guardian must be refused as a decompile target");
+    assert!(
+        err.to_lowercase().contains("ice"),
+        "the refusal should say why, got {err:?}"
+    );
+}
+
 #[test]
 fn a_refused_decompile_costs_the_player_no_catalyst_and_never_tames_the_boss() {
     let mut game = Game::new(3107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -1818,6 +1818,53 @@ fn killing_the_guardian_collapses_the_stack() {
     assert_ne!(after, before, "no replacement link appeared");
 }
 
+/// A guardian that leaves the fight for good spends the lair, however it
+/// left. `mark_lair_cleared` hangs off `award_loot`, which fires only on a
+/// death — so a capture recorded nothing, the stack stayed standing, and
+/// the guardian respawned on the next visit to be farmed.
+///
+/// Nothing in the game reaches this now: `battle_set_action` refuses a
+/// guardian before the roll, and `attempt_decompile` is called here
+/// directly. It is the second half of the same fix deliberately, because
+/// the record is what the collapse reads and a third way out of a fight
+/// would otherwise have to remember to write it.
+#[test]
+fn decompiling_the_guardian_spends_the_lair() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let before = entrance_tiles(&mut game);
+    let player = game.player_entity();
+    let guardian = rouse_a_tameable_guardian(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+
+    for _ in 0..50 {
+        if game.world.get::<Tamed>(guardian).is_some() {
+            break;
+        }
+        game.attempt_decompile(0, player);
+    }
+    assert!(
+        game.world.get::<Tamed>(guardian).is_some(),
+        "50 attempts at 1 HP and the capture never landed"
+    );
+
+    assert!(
+        !game.is_underground(),
+        "taking the guardian should have collapsed the stack and thrown the party out"
+    );
+    let after = entrance_tiles(&mut game);
+    assert!(
+        !after.contains(&entrance),
+        "the entrance survived the stack it led into"
+    );
+    assert_eq!(
+        after.len(),
+        before.len(),
+        "the sector lost a link instead of trading one"
+    );
+}
+
 /// The run's record of a stack goes with the stack — and only that stack's.
 /// `StackMemory` is keyed by `(link tile, depth)`, so a wipe that reached
 /// wider would blank the map of every other stack the party has walked.

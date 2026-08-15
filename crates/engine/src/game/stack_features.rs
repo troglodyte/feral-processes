@@ -231,10 +231,37 @@ impl Game {
             .is_some_and(|m| m.cleared)
     }
 
-    /// Records that this stack's guardian is down. Called from `award_loot`,
-    /// which is the one place that knows a hostile actually died rather than
-    /// merely being fled from — and passed the victim, because it fires for
-    /// *every* kill in the game and most of a lair's pack is escort.
+    /// The frame whose lair `entity` guards, if the live fight was roused
+    /// from one and `entity` is the program it was built around.
+    ///
+    /// The one statement of "this is the guardian", which two things ask in
+    /// opposite directions: `mark_lair_cleared` on the way out of the fight,
+    /// and `battle_set_action` at plan time to refuse it as a decompile
+    /// target. A copy of the comparison in the refusal is a copy that can
+    /// come to disagree about what a guardian is, and the two disagreeing is
+    /// precisely a stack the player may empty and never finish.
+    fn lair_guarded_by(&self, entity: Entity) -> Option<StackPos> {
+        self.world
+            .get_resource::<BattleState>()
+            .and_then(|battle| battle.lair)
+            .filter(|lair| lair.guardian == entity)
+            .map(|lair| lair.pos)
+    }
+
+    /// Whether the live fight's lair was built around `entity` — see
+    /// `lair_guarded_by`.
+    pub(crate) fn is_lair_guardian(&self, entity: Entity) -> bool {
+        self.lair_guarded_by(entity).is_some()
+    }
+
+    /// Records that this stack's guardian has left the fight for good.
+    ///
+    /// Called from `award_loot`, which is the one place that knows a hostile
+    /// actually died rather than merely being fled from, and from
+    /// `attempt_decompile`, which is the one other way a program leaves a
+    /// fight and does not come back. Both pass the program itself, because
+    /// `award_loot` fires for *every* kill in the game and most of a lair's
+    /// pack is escort.
     ///
     /// `FrameMemory::cleared` is the single record: it says the lair is
     /// spent, which is what stops it refilling, and `end_battle` reads it
@@ -242,17 +269,10 @@ impl Game {
     /// down with it. Which frame that is comes off the battle rather than
     /// off the party's own `Locale`, for the reason `LairFight` documents.
     pub(crate) fn mark_lair_cleared(&mut self, victim: Entity) {
-        let Some(lair) = self
-            .world
-            .get_resource::<BattleState>()
-            .and_then(|battle| battle.lair)
-        else {
+        let Some(pos) = self.lair_guarded_by(victim) else {
             return;
         };
-        if lair.guardian != victim {
-            return;
-        }
-        self.frame_memory_mut(lair.pos).cleared = true;
+        self.frame_memory_mut(pos).cleared = true;
     }
 
     /// Whether the cache on `cell` of the frame the party is in is still

@@ -1029,6 +1029,43 @@ pub(super) fn spawn_boss_on_player_tile(game: &mut Game) -> Entity {
         .expect("a shipped boss species should spawn")
 }
 
+/// Opens a lair fight in the frame the party is standing in, against a
+/// guardian the game will actually let the player decompile.
+///
+/// A real `rouse_lair` cannot produce one: every walkable biome fields a
+/// boss (`every_biome_a_stack_link_can_open_in_fields_a_boss`) and a boss
+/// is refused as a decompile target before the roll. What is left is
+/// `pick_lair_species`'s fallback — the toughest *ordinary* program a
+/// biome with no boss can field, which a mod can reach and which carries
+/// no `is_boss` to refuse on. Installing that case by hand is cheaper than
+/// a bossless install and names the same state `rouse_lair` writes: the
+/// pack in the fight, `StackSpawn` on it, and `BattleState::lair` pointing
+/// at the guardian.
+///
+/// Softened to 1 HP, so a test about what a capture *does* is not also a
+/// test of whether the roll lands.
+pub(super) fn rouse_a_tameable_guardian(game: &mut Game) -> Entity {
+    let player = game.player_entity();
+    let pos = game
+        .stack_pos()
+        .expect("a lair fight belongs to a frame — descend first");
+    let tile = *game.world.get::<Position>(player).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    let guardian = game
+        .spawn_wild_creature(&species.id, tile.x, tile.y)
+        .expect("a shipped species should spawn");
+    game.world.entity_mut(guardian).insert(StackSpawn);
+    game.world.get_mut::<Stats>(guardian).unwrap().hp = 1;
+    insert_battle(game, player, vec![guardian]);
+    game.world.resource_mut::<BattleState>().lair =
+        Some(crate::resources::LairFight { pos, guardian });
+    guardian
+}
+
 /// Deploys a Home directly on the player's current tile — `Game::rest`
 /// requires a rest-enabling structure nearby, so tests exercising `rest`
 /// need one in place first. Spawned directly rather than through

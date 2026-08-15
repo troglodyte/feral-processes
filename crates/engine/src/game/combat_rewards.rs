@@ -771,6 +771,14 @@ impl Game {
             "ICE breached! The program now runs under your control.",
         );
         self.award_player_xp(player, wild_max_hp as u32);
+        // The other way a program leaves a fight and does not come back.
+        // `award_loot` carries this for a kill and taming spends no loot, so
+        // without it a captured guardian left the lair unspent — refilling
+        // on the next visit, over a stack that could never be finished.
+        // Unreachable while `battle_set_action` refuses a guardian outright,
+        // and kept because the record is what the collapse reads: a third
+        // way out of a fight should not have to remember to write it.
+        self.mark_lair_cleared(front);
         if self.remove_member(group, 0) {
             self.end_battle(player, Some(front));
             return true;

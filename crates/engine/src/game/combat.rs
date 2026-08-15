@@ -435,6 +435,15 @@ impl Game {
             // it joins however modest its `base_hp` looks at capture, and
             // fusion's `max + min/2` then compounds that.
             //
+            // A lair's guardian is refused for a second reason that has
+            // nothing to do with what it would be worth in the roster: the
+            // stack comes down when the guardian does, and a program walked
+            // off with leaves a lair with nothing left to beat standing
+            // over a stack that can never be finished. Every shipped
+            // guardian is already covered by the boss half — the fallback
+            // `pick_lair_species` takes where a biome fields no boss is an
+            // ordinary program, and this is the clause that catches it.
+            //
             // This can't join Decompile's other two refusals in
             // `ability_unavailable` — that takes no target, because the
             // ability is chosen before the group, so the row cannot grey on
@@ -446,9 +455,9 @@ impl Game {
                     self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
                     Some(AbilityEffect::Decompile)
                 )
-                && self
-                    .front_of_group(*group)
-                    .is_some_and(|front| self.is_boss_creature(front))
+                && self.front_of_group(*group).is_some_and(|front| {
+                    self.is_boss_creature(front) || self.is_lair_guardian(front)
+                })
             {
                 return Err("That program's ICE is beyond decompiling.".to_string());
             }

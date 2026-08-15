@@ -183,8 +183,12 @@ const QTY_COLUMN: usize = 3;
 /// constant cannot leave three literals disagreeing.
 ///
 /// Deliberately no "maxed" wording — `SWAP_STATS_COLUMN` is 20 monospace
-/// cells and `+2 ATK +1 DEF T3/3 maxed` is 24. The row colour carries that
-/// in the two column sites; `equip_preview_tag` has the room and appends it.
+/// cells and `+2 ATK +1 DEF T3/3 maxed` is 24. The row colour carries that in
+/// the two column sites; `equip_preview_tag` appends it. That used to be on
+/// the grounds that the inventory screen had the room, which measured false —
+/// the widest shipped copy ran 68px past the popup — so what makes it
+/// affordable is `inventory_row_lines` shedding the whole tag onto a
+/// continuation when it no longer fits, not the width.
 pub fn item_fusion_note(tier: u32) -> String {
     if tier == 0 {
         String::new()

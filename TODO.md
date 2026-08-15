@@ -36,16 +36,6 @@
 
 # Bugs
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
-1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest
-   the shipped assets can build is 1311px into a 1243px body at zone 10, and
-   the row runs off the right edge taking its equip tag with it. The excess is
-   `equip_preview_tag`'s `" - maxed"`, appended on the stated grounds that
-   this screen has the room. Pre-existing, measured 2026-08-13;
-   `no_shipped_inventory_row_overflows_its_popup` covers every tier below
-   maxed and excludes that case by name. Bug 2's fix built the tool this
-   wants: `popup::wrapped_row_lines` packs a row's trailing tags and sheds
-   what will not fit onto an indented continuation, so the inventory row
-   needs its head and tags separated and nothing else.
 7. decompiling a stack's guardian clears nothing — taming spends no
    `award_loot`, so the lair refills and the boss can be farmed. Found while
    fixing bug 6.

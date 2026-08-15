@@ -82,30 +82,68 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let tag = equip_preview_tag(game, &row.copy, status.zone);
-        // The engine hands this list back grouped, so the category column
-        // reads as a heading for the run of rows beneath it rather than as
-        // noise repeated at random. A fused copy is its own row beside its
-        // ordinary spares, which is the whole point of the screen.
+        let mut lines =
+            inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone)
+                .into_iter();
+        let head = lines
+            .next()
+            .expect("inventory_row_lines always emits the item's own row");
         rows.push(tier_row(
-            format!(
-                "[{}] {} {}  {}{}",
-                menu_shortcut(i + 3),
-                qty_column(row.qty),
-                game.item_category(&row.copy.item).short_label(),
-                game.copy_name(&row.copy),
-                tag
-            ),
+            head,
             selected == i + 3,
             row.copy.tier,
             row.copy.rarity,
         ));
+        // A continuation carries this row's own tail rather than a second kind
+        // of information, so it keeps the tier colour. Only the head is ever
+        // `selected`: the highlight belongs on the line carrying the row key,
+        // and `popup_layout`'s scroll anchor is the first selected `Item`.
+        for line in lines {
+            rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
+        }
     }
     rows.push(text_row(""));
     rows.push(text_row(
         "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
     ));
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
+}
+
+/// One carried item's lines: the count, category and name every row carries,
+/// then `equip_preview_tag` if it still fits — shed onto an indented
+/// continuation by `wrapped_row_lines` when it doesn't.
+///
+/// The engine hands the list back grouped, so the category column reads as a
+/// heading for the run of rows beneath it rather than as noise repeated at
+/// random. A fused copy is its own row beside its ordinary spares, which is
+/// the whole point of the screen.
+///
+/// The head ends at the name for `companion_row_lines`' reason: a shed has to
+/// fall on a boundary between segments, and the head is the part every row
+/// carries. The tag is handed over as *one* segment rather than several
+/// because it is parenthesised — breaking inside it would leave a line ending
+/// on an unclosed bracket and a continuation opening on a stat with nothing
+/// to say which item it belongs to.
+///
+/// Measured, a Gold, affixed, maxed Singularity Matrix ran 1311px into a
+/// 1243px body at zone 10, and nothing clamps a popup row horizontally: the
+/// tag ran off the right edge, taking the stat figures the screen is read for
+/// with it. That is the whole tag, so a chop here deletes the row's only
+/// answer to "what would this do if I put it on".
+fn inventory_row_lines(
+    game: &Game,
+    shortcut: char,
+    copy: &GearCopy,
+    qty: u32,
+    zone: u32,
+) -> Vec<String> {
+    let head = format!(
+        "[{shortcut}] {} {}  {}",
+        qty_column(qty),
+        game.item_category(&copy.item).short_label(),
+        game.copy_name(copy),
+    );
+    wrapped_row_lines(head, &[equip_preview_tag(game, copy, zone)])
 }
 
 pub(super) fn equipped_row(
@@ -291,10 +329,10 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
-    use super::equipped_summary;
+    use super::{equipped_summary, inventory_row_lines};
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
-    use feral_processes_app_core::{equip_preview_tag, menu_shortcut, qty_column};
+    use feral_processes_app_core::menu_shortcut;
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
     use feral_processes_engine::tuning::MAX_FUSIONS;
@@ -338,25 +376,24 @@ mod tests {
         );
     }
 
-    /// **The widest inventory row the shipped assets can build still fits.**
+    /// **Every line every shipped item can put on this screen fits inside
+    /// it.** The popup never wraps or clips horizontally, so a line past the
+    /// right edge is simply lost — which for an inventory row means the equip
+    /// tag, the only thing on it answering what the item would do if worn.
     ///
-    /// The row leads with `qty_column` now, so every row is wider than it
-    /// was, and the popup never wraps or clips horizontally — an overflowing
-    /// row simply runs off the right edge, taking the equip tag with it.
+    /// Built from `item_defs` × `affix_defs` through `inventory_row_lines`
+    /// rather than hand-written, which is the difference between a census and
+    /// a fixture: the widest row is a property of the assets *and* of how the
+    /// screen packs them, so a long item name added later, or a fourth tag
+    /// appended to `equip_preview_tag`, has to fail here rather than be
+    /// caught by eye.
     ///
-    /// Built from `item_defs` × `affix_defs` rather than hand-written, which
-    /// is the difference between a census and a fixture: the widest row is a
-    /// property of the assets, so a long item name or affix added later has
-    /// to fail here rather than be caught by eye.
-    ///
-    /// **A maxed copy is excluded, and that is a known overflow rather than
-    /// a carve-out for convenience.** `equip_preview_tag` appends
-    /// `" - maxed"` at `MAX_FUSIONS` on the stated grounds that this screen
-    /// has the room, and measured it does not: a Gold, affixed, maxed
-    /// Singularity Matrix runs 1311px into a 1243px body at zone 10. It ran
-    /// the same width before the quantity moved to the front — the count
-    /// simply changed ends — so it is recorded in `TODO.md` rather than
-    /// fixed here, since the fix is a decision about that tag.
+    /// **The maxed tier is the case this is most for.** `equip_preview_tag`
+    /// appends `" - maxed"` at `MAX_FUSIONS` on the stated grounds that this
+    /// screen has the room, and measured it does not: a Gold, affixed, maxed
+    /// Singularity Matrix ran 1311px into a 1243px body at zone 10, 68px
+    /// over. It fits now because the tag sheds onto its own line rather than
+    /// because it got shorter.
     #[test]
     fn no_shipped_inventory_row_overflows_its_popup() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
@@ -368,13 +405,13 @@ mod tests {
         let affixes: Vec<Option<_>> = std::iter::once(None)
             .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
             .collect();
-        let widest = game
+        let rows: Vec<(String, Vec<String>)> = game
             .item_defs()
             .iter()
             .flat_map(|def| {
                 affixes.iter().flat_map(move |affix| {
                     let def = def.clone();
-                    (0..MAX_FUSIONS).map(move |tier| GearCopy {
+                    (0..=MAX_FUSIONS).map(move |tier| GearCopy {
                         item: def.id.clone().into(),
                         rarity: Rarity::Gold,
                         tier,
@@ -383,33 +420,67 @@ mod tests {
                 })
             })
             .map(|copy| {
-                format!(
+                (
+                    game.copy_name(&copy),
                     // A four-digit count rather than the three the column
                     // reserves: the buffer is unbounded and a long run's
                     // scrap pile reaches it, at which point the row grows.
-                    "[{}] {} {}  {}{}",
-                    menu_shortcut(35),
-                    qty_column(1234),
-                    game.item_category(&copy.item).short_label(),
-                    game.copy_name(&copy),
-                    equip_preview_tag(&game, &copy, zone)
+                    inventory_row_lines(&game, menu_shortcut(35), &copy, 1234, zone),
                 )
             })
-            .max_by_key(|row| row.chars().count())
-            .expect("the shipped assets define items");
+            .collect();
+        assert!(!rows.is_empty(), "the shipped assets define items");
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
-            assert!(
-                drawn <= room,
-                "the widest inventory row overflows by {:.0}px \
-                 ({drawn:.0} into {room:.0}):\n{widest}",
-                drawn - room
-            );
+            for (name, lines) in &rows {
+                for line in lines {
+                    // The two-space prefix `draw_row` puts in front of every
+                    // `Row::Item` label, which a continuation carries too.
+                    let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a {name} row overflows by {:.0}px ({drawn:.0} into {room:.0}):\n{line}",
+                        drawn - room
+                    );
+                }
+            }
         });
+    }
+
+    /// The wrap is paid by the row that needs it and by no other. The census
+    /// above says every line fits, which a builder that shed every tag onto a
+    /// continuation would also satisfy — at the cost of doubling the length of
+    /// a list the player scrolls, and of splitting the name from its stats on
+    /// rows that had room for both.
+    #[test]
+    fn only_the_overflowing_inventory_row_spends_a_second_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(31, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let plain = GearCopy::plain("kinetic_edge".into());
+        assert_eq!(
+            inventory_row_lines(&game, 'a', &plain, 1, 1).len(),
+            1,
+            "an ordinary copy keeps its tag on the row it belongs to"
+        );
+
+        // The measured worst case: Gold, affixed, maxed, at the deepest zone
+        // `balance_sim` sweeps to.
+        let worst = GearCopy {
+            item: "singularity_matrix".into(),
+            rarity: Rarity::Gold,
+            tier: MAX_FUSIONS,
+            affix: Some("of_the_ghost_protocol".into()),
+        };
+        let lines = inventory_row_lines(&game, 'a', &worst, 1234, 10);
+        assert_eq!(lines.len(), 2, "{lines:#?}");
+        assert!(
+            lines[1].trim_start().starts_with('(') && lines[1].contains("maxed"),
+            "the tag sheds whole rather than being broken across the two: {lines:#?}"
+        );
     }
 
     /// A rare tier is drawn as a *word* in front of the item name, and

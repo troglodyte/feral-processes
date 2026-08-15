@@ -1193,3 +1193,63 @@ fn a_completed_order_is_announced_as_a_completion() {
          battle pane"
     );
 }
+
+/// The scheduler frees a worker it no longer wants with
+/// `.remove::<Task>().remove::<Carrying>()` — and a load has already been
+/// taken *out* of its machine's stock by the time it exists, so dropping the
+/// component destroys goods rather than releasing them.
+///
+/// Rare while a worker only ever set off from a clogged machine; routine now
+/// that one sets off every cycle. The rule is the scheduler's own, one case
+/// wider: it does not take a body off a post unless it has somewhere to put
+/// it, and a body mid-delivery has somewhere to be.
+#[test]
+fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
+    let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    spawn_machine_at(&mut game, "depot", 3, 0);
+    // Somewhere else for the scheduler to want a body, so the pass that
+    // frees one is actually reached: with every want already filled it
+    // returns before touching anybody. Placed *after* the mine in `(x, y)`
+    // order, since `producer_of` picks the lowest and the order has to land
+    // on the machine beside the depot.
+    let spare = spawn_machine_at(&mut game, "mining_node", 3, 3);
+    game.set_standing_job(spare, true, false).unwrap();
+    hire(&mut game, 1);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+    game.tick();
+
+    let worker = game.base_staff()[0];
+    assert_eq!(
+        game.world.get::<components::Task>(worker).map(|t| t.target),
+        Some(mine),
+        "precondition: the order's want is what the body is on"
+    );
+    // Nothing consumes Core Fragments beside the mine, so the worker sets
+    // off with the first cycle's payout of its own accord.
+    for _ in 0..60 {
+        if game.world.get::<Carrying>(worker).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let load = game
+        .world
+        .get::<Carrying>(worker)
+        .cloned()
+        .expect("precondition: the worker has to be holding a load");
+
+    // The player changes their mind mid-walk. The order's want disappears
+    // and the standing job is all that is left to fill.
+    game.cancel_work_order(0).unwrap();
+    game.tick();
+
+    let still = game
+        .world
+        .get::<Carrying>(worker)
+        .expect("the load must not be deleted out from under a walking worker");
+    assert_eq!(still.item, load.item);
+    assert_eq!(still.qty, load.qty);
+}

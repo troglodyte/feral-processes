@@ -10,6 +10,8 @@ use std::collections::HashSet;
 
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::pursuit::walk_field;
+use crate::items::ItemId;
+use crate::systems::{assembly_recipe, produced_item};
 use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;
 use crate::*;
@@ -38,17 +40,47 @@ pub(crate) fn take_haul_load(stock: &mut Stock) -> Option<Carrying> {
     Some(Carrying { item, qty })
 }
 
-/// True when `worker` stands on one of the four tiles `structure` can be
-/// reached from.
+/// Whether `a` is one of the four tiles orthogonally touching `b`.
 ///
 /// `collect::ORTHOGONAL` rather than a second adjacency list: a worker's
-/// arrival and a player's collect ask the same question, and the moment they
-/// could differ the base stops reading as a physical line. Movement itself
-/// stays 8-directional — only arrival is orthogonal.
-pub(crate) fn at_station(worker: Position, structure: Position) -> bool {
+/// arrival, a player's collect and a machine's reach into its neighbour all
+/// ask this one question, and the moment they could differ the base stops
+/// reading as a physical line. Movement itself stays 8-directional — only
+/// touching is orthogonal.
+fn touching(a: Position, b: Position) -> bool {
     ORTHOGONAL
         .iter()
-        .any(|(dx, dy)| worker.x == structure.x + dx && worker.y == structure.y + dy)
+        .any(|(dx, dy)| a.x == b.x + dx && a.y == b.y + dy)
+}
+
+/// True when `worker` stands on one of the four tiles `structure` can be
+/// reached from.
+pub(crate) fn at_station(worker: Position, structure: Position) -> bool {
+    touching(worker, structure)
+}
+
+/// A deployed assembler and the ingredient list it runs, as
+/// `haul_step_system` needs to see them: enough to answer whether the
+/// machine beside a producer will ever pull its output.
+type Consumer<'a> = (Position, &'a [(ItemId, u32)]);
+
+/// Whether a machine at `machine` producing `item` has an **attached
+/// building** — an orthogonal neighbour whose own recipe names that item.
+///
+/// This is what tells a feed buffer from a pile. A producer standing in a
+/// line hands its output to the machine beside it, so hoarding a buffer's
+/// worth is exactly right; a producer standing alone hands it to nobody, and
+/// waiting for twenty units to accumulate before the first trip serves
+/// nothing.
+///
+/// Deliberately asked of the *recipe* rather than of whether the neighbour is
+/// currently pulling. A consumer that is unstaffed, starved or clogged is
+/// still the building this output belongs to, and the clog path is what
+/// covers a line that has genuinely backed up.
+fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
+    consumers
+        .iter()
+        .any(|(pos, recipe)| touching(*pos, machine) && recipe.iter().any(|(want, _)| want == item))
 }
 
 fn chebyshev(a: Position, b: Position) -> i32 {
@@ -231,6 +263,7 @@ pub(crate) fn haul_step_system(
     mut structures: Query<HaulStructure, Without<Tamed>>,
     statuses: Query<&MachineStatus>,
     db: Res<StructureDb>,
+    items: Res<ItemDb>,
     platform: Res<Platform>,
     mut map: ResMut<WorldMap>,
     mut commands: Commands,
@@ -250,6 +283,15 @@ pub(crate) fn haul_step_system(
             stock.output_room() > 0 && db.get(&s.kind).is_some_and(|d| d.stores)
         })
         .map(|(e, p, _, _)| (e, *p))
+        .collect();
+
+    // Every assembler and what it takes, so a producer can be asked whether
+    // the building beside it will ever pull its output. Built per tick for
+    // the same reason `depots` is: a demolished consumer has to stop being
+    // one without anything noticing it changed.
+    let consumers: Vec<Consumer> = structures
+        .iter()
+        .filter_map(|(_, p, _, s)| Some((*p, assembly_recipe(db.get(&s.kind)?, &items)?)))
         .collect();
 
     // Sorted for the reason `assembler_system` sorts its machines: two
@@ -305,13 +347,37 @@ pub(crate) fn haul_step_system(
                         });
                     }
                 }
-                // At its post with empty hands. A clogged machine is where
-                // the errand starts — the cycle is already lost, so the walk
-                // costs nothing that was not lost anyway — and with nowhere
-                // to take a load there is no errand to start, which is what
-                // leaves a depot-less base behaving exactly as it did.
+                // At its post with empty hands, which is where an errand
+                // starts. Two of them do.
+                //
+                // A **clogged** machine is the original: the cycle is already
+                // lost, so the walk costs nothing that was not lost anyway.
+                //
+                // A machine with **no attached building** is the second, and
+                // it fires on whatever the last cycle put in the buffer
+                // rather than waiting for twenty units to pile up. Nobody
+                // downstream is going to take them, so the buffer is not a
+                // buffer — it is a heap sitting where the base cannot count
+                // it. The cost is real and deliberate: the worker is away
+                // walking for most of the round trip and produces nothing
+                // while it is (`task_progress_system` gates on `at_station`),
+                // so where the depot stands is now what paces a lone
+                // extractor.
+                //
+                // With nowhere to take a load there is no errand at all,
+                // which is what leaves a depot-less base behaving exactly as
+                // it did.
                 None => {
-                    if depots.is_empty() || statuses.get(machine) != Ok(&MachineStatus::Clogged) {
+                    if depots.is_empty() {
+                        continue;
+                    }
+                    let clogged = statuses.get(machine) == Ok(&MachineStatus::Clogged);
+                    let attached = structures.get(machine).ok().is_some_and(|(_, p, _, s)| {
+                        db.get(&s.kind)
+                            .and_then(produced_item)
+                            .is_some_and(|item| consumer_beside(*p, item, &consumers))
+                    });
+                    if !clogged && attached {
                         continue;
                     }
                     let Ok((_, _, mut stock, _)) = structures.get_mut(machine) else {

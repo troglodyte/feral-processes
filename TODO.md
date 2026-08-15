@@ -31,6 +31,7 @@
       here to reopening the unbounded-income hole the scan perk was deleted
       for, since a Mining Node produces sellable salvage forever. Teardown
       shipped instead: bounded by fights taken, which is the spine.
+22. base staff should show stats in the selection menu
 
 # Bugs
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
@@ -51,3 +52,5 @@
    cell was added; the cell is 54px of that total and the row was already
    339px over without it. The fix is a chop, not a shorter tag — the row has
    six optional tags and drops none of them.
+5. base staff shows 'party' when some should show as 'idle', i cant tell which ones are in my party and which ones are idle
+

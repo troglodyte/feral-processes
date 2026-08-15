@@ -516,6 +516,20 @@ impl Game {
         let mut remaining = wanted.clone();
         for &worker in &staff {
             let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
+            // **A body mid-delivery is never freed.** The same rule as the
+            // one above, one case wider: a worker holding a load has
+            // somewhere to be. Freeing it drops `Carrying` along with the
+            // `Task`, and by then the units have already been taken *out* of
+            // the machine's stock — so the goods are destroyed rather than
+            // released. Rare while a worker only ever set off from a clogged
+            // machine; routine now that one sets off every cycle.
+            if self.world.get::<Carrying>(worker).is_some() {
+                if let Some(index) = held.and_then(|post| remaining.iter().position(|&p| p == post))
+                {
+                    remaining.remove(index);
+                }
+                continue;
+            }
             match held.and_then(|post| remaining.iter().position(|&p| p == post)) {
                 Some(index) => {
                     remaining.remove(index);

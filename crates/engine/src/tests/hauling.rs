@@ -86,6 +86,12 @@ fn tick_until(game: &mut Game, limit: u32, done: impl Fn(&Game) -> bool) {
 fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     let mut game = base(1);
     let node = deploy(&mut game, "mining_node", 1, 0);
+    // A consumer beside it, so this is the *clogged* errand rather than the
+    // one a machine with nothing downstream starts every cycle — see
+    // `a_machine_with_nothing_downstream_delivers_as_it_produces`. Standing
+    // there unstaffed it pulls nothing, so the buffer stays where the
+    // fixture put it.
+    spawn_machine_at(&mut game, "lathe", 2, 0);
     // Somewhere to take a load: with no depot there is no errand, which is
     // `with_no_depot_a_clogged_machine_just_stays_clogged` below.
     deploy(&mut game, "depot", 4, 0);
@@ -751,5 +757,67 @@ fn a_worked_extractor_does_not_read_idle() {
     assert_eq!(
         *game.world.get::<MachineStatus>(node).unwrap(),
         MachineStatus::Running,
+    );
+}
+
+/// A machine with nobody downstream is not a feed buffer, so hoarding
+/// twenty units in it before the first trip serves nothing — the goods
+/// belong where the base can count and collect them.
+///
+/// Deliberately measured against the *buffer*, not against the clock: the
+/// assertion is that a load leaves while there is still room in the output,
+/// which is exactly what a clog-only pickup could never do.
+#[test]
+fn a_machine_with_nothing_downstream_delivers_as_it_produces() {
+    let mut game = base(30);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    let cap = capacity_of(&game, node);
+    tick_until(&mut game, 120, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "a lone extractor's payout should reach the depot without the \
+         machine having to clog first"
+    );
+    assert!(
+        game.world.get::<Stock>(node).unwrap().output_used() < cap,
+        "and it should never have filled up on the way"
+    );
+}
+
+/// The other half, and the one that keeps a production line a production
+/// line: an orthogonal neighbour whose recipe names this machine's product
+/// *is* the attached building, so its feed buffer is left alone for
+/// `assembler_system` to pull from.
+#[test]
+fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
+    let mut game = base(31);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    // A Lathe assembles Blank Substrate out of Core Fragments, so it is a
+    // consumer of exactly what the node beside it makes. Spawned rather than
+    // deployed because it is gated behind research this fixture has no
+    // business unlocking.
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "a machine with a consumer beside it feeds the line, not the depot"
     );
 }

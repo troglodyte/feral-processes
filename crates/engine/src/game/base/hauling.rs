@@ -8,6 +8,8 @@
 
 use std::collections::HashSet;
 
+use bevy_ecs::system::SystemParam;
+
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
@@ -250,6 +252,17 @@ type HaulStructure = (
     &'static Structure,
 );
 
+/// The read-only reference data `haul_step_system` consults, bundled so
+/// bevy's one-param-per-resource injection doesn't push the system past
+/// clippy's argument-count threshold. Bundled rather than `#[allow]`ed for
+/// the reason `systems::CronjobLookups` is: the grouping is real, since both
+/// are the def tables an errand is decided against.
+#[derive(SystemParam)]
+pub struct HaulLookups<'w> {
+    structures: Res<'w, StructureDb>,
+    items: Res<'w, ItemDb>,
+}
+
 /// What a posted program does with the tick: take a load off a clogged
 /// machine, carry it toward a depot, put it down, or walk back to its post.
 ///
@@ -262,12 +275,15 @@ pub(crate) fn haul_step_system(
     mut workers: Query<Hauler, (With<Tamed>, Without<Structure>)>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
     statuses: Query<&MachineStatus>,
-    db: Res<StructureDb>,
-    items: Res<ItemDb>,
+    defs: HaulLookups,
     platform: Res<Platform>,
     mut map: ResMut<WorldMap>,
     mut commands: Commands,
 ) {
+    let HaulLookups {
+        structures: db,
+        items,
+    } = defs;
     let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
     // The cached radius rather than `Game::build_radius`: a system has no
     // `Game`, and `Platform` is where that derivation is kept readable from

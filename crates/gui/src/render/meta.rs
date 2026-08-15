@@ -249,6 +249,7 @@ pub(super) const HELP_ROWS: &[&str] = &[
     "In an intrusion:  a attack   d defend   s special",
     "                  u use item   j jack out",
     "                  A all attack   D all defend (shift = the whole party)",
+    "                  Up/Down scroll the narration, on the results page too",
     "",
     "Press any key to close",
 ];

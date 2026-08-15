@@ -1206,3 +1206,179 @@ fn shift_t_taunts_without_spending_the_slots_action() {
         "the taunt should log exactly one line"
     );
 }
+
+/// A battle whose pane holds several lines: the opening range is a header
+/// and little else, and a window has to have something to walk back through.
+/// Resolving one round is what fills it — which may also finish the fight,
+/// so the caller must not assume `Mode::Battle`.
+fn app_with_narration() -> App {
+    let mut app = battling_app();
+    // All-attack, not the per-slot `a`: with one group there is no target to
+    // pick, so this resolves the round instead of opening the picker.
+    app.handle_key(GameKey::Char('A'));
+    app.advance_reveal(1_000.0);
+    assert!(
+        app.revealed_battle_log().len() >= 2,
+        "one resolved round produced too little narration to scroll"
+    );
+    app
+}
+
+/// The battle pane is a *window* on the round's narration rather than the
+/// whole of it. Measured with the arena (`dev-arenas/full-group.ron`, 50
+/// reps): a round runs to 18 lines, against a pane that seats about 15 in a
+/// four-group fight — and `Game::battle_log` is `since_round`, so the next
+/// round replaces the range outright and `retain_outcomes_since_battle`
+/// deletes the blow-by-blow when the fight ends. What scrolls off the top is
+/// therefore gone from every screen in the game, which is why the window has
+/// to be walkable rather than pinned to the newest line.
+#[test]
+fn scrolling_up_walks_the_battle_pane_back_through_the_round() {
+    let mut app = app_with_narration();
+    let capacity = app.revealed_battle_log().len() - 1;
+
+    let pinned = app.battle_pane(capacity);
+    assert_eq!(
+        pinned.above, 1,
+        "the pane should start pinned to the newest line"
+    );
+
+    app.handle_key(GameKey::Up);
+    let scrolled = app.battle_pane(capacity);
+
+    assert_eq!(
+        scrolled.above, 0,
+        "scrolling up left lines hidden above the window"
+    );
+    assert_eq!(
+        scrolled.below, 1,
+        "the newest line should have moved below the window"
+    );
+    assert_eq!(
+        scrolled.rows.first().map(|l| l.text.clone()),
+        app.revealed_battle_log().first().map(|l| l.text.clone()),
+        "scrolling up did not reach the round's opening line"
+    );
+}
+
+/// Down is the way back, and the pane pins to the newest line rather than
+/// running past it — that is the position every other reader assumes.
+#[test]
+fn scrolling_down_returns_the_pane_to_the_newest_line() {
+    let mut app = app_with_narration();
+    let capacity = app.revealed_battle_log().len() - 1;
+
+    app.handle_key(GameKey::Up);
+    app.battle_pane(capacity);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Down);
+
+    let pane = app.battle_pane(capacity);
+    assert_eq!(
+        pane.below, 0,
+        "the pane did not come back to the newest line"
+    );
+}
+
+/// The window stops at the oldest revealed line instead of walking off the
+/// top into a shrinking pane — scrolling past the start would otherwise draw
+/// fewer and fewer rows against a pane that has not changed size.
+#[test]
+fn the_scroll_stops_at_the_oldest_revealed_line() {
+    let mut app = app_with_narration();
+    let lines = app.revealed_battle_log().len();
+    let capacity = lines - 1;
+
+    for _ in 0..50 {
+        app.handle_key(GameKey::Up);
+        app.battle_pane(capacity);
+    }
+
+    let pane = app.battle_pane(capacity);
+    assert_eq!(pane.above, 0, "walked past the oldest line");
+    assert_eq!(
+        pane.rows.len(),
+        capacity,
+        "the window shrank instead of stopping"
+    );
+}
+
+/// A pane holding everything it is given has nothing to scroll, and must not
+/// let a stray arrow key move it off the newest line anyway.
+#[test]
+fn a_pane_with_room_to_spare_does_not_scroll() {
+    let mut app = app_with_narration();
+    let capacity = app.revealed_battle_log().len() + 10;
+
+    app.handle_key(GameKey::Up);
+    let pane = app.battle_pane(capacity);
+
+    assert_eq!(pane.above, 0);
+    assert_eq!(pane.below, 0);
+    assert_eq!(pane.rows.len(), app.revealed_battle_log().len());
+}
+
+/// A resolved round replaces the pane's whole range, so a scroll position
+/// held over from the last one would point into narration that no longer
+/// exists. `BattleReveal` is reset wholesale on a generation change, which
+/// is what makes this come free rather than needing its own clear.
+#[test]
+fn a_new_round_snaps_the_pane_back_to_the_newest_line() {
+    let mut app = app_with_narration();
+    let capacity = app.revealed_battle_log().len() - 1;
+
+    app.handle_key(GameKey::Up);
+    app.battle_pane(capacity);
+
+    // Resolves the round, which opens a fresh range.
+    app.handle_key(GameKey::Char('A'));
+    app.advance_reveal(1_000.0);
+
+    let pane = app.battle_pane(capacity);
+    assert_eq!(
+        pane.below, 0,
+        "the new round opened part-way up its own narration"
+    );
+}
+
+/// The results page is where the tally and the XP lines land, so it is the
+/// screen most likely to overflow — but every key there dismissed it. The
+/// two arrows now scroll instead; everything else still leaves.
+#[test]
+fn an_arrow_on_the_results_page_scrolls_instead_of_dismissing_it() {
+    let mut app = battling_app();
+    while app.mode == Mode::Battle {
+        app.handle_key(GameKey::Char('A'));
+        app.advance_reveal(1_000.0);
+    }
+    assert_eq!(
+        app.mode,
+        Mode::BattleResult,
+        "the fixture never finished the fight"
+    );
+
+    app.handle_key(GameKey::Up);
+
+    assert_eq!(
+        app.mode,
+        Mode::BattleResult,
+        "an arrow dismissed the results"
+    );
+}
+
+#[test]
+fn any_other_key_still_dismisses_the_results_page() {
+    let mut app = battling_app();
+    while app.mode == Mode::Battle {
+        app.handle_key(GameKey::Char('A'));
+        app.advance_reveal(1_000.0);
+    }
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the results page stopped being dismissable"
+    );
+}

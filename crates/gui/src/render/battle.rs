@@ -193,10 +193,25 @@ fn roster_row(
     )
 }
 
+/// What the log pane says about the narration it is not showing, or `None`
+/// when it is showing all of it.
+///
+/// Both directions are named, and the key is named with them: what scrolled
+/// off the top of this pane is gone from every screen in the game — a new
+/// round replaces the range and `retain_outcomes_since_battle` deletes the
+/// blow-by-blow at the end of the fight — so "there is more up there" is
+/// only useful next to the way to reach it.
+fn scroll_hint(pane: &BattlePane) -> Option<String> {
+    match (pane.above, pane.below) {
+        (0, 0) => None,
+        (above, 0) => Some(format!("Up/Down — {above} more above")),
+        (0, below) => Some(format!("Up/Down — {below} more below")),
+        (above, below) => Some(format!("Up/Down — {above} above, {below} below")),
+    }
+}
+
 pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
-    // Read before the `game` borrow below, which is held for the rest of
-    // the function.
-    let revealed = app.revealed_battle_log();
+    // Read before the `game` borrow below.
     let revealing = app.is_revealing();
     // A finished fight keeps this screen rather than handing off to a
     // summary page — same roster, same log pane, results scrolling into it.
@@ -209,11 +224,18 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     let Some(view) = app.battle_view() else {
         return;
     };
-    let Some(game) = &mut app.game else { return };
-    // A field buff cast before the fight keeps ticking through it (see
-    // `Game::active_buffs`), so the panel has to survive the transition
-    // from the map screen rather than being a `Mode::Playing`-only readout.
-    let buffs = game.active_buffs();
+    // Both of these hand back owned data, and both are read here rather than
+    // over a borrow held for the rest of the function: `App::battle_pane`
+    // below needs `&mut App`, because the pane's height is what clamps the
+    // scroll and only this side knows it.
+    let (buffs, party_commands) = {
+        let Some(game) = &mut app.game else { return };
+        // A field buff cast before the fight keeps ticking through it (see
+        // `Game::active_buffs`), so the panel has to survive the transition
+        // from the map screen rather than being a `Mode::Playing`-only
+        // readout.
+        (game.active_buffs(), game.battle_party_commands())
+    };
 
     let w = painter.screen_w();
     // The battle screen sits straight on the window instead of inside a
@@ -332,18 +354,31 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // at the party block's first row — which the party header then painted
     // over.
     let capacity = ((log_height - margin) / m.line_height).max(0.0) as usize;
+    // The window app-core picked, which is the tail unless the player has
+    // walked it back with the arrows — see `App::battle_pane`. The capacity
+    // travels *into* that call because it is derived from these pixels, and
+    // it is also what bounds the scroll.
+    let pane = app.battle_pane(capacity);
     let mut ly = y + margin;
-    // The tail, not the head: once a battle's narration outgrows the pane,
-    // new lines have to push old ones up and out.
-    for e in revealed
-        .iter()
-        .skip(revealed.len().saturating_sub(capacity))
-    {
+    for e in &pane.rows {
         if ly + m.line_height > party_top {
             break;
         }
         draw_message_line(e.kind, &e.text, margin + m.inset, ly, painter, m);
         ly += m.line_height;
+    }
+    // Only when there is something out of sight: a pane showing the whole
+    // round has nothing to say, and a hint standing there permanently would
+    // be one more thing to read past on a screen that is already dense.
+    if let Some(hint) = scroll_hint(&pane) {
+        let width = painter.measure_ui(&hint, m.small()).width;
+        painter.ui(
+            &hint,
+            w - margin - m.inset - width,
+            party_top - m.inset,
+            m.small(),
+            TEXT_DIM,
+        );
     }
     // Anchored to the narration pane's own top-right corner and drawn over
     // it last: that pane is flavor text, not tactical data, so occasionally
@@ -450,7 +485,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 .collect();
             // Party-level commands come from the engine too, so the two
             // renderers cannot drift on them either.
-            actions.extend(game.battle_party_commands().into_iter().map(|c| c.label));
+            actions.extend(party_commands.into_iter().map(|c| c.label));
             actions.join("   ")
         };
         painter.ui(
@@ -1005,6 +1040,50 @@ mod tests {
         assert_eq!(cell("Ünïcödé", 7).chars().count(), 7);
         assert_eq!(cell("Ünïcödé", 4).chars().count(), 4);
         assert_eq!(cell("Ünïcödé", 9).chars().count(), 9);
+    }
+}
+
+#[cfg(test)]
+mod scroll_hint_tests {
+    use super::*;
+
+    /// A pane showing the whole round says nothing — the hint is drawn over
+    /// the pane's own last row, and one standing there permanently would
+    /// cost a line of narration on every fight to say "nothing is hidden".
+    #[test]
+    fn a_pane_showing_everything_has_no_hint() {
+        let pane = BattlePane {
+            rows: Vec::new(),
+            above: 0,
+            below: 0,
+        };
+        assert_eq!(scroll_hint(&pane), None);
+    }
+
+    /// The count is what makes the hint worth the pixels: "there is more"
+    /// leaves the player guessing whether one line or twenty scrolled past,
+    /// and it is gone from every screen in the game either way.
+    #[test]
+    fn each_direction_is_named_with_its_count_and_its_key() {
+        let above_only = BattlePane {
+            rows: Vec::new(),
+            above: 4,
+            below: 0,
+        };
+        let hint = scroll_hint(&above_only).expect("hidden lines should raise a hint");
+        assert!(hint.contains('4'), "the count is missing from {hint:?}");
+        assert!(hint.contains("Up/Down"), "the key is missing from {hint:?}");
+
+        let both = BattlePane {
+            rows: Vec::new(),
+            above: 4,
+            below: 2,
+        };
+        let hint = scroll_hint(&both).expect("hidden lines should raise a hint");
+        assert!(
+            hint.contains('4') && hint.contains('2'),
+            "a window with narration on both sides should name both: {hint:?}"
+        );
     }
 }
 

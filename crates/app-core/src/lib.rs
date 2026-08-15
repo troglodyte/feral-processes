@@ -425,6 +425,30 @@ struct BattleReveal {
     /// engine's generation moves on, the pane has a fresh range — a new
     /// round or a new battle — and the count restarts.
     generation: u64,
+    /// How many revealed lines sit *below* the pane's window — 0 pins it to
+    /// the newest line, which is where every round starts.
+    ///
+    /// It lives here rather than beside it on `App` so the generation reset
+    /// in `advance_reveal` clears it for free: a resolved round replaces the
+    /// pane's whole range, and a position held over from the last one would
+    /// point into narration that no longer exists.
+    scroll: usize,
+}
+
+/// The battle log pane's window on the round's narration: the rows to draw,
+/// and how much is out of sight on either side of them.
+///
+/// Row selection belongs to app-core for the same reason the history
+/// screen's fold does — the renderer draws what it is given. The capacity
+/// travels the other way, because only the frontend knows how many rows fit
+/// in the pixels it has, exactly as `App::visible_log` already takes it.
+pub struct BattlePane {
+    /// Oldest first, like every other log pane.
+    pub rows: Vec<LogLine>,
+    /// Revealed lines above the window — what scrolling up would reach.
+    pub above: usize,
+    /// Revealed lines below it — what scrolling down would come back to.
+    pub below: usize,
 }
 
 /// A frontend-agnostic input event. Every renderer crate maps its own input

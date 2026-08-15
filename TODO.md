@@ -35,4 +35,3 @@
 
 
 # Bugs
-3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated

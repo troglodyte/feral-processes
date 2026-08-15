@@ -339,6 +339,52 @@ impl App {
         battle_rows(&game.battle_log(), self.revealed_count())
     }
 
+    /// The battle pane's window on `revealed_battle_log`, `capacity` rows
+    /// tall, walked back by however far the player has scrolled.
+    ///
+    /// Takes `&mut self` because it is also where the scroll is *clamped*:
+    /// `capacity` is the frontend's, derived from the pixels the pane was
+    /// given, so this is the only place that can tell an Up key that has run
+    /// out of narration from one that has not. A frontend calls it once a
+    /// frame, which is what keeps a held-down arrow from banking presses
+    /// against a pane that stopped moving several of them ago.
+    ///
+    /// Without this the pane was pinned to the newest line and everything
+    /// above it was unreachable — and unrecoverable, since a new round
+    /// replaces the range (`Game::battle_log` is `since_round`) and
+    /// `retain_outcomes_since_battle` deletes the blow-by-blow when the
+    /// fight ends.
+    pub fn battle_pane(&mut self, capacity: usize) -> BattlePane {
+        let lines = self.revealed_battle_log();
+        let slack = lines.len().saturating_sub(capacity);
+        self.reveal.scroll = self.reveal.scroll.min(slack);
+        let end = lines.len() - self.reveal.scroll;
+        let start = end.saturating_sub(capacity);
+        BattlePane {
+            rows: lines[start..end].to_vec(),
+            above: start,
+            below: self.reveal.scroll,
+        }
+    }
+
+    /// Walks the battle pane's window one line back or forward. Bounded here
+    /// only by the narration itself; `battle_pane` applies the real ceiling
+    /// once it knows how tall the pane is.
+    pub(crate) fn scroll_battle_pane(&mut self, key: GameKey) -> bool {
+        match key {
+            GameKey::Up => {
+                let lines = self.revealed_battle_log().len();
+                self.reveal.scroll = (self.reveal.scroll + 1).min(lines.saturating_sub(1));
+                true
+            }
+            GameKey::Down => {
+                self.reveal.scroll = self.reveal.scroll.saturating_sub(1);
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// The map log pane's rows under the active filter, oldest first — see
     /// `pane_rows` for why the chop, the filter and the capacity cut happen in
     /// that order.
@@ -383,6 +429,8 @@ impl App {
             revealed: game.battle_log().len(),
             accumulated: 0.0,
             generation: game.battle_log_generation(),
+            // The skip means "show me the end", so it lands on the end.
+            scroll: 0,
         };
     }
 

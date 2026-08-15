@@ -29,6 +29,11 @@ impl App {
             self.battle_back_up();
             return;
         }
+        // Ahead of the `Char` guard below, which is what every action on this
+        // screen comes through — so the two arrows cost no battle key.
+        if self.scroll_battle_pane(key) {
+            return;
+        }
         let GameKey::Char(raw) = key else { return };
 
         // Undocumented on purpose — see `crates/engine/EASTER_EGGS.md`.
@@ -452,12 +457,20 @@ impl App {
         }
     }
 
-    /// Any key leaves the results page for the map. Deliberately not a
-    /// menu: there is nothing to choose, and a key pressed while the
-    /// results are still scrolling in has already been spent skipping the
-    /// reveal by `handle_key`'s own guard — so the player reads them either
-    /// way and never dismisses loot they never saw.
-    pub(crate) fn handle_battle_result_key(&mut self, _key: GameKey) {
+    /// Any key but the two arrows leaves the results page for the map.
+    /// Deliberately not a menu: there is nothing to choose, and a key pressed
+    /// while the results are still scrolling in has already been spent
+    /// skipping the reveal by `handle_key`'s own guard — so the player reads
+    /// them either way and never dismisses loot they never saw.
+    ///
+    /// The arrows are carved out because this is the screen most likely to
+    /// overflow its pane: `settle_rewards` puts the salvage tally, a row per
+    /// distinct `GearCopy` and an XP line per fighter into the range that the
+    /// decisive round's narration is already in.
+    pub(crate) fn handle_battle_result_key(&mut self, key: GameKey) {
+        if self.scroll_battle_pane(key) {
+            return;
+        }
         self.mode = Mode::Playing;
     }
 

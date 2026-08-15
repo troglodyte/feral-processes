@@ -437,9 +437,15 @@ pub struct WorkOrderRow {
 pub struct BaseStaffRow {
     pub program: EntityView,
     pub on_staff: bool,
-    /// What it is doing right now — "Mining Node", "guarding Shield",
-    /// "idle" — or `None` for a program that is not staff at all.
-    pub doing: Option<String>,
+    /// What it is doing right now — "working the Mining Node", "guarding the
+    /// Shield", "in party", "idle".
+    ///
+    /// Total rather than `Option`, because "not on the staff" is two states
+    /// and not one: only `add_companion` ever pushes into `Party`, so a
+    /// program that has just been tamed or just stood down from the base is
+    /// in neither set. This read `None` for both and the renderer named the
+    /// pair "party", which is the one of the two it is *least* likely to be.
+    pub doing: String,
 }
 
 impl App {
@@ -567,8 +573,17 @@ impl App {
             .into_iter()
             .map(|program| {
                 let on_staff = staff.contains(&program.entity);
+                // Off the staff, `Game::program_activity` is the engine's one
+                // answer to "what is this program doing" — it already tells
+                // the party, the wield and idleness apart, so this screen
+                // cannot disagree with the sale and erase screens about a
+                // program neither of them can see a `Task` on.
                 BaseStaffRow {
-                    doing: on_staff.then(|| game.staff_activity(program.entity)),
+                    doing: if on_staff {
+                        game.staff_activity(program.entity)
+                    } else {
+                        game.program_activity(program.entity)
+                    },
                     on_staff,
                     program,
                 }
@@ -576,12 +591,16 @@ impl App {
             .collect()
     }
 
-    /// Enter moves the highlighted program across the party/staff line.
+    /// Enter puts the highlighted program on the staff, or takes it off.
     ///
-    /// One key rather than two rows, because the two states are exclusive
-    /// by construction — `Game::assign_base_staff` drops a program out of
-    /// `Party` and `add_companion` clears its `BaseStaff` — so there is
-    /// never a third thing to pick.
+    /// One key rather than two rows, because the marker it toggles is one
+    /// bit and the roles either side of it are exclusive by construction —
+    /// `Game::assign_base_staff` drops a program out of `Party` and
+    /// `add_companion` clears its `BaseStaff`. What that does **not** mean
+    /// is that a row is on one of two sides: releasing leaves a program
+    /// idle rather than handing it back to the party, so the state a row
+    /// reports is wider than the state this key writes. See
+    /// `BaseStaffRow::doing`.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();

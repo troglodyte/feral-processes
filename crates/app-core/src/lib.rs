@@ -663,8 +663,12 @@ pub enum Mode {
     /// How many of it. Digits and Enter, like `Mode::CraftQuantity`.
     WorkOrderQuantity,
     /// Moving programs into and out of the base staff pool — see
-    /// `components::BaseStaff`. Staff and party are disjoint sets, so a row
-    /// says which side a program is on and Enter moves it.
+    /// `components::BaseStaff`. Enter is a toggle on that one marker, but a
+    /// program you own is in **three** possible places rather than two: on
+    /// the staff, in your `Party`, or neither. Only `add_companion` pushes
+    /// into `Party` and `release_base_staff` does not, so "neither" is the
+    /// state a program is tamed into and the one it is stood down to. A row
+    /// says which, from `BaseStaffRow::doing`.
     BaseStaff,
     /// Picking a nearby structure for the *player* to work themselves rather
     /// than posting a program to it — see `Game::work_structure`. The player

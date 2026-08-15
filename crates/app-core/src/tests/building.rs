@@ -457,6 +457,65 @@ fn the_roster_does_not_staff_anything_underground() {
     );
 }
 
+/// The Base Staff screen lists every program you own, and there are three
+/// places one can be: on the staff, in your party, and neither. `doing` was
+/// `None` for anything off the staff and the renderer read that single `None`
+/// as "party" — so a program you had just tamed, or one you had just stood
+/// down from the base, claimed to be fighting alongside you. Only
+/// `add_companion` ever pushes into `Party`, so "neither" is the state every
+/// program starts in and the screen was wrong about it by default.
+#[test]
+fn the_staff_screen_tells_a_party_member_from_an_idle_program() {
+    let mut app = app_owning_distant_programs(742, 2);
+
+    let rows = app.base_staff_rows();
+    assert_eq!(rows.len(), 2, "fixture hands the player two programs");
+    assert!(
+        rows.iter().all(|r| !r.on_staff && r.doing == "idle"),
+        "a program that has been given no job is idle, not in the party: {:?}",
+        rows.iter().map(|r| r.doing.clone()).collect::<Vec<_>>()
+    );
+
+    let (member, other) = (rows[0].program.entity, rows[1].program.entity);
+    app.game.as_mut().unwrap().add_companion(member).unwrap();
+
+    let rows = app.base_staff_rows();
+    let doing = |e| {
+        rows.iter()
+            .find(|r| r.program.entity == e)
+            .map(|r| r.doing.clone())
+            .unwrap()
+    };
+    assert_ne!(
+        doing(member),
+        doing(other),
+        "the one that fell in beside you must not read the same as the one that didn't"
+    );
+    assert!(
+        doing(member).contains("party"),
+        "and it is the party it is in, got {:?}",
+        doing(member)
+    );
+    assert_eq!(doing(other), "idle");
+}
+
+/// The third state: a program on the staff reads as what the base has it
+/// doing, and the row still carries the flag Enter acts on.
+#[test]
+fn a_staffed_program_reads_as_staff_rather_than_as_idle() {
+    let mut app = app_owning_distant_programs(743, 1);
+    let program = app.base_staff_rows()[0].program.entity;
+
+    app.game
+        .as_mut()
+        .unwrap()
+        .assign_base_staff(program)
+        .unwrap();
+
+    let row = app.base_staff_rows().remove(0);
+    assert!(row.on_staff, "Enter must now release rather than assign");
+}
+
 /// The roster sorts the Home first and the node after it, so one Down from
 /// the opening row is the workable structure — asserted rather than assumed,
 /// since every staffing test above rides on it.

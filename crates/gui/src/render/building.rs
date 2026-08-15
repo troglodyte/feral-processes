@@ -288,9 +288,11 @@ pub(super) fn draw_work_order_quantity(
     draw_popup("Order Quantity", PopupSize::Small, &rows, painter, m);
 }
 
-/// Moving programs across the party/staff line. One key, because the two
-/// states are exclusive by construction and there is never a third thing to
-/// pick.
+/// Putting programs on the base staff and standing them down. One key,
+/// because a row is on the staff or it isn't — but what it says is the wider
+/// question of what the program is *doing*, since standing one down leaves it
+/// idle rather than in your party (the Companions screen is where a party is
+/// picked), and the two used to read identically.
 pub(super) fn draw_base_staff(
     game: &mut Game,
     staff_rows: &[BaseStaffRow],
@@ -300,15 +302,16 @@ pub(super) fn draw_base_staff(
 ) {
     let pets = game.owned_pets();
     let mut rows = vec![text_row(
-        "Enter moves a program between your party and the base. Esc to close.",
+        "Enter puts a program to work in the base, or stands it down. Esc to close.",
     )];
     if staff_rows.is_empty() {
         rows.push(text_row("(no compiled programs — beat one first)"));
     }
     for (i, row) in staff_rows.iter().enumerate() {
-        let side = match &row.doing {
-            Some(doing) => format!("base, {doing}"),
-            None => "party".to_string(),
+        let side = if row.on_staff {
+            format!("base, {}", row.doing)
+        } else {
+            row.doing.clone()
         };
         rows.push(with_icon(
             tier_row(

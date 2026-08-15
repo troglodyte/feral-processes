@@ -539,6 +539,36 @@ impl Game {
         pool
     }
 
+    /// What defeating `victim` is worth: its whole HP bar, scaled by
+    /// `progression::kill_xp`'s challenge factor.
+    ///
+    /// The one place the two powers behind that factor are gathered, so a
+    /// third award site cannot quietly price a kill off something else — the
+    /// two that exist (a kill in `combat_round`, a decompile here) differ
+    /// only in how the program stopped fighting.
+    ///
+    /// The denominator is the player's power **alone**, deliberately not the
+    /// party's. A companion makes a fight easier, so counting the roster in
+    /// would dock the player XP for recruiting one — turning the party into
+    /// a cost, when it is the point.
+    ///
+    /// Must be read before the victim's `Stats` can change; the decompile
+    /// caller takes it while the program is still hostile, for that reason.
+    pub(crate) fn kill_xp(&self, victim: Entity) -> u32 {
+        let Some(victim_stats) = self.world.get::<Stats>(victim) else {
+            return 0;
+        };
+        let player_power = self
+            .world
+            .get::<Stats>(self.player_entity())
+            .map(|s| s.power())
+            .unwrap_or(1);
+        progression::kill_xp(
+            victim_stats.max_hp,
+            crate::game::inspection::power_ratio(victim_stats.power(), player_power),
+        )
+    }
+
     /// Awards `amount` XP to the player, growing stats and fully healing on
     /// any level-up gained, then awards every current party member half as
     /// much (see `award_party_xp`) — fighting beside you pays off even on
@@ -753,7 +783,10 @@ impl Game {
             .rewards
             .decompile_verdict = None;
 
-        let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
+        // Taken while the program is still hostile: `kill_xp` reads its
+        // `Stats`, and everything below this line is the act of turning it
+        // into a companion.
+        let earned = self.kill_xp(front);
         let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);
         self.world
             .entity_mut(front)
@@ -786,7 +819,7 @@ impl Game {
             MessageKind::Outcome,
             "ICE breached! The program now runs under your control.",
         );
-        self.award_player_xp(player, wild_max_hp as u32);
+        self.award_player_xp(player, earned);
         // The other way a program leaves a fight and does not come back.
         // `award_loot` carries this for a kill and taming spends no loot, so
         // without it a captured guardian left the lair unspent — refilling

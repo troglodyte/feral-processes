@@ -2,8 +2,8 @@
 
 use super::support::*;
 use crate::tuning::{
-    STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
-    TEARDOWN_SALVAGE_PER_LEVEL,
+    PARTY_XP_DIVISOR, STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS,
+    SURFACE_BOSS_LOOT_RARITY_FLOOR, TEARDOWN_SALVAGE_PER_LEVEL,
 };
 use crate::*;
 
@@ -669,13 +669,17 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
         ))
         .id();
     insert_battle(&mut game, player, vec![wild]);
+    // Asked of the engine rather than hardcoded: this test is about the
+    // party's *share*, and pinning the kill's own value here would make it
+    // fail every time the XP curve is retuned.
+    let paid = game.kill_xp(wild);
 
     player_attacks(&mut game);
 
     assert_eq!(
         game.world.get::<Experience>(companion).unwrap().xp,
-        5,
-        "killing a 10-max-HP wild program should award the party member half its max HP as XP"
+        paid / PARTY_XP_DIVISOR,
+        "a party member should gain half of whatever the kill paid ({paid})"
     );
 }
 
@@ -723,15 +727,16 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
     let members: Vec<Entity> = (0..5)
         .map(|i| game.spawn_wild_creature("glitch", x, y + i).unwrap())
         .collect();
-    // Uniform, tiny HP: XP awarded per kill is the victim's max_hp, and
-    // 5 x 3 stays under xp_for_level(1) = 20 so no level-up spends the
-    // total being measured.
+    // Uniform, tiny HP, so every member is worth the same and the total
+    // stays well under xp_for_level(1) — a level-up mid-fight would grow the
+    // player's power and change what the later members pay.
     for &m in &members {
         let mut stats = game.world.get_mut::<Stats>(m).unwrap();
         stats.max_hp = 3;
         stats.hp = 3;
     }
     game.start_battle(members.clone());
+    let per_kill = game.kill_xp(members[0]);
     let before = game.world.get::<Experience>(player).unwrap().xp;
 
     for _ in 0..members.len() {
@@ -745,8 +750,8 @@ fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
     );
     assert_eq!(
         exp.xp - before,
-        3 * members.len() as u32,
-        "every vanquished member should pay its own max_hp in XP"
+        per_kill * members.len() as u32,
+        "every vanquished member should pay its own way"
     );
 }
 
@@ -1157,11 +1162,14 @@ fn nothing_is_salvaged_until_the_fight_ends() {
 fn the_xp_line_carries_the_whole_fights_total() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // 1 HP apiece: a kill pays the victim's `max_hp` in XP, so this is three
-    // XP for the fight — comfortably under `XP_PER_LEVEL_STEP`, which keeps
-    // the plain no-level wording under test here rather than a level-up.
+    // 1 HP apiece keeps the fight's total comfortably under
+    // `XP_PER_LEVEL_STEP`, which keeps the plain no-level wording under test
+    // here rather than a level-up. The total itself is summed off the engine
+    // as the kills happen, so the wording is what this pins, not the curve.
     let (_, members) = battle_with_a_dropping_pack(&mut game, 3, 1);
-    for _ in 0..members.len() {
+    let mut total = 0;
+    for &m in &members {
+        total += game.kill_xp(m);
         game.finish_member(0, 0, player);
     }
 
@@ -1172,7 +1180,7 @@ fn the_xp_line_carries_the_whole_fights_total() {
         "expected one XP line for the whole fight: {lines:#?}"
     );
     assert!(
-        lines.iter().any(|t| t == "You gain 3 XP."),
+        lines.iter().any(|t| *t == format!("You gain {total} XP.")),
         "expected the three kills summed into one line: {lines:#?}"
     );
 }
@@ -1185,8 +1193,11 @@ fn the_xp_line_carries_the_whole_fights_total() {
 fn reaching_a_level_is_announced_while_the_fight_runs() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // 30 HP apiece against `XP_PER_LEVEL_STEP` of 20: the first kill levels.
-    battle_with_a_dropping_pack(&mut game, 3, 30);
+    // Heavy enough that the first kill clears `xp_for_level(1)` on its own,
+    // and light enough that it clears only the one level — the wording under
+    // test here is a single announced level, not a jump.
+    let (_, members) = battle_with_a_dropping_pack(&mut game, 3, 100);
+    let mut total = game.kill_xp(members[0]);
 
     game.finish_member(0, 0, player);
     let mid = log_texts(&game);
@@ -1203,11 +1214,22 @@ fn reaching_a_level_is_announced_while_the_fight_runs() {
         "the stat block should wait for the tally: {mid:#?}"
     );
 
-    game.finish_member(0, 0, player);
-    game.finish_member(0, 0, player);
+    // Summed as they land: a level-up grows the player's power, so the later
+    // members genuinely pay less than the first.
+    for &m in &members[1..] {
+        total += game.kill_xp(m);
+        game.finish_member(0, 0, player);
+    }
+    let level = game.world.get::<Experience>(player).unwrap().level;
     let end = log_texts(&game);
     assert!(
-        end.iter().any(|t| t == "You gain 90 XP, reaching level 3."),
+        level > 2,
+        "the fixture must reach a second level, or the wording below is the \
+         single-level one already asserted above"
+    );
+    assert!(
+        end.iter()
+            .any(|t| *t == format!("You gain {total} XP, reaching level {level}.")),
         "expected one XP line summing the fight: {end:#?}"
     );
     assert!(
@@ -1311,5 +1333,85 @@ fn a_rare_copy_is_tallied_apart_from_a_plain_one() {
     assert!(
         lines.contains(&rare_row),
         "expected the rare copy on its own row as {rare_row:?}: {lines:#?}"
+    );
+}
+
+/// Overwrites a creature's whole stat block, so a `kill_xp` assertion rests
+/// on a known power rather than on whichever species a fixture happened to
+/// reach for.
+fn set_stats(game: &mut Game, entity: Entity, max_hp: i32, atk: i32, def: i32) {
+    let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
+    stats.max_hp = max_hp;
+    stats.hp = max_hp;
+    stats.atk = atk;
+    stats.def = def;
+}
+
+/// The wiring, not the formula: `progression::kill_xp`'s own tests cover the
+/// curve, and this asserts that a real kill actually goes through it. It
+/// would pass against the old flat `max_hp` award only if the challenge
+/// factor were exactly 1, which `DIFFICULTY_EASY_MAX` puts well away from a
+/// fresh player's ratio against a starter program.
+#[test]
+fn a_kill_pays_its_challenge_rather_than_the_victims_hp_bar() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let victim = spawn_wild_on_player_tile(&mut game);
+    // A starter program's shape, set explicitly rather than taken from the
+    // fixture's arbitrary first species: the assertion is about where this
+    // sits against the player's power, so that has to be the known quantity.
+    set_stats(&mut game, victim, 40, 4, 1);
+    let bar = game.world.get::<Stats>(victim).unwrap().max_hp as u32;
+
+    let earned = game.kill_xp(victim);
+
+    assert!(
+        earned < bar,
+        "a starter program reads green against a fresh player, so it must pay \
+         less than its {bar}-point bar, got {earned}"
+    );
+    assert!(earned > 0, "and the floor keeps it from paying nothing");
+}
+
+/// The point of the change: the same program is worth less to a party that
+/// has outgrown it. Mutation-checked by flattening the factor to a constant,
+/// which fails this while leaving the test above passing.
+#[test]
+fn the_same_program_pays_less_once_the_player_has_outgrown_it() {
+    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let victim = spawn_wild_on_player_tile(&mut game);
+    // Deliberately heavy enough that neither reading lands on a clamp — two
+    // floored values would compare equal and pass this vacuously.
+    set_stats(&mut game, victim, 120, 10, 5);
+    let fresh = game.kill_xp(victim);
+
+    let player = game.player_entity();
+    let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+    stats.max_hp *= 4;
+    stats.hp = stats.max_hp;
+
+    let grown = game.kill_xp(victim);
+    assert!(
+        grown < fresh,
+        "a four-times stronger party should earn less from the same drone, \
+         got {grown} against {fresh}"
+    );
+}
+
+/// A Stack guardian's HP is already inflated by depth, so without the
+/// ceiling it would earn a multiplier on top of an inflated bar — the double
+/// count behind "four depth-3 fights were worth five levels".
+#[test]
+fn an_overwhelming_program_pays_no_more_than_the_ceiling() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let victim = spawn_wild_on_player_tile(&mut game);
+    set_stats(&mut game, victim, 2_000, 100, 100);
+    let bar = game.world.get::<Stats>(victim).unwrap().max_hp as u32;
+
+    let earned = game.kill_xp(victim);
+
+    assert_eq!(
+        earned,
+        (bar as f64 * crate::tuning::XP_CHALLENGE_CEIL).round() as u32,
+        "however far out of its depth, a kill pays its bar times the ceiling"
     );
 }

@@ -126,9 +126,18 @@ pub fn xp_for_level(level: u32) -> u32 {
 ///
 /// See `XP_CHALLENGE_FLOOR`/`XP_CHALLENGE_CEIL` for why both clamps are
 /// load-bearing, in opposite directions.
+///
+/// A defeated program always pays *something*, which `XP_CHALLENGE_FLOOR`
+/// alone does not deliver: a quarter of a small enough bar rounds to zero,
+/// and a kill that silently pays nothing reads as a bug rather than as
+/// contempt. Unreachable on the shipped roster — the smallest `base_hp` is
+/// 38 — so this is a floor for mods and fixtures.
 pub fn kill_xp(victim_max_hp: i32, power_ratio: f64) -> u32 {
+    if victim_max_hp <= 0 {
+        return 0;
+    }
     let factor = (power_ratio / DIFFICULTY_EASY_MAX).clamp(XP_CHALLENGE_FLOOR, XP_CHALLENGE_CEIL);
-    (victim_max_hp.max(0) as f64 * factor).round() as u32
+    ((victim_max_hp as f64 * factor).round() as u32).max(1)
 }
 
 /// `base` after `levels_gained` level-ups at `growth_multiplier`, fully
@@ -280,6 +289,15 @@ mod tests {
     #[test]
     fn a_victim_with_no_hp_bar_pays_nothing_at_any_ratio() {
         assert_eq!(kill_xp(0, 4.0), 0);
+        assert_eq!(kill_xp(-5, 4.0), 0, "and a negative bar is not a reward");
+    }
+
+    /// A quarter of a small enough bar rounds to zero, and a kill that pays
+    /// literally nothing reads as a bug rather than as contempt.
+    #[test]
+    fn a_victim_too_small_to_round_up_still_pays_one() {
+        assert_eq!(kill_xp(1, 0.001), 1);
+        assert_eq!(kill_xp(2, 0.001), 1);
     }
 
     fn base_stats() -> Stats {

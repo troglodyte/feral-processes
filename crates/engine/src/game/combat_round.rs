@@ -690,8 +690,8 @@ impl Game {
             MessageKind::Outcome,
             "The rogue program crashes and deletes itself!",
         );
-        let wild_max_hp = self.world.get::<Stats>(victim).unwrap().max_hp;
-        self.award_player_xp(player, wild_max_hp as u32);
+        let earned = self.kill_xp(victim);
+        self.award_player_xp(player, earned);
         self.award_loot(victim);
         let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
         self.world.despawn(victim);

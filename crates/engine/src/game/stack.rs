@@ -449,7 +449,7 @@ impl Game {
     /// the way in caves in behind them, the run's record of the place goes
     /// with it, and the ground opens somewhere else nearby.
     ///
-    /// Called from `end_battle` against `BattleState::cleared_lair`, so the
+    /// Called from `end_battle` against `BattleState::lair`, so the
     /// party may already be on the surface by the time this runs — a
     /// Forgiving reboot on the round the guardian fell gets there first.
     /// Everything here is therefore written to work from either side, and

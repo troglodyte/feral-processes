@@ -13,7 +13,7 @@
 //! the run's history, not the world's shape, and no seed can hand it back.
 
 use super::stack::StackPos;
-use crate::resources::{CurrentStack, FrameMemory, StackMemory};
+use crate::resources::{CurrentStack, FrameMemory, LairFight, StackMemory};
 use crate::stack::CellKind;
 use crate::tuning::{
     STACK_BREAKPOINT_CHANCE, STACK_BREAKPOINT_PARTIAL_RADIUS, STACK_CACHE_CREDITS,
@@ -171,12 +171,20 @@ impl Game {
         for &member in &pack {
             self.world.entity_mut(member).insert(StackSpawn);
         }
+        // `spawn_pack` spawns the guardian first and extends with the escort
+        // behind it, so the lair's own program is the head of the pack.
+        let guardian = pack[0];
         self.remember_fight();
         self.log_kind(
             MessageKind::Outcome,
             "The stack opens out. Something very large is already awake.",
         );
         self.start_battle(pack);
+        // After the fight opens, since `start_battle` is what installs the
+        // resource this is written to.
+        if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
+            battle.lair = Some(LairFight { pos, guardian });
+        }
     }
 
     pub(crate) fn pick_lair_species(&mut self, pos: StackPos) -> Option<(String, bool)> {
@@ -225,27 +233,26 @@ impl Game {
 
     /// Records that this stack's guardian is down. Called from `award_loot`,
     /// which is the one place that knows a hostile actually died rather than
-    /// merely being fled from.
+    /// merely being fled from — and passed the victim, because it fires for
+    /// *every* kill in the game and most of a lair's pack is escort.
     ///
-    /// Two records, because they answer different questions at different
-    /// times. `FrameMemory::cleared` says the lair is spent, which is what
-    /// stops it refilling; `BattleState::cleared_lair` says *this fight*
-    /// finished a stack, which is what `end_battle` collapses it on. The
-    /// second cannot be re-derived from the first at teardown — see that
-    /// field's doc for the reboot that lands between the two moments — and
-    /// the first is what still holds the lair down in the one branch where
-    /// the collapse is skipped for want of anywhere to put a new link.
-    pub(crate) fn mark_lair_cleared(&mut self) {
-        let Some(pos) = self.stack_pos() else {
+    /// `FrameMemory::cleared` is the single record: it says the lair is
+    /// spent, which is what stops it refilling, and `end_battle` reads it
+    /// back against `BattleState::lair` to decide whether the stack comes
+    /// down with it. Which frame that is comes off the battle rather than
+    /// off the party's own `Locale`, for the reason `LairFight` documents.
+    pub(crate) fn mark_lair_cleared(&mut self, victim: Entity) {
+        let Some(lair) = self
+            .world
+            .get_resource::<BattleState>()
+            .and_then(|battle| battle.lair)
+        else {
             return;
         };
-        if self.cell_underfoot() != Some(CellKind::Lair) {
+        if lair.guardian != victim {
             return;
         }
-        self.frame_memory_mut(pos).cleared = true;
-        if let Some(mut battle) = self.world.get_resource_mut::<BattleState>() {
-            battle.cleared_lair = Some(pos.entrance);
-        }
+        self.frame_memory_mut(lair.pos).cleared = true;
     }
 
     /// Whether the cache on `cell` of the frame the party is in is still

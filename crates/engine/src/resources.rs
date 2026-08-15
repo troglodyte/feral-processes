@@ -507,6 +507,33 @@ pub struct BattleTelemetry {
 #[derive(Resource, Clone, Copy)]
 pub struct PlayerEntity(pub Entity);
 
+/// The stack lair a fight was roused from: which frame it is, and the
+/// program the lair was built around.
+///
+/// Recorded by `Game::rouse_lair` as the fight opens rather than derived at
+/// teardown, because the two moments are not the same one and a Forgiving
+/// reboot can land between them: the guardian falls, its escort flatlines
+/// the player, and `difficulty::death_handling_system` surfaces the party
+/// inside the trailing `tick` — so by the time the fight ends there is no
+/// `Locale::Stack` left to read a frame off, and the stack would survive
+/// with a cleared lair as a dud the player could re-enter forever.
+///
+/// **Naming the guardian is what keeps an escort's death out of it.**
+/// `Game::award_loot` fires for every hostile in the game that goes down,
+/// and past the first frame most of a lair's pack is escort rather than
+/// guardian (`spawn_pack`). A lair spent by "something died while the party
+/// stood on it" was spent by cutting one escort down and jacking out, which
+/// collapsed the whole stack with the guardian still standing in it.
+#[derive(Clone, Copy)]
+pub(crate) struct LairFight {
+    /// The frame the lair is in — `Game::collapse_stack` needs its entrance,
+    /// and `FrameMemory` is keyed by that and the depth.
+    pub(crate) pos: crate::game::stack::StackPos,
+    /// The program the lair was built around: the biome's boss, or the
+    /// toughest ordinary program where it fields none (`pick_lair_species`).
+    pub(crate) guardian: Entity,
+}
+
 /// Active turn-based encounter between the player's party and one or more
 /// wild species groups (see `battle::EnemyGroup`), partitioned out of the
 /// pack `Game::gather_pack` collected. Groups 0 and 1 are engaged and can
@@ -541,23 +568,14 @@ pub struct BattleState {
     /// What the fight has paid out so far, held back until it ends — see
     /// `BattleRewards`.
     pub rewards: BattleRewards,
-    /// The entrance tile of the stack whose guardian went down in this
-    /// fight, which `Game::end_battle` collapses on the way out.
-    ///
-    /// Written by `Game::mark_lair_cleared`, at the one point that knows a
-    /// hostile actually died rather than being fled from. It is here rather
-    /// than re-derived at teardown because the two moments are not the same
-    /// one and a Forgiving reboot can land between them: the guardian falls,
-    /// its escort flatlines the player, and `difficulty::
-    /// death_handling_system` surfaces the party inside the trailing `tick`
-    /// — so by the time the fight ends there is no `Locale::Stack` left to
-    /// read an entrance off, and the stack would survive with a cleared lair
-    /// as a dud the player could re-enter forever.
+    /// The stack lair this fight was roused from, if it was one — see
+    /// `LairFight`. `Game::end_battle` reads it back to decide whether the
+    /// stack comes down on the way out.
     ///
     /// Same lifetime argument as `decompile_attempts` and `rewards`, and the
     /// same payoff: battles are never serialised, so this needs no
     /// `SAVE_FORMAT_VERSION` bump.
-    pub cleared_lair: Option<(i32, i32)>,
+    pub(crate) lair: Option<LairFight>,
     /// Each group's members as they stood when this round's plan was made,
     /// in the order the plan indexes them.
     ///

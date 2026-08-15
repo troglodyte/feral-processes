@@ -1883,8 +1883,8 @@ fn the_replacement_link_stands_on_ground_a_link_may_stand_on() {
 /// `Locale::Stack` left to name the entrance, and the stack would survive
 /// with a cleared lair — a dud the player could re-enter forever.
 ///
-/// Staged rather than played: an escort needs zone 2, and the interleaving
-/// needs the player to drop on the exact round the guardian does.
+/// Staged rather than played: the interleaving needs the player to drop on
+/// the exact round the guardian does.
 #[test]
 fn a_guardian_killed_before_a_reboot_still_collapses_the_stack() {
     let mut game = game();
@@ -1893,7 +1893,8 @@ fn a_guardian_killed_before_a_reboot_still_collapses_the_stack() {
     walk_into_the_lair(&mut game);
     assert!(game.has_active_battle(), "the lair should have roused");
 
-    game.mark_lair_cleared();
+    let guardian = game.world.resource::<BattleState>().lair.unwrap().guardian;
+    game.award_loot(guardian);
     let (locale, current, trace) = crate::game::stack::surfaced();
     game.world.insert_resource(locale);
     game.world.insert_resource(current);
@@ -1904,6 +1905,111 @@ fn a_guardian_killed_before_a_reboot_still_collapses_the_stack() {
     assert!(
         !entrance_tiles(&mut game).contains(&entrance),
         "the stack outlived a guardian that died in it"
+    );
+}
+
+/// Descends through a link whose stack runs deep enough for its lair to
+/// field an escort — `max_enemy_groups` opens the second group at depth 2 —
+/// and returns that link's tile.
+fn descend_through_an_escorted_link(game: &mut Game) -> (i32, i32) {
+    let link = entrance_tiles(game)
+        .into_iter()
+        .find(|&tile| game.frames_at(tile) >= 2)
+        .expect("a zone should scatter one link with a floor below its first frame");
+    game.enter_stack(link.0, link.1);
+    link
+}
+
+/// The group index of the lair's escort — everything roused beside the
+/// guardian, which is an ordinary program of the entrance's own biome.
+fn escort_group(game: &Game) -> usize {
+    let battle = game.world.resource::<BattleState>();
+    let db = game.world.resource::<SpeciesDb>();
+    battle
+        .groups
+        .iter()
+        .position(|group| {
+            group.members.first().is_some_and(|&member| {
+                game.world
+                    .get::<Creature>(member)
+                    .and_then(|c| db.get(&c.species))
+                    .is_some_and(|s| !s.is_boss)
+            })
+        })
+        .expect("a lair past the first frame rouses an escort beside its guardian")
+}
+
+/// A kill is a kill: `award_loot` fires for every hostile that goes down,
+/// and past the first frame most of a lair's pack is escort rather than
+/// guardian. Cutting the escort down and then jacking out used to collapse
+/// the whole stack with the guardian still standing in it, untouched.
+#[test]
+fn killing_a_lairs_escort_and_fleeing_leaves_the_stack_standing() {
+    let mut game = game();
+    let entrance = descend_through_an_escorted_link(&mut game);
+    outlast_the_guardian(&mut game);
+    outclass_the_guardian(&mut game);
+    let lair = walk_into_the_lair(&mut game);
+    assert!(game.has_active_battle(), "the lair should have roused");
+
+    // Every escort member down, the guardian never aimed at.
+    for _ in 0..60 {
+        if game.world.resource::<BattleState>().groups.len() < 2 {
+            break;
+        }
+        let escort = escort_group(&game);
+        resolve_round_with(&mut game, BattleAction::Attack { group: escort });
+    }
+    assert!(
+        game.has_active_battle(),
+        "the guardian went down with the escort — this is not the fight under test"
+    );
+
+    flee_until_clear(&mut game);
+
+    assert!(game.is_underground(), "a jack-out is not a collapse");
+    assert!(
+        entrance_tiles(&mut game).contains(&entrance),
+        "killing an escort and running collapsed the stack"
+    );
+    assert_eq!(
+        map_cell(&map(&game), lair.0, lair.1),
+        FrameMapCell::Lair,
+        "killing an escort spent the lair"
+    );
+}
+
+/// The other side of the same boundary: it is the guardian going down that
+/// finishes a stack, not the fight being won. A party that put the lair's
+/// own program down and then ran from what was standing beside it has still
+/// beaten the stack, and gets the collapse it paid for.
+#[test]
+fn killing_a_lairs_guardian_and_fleeing_its_escort_still_collapses_the_stack() {
+    let mut game = game();
+    let entrance = descend_through_an_escorted_link(&mut game);
+    outlast_the_guardian(&mut game);
+    outclass_the_guardian(&mut game);
+    walk_into_the_lair(&mut game);
+    assert!(game.has_active_battle(), "the lair should have roused");
+
+    for _ in 0..60 {
+        if !game.has_active_battle() {
+            break;
+        }
+        let escort = escort_group(&game);
+        let guardian = usize::from(escort == 0);
+        resolve_round_with(&mut game, BattleAction::Attack { group: guardian });
+    }
+    assert!(
+        game.has_active_battle(),
+        "the escort fell with the guardian — this is not the fight under test"
+    );
+
+    flee_until_clear(&mut game);
+
+    assert!(
+        !entrance_tiles(&mut game).contains(&entrance),
+        "the stack outlived the guardian it was built around"
     );
 }
 

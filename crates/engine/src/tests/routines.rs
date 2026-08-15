@@ -798,7 +798,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
         player_won: false,
         decompile_attempts: std::collections::HashMap::new(),
         rewards: BattleRewards::default(),
-        cleared_lair: None,
+        lair: None,
     });
 
     let player_decompile = game

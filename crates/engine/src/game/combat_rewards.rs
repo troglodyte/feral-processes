@@ -406,9 +406,11 @@ impl Game {
             }
         }
 
-        // Underground this is the stack's guardian going down, and the one
-        // point that knows it actually died rather than being fled from.
-        self.mark_lair_cleared();
+        // Underground this may be the stack's guardian going down, and this
+        // is the one point that knows it actually died rather than being
+        // fled from. `wild` is passed on because most of what dies in a lair
+        // is the escort standing beside it.
+        self.mark_lair_cleared(wild);
 
         // Same "it actually died" guarantee, spent on the other thing that
         // needs it. `raise_trace` no-ops on the surface, which is where the

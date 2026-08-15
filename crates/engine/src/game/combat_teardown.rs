@@ -286,17 +286,23 @@ impl Game {
         // line. There is no roster left to draw them on either — the
         // screen is gone with `BattleState`.
         self.world.resource_mut::<BattleTimeline>().frames.clear();
-        let cleared_lair = self
+        let lair = self
             .world
             .remove_resource::<BattleState>()
-            .and_then(|battle| battle.cleared_lair);
+            .and_then(|battle| battle.lair);
         // Last of the teardown, and below the prune deliberately: the
         // collapse rewrites the locale and the sector's links, which is the
         // fight's consequence rather than part of it, and its lines are
         // pushed after the prune has run so they reach the map whatever kind
         // they carry.
-        if let Some(entrance) = cleared_lair {
-            self.collapse_stack(entrance);
+        //
+        // The guardian going down is what this asks about, not the fight
+        // being won: a party that put the lair's own program down and then
+        // ran from its escort has still finished the stack.
+        if let Some(lair) = lair
+            && self.lair_cleared(lair.pos)
+        {
+            self.collapse_stack(lair.pos.entrance);
         }
     }
 }

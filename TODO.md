@@ -53,5 +53,6 @@
    cell was added; the cell is 54px of that total and the row was already
    339px over without it. The fix is a chop, not a shorter tag — the row has
    six optional tags and drops none of them.
-5. base staff shows 'party' when some should show as 'idle', i cant tell which ones are in my party and which ones are idle
-6. when you jack out/run away from a stack boss, the stack collapses and deletes itself. it should stay there until it's defeated.
+7. decompiling a stack's guardian clears nothing — taming spends no
+   `award_loot`, so the lair refills and the boss can be farmed. Found while
+   fixing bug 6.

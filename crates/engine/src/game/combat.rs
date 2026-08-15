@@ -205,7 +205,7 @@ impl Game {
             player_won: false,
             decompile_attempts: HashMap::new(),
             rewards: BattleRewards::default(),
-            cleared_lair: None,
+            lair: None,
         });
         // After `BattleState` is in place, deliberately: the party slots and
         // the groups are both read back off it, so a record taken earlier

@@ -46,7 +46,7 @@ that automate a base, not the base itself.
 | `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
 | `!` | Contract Broker | 14 `core_fragment` | - | posts contracts, takes deliveries |
 | `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
-| `D` | Depot | 12 `core_fragment` | 100 | programs empty full machines into it |
+| `D` | Depot | 12 `core_fragment` | 100 | programs stock it and fetch from it |
 | `^` | Shield | 16 `core_fragment` | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | +1 Power a tick, base-wide |

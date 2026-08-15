@@ -54,6 +54,11 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-15 — Challenge-scaled XP pacing](2026-08-15-challenge-xp-pacing.md)
+  — what a level costs now that a kill is priced by difficulty: 34 kills to
+  level 5 in the opening, 208 to grind zone 1 from 5 to 10, 37 to do it four
+  frames down instead. Also the replication that showed the level-coarsening
+  half was power-neutral.
 - [2026-08-10 — Enemy policy pin sweep](2026-08-10-enemy-policy-pin-sweep.md)
   — the three pinned features are a real design boundary, not a tuning
   accident, and an unpinned policy downs zero companions in 1,600 fights.

@@ -1153,3 +1153,43 @@ fn the_report_names_who_is_posted_on_each_machine() {
         "a machine with a body on it says whose"
     );
 }
+
+/// A finished order is the one piece of base news that is unambiguously
+/// good, and the log's colour table is the only thing that says so — the
+/// text reads the same as a filing or a cancellation. `MessageKind::Info`
+/// draws it dim beside every routine payout line, which is where it was
+/// getting lost.
+#[test]
+fn a_completed_order_is_announced_as_a_completion() {
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, ..) = lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5)
+        .unwrap();
+    // Already satisfied when the scheduler next looks, so the order settles
+    // on the first tick without anything having to be produced.
+    game.world
+        .get_mut::<Stock>(mine)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
+
+    game.tick();
+
+    let line = game
+        .message_log(30)
+        .into_iter()
+        .find(|l| l.text.starts_with("Work order complete"))
+        .expect("the order should have settled");
+    assert_eq!(
+        line.kind,
+        MessageKind::Complete,
+        "a finished order needs its own kind — no existing one is both green \
+         and about a job being done"
+    );
+    assert_eq!(
+        line.source,
+        MessageSource::Base,
+        "and it stays base news, which is the axis that keeps it off the \
+         battle pane"
+    );
+}

@@ -747,7 +747,10 @@ impl Game {
                     .resource_mut::<resources::WorkOrders>()
                     .0
                     .remove(index);
-                self.log_base(format!("Work order complete: {qty} x {name}."));
+                self.log_base_kind(
+                    MessageKind::Complete,
+                    format!("Work order complete: {qty} x {name}."),
+                );
                 continue;
             }
             let list = wants(self, &order);

@@ -321,9 +321,12 @@ fn message_color(kind: MessageKind) -> Color {
     match kind {
         MessageKind::Info | MessageKind::Round | MessageKind::PartyDamage => TEXT_DIM,
         MessageKind::Loot => BLUE,
-        // Green with `LevelUp` on purpose: both are the party gaining, and
-        // the two are told apart by weight — a level is bold, a patch is not.
-        MessageKind::LevelUp | MessageKind::Heal => GREEN,
+        // All three are something going right, and they are told apart by
+        // weight and by source rather than by hue — a level is bold, a patch
+        // is not, and a finished order is base news. `Complete` is the only
+        // thing distinguishing that line from the filing and cancellation
+        // lines it shares its wording with.
+        MessageKind::LevelUp | MessageKind::Heal | MessageKind::Complete => GREEN,
         MessageKind::Raid | MessageKind::EnemySpecial => ORANGE,
         MessageKind::EnemyAttack => RED,
         // A result reads at full brightness: it is the line still on screen

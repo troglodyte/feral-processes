@@ -63,9 +63,9 @@ pub enum MessageKind {
     /// of six rounds reads as one undifferentiated block.
     Round,
     /// A line that is a *result* of a battle rather than narration of it —
-    /// the kill, the XP, the decompile verdict, the jack-out. `MessageLog::
-    /// retain_outcomes_since_battle` keeps exactly these (plus `Loot` and
-    /// `LevelUp`, which already tag themselves) when a battle ends, which is
+    /// the kill, the XP, the decompile verdict, the jack-out.
+    /// `MessageLog::retain_outcomes_since_battle` keeps these alongside
+    /// `Loot`, `LevelUp`, `Raid` and `Complete` when a battle ends, which is
     /// what stops the blow-by-blow following the player onto the map.
     Outcome,
     /// A party member landing damage on a hostile group.
@@ -84,6 +84,15 @@ pub enum MessageKind {
     /// `retain_outcomes_since_battle` drops it with the rest of the
     /// blow-by-blow when the fight ends.
     Heal,
+    /// A job the base set itself has finished — currently a work order
+    /// reaching its target. Its own kind rather than `Outcome` or `Loot`
+    /// because the colour table is the only thing distinguishing it from
+    /// the filing and cancellation lines that share its wording, and
+    /// neither of those is green. Kept by
+    /// `retain_outcomes_since_battle` for the reason `Raid` is: an order
+    /// that lands mid-fight has to survive the prune or the player never
+    /// learns it finished.
+    Complete,
 }
 
 /// Which of the two things the player is doing produced a line: running the
@@ -263,6 +272,7 @@ impl MessageLog {
                         | MessageKind::Loot
                         | MessageKind::LevelUp
                         | MessageKind::Raid
+                        | MessageKind::Complete
                 );
             index += 1;
             keep

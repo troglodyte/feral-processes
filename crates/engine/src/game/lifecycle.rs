@@ -371,7 +371,13 @@ impl Game {
                 Experience {
                     level: data.player.level,
                     xp: data.player.xp,
-                    xp_to_next: data.player.xp_to_next,
+                    // Derived, not read back. `PlayerSave::xp_to_next` is a
+                    // second copy of `xp_for_level(level)`, which agrees
+                    // until `XP_PER_LEVEL_STEP` moves — and then hands a
+                    // pre-retune save a level at the old price. The field
+                    // stays written (removing one is what earns a
+                    // `SAVE_FORMAT_VERSION` bump) and is simply not trusted.
+                    xp_to_next: crate::progression::xp_for_level(data.player.level),
                 },
                 Decompiler {
                     skill: data.player.decompiler,
@@ -593,7 +599,9 @@ impl Game {
                     Experience {
                         level: c.level,
                         xp: c.xp,
-                        xp_to_next: c.xp_to_next,
+                        // Derived, like the player's above — both load paths
+                        // or the stale value survives on half the roster.
+                        xp_to_next: crate::progression::xp_for_level(c.level),
                     },
                 ));
                 if c.wielded && wielded.is_none() {
@@ -870,7 +878,9 @@ impl Game {
                 tamed: tamed.is_some(),
                 level: exp.map(|e| e.level).unwrap_or(1),
                 xp: exp.map(|e| e.xp).unwrap_or(0),
-                xp_to_next: exp.map(|e| e.xp_to_next).unwrap_or(20),
+                xp_to_next: exp
+                    .map(|e| e.xp_to_next)
+                    .unwrap_or_else(|| crate::progression::xp_for_level(1)),
                 cronjob,
                 party_slot: party_entities
                     .iter()

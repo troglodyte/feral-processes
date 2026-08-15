@@ -186,3 +186,57 @@ fn two_entities_gaining_the_same_stat_stay_two_history_rows() {
         "nothing here is a repeat: {entries:?}"
     );
 }
+
+/// A level's threshold is `xp_for_level(level)` and always has been, so the
+/// copy in the save is redundant — and a save written under a different
+/// `XP_PER_LEVEL_STEP` carries one that disagrees. Deriving it on load is
+/// what stops such a save handing out a cheap level, at no
+/// `SAVE_FORMAT_VERSION` cost.
+///
+/// Written by corrupting the field rather than by checking in an old save,
+/// because the property is "the file's copy is not trusted", which any
+/// disagreeing value demonstrates.
+#[test]
+fn a_saves_stale_xp_threshold_is_rederived_from_its_level_on_load() {
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    for e in [player, companion] {
+        let mut exp = game.world.get_mut::<Experience>(e).unwrap();
+        exp.level = 4;
+        exp.xp_to_next = 7; // a threshold no level has ever had
+    }
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_xp_threshold_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let expected = crate::progression::xp_for_level(4);
+    let reloaded_player = loaded.player_entity();
+    assert_eq!(
+        loaded
+            .world
+            .get::<Experience>(reloaded_player)
+            .unwrap()
+            .xp_to_next,
+        expected,
+        "the player's threshold comes from their level, not from the file"
+    );
+    let companion_threshold = loaded
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<Tamed>())
+        .filter_map(|e| e.get::<Experience>())
+        .map(|e| e.xp_to_next)
+        .next()
+        .expect("the companion came back");
+    assert_eq!(
+        companion_threshold, expected,
+        "and so does a companion's — both load paths, or one of them keeps the stale value"
+    );
+}

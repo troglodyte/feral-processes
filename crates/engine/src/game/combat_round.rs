@@ -906,9 +906,10 @@ impl Game {
         } else {
             MessageKind::PartyDamage
         };
-        // Same split for the heal line, and for the same reason: a hostile
-        // mending its own group is the party's bad news, so only the
-        // party's own patch earns the kind that reads as good news.
+        // Same split for the lines that restore Integrity — a patch and a
+        // drain alike — and for the same reason: a hostile mending its own
+        // group, or siphoning off the party, is the party's bad news, so
+        // only the party's own restore earns the kind that reads as good.
         let heal_kind = if hostile {
             MessageKind::EnemySpecial
         } else {
@@ -1000,8 +1001,13 @@ impl Game {
                     // an armoured target than a soft one.
                     let siphoned = (dmg as f32 * heal_fraction).round() as i32;
                     let restored = self.restore_hp(actor, siphoned);
+                    // `heal_kind`, not `hit_kind`: the Integrity coming back
+                    // is the half a plain `Attack` cannot also produce, and
+                    // so the half the line is read for. It keeps the number
+                    // emphasis `PartyDamage` gave it because `Heal` shares
+                    // that styling — see `render/mod.rs::draw_message_line`.
                     self.log_kind(
-                        hit_kind,
+                        heal_kind,
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),
                     );
                 }

@@ -36,7 +36,6 @@
 
 # Bugs
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
-4. heals in battle log should be green
 1. A maxed-fusion Gold affixed copy overflows the inventory popup: the widest
    the shipped assets can build is 1311px into a 1243px body at zone 10, and
    the row runs off the right edge taking its equip tag with it. The excess is

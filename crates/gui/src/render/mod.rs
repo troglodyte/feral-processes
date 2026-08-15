@@ -335,11 +335,19 @@ fn message_color(kind: MessageKind) -> Color {
     }
 }
 
-/// Draws one log line in its kind's style.
+/// Whether this kind's line is read for a number rather than for its
+/// wording, so the digits take the emphasis and the narration around them
+/// stays as quiet as any other chatter.
 ///
-/// A party member's hit is the one line styled unevenly: how hard it landed is
-/// the part worth reading twice, so the number takes the emphasis and the
-/// narration around it stays as quiet as any other chatter.
+/// Both are the party's own doing and both are read the same way: how hard a
+/// blow landed, and how much Integrity came back. `Heal` covers a drain as
+/// well as a patch — `use_ability` logs the party's drain under it, and that
+/// line is the one with a figure on either side of it.
+fn emphasizes_numbers(kind: MessageKind) -> bool {
+    matches!(kind, MessageKind::PartyDamage | MessageKind::Heal)
+}
+
+/// Draws one log line in its kind's style.
 fn draw_message_line(
     kind: MessageKind,
     text: &str,
@@ -350,7 +358,7 @@ fn draw_message_line(
 ) {
     let color = message_color(kind);
     match kind {
-        MessageKind::PartyDamage => {
+        k if emphasizes_numbers(k) => {
             painter.ui_runs(&emphasize_numbers(text, color, WHITE), x, y, m.font_size)
         }
         MessageKind::LevelUp => painter.ui_bold(text, x, y, m.font_size, color),
@@ -970,6 +978,38 @@ mod tests {
                     "{a:?} and {b:?} narrate in the same colour"
                 );
             }
+        }
+    }
+
+    /// The party's own drain narrates under `Heal` — the Integrity coming
+    /// back is the half a plain `Attack` cannot also produce — and that line
+    /// carries a figure on either side of it. Losing the emphasis in the move
+    /// would have taken the number-first reading off the one line that has
+    /// two, so the styling follows the kind rather than staying behind on
+    /// `PartyDamage` alone.
+    #[test]
+    fn the_lines_read_for_a_number_are_the_partys_own_blows_and_its_own_mending() {
+        for kind in [MessageKind::PartyDamage, MessageKind::Heal] {
+            assert!(
+                emphasizes_numbers(kind),
+                "{kind:?} is read for its figure, so its digits take the emphasis"
+            );
+        }
+        for kind in [
+            MessageKind::Info,
+            MessageKind::Loot,
+            MessageKind::LevelUp,
+            MessageKind::Raid,
+            MessageKind::Round,
+            MessageKind::Outcome,
+            MessageKind::EnemyAttack,
+            MessageKind::EnemySpecial,
+            MessageKind::Complete,
+        ] {
+            assert!(
+                !emphasizes_numbers(kind),
+                "{kind:?} is read for its wording; picking a digit out of it says nothing"
+            );
         }
     }
 

@@ -1374,6 +1374,65 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
     );
 }
 
+/// A drain's line is a hit that also restores, and it reads as the party's
+/// good news for the same reason a patch does — the Integrity coming back is
+/// the half the player is watching for, and it is the only half a plain
+/// `Attack` cannot also produce.
+///
+/// The side split is `heal_kind`'s, so a hostile siphoning off the party
+/// stays `EnemySpecial` by construction rather than by a second branch.
+#[test]
+fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
+    let mut game = Game::new(9203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let enemies = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 100;
+        stats.hp = 40;
+        stats.atk = 40;
+    }
+    let siphon = crate::abilities::AbilityDef {
+        id: "test_drain".into(),
+        name: "Test Drain".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+        effect: crate::abilities::AbilityEffect::Drain {
+            power: 10,
+            heal_fraction: 1.0,
+        },
+        cooldown: 1,
+        fatigue_cost: 0.0,
+        wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
+    };
+    let kinds = |game: &Game| -> Vec<MessageKind> {
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .filter(|l| l.text.contains("siphons"))
+            .map(|l| l.kind)
+            .collect()
+    };
+
+    game.use_ability(&siphon, player, "You", &[enemies[0]]);
+    assert_eq!(
+        kinds(&game),
+        vec![MessageKind::Heal],
+        "the party's own drain restores Integrity and reads as good news"
+    );
+
+    game.use_ability(&siphon, enemies[0], "Crawler", &[player]);
+    assert_eq!(
+        kinds(&game),
+        vec![MessageKind::Heal, MessageKind::EnemySpecial],
+        "a hostile siphoning off the party is not good news and must not read as it"
+    );
+}
+
 /// A `test_medic` (support::TWO_ABILITY_SPECIES) with a heal affinity —
 /// same species, same `hot_patch`, one number different.
 const HEALER_WITH_AFFINITY: &str = r#"(

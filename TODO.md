@@ -42,16 +42,10 @@
    `equip_preview_tag`'s `" - maxed"`, appended on the stated grounds that
    this screen has the room. Pre-existing, measured 2026-08-13;
    `no_shipped_inventory_row_overflows_its_popup` covers every tier below
-   maxed and excludes that case by name.
-2. The roster's widest row overflows the Party popup the same way, and by far
-   more: a maxed-fusion rare program with a full custom name, a zone tag, a
-   quality tier, the wield mark, an activity and CRITICAL measures 1636px into
-   the same 1243px body — 393px over. Pre-existing and worse than Bug 1
-   because the name half is player-authored rather than shipped, so no census
-   over the assets can bound it. Measured 2026-08-13, when the `w|a|m` loadout
-   cell was added; the cell is 54px of that total and the row was already
-   339px over without it. The fix is a chop, not a shorter tag — the row has
-   six optional tags and drops none of them.
+   maxed and excludes that case by name. Bug 2's fix built the tool this
+   wants: `popup::wrapped_row_lines` packs a row's trailing tags and sheds
+   what will not fit onto an indented continuation, so the inventory row
+   needs its head and tags separated and nothing else.
 7. decompiling a stack's guardian clears nothing — taming spends no
    `award_loot`, so the lair refills and the boss can be farmed. Found while
    fixing bug 6.

@@ -82,45 +82,51 @@ pub(super) fn draw_companion_equip(
     draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
 }
 
-/// One program's line on the roster.
+/// One program's lines on the roster: the identity and stats, then whichever
+/// of its six optional tags still fit, the rest shed onto indented
+/// continuations by `wrapped_row_lines`.
 ///
 /// The `w|a|m` loadout cell sits directly after the stats and ahead of every
 /// optional tag, so it holds one column down the list: quality, fusion depth,
 /// the wield mark and the activity all come and go per row, and a cell placed
 /// after any of them would only line up with rows carrying the same ones.
+/// That is also why the head ends there and the tags are handed over as
+/// separate segments: the shed has to fall on a boundary between two tags,
+/// and the head is exactly the part every row carries.
+///
 /// Its shortcut is passed in rather than read off the row, since the number
 /// keys are the list's position and `PetInfo` has no idea where it landed.
-fn companion_row(shortcut: char, p: &PetInfo) -> String {
+///
+/// Six tags at their widest run a roster row 382px past a `PopupSize::Large`
+/// body, and nothing clamps a row horizontally — so before this the tail ran
+/// off the right edge, taking the activity and CRITICAL with it. Those are
+/// the two tags the list is most often being read for, which is why the fix
+/// wraps rather than chopping: a chop deletes exactly them.
+fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
     let slot = p
         .party_slot
         .map(|s| format!("#{} ", s + 1))
         .unwrap_or_default();
-    let activity = activity_tag(&p.activity);
-    let quality = p
-        .quality
-        .as_ref()
-        .map(|q| format!(" [{q}]"))
-        .unwrap_or_default();
-    let fused = fusion_tag(p.fusions);
-    let wielded = if p.wielded { " (WEP)" } else { "" };
-    format!(
-        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  PWR {}  {}{}{}{}{}{}",
-        p.name,
-        p.level,
-        p.hp,
-        p.max_hp,
-        p.power,
-        p.gear,
-        quality,
-        fused,
-        wielded,
-        activity,
+    let head = format!(
+        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  PWR {}  {}",
+        p.name, p.level, p.hp, p.max_hp, p.power, p.gear,
+    );
+    let tags = [
+        p.quality
+            .as_ref()
+            .map(|q| format!(" [{q}]"))
+            .unwrap_or_default(),
+        fusion_tag(p.fusions),
+        if p.wielded { " (WEP)" } else { "" }.to_string(),
+        activity_tag(&p.activity),
         if hp_critical(p.hp, p.max_hp) {
             " - CRITICAL"
         } else {
             ""
         }
-    )
+        .to_string(),
+    ];
+    wrapped_row_lines(head, &tags)
 }
 
 pub(super) fn draw_companion_menu(
@@ -138,20 +144,35 @@ pub(super) fn draw_companion_menu(
         // No row colour of its own: `fusion_row` already loses to CRITICAL
         // below, and a third meaning on that axis makes all three unreadable.
         let critical = hp_critical(p.hp, p.max_hp);
-        let text = companion_row(menu_shortcut(i), p);
         // CRITICAL outranks both the fusion colour and the rare tier: one is
         // a state to act on this turn, the others are permanent properties
         // to read at leisure. `tier_color` settles those two against each
         // other, so this only has to know about the loud one.
-        rows.push(with_icon(
+        let colored = |text: String, selected: bool| {
             if critical {
-                critical_item_row(text, i == selected)
+                critical_item_row(text, selected)
             } else {
-                tier_row(text, i == selected, p.fusions, p.rarity)
-            },
+                tier_row(text, selected, p.fusions, p.rarity)
+            }
+        };
+        let mut lines = companion_row_lines(menu_shortcut(i), p).into_iter();
+        let head = lines
+            .next()
+            .expect("companion_row_lines always emits the identity row");
+        rows.push(with_icon(
+            colored(head, i == selected),
             p.glyph,
             glyph_color(p.color),
         ));
+        // A continuation carries this row's own tail rather than a second
+        // kind of information, so it keeps the row's colour instead of the
+        // dim the fuse picker gives a candidate's routines. Only the head is
+        // ever `selected`: the highlight belongs on the line carrying the
+        // shortcut, and the popup's scroll anchor is the first selected
+        // `Item`, so these cannot disturb it.
+        for line in lines {
+            rows.push(colored(line, false));
+        }
     }
     draw_popup("Party", PopupSize::Large, &rows, painter, m);
 }
@@ -443,15 +464,122 @@ mod tests {
 
     use super::super::test_pet as pet;
 
+    /// The widest roster row the game can put on screen, as `(lines, why)`.
+    ///
+    /// Enumerated rather than reasoned about: several of the six optional
+    /// tags exclude each other (a party member's activity is "in party", a
+    /// wielded program is stood down from the party), and picking the worst
+    /// case by argument is how a census ends up measuring a row nobody can
+    /// reach while the reachable one overflows.
+    ///
+    /// The ingredients are the real ceilings — `MAX_CUSTOM_NAME_LEN`,
+    /// `MAX_FUSIONS`, the longest shipped structure name behind an activity,
+    /// the widest quality label, `Rarity::Gold`'s "Overclocked" — because the
+    /// name half is capped in characters and the UI face is monospace, so the
+    /// row *is* bounded even though half of it is player-authored.
+    fn widest_roster_rows() -> Vec<(Vec<String>, String)> {
+        // 12 characters, `MAX_CUSTOM_NAME_LEN`, plus the rare tier's word in
+        // front and the zone tag behind, which `creature_label` appends to a
+        // custom name exactly as it does to a species name.
+        let name = format!(
+            "Overclocked {} 10",
+            "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN)
+        );
+        // "Below Average" and "Above Average" tie for the widest label.
+        let quality = "Below Average (100%)".to_string();
+        let mut out = Vec::new();
+        for (slot, activity, why) in [
+            (Some(0), "in party", "a front-slot party member"),
+            (None, "guarding Contract Broker", "a posted guard"),
+            (None, "equipped as weapon", "the wielded program"),
+        ] {
+            let mut p = pet(&name, "w|a|m");
+            p.party_slot = slot;
+            p.activity = activity.to_string();
+            p.quality = Some(quality.clone());
+            p.fusions = MAX_FUSIONS;
+            p.wielded = activity == "equipped as weapon";
+            // Four digits apiece: a refactored, fused, geared program's bar
+            // and power both reach them, and the column is not padded.
+            p.level = 6;
+            p.hp = 1;
+            p.max_hp = 1234;
+            p.power = 1234;
+            out.push((companion_row_lines('a', &p), why.to_string()));
+        }
+        out
+    }
+
+    /// Nothing clamps a popup row horizontally (see `continuation_lines`), so
+    /// a roster row wider than the Party popup's body runs off its right edge
+    /// and takes its tail with it — the activity and CRITICAL, which are the
+    /// two tags a player is most likely to be reading the list for.
+    ///
+    /// Measured against the real font rather than counted in characters,
+    /// because `ROW_WRAP_COLUMNS` is a budget in cells and the question here
+    /// is whether that budget is still the right one — a wrap that packs to
+    /// 100 cells is no defence if the body only has room for 90.
+    #[test]
+    fn no_roster_row_overflows_its_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for (lines, why) in widest_roster_rows() {
+                for (i, line) in lines.iter().enumerate() {
+                    // The head draws through `with_icon`, so its label carries
+                    // the selection prefix *and* the glyph's reserved slot;
+                    // a continuation is a plain row and reserves no slot.
+                    let prefix = if i == 0 { "     " } else { "  " };
+                    let drawn = p.measure_ui_advance(format!("{prefix}{line}"), m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "line {i} of the widest roster row ({why}) overflows \
+                         the Party popup by {:.0}px ({drawn:.0} into {room:.0}):\n{line}",
+                        drawn - room
+                    );
+                }
+            }
+        });
+    }
+
+    /// The wrap may not silently drop a tag: a row that sheds its tail is
+    /// only better than one that runs off the edge if the tail is still on
+    /// screen. Asserted on the *joined* lines so it holds however the six
+    /// tags happen to be distributed.
+    #[test]
+    fn a_wrapped_roster_row_keeps_every_tag() {
+        for (lines, why) in widest_roster_rows() {
+            assert!(lines.len() > 1, "{why} is the case that needs wrapping");
+            let joined = lines.join(" ");
+            for tag in ["Below Average (100%)", "fused 3/3 - maxed", "CRITICAL"] {
+                assert!(joined.contains(tag), "{why} lost {tag:?}:\n{lines:#?}");
+            }
+        }
+    }
+
     /// The roster is where a program's gear is *fitted*, so it is also where
     /// the player is deciding which one to fit next — and the list is the
     /// only screen that can answer "which of these is still bare" without
     /// three keypresses per program.
     #[test]
     fn a_roster_row_carries_the_loadout_cell() {
-        assert!(companion_row('a', &pet("Kestrel", "w|a|m")).contains("w|a|m"));
-        let bare = companion_row('b', &pet("Nine", ".|.|."));
+        let head = |p: &PetInfo| companion_row_lines('a', p).remove(0);
+        assert!(head(&pet("Kestrel", "w|a|m")).contains("w|a|m"));
+        let bare = head(&pet("Nine", ".|.|."));
         assert!(bare.contains(".|.|."), "{bare}");
+    }
+
+    /// An ordinary program spends one line. The wrap is for the extreme row
+    /// the census above measures, and a list that put every program on two
+    /// lines would halve how many the popup can show to fix a row most bases
+    /// never field.
+    #[test]
+    fn an_ordinary_roster_row_stays_on_one_line() {
+        let mut p = pet("Kestrel", "w|a|m");
+        p.quality = Some("Average (54%)".to_string());
+        assert_eq!(companion_row_lines('a', &p).len(), 1);
     }
 
     /// The cell sits ahead of the tags that come and go — quality, fusion,
@@ -462,7 +590,7 @@ mod tests {
         let mut p = pet("Kestrel", "w|.|.");
         p.quality = Some("Excellent (94%)".to_string());
         p.wielded = true;
-        let row = companion_row('a', &p);
+        let row = companion_row_lines('a', &p).join(" ");
         let cell = row.find("w|.|.").expect("the cell is drawn");
         assert!(cell < row.find("Excellent").unwrap(), "{row}");
         assert!(cell < row.find("WEP").unwrap(), "{row}");

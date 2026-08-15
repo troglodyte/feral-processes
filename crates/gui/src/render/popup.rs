@@ -542,6 +542,39 @@ pub(super) fn continuation_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// A menu row wrapped onto indented continuation lines at its own segment
+/// boundaries: a `head` that always leads, then trailing `tags` packed on
+/// after it while they fit and shed onto a fresh indented line when they
+/// don't. An empty tag contributes nothing, so a row carrying none is
+/// returned as the single line it already was.
+///
+/// The counterpart of `continuation_lines` rather than a second copy of it,
+/// and the difference is what a segment is. That one takes a row's trailing
+/// *detail* — separate text, and prose, so word wrap is right for it. A row
+/// built out of optional tags is neither: the tags are the units that come
+/// and go, so breaking inside one splits a fact across two lines, and the
+/// double spaces holding a row's columns apart are exactly what
+/// `wrap_text`'s `split_whitespace` would collapse. So this touches nothing
+/// inside a segment and never rewrites what it packs.
+///
+/// A single tag wider than the budget is emitted whole on its own line, the
+/// same call `wrap_text` makes about an over-long word and for the same
+/// reason: one row running wide beats losing text.
+pub(super) fn wrapped_row_lines(head: String, tags: &[String]) -> Vec<String> {
+    let mut lines = vec![head];
+    for tag in tags.iter().filter(|t| !t.is_empty()) {
+        let line = lines.last_mut().expect("the head is always present");
+        if line.chars().count() + tag.chars().count() <= ROW_WRAP_COLUMNS {
+            line.push_str(tag);
+        } else {
+            // Trimmed because a tag carries the space that joined it to the
+            // row it was following, and it is no longer following anything.
+            lines.push(format!("{ROW_CONTINUATION_INDENT}{}", tag.trim_start()));
+        }
+    }
+    lines
+}
+
 /// Greedy word wrap to `columns`, for prose too long to sit on one popup
 /// row — an item's authored description, chiefly.
 ///
@@ -571,6 +604,41 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The three properties `wrapped_row_lines` is relied on for, none of
+    /// which the roster census above it can distinguish from luck: a row
+    /// under budget is left exactly as it was, an empty tag is not a
+    /// segment, and packing continues across as many lines as the tags need
+    /// rather than dumping the whole tail onto a second one.
+    #[test]
+    fn a_row_packs_its_tags_and_sheds_only_what_will_not_fit() {
+        let short = wrapped_row_lines("[a] Kestrel".into(), &[" (in party)".into(), String::new()]);
+        assert_eq!(short, vec!["[a] Kestrel (in party)"]);
+
+        // Five 43-cell tags behind an 8-cell head: two fit on the head line,
+        // two more on the first continuation, one on the second. A packer
+        // that shed the whole tail at the first tag that did not fit would
+        // give four lines here rather than three.
+        let tag = |n: usize| format!(" ({})", "x".repeat(n));
+        let packed = wrapped_row_lines("[a] head".into(), &vec![tag(40); 5]);
+        assert_eq!(
+            packed.len(),
+            3,
+            "each line takes what it can hold: {packed:#?}"
+        );
+        assert!(packed[1].starts_with(ROW_CONTINUATION_INDENT));
+        assert!(
+            packed.iter().all(|l| l.chars().count() <= ROW_WRAP_COLUMNS),
+            "{packed:#?}"
+        );
+
+        // Wider than the budget on its own. Emitted whole rather than split,
+        // the same call `wrap_text` makes about an over-long word: one row
+        // running wide beats losing text.
+        let huge = wrapped_row_lines("[a] head".into(), &[tag(ROW_WRAP_COLUMNS + 10)]);
+        assert_eq!(huge.len(), 2);
+        assert!(huge[1].contains(&"x".repeat(ROW_WRAP_COLUMNS + 10)));
+    }
 
     fn row_color(row: &Row) -> Option<Color> {
         match row {

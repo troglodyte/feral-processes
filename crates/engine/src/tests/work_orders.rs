@@ -1253,3 +1253,81 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     assert_eq!(still.item, load.item);
     assert_eq!(still.qty, load.qty);
 }
+
+/// **Look in the depot before making it by hand.** `wants` is sorted
+/// deepest-first, so a feeder outranks the bench it feeds and a single body
+/// goes upstream to make more of something the base already has in store.
+/// With a batch on the shelf the feeder stops being wanted at all, and the
+/// bench — which can now run — takes the body.
+#[test]
+fn a_bench_fed_from_the_depot_does_not_staff_its_feeder() {
+    let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, press) = lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 3, 1);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from("blank_substrate"), 10);
+    hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+
+    game.tick();
+
+    let worker = game.base_staff()[0];
+    assert_eq!(
+        game.world.get::<components::Task>(worker).map(|t| t.target),
+        Some(press),
+        "the body belongs on the machine that can run off store, not \
+         upstream making more"
+    );
+    let walked: Vec<Entity> = game
+        .work_order_report()
+        .remove(0)
+        .machines
+        .into_iter()
+        .map(|m| m.entity)
+        .collect();
+    assert!(
+        !walked.contains(&lathe) && !walked.contains(&mine),
+        "and nothing upstream of it is wanted at all: {walked:?}"
+    );
+}
+
+/// The other half of "while stock lasts". A shelf too thin for a batch is
+/// no answer, and neither is an empty one — the line has to come back.
+#[test]
+fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
+    let mut game = Game::new(68, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, ..) = lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 3, 1);
+    hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+
+    // One on the shelf against a Disk Press batch of two. Deliberately not
+    // an *empty* shelf: a `> 0` skip would pass that and still strand the
+    // order here, having taken the feeder off the list on the strength of
+    // stock that cannot run a single cycle — leaving nobody working
+    // anything.
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from("blank_substrate"), 1);
+    game.tick();
+
+    let walked: Vec<Entity> = game
+        .work_order_report()
+        .remove(0)
+        .machines
+        .into_iter()
+        .map(|m| m.entity)
+        .collect();
+    assert!(
+        walked.contains(&mine),
+        "a shelf too thin for a batch is no answer — the base has to make \
+         its own: {walked:?}"
+    );
+}

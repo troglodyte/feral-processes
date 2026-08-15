@@ -183,11 +183,57 @@ fn break_at(
     None
 }
 
+/// How many of `item` the base has **in store** — every Depot
+/// (`StructureDef::stores`) and nothing else.
+///
+/// Deliberately narrower than `base_holding`, which counts machine output
+/// buffers too. A buffer is the feed for whatever stands beside it; a Depot
+/// is the shelf a worker can be sent to. Asking the wider question here
+/// would have a bench count its own feeder's output twice — once as a
+/// neighbour it can pull from, once as stores it could walk to — and skip
+/// staffing that feeder on the strength of stock only the feeder itself
+/// could ever have made.
+pub(crate) fn depot_holding(game: &Game, item: &ItemId) -> u32 {
+    let db = game.world.resource::<StructureDb>();
+    game.world
+        .iter_entities()
+        .filter(|e| {
+            e.get::<Structure>()
+                .and_then(|s| db.get(&s.kind))
+                .is_some_and(|d| d.stores)
+        })
+        .filter_map(|e| e.get::<Stock>())
+        .map(|s| s.output.get(item).copied().unwrap_or(0))
+        .sum()
+}
+
+/// Whether one batch of an ingredient is within a machine's reach, given
+/// what its own input holds, what the machines touching it have finished,
+/// and what the base has in store.
+///
+/// **The one statement of that rule.** `can_progress` asks it of a `&Game`
+/// and `haul_step_system` asks it of its queries, and the two must not
+/// drift: a scheduler that staffs a bench the walker will not fetch for
+/// leaves a body standing at a starved machine forever, and the reverse
+/// sends one on an errand nothing wanted.
+///
+/// Trivial arithmetic, and that is the point — it replaced a `beside.min(
+/// want - held)` cap in `can_progress` that could never change the answer.
+/// The cap bites only when `beside > want - held`, and since `want` is
+/// `per_batch * INPUT_STOCK_BATCHES` that already implies
+/// `held + beside > per_batch`, which is the true branch either way.
+pub(crate) fn batch_within_reach(held: u32, beside: u32, in_store: u32, per_batch: u32) -> bool {
+    held + beside + in_store >= per_batch
+}
+
 /// Whether staffing `machine` right now would actually move something.
 ///
-/// Output has room, **and** for an assembler, its input holds at least one
-/// batch of each ingredient *or* every shortfall is sitting in an
-/// orthogonally adjacent feeder's output.
+/// Output has room, **and** for an assembler, one batch of every ingredient
+/// is within reach: in its own input, in an orthogonally adjacent feeder's
+/// output, or on a Depot shelf a worker can walk to. `batch_within_reach`
+/// is that rule and `haul_step_system` reads the same one, so a machine the
+/// scheduler staffs on the strength of stores is a machine the walker will
+/// actually fetch for.
 ///
 /// The second half is the load-bearing one. `assembler_system`'s pull phase
 /// is *behind* the "is anyone posted here" gate, so a machine with nobody on
@@ -225,19 +271,14 @@ pub(crate) fn can_progress(game: &Game, machine: Entity) -> bool {
     };
     let by_tile = structures_by_tile(game);
     recipe.iter().all(|(item, per_batch)| {
-        let want = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
         let held = stock.input.get(item).copied().unwrap_or(0);
-        if held >= *per_batch {
-            return true;
-        }
-        let short = want - held.min(want);
         let beside: u32 = ORTHOGONAL
             .into_iter()
             .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
             .filter_map(|feeder| game.world.get::<Stock>(feeder))
             .map(|s| s.output.get(item).copied().unwrap_or(0))
             .sum();
-        beside.min(short) + held >= *per_batch
+        batch_within_reach(held, beside, depot_holding(game, item), *per_batch)
     })
 }
 
@@ -342,11 +383,23 @@ fn walk_feeders(
         // else has to drain it before it wants a body again.
         return;
     };
-    let recipe: Vec<ItemId> = recipe.iter().map(|(item, _)| item.clone()).collect();
+    let recipe: Vec<(ItemId, u32)> = recipe.to_vec();
     let Some(pos) = game.world.get::<Position>(machine).copied() else {
         return;
     };
-    for ingredient in recipe {
+    for (ingredient, per_batch) in recipe {
+        // **The shelf comes before the bench.** With a batch already in
+        // store there is nothing to make, so the feeder that would make it
+        // does not want a body — and since the list is sorted deepest-first,
+        // leaving it in is what would send the one spare program upstream to
+        // hand-make what the base is already holding.
+        //
+        // A batch, not a single unit: a shelf too thin to run a cycle off is
+        // no answer, and skipping the feeder on the strength of it would
+        // stall the order with nobody working anything.
+        if depot_holding(game, &ingredient) >= per_batch {
+            continue;
+        }
         for (dx, dy) in ORTHOGONAL {
             let Some(&feeder) = by_tile.get(&(pos.x + dx, pos.y + dy)) else {
                 continue;

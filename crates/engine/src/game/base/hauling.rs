@@ -29,17 +29,26 @@ pub(crate) fn take_haul_load(stock: &mut Stock) -> Option<Carrying> {
     // Cloned out before the map is touched: the borrow behind `.keys()` is
     // still live otherwise.
     let item = stock.output.keys().next().cloned()?;
-    let held = stock.output.get(&item).copied().unwrap_or(0);
-    let qty = held.min(tuning::HAUL_CARRY_CAPACITY);
-    if qty == 0 {
-        return None;
+    let qty = take_from(stock, &item, tuning::HAUL_CARRY_CAPACITY);
+    (qty > 0).then_some(Carrying { item, qty })
+}
+
+/// Takes up to `qty` of `item` out of `stock`'s output and reports how much
+/// came. The inverse of `deposit`, and the one way units leave a buffer by
+/// hand — a producer clearing its own and a worker drawing an ingredient
+/// off a shelf differ only in which item they name.
+fn take_from(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
+    let held = stock.output.get(item).copied().unwrap_or(0);
+    let taken = qty.min(held);
+    if taken == 0 {
+        return 0;
     }
-    if held == qty {
-        stock.output.remove(&item);
+    if held == taken {
+        stock.output.remove(item);
     } else {
-        stock.output.insert(item.clone(), held - qty);
+        stock.output.insert(item.clone(), held - taken);
     }
-    Some(Carrying { item, qty })
+    taken
 }
 
 /// Whether `a` is one of the four tiles orthogonally touching `b`.
@@ -263,6 +272,127 @@ pub struct HaulLookups<'w> {
     items: Res<'w, ItemDb>,
 }
 
+/// The structure side of `haul_step_system`, named so the helpers that read
+/// it can say so in a signature.
+type HaulStructures<'w, 's> = Query<'w, 's, HaulStructure, Without<Tamed>>;
+
+/// What a posted program is doing with this tick.
+///
+/// **Derived every tick and never stored**, which is what keeps `Carrying`
+/// the feature's only state: a worker's whole plan falls out of where it is
+/// standing, what it is holding, and what its machine is short of. A depot
+/// demolished mid-walk, a shelf someone else emptied, or a load that turned
+/// out not to fit simply produces a different answer on the next tick, with
+/// no arrival event to write and nothing to unwind.
+///
+/// One enum rather than a destination and a separate arrival branch. There
+/// are four of each and they have to agree — a worker sent to a depot and
+/// then asked to unload into a machine spins there forever — so they are one
+/// decision, made once, at the top of the loop.
+///
+/// Every variant carries **owned** data. That is not incidental: deriving
+/// the errand reads the structures query, applying it writes to it, and a
+/// variant holding a borrow would keep the read alive across the write.
+enum Errand {
+    /// Put the held load into this structure's *output*. A depot normally;
+    /// the worker's own machine when no depot has room, which puts the goods
+    /// back where they came from rather than riding forever.
+    Deposit(Entity),
+    /// Put the held load into this machine's *input* — a fetched ingredient
+    /// arriving home. `room` is this tick's headroom under the same
+    /// `INPUT_STOCK_BATCHES` ceiling `assembler_system` pulls to, so a
+    /// fetched batch and a pulled one leave the hopper in the same state.
+    Load { machine: Entity, room: u32 },
+    /// Walk to this depot and draw `want` of `item` off it. The errand a
+    /// machine starts when it cannot assemble a batch from its own input or
+    /// from anything touching it, but the base has the ingredient in store.
+    Collect {
+        depot: Entity,
+        item: ItemId,
+        want: u32,
+    },
+    /// Nothing to move. Stand at the post — and pick a load up if this is a
+    /// machine that has one to shed.
+    Tend(Entity),
+}
+
+impl Errand {
+    /// Where the worker is walking. Every errand has exactly one, which is
+    /// what lets the walk below be written once.
+    fn destination(&self) -> Entity {
+        match self {
+            Errand::Deposit(e)
+            | Errand::Load { machine: e, .. }
+            | Errand::Collect { depot: e, .. }
+            | Errand::Tend(e) => *e,
+        }
+    }
+}
+
+/// How much more of `item` a machine's input may hold before it is stocked
+/// to `INPUT_STOCK_BATCHES` batches. Zero for an item its recipe does not
+/// name, which is what makes a load of *product* fall through to `Deposit`
+/// even on a machine whose recipe happens to mention it.
+fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
+    let Some((_, per_batch)) = recipe.iter().find(|(id, _)| id == item) else {
+        return 0;
+    };
+    (per_batch * tuning::INPUT_STOCK_BATCHES)
+        .saturating_sub(stock.input.get(item).copied().unwrap_or(0))
+}
+
+/// The first ingredient `machine` cannot assemble a batch of out of its own
+/// input or the machines touching it — the one an errand to a shelf would be
+/// for. `None` when everything it needs is already within reach.
+///
+/// The store term is deliberately **zero**: this is the question of whether
+/// the local chain can cover it, and the shelf is the answer being
+/// considered rather than part of the question.
+/// `work_orders::batch_within_reach` is the shared rule, so the machine the
+/// scheduler staffs off store is the machine this fetches for.
+fn missing_ingredient(
+    machine: Entity,
+    recipe: &[(ItemId, u32)],
+    structures: &HaulStructures,
+    by_tile: &HashMap<(i32, i32), Entity>,
+) -> Option<ItemId> {
+    let (_, pos, stock, _) = structures.get(machine).ok()?;
+    recipe.iter().find_map(|(item, per_batch)| {
+        let held = stock.input.get(item).copied().unwrap_or(0);
+        let beside: u32 = ORTHOGONAL
+            .into_iter()
+            .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
+            .filter_map(|feeder| structures.get(feeder).ok())
+            .map(|(_, _, s, _)| s.output.get(item).copied().unwrap_or(0))
+            .sum();
+        (!crate::game::base::work_orders::batch_within_reach(held, beside, 0, *per_batch))
+            .then(|| item.clone())
+    })
+}
+
+/// The nearest Depot actually holding `item`.
+///
+/// `stores` is every Depot whatever its state, not the `depots` list the
+/// delivery leg uses — that one is filtered to those with *room*, and a full
+/// shelf is still one to take something off.
+fn nearest_store_holding(
+    stores: &[(Entity, Position)],
+    from: Position,
+    item: &ItemId,
+    structures: &HaulStructures,
+) -> Option<Entity> {
+    let holding: Vec<(Entity, Position)> = stores
+        .iter()
+        .copied()
+        .filter(|(e, _)| {
+            structures
+                .get(*e)
+                .is_ok_and(|(_, _, s, _)| s.output.get(item).copied().unwrap_or(0) > 0)
+        })
+        .collect();
+    nearest_depot(&holding, from).map(|(e, _)| e)
+}
+
 /// What a posted program does with the tick: take a load off a clogged
 /// machine, carry it toward a depot, put it down, or walk back to its post.
 ///
@@ -310,6 +440,20 @@ pub(crate) fn haul_step_system(
         .filter_map(|(_, p, _, s)| Some((*p, assembly_recipe(db.get(&s.kind)?, &items)?)))
         .collect();
 
+    // Every Depot whatever its state — the *collect* leg's list, as against
+    // `depots` above, which is filtered to those with room to take a
+    // delivery. A full shelf is still one to draw an ingredient off.
+    let stores: Vec<(Entity, Position)> = structures
+        .iter()
+        .filter(|(_, _, _, s)| db.get(&s.kind).is_some_and(|d| d.stores))
+        .map(|(e, p, _, _)| (e, *p))
+        .collect();
+
+    let by_tile: HashMap<(i32, i32), Entity> = structures
+        .iter()
+        .map(|(e, p, _, _)| ((p.x, p.y), e))
+        .collect();
+
     // Sorted for the reason `assembler_system` sorts its machines: two
     // workers competing for the last slot in a depot must resolve the same
     // way every run, and bevy's iteration order does not promise that.
@@ -327,16 +471,65 @@ pub(crate) fn haul_step_system(
         let (worker_pos, carrying) = (*worker_pos, carrying.cloned());
         let machine = task.target;
 
-        let destination = match &carrying {
-            Some(_) => nearest_depot(&depots, worker_pos)
-                .map(|(e, _)| e)
-                // Every depot full, or none built: the load goes back where
-                // it came from and re-clogs the machine. The base stalls
-                // loudly rather than the goods vanishing.
-                .unwrap_or(machine),
-            None => machine,
+        // The whole of what this worker is doing with the tick, decided once
+        // — see `Errand`. Scoped so every read of `structures` is finished
+        // before the arrival below writes to it.
+        let errand = {
+            let recipe = structures
+                .get(machine)
+                .ok()
+                .and_then(|(_, _, _, s)| db.get(&s.kind))
+                .and_then(|def| assembly_recipe(def, &items));
+            match &carrying {
+                Some(load) => {
+                    // A load the machine's own recipe has room for is an
+                    // ingredient coming home; anything else is product being
+                    // cleared. That is the whole of the direction test, and
+                    // it is why `Carrying` needs no field saying which way
+                    // the worker is walking — which matters, since
+                    // `CreatureSave::carrying` is a positional tuple RON
+                    // cannot widen.
+                    let room = recipe
+                        .and_then(|r| {
+                            structures
+                                .get(machine)
+                                .ok()
+                                .map(|(_, _, stock, _)| input_room(stock, r, &load.item))
+                        })
+                        .unwrap_or(0);
+                    if room > 0 {
+                        Errand::Load { machine, room }
+                    } else {
+                        Errand::Deposit(
+                            nearest_depot(&depots, worker_pos)
+                                .map(|(e, _)| e)
+                                // Every depot full, or none built: the load
+                                // goes back where it came from and re-clogs
+                                // the machine. The base stalls loudly rather
+                                // than the goods vanishing.
+                                .unwrap_or(machine),
+                        )
+                    }
+                }
+                None => recipe
+                    .and_then(|r| missing_ingredient(machine, r, &structures, &by_tile))
+                    .and_then(|item| {
+                        let want = recipe
+                            .and_then(|r| {
+                                structures
+                                    .get(machine)
+                                    .ok()
+                                    .map(|(_, _, stock, _)| input_room(stock, r, &item))
+                            })
+                            .unwrap_or(0)
+                            .min(tuning::HAUL_CARRY_CAPACITY);
+                        let depot = nearest_store_holding(&stores, worker_pos, &item, &structures)?;
+                        (want > 0).then_some(Errand::Collect { depot, item, want })
+                    })
+                    .unwrap_or(Errand::Tend(machine)),
+            }
         };
-        let Ok((_, dest_pos, _, _)) = structures.get(destination) else {
+        let Ok((_, dest_pos, _, _)) = structures.get(errand.destination()) else {
             continue;
         };
         let dest_pos = *dest_pos;
@@ -348,9 +541,12 @@ pub(crate) fn haul_step_system(
             // ever built — a depot deployed beside a stranded worker would
             // otherwise leave the marker set while it went back to work.
             commands.entity(worker).remove::<Stranded>();
-            match carrying {
-                Some(load) => {
-                    let Ok((_, _, mut stock, _)) = structures.get_mut(destination) else {
+            match errand {
+                Errand::Deposit(depot) => {
+                    let Some(load) = carrying else {
+                        continue;
+                    };
+                    let Ok((_, _, mut stock, _)) = structures.get_mut(depot) else {
                         continue;
                     };
                     let moved = deposit(&mut stock, &load);
@@ -363,8 +559,48 @@ pub(crate) fn haul_step_system(
                         });
                     }
                 }
-                // At its post with empty hands, which is where an errand
-                // starts. Two of them do.
+                // An ingredient arriving home. The one write to a machine's
+                // `input` outside `assembler_system`, and it is not the
+                // exception to that asymmetry it looks like: `Stock::output`
+                // is public so a *neighbour* can pull from it, and nothing
+                // outside a machine may reach into its input. This is the
+                // machine's own posted program loading its own hopper.
+                Errand::Load { machine, room } => {
+                    let Some(load) = carrying else {
+                        continue;
+                    };
+                    let moved = load.qty.min(room);
+                    if moved > 0 {
+                        let Ok((_, _, mut stock, _)) = structures.get_mut(machine) else {
+                            continue;
+                        };
+                        *stock.input.entry(load.item.clone()).or_default() += moved;
+                    }
+                    // Nothing landed means the hopper filled while the worker
+                    // walked. It keeps the load, and next tick's errand is a
+                    // `Deposit` — there is no stuck state to write.
+                    if moved == load.qty {
+                        commands.entity(worker).remove::<Carrying>();
+                    } else if moved > 0 {
+                        commands.entity(worker).insert(Carrying {
+                            item: load.item,
+                            qty: load.qty - moved,
+                        });
+                    }
+                }
+                Errand::Collect { depot, item, want } => {
+                    let Ok((_, _, mut stock, _)) = structures.get_mut(depot) else {
+                        continue;
+                    };
+                    let taken = take_from(&mut stock, &item, want);
+                    if taken > 0 {
+                        commands
+                            .entity(worker)
+                            .insert(Carrying { item, qty: taken });
+                    }
+                }
+                // At its post with empty hands and nothing to fetch, which is
+                // where the outbound errands start. Two of them do.
                 //
                 // A **clogged** machine is the original: the cycle is already
                 // lost, so the walk costs nothing that was not lost anyway.
@@ -383,7 +619,7 @@ pub(crate) fn haul_step_system(
                 // With nowhere to take a load there is no errand at all,
                 // which is what leaves a depot-less base behaving exactly as
                 // it did.
-                None => {
+                Errand::Tend(machine) => {
                     if depots.is_empty() {
                         continue;
                     }

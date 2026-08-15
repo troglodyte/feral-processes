@@ -33,6 +33,7 @@
       shipped instead: bounded by fights taken, which is the spine.
 22. base staff should show stats in the selection menu
 
+
 # Bugs
 3. when the battle log goes beyound the visual buffer, it should scroll, it currently gets truncated
 4. heals in battle log should be green
@@ -53,4 +54,4 @@
    339px over without it. The fix is a chop, not a shorter tag — the row has
    six optional tags and drops none of them.
 5. base staff shows 'party' when some should show as 'idle', i cant tell which ones are in my party and which ones are idle
-
+6. when you jack out/run away from a stack boss, the stack collapses and deletes itself. it should stay there until it's defeated.

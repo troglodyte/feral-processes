@@ -821,3 +821,49 @@ fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
         "a machine with a consumer beside it feeds the line, not the depot"
     );
 }
+
+/// The return leg. A worker at a bench that cannot assemble a batch, with
+/// the ingredient sitting in a depot, goes and gets it rather than standing
+/// there starved.
+///
+/// The load lands in the machine's `input` — the one place outside
+/// `assembler_system` that writes it, and defensible because this is the
+/// machine's own posted program loading its hopper rather than a neighbour
+/// reaching in.
+#[test]
+fn a_worker_short_an_ingredient_fetches_it_from_the_depot() {
+    let mut game = base(32);
+    let press = spawn_machine_at(&mut game, "disk_press", 1, 0);
+    let depot = deploy(&mut game, "depot", 3, 0);
+    fill_output(&mut game, depot, "blank_substrate", 10);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, press).unwrap();
+    park_at_post(&mut game, worker, press);
+
+    tick_until(&mut game, 120, |g| {
+        g.world
+            .get::<Stock>(press)
+            .unwrap()
+            .input
+            .get(&ItemId::from("blank_substrate"))
+            .copied()
+            .unwrap_or(0)
+            > 0
+    });
+
+    assert!(
+        game.world
+            .get::<Stock>(press)
+            .unwrap()
+            .input
+            .get(&ItemId::from("blank_substrate"))
+            .copied()
+            .unwrap_or(0)
+            > 0,
+        "the ingredient should have been carried from the depot into the press"
+    );
+    assert!(
+        node_output(&game, depot, "blank_substrate") < 10,
+        "and taken out of the depot on the way"
+    );
+}

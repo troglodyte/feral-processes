@@ -7,6 +7,7 @@ use super::support::*;
 use crate::components::{Decompiler, Experience, Stats};
 use crate::progression::{StatRow, stat_block};
 use crate::resources::{CONDENSE_LOOKBACK, LogLine, MessageSource, condense};
+use crate::tuning::{DECOMPILER_SKILL_PER_LEVEL, PERK_POINTS_PER_LEVEL};
 use crate::*;
 
 /// The indented stat lines out of a log, in order. Reaching for the two
@@ -36,10 +37,10 @@ fn a_player_level_up_lists_what_each_stat_grew_to() {
             format!("  Max HP {} → {}", before.max_hp, after.max_hp),
             format!("  ATK {} → {}", before.atk, after.atk),
             format!("  DEF {} → {}", before.def, after.def),
-            "  Perk Points 0 → 1".to_string(),
+            format!("  Perk Points 0 → {PERK_POINTS_PER_LEVEL}"),
             format!(
                 "  Decompiler {} → {}",
-                game.world.get::<Decompiler>(player).unwrap().skill - 1,
+                game.world.get::<Decompiler>(player).unwrap().skill - DECOMPILER_SKILL_PER_LEVEL,
                 game.world.get::<Decompiler>(player).unwrap().skill
             ),
         ],

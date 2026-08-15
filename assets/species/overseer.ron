@@ -17,5 +17,5 @@
     ],
     work_resource: None,
     is_boss: true,
-    abilities: [(id: "broadcast_storm"), (id: "overclock_array", level: 5)],
+    abilities: [(id: "broadcast_storm"), (id: "overclock_array", level: 4)],
 )

@@ -1486,7 +1486,9 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
     };
 
     let worker = spawn_tamed(&mut game, 20, 5);
-    set_level(&mut game, worker, 7);
+    // Under `CREATURE_MAX_LEVEL`, which is 6: a level the fixture cannot
+    // actually reach would be clamped and this would assert on the clamp.
+    set_level(&mut game, worker, 5);
     game.assign_cronjob(worker, node).unwrap();
     game.world.get_mut::<Stats>(worker).unwrap().hp = 3;
 
@@ -1496,7 +1498,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
         .iter()
         .find(|a| a.entity == worker)
         .expect("the worker is listed");
-    assert_eq!(posted.level, Some(7));
+    assert_eq!(posted.level, Some(5));
     let (hp, max_hp) = posted.hp.expect("a program has stats");
     assert_eq!(hp, 3, "the row reports the health it actually has");
     assert!(max_hp >= hp);

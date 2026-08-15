@@ -984,20 +984,11 @@ mod tests {
     }
 
     #[test]
-    fn companion_slots_grow_one_per_two_levels_up_to_the_cap() {
-        // Level 1 has no slot by the raw formula; the clamp gives it one, so
-        // a freshly tamed program still has somewhere to keep its kit.
-        let expected = [
-            (1, 1),
-            (2, 1),
-            (3, 1),
-            (4, 2),
-            (5, 2),
-            (6, 3),
-            (8, 4),
-            (10, 5),
-            (12, 6),
-        ];
+    fn companion_slots_grow_one_per_level_up_to_the_cap() {
+        // A slot a level against `CREATURE_MAX_LEVEL` of 6 lands a companion
+        // on the same six slots it used to reach at level 12 — the ceiling
+        // moved in level units and stayed put in power.
+        let expected = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
         for (level, slots) in expected {
             assert_eq!(
                 companion_routine_slots(level),
@@ -1013,20 +1004,20 @@ mod tests {
     }
 
     #[test]
-    fn player_slots_grow_one_per_ten_levels_so_the_first_free_one_lands_at_10() {
+    fn player_slots_grow_one_per_five_levels_so_the_first_free_one_lands_at_5() {
         assert_eq!(
             player_routine_slots(1),
             1,
             "the starting slot holds decompile"
         );
-        assert_eq!(player_routine_slots(9), 1, "still nothing free at 9");
+        assert_eq!(player_routine_slots(4), 1, "still nothing free at 4");
         assert_eq!(
-            player_routine_slots(10),
+            player_routine_slots(5),
             2,
-            "the first free slot arrives at 10"
+            "the first free slot arrives at 5"
         );
-        assert_eq!(player_routine_slots(49), 5);
-        assert_eq!(player_routine_slots(50), 6);
+        assert_eq!(player_routine_slots(24), 5);
+        assert_eq!(player_routine_slots(25), 6);
         assert_eq!(
             player_routine_slots(9_999),
             crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,
@@ -1132,8 +1123,10 @@ mod tests {
         assert_eq!(ability_stat_scale(0), 1.0, "no level, no bonus");
         assert_eq!(ability_hp_scale(0), 1.0, "no level, no bonus");
         assert!(
-            (ability_stat_scale(12) - 2.8).abs() < 1e-5,
-            "a companion at its level cap runs stat routines at 2.8x"
+            (ability_stat_scale(crate::tuning::CREATURE_MAX_LEVEL) - 2.8).abs() < 1e-5,
+            "a companion at its level cap runs stat routines at 2.8x — the same \
+             figure it reached at level 12 before `HP_PER_LEVEL`'s K = 2 halved \
+             the cap and doubled the rate"
         );
         assert!(
             ability_hp_scale(10) > ability_stat_scale(10),
@@ -1152,7 +1145,7 @@ mod tests {
     fn scaled_power_scales_negative_magnitudes_too() {
         assert_eq!(
             scaled_stat_power(-4, 20, crate::tuning::AFFINITY_NEUTRAL),
-            -16,
+            -28,
             "a sap must sharpen with level the same way a buff does"
         );
         assert_eq!(scaled_stat_power(0, 20, crate::tuning::AFFINITY_NEUTRAL), 0);
@@ -1171,10 +1164,9 @@ mod tests {
 
     #[test]
     fn affinity_multiplies_on_top_of_the_level_scale() {
-        // One combined multiply, not two rounds of rounding: 8 * 1.15 * 1.5
-        // is 13.8 -> 14, where rounding twice gives 9 * 1.5 = 13.5 -> 14 by
-        // luck at this level and diverges at others.
-        assert_eq!(scaled_stat_power(8, 1, 1.5), 14);
+        // One combined multiply, not two rounds of rounding: 8 * 1.3 * 1.5
+        // is 15.6 -> 16, where rounding twice gives 10 * 1.5 = 15.
+        assert_eq!(scaled_stat_power(8, 1, 1.5), 16);
     }
 
     #[test]

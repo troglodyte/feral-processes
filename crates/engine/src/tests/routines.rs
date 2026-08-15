@@ -68,11 +68,22 @@ fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_f
         "a level-1 Scrapper has no unlock yet, so it starts on the fallback"
     );
 
-    set_level(&mut game, scrapper, 3);
+    set_level(&mut game, scrapper, 2);
+    let routines = &game.world.get::<Routines>(scrapper).unwrap().0;
+    assert!(
+        routines.iter().any(|r| r == "cascade_overflow"),
+        "reaching the unlock must never lose it: {routines:?}"
+    );
+    // The fallback survives beside it now, and that is the slot rate rather
+    // than a change of heart about placeholders: a level-up brings a slot
+    // (`COMPANION_ROUTINE_SLOT_PER_LEVEL` is 1), so the unlock has somewhere
+    // to land and has nothing to displace. The eviction branch it used to
+    // exercise is covered by `evicting_a_manually_installed_priority_boost_
+    // is_logged`, against a species that unlocks two routines at once.
     assert_eq!(
-        game.world.get::<Routines>(scrapper).unwrap().0,
-        vec!["cascade_overflow".to_string()],
-        "reaching the level-3 unlock must evict the fallback, not lose the unlock"
+        routines.len(),
+        2,
+        "both the unlock and the fallback fit: {routines:?}"
     );
 }
 
@@ -80,8 +91,8 @@ fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_f
 fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
     let (mut game, medic) = game_with_two_ability_companion();
     let before = game.world.get::<Routines>(medic).unwrap().0.len();
-    // `TWO_ABILITY_SPECIES` gates `sandbox` at level 5, and level 5 is worth
-    // two slots, so the unlock has somewhere to land.
+    // `TWO_ABILITY_SPECIES` gates `sandbox` at level 5, and a slot arrives
+    // with every level, so the unlock has somewhere to land.
     set_level(&mut game, medic, 5);
     let after = &game.world.get::<Routines>(medic).unwrap().0;
     assert_eq!(
@@ -98,8 +109,11 @@ fn a_level_up_that_reaches_an_unlock_installs_it_into_a_free_slot() {
 /// line at all, unlike the neighbouring "it is lost" branch.
 #[test]
 fn evicting_a_manually_installed_priority_boost_is_logged() {
-    let (mut game, medic) = game_with_two_ability_companion();
-    set_level(&mut game, medic, 4); // two slots: hot_patch, plus one free
+    // A species that unlocks two routines on one rung, because that is now
+    // the only way to run out of slots: an ordinary level-up brings a slot
+    // along with the unlock it grants.
+    let (mut game, medic) = game_with_contending_unlocks_companion();
+    set_level(&mut game, medic, 2); // two slots: hot_patch, plus one free
     install_routine_for_test(&mut game, medic, crate::abilities::FALLBACK_ABILITY_ID);
     assert_eq!(
         game.world.get::<Routines>(medic).unwrap().0,
@@ -107,18 +121,26 @@ fn evicting_a_manually_installed_priority_boost_is_logged() {
         "a deliberate install, not the tame-time fallback"
     );
 
-    set_level(&mut game, medic, 5); // sandbox unlocks; both slots are full
+    // Three slots, and hot_patch plus two unlocks to put in them.
+    set_level(&mut game, medic, 3);
 
-    assert_eq!(
-        game.world.get::<Routines>(medic).unwrap().0,
-        vec!["hot_patch".to_string(), "sandbox".to_string()],
-        "the unlock still evicts the id-matched slot, manual install or not"
+    let routines = &game.world.get::<Routines>(medic).unwrap().0;
+    assert!(
+        !routines.iter().any(|r| r == "priority_boost"),
+        "the unlock still evicts the id-matched slot, manual install or not: {routines:?}"
+    );
+    assert!(
+        routines.iter().any(|r| r == "sandbox") && routines.iter().any(|r| r == "cascade_overflow"),
+        "and both unlocks landed: {routines:?}"
     );
     assert!(
         game.message_log(10).iter().any(|e| {
             e.text.contains("swaps out")
                 && e.text.contains("Hyperthread Single v1.0")
-                && e.text.contains("Bastion Single")
+                // Either unlock may be the one that claimed the slot: they
+                // arrive on the same level-up, so which lands first is the
+                // order they are declared in, not something worth pinning.
+                && (e.text.contains("Bastion Single") || e.text.contains("Packet Shred Group"))
         }),
         "the eviction of a deliberately installed routine must be logged, \
          not just the auto-installed placeholder's: {:?}",

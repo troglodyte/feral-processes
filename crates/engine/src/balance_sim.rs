@@ -641,18 +641,24 @@ mod tests {
     /// `battle::compute_damage`'s subtractive rule floors every swing at
     /// `MIN_DAMAGE` so no amount of levelling helps at all.
     ///
-    /// With `ZONE_STAT_STEP` linear the measured curve is 1, 15, 24, 32, 47,
-    /// 61, 76, 90, 106, 121 for zones 1-10 — about 14 levels a zone,
+    /// With `ZONE_STAT_STEP` linear the measured curve is 1, 8, 12, 16, 19,
+    /// 25, 31, 37, 42, 49 for zones 1-10 — about 5 levels a zone,
     /// indefinitely. Sweeping to 10 is therefore the gate itself: a return
     /// to a compounding curve cannot reach zone 10 inside
     /// `MAX_LEVEL_SEARCHED` and fails here rather than shipping.
+    ///
+    /// That curve is `HP_PER_LEVEL`'s `K = 2` applied to a previously
+    /// measured 1, 15, 24, 32, 47, 61, 76, 90, 106, 121: half as many
+    /// levels, each worth twice as much, so a zone costs the same *progress*
+    /// and states it in coarser units. The coarseness shows up in
+    /// `LINEAR_STEP_GUARD_MULTIPLIER`'s margin — see the note there.
     const MAX_GRIND_ONLY_ZONE_SWEPT: u32 = 10;
     /// How deep to sweep the fully-geared scenario. `GEAR_LEVEL_STEP`
     /// matches `ZoneLevel::stat_multiplier`'s per-zone step (see
     /// `crate::tuning::GEAR_LEVEL_STEP`), so gear neither overtakes deep
     /// zones the way the old 2.5x factor did nor collapses to "level 1
-    /// clears everything" (measured: 1, 10, 18, 31, 43, 56, 70, 83, 97, 112
-    /// geared vs. 1, 15, 24, 32, 47, 61, 76, 90, 106, 121 gear-free for
+    /// clears everything" (measured: 1, 5, 8, 14, 18, 24, 29, 35, 41, 46
+    /// geared vs. 1, 8, 12, 16, 19, 25, 31, 37, 42, 49 gear-free for
     /// zones 1-10).
     ///
     /// Gear's advantage narrows with depth rather than holding at a
@@ -673,9 +679,17 @@ mod tests {
     /// constant; on a compounding one they grow without limit, so a single
     /// figure catches the whole class rather than one retune of it.
     ///
-    /// Set at 3 against a shipped spread of 8 to 16 — real margin for the
-    /// integer search's lumpiness, and nowhere near the 5x a geometric
-    /// curve reaches within five zones, let alone ten.
+    /// Set at 3 against a shipped spread of 3 to 7 — margin for the integer
+    /// search's lumpiness, and nowhere near the 5x a geometric curve reaches
+    /// within five zones, let alone ten.
+    ///
+    /// That spread is a 2.33x ratio where it used to be 2.0x (8 to 16), and
+    /// the difference is arithmetic rather than balance: `HP_PER_LEVEL`'s
+    /// `K = 2` halved the level count, so the search quantises a zone's
+    /// requirement into units twice as coarse and the same curve reads
+    /// lumpier. Halving `K` again would put the spread through this guard on
+    /// rounding alone, which is the thing to check before assuming a failure
+    /// here means the curve compounds.
     const LINEAR_STEP_GUARD_MULTIPLIER: u32 = 3;
 
     /// Multiplier and flat slack the "no cliff" guard allows a zone's level

@@ -17,5 +17,5 @@
     ],
     work_resource: None,
     is_boss: true,
-    abilities: [(id: "broadcast_storm"), (id: "null_route", level: 4)],
+    abilities: [(id: "broadcast_storm"), (id: "null_route", level: 3)],
 )

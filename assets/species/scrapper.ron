@@ -17,6 +17,6 @@
     ],
     work_resource: Some("core_fragment"),
     can_nest: true,
-    abilities: [(id: "cascade_overflow", level: 2), (id: "segfault_v2", level: 6)],
+    abilities: [(id: "cascade_overflow", level: 2), (id: "segfault_v2", level: 4)],
     affinities: (damage: 1.3, heal: 0.85),
 )

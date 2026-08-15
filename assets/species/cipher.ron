@@ -16,6 +16,6 @@
         (name: "Cross-Reference", power: 9, ranged: true),
     ],
     work_resource: None,
-    abilities: [(id: "deadlock", level: 2), (id: "bit_rot_v3", level: 6)],
+    abilities: [(id: "deadlock", level: 2), (id: "bit_rot_v3", level: 4)],
     affinities: (heal: 0.85, debuff: 1.3),
 )

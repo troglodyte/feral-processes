@@ -1249,6 +1249,68 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
     (game, medic)
 }
 
+/// A species granting *two* abilities at one level, which is the only shape
+/// that can still run a companion out of routine slots.
+///
+/// `COMPANION_ROUTINE_SLOT_PER_LEVEL` is 1, so an ordinary level-up brings a
+/// slot along with whatever it unlocks and the two never contend — no
+/// shipped species can reach the eviction branch any more. A mod can, by
+/// unlocking two routines on the same rung, and that branch is still live
+/// code with a log line of its own.
+pub(super) const CONTENDING_UNLOCK_SPECIES: &str = r#"(
+    id: "test_crowded",
+    name: "Test Crowded",
+    glyph: 'c',
+    color: Cyan,
+    base_hp: 10,
+    base_atk: 4,
+    base_def: 2,
+    taming_difficulty: 0.5,
+    habitats: [OpenGrid],
+    base_speed: 10,
+    moves: [(name: "Poke", power: 3)],
+    abilities: [
+        (id: "hot_patch"),
+        (id: "sandbox", level: 3),
+        (id: "cascade_overflow", level: 3),
+    ],
+)"#;
+
+/// Spawns a tamed member of `CONTENDING_UNLOCK_SPECIES` into the party of a
+/// game built on a modded install that ships it.
+pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
+    let dir = modded_assets_dir(
+        "contending_unlock_species",
+        &[],
+        &[],
+        &[("test_crowded.ron", CONTENDING_UNLOCK_SPECIES)],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    let crowded = game
+        .world
+        .spawn((
+            Creature {
+                species: "test_crowded".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 5,
+                def: 1,
+            },
+            Tamed { owner: player },
+            Experience::default(),
+        ))
+        .id();
+    game.install_innate_routines(crowded);
+    game.add_companion(crowded).unwrap();
+    (game, crowded)
+}
+
 /// Deploys a Recharger Node `dx`/`dy` tiles from the player, bypassing
 /// `place_structure`'s Home and cost requirements — this is about the
 /// regen system, not the build rules.

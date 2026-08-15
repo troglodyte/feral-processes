@@ -28,16 +28,16 @@ fn player_decompiler_skill_grows_on_level_up_and_survives_save_load() {
         "should start with no decompiler skill"
     );
 
-    game.award_player_xp(player, 20);
+    game.award_player_xp(player, crate::progression::xp_for_level(1));
     assert_eq!(
         game.player_status().level,
         2,
-        "20 xp should be enough to reach level 2"
+        "a level's worth of xp should be enough to reach level 2"
     );
     assert_eq!(
         game.player_status().decompiler,
         DECOMPILER_SKILL_PER_LEVEL,
-        "one level gained should grant one point of decompiler skill"
+        "one level gained should grant one level's decompiler skill"
     );
 
     let path = std::env::temp_dir().join(format!(

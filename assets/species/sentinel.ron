@@ -16,6 +16,6 @@
         (name: "Lockout", power: 7, effect: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
     ],
     work_resource: None,
-    abilities: [(id: "overclock_array", level: 2), (id: "bastion_shield_v3", level: 6)],
+    abilities: [(id: "overclock_array", level: 2), (id: "bastion_shield_v3", level: 4)],
     affinities: (damage: 0.85, buff: 1.3),
 )

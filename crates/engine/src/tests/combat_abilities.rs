@@ -1226,15 +1226,22 @@ fn drain_scales_with_the_users_level() {
 }
 
 /// The pin for the whole HP-magnitude retune, in the terms the retune was
-/// asked for: a level-10 player with the Damage affinity perk five levels
+/// asked for: a mid-run player with the Damage affinity perk five levels
 /// deep, spending the heaviest shipped single-target routine, against a
 /// program with the Integrity a mid-zone one actually has.
+///
+/// The level here is 5 and used to be 10. It is the *same point in a run*:
+/// `HP_PER_LEVEL`'s `K = 2` halved the level count and doubled
+/// `ABILITY_HP_SCALE_PER_LEVEL` to match, so `ability_hp_scale(5)` is now
+/// exactly the 5.0x `ability_hp_scale(10)` used to be — and the band below
+/// is unchanged, which is the evidence that rebase was power-neutral rather
+/// than a stealth buff.
 ///
 /// `balance_sim` cannot hold this — it models no abilities at all — so this
 /// is the only gate on ability magnitudes. A number that moves here means
 /// routine damage was retuned, which is the signal, not a broken test.
 #[test]
-fn a_perked_level_ten_kernel_panic_lands_in_the_intended_band() {
+fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
     let mut game = Game::new(4207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 400);
@@ -1243,7 +1250,7 @@ fn a_perked_level_ten_kernel_panic_lands_in_the_intended_band() {
         stats.atk = 16;
     }
     game.world.get_mut::<Stats>(enemies[0]).unwrap().def = 9;
-    game.world.get_mut::<Experience>(player).unwrap().level = 10;
+    game.world.get_mut::<Experience>(player).unwrap().level = 5;
     for _ in 0..5 {
         game.world
             .get_mut::<Perks>(player)
@@ -1263,7 +1270,7 @@ fn a_perked_level_ten_kernel_panic_lands_in_the_intended_band() {
 
     assert!(
         (140..=165).contains(&dealt),
-        "a perked level-10 Packet Shred Single should land near 150 against 400 Integrity, got {dealt}"
+        "a perked mid-run Packet Shred Single should land near 150 against 400 Integrity, got {dealt}"
     );
 }
 

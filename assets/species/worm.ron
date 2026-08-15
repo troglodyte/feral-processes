@@ -17,6 +17,6 @@
     ],
     work_resource: Some("core_fragment"),
     can_nest: true,
-    abilities: [(id: "skim_group", level: 2), (id: "skim_v2", level: 6)],
+    abilities: [(id: "skim_group", level: 2), (id: "skim_v2", level: 4)],
     affinities: (buff: 0.85, drain: 1.3),
 )

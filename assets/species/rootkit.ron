@@ -16,6 +16,6 @@
         (name: "Kernel Panic", power: 12, ranged: true),
     ],
     work_resource: None,
-    abilities: [(id: "skim_group", level: 2), (id: "skim_v3", level: 6)],
+    abilities: [(id: "skim_group", level: 2), (id: "skim_v3", level: 4)],
     affinities: (buff: 0.85, drain: 1.3),
 )

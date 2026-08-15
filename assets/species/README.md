@@ -200,22 +200,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `level` is optional and defaults to 1, meaning the ability installs
     // as soon as the program is tamed (or as soon as slots exist for it —
     // see below). A higher number gates it until the companion reaches
-    // that level; companions cap at level 12, so anything above that is
-    // permanently unreachable.
+    // that level; companions cap at `tuning::CREATURE_MAX_LEVEL`, which is
+    // 6, so anything above that is permanently unreachable.
     //
     // An id that doesn't exist is dropped with a logged warning and the
     // rest of the species still loads — a program missing one ability is
     // still perfectly playable.
     abilities: [
         (id: "hot_patch"),
-        (id: "redundancy_sync", level: 7),
+        (id: "redundancy_sync", level: 4),
     ],
 
     // ## Routines and slots
     //
     // A tamed program's abilities live in a small, level-derived number of
-    // routine slots (one more every two companion levels, six at most —
-    // see `tuning::COMPANION_ROUTINE_SLOT_*`), and what a slot holds is
+    // routine slots (one per companion level, six at most — see
+    // `tuning::COMPANION_ROUTINE_SLOT_*`), and what a slot holds is
     // installed at specific moments, not recomputed on the fly:
     //
     //   - **Tame or fusion time.** Every entry above whose `level` is at
@@ -236,9 +236,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     //     *real* routine (installed, researched, or another innate
     //     ability) is the unlock logged as lost, permanently — the window
     //     to install it has passed. No shipped species can reach that
-    //     genuine-loss state; the closest any comes is exactly the eviction
-    //     case above (e.g. a species whose only ability unlocks above
-    //     level 1, like the Scrapper's `cascade_overflow` at level 3).
+    //     genuine-loss state. Nor, since a slot arrives with every level,
+    //     can a shipped species reach the *eviction* case either: a
+    //     level-up that brings an unlock brings room for it. Both branches
+    //     stay live for mods, which can grant two abilities at one level,
+    //     or more of them than a program has slots.
     //
     // Nothing here is permanently welded in: an innate routine can be
     // popped back out (`m` in the routine panel) same as any installed
@@ -388,9 +390,11 @@ the guarantee that its role is readable from its numbers.
 The third leg, and the one a player actually spends a round on. Every shipped
 non-boss species grants exactly two abilities: a **class utility** at level 2,
 shared verbatim by all three members of its class, and a **tier rung** at
-level 6 that it holds alone.
+level 4 that it holds alone. Against `CREATURE_MAX_LEVEL` of 6 that puts the
+capstone two rungs below the ceiling, so a companion is still growing after
+it lands.
 
-| Class | Utility (level 2) | Tier rungs (level 6), 1.0 → 1.25 → 1.5 |
+| Class | Utility (level 2) | Tier rungs (level 4), 1.0 → 1.25 → 1.5 |
 |---|---|---|
 | Striker | `cascade_overflow` | `segfault_v1` → `v2` → `v3` |
 | Saboteur | `deadlock` | `memory_leak` → `bit_rot_v2` → `bit_rot_v3` |

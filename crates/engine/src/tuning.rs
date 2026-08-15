@@ -40,13 +40,26 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 };
 
 /// Flat stat growth per level-up, before `growth_multiplier` scales it —
-/// see `progression::stats_after_levels`. With ATK and DEF both at 1, a
-/// multiplier has to cross a rounding boundary (roughly +0.5) to change
-/// them at all, so `HP_PER_LEVEL` carries most of the effective
-/// granularity.
-pub const HP_PER_LEVEL: i32 = 12;
-pub const ATK_PER_LEVEL: i32 = 1;
-pub const DEF_PER_LEVEL: i32 = 1;
+/// see `progression::stats_after_levels`.
+///
+/// These are `K = 2` times what they were, along with every other constant
+/// denominated in entity level (`PERK_POINTS_PER_LEVEL`,
+/// `DECOMPILER_SKILL_PER_LEVEL`, the two `ABILITY_*_SCALE_PER_LEVEL` rates)
+/// and the reciprocal of every constant denominated in *levels per*
+/// something (`PLAYER_ROUTINE_SLOT_PER_LEVEL`,
+/// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `CREATURE_MAX_LEVEL`,
+/// `WORK_XP_LEVEL_CAP`). Half as many level-ups, each worth twice as much,
+/// paid for by `XP_PER_LEVEL_STEP`'s matching `K^2` — so the *power* curve
+/// is where it was and only its grain changed. A level-up is meant to be an
+/// event rather than a tick.
+///
+/// ATK and DEF at 2 also buy back granularity that was silently missing:
+/// at 1, a `growth_multiplier` had to cross a rounding boundary (roughly
+/// +0.5) to move them at all, so `HP_PER_LEVEL` carried nearly all of a
+/// species' growth rate on its own — see `progression::scaled_growth`.
+pub const HP_PER_LEVEL: i32 = 24;
+pub const ATK_PER_LEVEL: i32 = 2;
+pub const DEF_PER_LEVEL: i32 = 2;
 
 /// Growth-rate multiplier for anything with no species-specific rate of
 /// its own. The player (who has no species at all) always levels at this
@@ -69,7 +82,13 @@ pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
 /// `crate::balance_sim`'s offline curve-shape projections, which search well
 /// past any level actually reachable in play on purpose (see that
 /// module's docs).
-pub const CREATURE_MAX_LEVEL: u32 = 12;
+///
+/// Halved by `HP_PER_LEVEL`'s `K = 2`, so the ceiling stands at the same
+/// *power* it always did. A companion loaded from a save above it keeps both
+/// its level and its stats: `add_xp` simply stops paying it, and clawing back
+/// growth already spent would be the `EquippedItem::fusion_tier` trap — a
+/// subtraction with no record of what was added.
+pub const CREATURE_MAX_LEVEL: u32 = 6;
 
 /// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
@@ -78,10 +97,15 @@ pub const CREATURE_MAX_LEVEL: u32 = 12;
 pub const SETBACK_XP_PENALTY_FRACTION: f64 = 0.2;
 
 /// How much the player's `Decompiler` skill grows per level gained.
-pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 1;
+/// Carries `HP_PER_LEVEL`'s `K = 2`, so skill still tracks total power
+/// rather than level count.
+pub const DECOMPILER_SKILL_PER_LEVEL: i32 = 2;
 
 /// Perk Points (see `perks::Perk`) awarded per player level gained.
-pub const PERK_POINTS_PER_LEVEL: u32 = 1;
+/// Carries `HP_PER_LEVEL`'s `K = 2`: perks are bought out of total progress,
+/// so halving the level count without this would halve the perk budget of a
+/// whole run as a side effect of a legibility change.
+pub const PERK_POINTS_PER_LEVEL: u32 = 2;
 
 /// Every party member (see `resources::Party`) gains `1 / PARTY_XP_DIVISOR`
 /// of whatever XP the player just earned from a kill or successful
@@ -93,7 +117,39 @@ pub const PARTY_XP_DIVISOR: u32 = 2;
 /// quadratically. `balance_sim`'s companion-level projection leans on that
 /// quadratic shape: half the XP rate lands a companion at roughly
 /// `1 / sqrt(2)` of the player's level, not half of it.
-pub const XP_PER_LEVEL_STEP: u32 = 20;
+///
+/// It is `20 * K^2` for the `K = 2` level-coarsening below, and that square
+/// is what makes the coarsening cost-neutral rather than a difficulty
+/// change: cumulative XP to a level is `(STEP / 2) * L^2`, so doubling the
+/// stats a level grants (halving the levels needed for a given power) has to
+/// be paid for by four times the step, or the same power would arrive for a
+/// quarter of the XP. **None** of this run's slowdown lives here — all of it
+/// is `xp_challenge_factor` below. Retuning the two independently is the
+/// point: this one is legibility, that one is difficulty.
+pub const XP_PER_LEVEL_STEP: u32 = 80;
+
+/// A kill's XP is the victim's max HP scaled by how hard it was — see
+/// `progression::kill_xp`. The scale is `power_ratio` (the very number
+/// `difficulty_color` buckets into the map's con-colours) over
+/// `DIFFICULTY_EASY_MAX`, so full XP lands exactly at the green/yellow
+/// boundary and the rule a player can state is "green pays less, yellow and
+/// up pays full".
+///
+/// Sharing `DIFFICULTY_EASY_MAX` rather than carrying a par of its own is
+/// deliberate: the colour on the map is the only advance notice a fight's
+/// XP value gets, and a second threshold would let the two drift until the
+/// glyph lied about the reward.
+///
+/// Both clamps are load-bearing in opposite directions. Without the
+/// **floor**, an over-levelled party earns literally nothing in the opening
+/// ring, which is the one place the game deliberately keeps fights trivial
+/// (`Game::in_opening_ring`) — 0.25 leaves farming viable but pointless
+/// rather than broken. Without the **ceiling**, a Stack guardian pays a
+/// multiplier on top of HP that depth has already inflated
+/// (`STACK_DEPTH_STAT_STEP`), which is the double-count that made four
+/// depth-3 fights worth five levels.
+pub const XP_CHALLENGE_FLOOR: f64 = 0.25;
+pub const XP_CHALLENGE_CEIL: f64 = 2.0;
 
 /// XP a tamed creature earns for each completed gather cycle.
 pub const WORK_XP_PER_CYCLE: u32 = 5;
@@ -104,7 +160,8 @@ pub const WORK_XP_PER_CYCLE: u32 = 5;
 /// above this only come from combat (`Game::award_player_xp` /
 /// `award_party_xp`), up to the separate, higher ceiling every creature
 /// shares — see `CREATURE_MAX_LEVEL`.
-pub const WORK_XP_LEVEL_CAP: u32 = 10;
+/// Halved by `HP_PER_LEVEL`'s `K = 2`, like the ceiling above it.
+pub const WORK_XP_LEVEL_CAP: u32 = 5;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Zone & distance scaling
@@ -2014,8 +2071,10 @@ pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
 /// from having nowhere to hold its innate kit.
 pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
 
-/// Levels a companion needs per additional routine slot.
-pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 2;
+/// Levels a companion needs per additional routine slot. Halved by
+/// `HP_PER_LEVEL`'s `K = 2` alongside `CREATURE_MAX_LEVEL`, so a companion
+/// still tops out at the same number of slots it always did.
+pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 1;
 
 /// Most routines a companion can hold at once, reached at level 12.
 pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 6;
@@ -2028,9 +2087,11 @@ pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 1;
 /// Levels the player needs per additional routine slot. Deliberately far
 /// slower than a companion's: researched routines are meant to be a choice
 /// between programs, not a second kit the player accumulates for free.
-pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 10;
+/// Halved by `HP_PER_LEVEL`'s `K = 2`, so a slot still costs the same
+/// progress it used to rather than twice as much.
+pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 5;
 
-/// Most routines the player can hold at once, reached at level 50. The
+/// Most routines the player can hold at once, reached at level 25. The
 /// player has no level ceiling (`progression::add_xp` takes `None`), so this
 /// clamp is the only thing bounding their slots.
 pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
@@ -2058,32 +2119,42 @@ pub const WILD_ROUTINE_CHANCE: f64 = 0.06;
 /// `1.0 + level * this`.
 ///
 /// Deliberately gentle, because the curve it has to keep pace with is
-/// gentle: `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are both 1. A +3 attack buff
+/// gentle: `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are both 2. A +3 attack buff
 /// against a base ATK of 6 is already half again; scaling it on the HP curve
 /// below would turn the same routine into a tripling.
-pub const ABILITY_STAT_SCALE_PER_LEVEL: f32 = 0.15;
+///
+/// Doubled by `HP_PER_LEVEL`'s `K = 2`. Both ability rates are per *level*
+/// against stats that are now also per level, so leaving them alone would
+/// have halved every routine's late-game magnitude as a side effect.
+pub const ABILITY_STAT_SCALE_PER_LEVEL: f32 = 0.30;
 
 /// How much each level adds to an ability magnitude measured in **HP** —
 /// `Damage`, `Drain`, `Heal`, and the per-round bite of a `Debuff`. Steeper
 /// than `ABILITY_STAT_SCALE_PER_LEVEL` by design, and for the same reason
 /// that one is gentle: these are weighed against Integrity, which grows at
-/// `HP_PER_LEVEL` (12) per level and doubles again per zone
+/// `HP_PER_LEVEL` (24) per level and doubles again per zone
 /// (`ZONE_STAT_GROWTH`).
 ///
 /// Ability damage used not to be level-scaled at all. `compute_damage` is
 /// `power + ATK - DEF`, and ATK was held to carry the progression on its own
-/// — but ATK grows at 1 per level against Integrity's 12, so an authored
+/// — but ATK grows at 2 per level against Integrity's 24, so an authored
 /// power fell further behind its target every level. By the time a level-10
 /// player with the affinity perk five deep faced a 400-Integrity program,
 /// the heaviest shipped routine hit for 35. That is what this rate exists to
 /// fix; `tests::combat_abilities` pins the resulting figure.
-pub const ABILITY_HP_SCALE_PER_LEVEL: f32 = 0.40;
+///
+/// Doubled by `HP_PER_LEVEL`'s `K = 2` — see
+/// `ABILITY_STAT_SCALE_PER_LEVEL`.
+pub const ABILITY_HP_SCALE_PER_LEVEL: f32 = 0.80;
 
 /// Level ceiling on both ability scales. The player has no level cap
 /// (`progression::add_xp` takes `None`), so without this a long enough game
 /// multiplies every routine without bound. A companion is capped far lower
 /// by `CREATURE_MAX_LEVEL` and never reaches this.
-pub const ABILITY_SCALE_LEVEL_CAP: u32 = 40;
+/// Halved by `HP_PER_LEVEL`'s `K = 2`, so the cap bites at the same power it
+/// used to — and doubling the rates above without halving this would have
+/// doubled the ceiling itself.
+pub const ABILITY_SCALE_LEVEL_CAP: u32 = 20;
 
 /// An ability magnitude's neutral affinity — no bonus, no penalty. The
 /// value every `AffinityKind` defaults to, and what a caster with neither

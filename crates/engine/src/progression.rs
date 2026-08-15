@@ -1,12 +1,13 @@
 use crate::components::{Experience, Stats};
 use crate::tuning::{
-    ATK_PER_LEVEL, DEF_PER_LEVEL, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION, XP_PER_LEVEL_STEP,
+    ATK_PER_LEVEL, DEF_PER_LEVEL, DIFFICULTY_EASY_MAX, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION,
+    XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
 /// rounded to the nearest whole point. With `ATK_PER_LEVEL`/`DEF_PER_LEVEL`
-/// both at 1, a multiplier has to cross a rounding boundary (roughly
-/// +0.5) to actually change those two — `HP_PER_LEVEL` (12) has much finer
+/// both at 2, a multiplier has to cross a rounding boundary (roughly
+/// +0.25) to actually change those two — `HP_PER_LEVEL` (24) has much finer
 /// effective granularity.
 fn scaled_growth(per_level: i32, growth_multiplier: f32) -> i32 {
     (per_level as f32 * growth_multiplier).round() as i32
@@ -87,7 +88,7 @@ impl StatRow {
 
 /// The indented lines under a level-up announcement, one per stat that
 /// actually moved. A stat that didn't is dropped: `ATK_PER_LEVEL` and
-/// `DEF_PER_LEVEL` are both 1, so a low `growth_multiplier` rounds them away
+/// `DEF_PER_LEVEL` are both 2, so a low `growth_multiplier` rounds them away
 /// on a given level (see `scaled_growth`), and "ATK 14 → 14" is noise.
 ///
 /// Lives here rather than in a frontend because all three sites that
@@ -104,6 +105,30 @@ pub fn stat_block(rows: &[StatRow]) -> Vec<String> {
 /// XP required to advance from `level` to `level + 1`.
 pub fn xp_for_level(level: u32) -> u32 {
     level * XP_PER_LEVEL_STEP
+}
+
+/// What a defeated program is worth: its whole HP bar, scaled by how hard it
+/// was to put down.
+///
+/// `power_ratio` is `game::inspection::power_ratio` — the victim's
+/// `Stats::power` over the player's, and the very number `difficulty_color`
+/// buckets into the con-colours already drawn on the map. That sharing is
+/// the point rather than a convenience: the glyph's colour is the only
+/// advance notice a fight's XP value gets, so the two must be one
+/// computation. Full XP lands at `DIFFICULTY_EASY_MAX`, the green/yellow
+/// boundary, which makes the whole rule "green pays less, yellow and up pays
+/// full or more".
+///
+/// Takes the ratio rather than the two powers so it stays a pure function of
+/// numbers, testable without a `Game` — the same reason `add_xp` takes
+/// `xp_boost_pct` instead of reading a buff off the world. `Game::kill_xp`
+/// is the one caller that knows where the powers come from.
+///
+/// See `XP_CHALLENGE_FLOOR`/`XP_CHALLENGE_CEIL` for why both clamps are
+/// load-bearing, in opposite directions.
+pub fn kill_xp(victim_max_hp: i32, power_ratio: f64) -> u32 {
+    let factor = (power_ratio / DIFFICULTY_EASY_MAX).clamp(XP_CHALLENGE_FLOOR, XP_CHALLENGE_CEIL);
+    (victim_max_hp.max(0) as f64 * factor).round() as u32
 }
 
 /// `base` after `levels_gained` level-ups at `growth_multiplier`, fully
@@ -187,7 +212,75 @@ pub fn add_xp(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL};
+    use crate::tuning::{
+        BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX,
+        XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
+    };
+
+    /// The rule a player can state from the map's con-colours alone: full XP
+    /// arrives exactly where green becomes yellow, so anything reading yellow
+    /// or worse pays its whole HP bar and anything green pays less.
+    #[test]
+    fn a_kill_pays_its_full_hp_bar_at_the_green_yellow_boundary() {
+        assert_eq!(kill_xp(200, DIFFICULTY_EASY_MAX), 200);
+        assert!(
+            kill_xp(200, DIFFICULTY_EASY_MAX - 0.2) < 200,
+            "still green: pays less than its bar"
+        );
+        assert!(
+            kill_xp(200, DIFFICULTY_EVEN_MAX) > 200,
+            "an even match is past the boundary and pays more"
+        );
+    }
+
+    /// The floor is what keeps the opening ring from paying literally
+    /// nothing once the party outclasses it — farming should be pointless,
+    /// not broken.
+    #[test]
+    fn an_outclassed_victim_pays_the_floor_rather_than_nothing() {
+        assert_eq!(kill_xp(200, 0.001), (200.0 * XP_CHALLENGE_FLOOR) as u32);
+        assert_eq!(
+            kill_xp(200, 0.0),
+            kill_xp(200, 0.001),
+            "the floor holds all the way down, so a ratio of zero is not a special case"
+        );
+    }
+
+    /// Without the ceiling a Stack guardian would earn a multiplier on top
+    /// of HP that `STACK_DEPTH_STAT_STEP` has already inflated — the double
+    /// count that made a handful of deep fights worth several levels.
+    #[test]
+    fn an_overwhelming_victim_pays_the_ceiling_rather_than_its_whole_ratio() {
+        let capped = (200.0 * XP_CHALLENGE_CEIL) as u32;
+        assert_eq!(kill_xp(200, 8.0), capped);
+        assert_eq!(
+            kill_xp(200, 40.0),
+            capped,
+            "five times deeper out of its depth is still the same cap"
+        );
+    }
+
+    /// The whole point of the change: the *same* program is worth less to a
+    /// stronger party. Asserted as a fall across a rising player power
+    /// rather than against fixed numbers, so it fails if the factor is ever
+    /// flattened back to a constant.
+    #[test]
+    fn the_same_victim_pays_less_as_the_party_outgrows_it() {
+        let victim_power = 53.0; // a zone-1 drone, 48 + 4 + 1
+        let earned: Vec<u32> = [98.0, 200.0, 400.0]
+            .iter()
+            .map(|player_power| kill_xp(48, victim_power / player_power))
+            .collect();
+        assert!(
+            earned[0] > earned[1] && earned[1] > earned[2],
+            "a drone should pay a level-1 party more than a grown one, got {earned:?}"
+        );
+    }
+
+    #[test]
+    fn a_victim_with_no_hp_bar_pays_nothing_at_any_ratio() {
+        assert_eq!(kill_xp(0, 4.0), 0);
+    }
 
     fn base_stats() -> Stats {
         Stats {
@@ -202,13 +295,14 @@ mod tests {
     fn a_multi_level_jump_reports_the_summed_stat_growth() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // Same 65 XP as `large_xp_gain_can_grant_multiple_levels`: two levels,
-        // so every delta reported has to be twice one level's growth rather
-        // than the last level's alone.
+        // Exactly the two levels `large_xp_gain_can_grant_multiple_levels`
+        // buys, so every delta reported has to be twice one level's growth
+        // rather than the last level's alone.
+        let two_levels = xp_for_level(1) + xp_for_level(2);
         let gain = add_xp(
             &mut exp,
             &mut stats,
-            65,
+            two_levels,
             BASELINE_GROWTH_MULTIPLIER,
             None,
             0,
@@ -223,22 +317,24 @@ mod tests {
     fn a_growth_multiplier_that_rounds_a_stat_away_reports_no_gain_for_it() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // 1.25x leaves ATK/DEF_PER_LEVEL (1) rounding back to 1 — the case
-        // `scaled_growth`'s doc warns about — while HP_PER_LEVEL (12) moves.
+        // 1.1x leaves ATK/DEF_PER_LEVEL (2) rounding back to 2 — the case
+        // `scaled_growth`'s doc warns about — while HP_PER_LEVEL (24) moves.
         // A stat that did move must still be reported, so this is not just
-        // "everything is zero".
-        let gain = add_xp(&mut exp, &mut stats, 20, 1.25, None, 0);
+        // "everything is zero". The window is narrower than it was at 1 point
+        // a level: 1.25x now genuinely moves ATK, which is the granularity
+        // `HP_PER_LEVEL`'s `K = 2` was meant to buy back.
+        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.1, None, 0);
         assert_eq!(gain.levels, 1);
-        assert_eq!(gain.max_hp, 15);
-        assert_eq!(gain.atk, 1);
-        assert_eq!(gain.def, 1);
+        assert_eq!(gain.max_hp, 26);
+        assert_eq!(gain.atk, ATK_PER_LEVEL, "1.1 * 2 rounds back to 2");
+        assert_eq!(gain.def, DEF_PER_LEVEL);
 
-        // 0.4x rounds ATK/DEF away entirely: 0.4 rounds to 0.
+        // 0.2x rounds ATK/DEF away entirely: 0.4 rounds to 0.
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        let gain = add_xp(&mut exp, &mut stats, 20, 0.4, None, 0);
+        let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 0.2, None, 0);
         assert_eq!(gain.levels, 1);
-        assert_eq!(gain.atk, 0, "0.4 * 1 rounds to no attack gain");
+        assert_eq!(gain.atk, 0, "0.2 * 2 rounds to no attack gain");
         assert_eq!(gain.def, 0);
     }
 
@@ -283,7 +379,7 @@ mod tests {
         let gain = add_xp(
             &mut exp,
             &mut stats,
-            20,
+            xp_for_level(1),
             BASELINE_GROWTH_MULTIPLIER,
             None,
             0,
@@ -318,7 +414,7 @@ mod tests {
         let levels = add_xp(
             &mut exp,
             &mut stats,
-            20,
+            xp_for_level(1),
             BASELINE_GROWTH_MULTIPLIER,
             None,
             0,
@@ -336,11 +432,12 @@ mod tests {
     fn large_xp_gain_can_grant_multiple_levels() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // level 1->2 costs 20, 2->3 costs 40: 65 xp should clear both.
+        // Both levels' cost plus 5 to spare should clear both and carry the
+        // remainder into the third.
         let levels = add_xp(
             &mut exp,
             &mut stats,
-            65,
+            xp_for_level(1) + xp_for_level(2) + 5,
             BASELINE_GROWTH_MULTIPLIER,
             None,
             0,
@@ -355,25 +452,25 @@ mod tests {
     fn growth_multiplier_scales_stat_gains_per_level_up() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // 1.5x rounds HP_PER_LEVEL (12) to 18 and ATK/DEF_PER_LEVEL (1) to 2,
+        // 1.5x rounds HP_PER_LEVEL (24) to 36 and ATK/DEF_PER_LEVEL (2) to 3,
         // crossing the rounding boundary scaled_growth's doc comment warns
-        // about — a smaller multiplier like 1.25 wouldn't move ATK/DEF at all.
-        let levels = add_xp(&mut exp, &mut stats, 20, 1.5, None, 0).levels;
+        // about — a smaller multiplier like 1.1 wouldn't move ATK/DEF at all.
+        let levels = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.5, None, 0).levels;
         assert_eq!(levels, 1);
         assert_eq!(
             stats.max_hp,
-            10 + 18,
-            "1.5x should scale HP growth up from 12 to 18"
+            10 + 36,
+            "1.5x should scale HP growth up from 24 to 36"
         );
         assert_eq!(
             stats.atk,
-            5 + 2,
-            "1.5x should scale ATK growth up from 1 to 2"
+            5 + 3,
+            "1.5x should scale ATK growth up from 2 to 3"
         );
         assert_eq!(
             stats.def,
-            5 + 2,
-            "1.5x should scale DEF growth up from 1 to 2"
+            5 + 3,
+            "1.5x should scale DEF growth up from 2 to 3"
         );
     }
 
@@ -482,32 +579,36 @@ mod tests {
         );
     }
 
-    /// A 50% `XpBoost` turns 15 gained xp into 23, clearing the 20-xp
-    /// threshold to level 2 — a case a flat "differs in the right
-    /// direction" assertion wouldn't catch, since the unboosted gain alone
-    /// wouldn't level up at all.
+    /// A 50% `XpBoost` turns three-quarters of a level's XP into more than
+    /// the whole of it, clearing the threshold to level 2 — a case a flat
+    /// "differs in the right direction" assertion wouldn't catch, since the
+    /// unboosted gain alone wouldn't level up at all.
     #[test]
     fn xp_boost_pct_scales_gained_xp_before_leveling() {
+        let three_quarters = xp_for_level(1) * 3 / 4;
         let mut unboosted_exp = Experience::default();
         let mut unboosted_stats = base_stats();
         let levels = add_xp(
             &mut unboosted_exp,
             &mut unboosted_stats,
-            15,
+            three_quarters,
             BASELINE_GROWTH_MULTIPLIER,
             None,
             0,
         )
         .levels;
-        assert_eq!(levels, 0, "15 xp alone doesn't clear the 20xp threshold");
-        assert_eq!(unboosted_exp.xp, 15);
+        assert_eq!(
+            levels, 0,
+            "three-quarters of a level's XP alone doesn't clear the threshold"
+        );
+        assert_eq!(unboosted_exp.xp, three_quarters);
 
         let mut boosted_exp = Experience::default();
         let mut boosted_stats = base_stats();
         let levels = add_xp(
             &mut boosted_exp,
             &mut boosted_stats,
-            15,
+            three_quarters,
             BASELINE_GROWTH_MULTIPLIER,
             None,
             50,
@@ -515,10 +616,14 @@ mod tests {
         .levels;
         assert_eq!(
             levels, 1,
-            "a 50% XpBoost turns 15 xp into 23, clearing the 20xp threshold"
+            "a 50% XpBoost lifts three-quarters of a level past the whole of it"
         );
         assert_eq!(boosted_exp.level, 2);
-        assert_eq!(boosted_exp.xp, 3, "23 - 20 carries over into the new level");
+        assert_eq!(
+            boosted_exp.xp,
+            three_quarters * 3 / 2 - xp_for_level(1),
+            "the excess carries over into the new level"
+        );
     }
 
     #[test]

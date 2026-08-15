@@ -155,7 +155,11 @@ impl Default for Experience {
         Self {
             level: 1,
             xp: 0,
-            xp_to_next: 20,
+            // Called, not copied. This was a literal 20 that silently agreed
+            // with `XP_PER_LEVEL_STEP` until the step moved, at which point
+            // every entity in the game — the player included — would have
+            // bought its first level at a quarter price.
+            xp_to_next: crate::progression::xp_for_level(1),
         }
     }
 }

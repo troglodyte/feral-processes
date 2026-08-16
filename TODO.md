@@ -6,7 +6,6 @@
 6. easter eggs (hidden commands & effects)
 7. remove 'move abilities' and use routines
 8. more machine learning
-9. i want the description of what i'm seeing as i'm walking in the stack, not with x | examine
 11. structures to keep base
 12. next zone unlocks are research -> upgrade base to zone 2
 20. too easy to level up, lets slow that down a bit

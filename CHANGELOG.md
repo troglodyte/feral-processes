@@ -27,6 +27,113 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.9.0
+
+**Saves written by 0.8.x still load.** `save::SAVE_FORMAT_VERSION` is
+unchanged at 29, so by the rule above this would ordinarily be a patch. The
+minor is deliberate: seventeen changes landed on `main` between the 0.8.35
+release and this one without being cut individually, and one number covering
+the lot reads more honestly than back-dating sixteen sections. The
+per-change rule stands; this is the correction, not a new practice.
+
+### The Stack describes itself as you walk it
+
+The description bank shipped with three lengths of prose per subject, and
+the one-sentence length had a single reader: the line that fires the first
+time a feature comes into view. So a plain corridor said **nothing at all**
+— the floor and doorway prose was written, shipped, and unreachable — and
+ground already on your map was silent forever after, which made walking back
+through a frame a wordless trudge.
+
+There are now two narration axes. **Discovery** is unchanged: the first
+sight of something worth walking to, once ever. **Passage** is new, fires as
+you arrive somewhere, and describes whatever your line of sight settles on
+ahead — with no notion of *new*, so a corridor you have walked ten times
+still has something to say about itself.
+
+Both resolve through one pick, the same one the examine key uses, so the
+corridor cannot announce a cache that `x` then declines to name.
+
+**Which cells speak is a property of the place**, folded out of the frame
+and the coordinates rather than rolled — so a corridor keeps its rhythm
+across a save and reload and on every later walk, and opening a log line
+costs nothing from the run's shared randomness. Roughly one cell in three,
+which is a first guess at a feel question.
+
+A **live Stack market** is now announced like any other find. It was the one
+unspent feature missing from that ranking, so nothing ever mentioned a stall
+and the examine ray looked straight through one.
+
+### Work orders: the base fetches, delivers, and finishes
+
+The base that started staffing itself in 0.8.35 was still hoarding and
+still hand-making things it already owned.
+
+**A worker fetches from a Depot before making the thing.** The scheduler
+worked deepest-first, so a feeder outranked the bench it fed and your one
+spare body went upstream to hand-make what was already sitting on a shelf.
+A full batch on a shelf now settles it. One statement of "is a batch of this
+in reach" answers for both the scheduler and the walker, so a bench that
+gets staffed is a bench that gets fetched for.
+
+**A machine with nothing downstream delivers as it produces.** Pickup used
+to wait for a clog, so a lone extractor sat on twenty units the base could
+not count. If no neighbour's recipe wants its output, the worker walks each
+cycle's payout to the nearest Depot. Depot placement now paces a lone
+extractor — deliberately, and the number most likely to want retuning after
+play.
+
+**A work order staffs every machine that makes the item, not one.** Deploy a
+second Mining Node because the first one's output is eaten by the assembler
+beside it, and it used to stand empty for the rest of the run. The mirror
+failure went too: an unfed twin bench in a corner no longer refuses an order
+the base can already fill through a line that is whole.
+
+**Cancelling an order mid-walk no longer destroys the load** the worker was
+carrying, and a **finished order reads green** in the base log instead of
+sitting dim among the routine payouts.
+
+### The Stack
+
+- **An escort's death no longer collapses the stack.** Cut down one of a
+  guardian's escort, jack out with the guardian untouched, and the lair was
+  spent and the whole stack folded on the way out.
+- **A guardian can no longer be walked off with.** Taming one recorded
+  nothing, so the lair refilled on the next visit over a stack that could
+  never be finished — and the guardian could be farmed indefinitely.
+
+### Battle
+
+- **The battle log can be walked back.** Narration that outgrew the pane was
+  gone from every screen in the game — a round runs to 18 lines against a
+  pane seating about 15, and the results page lands the salvage tally and
+  every fighter's XP in the same space. Up and Down now walk the window on
+  both the battle screen and the results page, with a hint naming what is
+  out of sight.
+- **The summary reports one decompile verdict, not one per catalyst.** Six
+  catalysts fed to one program left six near-identical refusals on the
+  results screen, only the newest of which still said anything true.
+
+### Screens
+
+- **The manifest reads as a panel** at two-thirds its old scale, and **`M` on
+  the roster** opens the highlighted program's sheet — Esc comes back with
+  that row still highlighted.
+- **A roster row and an inventory row shed their tags** onto an indented
+  continuation instead of running off the popup. The worst roster row ran
+  382px past the edge, taking the activity and CRITICAL marks with it; the
+  worst inventory row ran 68px over, taking the whole answer to what the item
+  would do if you put it on. Ordinary rows are untouched.
+- **The last perk's description is no longer torn off the list.** It was
+  drawn detached at the foot of the box under a blank scroll indicator. The
+  research picker had the identical defect and gets the identical fix.
+- **An idle program stops claiming to be in your party** on the Base Staff
+  screen. "Neither staff nor party" is the state a program is tamed into and
+  the one it is stood down to — the common case read as the one it was least
+  likely to be.
+- **A party drain narrates green** like a patch, keeping its numbers. It is
+  the one line in the game with a figure on either side of it.
+
 ## 0.8.35
 
 ### Work orders: the base staffs itself

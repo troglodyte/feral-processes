@@ -103,40 +103,19 @@ pub(super) struct ManifestLayout {
     pub(super) meters: Vec<Rect>,
     pub(super) sections: Vec<Rect>,
     pub(super) footer: Rect,
-    /// The metrics every box above was measured with, which are **not** the
-    /// window's — see `SHEET_SCALE`. Returned rather than left for the caller
-    /// to recompute so the drawing cannot disagree with the arithmetic about
-    /// what size the page is.
-    pub(super) metrics: Metrics,
 }
-
-/// The whole sheet — frame, text, boxes, gaps and all — is drawn at this
-/// fraction of the window's own scale, so it reads as a panel rather than as
-/// a full screen.
-///
-/// It is one constant applied to both halves rather than a smaller
-/// `FRAME_*_PCT` alone, because the page's *content* is sized off `Metrics`
-/// while its frame is sized off the window: shrinking the frame on its own
-/// leaves the same rows in a smaller box, which the worst-case program page
-/// overflows by ~118px at 720p and ~79px at 1440p. Scaling both keeps
-/// `the_real_worst_case_pages_fit_the_tightest_window` true by construction
-/// — every term in that budget moves together.
-pub(super) const SHEET_SCALE: f32 = 2.0 / 3.0;
 
 /// How much of the window the sheet claims. Not the full window: the status
 /// banner (see `draw_status_banner`) lives in the bottom strip, and a refusal
 /// drawn over the footer would be unreadable.
-const FRAME_W_PCT: f32 = 0.92 * SHEET_SCALE;
-const FRAME_H_PCT: f32 = 0.90 * SHEET_SCALE;
+const FRAME_W_PCT: f32 = 0.92;
+const FRAME_H_PCT: f32 = 0.90;
 
 /// Header rows: a name line and a subtitle line. The glyph is drawn to their
 /// left at twice the title size and spans both, so it costs no rows of its
 /// own — which the 720px budget needs it not to.
 const HEADER_ROWS: f32 = 2.0;
 
-/// `m` is the *window's* metrics; everything below is laid out at
-/// `SHEET_SCALE` of them, and the scaled set comes back on the layout for the
-/// caller to draw with.
 pub(super) fn manifest_layout(
     screen_w: f32,
     screen_h: f32,
@@ -144,8 +123,6 @@ pub(super) fn manifest_layout(
     sections: &[Section],
     m: &Metrics,
 ) -> ManifestLayout {
-    let sheet = m.scaled(SHEET_SCALE);
-    let m = &sheet;
     let w = screen_w * FRAME_W_PCT;
     let h = screen_h * FRAME_H_PCT;
     let frame = Rect::new((screen_w - w) / 2.0, (screen_h - h) / 2.0, w, h);
@@ -226,7 +203,6 @@ pub(super) fn manifest_layout(
         meters: meter_rects,
         sections: placed.into_iter().flatten().collect(),
         footer,
-        metrics: sheet,
     }
 }
 

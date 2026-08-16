@@ -27,6 +27,17 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.9.1
+
+### Screens
+
+- **The manifest goes back to full size.** 0.9.0 drew the sheet at
+  two-thirds scale so it would read as a panel; it reads worse. The frame is
+  back at 92% x 90% of the window and the page is back on the window's own
+  metrics, so `manifest_layout` no longer scales anything or hands metrics
+  back to the caller. `M` on the roster is untouched — that half of 0.9.0
+  stays.
+
 ## 0.9.0
 
 **Saves written by 0.8.x still load.** `save::SAVE_FORMAT_VERSION` is

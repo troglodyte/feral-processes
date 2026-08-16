@@ -58,10 +58,6 @@ pub(super) fn draw_manifest(
         &sections,
         m,
     );
-    // The sheet is drawn at its own scale rather than the window's, and the
-    // layout is where that scale is decided — so every size below comes off
-    // the layout instead of off the caller's metrics. See `SHEET_SCALE`.
-    let m = &l.metrics;
 
     painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
     painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
@@ -1039,11 +1035,8 @@ mod tests {
         let line = tags.join("   ");
 
         with_painter(|p| {
-            let l = manifest_layout(1440.0, 900.0, 4, &[], &ui_metrics(900.0));
-            // Measured at the sheet's own scale, not the window's — the
-            // header rect and the text in it shrink together, so this stays
-            // a question about the ratio between them.
-            let m = &l.metrics;
+            let m = ui_metrics(900.0);
+            let l = manifest_layout(1440.0, 900.0, 4, &[], &m);
             // The glyph portrait and a pad sit left of the text; the tag line
             // starts there and has the rest of the header to run into.
             let portrait = p.measure_map("@", m.title() * 2).width + m.pad;

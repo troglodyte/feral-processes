@@ -7,14 +7,24 @@ use crate::*;
 /// must not have their highlight reset to the top of it. Every other mode
 /// change starts fresh — see `App::handle_key`.
 ///
-/// Both of these are a screen backing out into the one that opened it, and in
+/// The first two are a screen backing out into the one that opened it, and in
 /// both the returning handler has already put `menu_selected` on the row the
 /// side-trip was about: `leave_manifest` on whoever the sheet was showing,
 /// `leave_staffing` on the structure that was staffed.
+///
+/// The roster's pair is the outward leg as well, which the others don't need.
+/// `Mode::Manifest` indexes nothing with `menu_selected` — it pages with ←/→
+/// off `pending_manifest` — so the roster's row is simply parked there for the
+/// duration, and that parked value is what Esc restores when the sheet has
+/// been paged onto the player, who has no roster row for `leave_manifest` to
+/// find.
 fn keeps_highlight(before: Mode, after: Mode) -> bool {
     matches!(
         (before, after),
-        (Mode::Manifest, Mode::ManifestPick) | (Mode::StructureAssign, Mode::Structures)
+        (Mode::Manifest, Mode::ManifestPick)
+            | (Mode::StructureAssign, Mode::Structures)
+            | (Mode::Companion, Mode::Manifest)
+            | (Mode::Manifest, Mode::Companion)
     )
 }
 

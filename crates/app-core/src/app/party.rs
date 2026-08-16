@@ -6,8 +6,8 @@ impl App {
     /// Lists every tamed program you own, wherever it is. Every action on
     /// this screen acts on the highlight — `P` adds the highlighted program
     /// to the party or stands it down again, `<` and `>` shift it along the
-    /// battle line, `N`/`E`/`W` rename, gear and wield it — so a row's
-    /// number or letter *only* moves the highlight.
+    /// battle line, `N`/`E`/`W` rename, gear and wield it, `M` reads its
+    /// manifest — so a row's number or letter *only* moves the highlight.
     ///
     /// It used to toggle party membership on the spot, which meant a stray
     /// digit, or an Enter aimed at a screen that has never had one, stood a
@@ -40,6 +40,10 @@ impl App {
         }
         if key == GameKey::Char('P') {
             self.toggle_party_member();
+            return;
+        }
+        if key == GameKey::Char('M') {
+            self.open_companion_manifest();
             return;
         }
 
@@ -153,6 +157,27 @@ impl App {
         // slots, and can sit well past their end.
         self.menu_selected = 0;
         self.mode = Mode::CompanionEquip;
+    }
+
+    /// Opens the highlighted program's stat sheet — the same manifest the
+    /// party menu's picker and the map's `x` open, reached from the screen
+    /// the player is already comparing programs on.
+    ///
+    /// Handled before `selected_index` and bound to an uppercase key for the
+    /// reason `open_companion_equip` gives. Unlike that one it leaves
+    /// `menu_selected` alone: the manifest indexes nothing with it, and the
+    /// parked row is what Esc comes back to when ←/→ has paged the sheet onto
+    /// the player, who has no roster row of their own.
+    fn open_companion_manifest(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some(program) = game.owned_pets().get(row).map(|p| p.entity) else {
+            return;
+        };
+        self.pending_manifest = Some(program);
+        self.manifest_origin = ManifestOrigin::Roster;
+        self.status_line = None;
+        self.mode = Mode::Manifest;
     }
 
     /// The slot page for `pending_equip_program`: three rows, each opening

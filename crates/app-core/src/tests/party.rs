@@ -478,3 +478,94 @@ fn a_slot_with_nothing_to_fit_it_reports_that_instead_of_an_empty_picker() {
         app.status_line
     );
 }
+
+/// `M` on the roster opens the sheet for the row under the highlight, and Esc
+/// comes back to the roster with that row still highlighted — the roster is
+/// where a player compares two programs, so reading one's numbers must not
+/// cost the place they were reading from.
+#[test]
+fn m_reads_the_highlighted_programs_manifest_and_esc_returns_to_the_roster() {
+    let mut app = app_with_companions_in_the_party(775, 2);
+    let roster = roster(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1, "the second program is highlighted");
+
+    app.handle_key(GameKey::Char('M'));
+
+    assert_eq!(app.mode, Mode::Manifest);
+    assert_eq!(
+        app.pending_manifest,
+        Some(roster[1]),
+        "the sheet is the highlighted program's, not the first row's"
+    );
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(
+        app.mode,
+        Mode::Companion,
+        "Esc backs into the roster rather than out to the map"
+    );
+    assert_eq!(
+        app.menu_selected, 1,
+        "and lands back on the row the sheet was opened from"
+    );
+}
+
+/// Paging the sheet with ←/→ and then leaving lands the roster's highlight on
+/// whoever was on screen, the same rule `Mode::ManifestPick` follows: the list
+/// should agree with the sheet just left.
+#[test]
+fn paging_the_sheet_moves_the_rosters_highlight_to_match() {
+    let mut app = app_with_companions_in_the_party(776, 2);
+    let roster = roster(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Char('M'));
+    assert_eq!(app.pending_manifest, Some(roster[0]));
+
+    // The subjects are the player first, then the roster — so two steps
+    // forward from the first program is the second one.
+    let subjects = app.manifest_subjects();
+    let from = subjects.iter().position(|&s| s == roster[0]).unwrap();
+    let steps = (subjects.iter().position(|&s| s == roster[1]).unwrap() + subjects.len() - from)
+        % subjects.len();
+    for _ in 0..steps {
+        app.handle_key(GameKey::Right);
+    }
+    assert_eq!(app.pending_manifest, Some(roster[1]));
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(
+        app.menu_selected, 1,
+        "the highlight follows the sheet, not the row M was pressed on"
+    );
+}
+
+/// The roster has no row for the player, so a sheet paged onto them leaves the
+/// highlight standing where it was rather than snapping to the top. The parked
+/// row is what `keeps_highlight` carries across the side trip; without it this
+/// returns to row 0 and the player loses their place by reading their own
+/// stats.
+#[test]
+fn paging_onto_the_player_leaves_the_rosters_highlight_alone() {
+    let mut app = app_with_companions_in_the_party(777, 2);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('M'));
+
+    let player = app.game.as_mut().unwrap().manifest_subjects()[0];
+    while app.pending_manifest != Some(player) {
+        app.handle_key(GameKey::Right);
+    }
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(
+        app.menu_selected, 1,
+        "the row M was pressed on is still highlighted"
+    );
+}

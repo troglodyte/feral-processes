@@ -25,8 +25,10 @@ pub(super) struct ManifestNav {
     /// ←/→ page between subjects. False for a wild program, which isn't in
     /// the owned list and so has nowhere to page to.
     pub(super) cyclable: bool,
-    /// Esc returns to the picker rather than to the map.
-    pub(super) from_picker: bool,
+    /// Esc returns to the list this was opened from — the manifest picker or
+    /// the roster — rather than to the map. Which of the two is app-core's
+    /// business (`ManifestOrigin`); the footer only has to know there is one.
+    pub(super) back_to_list: bool,
 }
 
 pub(super) fn draw_manifest(
@@ -56,6 +58,10 @@ pub(super) fn draw_manifest(
         &sections,
         m,
     );
+    // The sheet is drawn at its own scale rather than the window's, and the
+    // layout is where that scale is decided — so every size below comes off
+    // the layout instead of off the caller's metrics. See `SHEET_SCALE`.
+    let m = &l.metrics;
 
     painter.rect(l.frame.x, l.frame.y, l.frame.w, l.frame.h, PANEL_BG);
     painter.rect_lines(l.frame.x, l.frame.y, l.frame.w, l.frame.h, 2.0, BORDER);
@@ -85,7 +91,7 @@ pub(super) fn draw_manifest(
     if nav.cyclable {
         footer.push("←/→ other programs");
     }
-    footer.push(if nav.from_picker {
+    footer.push(if nav.back_to_list {
         "Esc back to list"
     } else {
         "Esc back"
@@ -1033,8 +1039,11 @@ mod tests {
         let line = tags.join("   ");
 
         with_painter(|p| {
-            let m = ui_metrics(900.0);
-            let l = manifest_layout(1440.0, 900.0, 4, &[], &m);
+            let l = manifest_layout(1440.0, 900.0, 4, &[], &ui_metrics(900.0));
+            // Measured at the sheet's own scale, not the window's — the
+            // header rect and the text in it shrink together, so this stays
+            // a question about the ratio between them.
+            let m = &l.metrics;
             // The glyph portrait and a pad sit left of the text; the tag line
             // starts there and has the rest of the header to run into.
             let portrait = p.measure_map("@", m.title() * 2).width + m.pad;

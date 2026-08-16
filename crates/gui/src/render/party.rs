@@ -16,7 +16,7 @@ use super::*;
 /// wielded program fills, because that word starts with the capital letter
 /// the census below forbids anywhere in these lines. That is the constraint
 /// working, not a phrasing accident.
-fn companion_help() -> [String; 4] {
+fn companion_help() -> [String; 5] {
     [
         format!(
             "P adds the highlighted program to your party (max {MAX_PARTY_SIZE}), or stands a member back down."
@@ -26,6 +26,8 @@ fn companion_help() -> [String; 4] {
         "N renames the highlighted program; clear the name to go back to its species."
             .to_string(),
         "E fits gear to the highlighted program, out of your own cargo."
+            .to_string(),
+        "M reads the highlighted program's manifest — its full stat sheet."
             .to_string(),
     ]
 }
@@ -617,6 +619,21 @@ mod tests {
         assert!(
             companion_help().iter().any(|line| line.starts_with("P ")),
             "the roster must say which key stands a program in the party: {:?}",
+            companion_help()
+        );
+    }
+
+    /// The manifest is the one screen that states a program's potential
+    /// rolls, affinities, growth and base job — none of which the roster's own
+    /// stat row carries. Reached from the party menu's picker as well, so a
+    /// player who never finds this key is not locked out of anything; what the
+    /// line buys is that comparing two programs' full sheets doesn't mean
+    /// backing all the way out to a menu between each one.
+    #[test]
+    fn the_companion_screen_names_the_manifest_key() {
+        assert!(
+            companion_help().iter().any(|line| line.starts_with("M ")),
+            "the roster must say which key opens a program's manifest: {:?}",
             companion_help()
         );
     }

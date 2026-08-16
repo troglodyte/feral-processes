@@ -531,7 +531,7 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow])
 fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let pending_manifest = app.pending_manifest;
-    let manifest_from_picker = app.manifest_from_picker;
+    let manifest_origin = app.manifest_origin;
     let pending_field_routine = app.pending_field_routine;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
@@ -649,7 +649,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             let nav = ManifestNav {
                 cyclable: subjects.len() > 1
                     && pending_manifest.is_some_and(|e| subjects.contains(&e)),
-                from_picker: manifest_from_picker,
+                back_to_list: manifest_origin.returns_to_list(),
             };
             draw_manifest(game, pending_manifest, nav, painter, m)
         }

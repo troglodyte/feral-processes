@@ -43,7 +43,7 @@ impl App {
         match game.find_target_in_direction(dx, dy, EXAMINE_RANGE_TILES) {
             Some(InspectTarget::Creature(entity)) => {
                 self.pending_manifest = Some(entity);
-                self.manifest_from_picker = false;
+                self.manifest_origin = ManifestOrigin::Map;
                 self.status_line = None;
                 self.mode = Mode::Manifest;
             }
@@ -96,7 +96,7 @@ impl App {
         let subjects = self.manifest_subjects();
         if let Some(idx) = self.selected_index(key, subjects.len()) {
             self.pending_manifest = Some(subjects[idx]);
-            self.manifest_from_picker = true;
+            self.manifest_origin = ManifestOrigin::Picker;
             self.status_line = None;
             self.mode = Mode::Manifest;
         }
@@ -127,23 +127,52 @@ impl App {
         self.pending_manifest = Some(subjects[next]);
     }
 
-    /// Esc from the manifest: back to the picker it was opened from, or to
-    /// the map if it was opened from there.
+    /// Esc from the manifest: back to the list it was opened from, or to the
+    /// map if it was opened from there.
     ///
-    /// Returning to the picker re-highlights whoever the sheet was showing
-    /// rather than the row originally picked — after paging with ←/→ those
-    /// differ, and the list should agree with the sheet you just left.
+    /// Either list re-highlights whoever the sheet was *showing* rather than
+    /// the row originally picked — after paging with ←/→ those differ, and
+    /// the list should agree with the sheet you just left.
+    ///
+    /// The two lists differ in what they can be asked for. The picker holds
+    /// every subject the manifest can page to, so the lookup always lands;
+    /// the roster holds programs only, so a sheet paged onto the *player* has
+    /// no row there, and the highlight is left standing where it was rather
+    /// than snapped to the top — which is what `keeps_highlight` parks it for
+    /// across the side trip.
     fn leave_manifest(&mut self) {
-        if !self.manifest_from_picker {
-            self.pending_manifest = None;
-            self.mode = Mode::Playing;
-            return;
+        match self.manifest_origin {
+            ManifestOrigin::Map => {
+                self.pending_manifest = None;
+                self.mode = Mode::Playing;
+            }
+            ManifestOrigin::Picker => {
+                let subjects = self.manifest_subjects();
+                self.menu_selected = self
+                    .pending_manifest
+                    .and_then(|e| subjects.iter().position(|&s| s == e))
+                    .unwrap_or(0);
+                self.mode = Mode::ManifestPick;
+            }
+            ManifestOrigin::Roster => {
+                if let Some(row) = self.roster_row_of(self.pending_manifest) {
+                    self.menu_selected = row;
+                }
+                self.mode = Mode::Companion;
+            }
         }
-        let subjects = self.manifest_subjects();
-        self.menu_selected = self
-            .pending_manifest
-            .and_then(|e| subjects.iter().position(|&s| s == e))
-            .unwrap_or(0);
-        self.mode = Mode::ManifestPick;
+    }
+
+    /// Where `entity` sits in the roster `Mode::Companion` lists, if it is in
+    /// it at all. Read through `owned_pets` rather than `manifest_subjects`
+    /// because those are two different lists — the roster has no player row,
+    /// so their indices agree only by luck.
+    fn roster_row_of(&mut self, entity: Option<Entity>) -> Option<usize> {
+        let entity = entity?;
+        self.game
+            .as_mut()?
+            .owned_pets()
+            .iter()
+            .position(|p| p.entity == entity)
     }
 }

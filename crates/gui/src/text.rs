@@ -90,15 +90,21 @@ impl Metrics {
     pub fn small(&self) -> u16 {
         self.font_size - 4
     }
+
+    /// The same proportions at a fraction of the size, for a screen drawn
+    /// smaller than the window it sits in. Deliberately not clamped to
+    /// `MIN_UI_FONT`: that floor is the legibility limit for the UI the
+    /// window *is*, and a screen that has chosen to draw itself small is
+    /// asking to go under it — see `manifest_layout::SHEET_SCALE`, the one
+    /// caller.
+    pub fn scaled(&self, factor: f32) -> Metrics {
+        metrics_for((self.font_size as f32 * factor).round().max(1.0) as u16)
+    }
 }
 
-/// UI text scales continuously with window height, unlike map glyphs.
-/// `TextParams::font_size` is a `u16`, so sizes are already quantized to
-/// whole pixels and the font atlas gains at most a few dozen entries over
-/// a resize drag — no separate stepping scheme is needed.
-pub fn ui_metrics(window_height: f32) -> Metrics {
-    let scaled = (BASE_UI_FONT * window_height / REFERENCE_HEIGHT).round();
-    let font_size = (scaled as u16).clamp(MIN_UI_FONT, MAX_UI_FONT);
+/// Every derived dimension off one font size, so `ui_metrics` and
+/// `Metrics::scaled` cannot disagree about the proportions.
+fn metrics_for(font_size: u16) -> Metrics {
     let f = font_size as f32;
     Metrics {
         font_size,
@@ -107,6 +113,15 @@ pub fn ui_metrics(window_height: f32) -> Metrics {
         inset: f * INSET_RATIO,
         gap: f * GAP_RATIO,
     }
+}
+
+/// UI text scales continuously with window height, unlike map glyphs.
+/// `TextParams::font_size` is a `u16`, so sizes are already quantized to
+/// whole pixels and the font atlas gains at most a few dozen entries over
+/// a resize drag — no separate stepping scheme is needed.
+pub fn ui_metrics(window_height: f32) -> Metrics {
+    let scaled = (BASE_UI_FONT * window_height / REFERENCE_HEIGHT).round();
+    metrics_for((scaled as u16).clamp(MIN_UI_FONT, MAX_UI_FONT))
 }
 
 #[cfg(test)]

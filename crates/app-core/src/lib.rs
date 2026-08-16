@@ -619,6 +619,33 @@ pub fn filtered_out_count(lines: &[LogLine], filter: LogFilter) -> usize {
     lines.iter().filter(|l| !filter.accepts(l.source)).count()
 }
 
+/// Which screen opened `Mode::Manifest`, and so where its Esc goes back to.
+///
+/// An enum rather than the bool this replaced because there are now three
+/// answers and two of them are lists: the manifest picker and the roster are
+/// different screens indexing different sets — the roster holds programs
+/// only, so paging to the player with ←/→ has no row there to come back to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ManifestOrigin {
+    /// `x` at a creature on the map. There is no list to return to, and the
+    /// wild program on the sheet is not in one, so Esc goes straight back to
+    /// play.
+    #[default]
+    Map,
+    /// `Mode::ManifestPick`.
+    Picker,
+    /// The roster, `Mode::Companion`, via `M`.
+    Roster,
+}
+
+impl ManifestOrigin {
+    /// Whether Esc backs into a list rather than onto the map — the one
+    /// thing the manifest's footer needs to know about where it came from.
+    pub fn returns_to_list(self) -> bool {
+        !matches!(self, ManifestOrigin::Map)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     MainMenu,
@@ -1198,10 +1225,9 @@ pub struct App {
     /// the moment `x` was pressed, and the popup must not change under the
     /// player if something later moves them.
     pub pending_description: Option<String>,
-    /// Whether `Mode::Manifest` was opened from `Mode::ManifestPick`, which
-    /// is where Esc then goes back to. Reached from the map with `x` instead,
-    /// there is no list to return to and Esc goes straight back to play.
-    pub manifest_from_picker: bool,
+    /// Which screen `Mode::Manifest` was opened from, and so where Esc goes
+    /// back to. See `ManifestOrigin`.
+    pub manifest_origin: ManifestOrigin,
     /// Which of the log's two channels the map's pane shows. Cycled with `F`;
     /// see `LogFilter`.
     pub log_filter: LogFilter,

@@ -40,7 +40,7 @@ impl App {
             pending_manifest: None,
             pending_structure_manifest: None,
             pending_description: None,
-            manifest_from_picker: false,
+            manifest_origin: ManifestOrigin::default(),
             pending_fuse_first: None,
             pending_fuse_second: None,
             fuse_name_input: String::new(),

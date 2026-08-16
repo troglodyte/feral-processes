@@ -27,6 +27,70 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.9.2
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29.
+A save written before this release keeps its level and its banked XP; what
+changes is the price of the next level.
+
+### XP measures how hard the fight was, not how big the target was
+
+Levelling was too fast, and the reason was that a kill paid out its victim's
+HP bar. A bar is a property of the thing you hit, not of the fight — so the
+cheapest way to level was to find the fattest thing you could already beat
+without effort and keep beating it. Four fights three frames down a Stack
+could hand over five levels.
+
+A kill is now priced by challenge: the victim's bar, scaled by how it
+compared to you. The scale is the same one the con colour has always used to
+tell you whether something was safe, so what the screen calls a hard fight is
+now literally what pays more, clamped between a quarter and double. Something
+far beneath you still pays *something* — the floor is there so a player with
+nowhere harder to go is slowed rather than stopped — and something far above
+you cannot pay unboundedly, because the ceiling is what stops one lucky kill
+from skipping a tier.
+
+The denominator is your own power alone, not the party's. Counting companions
+would dock you XP for recruiting them, which is the opposite of what the
+roster is for.
+
+Measured against the real roster: reaching level 5 in the opening zone costs
+about 34 kills where it used to cost about 6. Grinding zone-1 drones from
+level 5 to 10 costs 208 kills — the dead end, and deliberately so. The same
+stretch costs 37 kills four frames down a zone-1 Stack, which is the way out
+of it. Playing on curve, at the level a zone actually asks for, settles at
+about 4 kills a level. The numbers and how to reproduce them are in
+`docs/measurements/2026-08-15-challenge-xp-pacing.md`.
+
+### Levels come at half the count and twice the size
+
+Slowing XP alone would have made every level worth the same as before while
+arriving half as often, which is just a longer game. So the ladder was
+rebuilt around it: there are half as many levels to a run, and each one
+grants twice as much. Every per-level constant carries that factor, and the
+XP a level costs carries its square, so the *power* curve is unchanged —
+you are as strong at a given point in the run as you were before, you simply
+got there in fewer, larger steps.
+
+Species ability unlock levels moved into the same currency, so a routine
+still arrives at the same point in a program's growth rather than at half of
+it. That is a data change across all seventeen species files; the schema note
+in `assets/species/README.md` says what the levels now mean, and a mod's own
+species files should be halved to match.
+
+Both halves of the claim were checked by instruments rather than argued:
+`balance_sim`'s reach curve halved while staying linear, and the ability
+magnitude pin reproduced its existing band at half the level with the band
+itself untouched.
+
+### Fixed
+
+- **A level's XP threshold is derived on load, not trusted from the file.**
+  It was already being written into the save and read back out, which meant a
+  save written under the old curve would have carried the old threshold into
+  the new one. Both load paths now compute it from the level, so the field is
+  written and ignored — removing it is what would cost a save-format bump.
+
 ## 0.9.1
 
 ### Screens

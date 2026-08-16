@@ -29,7 +29,6 @@
       here to reopening the unbounded-income hole the scan perk was deleted
       for, since a Mining Node produces sellable salvage forever. Teardown
       shipped instead: bounded by fights taken, which is the spine.
-22. base staff should show stats in the selection menu
 
 
 # Bugs

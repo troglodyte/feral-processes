@@ -209,8 +209,8 @@ fn a_banked_item_is_refused_even_with_its_machine_standing() {
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
 
     assert_eq!(
-        crate::game::base::work_orders::producer_of(&game, &ItemId::from("research_data")),
-        Some(node),
+        crate::game::base::work_orders::producers_of(&game, &ItemId::from("research_data")),
+        vec![node],
         "precondition: the machine that gathers it is deployed and findable"
     );
 
@@ -707,6 +707,76 @@ fn two_staff_take_the_two_deepest_machines() {
         "scarce bodies go upstream first; the Disk Press waits"
     );
     assert!(posts.iter().all(|&p| p != press));
+}
+
+/// **Every machine that makes the ordered item is a want, not the first
+/// one.** A base that builds a second Mining Node because the first one's
+/// output is being eaten by the assembler beside it has doubled its own
+/// capacity, and the order has to see the machine it just paid for.
+#[test]
+fn a_second_machine_making_the_ordered_item_is_staffed_too() {
+    let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+
+    game.tick();
+
+    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    posts.sort();
+    let mut expected = vec![first, second];
+    expected.sort();
+    assert_eq!(
+        posts, expected,
+        "both Mining Nodes make Core Fragments, so both want a body"
+    );
+}
+
+/// The report is built by calling `wants`, so the screen has to name the
+/// second machine as well — a player who cannot see the node they just
+/// deployed on the order's line has no way to tell it was picked up.
+#[test]
+fn the_report_names_every_machine_making_the_ordered_item() {
+    let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 1);
+    let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+
+    let report = game.work_order_report();
+
+    let mut listed: Vec<Entity> = report[0].machines.iter().map(|m| m.entity).collect();
+    listed.sort();
+    let mut expected = vec![first, second];
+    expected.sort();
+    assert_eq!(listed, expected);
+}
+
+/// `producers_of` returning several is also what stops a *whole* line being
+/// refused on the strength of an unfed twin. Two Disk Presses, only one of
+/// them beside a Lathe: the base can make Routine Disks, so the order
+/// stands.
+#[test]
+fn a_second_unfed_bench_does_not_refuse_a_line_that_is_whole() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    // Lower in `(x, y)` order than the fed Press, so an arbitrary
+    // first-producer pick lands on the one with nothing beside it.
+    let orphan = spawn_machine_at(&mut game, "disk_press", 0, 4);
+    assert_eq!(
+        crate::game::base::work_orders::producers_of(&game, &ItemId::from("routine_disk")),
+        vec![orphan, press],
+        "precondition: the unfed twin is the one an arbitrary pick would take"
+    );
+
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .expect("one whole line is enough for the order to stand");
+
+    assert_eq!(game.work_orders().len(), 1);
 }
 
 /// An order is a **target level, not a production run** — three already in
@@ -1212,8 +1282,9 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     // Somewhere else for the scheduler to want a body, so the pass that
     // frees one is actually reached: with every want already filled it
     // returns before touching anybody. Placed *after* the mine in `(x, y)`
-    // order, since `producer_of` picks the lowest and the order has to land
-    // on the machine beside the depot.
+    // order, since `wants` sorts by tile at equal depth and is truncated to
+    // the one staff member — the order has to land on the machine beside
+    // the depot.
     let spare = spawn_machine_at(&mut game, "mining_node", 3, 3);
     game.set_standing_job(spare, true, false).unwrap();
     hire(&mut game, 1);

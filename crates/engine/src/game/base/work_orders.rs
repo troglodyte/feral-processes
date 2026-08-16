@@ -43,14 +43,21 @@ pub struct WorkOrder {
     pub qty: u32,
 }
 
-/// The deployed structure whose def puts `item` into an output buffer, or
-/// `None` if nothing standing makes it.
+/// **Every** deployed structure whose def puts `item` into an output
+/// buffer, empty if nothing standing makes it.
 ///
-/// Ties are broken by tile and then entity, so two machines making the same
-/// thing resolve the same way on every run — bevy's query iteration order
-/// is not stable, and `assembler_system` sorts its own machines for exactly
-/// this reason.
-pub(crate) fn producer_of(game: &Game, item: &ItemId) -> Option<Entity> {
+/// All of them, not the first: a base that builds a second Mining Node
+/// because the first one's output is being eaten by the assembler beside it
+/// has doubled its own capacity, and an order that rooted its walk at one
+/// arbitrary machine would leave the one just paid for standing empty
+/// forever. The same plurality is what stops an unfed twin bench refusing a
+/// line that is whole elsewhere in the base.
+///
+/// Sorted by tile and then entity, so two machines making the same thing
+/// resolve the same way on every run — bevy's query iteration order is not
+/// stable, and `assembler_system` sorts its own machines for exactly this
+/// reason.
+pub(crate) fn producers_of(game: &Game, item: &ItemId) -> Vec<Entity> {
     let db = game.world.resource::<StructureDb>();
     let mut found: Vec<(i32, i32, Entity)> = game
         .world
@@ -63,7 +70,7 @@ pub(crate) fn producer_of(game: &Game, item: &ItemId) -> Option<Entity> {
         })
         .collect();
     found.sort();
-    found.first().map(|&(_, _, e)| e)
+    found.into_iter().map(|(_, _, e)| e).collect()
 }
 
 /// Whether any structure the game ships or a mod supplies could produce
@@ -102,7 +109,8 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
              against."
         ));
     }
-    let Some(machine) = producer_of(game, item) else {
+    let machines = producers_of(game, item);
+    if machines.is_empty() {
         let name = game.item_name(item);
         return Some(match makeable_by(game, item) {
             Some(def) => format!(
@@ -111,9 +119,23 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
             ),
             None => format!("Nothing the base can build makes a {name}."),
         });
-    };
-    let mut seen = std::collections::HashSet::new();
-    break_at(game, &structures_by_tile(game), machine, &mut seen)
+    }
+    // **One whole line is enough.** A second bench standing somewhere with
+    // nothing beside it is a half-built plan, not a reason to refuse an
+    // order the base can already fill — and since `wants` staffs every
+    // producer, refusing here would hide a line the scheduler would have
+    // worked. The first break is what is reported when none of them is
+    // whole, so the sentence still names a real missing link.
+    let by_tile = structures_by_tile(game);
+    let mut first_break = None;
+    for machine in machines {
+        let mut seen = std::collections::HashSet::new();
+        match break_at(game, &by_tile, machine, &mut seen) {
+            None => return None,
+            Some(reason) => first_break.get_or_insert(reason),
+        };
+    }
+    first_break
 }
 
 /// Every deployed structure by the tile it stands on. Built once per walk
@@ -128,7 +150,7 @@ pub(crate) fn structures_by_tile(game: &Game) -> std::collections::HashMap<(i32,
 }
 
 /// The recursive half of `chain_break`, walking *from the deployed
-/// machine* rather than re-asking `producer_of` per ingredient — the
+/// machine* rather than re-asking `producers_of` per ingredient — the
 /// question is whether this machine's own neighbours can feed it, and a
 /// producer standing somewhere else in the base is no answer to that.
 ///
@@ -312,8 +334,12 @@ pub(crate) fn can_progress(game: &Game, machine: Entity) -> bool {
 pub(crate) fn wants(game: &Game, order: &WorkOrder) -> Vec<(Entity, u32)> {
     let mut deepest: std::collections::HashMap<Entity, u32> = std::collections::HashMap::new();
     let by_tile = structures_by_tile(game);
-    if let Some(machine) = producer_of(game, &order.item) {
-        let mut seen = std::collections::HashSet::new();
+    // Every machine that makes the ordered item is a root of its own walk,
+    // and `deepest` merges them: a feeder shared by two lines is kept once,
+    // at the furthest depth either reached it. `seen` is path-local — lifted
+    // again on the way out of `walk_wants` — so one set serves every root.
+    let mut seen = std::collections::HashSet::new();
+    for machine in producers_of(game, &order.item) {
         walk_wants(game, &by_tile, machine, 0, &mut deepest, &mut seen);
     }
     let mut list: Vec<(u32, Option<i32>, Option<i32>, Entity)> = deepest

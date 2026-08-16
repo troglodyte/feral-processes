@@ -885,6 +885,29 @@ pub const STACK_CACHE_CREDITS: std::ops::RangeInclusive<u32> = 12..=30;
 /// place with no reason to visit it.
 pub const STACK_CACHE_DEPTH_GROWTH: f32 = 1.5;
 
+/// Roughly one cell in this many is one the corridor speaks from as the
+/// party walks through it — see `Game::narrates_passage`.
+///
+/// A cadence rather than a line per step. `Game::arrive` fires on every step
+/// that covers ground, and the log pane draws a handful of rows, so
+/// narrating unconditionally would bury the sighting line, the base's news
+/// and the encounter roll under a wall of corridor. Narrating never was the
+/// state this exists to leave: the `sighted` pools of `stack.floor` and
+/// `stack.door` were authored with the rest of the bank and were unreachable
+/// in play, because `Game::notability` — the discovery axis's gate — ranks
+/// neither.
+///
+/// **Which cells speak is a property of the place**, derived from the
+/// frame spec and the cell's own coordinates exactly as the words are, so
+/// the same corridor speaks at the same corners after a save and reload and
+/// on every later walk through it. That is what makes this a rhythm the
+/// player can come to know rather than noise, and it is why the figure is a
+/// divisor over a fold rather than a probability over `resources::GameRng`.
+///
+/// Three is a guess. It is a feel question — `balance_sim` has no Stack term
+/// at all and models no log — so only play answers it.
+pub const STACK_PASSAGE_NARRATION_ONE_IN: usize = 3;
+
 // ---- The Stack: markets ----------------------------------------------
 //
 // Somebody is running a stall down there. What is on it is a function of

@@ -695,7 +695,13 @@ impl Game {
     /// happens next. Three copies of this tail is three places to fix an
     /// ordering bug in, and the ordering is the whole of it:
     ///
-    /// - **Corruption first**, because it is a property of arriving rather
+    /// - **The passage line first**, because it narrates walking *in* — it
+    ///   is what the party sees on the way through the doorway, and putting
+    ///   it under the corruption bite or the encounter roll would have the
+    ///   corridor described after the thing that interrupted it. It is also
+    ///   the only step here that cannot change any state the five below
+    ///   read, so its position is free to be chosen for how it reads.
+    /// - **Corruption next**, because it is a property of arriving rather
     ///   than something the cell offers, and if it kills the party the four
     ///   below all refuse on their own `is_game_over` checks.
     /// - **The fault before the encounter roll**, so a party that fell rolls
@@ -713,6 +719,7 @@ impl Game {
     /// and `step` calls it unconditionally, including on a blocked step,
     /// which is a rule about facing rather than about arriving.
     pub(crate) fn arrive(&mut self) {
+        self.announce_passage();
         self.bleed_corruption();
         self.open_cache();
         self.rouse_lair();

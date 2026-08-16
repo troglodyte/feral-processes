@@ -12,9 +12,11 @@
 
 use super::listen::relative_bearing;
 use super::stack::StackPos;
+use crate::derive::index;
 use crate::descriptions::DescriptionDb;
 use crate::resources::{CurrentStack, TraceBand};
 use crate::stack::CellKind;
+use crate::tuning::STACK_PASSAGE_NARRATION_ONE_IN;
 use crate::*;
 
 /// Keeps description folds clear of `LAIR_SALT` (`0x1A19_B055`),
@@ -22,6 +24,13 @@ use crate::*;
 /// answer one question per frame and stay on their single XOR; this one is
 /// asked per cell, per length and per slot, so it rides `FrameSpec::salted`.
 const DESCRIPTION_SALT: u64 = 0xDE5C_21B3;
+
+/// Keeps the "does this cell speak as you walk through it" fold clear of
+/// `DESCRIPTION_SALT`, which decides *what* the same cell says. One salt for
+/// both would tie the two answers together — every cell that spoke would be
+/// drawing its words from the same corner of the fold as every other one,
+/// which is `Slot::tags`' argument reached one level up.
+const PASSAGE_SALT: u64 = 0x9A55_A6E5;
 
 /// The subject key for the frame-arrival mood line — the one description
 /// that reads run state (depth band and Trace band) rather than only the
@@ -104,6 +113,28 @@ impl Game {
             .salted(&[DESCRIPTION_SALT])
     }
 
+    /// Whether `cell` is one of the roughly one in
+    /// `STACK_PASSAGE_NARRATION_ONE_IN` that the corridor speaks from when
+    /// the party walks onto it.
+    ///
+    /// Derived from the place and nothing else, for the three reasons every
+    /// other description decision is: a `GameRng` draw would not survive a
+    /// save and reload, it would shift every later roll in the run, and it
+    /// would make the rhythm of a corridor different every time the player
+    /// walked it. A cell that speaks always speaks.
+    ///
+    /// Takes the cell rather than reading `pos.x`/`pos.y`, mirroring
+    /// `description_seed`: the caller always asks about the cell the party
+    /// has just arrived on, but a predicate that can only be asked about
+    /// where the party already is cannot be swept across a frame to measure
+    /// what rate the constant actually produces.
+    pub(crate) fn narrates_passage(&self, pos: StackPos, cell: (i32, i32)) -> bool {
+        let seed = self
+            .frame_spec(pos.depth, pos.frames, pos.entrance)
+            .salted(&[PASSAGE_SALT, cell.0 as u32 as u64, cell.1 as u32 as u64]);
+        index(seed, STACK_PASSAGE_NARRATION_ONE_IN) == 0
+    }
+
     /// The descriptive clause for the row under the first-person view, or
     /// `None` when the bank has nothing — which leaves `stack_view` free to
     /// fall back to its own literal, so an *empty* asset directory leaves
@@ -181,12 +212,20 @@ impl Game {
     ///
     /// `CellKind::LinkUp` is deliberately absent: it is the way the party
     /// came in, and announcing it would fire on arrival in every frame.
-    /// Doors are absent for being the most common non-floor cell there is.
+    /// Doors and plain floor are absent for being the corridor itself rather
+    /// than something in it — which is not the same as being unsayable, and
+    /// `announce_passage` is the axis that says them. That split is the
+    /// whole of what this rank table now decides: not *whether* a cell has
+    /// anything to say, but whether finding it is news.
     pub(crate) fn notability(&self, pos: StackPos, cell: (i32, i32)) -> Option<u8> {
         let level = self.world.resource::<CurrentStack>().0.as_ref()?;
         Some(match level.cell(cell.0, cell.1) {
             CellKind::Lair if !self.lair_cleared(pos) => 5,
             CellKind::Orphan if self.orphan_present(pos, cell) => 4,
+            // Beside the orphan rather than below it: both are a program
+            // standing in a corridor that will do something for the party,
+            // and a stall is the rarer of the two.
+            CellKind::Market if self.market_live(pos) => 4,
             CellKind::Cache if self.cache_unopened(pos, cell) => 3,
             CellKind::Breakpoint if !self.breakpoint_spent(pos, cell) => 3,
             CellKind::SealedDoor if !self.seal_open(pos, cell) => 2,

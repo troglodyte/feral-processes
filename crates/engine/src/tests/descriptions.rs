@@ -403,26 +403,26 @@ fn every_pair_of_slots_is_independent() {
 /// silence at a cell nobody happened to walk onto during testing. Same
 /// shape as `every_biome_a_stack_link_can_open_in_fields_a_boss`.
 ///
-/// **The `sighted` requirement below is deliberately broader than what
-/// `Game::notability` will ever let reach the screen.** `sighted_description`
-/// has exactly one production caller, `announce_sighting`, and it only
-/// calls it for a cell `notability` returned `Some` for. `notability`
-/// returns `None` unconditionally for `stack.floor`, `stack.door` and
-/// `stack.link_up` — they are never worth a line at all, by the design
-/// argument in `notability`'s own doc comment — and it returns `None` for
-/// every "already used" condition: `spent` (cache, breakpoint, orphan),
-/// `opened` (sealed door) and `cleared` (lair). Their `sighted` pools are
-/// authored anyway and checked here anyway, on purpose: `underfoot` and
-/// `paragraph` (via `x`) read any cell regardless of `notability`, so a
-/// player can still stand on or examine an emptied cache and see its
-/// `sighted`-length prose reused nowhere — and holding every subject to
-/// the same three-length shape is cheaper than tracking which subjects are
-/// exempt, catches a malformed `sighted` fragment before an author has to
-/// remember it is inert, and stops being inert the moment `notability`'s
-/// ranking ever changes. This test's shape does not claim these particular
-/// `sighted` pools play back in the current build — only `notability`'s
-/// doc comment and `announce_sighting`'s call site are the source of truth
-/// for that.
+/// **Every `sighted` pool below now reaches the screen, and that was not
+/// true when this census was written.** `sighted_description` had one
+/// production caller, `announce_sighting`, which only asks about a cell
+/// `Game::notability` ranked — so the pools of `stack.floor`, `stack.door`
+/// and `stack.link_up`, and of every "already used" condition (`spent` on
+/// cache, breakpoint and orphan; `opened` on the sealed door; `cleared` on
+/// the lair), were authored and checked here while being unreachable in
+/// play. The census held them to the three-length shape anyway, on the
+/// stated grounds that it cost less than tracking which subjects were
+/// exempt and would stop being inert if `notability` ever changed.
+///
+/// `Game::announce_passage` is the second caller, and what it changed is
+/// exactly that: it resolves through `ahead_target`, which falls back to
+/// the nearest *walkable* cell when the ray holds nothing ranked, and every
+/// subject in that list is walkable. So the breadth is no longer slack —
+/// emptying any pool below now ships silence at a corridor rather than at a
+/// cell nobody could have heard from anyway.
+///
+/// `stack.frame.arrival` remains the one subject outside both axes, read by
+/// `Game::arrival_line` alone.
 const SHIPPED: &[(&str, &[&str])] = &[
     ("stack.floor", &[]),
     ("stack.door", &[]),
@@ -1924,5 +1924,534 @@ fn left_and_right_read_opposite_flanks_not_each_others() {
         game.describe_view_direction(ExamineDir::Right),
         Some(left_text),
         "Right described the party's LEFT flank — Left/Right are swapped"
+    );
+}
+
+// ---- the passage axis: narrating a corridor as you walk it ------------
+
+/// Where to stand, which way to face, and the cell one `step_forward` from
+/// there lands on.
+type Approach = ((i32, i32), Dir, (i32, i32));
+
+/// A stand-and-facing that walks the party one step onto a cell matching
+/// what the caller is after.
+///
+/// Every condition is asked through the shipping predicates rather than
+/// re-derived here, which is what keeps the search honest — a test that
+/// decided for itself which cells speak would go on passing after
+/// `narrates_passage` changed its mind.
+///
+/// `terrain_target` asks for an arrival whose `ahead_target` is a cell
+/// `notability` does **not** rank. That is the discriminator the silence
+/// tests need: `announce_sighting` only ever logs a ranked cell, so a line
+/// about unranked terrain has exactly one possible source, and asserting its
+/// absence cannot be satisfied by the discovery axis merely staying quiet.
+fn find_walk_onto(game: &mut Game, speaks: bool, terrain_target: bool) -> Option<Approach> {
+    let level = crate::tests::support::frame(game);
+    let start = game.stack_pos().unwrap();
+    for (x, y) in crate::tests::support::every_cell(&level) {
+        if !level.walkable(x, y) {
+            continue;
+        }
+        for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+            let (dx, dy) = facing.delta();
+            let arrival = (x + dx, y + dy);
+            if !level.walkable(arrival.0, arrival.1)
+                || game.notability(start, arrival).is_some()
+                || game.narrates_passage(start, arrival) != speaks
+            {
+                continue;
+            }
+            // Stand on the arrival to ask what the ray resolves to from
+            // there: the answer depends on position as well as facing, so it
+            // cannot be read from where the party is standing now.
+            crate::tests::support::stand_at(game, arrival, facing);
+            let there = game.stack_pos().unwrap();
+            let usable = game.ahead_target(there).is_some_and(|t| {
+                t != arrival
+                    && game.sighted_description(there, t).is_some()
+                    && (!terrain_target || game.notability(there, t).is_none())
+            });
+            if usable {
+                crate::tests::support::stand_at(game, (x, y), facing);
+                return Some(((x, y), facing, arrival));
+            }
+        }
+    }
+    crate::tests::support::stand_at(game, (start.x, start.y), start.facing);
+    None
+}
+
+/// Descends `game` until `find_walk_onto` turns something up.
+fn walk_onto_across_frames(game: &mut Game, speaks: bool, terrain_target: bool) -> Approach {
+    crate::tests::support::descend(game);
+    loop {
+        if let Some(found) = find_walk_onto(game, speaks, terrain_target) {
+            return found;
+        }
+        let Locale::Stack {
+            depth,
+            frames,
+            entrance,
+            ..
+        } = game.locale()
+        else {
+            panic!("not underground")
+        };
+        assert!(
+            depth < frames,
+            "no frame of this stack offers a step onto a cell with \
+             speaks={speaks}, terrain_target={terrain_target}"
+        );
+        game.descend_to(depth + 1, frames, entrance);
+    }
+}
+
+/// The wiring: a step onto a speaking cell puts the corridor ahead into the
+/// log, driven through the real `step_forward` rather than by calling
+/// `announce_passage` directly. Removing the `arrive` hook fails this.
+#[test]
+fn walking_into_a_speaking_cell_narrates_what_lies_ahead() {
+    let mut game = game();
+    let (stand, facing, _) = walk_onto_across_frames(&mut game, true, true);
+    crate::tests::support::stand_at(&mut game, stand, facing);
+
+    let before = log_lines(&game).len();
+    game.step_forward();
+    let logged = log_lines(&game)[before..].to_vec();
+
+    let pos = game.stack_pos().unwrap();
+    let expected = game
+        .sighted_description(pos, game.ahead_target(pos).expect("a target ahead"))
+        .expect("the target has a sighted line");
+    assert!(
+        logged.contains(&expected),
+        "walking onto a speaking cell logged {logged:?}, without {expected:?}"
+    );
+}
+
+/// The cadence is the throttle, so a cell it does not pick stays quiet.
+/// Asked of `announce_passage` directly: a step also runs `remember_view`
+/// and a `tick`, and this is a claim about the passage axis alone.
+#[test]
+fn walking_into_a_silent_cell_narrates_nothing() {
+    let mut game = game();
+    let (_, facing, arrival) = walk_onto_across_frames(&mut game, false, true);
+    crate::tests::support::stand_at(&mut game, arrival, facing);
+
+    let before = log_lines(&game).len();
+    game.announce_passage();
+    assert_eq!(
+        log_lines(&game).len(),
+        before,
+        "a cell the cadence does not pick still narrated"
+    );
+}
+
+/// The gap the second axis exists to close. `announce_sighting` fires once
+/// ever per cell; this one has no notion of new, so ground already on the
+/// party's map still narrates when they walk it.
+///
+/// The discovery axis is deliberately exhausted first and asserted silent,
+/// which is what stops this passing on a line the *other* axis produced.
+#[test]
+fn already_seen_ground_still_narrates() {
+    let mut game = game();
+    let (_, facing, arrival) = walk_onto_across_frames(&mut game, true, true);
+    crate::tests::support::stand_at(&mut game, arrival, facing);
+
+    game.remember_view();
+    let before = log_lines(&game).len();
+    game.remember_view();
+    assert_eq!(
+        log_lines(&game).len(),
+        before,
+        "nothing was left to discover, yet the discovery axis spoke"
+    );
+
+    let before = log_lines(&game).len();
+    game.announce_passage();
+    assert!(
+        log_lines(&game).len() > before,
+        "a corridor the party has already seen narrated nothing"
+    );
+}
+
+/// Arriving is the trigger, not looking. Turning changes the view — and
+/// `announce_sighting` may well have something to say about it — but the
+/// party has not gone anywhere, so the corridor does not re-narrate.
+///
+/// There is no sibling test for a blocked step, deliberately: a step is
+/// blocked by rock dead ahead, which is exactly when `ahead_target` falls
+/// back to the party's own cell and `announce_passage` returns on the wall
+/// guard whether or not `arrive` ran. Such a test would pass with the hook
+/// moved anywhere at all.
+#[test]
+fn turning_in_place_narrates_no_passage() {
+    let mut game = game();
+    let (_, facing, arrival) = walk_onto_across_frames(&mut game, true, true);
+    crate::tests::support::stand_at(&mut game, arrival, facing);
+    let pos = game.stack_pos().unwrap();
+    let line = game
+        .sighted_description(pos, game.ahead_target(pos).expect("a target ahead"))
+        .expect("the target has a sighted line");
+
+    // The party is standing where the corridor does speak from, so the
+    // absence below is about the trigger rather than about the cadence.
+    let before = log_lines(&game).len();
+    game.announce_passage();
+    assert!(
+        log_lines(&game)[before..].contains(&line),
+        "the fixture is not on a speaking cell, so the check below proves nothing"
+    );
+
+    let before = log_lines(&game).len();
+    game.turn_left();
+    game.turn_right();
+    assert!(
+        !log_lines(&game)[before..].contains(&line),
+        "turning in place narrated the corridor"
+    );
+}
+
+/// The rhythm of a corridor is a property of the place, as its words are, so
+/// a reload finds the same cells speaking. A `GameRng` draw would not
+/// survive this, which is the regression it exists for.
+#[test]
+fn the_corridor_speaks_from_the_same_cells_after_a_save_and_load() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    let pos = game.stack_pos().unwrap();
+    let before: Vec<bool> = crate::tests::support::every_cell(&level)
+        .map(|cell| game.narrates_passage(pos, cell))
+        .collect();
+    assert!(
+        before.iter().any(|&speaks| speaks),
+        "no cell of this frame speaks, so the comparison is vacuous"
+    );
+
+    let path =
+        std::env::temp_dir().join(format!("feral_passage_cadence_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let reloaded = Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    let pos = reloaded.stack_pos().unwrap();
+    let after: Vec<bool> = crate::tests::support::every_cell(&level)
+        .map(|cell| reloaded.narrates_passage(pos, cell))
+        .collect();
+    assert_eq!(before, after, "the cadence moved across a save and load");
+}
+
+/// `x` ahead and the walking line have to be describing the same cell, or
+/// the corridor announces a cache the examine key then declines to name.
+///
+/// Comparing `describe_view_direction(Ahead)` against
+/// `cell_paragraph(ahead_target(..))` would be a tautology — the former is
+/// literally the latter — so this finds the cell independently instead: a
+/// vantage whose dead-ahead ray runs over plain floor *before* it reaches
+/// something notable. Both halves are then held to naming the notable cell
+/// rather than the nearer floor, which is a claim either side can break.
+///
+/// What no test can reach is the structural half, that the two are one call
+/// rather than two copies. This is the guard against the copies drifting
+/// once they exist; `ahead_target`'s doc is the argument for not making
+/// them.
+#[test]
+fn examine_and_the_passage_target_both_look_past_floor_to_a_feature() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let mut checked = 0;
+    loop {
+        let level = crate::tests::support::frame(&game);
+        for (x, y) in crate::tests::support::every_cell(&level) {
+            if !level.walkable(x, y) {
+                continue;
+            }
+            for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+                crate::tests::support::stand_at(&mut game, (x, y), facing);
+                let pos = game.stack_pos().unwrap();
+                let (dx, dy) = facing.delta();
+                // The cell one step ahead must be plain corridor and the one
+                // beyond it notable, so preferring the nearest walkable cell
+                // over the nearest notable one gives a different answer.
+                // `Floor` exactly, not merely walkable-and-unranked: a door
+                // is both of those and blocks sight, so the ray would stop
+                // at it — correctly — and never reach `far` at all.
+                let near = (x + dx, y + dy);
+                let far = (x + dx * 2, y + dy * 2);
+                if level.cell(near.0, near.1) != CellKind::Floor
+                    || game.notability(pos, far).is_none()
+                {
+                    continue;
+                }
+                assert_eq!(
+                    game.ahead_target(pos),
+                    Some(far),
+                    "the ray stopped at the floor at {near:?} instead of the feature at {far:?}"
+                );
+                assert_eq!(
+                    game.describe_view_direction(ExamineDir::Ahead),
+                    game.cell_paragraph(pos, far),
+                    "examine ahead named something other than the feature at {far:?}"
+                );
+                checked += 1;
+            }
+        }
+        let Locale::Stack {
+            depth,
+            frames,
+            entrance,
+            ..
+        } = game.locale()
+        else {
+            unreachable!("not underground")
+        };
+        if checked > 0 || depth >= frames {
+            break;
+        }
+        game.descend_to(depth + 1, frames, entrance);
+    }
+    assert!(
+        checked > 0,
+        "no frame of this stack puts a feature one cell beyond plain corridor"
+    );
+}
+
+/// A feature underfoot already has the `standing_on` row and its own arrival
+/// event; a line about the corridor past it makes one step read as two.
+#[test]
+fn arriving_on_a_notable_cell_narrates_no_passage() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    let start = game.stack_pos().unwrap();
+    let notable = crate::tests::support::every_cell(&level)
+        .filter(|&(x, y)| level.walkable(x, y))
+        .find(|&cell| game.notability(start, cell).is_some() && game.narrates_passage(start, cell))
+        .expect("no walkable cell of this frame is both notable and on the cadence");
+
+    for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+        crate::tests::support::stand_at(&mut game, notable, facing);
+        let before = log_lines(&game).len();
+        game.announce_passage();
+        assert_eq!(
+            log_lines(&game).len(),
+            before,
+            "standing on a notable cell facing {facing:?} narrated a passage line"
+        );
+    }
+}
+
+/// `ahead_target` answers with the party's own cell when the ray holds
+/// nothing walkable, which is right for `x` and wrong here: `fill_bearing`
+/// renders that "right under you", so the line would claim the corridor runs
+/// on through the party's feet.
+#[test]
+fn facing_a_wall_narrates_nothing() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let level = crate::tests::support::frame(&game);
+    let start = game.stack_pos().unwrap();
+    let mut checked = 0;
+    for (x, y) in crate::tests::support::every_cell(&level) {
+        if !level.walkable(x, y) || game.notability(start, (x, y)).is_some() {
+            continue;
+        }
+        for facing in [Dir::North, Dir::East, Dir::South, Dir::West] {
+            let (dx, dy) = facing.delta();
+            if level.walkable(x + dx, y + dy) {
+                continue;
+            }
+            crate::tests::support::stand_at(&mut game, (x, y), facing);
+            let pos = game.stack_pos().unwrap();
+            if !game.narrates_passage(pos, (x, y)) {
+                continue;
+            }
+            let before = log_lines(&game).len();
+            game.announce_passage();
+            assert_eq!(
+                log_lines(&game).len(),
+                before,
+                "facing a wall at {:?} narrated a line",
+                (x, y)
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no speaking cell in this frame faces a wall");
+}
+
+/// One arrival saying a thing twice is a claim that it happened twice, and
+/// it is reachable: a step can reveal a cache through `announce_sighting`
+/// and then narrate the same cache one call later.
+#[test]
+fn a_passage_line_never_repeats_the_line_just_pushed() {
+    let mut game = game();
+    let (_, facing, arrival) = walk_onto_across_frames(&mut game, true, true);
+    crate::tests::support::stand_at(&mut game, arrival, facing);
+
+    let before = log_lines(&game).len();
+    game.announce_passage();
+    assert_eq!(
+        log_lines(&game).len() - before,
+        1,
+        "the fixture narrated something other than one line"
+    );
+
+    let before = log_lines(&game).len();
+    game.announce_passage();
+    assert_eq!(
+        log_lines(&game).len(),
+        before,
+        "the same line was pushed twice in a row"
+    );
+}
+
+/// Every seeded test downstream would move if this drew from the shared
+/// stream — the failure this repo has been bitten by three times.
+///
+/// Two games from one seed, both put in the same place, only one asked to
+/// narrate. `support::rng_unadvanced_by` is the wrong shape here: it runs
+/// its closure on one game alone, and descending is itself enough to move
+/// the stream, so the baseline has to make the same journey.
+#[test]
+fn narrating_a_passage_spends_no_rng_draw() {
+    let mut probe = game();
+    let (_, facing, arrival) = walk_onto_across_frames(&mut probe, true, true);
+    let depth = probe.stack_pos().unwrap().depth;
+
+    let travel = |game: &mut Game| {
+        crate::tests::support::descend(game);
+        let Locale::Stack {
+            frames, entrance, ..
+        } = game.locale()
+        else {
+            unreachable!("not underground")
+        };
+        game.descend_to(depth, frames, entrance);
+        crate::tests::support::stand_at(game, arrival, facing);
+    };
+
+    let mut touched = game();
+    let mut untouched = game();
+    travel(&mut touched);
+    travel(&mut untouched);
+
+    let before = log_lines(&touched).len();
+    touched.announce_passage();
+    assert!(
+        log_lines(&touched).len() > before,
+        "the fixture narrated nothing, so the check below proves nothing"
+    );
+
+    let after: u64 = touched
+        .world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random();
+    let baseline: u64 = untouched
+        .world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random();
+    assert_eq!(
+        after, baseline,
+        "narrating a passage line advanced the shared RNG stream"
+    );
+}
+
+/// The constant is a divisor over a fold, so the rate it actually produces
+/// is worth measuring rather than assuming — a fold reaching only the low
+/// bits would cluster, which is the failure `derive::index`'s doc is about.
+/// Swept over every cell of every frame of the stack.
+#[test]
+fn the_passage_cadence_speaks_from_about_one_cell_in_three() {
+    let mut game = game();
+    crate::tests::support::descend(&mut game);
+    let (mut speaking, mut total) = (0usize, 0usize);
+    loop {
+        let level = crate::tests::support::frame(&game);
+        let pos = game.stack_pos().unwrap();
+        for cell in crate::tests::support::every_cell(&level) {
+            total += 1;
+            speaking += usize::from(game.narrates_passage(pos, cell));
+        }
+        let Locale::Stack {
+            depth,
+            frames,
+            entrance,
+            ..
+        } = game.locale()
+        else {
+            unreachable!("not underground")
+        };
+        if depth >= frames {
+            break;
+        }
+        game.descend_to(depth + 1, frames, entrance);
+    }
+
+    let expected = total as f64 / crate::tuning::STACK_PASSAGE_NARRATION_ONE_IN as f64;
+    assert!(
+        (speaking as f64 - expected).abs() < expected * 0.2,
+        "{speaking} of {total} cells speak, wanted about {expected:.0}"
+    );
+}
+
+/// A live stall was the one unspent feature `notability` did not rank, so
+/// nothing ever announced one and the examine ray looked straight through it
+/// at whatever lay beyond.
+///
+/// Markets are per-frame and rolled, so seed 16's own stack may field none —
+/// the fallback seeds are the ones `a_rank_tie_is_broken_by_distance_not_scan_order`
+/// already commits this suite to.
+#[test]
+fn a_live_stall_is_notable() {
+    fn stall_in_stack(mut game: Game) -> Option<(Game, (i32, i32))> {
+        crate::tests::support::descend(&mut game);
+        loop {
+            if let Some(stall) = cell_of(&game, CellKind::Market) {
+                return Some((game, stall));
+            }
+            let Locale::Stack {
+                depth,
+                frames,
+                entrance,
+                ..
+            } = game.locale()
+            else {
+                return None;
+            };
+            if depth >= frames {
+                return None;
+            }
+            game.descend_to(depth + 1, frames, entrance);
+        }
+    }
+
+    let mut found = stall_in_stack(game());
+    if found.is_none() {
+        for seed in [43u32, 77, 101, 2024, 7, 999, 31337] {
+            let candidate = Game::new(
+                seed,
+                DifficultyMode::Forgiving,
+                &crate::tests::support::test_assets_dir(),
+            )
+            .unwrap();
+            found = stall_in_stack(candidate);
+            if found.is_some() {
+                break;
+            }
+        }
+    }
+    let (game, stall) =
+        found.expect("no stack across seed 16 or the fallback seeds fields a market");
+    let pos = game.stack_pos().unwrap();
+    assert!(game.market_live(pos), "the fixture stall is already spent");
+    assert!(
+        game.notability(pos, stall).is_some(),
+        "a live stall is not notable, so nothing announces it"
     );
 }

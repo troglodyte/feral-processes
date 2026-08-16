@@ -55,12 +55,23 @@ They are not truncations of each other — each is authored for where it goes.
   (`"  [>] descend"`, `"  — moving on costs"`). Never use `{bearing}` here —
   you are standing on the thing. `engine`'s
   `every_shipped_underfoot_line_fits_the_standing_on_row` holds this.
-- **`sighted`** — one log line, fired once when the cell first comes into
-  view. The log pane draws exactly one row per line with no wrapping, so
-  write one sentence — except `stack.frame.arrival`, whose lines read as
-  mood copy rather than a report on a specific cell and may run to two
-  short ones; see the `{bearing}` section below for why that subject is
-  special.
+- **`sighted`** — one log line about a cell the party can see from where
+  they are standing. The log pane draws exactly one row per line with no
+  wrapping, so write one sentence — except `stack.frame.arrival`, whose
+  lines read as mood copy rather than a report on a specific cell and may
+  run to two short ones; see the `{bearing}` section below for why that
+  subject is special.
+
+  Two axes draw from this pool, and a line has to read sensibly on both.
+  **Discovery** fires once ever, the moment the cell first comes into view,
+  and only for a cell `Game::notability` ranks — the features, not the
+  corridor. **Passage** fires as the party walks onto a cell that speaks,
+  for whatever their line of sight resolves to ahead, whether or not they
+  have seen it before. So a `sighted` line is read both as "there is one of
+  these over there" on first sight and as "you are walking towards one of
+  these" on the tenth. Avoid wording that only works the first time — "you
+  find", "at last" — and note that terrain subjects (`stack.floor`,
+  `stack.door`) reach the screen through the passage axis alone.
 - **`openers` / `details` / `codas`** — the examine paragraph, sentence by
   sentence. The engine joins the non-empty parts with a single space and
   does nothing else, so **each fragment must consist of one or two complete
@@ -168,11 +179,12 @@ shipped bank was written to:
 >   30 characters is always safe — the shipped `stack.lair` line runs 37
 >   with no suffix to spare.
 > - 2-3 `sighted` sentences: exactly one sentence each, containing
->   `{bearing}` once as a bare direction phrase. What the log says when this
->   first comes into view. Exception: `stack.frame.arrival` never fills
->   `{bearing}` (see the `{bearing}` section below) and its `sighted` lines
->   may run to two short sentences, since they read as mood copy rather
->   than a report on a specific place.
+>   `{bearing}` once as a bare direction phrase. What the log says about
+>   this when the party can see it — on first sight and equally on the
+>   tenth walk past, so nothing that only reads right once. Exception:
+>   `stack.frame.arrival` never fills `{bearing}` (see the `{bearing}`
+>   section below) and its `sighted` lines may run to two short sentences,
+>   since they read as mood copy rather than a report on a specific place.
 > - 3-4 `openers`: one complete sentence each, naming the thing.
 > - 3-4 `details`, including one `""`: ordinarily one complete sentence
 >   each, adding an observation about this particular thing — two short

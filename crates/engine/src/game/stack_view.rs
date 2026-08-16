@@ -163,39 +163,62 @@ impl Game {
     /// thing the log announced.
     pub fn describe_view_direction(&self, dir: ExamineDir) -> Option<String> {
         let pos = self.stack_pos()?;
-        if dir == ExamineDir::Underfoot {
-            return self.cell_paragraph(pos, (pos.x, pos.y));
-        }
-        let lateral = match dir {
-            ExamineDir::Left => 0,
-            ExamineDir::Ahead => STACK_VIEW_HALF_WIDTH,
-            ExamineDir::Right => STACK_VIEW_HALF_WIDTH * 2,
-            ExamineDir::Underfoot => unreachable!("returned above"),
+        let cell = match dir {
+            ExamineDir::Underfoot => (pos.x, pos.y),
+            ExamineDir::Left => self.ray_target(pos, 0)?,
+            ExamineDir::Ahead => self.ahead_target(pos)?,
+            ExamineDir::Right => self.ray_target(pos, STACK_VIEW_HALF_WIDTH * 2)?,
         };
+        self.cell_paragraph(pos, cell)
+    }
+
+    /// Which cell a ray cast down view-space column `lateral` resolves to:
+    /// the nearest notable cell along it, or — when it holds nothing notable
+    /// — the corridor itself, meaning the nearest walkable cell on it and
+    /// the party's own as the last resort. So the ray always answers.
+    ///
+    /// Reads `visible_rows`, the same walk the first-person view and the
+    /// map's memory are built from, so nothing can resolve onto a cell the
+    /// player cannot actually see — a shut door blocks the ray exactly as it
+    /// blocks the eye, the same as it already blocked `remember_view_silent`
+    /// from ever marking what's behind it as seen. And the same `notability`
+    /// ranking the sighting line uses, so the thing `x` describes is the
+    /// thing the log announced.
+    ///
+    /// Nearest first. Only the party's own cell is excluded — row 0's centre
+    /// column, which is where `ExamineDir::Underfoot` answers instead — not
+    /// row 0 itself: the cells beside the party at `ahead == 0` are what
+    /// `Left`/`Right` read there, and dropping the whole row would make an
+    /// adjacent cell unreachable by the ray that is supposed to cover it.
+    fn ray_target(&self, pos: StackPos, lateral: usize) -> Option<(i32, i32)> {
         let level = self.world.resource::<CurrentStack>().0.as_ref()?;
         let cone = visible_rows(level, pos.x, pos.y, pos.facing);
-        // Nearest first. Only the party's own cell is excluded — row 0's
-        // centre column, which is where `Underfoot` answers instead — not
-        // row 0 itself: the cells beside the party at `ahead == 0` are what
-        // `Left`/`Right` read there, and dropping the whole row would make
-        // an adjacent cell unreachable by the ray that is supposed to cover
-        // it.
-        let along = cone
+        let mut along = cone
             .iter()
             .filter_map(|row| row.get(lateral).copied())
             .filter(|&cell| cell != (pos.x, pos.y));
-        for cell in along.clone() {
-            if self.notability(pos, cell).is_some() {
-                return self.cell_paragraph(pos, cell);
-            }
-        }
-        // Nothing notable that way, so describe the corridor the ray runs
-        // down — the nearest walkable cell on it, or the party's own.
-        let fallback = along
+        if let Some(cell) = along
             .clone()
-            .find(|&(x, y)| level.walkable(x, y))
-            .unwrap_or((pos.x, pos.y));
-        self.cell_paragraph(pos, fallback)
+            .find(|&cell| self.notability(pos, cell).is_some())
+        {
+            return Some(cell);
+        }
+        Some(
+            along
+                .find(|&(x, y)| level.walkable(x, y))
+                .unwrap_or((pos.x, pos.y)),
+        )
+    }
+
+    /// What the party is looking at down the corridor — the cell `x` ahead
+    /// describes at paragraph length, and `announce_passage` narrates at one
+    /// sentence as they walk.
+    ///
+    /// A call rather than a second copy of the pick: the two have to be
+    /// talking about the same cell, or a corridor that announces a cache is
+    /// one the examine key then declines to describe.
+    pub(crate) fn ahead_target(&self, pos: StackPos) -> Option<(i32, i32)> {
+        self.ray_target(pos, STACK_VIEW_HALF_WIDTH)
     }
 
     /// Records everything the party can see from where they are standing,
@@ -288,6 +311,66 @@ impl Game {
         {
             self.log(line);
         }
+    }
+
+    /// One sentence about what lies down the corridor, logged as the party
+    /// walks onto a cell that speaks.
+    ///
+    /// The second of the two narration axes, and the one that answers "what
+    /// am I looking at" rather than "what have I just found".
+    /// `announce_sighting` above fires on discovery — the moment a feature
+    /// first comes into view, once ever, from a turn as readily as from a
+    /// step. This fires on **arrival**, so turning in place and shoving at a
+    /// wall are both silent, and it has no notion of new: walking a corridor
+    /// again narrates it again, which is the whole point of the second axis.
+    /// Between them they are what puts the `sighted` pools of `stack.floor`
+    /// and `stack.door` on screen at all — `notability` ranks neither, so
+    /// until this existed both were authored and unreachable.
+    ///
+    /// Four things keep it from becoming noise, in the order they are asked:
+    ///
+    /// - **A feature underfoot says nothing here.** `stack_view`'s
+    ///   `standing_on` row already names it and `arrive`'s own tail
+    ///   announces what it did, so a line about the corridor beyond it is
+    ///   the one step that reads as two.
+    /// - **Only a cell that speaks speaks** — `narrates_passage`, which is a
+    ///   property of the place, so the same corridor keeps its rhythm across
+    ///   a save and every later walk.
+    /// - **Facing a wall is silent.** `ahead_target` falls back to the
+    ///   party's own cell when the ray holds nothing walkable, which is the
+    ///   right answer for `x` ("describe the corridor I am in") and the
+    ///   wrong one here: `fill_bearing` would render it "right under you"
+    ///   and claim the corridor runs on through the party's feet.
+    /// - **It never repeats the line just pushed.** A step can both reveal a
+    ///   cache and narrate the same cache one call later, and one arrival
+    ///   saying a thing twice is a claim that it happened twice. Only the
+    ///   immediately preceding line, deliberately: a genuine repeat further
+    ///   back is `resources::condense`'s job, and it already folds one into
+    ///   a single row with a count.
+    pub(crate) fn announce_passage(&mut self) {
+        let Some(pos) = self.stack_pos() else {
+            return;
+        };
+        let here = (pos.x, pos.y);
+        if self.notability(pos, here).is_some() || !self.narrates_passage(pos, here) {
+            return;
+        }
+        let Some(target) = self.ahead_target(pos).filter(|&cell| cell != here) else {
+            return;
+        };
+        let Some(line) = self.sighted_description(pos, target) else {
+            return;
+        };
+        if self
+            .world
+            .resource::<MessageLog>()
+            .recent(1)
+            .first()
+            .is_some_and(|last| last.text == line)
+        {
+            return;
+        }
+        self.log(line);
     }
 
     /// The party's map of the frame they are in — see

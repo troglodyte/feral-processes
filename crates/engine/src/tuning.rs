@@ -1315,10 +1315,24 @@ pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 ///
 /// Depth is the lever rather than the base range, per
 /// `STACK_CACHE_DEPTH_GROWTH`'s argument that the bottom of a stack has to
-/// pay better than it costs to reach. Linear rather than compounding: a
-/// stack runs at most `STACK_FRAMES_MAX` frames and each lair is one-shot
-/// (`StackMemory` remembers a cleared one), so the total a zone can pay is
-/// already bounded by `STACK_LINKS_PER_ZONE` stacks' worth of lairs.
+/// pay better than it costs to reach.
+///
+/// Linear rather than compounding, and **not** because a zone's total is
+/// bounded — it isn't. An individual lair is one-shot (`StackMemory`
+/// remembers a cleared one), but `Game::collapse_stack` trades the beaten
+/// stack for a fresh link elsewhere in the sector, and the replacement
+/// stands on a new tile and so keys a new `FrameSpec` with an uncleared
+/// lair of its own. A zone's supply of the breaching currency is therefore
+/// renewable, which is what stops a player who spent a payout at a bench
+/// from running the zone dry and stranding the run — fragments are an
+/// ordinary crafting ingredient besides, and nine recipes and six research
+/// projects want them on top of the portal itself. The test holding that is
+/// `the_stack_replacing_a_beaten_one_pays_a_lair_of_its_own`.
+///
+/// Renewable is exactly why the curve stays linear. A compounding one over
+/// a source that refills would let a party parked on deep ground print
+/// fragments faster than the descent costs them; linear keeps one clear
+/// worth about what the trip down to it was.
 pub const STACK_BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 4..=8;
 
 /// Upper bound, per zone level, on the `ItemDef::value` of gear a defeated

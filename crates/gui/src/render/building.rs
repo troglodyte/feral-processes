@@ -1,8 +1,10 @@
 //! The build, staffing, demolition, upgrade and symlink pickers.
 
+use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, WorkOrderRow};
+use feral_processes_engine::WorkProfile;
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -301,6 +303,51 @@ pub(super) fn draw_base_staff(
     m: &Metrics,
 ) {
     let pets = game.owned_pets();
+    let rows = base_staff_menu_rows(staff_rows, &pets, selected);
+    draw_popup("Base Staff", PopupSize::Large, &rows, painter, m);
+}
+
+/// What a program is worth at a post, as the staff row says it.
+///
+/// The class goes through `manifest::base_job_label` rather than a second
+/// mapping of its own: that one is exhaustive on purpose so a sixth class
+/// cannot ship without deciding what it does at a post, and a copy here
+/// would be a way to dodge that.
+fn work_summary(work: Option<WorkProfile>) -> String {
+    let Some(work) = work else {
+        // The species is not in the db, so there are no numbers to quote —
+        // saying so beats printing the roster's defaults as if authored.
+        return "species not loaded".to_string();
+    };
+    let job = work
+        .class
+        .map(base_job_label)
+        .unwrap_or_else(|| "no base job".to_string());
+    format!("Spd {} · Ana {} · {job}", work.speed, work.analysis)
+}
+
+/// The Base Staff popup's rows: a shortcut line naming the program and what
+/// it brings to a post, and an indented line under it for what it is doing
+/// now.
+///
+/// Two lines because one busts the row budget. The widest realistic row — a
+/// Gold fused program of the longest species name, with a zone tag, the
+/// work summary and the longest activity — is 106 characters against
+/// `ROW_WRAP_COLUMNS`' 100. Measured against the real font that row does
+/// still *fit* the reference 1440x900 geometry, but by about two characters
+/// (1203px of 1243px including the draw prefix), and `draw_row` clamps a row
+/// vertically and never horizontally, so nothing catches the row that
+/// finally doesn't. The activity is the half that moved, because it is the
+/// half you read second.
+///
+/// Split out of `draw_base_staff` so the layout is reachable without a
+/// `Game`, which is what `every_base_staff_activity_stays_inside_the_scrollable_body`
+/// and `the_widest_base_staff_row_stays_inside_the_popup` need.
+pub(super) fn base_staff_menu_rows(
+    staff_rows: &[BaseStaffRow],
+    pets: &[PetInfo],
+    selected: usize,
+) -> Vec<Row> {
     let mut rows = vec![text_row(
         "Enter puts a program to work in the base, or stands it down. Esc to close.",
     )];
@@ -308,32 +355,44 @@ pub(super) fn draw_base_staff(
         rows.push(text_row("(no compiled programs — beat one first)"));
     }
     for (i, row) in staff_rows.iter().enumerate() {
+        let pet = pets.iter().find(|p| p.entity == row.program.entity);
+        rows.push(with_icon(
+            tier_row(
+                format!(
+                    "[{}] {} — {}",
+                    menu_shortcut(i),
+                    row.program.label,
+                    work_summary(row.work)
+                ),
+                i == selected,
+                pet.map(|p| p.fusions).unwrap_or(0),
+                pet.map(|p| p.rarity).unwrap_or_default(),
+            ),
+            row.program.glyph,
+            glyph_color(row.program.color),
+        ));
         let side = if row.on_staff {
             format!("base, {}", row.doing)
         } else {
             row.doing.clone()
         };
-        rows.push(with_icon(
-            tier_row(
-                format!("[{}] {} — {side}", menu_shortcut(i), row.program.label),
-                i == selected,
-                pets.iter()
-                    .find(|p| p.entity == row.program.entity)
-                    .map(|p| p.fusions)
-                    .unwrap_or(0),
-                pets.iter()
-                    .find(|p| p.entity == row.program.entity)
-                    .map(|p| p.rarity)
-                    .unwrap_or_default(),
-            ),
-            row.program.glyph,
-            glyph_color(row.program.color),
-        ));
+        // Dim `Item`s that can never be selected, not `Row::Text`:
+        // `popup_layout` ends the scrollable body at the *last* `Row::Item`,
+        // so text sub-lines under the last program would be pinned into the
+        // footer alongside this screen's legend and drawn detached at the
+        // bottom. That is the bug `routines::description_row` exists for, in
+        // the same shape. `continuation_lines` rather than one `format!` so
+        // the indent is the shared one and a long activity wraps.
+        rows.extend(
+            continuation_lines(&side)
+                .into_iter()
+                .map(|line| colored_item_row(line, false, TEXT_DIM)),
+        );
     }
     rows.push(text_row(
         "Base staff are posted automatically by your work orders.",
     ));
-    draw_popup("Base Staff", PopupSize::Large, &rows, painter, m);
+    rows
 }
 
 pub(super) fn draw_structure_menu(
@@ -697,7 +756,7 @@ fn assignee_vitals(a: &Assignee) -> String {
 mod tests {
     use super::*;
 
-    fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
+    pub(super) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         EntityView {
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
@@ -891,5 +950,161 @@ mod work_order_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod base_staff_tests {
+    use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
+    use feral_processes_engine::species::AffinityClass;
+
+    fn staff_row(
+        label: &str,
+        work: Option<WorkProfile>,
+        doing: &str,
+        on_staff: bool,
+    ) -> BaseStaffRow {
+        let mut program = super::tests::view(1, 1, 1);
+        program.label = label.to_string();
+        program.is_structure = false;
+        program.is_tamed = true;
+        BaseStaffRow {
+            program,
+            on_staff,
+            doing: doing.to_string(),
+            work,
+        }
+    }
+
+    /// The widest row the shipped content can produce: a Gold, thrice-fused
+    /// program of the longest species name carrying a zone tag, the widest
+    /// work summary, and the longest activity — "guarding the Contract
+    /// Broker" over the longest structure name in `assets/structures/`.
+    fn widest_staff_row() -> BaseStaffRow {
+        staff_row(
+            "Gold Sub-Process Lv18 [z9]",
+            Some(WorkProfile {
+                speed: 14,
+                analysis: 18,
+                class: Some(AffinityClass::Leech),
+            }),
+            "guarding the Contract Broker",
+            true,
+        )
+    }
+
+    /// `popup_layout` ends the scrollable body at the *last* `Row::Item` and
+    /// pins everything after it as a footer. This screen has a legend, so an
+    /// activity emitted as `Row::Text` would put the last program's activity
+    /// below the scroll indicator, detached from the program it describes —
+    /// the bug the `every_*_stays_inside_the_scrollable_body` family in
+    /// `popup.rs` guards for the routine and build pickers.
+    ///
+    /// Asserted on the row list rather than through `popup_layout` because
+    /// the cut is a property of where the last item sits and nothing else:
+    /// the footer is every row after it, at any window size.
+    #[test]
+    fn every_base_staff_activity_stays_inside_the_scrollable_body() {
+        for n in 1..6 {
+            for selected in [0, n - 1] {
+                let staff: Vec<BaseStaffRow> = (0..n)
+                    .map(|i| staff_row(&format!("Program {i}"), None, "idle", false))
+                    .collect();
+                let rows = base_staff_menu_rows(&staff, &[], selected);
+                let last_item = rows
+                    .iter()
+                    .rposition(|r| matches!(r, Row::Item { .. }))
+                    .expect("a program is an item row");
+                assert_eq!(
+                    rows.len() - last_item - 1,
+                    1,
+                    "with {n} programs the popup pinned {} rows below the list, \
+                     not the single legend it is allowed — an activity is \
+                     detached from the program it belongs to",
+                    rows.len() - last_item - 1
+                );
+            }
+        }
+    }
+
+    /// Nothing clamps a popup row horizontally, so a staff row wider than the
+    /// Base Staff popup's body runs off its right edge and takes the work
+    /// summary with it — which is the whole reason the row carries one.
+    ///
+    /// **Both budgets, because only one of them discriminates.** In pixels
+    /// the widest row clears the reference geometry either way, so that half
+    /// would pass just as happily with the activity folded back onto the
+    /// shortcut line — it is here for `no_roster_row_overflows_its_popup`'s
+    /// reason, to catch the day `ROW_WRAP_COLUMNS` stops being the right
+    /// budget. The column count is the half that fails if the two lines are
+    /// rejoined, and it is the budget the rest of the file is written
+    /// against (see `no_work_order_row_runs_past_the_popup_body`).
+    #[test]
+    fn the_widest_base_staff_row_stays_inside_the_popup() {
+        for row in base_staff_menu_rows(&[widest_staff_row()], &[], 0) {
+            let text = match &row {
+                Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                Row::Item { text, .. } => text.clone(),
+            };
+            assert!(
+                text.chars().count() <= ROW_WRAP_COLUMNS,
+                "a {} char Base Staff row runs past the {ROW_WRAP_COLUMNS} \
+                 column body: {text:?}",
+                text.chars().count()
+            );
+        }
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let rows = base_staff_menu_rows(&[widest_staff_row()], &[], 0);
+            for row in &rows {
+                let text = match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                    Row::Item { text, .. } => format!("     {text}"),
+                };
+                let drawn = p.measure_ui_advance(&text, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the widest Base Staff row overflows its popup by {:.0}px \
+                     ({drawn:.0} into {room:.0}):\n{text}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// The three facts reach the row, and a species the db never loaded says
+    /// so rather than quoting the roster's defaults as if someone authored
+    /// them for it.
+    #[test]
+    fn a_staff_row_spells_out_the_work_profile() {
+        let rows = base_staff_menu_rows(&[widest_staff_row()], &[], 0);
+        let head = rows
+            .iter()
+            .find_map(|r| match r {
+                Row::Item { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("the program is an item row");
+        assert!(head.contains("Spd 14"), "{head}");
+        assert!(head.contains("Ana 18"), "{head}");
+        assert!(
+            head.contains("Leech"),
+            "the class is the third fact that decides a posting: {head}"
+        );
+
+        let unknown = base_staff_menu_rows(&[staff_row("Modded", None, "idle", false)], &[], 0);
+        let head = unknown
+            .iter()
+            .find_map(|r| match r {
+                Row::Item { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert!(head.contains("not loaded"), "{head}");
     }
 }

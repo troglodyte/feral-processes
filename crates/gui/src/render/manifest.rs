@@ -545,7 +545,7 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
 /// Exhaustive on purpose: a sixth class must decide what it does at a post
 /// before it compiles, which is the same argument `render/stack.rs`'s
 /// `cell_mark` makes about a new `CellKind`.
-fn base_job_label(class: AffinityClass) -> String {
+pub(super) fn base_job_label(class: AffinityClass) -> String {
     let job = match class {
         AffinityClass::Striker | AffinityClass::Saboteur => "none",
         AffinityClass::Bastion => "guard",

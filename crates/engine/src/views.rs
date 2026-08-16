@@ -326,9 +326,10 @@ pub struct PetInfo {
     /// The same glyph and colour this program is drawn with on the map, so a
     /// menu row can carry its icon rather than making the player match a name
     /// to a letter. `EntityView` already carries the pair for the same reason;
-    /// the two lists overlap (see `draw_worker_menu`), and a program that
-    /// looked like one thing on one screen and another elsewhere would be
-    /// worse than no icon at all.
+    /// the two lists overlap (see `render/building.rs`'s `draw_base_staff`,
+    /// which reads a row's identity from an `EntityView` and its tier from
+    /// here), and a program that looked like one thing on one screen and
+    /// another elsewhere would be worse than no icon at all.
     pub glyph: char,
     pub color: GlyphColor,
     pub name: String,

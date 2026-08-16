@@ -1923,6 +1923,49 @@ fn the_replacement_link_stands_on_ground_a_link_may_stand_on() {
     );
 }
 
+/// A zone's supply of Portal Fragments is renewable, and the collapse is
+/// what makes it so. `award_loot` underground is the only source there is,
+/// each lair is one-shot, and fragments are an ordinary crafting ingredient
+/// besides — nine recipes and seven research projects spend them. Without a
+/// fresh lair behind the replacement link, a player who spent a payout at a
+/// bench could run a zone dry and never breach again.
+///
+/// The other collapse tests stop at the replacement *appearing*. This one
+/// walks into it, because a link standing on legal ground that fields no
+/// guardian would pass every one of them and still strand the run.
+#[test]
+fn the_stack_replacing_a_beaten_one_pays_a_lair_of_its_own() {
+    let mut game = game();
+    descend_through_a_real_link(&mut game);
+    let before = entrance_tiles(&mut game);
+
+    kill_the_guardian(&mut game);
+
+    let paid_once = portal_fragments(&game);
+    assert!(paid_once > 0, "the first lair paid no fragments at all");
+
+    let replacement = *entrance_tiles(&mut game)
+        .iter()
+        .find(|t| !before.contains(t))
+        .expect("a replacement link should have appeared");
+    game.enter_stack(replacement.0, replacement.1);
+
+    kill_the_guardian(&mut game);
+
+    assert!(
+        portal_fragments(&game) > paid_once,
+        "the replacement stack's lair was already spent, so the zone can run dry"
+    );
+}
+
+/// What the player is holding of the one currency that opens a portal.
+fn portal_fragments(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(crate::items::ids::PORTAL_FRAGMENT))
+}
+
 /// The kill and the teardown are not the same moment, and a Forgiving reboot
 /// can land between them: the guardian falls, its escort flatlines the
 /// player, and `difficulty::death_handling_system` throws the party out

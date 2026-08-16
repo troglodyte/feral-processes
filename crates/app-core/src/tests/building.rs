@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::species::AffinityClass;
 
 #[test]
 fn the_upgrade_picker_opens_from_the_base_menu_and_esc_backs_into_it() {
@@ -527,4 +528,35 @@ fn node_row(app: &mut App) -> usize {
         .iter()
         .position(|s| s.kind == "mining_node")
         .expect("the fixture deploys one")
+}
+
+/// The Base Staff row carries what the program is worth at a post, so the
+/// player picks staff on the facts the sim actually reads rather than on the
+/// name.
+///
+/// Two species, not two copies of one: rootkit and sprite disagree on all
+/// three answers, which is what makes a screen reading row `i`'s facts off
+/// program `j` fail here instead of passing on identical numbers.
+#[test]
+fn a_staff_row_carries_what_the_program_is_worth_at_a_post() {
+    let mut app = app_owning_distant_programs_of(744, &["rootkit", "sprite"]);
+
+    let rows = app.base_staff_rows();
+    let profile = |name: &str| {
+        rows.iter()
+            .find(|r| r.program.label.contains(name))
+            .unwrap_or_else(|| panic!("fixture spawns a {name}"))
+            .work
+            .expect("a shipped species has a work profile")
+    };
+
+    let rootkit = profile("Rootkit");
+    let sprite = profile("Sprite");
+    assert_eq!(rootkit.speed, 9);
+    assert_eq!(rootkit.analysis, 13);
+    assert_eq!(rootkit.class, Some(AffinityClass::Leech));
+    assert_ne!(
+        sprite.speed, rootkit.speed,
+        "the two rows must not be reporting the same program"
+    );
 }

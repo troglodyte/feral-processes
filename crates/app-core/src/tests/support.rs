@@ -70,16 +70,36 @@ pub(crate) fn test_app(seed: u32) -> App {
 /// Built by editing a save and reloading it, since the engine deliberately
 /// exposes no way to hand-place a tamed program from outside the crate.
 pub(crate) fn app_owning_distant_programs(seed: u32, count: i32) -> App {
+    distant_programs(seed, |game| {
+        let species = game.species_defs()[0].id.clone();
+        (0..count).map(|_| species.clone()).collect()
+    })
+}
+
+/// `app_owning_distant_programs` with the species named per program, for a
+/// test that has to tell two rows apart by something the roster decides —
+/// work speed, aptitude, class. The default fixture gives every program the
+/// same species, which cannot catch a screen that reads row `i`'s facts off
+/// program `j`.
+pub(crate) fn app_owning_distant_programs_of(seed: u32, species: &[&str]) -> App {
+    distant_programs(seed, |_| species.iter().map(|s| s.to_string()).collect())
+}
+
+/// The shared body: one program per name `pick` returns. It takes the
+/// `Game` because the count-based caller wants whichever species the roster
+/// happens to list first, and that is not knowable until one is loaded.
+fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("distant", seed);
     let game = app.game.as_mut().unwrap();
-    let species = game.species_defs()[0].id.clone();
+    let species = pick(game);
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
     let (px, py) = data.player.position;
-    for i in 0..count {
+    for (i, species) in species.iter().enumerate() {
+        let i = i as i32;
         data.creatures.push(CreatureSave {
             species: species.clone(),
             position: (px + MENU_SCAN_RADIUS + 10 + i, py),

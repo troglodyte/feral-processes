@@ -446,6 +446,14 @@ pub struct BaseStaffRow {
     /// in neither set. This read `None` for both and the renderer named the
     /// pair "party", which is the one of the two it is *least* likely to be.
     pub doing: String,
+    /// What this program is worth at a post — see `views::WorkProfile`. The
+    /// screen's whole decision, since the scheduler picks who stands where
+    /// and all the player chooses is who is available to it.
+    ///
+    /// `None` only for a species the db has never heard of, which in play
+    /// means a mod that failed to load. The renderer says so rather than
+    /// quoting numbers nobody authored.
+    pub work: Option<WorkProfile>,
 }
 
 impl App {
@@ -584,6 +592,7 @@ impl App {
                     } else {
                         game.program_activity(program.entity)
                     },
+                    work: game.work_profile(program.entity),
                     on_staff,
                     program,
                 }

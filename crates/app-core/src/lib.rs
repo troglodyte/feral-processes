@@ -35,7 +35,7 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::{
     AchievementRow, BattleView, ContractRefusal, ContractRow, DifficultyMode, Entity, EntityView,
     FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, ProgramSaleOption, SlotShift, WorkOrderReport,
+    MessageSource, ProgramSaleOption, SlotShift, WorkOrderReport, WorkProfile,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

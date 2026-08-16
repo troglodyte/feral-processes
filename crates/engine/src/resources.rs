@@ -630,6 +630,23 @@ pub struct BattleRewards {
     /// fight is still in `Party` when `settle_rewards` runs and is gone by
     /// the time `end_battle` returns, so the name is resolved at flush.
     pub companions: Vec<(Entity, XpTally)>,
+    /// The most recent failed decompile, as the line the pane already showed.
+    ///
+    /// The odd one out here — nothing was granted, and what waits is the
+    /// *only* copy rather than a tally of copies already announced. It is
+    /// here anyway because the shape is the same one: a refusal repeats once
+    /// per catalyst spent and is narration while the fight is on (the pane
+    /// shows every kind), but `retain_outcomes_since_battle` keeps whole
+    /// kinds, so six attempts left six near-identical refusals on the
+    /// results screen. Only the newest still says anything — it is the one
+    /// that knows whether the fraying has hit `DECOMPILE_ATTEMPT_BONUS_CAP`.
+    ///
+    /// The finished string rather than the attempt count, so the live line
+    /// and the summary cannot word the same verdict differently. Cleared by
+    /// a capture: the breach line is pushed live and survives the prune in
+    /// place, so a refusal flushed afterwards would sit *below* it and read
+    /// as a failure that came after the program was already yours.
+    pub decompile_verdict: Option<String>,
 }
 
 /// One fighter's experience over a whole fight.

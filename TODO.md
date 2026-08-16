@@ -35,3 +35,4 @@
 
 
 # Bugs
+1. if i deploy another mining node, and there's an existing work order for core fragments, that additional mining node should be manned. there's a mining node that's attached to another structure, so now all the output from the mining node is consumed by the second structure. expected behaivior i put a work order in for core fragments, and any available entity starts working on all available mining nodes until the work order is finished.

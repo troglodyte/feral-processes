@@ -572,6 +572,112 @@ fn a_failed_decompile_raises_the_odds_quoted_for_the_next_one() {
     );
 }
 
+/// A spent attempt is narration of the round that spent it — the pane shows
+/// every one of them live — but the summary a finished fight leaves on the
+/// map wants the verdict once. Six catalysts fed to one program used to put
+/// six near-identical refusals on the results screen, and the last of them is
+/// the only one that still says anything: it is the one carrying the cap.
+#[test]
+fn only_the_last_failed_decompile_reaches_the_battle_summary() {
+    let mut game = Game::new(3115, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+    let attempts = DECOMPILE_ATTEMPT_BONUS_CAP + 1;
+    for _ in 0..attempts {
+        // Reseeded per attempt rather than once: `SEED_THAT_FAILS` is a seed
+        // whose *first* draw comes up false, so restarting the stream is what
+        // makes every one of these a failure rather than most of them.
+        game.world
+            .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+        game.attempt_decompile(0, player);
+    }
+    assert!(
+        game.world.get::<Hostile>(wild).is_some(),
+        "every seeded roll must fail for this test to be about anything"
+    );
+    assert_eq!(
+        ice_holds_lines(&game).len(),
+        attempts as usize,
+        "the live pane shows every attempt — that half is not the bug"
+    );
+
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    resolve_round_with(&mut game, BattleAction::Attack { group: 0 });
+    assert!(
+        game.world.get_resource::<BattleState>().is_none(),
+        "the fight has to be over for this to be about the summary"
+    );
+
+    let summary = ice_holds_lines(&game);
+    assert_eq!(
+        summary.len(),
+        1,
+        "one verdict, not one line per catalyst: {summary:?}"
+    );
+    assert!(
+        summary[0].contains("as frayed as they will get"),
+        "and it has to be the *last* attempt's, which is the one naming the cap: {:?}",
+        summary[0]
+    );
+}
+
+/// The breach line is pushed live and survives the prune where it stands, so
+/// a refusal held over from an earlier attempt would be flushed *below* it and
+/// read as the capture having come undone.
+#[test]
+fn a_capture_leaves_no_refusal_on_the_summary() {
+    let mut game = Game::new(3116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+    game.attempt_decompile(0, player);
+    assert_eq!(
+        ice_holds_lines(&game).len(),
+        1,
+        "the capture below has to have a refusal to clear for this to be about anything"
+    );
+
+    // Left to the unseeded stream from here, at odds a wounded program with a
+    // skilled decompiler behind it cannot hold out against for long.
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+    for _ in 0..50 {
+        if game.world.get::<Tamed>(wild).is_some() {
+            break;
+        }
+        game.attempt_decompile(0, player);
+    }
+
+    assert!(
+        game.world.get::<Tamed>(wild).is_some(),
+        "the program should have been captured"
+    );
+    assert!(
+        game.world.get_resource::<BattleState>().is_none(),
+        "it was the last group standing, so the fight is over"
+    );
+    let summary = ice_holds_lines(&game);
+    assert!(
+        summary.is_empty(),
+        "a fight that ended in a capture has no refusal left to report: {summary:?}"
+    );
+}
+
+/// What the player can still read about their decompile attempts, in the
+/// order the log holds it.
+fn ice_holds_lines(game: &Game) -> Vec<String> {
+    game.battle_log()
+        .into_iter()
+        .filter(|line| line.text.contains("ICE holds"))
+        .map(|line| line.text)
+        .collect()
+}
+
 /// The counter is per program, not per player — otherwise softening up one
 /// group would quietly discount every other fight on screen.
 #[test]

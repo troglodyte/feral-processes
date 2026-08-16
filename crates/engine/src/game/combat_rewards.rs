@@ -333,8 +333,9 @@ impl Game {
         }
     }
 
-    /// Announces what the fight paid: one salvage tally, then one XP line per
-    /// fighter that earned anything.
+    /// Announces what the fight paid: the last decompile verdict if one is
+    /// outstanding, one salvage tally, then one XP line per fighter that
+    /// earned anything.
     ///
     /// Called at the top of `end_battle`, which puts it ahead of two things
     /// deliberately. Ahead of `dissolve_tamed_program`, because a companion
@@ -354,6 +355,12 @@ impl Game {
             };
             std::mem::take(&mut battle.rewards)
         };
+        // Above the payout, deliberately: it is the answer to what the
+        // catalysts were being spent on, and the narration it stands in for
+        // ran before any of the kills did.
+        if let Some(verdict) = rewards.decompile_verdict {
+            self.log_kind(MessageKind::Outcome, verdict);
+        }
         // Sorted rather than left in the order things fell, so the same haul
         // reads the same way however the kills happened to order it.
         rewards.drops.sort_by(|a, b| a.0.cmp(&b.0));
@@ -730,12 +737,21 @@ impl Game {
             } else {
                 " Its defences are as frayed as they will get."
             };
-            self.log_kind(
-                MessageKind::Outcome,
-                format!("The program's ICE holds — decompile failed!{fraying}"),
-            );
+            let verdict = format!("The program's ICE holds — decompile failed!{fraying}");
+            // `Info`, so the prune drops the run of them; the copy held for
+            // `settle_rewards` is what reaches the summary. See
+            // `BattleRewards::decompile_verdict`.
+            self.log_kind(MessageKind::Info, verdict.clone());
+            self.world
+                .resource_mut::<BattleState>()
+                .rewards
+                .decompile_verdict = Some(verdict);
             return false;
         }
+        self.world
+            .resource_mut::<BattleState>()
+            .rewards
+            .decompile_verdict = None;
 
         let wild_max_hp = self.world.get::<Stats>(front).unwrap().max_hp;
         let nest = self.world.get::<NestGuardian>(front).map(|g| g.nest);

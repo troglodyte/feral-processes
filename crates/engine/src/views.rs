@@ -1374,6 +1374,38 @@ pub struct ProgramManifest {
     pub base_job: Option<AffinityClass>,
 }
 
+/// What a program is worth at a post: how fast it cycles, how reliably, and
+/// what its class adds on top. The three facts the Base Staff screen ranks
+/// programs by, and the same trio the manifest's WORK box draws.
+///
+/// A grouping and not an abstraction — no trait, no second implementor. It
+/// exists so the walk from an entity to its `SpeciesDef` is written once
+/// instead of once per fact, since all three answers come off the same def
+/// and all three are `None` together when it is missing.
+///
+/// Deliberately **not** the battle stats. Nothing on this struct is read by
+/// combat and nothing combat reads belongs on it: `work_ticks_at_speed`
+/// takes `speed`, the gather roll takes `analysis`, and `class` decides only
+/// what a landed cycle is worth. A program's Attack has no effect at a
+/// machine, so a staffing screen that showed it would be describing a
+/// relationship the sim does not have.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WorkProfile {
+    /// `SpeciesDef::base_speed` — the cycle rate, against
+    /// `tuning::DEFAULT_BASE_SPEED` as the baseline that leaves a machine's
+    /// shipped `ticks_per_unit` unchanged (see `systems::work_ticks_at_speed`).
+    pub speed: i32,
+    /// `SpeciesDef::base_int`, the extraction aptitude — how often a cycle
+    /// lands rather than fizzles. Named for the word the player reads
+    /// ("Analysis") rather than the field, the choice `ManifestEntry`
+    /// already documents.
+    pub analysis: i32,
+    /// The species' base job, or `None` for a boss and for anything else
+    /// outside the class system. Carried as the class rather than a finished
+    /// phrase so the renderer keeps choosing the player-facing word.
+    pub class: Option<AffinityClass>,
+}
+
 /// An individual's four `Potential` rolls, surfaced separately rather than
 /// only as the aggregate tier the party menu shows.
 #[derive(Debug, PartialEq)]

@@ -838,6 +838,27 @@ impl Game {
         })
     }
 
+    /// What `creature` is worth at a post — see `views::WorkProfile`.
+    ///
+    /// `None` when the species is not in the db, which in play means a mod
+    /// that failed to load. Quoting the roster's baseline numbers for it
+    /// would be inventing them, and the caller can say "unknown" far better
+    /// than this can guess.
+    ///
+    /// The manifest reads the same three off a `&SpeciesDef` it already has
+    /// in hand rather than calling this, and that is not a copy worth
+    /// closing: these are field reads, not a formula, so there is nothing
+    /// here that can drift out of step with them.
+    pub fn work_profile(&self, creature: Entity) -> Option<WorkProfile> {
+        let species = &self.world.get::<Creature>(creature)?.species;
+        let def = self.world.resource::<SpeciesDb>().get(species)?;
+        Some(WorkProfile {
+            speed: def.base_speed,
+            analysis: def.base_int,
+            class: def.affinity_class(),
+        })
+    }
+
     /// Every deployed structure that's a symlink target (its def has
     /// `teleport_cost` set), anywhere on the map — unlike `view_entities`,
     /// this isn't limited to a scan radius, since the whole point of a

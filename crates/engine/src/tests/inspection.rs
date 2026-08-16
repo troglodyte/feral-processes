@@ -1967,3 +1967,53 @@ fn with_no_sectors_installed_the_hues_stay_neutral() {
         )
     );
 }
+
+/// The three facts that decide what a program is worth at a post, in one
+/// answer — `Game::work_profile`, which the Base Staff screen reads.
+///
+/// Rootkit is the fixture because its three answers are mutually
+/// distinguishable: speed and analysis differ from each other *and* from
+/// their species defaults, so a profile that returned the wrong field, or
+/// fell through to a default, still fails. Against a species where any two
+/// agree, this test would pass with the lookup wired to the wrong one.
+#[test]
+fn a_work_profile_carries_the_three_facts_that_decide_a_posting() {
+    let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    game.world.get_mut::<Creature>(program).unwrap().species = "rootkit".to_string();
+
+    let def = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.id == "rootkit")
+        .expect("rootkit ships with the game");
+    assert_ne!(
+        def.base_speed, def.base_int,
+        "the fixture stops distinguishing a swapped field the day these agree"
+    );
+    assert_ne!(def.base_speed, crate::tuning::DEFAULT_BASE_SPEED);
+    assert_ne!(def.base_int, crate::tuning::DEFAULT_BASE_INT);
+
+    let profile = game
+        .work_profile(program)
+        .expect("a program of a shipped species has a work profile");
+    assert_eq!(profile.speed, def.base_speed);
+    assert_eq!(profile.analysis, def.base_int);
+    assert_eq!(
+        profile.class,
+        Some(AffinityClass::Leech),
+        "drain is rootkit's one raised axis, so Leech is its base job"
+    );
+}
+
+/// `None` rather than a defaulted profile: a species the db has never heard
+/// of is a mod that failed to load, and quoting it the roster's baseline
+/// numbers would be inventing them.
+#[test]
+fn a_work_profile_is_none_for_a_species_the_db_never_heard_of() {
+    let mut game = Game::new(3211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    game.world.get_mut::<Creature>(program).unwrap().species = "no_such_species".to_string();
+
+    assert!(game.work_profile(program).is_none());
+}

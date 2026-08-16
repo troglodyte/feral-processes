@@ -1415,4 +1415,3 @@ fn an_overwhelming_program_pays_no_more_than_the_ceiling() {
         "however far out of its depth, a kill pays its bar times the ceiling"
     );
 }
-

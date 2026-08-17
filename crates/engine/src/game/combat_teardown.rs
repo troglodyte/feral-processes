@@ -376,6 +376,24 @@ impl Game {
                 if fresh {
                     self.name_new_nemesis(hostile);
                 }
+                // The same shake `battle_flee` performs on a successful
+                // jack-out, generalised to the path that function's own
+                // comment doesn't cover: a Forgiving defeat with no
+                // structure to warp to leaves the player's `Position`
+                // exactly where it was, adjacent to whatever just beat
+                // them. A `NestGuardian` marked here is promoted and
+                // healed to its new max in the same breath — if it were
+                // still `Pursuing`, `nest_aggro_tick` (already the first
+                // thing to call `start_battle` from inside `tick_inner`,
+                // and running later in the very same tick via
+                // `death_handling_system`) would re-engage it before the
+                // player's next input ever arrived. `NestGuardian` itself
+                // is left alone, so the guardian keeps its tether and just
+                // resumes ordinary wandering; `attack_nest` re-provokes it
+                // next time. Only a hostile that actually got marked loses
+                // its `Pursuing` here — one the cap refused keeps chasing,
+                // exactly as it did before this feature existed.
+                self.world.entity_mut(hostile).remove::<Pursuing>();
             }
         }
     }

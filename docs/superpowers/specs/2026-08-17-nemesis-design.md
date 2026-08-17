@@ -158,7 +158,19 @@ thing that beat you is meaningfully worse news now.
 **The escalation is safe to leave uncapped in this sense because a nemesis
 cannot force the rematch.** `systems::wander_ai_system` moves hostiles and
 never initiates combat, and `Pursuing` is only ever inserted alongside
-`NestGuardian`. Engaging a nemesis is the player's decision, every time.
+`NestGuardian`. The one thing that *can* force an engagement is
+`Game::nest_aggro_tick` — CLAUDE.md flags it as the first code to call
+`start_battle` from inside `tick_inner` — which re-engages any `Pursuing`
+guardian still adjacent to the player. A mark can land on exactly such a
+guardian, promoted and healed to full in the same breath, and a Forgiving
+defeat with no structure to warp to leaves the player standing right where
+they fell — adjacent to it, on the very next tick. `mark_nemeses` closes that
+off by dropping `Pursuing` from every hostile it marks, the same shake
+`battle_flee` already performs on a successful jack-out. `NestGuardian` stays
+untouched, so a cleared guardian keeps its tether and just resumes ordinary
+wandering; the nest re-provokes it the next time `attack_nest` lands a hit.
+That is what makes "engaging a nemesis is the player's decision, every time"
+true rather than a caveat.
 
 ### The recharge
 

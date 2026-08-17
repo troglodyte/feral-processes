@@ -102,6 +102,74 @@ fn a_successful_jack_out_marks_the_surviving_hostile_at_grudge_1() {
     );
 }
 
+/// The hole Finding 1 of the final review closed: `battle_flee` already
+/// strips `Pursuing` from every battle member on a successful jack-out (see
+/// its own comment naming `nest_aggro_tick`), but nothing did the same on a
+/// Forgiving defeat. A player with no structures anywhere is not warped by
+/// `difficulty::death_handling_system` — `forgiving_death_stays_in_place_
+/// when_no_structures_exist` pins that — so they wake up exactly where they
+/// fell, adjacent to a `NestGuardian` that `mark_nemeses` just promoted and
+/// healed to full. Left `Pursuing`, that guardian would be re-engaged by
+/// `nest_aggro_tick` before the player's next input ever arrived —
+/// `nest_aggro_tick` runs inside the very same `tick()` call that
+/// `battle_resolve_round` makes after `death_handling_system`, both in
+/// `Game::tick_inner`'s schedule.
+///
+/// Verified by mutation: the `self.world.entity_mut(hostile).remove::
+/// <Pursuing>();` line added to `mark_nemeses` was deleted and this test
+/// failed both assertions — `Pursuing` survived the mark, and the guardian
+/// immediately re-opened a battle in the very call that was supposed to end
+/// one. Restored after confirming the failure.
+#[test]
+fn a_pursuing_guardian_that_wins_by_default_is_no_longer_pursuing() {
+    let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // No `Nest` component needed — `nest_aggro_tick`'s leash check only asks
+    // for a `Position` on the entity `NestGuardian::nest` names, and this
+    // fixture has no reason to stand up a whole nest to get one.
+    let nest = game
+        .world
+        .spawn(Position {
+            x: player_pos.x,
+            y: player_pos.y,
+        })
+        .id();
+    let wild = game
+        .spawn_wild_creature("construct", player_pos.x, player_pos.y)
+        .expect("construct ships with the game");
+    {
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        stats.hp = 100_000;
+        stats.max_hp = 100_000;
+        stats.atk = 100_000;
+    }
+    game.world
+        .entity_mut(wild)
+        .insert((NestGuardian { nest }, Pursuing));
+
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+
+    assert!(
+        game.world.get::<Nemesis>(wild).is_some(),
+        "setup: the fixture should have marked the guardian as a nemesis"
+    );
+    assert!(
+        game.world.get::<Pursuing>(wild).is_none(),
+        "a marked guardian must lose Pursuing, or it re-engages the instant \
+         a Forgiving defeat with nowhere to warp to leaves the player \
+         standing right next to it"
+    );
+    assert!(
+        !game.has_active_battle(),
+        "nest_aggro_tick ran inside the same tick() call battle_resolve_round \
+         just made — a still-Pursuing guardian would have re-opened a battle \
+         before the player ever got a turn"
+    );
+}
+
 #[test]
 fn a_forgiving_defeat_marks_the_surviving_hostile_at_grudge_1() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -531,12 +599,14 @@ fn a_save_written_without_the_nemesis_field_loads_to_an_unmarked_creature() {
 /// The controller ruling this test follows instead of the task brief:
 /// `GameRng` wraps `StdRng`, which is not `PartialEq`, so its state cannot
 /// be snapshotted and compared directly. The differential proof is two
-/// `Game`s built from the same seed — sharing a stream position by
-/// construction, since neither `Game::new` nor `start_battle_with_a_wild_
-/// program` draws from `GameRng` — with only one asked to mark. **Several**
-/// draws afterward, not one: a single draw could coincidentally land on the
-/// same value either way, where a run of five landing on the same sequence
-/// is not a coincidence.
+/// `Game`s built from the same seed — `Game::new` seeds a wild population
+/// and `start_battle_with_a_wild_program` rolls a fresh `Potential`
+/// (`roll_potential`), so both DO draw from `GameRng`, but identically: same
+/// seed, same calls, same draws in the same order, so the two `Game`s share
+/// a stream position by construction regardless. Only one is then asked to
+/// mark. **Several** draws afterward, not one: a single draw could
+/// coincidentally land on the same value either way, where a run of five
+/// landing on the same sequence is not a coincidence.
 ///
 /// Verified by mutation: a `rng.0.random::<u64>()` draw was added inside
 /// `name_new_nemesis` and this test failed (`marked` and `untouched`

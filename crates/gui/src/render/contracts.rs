@@ -3,6 +3,17 @@
 use super::popup::*;
 use super::*;
 
+/// The board's own header. Off the base the offers are still listed — they
+/// are the sector's, not the tile's — so this is where the screen says they
+/// cannot be signed from here, rather than leaving the player to press a key
+/// and read a refusal.
+fn offered_header(reach: BrokerReach) -> String {
+    match reach {
+        BrokerReach::AtBroker | BrokerReach::NoBroker => "Offered".to_string(),
+        BrokerReach::OffBase => "Offered - return to your base to take one".to_string(),
+    }
+}
+
 /// Two stacked sections, numbered continuously — active contracts first, then
 /// the board's offers.
 ///
@@ -13,6 +24,7 @@ use super::*;
 pub(super) fn draw_contracts(
     active: &[ContractRow],
     offers: &[ContractRow],
+    reach: BrokerReach,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
@@ -31,7 +43,7 @@ pub(super) fn draw_contracts(
     }
 
     rows.push(text_row(""));
-    rows.push(Row::TextColored("Offered".to_string(), CYAN));
+    rows.push(Row::TextColored(offered_header(reach), CYAN));
     if offers.is_empty() {
         rows.push(text_row("    Nothing on the board."));
     }
@@ -74,6 +86,29 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use feral_processes_engine::{DifficultyMode, Game};
+
+    /// The board stays on screen off the base, so the header is the only
+    /// thing that says the offers cannot be taken from here. A player who has
+    /// to press a key to find that out has been shown a menu that lies.
+    #[test]
+    fn the_board_header_says_when_an_offer_cannot_be_taken_from_here() {
+        assert_eq!(offered_header(BrokerReach::AtBroker), "Offered");
+        assert_eq!(
+            offered_header(BrokerReach::NoBroker),
+            "Offered",
+            "with no Broker the section is empty anyway, and `Nothing on the \
+             board` is the line that speaks"
+        );
+        let away = offered_header(BrokerReach::OffBase);
+        assert!(
+            away.starts_with("Offered"),
+            "the section still has to be recognisable as the board: {away:?}"
+        );
+        assert!(
+            away.contains("base"),
+            "the header names the errand: {away:?}"
+        );
+    }
 
     /// **The widest contract row the shipped assets can build still fits.**
     ///

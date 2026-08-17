@@ -830,10 +830,16 @@ pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
     }
 }
 
-/// A game with a Contract Broker one tile east of the player, so the
-/// contracts screen has a board on it. `underground` drops the party into a
-/// Stack frame afterwards, which is what makes the offers half go away while
-/// the active half stays.
+/// A game with a Contract Broker one tile east of the player, standing on a
+/// base the player is also standing on — which is what `BrokerReach::AtBroker`
+/// asks for, and what a run that owns a Broker looks like anyway, since
+/// nothing but a Home may be deployed before a Home is. `underground` drops
+/// the party into a Stack frame afterwards, which is what refuses the verbs
+/// while leaving the board readable.
+///
+/// The Home is what puts the slab there: the load path derives
+/// `Platform::center` from `Game::home_position`, so a save with a Broker and
+/// no Home loads as a base that does not exist.
 ///
 /// Built by editing a save for the reason `app_at_trading_posts` is: the
 /// engine exposes no way to hand-place a structure from outside the crate.
@@ -846,16 +852,18 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
 
     let mut data = save::load_from_file(&path).unwrap();
     let (px, py) = data.player.position;
-    data.structures.push(save::StructureSave {
-        kind: "contract_broker".to_string(),
-        position: (px + 1, py),
-        durability: None,
-        tier: None,
-        stock_input: Vec::new(),
-        stock_output: Vec::new(),
-        standing_work: false,
-        standing_guard: false,
-    });
+    for (kind, position) in [("home", (px, py + 1)), ("contract_broker", (px + 1, py))] {
+        data.structures.push(save::StructureSave {
+            kind: kind.to_string(),
+            position,
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
+        });
+    }
     if underground {
         data.locale = Locale::Stack {
             depth: 1,
@@ -870,4 +878,27 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
     app
+}
+
+/// Moves the player well clear of the base slab, without walking there.
+///
+/// A save round trip rather than ten movement keys, which is what the
+/// contracts fixtures already do and for the same reason — the engine hands
+/// app-core no way to write a `Position` — plus one of its own: walking ten
+/// tiles ticks the world ten times, and a wild program met on the way would
+/// answer a question about the contracts screen with a battle.
+pub(crate) fn walk_far_from_the_base(app: &mut App) {
+    let path = scratch_path("off_base", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    // Twice `MAX_BUILD_RADIUS_TILES` clear of the slab, so this stays true of
+    // a base that has grown as far as one can.
+    data.player.position = (
+        px + feral_processes_engine::tuning::MAX_BUILD_RADIUS_TILES * 2,
+        py,
+    );
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
 }

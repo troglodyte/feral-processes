@@ -120,19 +120,23 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not surface-only, and deliberately so: the offers half asks
-        // `Game::contract_board`, which answers `None` underground on its own
-        // rather than through a `nearby_*` scan around a `Position` pinned to
-        // the surface entrance tile — so underground this reduces to "is
-        // anything in hand", which is exactly the question worth answering
-        // four frames down.
+        // Not surface-only, and deliberately so: mission status is the
+        // question worth answering four frames down, and the board itself is
+        // a property of the sector rather than of where the party is
+        // standing. Off the base the screen opens read-only — see
+        // `Game::broker_reach`.
+        //
+        // `broker_reach` rather than `contract_board`, which is what this row
+        // used to ask: this closure runs every frame the menu is open, and a
+        // board that no longer refuses on distance rolls every template and
+        // samples the habitat ring before it can answer. The proximity check
+        // used to short-circuit all of that.
         label: "Contracts",
         target: Mode::Contracts,
         surface_only: false,
         available: |app| {
             app.game.as_mut().is_some_and(|g| {
-                g.contract_board().is_some_and(|board| !board.is_empty())
-                    || !g.active_contracts().is_empty()
+                g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
             })
         },
     },

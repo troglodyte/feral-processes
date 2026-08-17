@@ -994,10 +994,53 @@ fn the_broker_is_buildable_from_turn_one() {
 // The derived board
 // ---------------------------------------------------------------------------
 
-/// A Broker one tile from the player, which is where a board is read from.
+/// A Broker beside the player, standing on a base the player is also on —
+/// which is what a run that has one actually looks like, since
+/// `place_structure` refuses everything but a Home until a Home is standing
+/// and `stamp_platform` then covers every structure on the slab.
+///
+/// The slab is laid directly rather than through `place_home`, which spends a
+/// `tick()` and five Core Fragments: a tick here would move the shared
+/// `GameRng` for every seeded board below it.
+///
+/// The Home itself still has to stand, and not for tidiness — the load path
+/// restores `Platform::center` from `Game::home_position`, so a slab stamped
+/// without one comes back from a save as no slab at all. That is a fixture
+/// that survives its own round trip, which
+/// `the_same_rolled_contract_comes_back_after_a_save_and_load` needs: the
+/// species half of `template_pools` is read off the ring around the slab, and
+/// a board rolled with no slab is a different board.
 fn deploy_broker(game: &mut Game) {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    deploy(game, "home", pos.x, pos.y + 1);
+    game.stamp_platform(pos.x, pos.y + 1);
     deploy(game, "contract_broker", pos.x + 1, pos.y);
+}
+
+/// Off the slab entirely, and far enough out that the Broker's own tile
+/// cannot be what answers.
+fn stand_off_base(game: &mut Game) {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    stand_player_at(game, pos.x + 10, pos.y);
+}
+
+/// The far edge of the slab: on the base, but outside the arm's-length reach
+/// the board used to be reachable from. This is the case the whole rule
+/// exists for.
+fn stand_across_the_base(game: &mut Game) {
+    let (cx, cy) = game
+        .world
+        .resource::<crate::resources::Platform>()
+        .center
+        .expect("deploy_broker lays the slab");
+    let edge = crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+    stand_player_at(game, cx + edge, cy);
+    let broker_gap = edge - 1;
+    assert!(
+        broker_gap > 2,
+        "the far edge has to be further from the Broker than arm's length, \
+         or this fixture proves nothing"
+    );
 }
 
 /// Marks every shipped starter finished. A test about the rest of the board's
@@ -2147,4 +2190,201 @@ fn no_shipped_contract_or_template_can_be_offered_already_finished() {
             game.tick();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Where the board may be read, and where it may be acted on
+// ---------------------------------------------------------------------------
+
+/// The board is a bulletin, not a conversation: it is derived from the world
+/// seed, the sector and the epoch and makes no claim about where the party
+/// is, so there is nothing for standing somewhere else to invalidate.
+#[test]
+fn the_board_is_readable_from_off_the_base() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let at_the_desk = board_ids(&mut game);
+    assert!(!at_the_desk.is_empty(), "a zone-1 board fills its slots");
+
+    stand_off_base(&mut game);
+    assert_eq!(
+        board_ids(&mut game),
+        at_the_desk,
+        "the offers are the sector's, not the tile's — walking away from the \
+         base must not change what is on the board"
+    );
+}
+
+/// The same reasoning underground, where it replaces the opposite rule: the
+/// board used to be `None` down there because reach was measured from a
+/// `Position` pinned to the surface entrance tile. Nothing measures from the
+/// player's tile any more, so the reason is gone and the answer changes with
+/// it. Taking one is still refused, which is what that guard was protecting.
+#[test]
+fn the_board_is_readable_underground_and_nothing_can_be_taken_off_it() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let on_the_surface = board_ids(&mut game);
+    let id = on_the_surface
+        .first()
+        .cloned()
+        .expect("a zone-1 board fills its slots");
+
+    set_depth(&mut game, 2);
+    assert_eq!(
+        board_ids(&mut game),
+        on_the_surface,
+        "four frames down the sector is still offering what it was offering"
+    );
+    assert_eq!(
+        game.accept_contract(&id),
+        Err(ContractRefusal::NotAtBroker),
+        "reading the board and standing at it are different questions"
+    );
+    assert!(
+        game.world.resource::<ActiveContracts>().active.is_empty(),
+        "a refused acceptance leaves the run exactly as it found it"
+    );
+}
+
+/// The feature: the Broker's own tile stops mattering once you are home.
+#[test]
+fn a_contract_is_taken_from_anywhere_on_the_base() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let id = first_offer(&mut game);
+
+    stand_across_the_base(&mut game);
+    assert_eq!(
+        game.accept_contract(&id),
+        Ok(()),
+        "standing on your own slab is standing at your Broker"
+    );
+    assert_eq!(game.world.resource::<ActiveContracts>().active.len(), 1);
+}
+
+#[test]
+fn taking_a_contract_off_the_base_is_refused_and_writes_nothing() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let id = first_offer(&mut game);
+
+    stand_off_base(&mut game);
+    assert_eq!(
+        game.accept_contract(&id),
+        Err(ContractRefusal::NotAtBroker),
+        "a contract on the board a sector away is not a contract in hand"
+    );
+    assert!(game.world.resource::<ActiveContracts>().active.is_empty());
+}
+
+/// Distinct from `NotAtBroker` on purpose: the two leave the player different
+/// errands, which is `NoPost::BoxedIn`'s reason for existing beside
+/// `NoPost::NoRoute`. One says go home, the other says nobody is offering it.
+#[test]
+fn a_run_with_no_broker_is_refused_differently_from_one_away_from_its_broker() {
+    let mut game = fresh();
+    let id = ContractId::from("anything");
+    assert_eq!(
+        game.accept_contract(&id),
+        Err(ContractRefusal::NotOffered),
+        "with nothing built, there is no board to be away from"
+    );
+    assert!(game.contract_board().is_none());
+}
+
+#[test]
+fn handing_over_cargo_off_the_base_keeps_the_cargo() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let before = carried(&game, "core_fragment");
+    assert!(before >= 3, "the fixture needs stock, has {before}");
+    let id = deliver_fixture(&mut game, 3);
+
+    stand_off_base(&mut game);
+    assert_eq!(
+        game.deliver_to_contract(&id),
+        Err(ContractRefusal::NotAtBroker)
+    );
+    assert_eq!(
+        carried(&game, "core_fragment"),
+        before,
+        "every refusal lands before anything leaves cargo"
+    );
+    assert_eq!(progress_of(&game, "quota"), 0);
+}
+
+#[test]
+fn cargo_is_handed_over_from_anywhere_on_the_base() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let id = deliver_fixture(&mut game, 3);
+
+    stand_across_the_base(&mut game);
+    assert_eq!(game.deliver_to_contract(&id), Ok(3));
+}
+
+/// Giving one back is deliberately not gated. A contract abandoned in the
+/// field is abandoned — walking home to resign is errand, not decision.
+#[test]
+fn a_contract_is_given_back_from_anywhere() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let id = first_offer(&mut game);
+    game.accept_contract(&id).unwrap();
+
+    stand_off_base(&mut game);
+    assert!(game.abandon_contract(&id));
+    assert!(game.world.resource::<ActiveContracts>().active.is_empty());
+}
+
+/// Three states, and the middle one is the whole point: a run can have a
+/// Broker without the player being at it.
+#[test]
+fn broker_reach_reports_the_three_states() {
+    let mut game = fresh();
+    assert_eq!(game.broker_reach(), BrokerReach::NoBroker);
+
+    deploy_broker(&mut game);
+    assert_eq!(game.broker_reach(), BrokerReach::AtBroker);
+
+    stand_across_the_base(&mut game);
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::AtBroker,
+        "the far edge of the slab is still the base"
+    );
+
+    stand_off_base(&mut game);
+    assert_eq!(game.broker_reach(), BrokerReach::OffBase);
+}
+
+/// The slab is derived and grows, so the rule has to grow with it — reading
+/// `MAX_BUILD_DISTANCE_FROM_HOME` where the question is about a base that
+/// *exists* is the mistake this guards.
+#[test]
+fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let (cx, cy) = game
+        .world
+        .resource::<crate::resources::Platform>()
+        .center
+        .unwrap();
+    let grown = crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME + 3;
+    stand_player_at(&mut game, cx + grown, cy);
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::OffBase,
+        "that tile is outside the slab as it stands"
+    );
+
+    game.world
+        .resource_mut::<crate::resources::Platform>()
+        .radius = grown;
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::AtBroker,
+        "the same tile, once the slab reaches it"
+    );
 }

@@ -271,19 +271,26 @@ mod tests {
     }
 
     /// Loading is not the bar for `contracts` either: it exists so a session
-    /// testing the contracts loop starts *at a board*, and a Broker placed one
-    /// tile too far away would load perfectly and offer nothing. The research
-    /// buy and the build are exactly what the template is for skipping.
+    /// testing the contracts loop starts *at a board it can sign*, and a
+    /// template that parked the player off their own slab would load
+    /// perfectly and refuse every offer. The research buy and the build are
+    /// exactly what the template is for skipping.
     #[test]
-    fn the_contracts_template_starts_within_reach_of_a_board() {
+    fn the_contracts_template_starts_at_a_board_it_can_take_from() {
         let out = std::env::temp_dir().join("feral_processes_template_contracts_board.bin");
         generate("contracts", &out).unwrap();
         let mut game = Game::load(&out, &assets_dir()).unwrap();
         let _ = std::fs::remove_file(&out);
 
+        assert_eq!(
+            game.broker_reach(),
+            feral_processes_engine::BrokerReach::AtBroker,
+            "the template has to park the player on the base, not merely near \
+             the Broker — reading the board is not taking from it"
+        );
         let board = game
             .contract_board()
-            .expect("the template parks the player within CONTRACT_BOARD_RANGE_TILES of a Broker");
+            .expect("the template deploys a Broker");
         assert!(
             !board.is_empty(),
             "a Broker in reach with an empty board is a template that tests nothing"

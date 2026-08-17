@@ -37,13 +37,58 @@ fn a_contract_in_hand_shows_the_row_underground() {
 
     let mut app = app_at_a_contract_broker(3104, true);
     assert!(
-        app.game.as_mut().unwrap().contract_board().is_none(),
-        "no board four frames down"
+        app.game.as_mut().unwrap().contract_board().is_some(),
+        "the board is the sector's bulletin, and four frames down the party \
+         is still in the sector"
     );
     assert!(
-        !base_labels(&mut app).contains(&"Contracts"),
-        "underground with nothing in hand there is still nothing to show"
+        base_labels(&mut app).contains(&"Contracts"),
+        "mission status is the question worth answering underground"
     );
+}
+
+/// The row is what makes the screen reachable at all, so "you can check your
+/// missions from anywhere" is really a claim about this list.
+#[test]
+fn the_row_is_listed_across_the_map_from_the_base() {
+    let mut app = app_at_a_contract_broker(3120, false);
+    walk_far_from_the_base(&mut app);
+    assert_eq!(
+        app.broker_reach(),
+        BrokerReach::OffBase,
+        "the fixture has to actually leave the slab"
+    );
+    assert!(
+        base_labels(&mut app).contains(&"Contracts"),
+        "the board is readable from anywhere, so the row that opens it is too"
+    );
+}
+
+/// The refusal a player will actually hit: they read the board out in the
+/// field and press a number. The wording has to send them home rather than
+/// claim the contract does not exist.
+#[test]
+fn taking_an_offer_away_from_the_base_says_where_to_go() {
+    let mut app = app_at_a_contract_broker(3121, false);
+    open_via_menu(&mut app, 'b', "Contracts");
+    let offered = app.contract_sections().1;
+    assert!(!offered.is_empty(), "the fixture needs a board");
+
+    walk_far_from_the_base(&mut app);
+    assert_eq!(
+        app.contract_sections().1.len(),
+        offered.len(),
+        "the offers are still on screen out here"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+    assert!(app.game.as_ref().unwrap().active_contracts().is_empty());
+    let said = app.status_line.clone().expect("a refusal is reported");
+    assert!(
+        said.contains("base"),
+        "the refusal has to name the errand, not just decline: {said:?}"
+    );
+    assert_eq!(app.mode, Mode::Contracts, "the screen stays open");
 }
 
 #[test]

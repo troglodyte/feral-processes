@@ -32,3 +32,5 @@
 
 
 # Bugs
+1. if there is a mining node attached to a lathe, and an order comes in for x amount of core fragments. the worker should work the mining node and deliver the core fragments to the depot, not the lathe. the lathe should only 'consume' core fragments if there's a current working order for the lathe. currently, a worker works the mining node and does not deliver core fragments to the depot if the mining node is touching an unworked lathe.
+

@@ -42,6 +42,21 @@ impl App {
         (game.active_contracts(), offers)
     }
 
+    /// Whether the offers on screen can be acted on from where the player is
+    /// standing. The renderer says so in the board's header rather than
+    /// leaving the player to press a key and read a refusal.
+    ///
+    /// Asked of the engine rather than derived from the two lists being
+    /// non-empty, because "there is a board" and "you may take from it" are
+    /// exactly the two things `Game::broker_reach` exists to keep from
+    /// drifting apart.
+    pub fn broker_reach(&mut self) -> BrokerReach {
+        self.game
+            .as_mut()
+            .map(|game| game.broker_reach())
+            .unwrap_or(BrokerReach::NoBroker)
+    }
+
     pub(crate) fn handle_contracts_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -112,6 +127,9 @@ fn refusal_line(why: ContractRefusal) -> String {
         ContractRefusal::AlreadyActive => "You have that one already.".to_string(),
         ContractRefusal::AlreadyDone => "That one is finished.".to_string(),
         ContractRefusal::NotOffered => "Nobody here is offering that.".to_string(),
+        ContractRefusal::NotAtBroker => {
+            "You can read the board from here, but not sign it. Go back to your base.".to_string()
+        }
         ContractRefusal::NothingToDeliver => {
             "You are not carrying anything it asks for.".to_string()
         }

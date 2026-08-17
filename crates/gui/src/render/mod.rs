@@ -17,8 +17,8 @@ use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
-    Assignee, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow, LogEntry,
-    MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep,
+    Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
+    LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep,
     ResearchState, StructureReport,
 };
 
@@ -553,9 +553,12 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     // `group_rows`' reason one line up: the handler resolves a row number
     // against these two lists, so a renderer with its own copy would act on a
     // different contract from the one under the highlight.
-    let (contract_active, contract_offers) = match app.mode {
-        Mode::Contracts => app.contract_sections(),
-        _ => (Vec::new(), Vec::new()),
+    let (contract_active, contract_offers, contract_reach) = match app.mode {
+        Mode::Contracts => {
+            let (active, offers) = app.contract_sections();
+            (active, offers, app.broker_reach())
+        }
+        _ => (Vec::new(), Vec::new(), BrokerReach::NoBroker),
     };
     let scanned = match app.mode {
         Mode::WorkStructure => app.workable_structures(),
@@ -744,7 +747,14 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         }
         Mode::Perks => draw_perks_menu(game, selected, painter, m),
         Mode::Research => draw_research_menu(game, selected, painter, m),
-        Mode::Contracts => draw_contracts(&contract_active, &contract_offers, selected, painter, m),
+        Mode::Contracts => draw_contracts(
+            &contract_active,
+            &contract_offers,
+            contract_reach,
+            selected,
+            painter,
+            m,
+        ),
         Mode::History => draw_history(game, selected, painter, m),
         Mode::Structures => draw_structures(game, selected, painter, m),
         Mode::StructureAssign => {

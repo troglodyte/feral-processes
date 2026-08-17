@@ -178,6 +178,21 @@ impl Game {
     }
 }
 
+/// Where the player is standing, as far as contracts are concerned. See
+/// `Game::broker_reach`, which is the only thing that builds one.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum BrokerReach {
+    /// Nothing standing that `issues_contracts`, so there is no board to
+    /// read and nothing to be away from.
+    NoBroker,
+    /// A Broker exists, but the player is not on the base — off the slab, or
+    /// underground. The board is readable; nothing on it can be acted on.
+    OffBase,
+    /// On the base, on the surface, with a Broker standing. Everything is
+    /// available.
+    AtBroker,
+}
+
 /// Salts the board's seed so what a sector is offering does not correlate
 /// with anything else derived from the same world seed. Its own named
 /// constant, per `FrameSpec::salted`'s rule — one scheme, not a second seed
@@ -200,12 +215,13 @@ pub(crate) fn fold(mut h: u64, bytes: &[u8]) -> u64 {
 }
 
 impl Game {
-    /// What a Broker within `CONTRACT_BOARD_RANGE_TILES` is offering, or
-    /// `None` if there is no Broker in reach.
+    /// What the run's Broker is offering, or `None` if the run has no Broker
+    /// standing.
     ///
     /// One call answers both "is there a board" and "what is on it", so no
     /// screen asks those separately and then disagrees — `Game::stack_market`'s
-    /// contract.
+    /// contract. Whether the player may *take* any of it is the third
+    /// question and `Game::broker_reach`'s.
     ///
     /// **Offers are derived, never stored.** A local `StdRng` seeded from the
     /// world seed, the sector and the epoch, exactly as `market_offers` is
@@ -216,11 +232,13 @@ impl Game {
     /// reading it spends no `GameRng` draw and so shifts nobody's stream, it
     /// cannot be rerolled by save-scumming, and it rotates on its own.
     ///
-    /// `None` underground, and that is not an oversight: the player's
-    /// `Position` is pinned to the surface entrance tile the whole time they
-    /// are down there, so a range check made from it would put the party at a
-    /// Broker they are four frames below. `active_contracts` is what reads
-    /// anywhere.
+    /// Readable from anywhere, underground included, and that follows from
+    /// the seed above rather than being a concession: the board is a property
+    /// of the sector and makes no claim about where the party is standing, so
+    /// there is nothing for distance to invalidate. It used to be `None`
+    /// underground because reach *was* measured from the player's `Position`,
+    /// which is pinned to the surface entrance tile the whole time they are
+    /// down there — that reading is what `broker_reach` retired.
     pub fn contract_board(&mut self) -> Option<Vec<crate::views::ContractRow>> {
         let defs = self.board_defs()?;
         Some(defs.iter().map(|def| self.contract_row(def, 0)).collect())
@@ -238,7 +256,7 @@ impl Game {
     /// contract already accepted), and that is exactly the shape a rolled one
     /// needs.
     fn board_defs(&mut self) -> Option<Vec<crate::contracts::ContractDef>> {
-        if self.is_underground() || !self.broker_in_range() {
+        if self.broker_reach() == BrokerReach::NoBroker {
             return None;
         }
         let mut pool = self.offerable_contracts();
@@ -537,21 +555,52 @@ impl Game {
             .collect()
     }
 
-    /// Whether a Contract Broker is close enough to deal with.
-    fn broker_in_range(&mut self) -> bool {
+    /// Where the player stands in relation to the run's Contract Broker —
+    /// the one derivation behind both "is there a board" and "may I act on
+    /// it".
+    ///
+    /// Three states out of one call rather than two predicates, for
+    /// `NoPost::BoxedIn`'s reason for sitting beside `NoPost::NoRoute`: five
+    /// things ask this (the board, accepting, delivering, the base menu's row
+    /// and the screen's own header) and two independent booleans would let
+    /// them disagree about whether a board that is drawn can be taken from.
+    ///
+    /// The Broker's own tile does not enter into it. `place_structure` refuses
+    /// everything but a Home until a Home is standing and the slab always
+    /// covers every structure on it, so a Broker is on the base by
+    /// construction — which makes "is the player on the base" the whole
+    /// question, and `Platform::covers` the one place it is asked. Reading
+    /// `MAX_BUILD_DISTANCE_FROM_HOME` here instead would freeze the desk at
+    /// the radius a base *starts* at.
+    pub fn broker_reach(&mut self) -> BrokerReach {
+        if !self.has_broker() {
+            return BrokerReach::NoBroker;
+        }
+        // Explicit rather than left to the slab check, even though the
+        // entrance tile a `Position` is pinned to while underground sits
+        // outside the slab by construction — `spawn_surface_links` draws it
+        // from the ring just outside. Leaning on that would make this rule
+        // depend on where links are allowed to land.
+        if self.is_underground() {
+            return BrokerReach::OffBase;
+        }
         let Some(here) = self.world.get::<Position>(self.player_entity()).copied() else {
-            return false;
+            return BrokerReach::OffBase;
         };
-        let reach = crate::tuning::CONTRACT_BOARD_RANGE_TILES;
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &Position), With<Structure>>();
-        let near: Vec<Entity> = query
-            .iter(&self.world)
-            .filter(|(_, pos)| (pos.x - here.x).abs() <= reach && (pos.y - here.y).abs() <= reach)
-            .map(|(entity, _)| entity)
-            .collect();
-        near.into_iter().any(|entity| self.issues_contracts(entity))
+        let platform = *self.world.resource::<crate::resources::Platform>();
+        match platform.center {
+            Some((cx, cy)) if platform.covers(here.x - cx, here.y - cy) => BrokerReach::AtBroker,
+            _ => BrokerReach::OffBase,
+        }
+    }
+
+    /// Whether the run has a Broker standing at all, wherever it is.
+    fn has_broker(&mut self) -> bool {
+        let mut query = self.world.query_filtered::<Entity, With<Structure>>();
+        let standing: Vec<Entity> = query.iter(&self.world).collect();
+        standing
+            .into_iter()
+            .any(|entity| self.issues_contracts(entity))
     }
 
     /// The board's seed: the world seed, the sector and the epoch, folded
@@ -642,9 +691,14 @@ pub enum ContractRefusal {
     AlreadyActive,
     /// Finished this run, and not `repeatable`.
     AlreadyDone,
-    /// No Broker in reach, or this contract is not on that Broker's board —
+    /// No Broker standing at all, or this contract is not on the board —
     /// and, for a delivery, not one the run is holding.
     NotOffered,
+    /// A Broker is standing and the contract is on its board, but the player
+    /// is not on the base. Distinct from `NotOffered` because the two leave
+    /// the player different errands: one is a walk home, the other is a
+    /// contract that was never on offer.
+    NotAtBroker,
     /// Nothing in cargo that the contract asks for.
     NothingToDeliver,
 }
@@ -659,6 +713,9 @@ impl Game {
         let Some(board) = self.board_defs() else {
             return Err(ContractRefusal::NotOffered);
         };
+        if self.broker_reach() != BrokerReach::AtBroker {
+            return Err(ContractRefusal::NotAtBroker);
+        }
         {
             let repeatable = self
                 .world
@@ -722,8 +779,10 @@ impl Game {
     ///
     /// Every refusal lands before any item leaves cargo.
     pub fn deliver_to_contract(&mut self, id: &ContractId) -> Result<u32, ContractRefusal> {
-        if self.contract_board().is_none() {
-            return Err(ContractRefusal::NotOffered);
+        match self.broker_reach() {
+            BrokerReach::NoBroker => return Err(ContractRefusal::NotOffered),
+            BrokerReach::OffBase => return Err(ContractRefusal::NotAtBroker),
+            BrokerReach::AtBroker => {}
         }
         let Some((idx, item, wanted)) = self
             .world

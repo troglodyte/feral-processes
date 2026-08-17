@@ -2139,13 +2139,70 @@ forced one: the player is shown an offer *before* accepting it, so the
 answer has to survive a save and load. What follows is that the board
 needs no save field, spends no `GameRng` draw (so opening a screen shifts
 nobody's stream — the failure this repo has been bitten by three times),
-cannot be rerolled by save-scumming, and rotates on its own. It is `None`
-underground, which is not an oversight but the same `Position` trap
-`find_target_in_direction` fell into: `Position` is pinned to the surface
-entrance tile down there, so a range check made from it would seat the
-party at a Broker four frames above. `Game::active_contracts` is the half
-that reads anywhere, and the base-menu row is `surface_only: false`
-precisely because the *engine* refuses rather than the frontend guessing.
+cannot be rerolled by save-scumming, and rotates on its own.
+
+It is also readable from **anywhere**, underground included, and that is
+the same fact rather than a second one: a board seeded off the sector and
+the epoch makes no claim about where the party is standing, so there is
+nothing for distance to invalidate. Until 0.9.3 it was `None` underground,
+which was not an oversight either — reach *was* measured from the player's
+`Position`, and `Position` is pinned to the surface entrance tile down
+there, so a range check made from it would have seated the party at a
+Broker four frames above, the same trap `find_target_in_direction` fell
+into. What retired that reading was retiring the range check; see
+**Reading a Broker's board and signing it are two questions** below.
+`Game::active_contracts` was always the half that read anywhere, and the
+base-menu row has always been `surface_only: false` precisely because the
+*engine* answers rather than the frontend guessing.
+
+### Reading a Broker's board and signing it are two questions, and one call answers both
+
+**Reading a Broker's board and signing it are two questions, and one call
+answers both.** `Game::broker_reach` returns a three-state `BrokerReach`
+— `NoBroker`, `OffBase`, `AtBroker` — and it is the only thing that builds
+one. `board_defs` refuses on `NoBroker` alone, so the offers are listed
+wherever the player is; `accept_contract` and `deliver_to_contract` require
+`AtBroker`; the base menu's row test and the screen's own header read the
+same value.
+
+Three booleans' worth of state out of one call rather than two predicates,
+for `NoPost::BoxedIn`'s reason for sitting beside `NoPost::NoRoute`: five
+things ask this, and two independent booleans let a screen draw a board it
+will then refuse to take from. `ContractRefusal::NotAtBroker` is the
+matching half on the way back out — distinct from `NotOffered` because the
+two leave the player different errands, one a walk home and one a contract
+that was never on offer.
+
+What `AtBroker` measures is the **base**, through `Platform::covers`, and
+not the distance to the Broker. That is not a relaxation for its own sake:
+`place_structure` refuses everything but a Home until a Home is standing
+and the slab always covers every structure on it, so a Broker is on the
+base by construction and its own tile carries no information the slab does
+not. The old rule was `CONTRACT_BOARD_RANGE_TILES: 2` — arm's length,
+which read as arbitrary from the far corner of a base the player had built
+themselves. The constant is gone rather than widened, because a base's
+footprint is already derived and grows: a number here would have frozen the
+desk at the radius a base *starts* at, which is
+`MAX_BUILD_DISTANCE_FROM_HOME`'s standing trap.
+
+The underground refusal is written as its own early return rather than
+left to the slab check, even though the entrance tile a `Position` is
+pinned to sits outside the slab by construction —
+`spawn_surface_links` draws it from the ring just outside. Leaning on that
+would make a contract rule depend on where links are allowed to land.
+
+Two consequences worth knowing before touching either side. The base
+menu's row test calls `broker_reach` and **not** `contract_board`, which is
+what it used to call: that closure runs every frame the menu is open, and a
+board that no longer refuses on distance rolls every template and samples
+the habitat ring before it can answer — the proximity check used to
+short-circuit all of it. And an engine fixture that stands a Broker up has
+to stand a **Home** up with it: the load path derives `Platform::center`
+from `Game::home_position`, so a slab stamped without one comes back from a
+save as no base at all, and `template_pools` reads its species half off the
+ring around the slab. That is how the first draft of this change made
+`the_same_rolled_contract_comes_back_after_a_save_and_load` fail — the
+fixture, not the feature.
 
 ### A starter contract jumps the board queue, and only in the first sector
 

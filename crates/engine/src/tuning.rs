@@ -1633,19 +1633,6 @@ pub const CONTRACT_BOARD_SLOTS: usize = 3;
 /// static. Nothing instruments this — `balance_sim` cannot see a contract.
 pub const CONTRACT_REFRESH_CYCLES: u32 = 400;
 
-/// How close the player must stand to a Contract Broker to read its board.
-///
-/// **Engine tuning rather than the frontend's `MENU_SCAN_RADIUS`**, for
-/// `EXAMINE_RANGE_TILES`' reason above: that constant is a menu window, which
-/// is frontend policy, and borrowing it for a question about the game gives
-/// the wrong answer at 40 tiles. Whether a Broker is close enough to hand
-/// items to is a question about the game.
-///
-/// 2 is arm's length — the tile beside it and the diagonal past that, so a
-/// player standing at the corner of their own Broker is served without a
-/// board being readable from across the base.
-pub const CONTRACT_BOARD_RANGE_TILES: i32 = 2;
-
 /// The dearest item a rolled `Deliver` may ask for, in `ItemDef::value`.
 ///
 /// A delivery is asked for by the score, and `ItemDef::value`'s ladder runs

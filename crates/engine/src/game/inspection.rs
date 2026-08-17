@@ -1021,8 +1021,8 @@ pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
 /// to the player's current `Stats::power`. A nemesis is always Blue
 /// regardless of the ratio, checked *before* the boss override so a
 /// creature that is both draws as a nemesis — see `views::EntityView::rarity`
-/// for the argument that spending the con read here is deliberate. Blue is
-/// the one `GlyphColor` variant no entity anywhere is ever painted — Cyan
+/// for the argument that spending the con read here is deliberate. Blue was
+/// the one `GlyphColor` variant nothing else on the map was painted — Cyan
 /// was tried first and rejected, because it is the player's own glyph colour
 /// (`lifecycle.rs`'s `Game::new`/`load`), and a nemesis tile has no business
 /// reading as the player. A boss that isn't a nemesis is always Magenta

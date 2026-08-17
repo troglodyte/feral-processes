@@ -5,5 +5,5 @@
     target: OneEnemyGroupFront,
     effect: Damage(power: 17),
     cooldown: 4,
-    fatigue_cost: 10.0,
+    power_cost: 10.0,
 )

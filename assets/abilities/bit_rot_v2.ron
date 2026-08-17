@@ -5,5 +5,5 @@
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Bleed, power: 4, duration: 3),
     cooldown: 2,
-    fatigue_cost: 7.0,
+    power_cost: 7.0,
 )

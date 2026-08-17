@@ -3,5 +3,6 @@
     name: "Deep Scan Party",
     description: "+20% capture chance for 100 turns",
     target: WholeParty,
-    effect: FieldBuff(kind: CaptureBoost, power: 20, duration: 100, power_cost: 18.0),
+    power_cost: 18.0,
+    effect: FieldBuff(kind: CaptureBoost, power: 20, duration: 100),
 )

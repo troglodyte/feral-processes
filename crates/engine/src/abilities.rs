@@ -254,10 +254,11 @@ pub enum AbilityEffect {
     /// resolving against a recipient in one. This is the field-only marker:
     /// there is no separate `field_cast: bool` on `AbilityDef`, an ability
     /// carrying this effect *is* field-only, and `AbilityDb::load_dir`
-    /// rejects a `target` its `kind`'s `FieldScope` can't reach. `power_cost`
-    /// is Power spent to cast, not `AbilityDef::fatigue_cost` — that field
-    /// (and `cooldown`) are dead on this variant, since neither battle
-    /// throttling concept applies outside one.
+    /// rejects a `target` its `kind`'s `FieldScope` can't reach. What casting
+    /// costs lives on `AbilityDef::power_cost` like every other effect's —
+    /// this variant carried its own `power_cost` field until the two cost
+    /// fields were folded into one. `cooldown` is dead here, since battle
+    /// round throttling does not apply outside a battle.
     FieldBuff {
         kind: FieldBuffKind,
         power: i32,
@@ -274,7 +275,6 @@ pub enum AbilityEffect {
         /// is *for*, and `power` is what affinity scaling multiplies.
         #[serde(default = "every_turn")]
         interval: u32,
-        power_cost: f32,
     },
     /// Steps the party through exactly one solid cell along their current
     /// facing, landing on the open cell beyond — see `Game::phase_landing`.
@@ -347,13 +347,27 @@ pub struct AbilityDef {
     /// which for a battle effect means entirely unthrottled.
     #[serde(default)]
     pub cooldown: u32,
-    /// Player Fatigue spent running this routine — read by the two field
-    /// effects, `Phase` and `Jump`, and by nothing else. A battle Special is
-    /// priced in `cooldown` alone, so a value here is inert on every other
-    /// effect and the 36 shipped battle abilities that still carry one are
-    /// simply not read.
-    #[serde(default = "default_fatigue_cost")]
-    pub fatigue_cost: f32,
+    /// Power spent running this routine, by *whoever runs it* — the caster
+    /// pays, so a companion's Special draws on the companion's reserve. Read
+    /// through `routine_power_cost`, never directly, so the refusal in
+    /// `Game::ability_unavailable` and the charge in `Game::spend_power`
+    /// cannot disagree about the price.
+    ///
+    /// **Defaults to 0.0, not to a flat fee.** This field used to reach only
+    /// `Phase` and `Jump`, and carried a nonzero default left over from a
+    /// mechanic — commanding a companion — that stopped charging on
+    /// 2026-08-08. Widening its reach to every routine in the game while
+    /// keeping that default would silently price every ability a mod ships.
+    /// Free-by-default is the only safe default once a field's audience
+    /// widens; a mod that means to charge says so.
+    ///
+    /// `AbilityEffect::FieldBuff` reads it like everything else — the
+    /// separate `power_cost` it carried inside the variant was folded in
+    /// here. `Game::proc_wielded_routine` is the one exemption, and a
+    /// deliberate one: its 25% proc rate is the whole of its price (see
+    /// `tuning::WIELDED_ROUTINE_PROC_CHANCE`).
+    #[serde(default)]
+    pub power_cost: f32,
     /// How likely this ability is to be found already installed on a wild
     /// program — see `Game::spawn_wild_creature`. Relative within the pool,
     /// not a probability: weight 12 is twice as likely as weight 6, and the
@@ -401,7 +415,7 @@ pub struct AbilityDef {
     /// Heal or Cleanse. As a variant this would need either one arm per
     /// effect it can pair with or a recursive `Passive { trigger, effect:
     /// Box<AbilityEffect> }`, which would force a delegating arm into every
-    /// match on the enum. `cooldown`, `fatigue_cost` and `wild_weight` are
+    /// match on the enum. `cooldown`, `power_cost` and `wild_weight` are
     /// all orthogonal modifiers carried here for the same reason.
     #[serde(default)]
     pub triggers: Option<PassiveTrigger>,
@@ -422,8 +436,17 @@ pub enum PassiveTrigger {
     Afflicted,
 }
 
-fn default_fatigue_cost() -> f32 {
-    crate::tuning::DEFAULT_ROUTINE_FATIGUE_COST
+/// What running `def` actually costs its caster: the authored
+/// `power_cost` scaled by `tuning::ROUTINE_POWER_COST_MULTIPLIER`.
+///
+/// **This must stay the one expression for a routine's price.** Two call
+/// sites reading `def.power_cost * MULTIPLIER` independently is exactly the
+/// drift a shared doc comment cannot prevent — and here the two sites are a
+/// refusal (`Game::ability_unavailable`) and a charge (`Game::spend_power`),
+/// which disagreeing means a routine the picker offers and the cast cannot
+/// pay for, or one charged more than the row quoted.
+pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
+    def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
 }
 
 /// `AbilityEffect::FieldBuff::interval`'s default, and the only value that
@@ -440,8 +463,8 @@ impl AbilityDef {
     /// cheaper to refuse the file at load than to defend every read. Same
     /// rationale as `ItemDef::non_finite_field`.
     fn non_finite_field(&self) -> Option<&'static str> {
-        if !self.fatigue_cost.is_finite() {
-            return Some("fatigue_cost");
+        if !self.power_cost.is_finite() {
+            return Some("power_cost");
         }
         if let AbilityEffect::Damage {
             status: Some(status),
@@ -456,11 +479,6 @@ impl AbilityDef {
         {
             return Some("effect.heal_fraction");
         }
-        if let AbilityEffect::FieldBuff { power_cost, .. } = &self.effect
-            && !power_cost.is_finite()
-        {
-            return Some("effect.power_cost");
-        }
         None
     }
 
@@ -468,7 +486,7 @@ impl AbilityDef {
     /// which only ever runs when the planned target is a
     /// `battle::SpecialTarget::EnemyGroup` — the shape `AbilityTarget`'s
     /// `Enemy` targeting produces. Any other `target` would still arm the
-    /// cooldown and spend Fatigue in `resolve_one_action`, then find no
+    /// cooldown and spend Power in `resolve_one_action`, then find no
     /// group index to act on and silently do nothing: the exact
     /// "wastes-the-round" failure mode this branch refuses loudly for
     /// everywhere else it can reach. Caught here instead, the same way
@@ -550,21 +568,14 @@ impl AbilityDef {
     /// ability runs outside one. Not a load failure — the def still loads —
     /// just something worth a modder knowing rather than silently swallowing.
     ///
-    /// `fatigue_cost` is deliberately not checked here, or anywhere. On
-    /// `Phase` and `Jump` it is the live cost of running the routine, so
-    /// there would be nothing to warn about; everywhere else — `FieldBuff`,
-    /// which has `power_cost` of its own, and every battle effect, which is
-    /// priced in `cooldown` — it is dead, and unwarnable for the same
-    /// reason in both cases. Its serde default
-    /// (`tuning::DEFAULT_ROUTINE_FATIGUE_COST`) is nonzero, so a file that
-    /// never mentions the field looks byte-for-byte identical at this point
-    /// to one that spells out the same number on purpose. There's nothing
-    /// here to distinguish "careless" from "correct", so a warning on it
-    /// would fire on well-formed files as often as mistaken ones.
-    /// `cooldown` defaults to 0, so a nonzero value there is unambiguous
-    /// authorial intent worth naming.
+    /// `power_cost` is not checked here, because there is nothing dead
+    /// about it any more: every routine is priced in it, field-only ones
+    /// included. That is what folding the two cost fields into one bought —
+    /// the exemption this function used to carry, for a field whose nonzero
+    /// default made "the author wrote this" indistinguishable from "the
+    /// author never touched it", has nothing left to except.
     /// `assets/abilities/README.md` tells a modder directly which fields
-    /// apply to which field-only effect instead.
+    /// apply to which field-only effect.
     fn field_only_dead_fields(&self) -> Option<&'static str> {
         if !self.effect.field_only() {
             return None;
@@ -746,10 +757,9 @@ mod tests {
         assert_eq!(def.target, AbilityTarget::WholeEnemyGroup);
         assert_eq!(def.cooldown, 0, "cooldown defaults to none");
         assert_eq!(
-            def.fatigue_cost,
-            crate::tuning::DEFAULT_ROUTINE_FATIGUE_COST,
-            "an ability declaring no cost falls back to the flat default — \
-             which only a field routine ever reads"
+            def.power_cost, 0.0,
+            "an ability declaring no cost is free; free-by-default is what \
+             stops a widened field silently pricing every mod's abilities"
         );
         assert!(warnings.is_empty(), "a valid def warns about nothing");
     }
@@ -792,7 +802,8 @@ mod tests {
             name: "Bad Trickle",
             description: "d",
             target: OneAlly,
-            effect: FieldBuff(kind: Trickle, power: 4, duration: 20, power_cost: 5.0),
+            power_cost: 5.0,
+            effect: FieldBuff(kind: Trickle, power: 4, duration: 20),
         )"#;
         let (db, warnings) = load(
             "bad_run_scope",
@@ -817,7 +828,8 @@ mod tests {
             name: "Bad Regen",
             description: "d",
             target: WholeEnemyGroup,
-            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+            power_cost: 5.0,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20),
         )"#;
         let (db, warnings) = load(
             "bad_creature_scope",
@@ -834,17 +846,13 @@ mod tests {
 
     #[test]
     fn a_creature_scoped_field_buff_targeting_one_ally_loads_clean() {
-        // fatigue_cost is left at its serde default deliberately: that
-        // default is the nonzero flat companion command cost, so a file
-        // that never mentions the field must load exactly as warning-free
-        // as one that does — see `field_buff_dead_fields`'s doc for why that
-        // field is excluded from the dead-fields warning.
         let good = r#"(
             id: "test_good_regen",
             name: "Good Regen",
             description: "d",
             target: OneAlly,
-            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+            power_cost: 5.0,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20),
         )"#;
         let (db, warnings) = load("good_creature_scope", &[("good", good)]);
         assert!(
@@ -861,7 +869,8 @@ mod tests {
             name: "Bad Power Cost",
             description: "d",
             target: OneAlly,
-            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: NaN),
+            power_cost: NaN,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20),
         )"#;
         let (db, warnings) = load("bad_power_cost", &[("test_sweep", VALID), ("bad", bad)]);
         assert!(db.get("test_sweep").is_some(), "the valid file still loads");
@@ -876,10 +885,7 @@ mod tests {
     /// `cooldown` throttles re-use within a battle; a field ability runs
     /// outside one, so `cooldown` is dead weight the loader should point out
     /// rather than silently accept. `cooldown` defaults to 0, so any nonzero
-    /// value here is unambiguous authorial intent — unlike `fatigue_cost`,
-    /// whose own nonzero default makes "the author wrote this on purpose"
-    /// indistinguishable from "the author never touched this field" (see the
-    /// sibling test below and `field_buff_dead_fields`'s doc).
+    /// value here is unambiguous authorial intent.
     #[test]
     fn a_field_buff_declaring_a_cooldown_loads_with_a_warning() {
         let noisy = r#"(
@@ -888,7 +894,8 @@ mod tests {
             description: "d",
             target: OneAlly,
             cooldown: 3,
-            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+            power_cost: 5.0,
+            effect: FieldBuff(kind: Regen, power: 2, duration: 20),
         )"#;
         let (db, warnings) = load("noisy_field_buff", &[("noisy", noisy)]);
         assert!(
@@ -897,28 +904,6 @@ mod tests {
         );
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("cooldown"), "{}", warnings[0]);
-    }
-
-    /// The regression this guards: `fatigue_cost`'s serde default is the
-    /// nonzero flat companion command cost, so a naive "warn when nonzero"
-    /// check (the shape `cooldown`'s check uses) would fire on this file even
-    /// though it never mentions the field at all — indistinguishable from a
-    /// file that spells out the same number on purpose. It must stay silent.
-    #[test]
-    fn a_field_buff_leaving_fatigue_cost_at_its_default_is_silent() {
-        let quiet = r#"(
-            id: "test_quiet_regen",
-            name: "Quiet Regen",
-            description: "d",
-            target: OneAlly,
-            effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
-        )"#;
-        let (db, warnings) = load("quiet_field_buff", &[("quiet", quiet)]);
-        assert!(db.get("test_quiet_regen").is_some());
-        assert!(
-            warnings.is_empty(),
-            "fatigue_cost must never trigger the dead-fields warning: {warnings:?}"
-        );
     }
 
     #[test]

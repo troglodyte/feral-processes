@@ -4,5 +4,5 @@
     description: "Jump to any cell of this frame — solid ground kills you",
     target: WholeParty,
     effect: Jump,
-    fatigue_cost: 20.0,
+    power_cost: 20.0,
 )

@@ -460,7 +460,7 @@ impl Game {
         // world unchecked otherwise: the recipient's slot and which of the
         // acting member's abilities to spend. Both resolve to `None` at
         // resolve time and silently cost the member its round — while still
-        // charging the player fatigue — so they are refused here instead.
+        // charging for it — so they are refused here instead.
         if let BattleAction::Special { ability, target } = &action {
             if let battle::SpecialTarget::Ally { slot: ally } = target
                 && *ally >= planned_len
@@ -845,10 +845,11 @@ impl Game {
     /// Every reason is refused in `battle_set_action` too, so a greyed row
     /// can never be planned and silently waste the member's round.
     ///
-    /// A need is deliberately not among them: a Special is priced in its
-    /// cooldown alone, so an exhausted player is never barred from ordering
-    /// one. `AbilityDef::fatigue_cost` is read only by the two Stack field
-    /// routines, which refuse themselves in `Game::field_routines`.
+    /// A reserve is deliberately not among them *yet*: a Special is still
+    /// priced in its cooldown alone here, so an exhausted player is not
+    /// barred from ordering one. `AbilityDef::power_cost` now reaches every
+    /// routine in the game rather than only the two Stack field ones, and
+    /// this is where that price gets refused.
     pub(crate) fn ability_unavailable(
         &self,
         entity: Entity,

@@ -5,5 +5,5 @@
     target: OneEnemyGroupFront,
     effect: Drain(power: 5, heal_fraction: 0.4),
     cooldown: 2,
-    fatigue_cost: 6.0,
+    power_cost: 6.0,
 )

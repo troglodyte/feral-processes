@@ -3,5 +3,6 @@
     name: "Repair Loop Single",
     description: "+2 Integrity every 4th turn to one ally, for 300 turns",
     target: OneAlly,
-    effect: FieldBuff(kind: Regen, power: 2, duration: 300, interval: 4, power_cost: 18.0),
+    power_cost: 18.0,
+    effect: FieldBuff(kind: Regen, power: 2, duration: 300, interval: 4),
 )

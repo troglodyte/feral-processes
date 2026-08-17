@@ -8,6 +8,6 @@
     target: OneAlly,
     effect: Cleanse,
     cooldown: 2,
-    fatigue_cost: 4.0,
+    power_cost: 4.0,
     wild_weight: 9,
 )

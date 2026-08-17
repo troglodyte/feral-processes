@@ -10,7 +10,7 @@
     target: AllEnemies,
     effect: Debuff(kind: Stun, power: 0, duration: 2),
     cooldown: 5,
-    fatigue_cost: 20.0,
+    power_cost: 20.0,
     exclusive: true,
     boss_drop: Some([("overseer", 0.30)]),
 )

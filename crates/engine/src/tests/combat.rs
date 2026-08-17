@@ -425,7 +425,7 @@ fn battle_set_action_refuses_a_slot_that_is_not_in_the_party() {
 /// The same argument, for the two indices an ally-targeted Special
 /// carries beyond the acting slot. Unchecked, both resolve to `None`
 /// mid-round and cost the member its turn in silence — while the player
-/// is still charged the fatigue for commanding it.
+/// is still charged for commanding it.
 #[test]
 fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -10,7 +10,7 @@
     target: WholeEnemyGroup,
     effect: Drain(power: 12, heal_fraction: 1.0),
     cooldown: 3,
-    fatigue_cost: 18.0,
+    power_cost: 18.0,
     exclusive: true,
     boss_drop: Some([("wintermute", 0.35)]),
 )

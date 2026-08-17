@@ -5,6 +5,6 @@
     target: WholeParty,
     effect: Cleanse,
     cooldown: 3,
-    fatigue_cost: 7.0,
+    power_cost: 7.0,
     wild_weight: 8,
 )

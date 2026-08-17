@@ -4,5 +4,5 @@
     description: "Step through one wall ahead, into the cell beyond",
     target: WholeParty,
     effect: Phase,
-    fatigue_cost: 12.0,
+    power_cost: 12.0,
 )

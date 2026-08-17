@@ -5,5 +5,5 @@
     target: OneAlly,
     effect: Buff(kind: Def, power: 7, duration: 4),
     cooldown: 2,
-    fatigue_cost: 9.0,
+    power_cost: 9.0,
 )

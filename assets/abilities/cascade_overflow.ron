@@ -5,5 +5,5 @@
     target: WholeEnemyGroup,
     effect: Damage(power: 6),
     cooldown: 2,
-    fatigue_cost: 8.0,
+    power_cost: 8.0,
 )

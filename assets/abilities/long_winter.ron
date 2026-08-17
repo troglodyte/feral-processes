@@ -7,7 +7,8 @@
     // of a full charge, so this is cast at the top of a run and lived with.
     description: "-25% incoming damage to the whole party, and it lasts",
     target: WholeParty,
-    effect: FieldBuff(kind: Mitigation, power: 25, duration: 300, power_cost: 40.0),
+    power_cost: 40.0,
+    effect: FieldBuff(kind: Mitigation, power: 25, duration: 300),
     exclusive: true,
     boss_drop: Some([("overseer", 0.35)]),
 )

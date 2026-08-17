@@ -8,6 +8,6 @@
     target: AllEnemies,
     effect: Buff(kind: Atk, power: -3, duration: 3),
     cooldown: 5,
-    fatigue_cost: 16.0,
+    power_cost: 16.0,
     wild_weight: 3,
 )

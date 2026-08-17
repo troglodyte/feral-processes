@@ -676,19 +676,59 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
     }
 }
 
+/// `AbilityDef::validate` refuses a non-finite cost at load, and that check
+/// has to survive the rename off `fatigue_cost` rather than be lost with it.
+/// Asserted over the real files, since a negative cost would *pay* the caster
+/// for casting and nothing downstream defends against one.
+#[test]
+fn every_shipped_power_cost_is_finite_and_non_negative() {
+    let game = Game::new(3307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        assert!(
+            def.power_cost.is_finite() && def.power_cost >= 0.0,
+            "{:?} authors power_cost {}",
+            def.id,
+            def.power_cost
+        );
+    }
+}
+
+/// The 2026-08-17 flip was a key rename, not an authoring pass: the numbers
+/// were already in the files, priced back when `fatigue_cost` meant exactly
+/// what `power_cost` means now. Three abilities from three different bands
+/// pin that nothing moved in translation.
+#[test]
+fn the_flip_to_power_cost_carried_the_authored_numbers_over_unchanged() {
+    let game = Game::new(3308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+    for (id, expected) in [
+        // Taming stays free — it already spends an ICE Breaker.
+        ("decompile", 0.0),
+        ("wild_jump", 20.0),
+        ("trickle_charge", 25.0),
+    ] {
+        let def = db.get(id).unwrap_or_else(|| panic!("{id} ships"));
+        assert_eq!(def.power_cost, expected, "{id}");
+    }
+    // The five uncosted files inherit the 0.0 default and keep behaving
+    // exactly as they did. `priority_boost` matters most: it is the fallback
+    // every companion has when its species grants nothing, and a companion
+    // whose only routine is unaffordable has nothing to pick but an attack.
+    assert_eq!(db.get("priority_boost").unwrap().power_cost, 0.0);
+}
+
 /// Reaching every hostile on the field is the top of the scope ladder, and
 /// the shipped set charges for it consistently: no `AllEnemies` routine
-/// costs under 15 Fatigue or comes off cooldown in under 4 rounds. That
-/// ladder is what every Everyone-tier magnitude was derived against, and
-/// nothing else gates it — a new file could otherwise undercut a whole
-/// family's Group tier while reaching further than it.
+/// costs under 15 Power or comes off cooldown in under 4 rounds. That ladder
+/// is what every Everyone-tier magnitude was derived against, and nothing
+/// else gates it — a new file could otherwise undercut a whole family's
+/// Group tier while reaching further than it.
 ///
-/// The Fatigue half is skipped for **passives**, and only for them: Fatigue
-/// is what running a routine costs the player, and a passive is never run
-/// by the player — it fires on its trigger and takes no turn. The cooldown
-/// half still applies to everything, passive or not, because a cooldown is
-/// what bounds how often the effect lands and that question does not care
-/// who asked for it.
+/// The cost half is skipped for **passives**, and only for them: `power_cost`
+/// is what running a routine costs its caster, and a passive is never run —
+/// it fires on its trigger and takes no turn. The cooldown half still applies
+/// to everything, passive or not, because a cooldown is what bounds how often
+/// the effect lands, and that question does not care who asked for it.
 #[test]
 fn every_everyone_scope_routine_pays_the_everyone_tier_price() {
     use crate::abilities::AbilityTarget;
@@ -700,10 +740,10 @@ fn every_everyone_scope_routine_pays_the_everyone_tier_price() {
         .filter(|d| d.target == AbilityTarget::AllEnemies)
     {
         assert!(
-            def.is_passive() || def.fatigue_cost >= 15.0,
-            "{:?} reaches the whole field for {} Fatigue; the Everyone tier starts at 15",
+            def.is_passive() || def.power_cost >= 15.0,
+            "{:?} reaches the whole field for {} Power; the Everyone tier starts at 15",
             def.id,
-            def.fatigue_cost
+            def.power_cost
         );
         assert!(
             def.cooldown >= 4,

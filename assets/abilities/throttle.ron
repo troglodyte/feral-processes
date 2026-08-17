@@ -8,6 +8,6 @@
     target: WholeEnemyGroup,
     effect: Buff(kind: Atk, power: -4, duration: 3),
     cooldown: 3,
-    fatigue_cost: 10.0,
+    power_cost: 10.0,
     wild_weight: 7,
 )

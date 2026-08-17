@@ -5,6 +5,6 @@
     target: AllEnemies,
     effect: Damage(power: 6, status: Some((kind: Stun, chance: 0.25, duration: 1, power: 0))),
     cooldown: 5,
-    fatigue_cost: 18.0,
+    power_cost: 18.0,
     wild_weight: 3,
 )

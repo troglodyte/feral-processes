@@ -5,5 +5,5 @@
     target: AllEnemies,
     effect: Debuff(kind: Stun, power: 0, duration: 1),
     cooldown: 5,
-    fatigue_cost: 15.0,
+    power_cost: 15.0,
 )

@@ -34,7 +34,7 @@ use crate::tuning::PLAYER_BASE_STATS;
 /// zone-5 group of 81 needs over 800. At 300 the cap was scoring ordinary
 /// deep-zone wins as stalemates, which is the one thing it must not do.
 ///
-/// Power and Fatigue decay still aren't modelled here, so this is not a
+/// Power decay still isn't modelled here, so this is not a
 /// stand-in for "how long a fight the player can actually sustain" — that
 /// gap predates this constant's retuning and is not closed by it.
 const TURN_CAP: u32 = 2000;
@@ -377,7 +377,7 @@ fn full_group_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
 ///
 /// Runs for at most `TURN_CAP` rounds; a fight that hasn't resolved by then
 /// is scored as a loss — a stalemate that long isn't survivable in practice
-/// (Power/Fatigue would run out first).
+/// (Power would run out first).
 pub fn simulate_roster_fight(
     player: Stats,
     companions: &[Stats],

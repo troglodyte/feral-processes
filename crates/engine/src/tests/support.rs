@@ -1151,7 +1151,8 @@ pub(super) const FIELD_ONLY_ABILITY: &str = r#"(
     name: "Test Field Regen",
     description: "d",
     target: OneAlly,
-    effect: FieldBuff(kind: Regen, power: 2, duration: 20, power_cost: 5.0),
+    power_cost: 5.0,
+    effect: FieldBuff(kind: Regen, power: 2, duration: 20),
 )"#;
 
 /// A `Run`-scoped `FieldBuff` — `field_buff_target_mismatch` requires
@@ -1164,7 +1165,8 @@ pub(super) const FIELD_ONLY_RUN_ABILITY: &str = r#"(
     name: "Test Field Trickle",
     description: "d",
     target: WholeParty,
-    effect: FieldBuff(kind: Trickle, power: 3, duration: 15, power_cost: 4.0),
+    power_cost: 4.0,
+    effect: FieldBuff(kind: Trickle, power: 3, duration: 15),
 )"#;
 
 /// A `Creature`-scoped, `WholeParty`-targeted `FieldBuff` — for the test
@@ -1175,7 +1177,8 @@ pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
     name: "Test Field Def",
     description: "d",
     target: WholeParty,
-    effect: FieldBuff(kind: Def, power: 4, duration: 10, power_cost: 3.0),
+    power_cost: 3.0,
+    effect: FieldBuff(kind: Def, power: 4, duration: 10),
 )"#;
 
 /// A `Creature`-scoped, percentage-magnitude `FieldBuff` — `Mitigation` is
@@ -1189,7 +1192,8 @@ pub(super) const FIELD_ONLY_MITIGATION_ABILITY: &str = r#"(
     name: "Test Field Mitigation",
     description: "d",
     target: WholeParty,
-    effect: FieldBuff(kind: Mitigation, power: 10, duration: 20, power_cost: 5.0),
+    power_cost: 5.0,
+    effect: FieldBuff(kind: Mitigation, power: 10, duration: 20),
 )"#;
 
 /// A species declaring two abilities, so the multi-ability paths can be

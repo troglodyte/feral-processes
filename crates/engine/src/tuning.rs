@@ -442,19 +442,25 @@ pub const ENEMY_POLICY_TEMPERATURE: f32 = 1.0;
 /// DEF granted for the round by the Defend action.
 pub const DEFEND_DEF_BONUS: i32 = 6;
 
-/// `AbilityDef::fatigue_cost`'s serde default — what a routine charges when
-/// its file doesn't say.
+/// Scales every `AbilityDef::power_cost` in the game, applied wherever one is
+/// read — so `Game::ability_unavailable`'s refusal and `Game::spend_power`'s
+/// charge move together and cannot disagree. `Phase` and `Jump` are covered
+/// too; one knob, no exemptions.
 ///
-/// It reaches only the two field-routine effects, `Phase` and `Jump`, since
-/// nothing in battle charges a need at all: a Special is priced in its
-/// cooldown. Both shipped movement routines author their own cost, so this
-/// covers a mod that omits it rather than anything in the game.
+/// **This is the lever for the whole casting curve, and the reason it exists
+/// is that the shipped numbers' *scale* is inherited while their *ordering*
+/// is trusted.** The 55 files carrying a cost were priced against a Fatigue
+/// pool that refilled at 0.08 a tick — cheap and renewable. They are now
+/// spent out of an irreplaceable underground reserve. The relative ordering
+/// between abilities is worth keeping; the absolute scale almost certainly is
+/// not, and 1.0 is the starting point rather than a measured answer.
 ///
-/// It was the flat price of commanding a companion in battle until
-/// 2026-08-08, which is why it is 5.0 and not some rounder field-routine
-/// number — the two shipped movement costs (12.0 and 20.0) are what that
-/// mechanic is actually tuned around.
-pub const DEFAULT_ROUTINE_FATIGUE_COST: f32 = 5.0;
+/// Ungated by `balance_sim`, which models no abilities at all. Tuning happens
+/// in play; the instruments that can see this are `dev-arenas/` and a
+/// session. Two levels with different costs: the whole curve moves by editing
+/// this and rebuilding, a single ability by editing its `.ron` and
+/// restarting — no rebuild, which is the loop that matters mid-session.
+pub const ROUTINE_POWER_COST_MULTIPLIER: f32 = 1.0;
 
 /// Below this Power ("Power" is the player-facing label for `PowerReserve.hunger`)
 /// threshold, the player's own attacks start losing effectiveness — see
@@ -487,8 +493,9 @@ pub const WIELDED_PROGRAM_STAT_DIVISOR: i32 = 10;
 
 /// Chance that a player strike also fires one of the wielded program's
 /// installed routines (see `Game::proc_wielded_routine`). The proc costs
-/// nothing — no fatigue, no cooldown — so this rate is the whole of its
-/// price. Unguarded by any test: `balance_sim` models no abilities at all,
+/// nothing — no Power, no cooldown — so this rate is the whole of its price,
+/// and it is the one carve-out from `ROUTINE_POWER_COST_MULTIPLIER` reaching
+/// every routine. Unguarded by any test: `balance_sim` models no abilities at all,
 /// so neither this nor the magnitudes it fires can move a curve.
 pub const WIELDED_ROUTINE_PROC_CHANCE: f64 = 0.25;
 

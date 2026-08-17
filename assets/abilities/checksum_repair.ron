@@ -5,6 +5,6 @@
     target: OneAlly,
     effect: Heal(power: 25),
     cooldown: 3,
-    fatigue_cost: 9.0,
+    power_cost: 9.0,
     wild_weight: 9,
 )

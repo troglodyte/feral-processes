@@ -5,7 +5,7 @@ next time a game session starts — no recompiling required. A malformed file
 is skipped with a warning logged in-game rather than crashing startup. That
 includes a file whose numbers aren't finite: RON accepts bare `NaN` and
 `inf` literals, and they'd otherwise slip past every clamp downstream, so a
-non-finite `fatigue_cost` or `effect.status.chance` disqualifies the whole
+non-finite `power_cost` or `effect.status.chance` disqualifies the whole
 file.
 
 An ability is what a party member spends its round on when commanded with
@@ -194,16 +194,15 @@ way deleting the Currency item does.
     //     it would let the level term swamp whatever the file authors. This
     //     split is orthogonal to the Creature/Run scope above.
     //
-    //     `cooldown` and `fatigue_cost` are both dead on this variant — a
-    //     field buff runs outside battle, so battle-round throttling doesn't
-    //     apply, and `power_cost` above is its own price. A nonzero
-    //     `cooldown` logs a warning naming the
-    //     file, since its default is 0 and any other value is a deliberate
-    //     (if pointless) choice. `fatigue_cost` does *not* warn, even though
-    //     it's equally unused: its own default is nonzero, so there's no way
-    //     to tell "left alone" from "set on purpose" — leave it out of the
-    //     file, its value simply won't be read. (It is *not* dead on the two
-    //     movement effects below, which spend exactly that field.)
+    //     `cooldown` is dead on this variant — a field buff runs outside
+    //     battle, so battle-round throttling doesn't apply — and a nonzero
+    //     one logs a warning naming the file, since its default is 0 and any
+    //     other value is a deliberate (if pointless) choice.
+    //
+    //     What casting costs is the top-level `power_cost` below, the same
+    //     field every other effect is priced in. This variant carried a
+    //     `power_cost` of its own until the two cost fields were folded into
+    //     one; a file still authoring it inside the effect will not parse.
     //
     //   Phase
     //     Steps the party through exactly one solid cell along their current
@@ -227,8 +226,8 @@ way deleting the Currency item does.
     //     Both movement effects require `target: WholeParty`; anything else
     //     is refused at load with a warning, since they move the party as a
     //     body and there is no mechanic to phase one companion through a
-    //     wall. Both charge `fatigue_cost` (not `power_cost`, which they do
-    //     not have), both raise Trace on success, neither ever appears in
+    //     wall. Both charge `power_cost` like everything else, both raise
+    //     Trace on success, neither ever appears in
     //     the battle Special picker, and neither will be run by a wild
     //     carrier. Both refuse a landing behind an unopened sealed door, and
     //     refuse landing *on* one — a sealed door is walkable, so landing on
@@ -252,19 +251,23 @@ way deleting the Currency item does.
     // battle ends and are never saved.
     cooldown: 2,
 
-    // Optional; defaults to 5.0. Player Fatigue spent to run this routine —
-    // and read *only* by the two field effects, `Phase` and `Jump`, below.
+    // Optional; **defaults to 0.0**. Power spent to run this routine, by
+    // whoever runs it — the caster pays, so a companion's Special draws on
+    // the companion's own reserve rather than the player's.
     //
-    // Nothing in a battle reads it. It priced every Special until
-    // 2026-08-08, including a companion's, which rationed the party's whole
-    // kit against a pool only the player had; cooldowns do that job now.
-    // Setting it on a battle ability is harmless and inert, which is why
-    // most of the shipped ones still carry the number they used to charge.
+    // Free by default on purpose. This field reached only `Phase` and `Jump`
+    // until 2026-08-17 and defaulted to a flat 5.0; now that every routine
+    // in the game is priced in it, a nonzero default would silently charge
+    // for every ability a mod ships. An ability that means to cost says so.
     //
-    // Denominated in Power — the one need. The Fatigue meter this used to
-    // spend was deleted, and the two movement effects now charge this
-    // against the same reserve `FieldBuff`'s own `power_cost` spends.
-    fatigue_cost: 8.0,
+    // The whole curve is scaled by `tuning::ROUTINE_POWER_COST_MULTIPLIER`,
+    // which is code rather than data — how hard the game is, is not moddable.
+    // Editing a number here and restarting the game needs no rebuild, which
+    // is the faster loop for tuning one ability.
+    //
+    // `Game::proc_wielded_routine` is the one thing that does not charge it:
+    // the 25% proc rate is that feature's whole price.
+    power_cost: 8.0,
 
     // Optional; defaults to 0. How likely this ability is to be found
     // already installed on a wild program you meet in the field — a
@@ -424,7 +427,7 @@ claim to name the routine's only source, and they name different ones.
 on an event instead of being chosen on a turn. A passive occupies a slot
 like anything else and appears in no menu: not the Special picker, not the
 field cast list, and not a wild carrier's options. It costs no turn, so its
-`fatigue_cost` is dead; `cooldown` is its whole price and is honoured
+`power_cost` is never charged; `cooldown` is its whole price and is honoured
 exactly as a chosen routine's is.
 
 The trigger set is closed and small on purpose — each variant is a point in

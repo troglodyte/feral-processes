@@ -5,6 +5,6 @@
     target: WholeParty,
     effect: Heal(power: 8),
     cooldown: 2,
-    fatigue_cost: 10.0,
+    power_cost: 10.0,
     wild_weight: 8,
 )

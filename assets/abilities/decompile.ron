@@ -5,7 +5,8 @@
     target: OneEnemyGroupFront,
     effect: Decompile,
     cooldown: 0,
-    // Zero, deliberately: capturing has never cost Fatigue, and folding it
-    // into the ability system is not the place to start charging for it.
-    fatigue_cost: 0.0,
+    // Zero, deliberately: taming is already priced in its ICE Breaker
+    // catalyst, and pricing routine calls in Power is not the place to start
+    // charging for it a second time.
+    power_cost: 0.0,
 )

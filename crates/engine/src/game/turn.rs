@@ -471,7 +471,7 @@ impl Game {
     }
 
     /// Consume one unit of `id` out of battle, applying its `ConsumeDef`:
-    /// restore Power/Fatigue/Integrity (each clamped) and/or arm a
+    /// restore Power/Integrity (each clamped) and/or arm a
     /// `FieldBuff` (see `use_item`'s `prebattle_buff`) that outlives
     /// whatever intrusion it's next used in. A non-consumable or an empty
     /// stack is a logged no-op.
@@ -566,7 +566,7 @@ impl Game {
 
     /// Power down for the night: many ticks pass at once (power reserves
     /// drain accordingly, tamed programs keep processing, rogue programs
-    /// keep roaming), then Fatigue and Integrity are both restored to full.
+    /// keep roaming), then Power and Integrity are both restored to full.
     /// Requires the player to be standing within the radius of a structure
     /// that sets `StructureDef::enables_rest` — Home, and only Home, among
     /// the shipped structures — and, since it grants a free heal otherwise
@@ -578,7 +578,7 @@ impl Game {
     /// *starts* has already bought its ticks — the mid-loop `is_game_over`
     /// bail below does not refund it. Beyond that, there's no separate
     /// "rest" system beyond replaying the normal tick loop plus a
-    /// Fatigue/HP reset at the end (via `tick_inner(false)`, so these ticks
+    /// Power/HP reset at the end (via `tick_inner(false)`, so these ticks
     /// don't age the rest structure itself — see
     /// `age_temporary_structures`). If Power runs out and you take lethal
     /// damage mid-rest, the loop bails out via the `is_game_over` check
@@ -694,7 +694,7 @@ impl Game {
     /// Stand in place for a single tick — lets the world (wander AI,
     /// cronjob production, needs decay) advance by one step without moving
     /// or taking any other action. Distinct from `rest`, which advances
-    /// `REST_TICKS` at once and restores Fatigue.
+    /// `REST_TICKS` at once and restores Power.
     pub fn wait(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;

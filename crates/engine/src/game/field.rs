@@ -1,13 +1,14 @@
 //! Casting a field routine: the abilities that run outside battle rather
 //! than being spent as a Special.
 //!
-//! Three effects reach this path — `AbilityEffect::FieldBuff`, which spends
-//! Power to arm a running buff (see `components::FieldBuff` and
-//! `arm_field_buff`), and the two Stack movement routines `Phase` and
-//! `Jump`, which spend Fatigue to move the party through a frame (see
-//! `game/stack_movement.rs`). `AbilityEffect::field_only` is the predicate
-//! that says which.
+//! Three effects reach this path — `AbilityEffect::FieldBuff`, which arms a
+//! running buff (see `components::FieldBuff` and `arm_field_buff`), and the
+//! two Stack movement routines `Phase` and `Jump`, which move the party
+//! through a frame (see `game/stack_movement.rs`). All three are priced in
+//! Power through `routine_power_cost`, and
+//! `AbilityEffect::field_only` is the predicate that says which reach here.
 
+use crate::abilities::routine_power_cost;
 use crate::components::FieldScope;
 use crate::game::stack::StackPos;
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
@@ -30,7 +31,7 @@ impl Game {
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
         let holders = self.routine_holders();
         let player = self.player_entity();
-        let needs = self
+        let reserve = self
             .world
             .get::<PowerReserve>(player)
             .copied()
@@ -47,12 +48,7 @@ impl Game {
                 if !def.effect.field_only() || def.is_passive() {
                     continue;
                 }
-                let (cost, held, unit) = match &def.effect {
-                    AbilityEffect::FieldBuff { power_cost, .. } => {
-                        (*power_cost, needs.get(), "PWR")
-                    }
-                    _ => (def.fatigue_cost, needs.get(), "PWR"),
-                };
+                let cost = routine_power_cost(def);
                 let stack_only = matches!(def.effect, AbilityEffect::Phase | AbilityEffect::Jump);
                 rows.push(FieldRoutineView {
                     ability: def.id.clone(),
@@ -60,15 +56,15 @@ impl Game {
                     description: def.description.clone(),
                     holder: holder.entity,
                     holder_label: holder.name.clone(),
-                    cost: format!("{cost:.0} {unit}"),
+                    cost: format!("{cost:.0} PWR"),
                     // Ordered so the permanent objection is stated ahead of
                     // the temporary one: telling a player on open grid that
                     // they are short of Power would send them to rest for a
                     // routine that was never going to run up here.
                     unavailable: if stack_only && !underground {
                         Some("only in the Stack".into())
-                    } else if held < cost {
-                        Some(format!("not enough {unit}"))
+                    } else if !reserve.holds(cost) {
+                        Some("not enough PWR".to_string())
                     } else {
                         None
                     },
@@ -243,7 +239,6 @@ impl Game {
             power,
             duration,
             interval,
-            power_cost,
         } = def.effect
         else {
             unreachable!(
@@ -304,7 +299,7 @@ impl Game {
             power
         };
 
-        self.spend_power(power_cost);
+        self.spend_power(routine_power_cost(&def));
         for entity in recipients {
             self.arm_field_buff(
                 entity,
@@ -335,10 +330,10 @@ impl Game {
             .ok_or_else(|| format!("{name} only runs inside the Stack."))
     }
 
-    /// Spends `def`'s Fatigue and steps the party through one wall.
+    /// Spends `def`'s Power and steps the party through one wall.
     ///
     /// `phase_landing` has already applied every refusal by the time
-    /// anything below runs, so the Fatigue is spent on a move that is
+    /// anything below runs, so the Power is spent on a move that is
     /// certain to happen. Trace is raised for the phase itself *before*
     /// `arrive`, so the crossing reads as the consequence of the routine
     /// rather than of whatever the party landed on top of.
@@ -349,7 +344,7 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        self.spend_power(def.fatigue_cost);
+        self.spend_power(routine_power_cost(def));
         self.log_kind(
             MessageKind::Outcome,
             "The wall goes soft for exactly as long as it takes to cross it.",
@@ -361,10 +356,10 @@ impl Game {
         Ok(())
     }
 
-    /// Spends `def`'s Fatigue and moves the party to the cell they pointed
+    /// Spends `def`'s Power and moves the party to the cell they pointed
     /// at — or kills them, if that cell turns out to be solid.
     ///
-    /// The Fatigue comes off either way: the routine ran, and what it found
+    /// The Power comes off either way: the routine ran, and what it found
     /// at the address is not something the party gets refunded for. Trace
     /// and `arrive` belong only to the arrival — a party that resolved
     /// inside rock has arrived nowhere, and `die_in_the_rock` deliberately
@@ -377,7 +372,7 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        self.spend_power(def.fatigue_cost);
+        self.spend_power(routine_power_cost(def));
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();
         } else {

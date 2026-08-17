@@ -5,6 +5,6 @@
     target: OneEnemyGroupFront,
     effect: Damage(power: 7, status: Some((kind: Stun, chance: 0.4, duration: 1, power: 0))),
     cooldown: 3,
-    fatigue_cost: 9.0,
+    power_cost: 9.0,
     wild_weight: 8,
 )

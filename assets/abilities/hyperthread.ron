@@ -5,6 +5,6 @@
     target: OneAlly,
     effect: Buff(kind: Atk, power: 6, duration: 4),
     cooldown: 3,
-    fatigue_cost: 8.0,
+    power_cost: 8.0,
     wild_weight: 9,
 )

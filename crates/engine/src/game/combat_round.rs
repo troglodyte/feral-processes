@@ -364,7 +364,7 @@ impl Game {
     /// the feature. A tamed program carries no `Hostile`, so
     /// `ability_recipients` takes the friendly branch for free.
     ///
-    /// Costs nothing: no fatigue, no cooldown armed. The program is not in
+    /// Costs nothing: no Power, no cooldown armed. The program is not in
     /// the battle line and has no `AbilityCooldowns` tick of its own to hang
     /// one off, and inventing bookkeeping for a non-combatant buys nothing
     /// at this rate. Nothing happens to the program either — no damage, no

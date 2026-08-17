@@ -9,7 +9,7 @@
     target: WholeEnemyGroup,
     effect: Damage(power: 22, status: Some((kind: Bleed, chance: 0.75, duration: 4, power: 6))),
     cooldown: 4,
-    fatigue_cost: 16.0,
+    power_cost: 16.0,
     exclusive: true,
     boss_drop: Some([("wintermute", 0.35)]),
 )

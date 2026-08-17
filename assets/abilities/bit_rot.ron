@@ -5,6 +5,6 @@
     target: AllEnemies,
     effect: Debuff(kind: Bleed, power: 2, duration: 4),
     cooldown: 5,
-    fatigue_cost: 16.0,
+    power_cost: 16.0,
     wild_weight: 4,
 )

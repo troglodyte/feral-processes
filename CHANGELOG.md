@@ -27,7 +27,7 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.10.0
 
 **Existing saves will not load.** `save::SAVE_FORMAT_VERSION` goes 29 → 30:
 `PlayerSave::fatigue` is a field *removed*, which field-named RON does not
@@ -146,6 +146,25 @@ that counts (which armed at zero and expired on the turn it was cast — silentl
 possible before). Buff rows show `rest` where they used to show a tick count.
 No save-format change; a buff already running in an old save simply stops
 ageing.
+
+### Hardened Shell, for the whole party
+
+Hardening the party meant casting Hardened Shell Single four times: four
+turns, and 56 Power for a full roster. **Hardened Shell Party** is the same
++4 DEF on everyone off one cast for 32 Power, taught by a new **Mesh
+Plating** node — zone 3, 120 Research Data, hanging off Adaptive Plating.
+
+The price is the whole design, and it is bounded from both sides: above one
+Single, so the narrow cast is still what you reach for when only one program
+is going to get hit, and below covering the party a Single at a time, or
+nobody would ever run the wide one — the only thing it would still buy is
+turns, and turns are free. Both bounds are asserted against the shipped
+assets as a *relationship* rather than as three numbers, so a Power retune
+moves all of them freely and only an inversion fails.
+
+Data only. `Long Winter Party` was already a whole-party field buff, so
+nothing in the cast path changed — this is two `.ron` files, which is what
+the moddability rule is for.
 
 ## 0.9.3
 

@@ -102,7 +102,7 @@ fn no_two_console_rows_fire_the_same_action() {
 #[test]
 fn the_tick_trigger_advances_the_world() {
     let mut app = console_app(5);
-    let before = app.game.as_ref().unwrap().player_status().hunger;
+    let before = app.game.as_ref().unwrap().player_status().power;
     app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
     let row = App::dev_console_rows()
         .iter()
@@ -112,9 +112,9 @@ fn the_tick_trigger_advances_the_world() {
 
     app.handle_key(GameKey::Enter);
 
-    let after = app.game.as_ref().unwrap().player_status().hunger;
+    let after = app.game.as_ref().unwrap().player_status().power;
     assert!(
         after < before,
-        "burning {DEV_CONSOLE_TICKS} cycles should have moved hunger: {before} -> {after}"
+        "burning {DEV_CONSOLE_TICKS} cycles should have moved Power: {before} -> {after}"
     );
 }

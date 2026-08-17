@@ -346,14 +346,14 @@ fn a_companions_special_charges_the_player_no_power() {
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
 
-    let before = game.world.get::<Needs>(player).unwrap().hunger;
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
     companion_uses_special(
         &mut game,
         sweeper,
         0,
         battle::SpecialTarget::EnemyGroup { group: 0 },
     );
-    let spent = before - game.world.get::<Needs>(player).unwrap().hunger;
+    let spent = before - game.world.get::<PowerReserve>(player).unwrap().get();
 
     assert!(
         spent <= HUNGER_DECAY_PER_TICK + 1e-4,
@@ -367,7 +367,7 @@ fn a_player_out_of_power_can_still_command_a_companions_routine() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 0.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.0);
 
     let options = game.battle_special_options(1);
     assert_eq!(
@@ -400,7 +400,7 @@ fn a_special_option_carries_the_cooldown_it_would_arm() {
 }
 
 /// Power rides on the party slot because the roster shows it as a per-member
-/// column. Only the player holds `Needs` today, so a companion's cell is
+/// column. Only the player holds `PowerReserve` today, so a companion's cell is
 /// honestly empty rather than a second copy of the player's number — and that
 /// empty cell is the visible symptom of a roster member with no reserve.
 #[test]
@@ -408,7 +408,7 @@ fn the_battle_view_carries_the_players_power_and_no_one_elses() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 62.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(62.0);
 
     let view = game.battle_view().expect("the pack opened a battle");
     assert_eq!(
@@ -587,7 +587,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
 /// shipped tree and still charges nothing.
 ///
 /// Measured against a control round rather than against zero: a round of any
-/// kind drains a little Power on its own (`tick_needs`), so what the ability
+/// kind drains a little Power on its own, so what the ability
 /// costs is the difference between a Special round and a Defend one, and
 /// that difference must be nothing.
 #[test]
@@ -606,10 +606,10 @@ fn a_player_special_spends_no_power() {
 
         // Start off the cap: a round's own drain is meant to cancel between
         // the two measurements, and only does when neither is clamped.
-        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-        let before = game.world.get::<Needs>(player).unwrap().hunger;
+        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+        let before = game.world.get::<PowerReserve>(player).unwrap().get();
         resolve_round_with(&mut game, action);
-        before - game.world.get::<Needs>(player).unwrap().hunger
+        before - game.world.get::<PowerReserve>(player).unwrap().get()
     }
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

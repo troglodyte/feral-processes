@@ -499,7 +499,7 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
     // going to be anyway, and an even matchup draws Yellow — which is
     // exactly what a first draft of this test collided with.
     let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().power, false, false);
+    let expected = difficulty_color(power, game.player_status().strength, false, false);
     let shiny = game
         .view_entities(5, 5)
         .into_iter()
@@ -566,7 +566,7 @@ fn a_marked_hostile_draws_the_nemesis_colour_on_the_map_not_just_in_the_pure_buc
         .expect("scrapper ships with the game");
 
     let power = game.world.get::<Stats>(wild).unwrap().power();
-    let unmarked_expected = difficulty_color(power, game.player_status().power, false, false);
+    let unmarked_expected = difficulty_color(power, game.player_status().strength, false, false);
     let before = game
         .view_entities(5, 5)
         .into_iter()
@@ -793,7 +793,7 @@ fn manifest_reports_the_player_with_equipment_folded_into_their_stats() {
     assert_eq!(view.max_hp, status.max_hp);
     assert_eq!(
         (view.atk, view.def, view.power),
-        (status.atk, status.def, status.power),
+        (status.atk, status.def, status.strength),
         "the manifest must quote the same effective stats the sidebar does"
     );
     assert_eq!(view.level, Some(status.level));
@@ -802,7 +802,7 @@ fn manifest_reports_the_player_with_equipment_folded_into_their_stats() {
     let ManifestSubject::Player(p) = view.subject else {
         panic!("the player is a Player subject");
     };
-    assert_eq!(p.hunger, status.hunger);
+    assert_eq!(p.power, status.power);
     assert_eq!(p.decompiler, status.decompiler);
     assert_eq!(p.zone, status.zone);
     assert_eq!(p.position, status.position);

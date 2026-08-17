@@ -162,7 +162,7 @@ impl Game {
                     color: GlyphColor::Cyan,
                 },
                 crate::tuning::PLAYER_BASE_STATS,
-                Needs::default(),
+                PowerReserve::default(),
                 Experience::default(),
                 Decompiler::default(),
                 Equipment::default(),
@@ -368,9 +368,7 @@ impl Game {
                     atk: data.player.atk,
                     def: data.player.def,
                 },
-                Needs {
-                    hunger: data.player.hunger,
-                },
+                PowerReserve::new(data.player.power),
                 Experience {
                     level: data.player.level,
                     xp: data.player.xp,
@@ -787,7 +785,7 @@ impl Game {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
         let stats = *self.world.get::<Stats>(player).unwrap();
-        let needs = *self.world.get::<Needs>(player).unwrap();
+        let needs = *self.world.get::<PowerReserve>(player).unwrap();
         let exp = *self.world.get::<Experience>(player).unwrap();
         let decompiler = self.world.get::<Decompiler>(player).unwrap().skill;
         let equipment = self.world.get::<Equipment>(player).unwrap().clone();
@@ -999,7 +997,7 @@ impl Game {
                 max_hp: stats.max_hp,
                 atk: stats.atk,
                 def: stats.def,
-                hunger: needs.hunger,
+                power: needs.get(),
                 inventory,
                 level: exp.level,
                 xp: exp.xp,

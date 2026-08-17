@@ -8,7 +8,7 @@ use crate::*;
 fn player_status_power_matches_max_hp_plus_atk_plus_def() {
     let game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let status = game.player_status();
-    assert_eq!(status.power, status.max_hp + status.atk + status.def);
+    assert_eq!(status.strength, status.max_hp + status.atk + status.def);
 }
 
 /// The map's Integrity gauge and the battle screen's "You" bar are two
@@ -131,17 +131,17 @@ fn rest_fully_heals_and_restores_power() {
         stats.hp = 1;
     }
     {
-        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.hunger = 10.0;
+        let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
+        *needs = PowerReserve::new(10.0);
     }
     spawn_rest_structure_at_player(&mut game);
 
     game.rest();
 
     let stats = *game.world.get::<Stats>(player).unwrap();
-    let needs = *game.world.get::<Needs>(player).unwrap();
+    let needs = *game.world.get::<PowerReserve>(player).unwrap();
     assert_eq!(stats.hp, stats.max_hp, "rest should fully heal Integrity");
-    assert_eq!(needs.hunger, 100.0, "rest should fully restore Power");
+    assert_eq!(needs.get(), 100.0, "rest should fully restore Power");
 }
 
 /// A battle starting mid-`rest` (see the comment at its internal loop in
@@ -194,8 +194,8 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
         stats.hp = 1;
     }
     {
-        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.hunger = 10.0;
+        let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
+        *needs = PowerReserve::new(10.0);
     }
 
     let nest = spawn_bare_nest(&mut game, ppos.x + 3, ppos.y);
@@ -208,7 +208,7 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
         "a pursuer reaching the player mid-rest should interrupt it, same as any other battle"
     );
     let stats = *game.world.get::<Stats>(player).unwrap();
-    let needs = *game.world.get::<Needs>(player).unwrap();
+    let needs = *game.world.get::<PowerReserve>(player).unwrap();
     assert_eq!(
         stats.hp, 1,
         "rest must abort before its heal once a battle starts"
@@ -217,9 +217,9 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
     // handful of ticks before the pursuer catches up, so this checks
     // "nowhere near the full restore", not "exactly untouched".
     assert!(
-        needs.hunger < 50.0,
+        needs.get() < 50.0,
         "rest must abort before restoring Power to 100, found {}",
-        needs.hunger
+        needs.get()
     );
 }
 
@@ -413,12 +413,12 @@ fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
         },
         Position { x: pos.x, y: pos.y },
     ));
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 10.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
 
     game.rest();
 
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().hunger,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
         100.0,
         "a rest structure whose def sets no cost should still rest for free, \
          with zero outlets held"
@@ -469,7 +469,7 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
         },
         Position { x: pos.x, y: pos.y },
     ));
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 10.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
     let before_tick = game.current_tick();
 
     game.rest();
@@ -484,7 +484,7 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
          whatever it took, not keep the partial payment"
     );
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().hunger,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
         10.0,
         "a refused rest must not run any ticks, so Power is untouched"
     );
@@ -525,15 +525,16 @@ fn rest_is_a_no_op_without_a_nearby_rest_structure() {
     let mut game = Game::new(401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     {
-        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.hunger = 10.0;
+        let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
+        *needs = PowerReserve::new(10.0);
     }
 
     game.rest();
 
-    let needs = *game.world.get::<Needs>(player).unwrap();
+    let needs = *game.world.get::<PowerReserve>(player).unwrap();
     assert_eq!(
-        needs.hunger, 10.0,
+        needs.get(),
+        10.0,
         "resting with no Home in range shouldn't restore anything"
     );
 }
@@ -858,9 +859,9 @@ fn a_full_tick_applies_trickle_on_top_of_that_ticks_decay() {
     let mut game = Game::new(612, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let hunger_before = {
-        let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.hunger = 90.0;
-        needs.hunger
+        let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
+        *needs = PowerReserve::new(90.0);
+        needs.get()
     };
     game.arm_field_buff(
         player,
@@ -880,15 +881,16 @@ fn a_full_tick_applies_trickle_on_top_of_that_ticks_decay() {
     // `tick_field_buffs` (see `tick_inner`), so the restore lands on top of
     // that tick's own drain. Read through the live formula instead of
     // restating its constants.
-    let ticked_hunger = crate::systems::tick_needs(hunger_before, 1.0);
-    let needs = *game.world.get::<Needs>(player).unwrap();
+    let ticked_hunger = hunger_before - crate::systems::power_drain_per_tick(1.0);
+    let needs = *game.world.get::<PowerReserve>(player).unwrap();
     assert_eq!(
-        needs.hunger,
-        (ticked_hunger + 15.0).min(NEED_MAX),
+        needs.get(),
+        (ticked_hunger + 15.0).min(POWER_MAX),
         "Trickle should restore Power on top of the tick's own drain"
     );
     assert_eq!(
-        needs.hunger, NEED_MAX,
+        needs.get(),
+        POWER_MAX,
         "90 + 15 minus a hair of decay should still clamp to the cap"
     );
 }
@@ -1001,7 +1003,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
 fn use_item_applies_a_power_restore_and_consumes_one() {
     let mut game = Game::new(500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     // The player already starts holding Power Cells (see `Game::new`);
     // drain the default stock first so the stack is exactly 2 below.
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
@@ -1016,7 +1018,10 @@ fn use_item_applies_a_power_restore_and_consumes_one() {
     // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
     // restore — same shared-decay caveat documented on
     // `commanding_a_companion_in_battle_costs_the_player_no_power`.
-    assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        75.0 - 0.15
+    );
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -1030,7 +1035,7 @@ fn use_item_applies_a_power_restore_and_consumes_one() {
 fn use_item_clamps_power_at_full() {
     let mut game = Game::new(501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 90.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(90.0);
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
@@ -1042,7 +1047,7 @@ fn use_item_clamps_power_at_full() {
     // 0.15 (see the comment in the test above) — had the clamp not
     // engaged, this would read 114.85 instead.
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().hunger,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
         100.0 - 0.15
     );
 }
@@ -1091,11 +1096,14 @@ fn use_item_on_an_empty_stack_is_a_no_op() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .take(ItemId::from(ids::POWER_CELL), held);
-    let before = game.world.get::<Needs>(player).unwrap().hunger;
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
 
     game.use_item(&ItemId::from(ids::POWER_CELL));
 
-    assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, before);
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        before
+    );
 }
 
 #[test]
@@ -1265,7 +1273,7 @@ fn a_prebattle_buff_survives_a_save_load_round_trip() {
 fn use_power_source_restores_power_and_consumes_one() {
     let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     // The player already starts holding Power Cells (see `Game::new`);
     // drain the default stock first so the stack is exactly 2 below.
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
@@ -1281,7 +1289,10 @@ fn use_power_source_restores_power_and_consumes_one() {
     // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
     // restore — same shared-decay caveat as `use_item_applies_a_power_
     // restore_and_consumes_one` above.
-    assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        75.0 - 0.15
+    );
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -1302,7 +1313,7 @@ fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
     let held = inv.count(&ItemId::from(ids::POWER_CELL));
     inv.take(ItemId::from(ids::POWER_CELL), held);
     let fragments_before = inv.count(&ItemId::from(ids::CORE_FRAGMENT));
-    let hunger_before = game.world.get::<Needs>(player).unwrap().hunger;
+    let hunger_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
     game.use_power_source();
 
@@ -1310,9 +1321,9 @@ fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
     // success path above there's no trailing `tick()` and hunger must
     // be untouched, not merely undecayed.
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().hunger,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
         hunger_before,
-        "a failed recharge must not tick the game or touch Needs"
+        "a failed recharge must not tick the game or touch PowerReserve"
     );
     assert_eq!(
         game.world
@@ -1335,7 +1346,7 @@ fn use_power_source_with_nothing_to_recharge_from_is_a_no_op() {
 fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
     let mut game = Game::new(506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     // Drain all four starting stacks (see `Game::new`: Ice Breaker, Power
     // Cell, Core Fragment, Power Outlet) and rebuild the inventory with the
     // non-power item (Core Fragment) added *first*, so it's ahead of
@@ -1377,7 +1388,10 @@ fn use_power_source_picks_the_power_item_over_an_earlier_non_power_item() {
         5,
         "the earlier non-power item must be left untouched"
     );
-    assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        75.0 - 0.15
+    );
 }
 
 /// Wipes every wild program off the map. The ambush tests use this to make

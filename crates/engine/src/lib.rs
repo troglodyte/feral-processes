@@ -52,8 +52,8 @@ use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BaseStaff, BuffKind, BuffSource,
     Carrying, CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem,
     Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile,
-    Inventory, MachineStatus, NEED_MAX, Needs, Nemesis, Nest, NestGuardian, Perks, Player,
-    Position, Potential, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines,
+    Inventory, MachineStatus, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player, Position,
+    Potential, PowerReserve, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines,
     StackSpawn, StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded, Structure,
     StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };

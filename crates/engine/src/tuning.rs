@@ -13,8 +13,8 @@
 //!   `.ron` files under `assets/`. Tune those by editing the files — see
 //!   each directory's `README.md`. Pulling them into Rust would break
 //!   moddability.
-//! - **Type invariants.** `components::NEED_MAX`/`NEED_MIN` bound what
-//!   `Needs` may hold; every reader assumes they hold. They live beside the
+//! - **Type invariants.** `components::POWER_MAX`/`POWER_MIN` bound what
+//!   `PowerReserve` may hold; every reader assumes they hold. They live beside the
 //!   type they constrain.
 //! - **Infrastructure.** `world::CHUNK_SIZE`, `save::SAVE_FORMAT_VERSION`,
 //!   `resources::MESSAGE_LOG_CAP`/`EFFECT_QUEUE_CAP`, `MAX_CUSTOM_NAME_LEN`
@@ -456,7 +456,7 @@ pub const DEFEND_DEF_BONUS: i32 = 6;
 /// mechanic is actually tuned around.
 pub const DEFAULT_ROUTINE_FATIGUE_COST: f32 = 5.0;
 
-/// Below this Power ("Power" is the player-facing label for `Needs.hunger`)
+/// Below this Power ("Power" is the player-facing label for `PowerReserve.hunger`)
 /// threshold, the player's own attacks start losing effectiveness — see
 /// `battle::power_attack_multiplier`.
 pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
@@ -1463,14 +1463,14 @@ pub const NEST_ORPHAN_CHANCE: f64 = 0.5;
 pub const NEST_CACHE_EQUIPMENT_ROLLS: u32 = 3;
 
 // ─────────────────────────────────────────────────────────────────────────
-// Needs & rest
+// PowerReserve & rest
 // ─────────────────────────────────────────────────────────────────────────
 
 /// How many ticks a full night's recharge cycle advances the clock by.
 pub const REST_TICKS: u32 = 40;
 
-/// Per-tick drain of Power — the one need, see `systems::tick_needs`.
-/// (`Needs::hunger`; "Power" is the player-facing label.) It is the only
+/// Per-tick drain of Power — the one need, see `systems::power_drain_per_tick`.
+/// (`PowerReserve::hunger`; "Power" is the player-facing label.) It is the only
 /// thing that can starve you, so it alone paces a session.
 ///
 /// It is now also the budget every routine call is priced in, which changes

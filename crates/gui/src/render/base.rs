@@ -1093,8 +1093,8 @@ fn draw_status_panel(
             y: cy,
             w: w - m.inset * 2.0,
         },
-        &format!("Power {:.0}/100", status.hunger),
-        status.hunger,
+        &format!("Power {:.0}/100", status.power),
+        status.power,
         100.0,
         BarStyle::plain(YELLOW),
         painter,
@@ -1110,8 +1110,8 @@ fn draw_status_panel(
         format!("Zone {}", status.zone),
         format!("Position: ({}, {})", status.position.0, status.position.1),
         format!(
-            "Attack {}  Defense {}  Power {}",
-            status.atk, status.def, status.power
+            "Attack {}  Defense {}  Strength {}",
+            status.atk, status.def, status.strength
         ),
         format!("Decompiler {}", status.decompiler),
     ];

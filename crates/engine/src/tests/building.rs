@@ -917,12 +917,12 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
 fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
     let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     spawn_recharger_node(&mut game, 0, 0);
 
     game.wait();
 
-    let hunger = game.world.get::<Needs>(player).unwrap().hunger;
+    let hunger = game.world.get::<PowerReserve>(player).unwrap().get();
     assert!(
         (hunger - 50.85).abs() < 1e-4,
         "expected +1.0 regen less 0.15 decay, got {hunger}"
@@ -933,13 +933,13 @@ fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
 fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let mut game = Game::new(404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     let reach = recharger_reach(&game);
     spawn_recharger_node(&mut game, reach + 1, 0);
 
     game.wait();
 
-    let hunger = game.world.get::<Needs>(player).unwrap().hunger;
+    let hunger = game.world.get::<PowerReserve>(player).unwrap().get();
     assert!(
         (hunger - 49.85).abs() < 1e-4,
         "expected decay only, got {hunger}"
@@ -950,7 +950,7 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
 fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
     let mut game = Game::new(405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 0.1;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.1);
     let before = *game.world.get::<Stats>(player).unwrap();
     spawn_recharger_node(&mut game, 0, 0);
 

@@ -127,12 +127,12 @@ fn meter_rows(view: &ManifestView) -> Vec<Meter> {
             color: CYAN,
         });
     }
-    // Needs are player-only — no creature in the sim carries `Needs`.
+    // PowerReserve are player-only — no creature in the sim carries `PowerReserve`.
     if let ManifestSubject::Player(p) = &view.subject {
         meters.push(Meter {
             label: "POWER",
-            readout: format!("{:.0}/100", p.hunger),
-            value: p.hunger,
+            readout: format!("{:.0}/100", p.power),
+            value: p.power,
             max: 100.0,
             color: YELLOW,
         });

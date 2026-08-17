@@ -531,7 +531,7 @@ impl Game {
                     atk: self.effective_atk(entity),
                     def: self.effective_def(entity),
                     status_effect: self.status_label(entity),
-                    power: self.world.get::<Needs>(entity).map(|n| n.hunger),
+                    power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
                     planned: battle.planned[slot]
                         .as_ref()
                         .map(|action| self.action_label(entity, action)),
@@ -1055,7 +1055,7 @@ impl Game {
     /// `entity` isn't always the player: `wild_retaliate` can call this
     /// (via `effective_def`) with a companion that's eating the hit
     /// instead, and a companion has neither a `Party` bonus of its own nor
-    /// `Needs` to run low on.
+    /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
         let bonus = self
@@ -1071,12 +1071,12 @@ impl Game {
         }
         let total =
             base + bonus + field_bonus + self.party_stat_bonus().0 + self.wielded_stat_bonus().0;
-        let hunger = self
+        let power = self
             .world
-            .get::<Needs>(entity)
-            .map(|n| n.hunger)
-            .unwrap_or(100.0);
-        ((total as f32) * battle::power_attack_multiplier(hunger)).round() as i32
+            .get::<PowerReserve>(entity)
+            .map(|r| r.get())
+            .unwrap_or(POWER_MAX);
+        ((total as f32) * battle::power_attack_multiplier(power)).round() as i32
     }
 
     /// `entity`'s effective DEF against incoming damage: its real `Stats`

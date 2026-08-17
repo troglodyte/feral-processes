@@ -1127,18 +1127,18 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
         .id();
     insert_battle(&mut game, player, vec![wild]);
 
-    // Start off the cap. Power drains per tick (`tick_needs`), and both arms
+    // Start off the cap. Power drains per tick, and both arms
     // of the comparison are supposed to absorb one tick's worth identically
     // — which they only do if neither is clamped at either end.
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
-    let power_before = game.world.get::<Needs>(player).unwrap().hunger;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
     companion_uses_special(
         &mut game,
         companion,
         0,
         battle::SpecialTarget::Ally { slot: 0 },
     );
-    let power_after = game.world.get::<Needs>(player).unwrap().hunger;
+    let power_after = game.world.get::<PowerReserve>(player).unwrap().get();
     power_before - power_after
 }
 

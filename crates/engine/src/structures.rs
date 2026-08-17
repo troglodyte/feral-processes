@@ -84,7 +84,7 @@ pub struct AssembleDef {
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PowerRegenDef {
-    /// Power (`components::Needs::hunger`) restored per tick while the
+    /// Power (`components::PowerReserve::hunger`) restored per tick while the
     /// player is in range. Stacks additively across every in-range
     /// structure that sets it.
     pub per_tick: f32,

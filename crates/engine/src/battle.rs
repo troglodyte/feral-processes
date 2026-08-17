@@ -105,7 +105,7 @@ pub enum SpecialTargeting {
     Ally,
     /// Lands on an enemy group.
     Enemy,
-    /// Needs no choice at all — it resolves the moment it is picked.
+    /// PowerReserve no choice at all — it resolves the moment it is picked.
     None,
 }
 

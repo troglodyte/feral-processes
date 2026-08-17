@@ -515,8 +515,8 @@ impl Game {
             return false;
         }
         {
-            let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.hunger = (needs.hunger + effect.power).min(NEED_MAX);
+            let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
+            needs.restore(effect.power);
         }
         if effect.heal != 0 {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
@@ -663,8 +663,8 @@ impl Game {
         }
         let player = self.player_entity();
         {
-            let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.hunger = NEED_MAX;
+            let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
+            needs.fill();
         }
         {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();

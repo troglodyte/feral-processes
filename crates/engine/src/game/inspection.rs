@@ -674,7 +674,7 @@ impl Game {
 
     fn player_manifest(&self, entity: Entity) -> Option<ManifestView> {
         let stats = self.world.get::<Stats>(entity)?;
-        let needs = self.world.get::<Needs>(entity)?;
+        let needs = self.world.get::<PowerReserve>(entity)?;
         let pos = self.world.get::<Position>(entity)?;
         let inv = self.world.get::<Inventory>(entity)?;
         let exp = self.world.get::<Experience>(entity)?;
@@ -700,7 +700,7 @@ impl Game {
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Player(PlayerManifest {
-                hunger: needs.hunger,
+                power: needs.get(),
                 decompiler: self
                     .world
                     .get::<Decompiler>(entity)

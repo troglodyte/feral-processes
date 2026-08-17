@@ -117,27 +117,132 @@ impl Stats {
     }
 }
 
-/// The satisfied end of a need's range. Lives here beside `Needs` rather
-/// than in `balance_sim`, because it is the type's own documented invariant
-/// rather than a tuning knob: anything writing `hunger` has to clamp to it.
-pub const NEED_MAX: f32 = 100.0;
-/// The critical end. Below it a need is meaningless, and `Needs` readers
-/// (the status bars, `battle::power_attack_multiplier`) assume it holds.
-pub const NEED_MIN: f32 = 0.0;
+/// The full end of a reserve's range. Lives here beside `PowerReserve`
+/// rather than in `tuning.rs`, because it is the type's own documented
+/// invariant rather than a difficulty knob.
+pub const POWER_MAX: f32 = 100.0;
+/// The empty end. Below it Power is meaningless, and its readers (the status
+/// bars, `battle::power_attack_multiplier`) assume it holds.
+pub const POWER_MIN: f32 = 0.0;
 
-/// Power, `NEED_MIN..=NEED_MAX`; full is satisfied, 0 is critical.
+/// What a combatant has left to spend on routine calls, `POWER_MIN..=
+/// POWER_MAX`. One meter, since the Fatigue half was deleted — that one
+/// refilled on its own and was spent by two routines, while Power is the only
+/// thing that kills by attrition and the budget every routine call draws on.
 ///
-/// One meter, since the Fatigue half was deleted — it refilled on its own and
-/// was spent by two routines, while Power is the only thing that kills by
-/// attrition and the budget every routine call now draws on.
+/// **The float is private, and that is the point of the type.** The range was
+/// an invariant held by convention across a dozen sites, each hand-rolling
+/// its own `.max(POWER_MIN)` or `.min(POWER_MAX)` — one forgotten clamp and a
+/// reserve reads negative or overfull to `power_attack_multiplier` and every
+/// status bar. A private field makes the compiler hold it instead, the same
+/// move as `Game`'s private `world`.
+///
+/// The API is exactly the operations the call sites perform and nothing
+/// speculative. A caller wanting an eighth is a signal to re-read the call
+/// site, not to widen the type.
 #[derive(Component, Clone, Copy, Debug)]
-pub struct Needs {
-    pub hunger: f32,
+pub struct PowerReserve(f32);
+
+impl Default for PowerReserve {
+    fn default() -> Self {
+        Self(POWER_MAX)
+    }
 }
 
-impl Default for Needs {
-    fn default() -> Self {
-        Self { hunger: NEED_MAX }
+impl PowerReserve {
+    /// Clamps, because both callers are load paths: a save file and a mod's
+    /// numbers are equally outside this crate's control.
+    pub fn new(value: f32) -> Self {
+        Self(value.clamp(POWER_MIN, POWER_MAX))
+    }
+
+    pub fn get(&self) -> f32 {
+        self.0
+    }
+
+    /// Whether `cost` is affordable. `>=`, so a reserve holding exactly the
+    /// cost may spend it — the refusal is for a reserve that would go
+    /// negative, not one that lands on empty.
+    pub fn holds(&self, cost: f32) -> bool {
+        self.0 >= cost
+    }
+
+    pub fn spend(&mut self, cost: f32) {
+        self.0 = (self.0 - cost).max(POWER_MIN);
+    }
+
+    pub fn restore(&mut self, amount: f32) {
+        self.0 = (self.0 + amount).min(POWER_MAX);
+    }
+
+    /// `Game::rest`, which sets outright rather than adding.
+    pub fn fill(&mut self) {
+        self.0 = POWER_MAX;
+    }
+
+    /// `difficulty.rs`'s Forgiving reboot — the one site that raises *to* a
+    /// floor rather than adding. Never lowers: a reboot is meant to leave you
+    /// with enough to keep going, and a player who died holding more than the
+    /// floor does not get docked for it. Delete this if that call ever
+    /// becomes an additive top-up.
+    pub fn raise_to_at_least(&mut self, floor: f32) {
+        self.0 = self.0.max(floor).min(POWER_MAX);
+    }
+}
+
+#[cfg(test)]
+mod power_reserve_tests {
+    use super::*;
+
+    #[test]
+    fn spend_floors_at_empty_rather_than_going_negative() {
+        let mut r = PowerReserve::new(5.0);
+        r.spend(50.0);
+        assert_eq!(r.get(), POWER_MIN);
+    }
+
+    #[test]
+    fn restore_caps_at_full() {
+        let mut r = PowerReserve::new(POWER_MAX - 1.0);
+        r.restore(50.0);
+        assert_eq!(r.get(), POWER_MAX);
+    }
+
+    #[test]
+    fn new_clamps_a_wild_input_at_both_ends() {
+        assert_eq!(PowerReserve::new(-40.0).get(), POWER_MIN);
+        assert_eq!(PowerReserve::new(4000.0).get(), POWER_MAX);
+    }
+
+    /// The boundary is where a refusal and a charge would disagree if they
+    /// were written twice, so it is pinned on both sides of exact.
+    #[test]
+    fn holds_is_true_at_exactly_the_cost_and_false_one_short() {
+        let r = PowerReserve::new(10.0);
+        assert!(r.holds(10.0), "a reserve holding exactly the cost may pay");
+        assert!(!r.holds(10.1));
+        assert!(r.holds(9.9));
+    }
+
+    /// The bug the Forgiving reboot would otherwise ship: a player who died
+    /// with a full reserve being *dropped* to the floor by the thing meant to
+    /// help them.
+    #[test]
+    fn raise_to_at_least_never_lowers_a_reserve_already_above_the_floor() {
+        let mut r = PowerReserve::new(90.0);
+        r.raise_to_at_least(40.0);
+        assert_eq!(r.get(), 90.0);
+
+        let mut drained = PowerReserve::new(5.0);
+        drained.raise_to_at_least(40.0);
+        assert_eq!(drained.get(), 40.0);
+    }
+
+    #[test]
+    fn fill_sets_outright() {
+        let mut r = PowerReserve::new(1.0);
+        r.fill();
+        assert_eq!(r.get(), POWER_MAX);
     }
 }
 
@@ -751,7 +856,7 @@ impl FieldBuffKind {
     /// between it and `Regen` that decides it.** Both restore a pool, but
     /// `Regen`'s ceiling is `max_hp`, which grows with level — so a scaled
     /// heal stays the same fraction of the bar. Power's ceiling is
-    /// `NEED_MAX`, a fixed 100 forever. Scaled, an authored `power: 1` is 7 a
+    /// `POWER_MAX`, a fixed 100 forever. Scaled, an authored `power: 1` is 7 a
     /// turn at the level cap, which pins a full reserve for the buff's whole
     /// duration and makes the authored number untunable: the level term
     /// swamps whatever the file says. Unscaled, `power` means what it says

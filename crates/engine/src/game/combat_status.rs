@@ -311,7 +311,7 @@ impl Game {
     /// `Regen` is a heal, not damage, so it writes `Stats::hp` directly
     /// rather than going through `apply_damage` — that function is the
     /// only path that *lowers* HP, and routing a heal through it would
-    /// break that invariant. `Trickle` writes `Needs`, which only
+    /// break that invariant. `Trickle` writes `PowerReserve`, which only
     /// the player has (`FieldBuffKind::scope` makes both `Run`-scoped for
     /// exactly that reason) — a companion carrying one is not an error, the
     /// write simply has nothing to land on.
@@ -335,8 +335,8 @@ impl Game {
                 }
             }
             FieldBuffKind::Trickle => {
-                if let Some(mut needs) = self.world.get_mut::<Needs>(entity) {
-                    needs.hunger = (needs.hunger + power as f32).min(NEED_MAX);
+                if let Some(mut needs) = self.world.get_mut::<PowerReserve>(entity) {
+                    needs.restore(power as f32);
                 }
             }
             FieldBuffKind::Def

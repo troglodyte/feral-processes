@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::components::{
-    ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Needs, Perks, Routines,
+    ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Perks, PowerReserve, Routines,
 };
 use crate::resources::Party;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, CREATURE_MAX_LEVEL};
@@ -23,9 +23,9 @@ fn game_with_field_ability() -> Game {
 
 fn player_hunger(game: &Game) -> f32 {
     game.world
-        .get::<Needs>(game.player_entity())
+        .get::<PowerReserve>(game.player_entity())
         .unwrap()
-        .hunger
+        .get()
 }
 
 #[test]
@@ -47,9 +47,9 @@ fn casting_arms_the_buff_and_deducts_power() {
 
     // A successful cast ticks the clock (see `cast_field_routine`'s doc), so
     // the ordinary per-tick Power decay lands on top of the routine's own
-    // cost. `systems::tick_needs` is the one place that decay formula
+    // cost. `systems::power_drain_per_tick` is the one place that decay formula
     // lives — read through it rather than restating its constant here.
-    let expected_hunger = crate::systems::tick_needs(before - 5.0, 1.0);
+    let expected_hunger = before - 5.0 - crate::systems::power_drain_per_tick(1.0);
     assert_eq!(player_hunger(&game), expected_hunger);
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(active.len(), 1);
@@ -74,7 +74,7 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     let start = game.current_tick();
 
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 4.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
     let refused = game.cast_field_routine(0, FieldCastTarget::Ally(player));
     assert!(refused.is_err(), "4.0 Power can't cover a 5.0 cost");
     assert_eq!(
@@ -83,7 +83,7 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
         "a refused cast spends nothing, so it must cost no time"
     );
 
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
     game.cast_field_routine(0, FieldCastTarget::Ally(player))
         .expect("100.0 Power covers a 5.0 cost");
     assert_eq!(
@@ -100,7 +100,7 @@ fn insufficient_power_returns_err_and_leaves_state_untouched() {
     game.world
         .entity_mut(player)
         .insert(Routines(vec!["test_field_regen".to_string()]));
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 4.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
 
     let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
 
@@ -179,10 +179,10 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     game.world
         .entity_mut(high)
         .insert(Routines(vec!["test_field_regen".to_string()]));
-    game.world
-        .get_mut::<Needs>(game.player_entity())
-        .unwrap()
-        .hunger = 100.0;
+    *game
+        .world
+        .get_mut::<PowerReserve>(game.player_entity())
+        .unwrap() = PowerReserve::new(100.0);
 
     let routines = game.field_routines();
     let low_index = routines
@@ -192,10 +192,10 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     game.cast_field_routine(low_index, FieldCastTarget::Ally(low))
         .unwrap();
 
-    game.world
-        .get_mut::<Needs>(game.player_entity())
-        .unwrap()
-        .hunger = 100.0;
+    *game
+        .world
+        .get_mut::<PowerReserve>(game.player_entity())
+        .unwrap() = PowerReserve::new(100.0);
     let routines = game.field_routines();
     let high_index = routines
         .iter()
@@ -238,7 +238,7 @@ fn buff_affinity_maxed_player(game: &mut Game) -> Entity {
         points: 0,
         unlocked: vec![Perk::BuffAffinity; levels_to_max],
     });
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
     player
 }
 
@@ -697,10 +697,10 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
-    game.world
-        .get_mut::<Needs>(game.player_entity())
-        .unwrap()
-        .hunger = 100.0;
+    *game
+        .world
+        .get_mut::<PowerReserve>(game.player_entity())
+        .unwrap() = PowerReserve::new(100.0);
 
     let routines = game.field_routines();
     let index = routines
@@ -726,10 +726,10 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     game.world
         .entity_mut(holder)
         .insert(Routines(vec!["test_field_regen".to_string()]));
-    game.world
-        .get_mut::<Needs>(game.player_entity())
-        .unwrap()
-        .hunger = 100.0;
+    *game
+        .world
+        .get_mut::<PowerReserve>(game.player_entity())
+        .unwrap() = PowerReserve::new(100.0);
 
     let routines = game.field_routines();
     let index = routines

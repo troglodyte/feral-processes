@@ -410,7 +410,7 @@ pub(crate) fn app_with_player_routines(seed: u32, routines: &[&str], hunger: f32
 
     let mut data = save::load_from_file(&path).unwrap();
     data.player.routines = routines.iter().map(|r| r.to_string()).collect();
-    data.player.hunger = hunger;
+    data.player.power = hunger;
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Game::load(&path, &assets_dir).ok();
@@ -467,7 +467,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
 
     let mut data = save::load_from_file(&path).unwrap();
     data.player.routines = routines.iter().map(|r| r.to_string()).collect();
-    data.player.hunger = 100.0;
+    data.player.power = 100.0;
     let (px, py) = data.player.position;
     for (offset, tamed) in [(1, true), (2, false)] {
         data.creatures.push(CreatureSave {

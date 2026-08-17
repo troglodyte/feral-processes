@@ -10,7 +10,7 @@ impl Game {
         let pet_capacity = self.pet_capacity();
         let player = self.player_entity();
         let stats = self.world.get::<Stats>(player).unwrap();
-        let needs = self.world.get::<Needs>(player).unwrap();
+        let needs = self.world.get::<PowerReserve>(player).unwrap();
         let pos = self.world.get::<Position>(player).unwrap();
         let inv = self.world.get::<Inventory>(player).unwrap();
         let exp = self.world.get::<Experience>(player).unwrap();
@@ -79,9 +79,9 @@ impl Game {
             max_hp: stats.max_hp,
             atk,
             def,
-            power: stats.max_hp + atk + def,
+            strength: stats.max_hp + atk + def,
             decompiler,
-            hunger: needs.hunger,
+            power: needs.get(),
             inventory,
             inventory_used: self.inventory_used(),
             pet_count,

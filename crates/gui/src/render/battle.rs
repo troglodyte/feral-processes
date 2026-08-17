@@ -6,7 +6,7 @@ use super::field::draw_battle_buffs;
 use super::popup::*;
 use super::*;
 use feral_processes_engine::battle::SpecialOption;
-use feral_processes_engine::components::NEED_MAX;
+use feral_processes_engine::components::POWER_MAX;
 
 /// Offset that keeps party-slot bar keys clear of the enemy-group keys they
 /// share `Fx::bar_ghost`'s map with. Far above `MAX_ENEMY_GROUPS`, so the
@@ -127,7 +127,7 @@ fn party_tail(gear: &str, power: &str, action: &str) -> String {
 /// player's number, which would read as five slots drawing on one pool.
 fn power_cell(power: Option<f32>) -> String {
     match power {
-        Some(f) => format!("{f:.0}/{NEED_MAX:.0}"),
+        Some(f) => format!("{f:.0}/{POWER_MAX:.0}"),
         None => "—".to_string(),
     }
 }
@@ -899,7 +899,7 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail("w|a|m", &power_cell(Some(NEED_MAX)), "Special: Null Route"),
+            &party_tail("w|a|m", &power_cell(Some(POWER_MAX)), "Special: Null Route"),
         );
         let pet = roster_row(
             " 2 ",
@@ -910,7 +910,7 @@ mod tests {
             "FRONT",
             &party_tail("w|.|.", &power_cell(None), "Defend"),
         );
-        assert_eq!(power_cell(Some(NEED_MAX)).chars().count(), POWER_W);
+        assert_eq!(power_cell(Some(POWER_MAX)).chars().count(), POWER_W);
         assert_eq!(
             at(&you, POWER_COL)
                 .chars()

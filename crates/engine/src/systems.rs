@@ -3,8 +3,8 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, NEED_MAX,
-    NEED_MIN, Needs, Nest, NestGuardian, Perks, Player, Position, Potential, Pursuing,
+    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Nest,
+    NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve, Pursuing,
     ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
     WanderAi, field_buff_power_of,
 };
@@ -24,17 +24,19 @@ use crate::tuning::{
 use crate::tuning::{HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE};
 use crate::world::WorldMap;
 
-/// One tick of Power's drain; pulled out of the system so the rate is
-/// unit-testable without spinning up an ECS `World`.
+/// How much Power one tick costs, before the floor — which is
+/// `PowerReserve::spend`'s and not this function's, so there is one place a
+/// reserve is clamped rather than one per writer.
 ///
-/// `hunger_multiplier` scales it — e.g. `Perk::LowPowerMode`'s per-level
-/// reduction.
-pub fn tick_needs(hunger: f32, hunger_multiplier: f32) -> f32 {
-    (hunger - HUNGER_DECAY_PER_TICK * hunger_multiplier).max(0.0)
+/// Pulled out of the system so the rate is unit-testable without spinning up
+/// an ECS `World`. `multiplier` scales it — e.g. `Perk::LowPowerMode`'s
+/// per-level reduction.
+pub fn power_drain_per_tick(multiplier: f32) -> f32 {
+    HUNGER_DECAY_PER_TICK * multiplier
 }
 
 pub fn needs_tick_system(
-    mut query: Query<(&mut Needs, &mut Stats, Option<&Perks>), With<Player>>,
+    mut query: Query<(&mut PowerReserve, &mut Stats, Option<&Perks>), With<Player>>,
     mut log: ResMut<MessageLog>,
 ) {
     for (mut needs, mut stats, perks) in &mut query {
@@ -42,9 +44,9 @@ pub fn needs_tick_system(
         let hunger_multiplier = (1.0
             - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32)
             .max(0.0);
-        let was_starving = needs.hunger <= 0.0;
-        needs.hunger = tick_needs(needs.hunger, hunger_multiplier);
-        if needs.hunger <= 0.0 {
+        let was_starving = needs.get() <= POWER_MIN;
+        needs.spend(power_drain_per_tick(hunger_multiplier));
+        if needs.get() <= POWER_MIN {
             stats.hp -= 1;
             if !was_starving {
                 log.push("Your power reserves are critical!");
@@ -937,7 +939,7 @@ pub fn assembler_system(
 /// `Position` that never went through `require_surface` but still claims
 /// something about where the party is standing.
 pub fn power_regen_system(
-    mut player: Query<(&Position, &mut Needs), With<Player>>,
+    mut player: Query<(&Position, &mut PowerReserve), With<Player>>,
     structures: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
     locale: Res<Locale>,
@@ -963,11 +965,11 @@ pub fn power_regen_system(
             // rather than trusted. A negative value would drain Power past
             // 0 through a field named "regen", and NaN would pin it at the
             // ceiling forever — `f32::min` returns the non-NaN operand, so
-            // a bare `.min(NEED_MAX)` silently yields NEED_MAX.
+            // a bare `.min(POWER_MAX)` silently yields POWER_MAX.
             if !regen.per_tick.is_finite() {
                 continue;
             }
-            needs.hunger = (needs.hunger + regen.per_tick.max(0.0)).clamp(NEED_MIN, NEED_MAX);
+            needs.restore(regen.per_tick.max(0.0));
         }
     }
 }
@@ -1178,7 +1180,7 @@ mod tests {
             .spawn((
                 Player,
                 Position { x: 0, y: 0 },
-                Needs { hunger },
+                PowerReserve::new(hunger),
                 PLAYER_BASE_STATS,
             ))
             .id();
@@ -1200,7 +1202,7 @@ mod tests {
         let mut schedule = Schedule::default();
         schedule.add_systems(power_regen_system);
         schedule.run(&mut world);
-        world.get::<Needs>(player).unwrap().hunger
+        world.get::<PowerReserve>(player).unwrap().get()
     }
 
     /// `power_regen_system` reads the player's `Position`, and that `Position`
@@ -1234,7 +1236,7 @@ mod tests {
             let mut schedule = Schedule::default();
             schedule.add_systems(power_regen_system);
             schedule.run(&mut world);
-            power[i] = world.get::<Needs>(player).unwrap().hunger;
+            power[i] = world.get::<PowerReserve>(player).unwrap().get();
         }
         assert_eq!(
             power[0], 52.0,
@@ -1263,8 +1265,8 @@ mod tests {
 
     /// `per_tick` comes from a mod file, so it is not trusted. A negative
     /// one would drain Power through a field named "regen", past 0 and out
-    /// of the range `Needs` documents. NaN is worse: `f32::min` returns the
-    /// non-NaN operand, so clamping with a bare `.min(NEED_MAX)` turns it
+    /// of the range `PowerReserve` documents. NaN is worse: `f32::min` returns the
+    /// non-NaN operand, so clamping with a bare `.min(POWER_MAX)` turns it
     /// into *permanently full* Power rather than rejecting it.
     #[test]
     fn power_regen_neither_drains_nor_pins_power_on_a_malformed_per_tick() {
@@ -1350,15 +1352,15 @@ mod tests {
         schedule.run(&mut world);
 
         let stats = *world.get::<Stats>(player).unwrap();
-        let needs = *world.get::<Needs>(player).unwrap();
+        let needs = *world.get::<PowerReserve>(player).unwrap();
         assert_eq!(
             stats.hp, stats.max_hp,
             "regen must cover the player before decay can starve them"
         );
         assert!(
-            (needs.hunger - (0.1 + 2.0 - HUNGER_DECAY_PER_TICK)).abs() < 1e-5,
+            (needs.get() - (0.1 + 2.0 - HUNGER_DECAY_PER_TICK)).abs() < 1e-5,
             "expected regen then decay, got {}",
-            needs.hunger
+            needs.get()
         );
     }
 
@@ -1382,13 +1384,17 @@ mod tests {
 
     #[test]
     fn power_drains_by_its_rate() {
-        let power = tick_needs(50.0, 1.0);
-        assert!((power - (50.0 - HUNGER_DECAY_PER_TICK)).abs() < f32::EPSILON);
+        let drain = power_drain_per_tick(1.0);
+        assert!((drain - HUNGER_DECAY_PER_TICK).abs() < f32::EPSILON);
     }
 
+    /// The floor is `PowerReserve::spend`'s, not the rate's — so this is
+    /// asserted through the type rather than through the drain function.
     #[test]
     fn power_never_goes_negative() {
-        assert_eq!(tick_needs(0.05, 1.0), 0.0);
+        let mut reserve = PowerReserve::new(0.05);
+        reserve.spend(power_drain_per_tick(1.0));
+        assert_eq!(reserve.get(), POWER_MIN);
     }
 
     #[test]
@@ -1511,7 +1517,7 @@ mod tests {
 
     #[test]
     fn the_hunger_multiplier_scales_the_drain() {
-        let power = tick_needs(100.0, 0.5);
-        assert!((power - (100.0 - HUNGER_DECAY_PER_TICK * 0.5)).abs() < f32::EPSILON);
+        let drain = power_drain_per_tick(0.5);
+        assert!((drain - HUNGER_DECAY_PER_TICK * 0.5).abs() < f32::EPSILON);
     }
 }

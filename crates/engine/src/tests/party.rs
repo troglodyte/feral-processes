@@ -934,7 +934,7 @@ fn dropping_below_half_power_weakens_the_players_attack() {
     let full_atk = game.player_status().atk;
 
     // At and above the threshold, no penalty at all.
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     assert_eq!(
         game.player_status().atk,
         full_atk,
@@ -944,14 +944,14 @@ fn dropping_below_half_power_weakens_the_players_attack() {
     // Below it, a linear falloff — checked at a couple of points rather
     // than re-deriving the formula, since `battle::power_attack_multiplier`
     // already has its own dedicated unit tests for the exact curve.
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 25.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(25.0);
     let quarter_power_atk = game.player_status().atk;
     assert!(
         quarter_power_atk < full_atk,
         "attack should be weaker at 25 power than at full power"
     );
 
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 0.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.0);
     let zero_power_atk = game.player_status().atk;
     assert!(
         zero_power_atk < quarter_power_atk,

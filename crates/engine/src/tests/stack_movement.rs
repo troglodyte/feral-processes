@@ -2,7 +2,7 @@
 //! and `AbilityEffect::Jump` (Wild Jump). See `game/stack_movement.rs`.
 
 use super::support::*;
-use crate::components::{Needs, Routines};
+use crate::components::{PowerReserve, Routines};
 use crate::resources::{CurrentStack, Locale, StackMemory, Trace};
 use crate::stack::{CellKind, Dir};
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
@@ -37,7 +37,7 @@ fn surfaced_with_routines_on(mode: DifficultyMode) -> Game {
         .insert(Routines(vec![PHASE.to_string(), JUMP.to_string()]));
     // Full Power, so an unrelated drain can never be what refuses a cast
     // these tests expect to run.
-    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
     game
 }
 
@@ -79,9 +79,9 @@ fn facing(game: &Game) -> Dir {
 
 fn power(game: &Game) -> f32 {
     game.world
-        .get::<Needs>(game.player_entity())
+        .get::<PowerReserve>(game.player_entity())
         .unwrap()
-        .hunger
+        .get()
 }
 
 fn trace(game: &Game) -> u32 {
@@ -537,10 +537,10 @@ fn the_picker_greys_both_routines_on_the_surface_and_prices_them_in_power() {
 #[test]
 fn a_routine_the_player_cannot_pay_for_is_greyed_rather_than_hidden() {
     let mut game = underground();
-    game.world
-        .get_mut::<Needs>(game.player_entity())
-        .unwrap()
-        .hunger = 1.0;
+    *game
+        .world
+        .get_mut::<PowerReserve>(game.player_entity())
+        .unwrap() = PowerReserve::new(1.0);
     let rows = game.field_routines();
     assert_eq!(rows.len(), 2, "an unaffordable routine must not vanish");
     assert!(

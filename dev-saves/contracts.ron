@@ -8,7 +8,7 @@
         max_hp: 510,
         atk: 47,
         def: 46,
-        hunger: 100.0,
+        power: 100.0,
         inventory: [
             ("research_data", 500),
             ("ice_breaker", 200),

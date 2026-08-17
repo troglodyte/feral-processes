@@ -8,7 +8,7 @@
 //! `game/stack_movement.rs`). `AbilityEffect::field_only` is the predicate
 //! that says which.
 
-use crate::components::{FieldScope, NEED_MIN};
+use crate::components::FieldScope;
 use crate::game::stack::StackPos;
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
 use crate::*;
@@ -30,7 +30,11 @@ impl Game {
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
         let holders = self.routine_holders();
         let player = self.player_entity();
-        let needs = self.world.get::<Needs>(player).copied().unwrap_or_default();
+        let needs = self
+            .world
+            .get::<PowerReserve>(player)
+            .copied()
+            .unwrap_or_default();
         let underground = self.is_underground();
         let db = self.world.resource::<AbilityDb>();
         let mut rows = Vec::new();
@@ -45,9 +49,9 @@ impl Game {
                 }
                 let (cost, held, unit) = match &def.effect {
                     AbilityEffect::FieldBuff { power_cost, .. } => {
-                        (*power_cost, needs.hunger, "PWR")
+                        (*power_cost, needs.get(), "PWR")
                     }
-                    _ => (def.fatigue_cost, needs.hunger, "PWR"),
+                    _ => (def.fatigue_cost, needs.get(), "PWR"),
                 };
                 let stack_only = matches!(def.effect, AbilityEffect::Phase | AbilityEffect::Jump);
                 rows.push(FieldRoutineView {
@@ -300,10 +304,7 @@ impl Game {
             power
         };
 
-        {
-            let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.hunger = (needs.hunger - power_cost).max(NEED_MIN);
-        }
+        self.spend_power(power_cost);
         for entity in recipients {
             self.arm_field_buff(
                 entity,
@@ -392,13 +393,15 @@ impl Game {
         Ok(())
     }
 
-    /// Takes `cost` off the player's Power, floored at `NEED_MIN`. The
+    /// Takes `cost` off the player's Power, floored at `POWER_MIN`. The
     /// first write of either movement cast, and every refusal is already
     /// behind it.
     fn spend_power(&mut self, cost: f32) {
         let player = self.player_entity();
-        let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-        needs.hunger = (needs.hunger - cost).max(NEED_MIN);
+        self.world
+            .get_mut::<PowerReserve>(player)
+            .unwrap()
+            .spend(cost);
     }
 
     /// Every buff currently running on the player or a party member, for the

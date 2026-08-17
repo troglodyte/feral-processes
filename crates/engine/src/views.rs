@@ -76,9 +76,16 @@ pub struct PlayerStatus {
     pub atk: i32,
     pub def: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
-    pub power: i32,
+    ///
+    /// Named `strength` rather than `power` because this is the one struct
+    /// carrying both it and the reserve below, and the status screen prints
+    /// them two lines apart. Two different numbers labelled "Power" is what
+    /// the vocabulary pass exists to remove.
+    pub strength: i32,
     pub decompiler: i32,
-    pub hunger: f32,
+    /// What the player has left to spend on routine calls — see
+    /// `components::PowerReserve`.
+    pub power: f32,
     /// The player's cargo, and the one list every "what does the player
     /// have" screen reads. Banked items (`ItemDef::banked`) are **not** in
     /// it: a bank is not something carried and not something a trader
@@ -744,7 +751,7 @@ pub struct PartySlotView {
     pub def: i32,
     pub status_effect: Option<String>,
     /// What this member has left to spend on routines, or `None` for one
-    /// holding no reserve at all. `Needs` lives on the player alone for now,
+    /// holding no reserve at all. `PowerReserve` lives on the player alone for now,
     /// so this is `Some` on slot 0 and nowhere else; a companion's own
     /// reserve is what fills the rest of the column in.
     pub power: Option<f32>,
@@ -1273,7 +1280,8 @@ pub enum ManifestSubject {
 
 /// The player-only half of a manifest.
 pub struct PlayerManifest {
-    pub hunger: f32,
+    /// See `components::PowerReserve`.
+    pub power: f32,
     pub decompiler: i32,
     pub perk_points: u32,
     /// Every perk bought at least once, as (display name, level).

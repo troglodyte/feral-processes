@@ -19,7 +19,7 @@ pub struct PlayerSave {
     pub max_hp: i32,
     pub atk: i32,
     pub def: i32,
-    pub hunger: f32,
+    pub power: f32,
     pub inventory: Vec<(ItemId, u32)>,
     pub level: u32,
     pub xp: u32,
@@ -752,7 +752,7 @@ mod tests {
                 max_hp: 30,
                 atk: 6,
                 def: 2,
-                hunger: 100.0,
+                power: 100.0,
                 inventory: Vec::new(),
                 level: 1,
                 xp: 0,
@@ -846,7 +846,7 @@ mod tests {
     fn a_save_survives_a_round_trip_through_ron_unchanged() {
         let mut data = sample_data();
         data.player.inventory = vec![(ItemId::from("core_fragment"), 3)];
-        data.player.hunger = 62.5;
+        data.player.power = 62.5;
         data.tile_overrides = vec![(
             (4, -7),
             Tile {

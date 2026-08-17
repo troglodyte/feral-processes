@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 
-use crate::components::{Experience, Needs, Player, Position, Stats, Structure};
+use crate::components::{Experience, Player, Position, PowerReserve, Stats, Structure};
 use crate::game::stack::StackLocale;
 use crate::progression;
 use crate::resources::{DifficultyMode, GameClock, GameOver, MessageLog};
@@ -19,7 +19,15 @@ use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
 /// the one reset that doesn't go through `Game::clear_stack`, because a
 /// system has no `Game` — it shares that function's implementation instead.
 pub(crate) fn death_handling_system(
-    mut player_query: Query<(&mut Stats, &mut Needs, &mut Position, &mut Experience), With<Player>>,
+    mut player_query: Query<
+        (
+            &mut Stats,
+            &mut PowerReserve,
+            &mut Position,
+            &mut Experience,
+        ),
+        With<Player>,
+    >,
     structure_query: Query<&Position, (With<Structure>, Without<Player>)>,
     difficulty: Res<DifficultyMode>,
     clock: Res<GameClock>,
@@ -41,7 +49,7 @@ pub(crate) fn death_handling_system(
             }
             DifficultyMode::Forgiving => {
                 stats.hp = (stats.max_hp / FORGIVING_RESPAWN_HP_DIVISOR).max(1);
-                needs.hunger = needs.hunger.max(FORGIVING_RESPAWN_NEED_FLOOR);
+                needs.raise_to_at_least(FORGIVING_RESPAWN_NEED_FLOOR);
                 // Before the warp, not after: `Position` is the entrance
                 // tile until the locale drops, and the line below overwrites
                 // it. Unconditional on a structure being found — a reboot
@@ -109,7 +117,7 @@ mod tests {
                     atk: 1,
                     def: 1,
                 },
-                Needs { hunger: 0.0 },
+                PowerReserve::new(0.0),
                 Experience {
                     level: 2,
                     xp: 10,
@@ -169,7 +177,7 @@ mod tests {
                     atk: 1,
                     def: 1,
                 },
-                Needs { hunger: 0.0 },
+                PowerReserve::new(0.0),
                 Experience {
                     level: 2,
                     xp: 10,

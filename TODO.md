@@ -44,6 +44,7 @@
 23. infinite synergy and item stacking. using multiple items with side effects can stack even up to game breaking synergies. maybe burn out?
 24. remove fatigue. use power as well as cooldown for routine calls. allow the ability to use consumables like 'power battery' (whatever it's called) during combat. every companion would also track there power level.
 25. base needs power to run, structures consume power, and power rechargers produce power. for now power rechargers can be anywhere in the base, no proximity. requires more power rechargers for more buildings.
+26. add an outside battle routine timout option to last until rest.
 
 # Bugs
 1. spawned entities tend to gather around the players base, when traveling outside this group so that it's no longer on the screen, the entity population is almost non existent. we've run into this issue before, i think it needs further tuning

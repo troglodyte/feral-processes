@@ -2422,3 +2422,159 @@ here and nowhere else: a nemesis is a program you have already fought, so
 say. `crates/gui/src/render/base.rs` draws a second, independent corner
 mark for the same fact, so the read survives even for a player who reads
 shape before hue.
+
+### There are four doors into the roster, and `Game::roster_parts()` is the only barrier
+
+**There are four doors into the roster, and `Game::roster_parts()` is the
+only barrier.** A program becomes a companion at
+`lifecycle::grant_starting_program`, a successful capture in
+`combat_rewards`, `spawning::adopt_program`, and `party::fuse_companions` —
+and the fourth is the trap. The first three inserted the identical tuple;
+fusion despawns both parents and calls `world.spawn` with a component list
+it assembles itself, the same divergence "Destroying a tamed program has two
+paths" already records one component earlier.
+
+Nothing about `world.spawn` or `.insert` fails to compile when a component
+is missing from one of four hand-written tuples, so a shared constructor is
+the only barrier available. This is the pattern `work_node_parts()` sets,
+and the failure is the same shape: a fused companion silently unable to cast
+reads as *fusion producing a bad program*, not as a missing component.
+
+Fusion takes `roster_parts` and then overrides the one piece genuinely its
+own — the child's level — rather than opting out. Test fixtures go through
+it too: when the reserves landed, three of seven new tests failed on
+`spawn_tamed` rather than on the feature, which is exactly what
+`work_node_parts`'s entry warns about.
+
+### `PowerReserve`'s float is private, and the clamp is the type's rather than each caller's
+
+**`PowerReserve`'s float is private, and the clamp is the type's rather
+than each caller's.** `components.rs` documented "anything writing `hunger`
+or `fatigue` has to clamp to it" as an invariant held by convention across
+roughly a dozen sites, each hand-rolling `.max(NEED_MIN)` or
+`.min(NEED_MAX)`. One forgotten clamp and a reserve reads negative or
+overfull to `battle::power_attack_multiplier` and every status bar.
+
+Deleting the Fatigue meter left `Needs` a one-field struct, which was the
+moment to convert the convention into a compiler barrier — the same move as
+`Game`'s private `world` field. The API is exactly the seven operations the
+call sites perform: `new` (clamping, for the load paths), `get`, `holds`,
+`spend`, `restore`, `fill` for `Game::rest` which sets outright, and
+`raise_to_at_least` for `difficulty.rs`'s Forgiving reboot, the one site
+that raises *to* a floor. An eighth operation is a signal to re-read the
+call site, not to widen the type. Tests write through `PowerReserve::new`
+rather than a test-only setter, for the same reason.
+
+`POWER_MIN`/`POWER_MAX` stay in `components.rs` rather than moving to
+`tuning.rs`: they are the type's documented range, not a difficulty knob.
+`ROUTINE_POWER_COST_MULTIPLIER` is the knob, and it is in `tuning.rs`.
+
+The rename also forced a collision into the open. `views::PlayerStatus`
+carried both the reserve and the `Stats::power()` strength scalar, and the
+status screen printed them two lines apart — "Attack 11 Defense 6 Power 47"
+above a "Power 62/100" bar. The scalar is `strength` there now. Changing its
+type from `i32` to `f32` in the process caught three test sites that had
+been comparing a reserve against a difficulty rating.
+
+### `ability_unavailable` is the one gate and `spend_power` the one charge, both priced through `routine_power_cost`
+
+**`ability_unavailable` is the one gate and `spend_power` the one charge,
+both priced through `abilities::routine_power_cost`.** A routine is priced
+in a cooldown *and* a Power cost: the cooldown says "not again yet", the
+reserve says "not any more". Two sites reading `def.power_cost * MULTIPLIER`
+independently is the drift a comment cannot prevent, and here the two are a
+refusal and a charge — disagreeing means a routine the picker offers and the
+cast cannot pay for, or one charged more than the row quoted.
+
+Both read the reserve off **the entity in question**, and that single
+parameter is the whole of "every companion tracks their power level". A
+companion's Special draws on the companion's reserve with no second code
+path.
+
+The two ends are deliberately asymmetric. `ability_unavailable` treats a
+missing `PowerReserve` as **refusing**: between a companion that cannot cast
+because a roster door skipped `roster_parts` and one with silently unlimited
+Power, the first is the failure that gets reported. `spend_power` treats one
+as a **no-op**, which is what makes hostiles safe without a branch — they
+hold no reserve by design, because `choose_wild_action`'s weights were
+trained against today's action distribution and a Power constraint would
+cost a retrain that `CLAUDE.md` already records as not cheap.
+
+**The charge is at the `BattleAction::Special` resolution site, not in
+`use_ability`.** `use_ability` is also the path `proc_wielded_routine` and
+hostile casts take, and both stay free — the proc's 25% rate is that
+feature's whole price. Moving the charge into `use_ability` compiles, works,
+and makes `a_proc_charges_neither_the_player_nor_the_program` fail.
+
+### `power_regen_system` needs the underground guard
+
+**`power_regen_system` needs the underground guard**, a third entry in the
+same family as `nest_aggro_tick` above. It reads the player's `Position`,
+which is pinned to the surface entrance tile for the whole of a Stack run —
+so a link sited inside a Recharger's radius regenerated Power four frames
+down. Harmless while nothing underground spent Power; the moment routine
+calls are priced in it, it means "site a base near a link and Power is free
+in the Stack", which deletes the only scarcity the Stack has.
+
+The distinction that decides it is the one `nest_aggro_tick`'s entry states:
+not "does this act" but "does this claim something about where the party is",
+and a regen tied to standing near a structure claims precisely that. The
+test asserts both halves in one function, because the underground half alone
+passes against a bare `return` at the top of the system.
+
+### Every routine in the game was already priced; the field just reached nothing
+
+**Every routine in the game was already priced; the field just reached
+nothing.** `AbilityDef::fatigue_cost` was documented in three places as
+reaching only `Phase` and `Jump`. That was true about what the *engine read*
+and false about what the *assets contained*: 55 files authored a cost nothing
+consumed, priced back when the field meant exactly what `power_cost` means
+now, and 11 more authored one inside their `FieldBuff` effect. Folding the
+two fields into one was a key rename, not an authoring pass — which is what
+made a change that looked like 71 files of content work into a mechanical
+flip, verified by diffing the sorted multiset of all 65 numbers rather than
+by eye.
+
+The default moved from 5.0 to **0.0**, and that is load-bearing. The old
+default was the price of commanding a companion, a mechanic that stopped
+charging on 2026-08-08, and it survived only because the field reached two
+routines. Free-by-default is the only safe default once a field's audience
+widens to every ability in the game; a mod that means to charge says so. It
+is also what keeps the five uncosted shipped files behaving exactly as they
+did — `priority_boost` above all, the fallback every companion has when its
+species grants nothing.
+
+### `Trickle` is the one restore kind that does not scale with its caster
+
+**`Trickle` is the one restore kind that does not scale with its caster**,
+and the rule that excludes it is the one `scales_with_caster` already
+stated: a value that already carries its own ceiling does not need a second
+one stacked on top.
+
+`Regen` and `Trickle` look like the same shape — both restore a pool over
+time — but `Regen`'s ceiling is `max_hp`, which grows with level, so a
+scaled heal stays the same fraction of the bar. Power's ceiling is
+`POWER_MAX`, a fixed 100 forever. Scaled, an authored `power: 1` is 7 a turn
+at `ABILITY_SCALE_LEVEL_CAP`, which pins a full reserve for the buff's whole
+duration and makes the authored number untunable — the level term swamps
+whatever the file says.
+
+This surfaced retuning `trickle_charge`, which is now the only in-Stack
+Power source and so the highest-leverage number in the feature. Its numbers
+(80 turns at 20, to 60 turns at 25) buy back about a quarter of a reserve
+per cast and take 60 underground turns to collect, which is a real Trace and
+encounter cost: a sustain rather than a tap.
+
+### `balance_sim` gates none of the Power economy
+
+**`balance_sim` gates none of the Power economy.** It models no abilities at
+all, so none of the 66 inherited costs is covered by the balance regression
+suite, and neither is `ROUTINE_POWER_COST_MULTIPLIER` nor `trickle_charge`'s
+retune. Its curve tests pass against a game whose entire casting economy has
+changed.
+
+That is the accepted trade rather than an oversight, and it is the same
+shape as "`balance_sim` has no Stack term at all" above. The suite's job
+here is to prove the *mechanism* — costs are charged, the right entity pays,
+an empty reserve refuses — and no number in it. The instruments that can see
+the numbers are `dev-arenas/` and a session.

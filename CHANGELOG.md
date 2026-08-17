@@ -27,6 +27,95 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**Existing saves will not load.** `save::SAVE_FORMAT_VERSION` goes 29 → 30:
+`PlayerSave::fatigue` is a field *removed*, which field-named RON does not
+save you from, and `PlayerSave::hunger` is renamed to `power` in the same
+bump. `CreatureSave::power` is additive and rides it. The six `dev-saves/`
+templates are hand-edited to match.
+
+### Power replaces Fatigue
+
+The game had two need meters and only one of them was a mechanic.
+
+**Power** drained at 0.15 a tick, was the only thing that could kill you by
+attrition, and scaled your attack down below 50. **Fatigue** *refilled* at
+0.08 a tick and was spent by exactly two things in the entire game — the
+Stack's Phase and Jump. Battle Specials stopped charging it on 2026-08-08.
+It was a meter, a save field, a `FieldBuffKind`, a `ConsumeDef` field, a
+serde default and a row on the status bars, all in service of two routines.
+
+Meanwhile the thing you actually spend all game — calling routines — was
+priced only in cooldowns, which are a pacing device rather than a budget.
+A cooldown says "not again yet". Nothing said "not any more".
+
+Fatigue is gone. Power is now what every routine call draws on, alongside
+the cooldown it already had, and **every companion holds its own reserve**.
+A companion's Special is paid out of the companion's Power, so a party's
+casting is something you manage rather than a free action that fires
+whenever it is off cooldown. A companion at zero Power falls back to plain
+attacks; nothing about an empty reserve costs it Integrity.
+
+Scarcity stays soft on the surface and bites underground, and that is a
+property of the code rather than a rule anyone maintains: a Recharger has a
+radius, and a base is where Rechargers get built, so a Stack run carries
+whatever the party walked in with. **That depended on a bug fix.**
+`power_regen_system` reads the player's `Position`, which is pinned to the
+surface entrance tile for the whole of a Stack run — so a link sited inside
+a Recharger's radius refilled the party four frames down. Harmless while
+nothing underground spent Power; it would have deleted the feature outright.
+
+`Game::rest` refills Power, for you and for every program you own. That is
+the sole refill, and it gives the party's casting budget the same
+base-bound shape as everything else.
+
+Two things did not change, deliberately. Hostiles get no reserve — their
+policy weights were trained against today's action distribution, and a Power
+constraint would cost a retrain nobody would see the benefit of. The wielded
+program's 25% proc stays free, because that rate is already its whole price.
+
+### No costs were authored for this
+
+The numbers were already in the files. `AbilityDef::fatigue_cost` was
+documented in three places as reaching only Phase and Jump — true about what
+the engine read, and false about what the assets contained: 55 ability files
+carried a cost nothing consumed, priced back when the field meant exactly
+what it means again now, and 10 more carried one inside their `FieldBuff`
+effect. The content pass was a key rename with the values untouched,
+verified by diffing the sorted multiset of all 65 numbers rather than by eye.
+
+The serde default moved from 5.0 to **0.0**. The old number was the price of
+commanding a companion, a mechanic that stopped charging in 2026-08-08, and
+it survived only because the field reached two routines; keeping it while
+widening the field to every ability in the game would silently price every
+ability a mod ships. The five uncosted files are untouched and stay free —
+`priority_boost` most of all, since it is the fallback every companion has
+when its species grants nothing.
+
+`tuning::ROUTINE_POWER_COST_MULTIPLIER` scales the whole curve at once. The
+shipped values' *ordering* is worth keeping and their *scale* is inherited
+from a pool that refilled itself, so 1.0 is a starting point rather than a
+measured answer. `balance_sim` models no abilities, so none of this is
+gated by the balance suite — the arena and a session are the instruments.
+
+### Trickle Charge, retuned
+
+With one need there is one per-tick restore kind, so `Coolant` merges into
+`Trickle` and `coolant_flush.ron` is deleted — the two were the same ability
+once Fatigue was gone. That leaves Trickle Charge as the only source of
+Power underground, and it was retuned rather than left at its Fatigue-era
+numbers: 80 turns at a cost of 20 becomes 60 turns at 25. One cast buys back
+about a quarter of a reserve and takes 60 underground turns to collect,
+which is a real Trace and encounter cost — a sustain rather than a tap.
+
+Its *scaling* was the larger find. Trickle ran its authored magnitude
+through the caster's level, so `power: 1` is 7 a turn at the level cap:
+Power pinned at full for the buff's whole duration, and an authored number
+the level term swamps. It no longer scales, by the rule that arm of the
+match already stated — Regen's ceiling is `max_hp` and grows with level,
+Power's is a fixed 100 forever.
+
 ## 0.9.3
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29

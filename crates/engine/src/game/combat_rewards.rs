@@ -806,9 +806,8 @@ impl Game {
         if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(front) {
             c.0.clear();
         }
-        self.world
-            .entity_mut(front)
-            .insert((Tamed { owner: player }, Experience::default()));
+        let parts = self.roster_parts();
+        self.world.entity_mut(front).insert(parts);
         self.install_innate_routines(front);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)

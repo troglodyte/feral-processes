@@ -1516,6 +1516,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             atk: 1,
             def: 1,
             tamed: false,
+            power: crate::components::POWER_MAX,
             level: 1,
             xp: 0,
             xp_to_next: 20,

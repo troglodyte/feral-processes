@@ -609,6 +609,7 @@ impl Game {
                 let creature_id = entity.id();
                 entity.insert((
                     Tamed { owner: player },
+                    PowerReserve::new(c.power),
                     Experience {
                         level: c.level,
                         xp: c.xp,
@@ -841,6 +842,7 @@ impl Game {
                 Option<&PurchasedTiers>,
                 Option<&Equipment>,
                 Option<&Nemesis>,
+                Option<&PowerReserve>,
             ),
         )>();
         for (
@@ -866,6 +868,7 @@ impl Game {
                 purchased_tiers,
                 equipment,
                 nemesis,
+                reserve,
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -899,6 +902,7 @@ impl Game {
                 atk: stats.atk,
                 def: stats.def,
                 tamed: tamed.is_some(),
+                power: reserve.map(|r| r.get()).unwrap_or(POWER_MAX),
                 level: exp.map(|e| e.level).unwrap_or(1),
                 xp: exp.map(|e| e.xp).unwrap_or(0),
                 xp_to_next: exp
@@ -1263,9 +1267,8 @@ impl Game {
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
-        self.world
-            .entity_mut(program)
-            .insert((Tamed { owner: player }, Experience::default()));
+        let parts = self.roster_parts();
+        self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         Some(self.creature_label(program))
     }

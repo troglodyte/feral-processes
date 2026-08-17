@@ -99,6 +99,17 @@ pub struct CreatureSave {
     pub atk: i32,
     pub def: i32,
     pub tamed: bool,
+    /// What this program has left to spend on routine calls — see
+    /// `components::PowerReserve`. Only a companion holds one; a wild
+    /// creature's is written and ignored.
+    ///
+    /// Defaults to full rather than to zero, so companions in a save written
+    /// before reserves existed load able to cast rather than mysteriously
+    /// unable to. Additive behind `#[serde(default)]`, so it earns no version
+    /// bump of its own — it rides the one `PlayerSave::fatigue`'s removal
+    /// already spent.
+    #[serde(default = "full_reserve")]
+    pub power: f32,
     /// Only meaningful when `tamed` is true; wild creatures don't level.
     pub level: u32,
     pub xp: u32,
@@ -567,6 +578,11 @@ pub struct SaveData {
 /// lie in the struct.
 pub const SAVE_FORMAT_VERSION: u32 = 30;
 
+/// `CreatureSave::power`'s serde default — see that field.
+fn full_reserve() -> f32 {
+    crate::components::POWER_MAX
+}
+
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
 /// This is the one place the save is legible: the on-disk form is bincode,
@@ -811,6 +827,7 @@ mod tests {
             atk: 3,
             def: 1,
             tamed: true,
+            power: crate::components::POWER_MAX,
             level: 1,
             xp: 0,
             xp_to_next: 20,

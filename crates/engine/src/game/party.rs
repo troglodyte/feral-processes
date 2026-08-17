@@ -827,6 +827,12 @@ impl Game {
         let final_name = CustomName::sanitize(custom_name);
 
         let player_pos = *self.world.get::<Position>(player).unwrap();
+        // Read before the spawn borrow below. This is the door with no
+        // compiler barrier behind it — fusion assembles its own component
+        // list rather than going through `adopt_program` — so it takes the
+        // shared `roster_parts` and overrides only the one piece that is
+        // genuinely fusion's own, the child's level.
+        let parts = self.roster_parts();
         let mut fused = self.world.spawn((
             Creature {
                 species: species.id.clone(),
@@ -846,12 +852,6 @@ impl Game {
                 def: fused_def,
             },
             fused_potential,
-            Tamed { owner: player },
-            Experience {
-                level,
-                xp: 0,
-                xp_to_next: progression::xp_for_level(level),
-            },
             ZonePortal(fused_zone),
             StatusEffects::default(),
             FusionCount(fused_depth),
@@ -859,6 +859,14 @@ impl Game {
             Refactors(fused_refactors),
             PurchasedTiers(fused_purchased),
         ));
+        fused.insert(parts);
+        // After `parts`, which carries a level-1 default: a fused child's
+        // level is derived from its parents.
+        fused.insert(Experience {
+            level,
+            xp: 0,
+            xp_to_next: progression::xp_for_level(level),
+        });
         let fused_entity = fused.id();
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));

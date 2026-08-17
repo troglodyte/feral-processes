@@ -277,6 +277,31 @@ impl Game {
     /// Neither caller checks `pet_capacity` here; both decide for themselves
     /// what a full roster means, because one refuses the action outright and
     /// the other has already destroyed the thing that was paying.
+    /// The components a program gains by joining the roster, and **the only
+    /// barrier the four doors have.**
+    ///
+    /// A program becomes a companion at four sites: `grant_starting_program`,
+    /// a successful capture in `combat_rewards`, `adopt_program` here, and
+    /// `fuse_companions`, which despawns both parents and assembles its own
+    /// component list rather than going through any of the others. Nothing
+    /// about `world.spawn` or `.insert` fails to compile when a component is
+    /// missing from one of four hand-written tuples, so a shared constructor
+    /// is the only thing available — the same role `work_node_parts()` plays
+    /// for test fixtures, and the same failure if it is skipped: a fused
+    /// companion silently unable to cast reads as fusion producing a bad
+    /// program, not as a missing component.
+    ///
+    /// Reserves are full on arrival at every door.
+    pub(crate) fn roster_parts(&self) -> (Tamed, Experience, PowerReserve) {
+        (
+            Tamed {
+                owner: self.player_entity(),
+            },
+            Experience::default(),
+            PowerReserve::default(),
+        )
+    }
+
     pub(crate) fn adopt_program(
         &mut self,
         species_id: &str,
@@ -284,14 +309,12 @@ impl Game {
         y: i32,
         stat_mult: f32,
     ) -> Option<Entity> {
-        let player = self.player_entity();
         let program = self.spawn_wild_creature_scaled(species_id, x, y, stat_mult)?;
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
-        self.world
-            .entity_mut(program)
-            .insert((Tamed { owner: player }, Experience::default()));
+        let parts = self.roster_parts();
+        self.world.entity_mut(program).insert(parts);
         self.install_innate_routines(program);
         Some(program)
     }

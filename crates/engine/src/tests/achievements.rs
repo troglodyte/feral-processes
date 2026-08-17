@@ -368,3 +368,39 @@ fn a_starting_program_naming_an_unknown_species_warns_and_pays_nothing() {
         log.iter().map(|l| &l.text).collect::<Vec<_>>()
     );
 }
+
+/// `grant_starting_program` is the fourth door into the roster, and the only
+/// one a player never chooses to walk through — the program arrives with the
+/// run. It has to be able to cast like any other companion. See
+/// `Game::roster_parts` for why each door is tested on its own.
+#[test]
+fn a_starting_program_arrives_holding_a_full_reserve() {
+    let dir = scratch_assets_with_achievement(
+        "charged_program",
+        r#"(
+            id: "charged_program",
+            name: "Charged Program",
+            description: "d",
+            trigger: ZoneReached(2),
+            reward: StartingProgram("scrapper"),
+        )"#,
+    );
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    game.install_profile(profile_of("charged_program", None));
+    game.grant_profile_rewards();
+
+    let player = game.player_entity();
+    let reserves: Vec<f32> = game
+        .world
+        .iter_entities()
+        .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+        .filter_map(|e| e.get::<PowerReserve>().map(|r| r.get()))
+        .collect();
+    assert_eq!(
+        reserves,
+        vec![POWER_MAX],
+        "the program a profile hands you must arrive able to cast"
+    );
+}

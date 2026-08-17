@@ -963,14 +963,24 @@ mod tests {
         );
     }
 
-    /// A roster member with no reserve of its own holds a dash rather than a
-    /// copy of the player's number, which would read as a pool it could
-    /// actually spend. That dash is the visible symptom of a missing
-    /// `PowerReserve`, so it is worth keeping a case for.
+    /// **Every roster member now shows a number**, companions included —
+    /// each holds its own `PowerReserve` and pays for its own Specials, which
+    /// is the whole of what this column exists to make visible.
+    ///
+    /// The dash case survives on purpose rather than being deleted with the
+    /// behaviour it used to describe. A companion joins the roster at four
+    /// sites and nothing about `world.spawn` fails to compile when one of
+    /// them omits a component, so a dash in this column is the visible
+    /// symptom of a door that skipped `Game::roster_parts`.
     #[test]
-    fn a_companions_power_cell_is_a_dash() {
-        assert_eq!(power_cell(None), "—");
+    fn a_companions_power_cell_shows_its_own_reserve() {
+        assert_eq!(power_cell(Some(74.0)), "74/100");
         assert_eq!(power_cell(Some(0.0)), "0/100");
+        assert_eq!(
+            power_cell(None),
+            "—",
+            "a dash is now a bug report, not a companion"
+        );
         // Rounded, not truncated toward a reading the player can't act on:
         // decay leaves fractions, and `4.6` left of a 5.0-cost routine is
         // nearer 5 than 4.

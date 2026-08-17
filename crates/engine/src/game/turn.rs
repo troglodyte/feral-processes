@@ -687,6 +687,13 @@ impl Game {
             if let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
                 stats.hp = stats.max_hp;
             }
+            // Rest is the *only* refill for a companion's reserve: nothing
+            // restores one passively, and there is no way to hand a program a
+            // Power Cell mid-fight. That gives the party's casting budget the
+            // same base-bound shape as everything else here.
+            if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(creature) {
+                reserve.fill();
+            }
         }
         self.log("You come back online, fully recharged and repaired.");
     }

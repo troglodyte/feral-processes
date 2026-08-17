@@ -940,8 +940,11 @@ pub(super) fn spawn_wild_without_routine(game: &mut Game, species: &str, x: i32,
 }
 
 pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
-    let player = game.player_entity();
     let species = generic_species();
+    // Through `roster_parts` rather than a hand-written tuple, for the reason
+    // `work_node_parts` exists: a fixture short a component reads as the
+    // feature being broken rather than as the fixture being wrong.
+    let parts = game.roster_parts();
     let entity = game
         .world
         .spawn((
@@ -955,8 +958,7 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
                 atk,
                 def: 1,
             },
-            Tamed { owner: player },
-            Experience::default(),
+            parts,
         ))
         .id();
     game.install_innate_routines(entity);

@@ -1658,3 +1658,165 @@ fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
         "a worn weapon must not be fused into the child's base stats"
     );
 }
+
+/// A program joins the roster at four sites, and **nothing about `world.spawn`
+/// or `.insert` fails to compile when a component is missing from one of four
+/// hand-written tuples**. So each door gets its own test rather than one test
+/// over a convenient door — `fuse_companions` is the one that will be missed,
+/// because it despawns both parents and assembles its own component list
+/// instead of going through `adopt_program`.
+///
+/// A companion with no reserve cannot cast at all (`ability_unavailable`
+/// refuses a missing one rather than treating it as unlimited), and that would
+/// read as fusion producing a bad program rather than as a missing component.
+#[test]
+fn a_captured_program_joins_the_roster_with_a_full_reserve() {
+    let mut game = Game::new(7400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    // Stacked so the roll lands rather than being retried — what the odds
+    // are is not what this test is about.
+    game.world.get_mut::<Decompiler>(player).unwrap().skill = 50;
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    for _ in 0..40 {
+        if game.world.get::<Tamed>(wild).is_some() {
+            break;
+        }
+        game.attempt_decompile(0, player);
+    }
+
+    assert!(
+        game.world.get::<Tamed>(wild).is_some(),
+        "the capture has to actually land, or this proves nothing"
+    );
+    assert_eq!(
+        game.world.get::<PowerReserve>(wild).map(|r| r.get()),
+        Some(POWER_MAX),
+        "a captured program holds a full reserve"
+    );
+}
+
+#[test]
+fn an_adopted_program_joins_the_roster_with_a_full_reserve() {
+    let mut game = Game::new(7401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs()[0].id.clone();
+    let adopted = game
+        .adopt_program(&species, 4, 4, 1.0)
+        .expect("adoption succeeds");
+    assert_eq!(
+        game.world.get::<PowerReserve>(adopted).map(|r| r.get()),
+        Some(POWER_MAX)
+    );
+}
+
+/// The door with no compiler barrier behind it.
+#[test]
+fn a_fused_companion_joins_the_roster_with_a_full_reserve() {
+    let mut game = Game::new(7403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tamed = |game: &mut Game| -> Vec<Entity> {
+        let mut query = game.world.query_filtered::<Entity, With<Tamed>>();
+        query.iter(&game.world).collect()
+    };
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    let before = tamed(&mut game);
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let child = *tamed(&mut game)
+        .iter()
+        .find(|e| !before.contains(e))
+        .expect("a fused program exists");
+    assert_eq!(
+        game.world.get::<PowerReserve>(child).map(|r| r.get()),
+        Some(POWER_MAX),
+        "a fused program must be able to cast"
+    );
+}
+
+/// `needs_tick_system` stays `With<Player>`, and this is what says so. A
+/// companion's reserve moves only when the companion spends or something
+/// restores it — which keeps the starvation branch and
+/// `battle::power_attack_multiplier` player-only by construction rather than
+/// by a guard the next author has to remember to write.
+#[test]
+fn a_companions_reserve_does_not_drain_passively() {
+    let mut game = Game::new(7404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    for _ in 0..200 {
+        game.wait();
+    }
+    assert_eq!(
+        game.world.get::<PowerReserve>(companion).map(|r| r.get()),
+        Some(POWER_MAX),
+        "nothing passive may touch a companion's reserve"
+    );
+}
+
+/// There is no companion equivalent of starving. Permadeath makes an
+/// accidental attrition kill a real bug, not a curiosity.
+#[test]
+fn a_companion_at_zero_power_loses_no_integrity_over_many_ticks() {
+    let mut game = Game::new(7405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(0.0);
+    let before = game.world.get::<Stats>(companion).unwrap().hp;
+
+    for _ in 0..200 {
+        game.wait();
+    }
+
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        before,
+        "an empty reserve must never lower a companion's Integrity"
+    );
+}
+
+/// Rest is the sole refill, and it already full-heals every owned program —
+/// including ones left behind guarding a structure during a raid. Topping up
+/// their reserves in the same loop gives the party's casting budget the same
+/// base-bound shape as everything else.
+#[test]
+fn rest_refills_a_drained_companions_reserve() {
+    let mut game = Game::new(7406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(3.0);
+    spawn_rest_structure_at_player(&mut game);
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(companion).map(|r| r.get()),
+        Some(POWER_MAX)
+    );
+}
+
+#[test]
+fn a_companions_reserve_survives_a_save_and_load() {
+    let mut game = Game::new(7407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(41.0);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_companion_reserve_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let player = loaded.player_entity();
+    let reserves: Vec<f32> = loaded
+        .world
+        .iter_entities()
+        .filter(|e| e.get::<Tamed>().is_some_and(|t| t.owner == player))
+        .filter_map(|e| e.get::<PowerReserve>().map(|r| r.get()))
+        .collect();
+    assert!(
+        reserves.contains(&41.0),
+        "a drained companion must reload drained, found {reserves:?}"
+    );
+}

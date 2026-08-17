@@ -41,10 +41,26 @@
     `Game::distance_stat_multiplier` **does not exist** and six doc comments
     still name it — deleted 2026-08-05 in `30608eb`, worth fixing whether or
     not this is picked up.
-23. infinite synergy and item stacking. using multiple items with side effects can stack even up to game breaking synergies. maybe burn out?
-24. remove fatigue. use power as well as cooldown for routine calls. allow the ability to use consumables like 'power battery' (whatever it's called) during combat. every companion would also track there power level.
+23. Infinite synergy and item stacking — explored and **parked** on
+    2026-08-17 with no shape chosen. The headline finding is that **there is
+    nothing to stack**: all 31 gear items and all 18 affixes are flat
+    `atk`/`def`/`decompiler` lines, and exactly one item in the game has a
+    side effect at all (`patch_routine`, Mitigation 10). Six independent
+    closures already block compounding, no two by the same mechanism — the
+    largest reachable stack today is 35% mitigation. So the crux found is
+    that **burn-out is not a governor you add before the content, it is what
+    you trade for opening one specific closure**; pick the closure first.
+    Three candidate shapes, three open questions (the save-format one is
+    where the diminishing counter resets) and one doc-precision note are
+    written up in
+    `docs/superpowers/specs/2026-08-17-item-synergy-burnout-parked.md`.
+    Note in passing: backlash cannot be denominated in Trace —
+    `Game::raise_trace` returns silently on the surface, so it would be a
+    mechanic that only exists underground.
 25. base needs power to run, structures consume power, and power rechargers produce power. for now power rechargers can be anywhere in the base, no proximity. requires more power rechargers for more buildings.
 26. add an outside battle routine timout option to last until rest.
+27. add visual indicator of entity in the stack
+28. shields via outside battle routine
 
 # Bugs
 1. spawned entities tend to gather around the players base, when traveling outside this group so that it's no longer on the screen, the entity population is almost non existent. we've run into this issue before, i think it needs further tuning

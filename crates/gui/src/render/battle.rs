@@ -71,9 +71,10 @@ const REACH_W: usize = 7;
 const STATUS_W: usize = 13;
 /// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
 const DECOMP_W: usize = 6;
-/// `FATIGUE` itself is the widest thing in the column — `100/100` fits under
-/// it exactly, which `the_fatigue_column_holds_its_place` pins.
-const FATIGUE_W: usize = 7;
+/// `100/100` is the widest thing in the column — wider than the `POWER`
+/// header over it, which right-aligns inside the same seven cells. Pinned by
+/// `the_power_column_holds_its_place`.
+const POWER_W: usize = 7;
 /// `w|a|m` — three slot marks and the two separators between them. Fixed by
 /// construction, since `Game::gear_tag` holds an empty slot open with a dot.
 const GEAR_W: usize = 5;
@@ -108,26 +109,24 @@ fn hostile_tail(status: &str, decomp: &str) -> String {
     format!("{} {}", cell(status, STATUS_W), right(decomp, DECOMP_W))
 }
 
-/// The party roster's counterpart: a fixed GEAR cell, a fixed FATIGUE cell,
+/// The party roster's counterpart: a fixed GEAR cell, a fixed POWER cell,
 /// then the ragged ACTION column. Composed here for the reason `hostile_tail`
 /// is — the header and every row are built from one set of widths or they
 /// drift.
-fn party_tail(gear: &str, fatigue: &str, action: &str) -> String {
+fn party_tail(gear: &str, power: &str, action: &str) -> String {
     format!(
         "{} {} {}",
         cell(gear, GEAR_W),
-        right(fatigue, FATIGUE_W),
+        right(power, POWER_W),
         action
     )
 }
 
-/// The FATIGUE cell: what this member has left to spend on routines, or a
-/// dash for one that has none to spend. Every companion is a dash — Fatigue
-/// is the player's alone, whoever a routine is ordered for — and a dash
-/// rather than a copy of the player's number, which would read as five
-/// separate pools.
-fn fatigue_cell(fatigue: Option<f32>) -> String {
-    match fatigue {
+/// The POWER cell: what this member has left to spend on routines, or a dash
+/// for one holding no reserve at all. A dash rather than a copy of the
+/// player's number, which would read as five slots drawing on one pool.
+fn power_cell(power: Option<f32>) -> String {
+    match power {
         Some(f) => format!("{f:.0}/{NEED_MAX:.0}"),
         None => "—".to_string(),
     }
@@ -168,7 +167,7 @@ fn party_header() -> String {
         "ATK",
         "DEF",
         "POS",
-        &party_tail("GEAR", "FATIGUE", "ACTION"),
+        &party_tail("GEAR", "POWER", "ACTION"),
     )
 }
 
@@ -430,7 +429,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 // empty on almost every row.
                 &party_tail(
                     &p.gear,
-                    &fatigue_cell(p.fatigue),
+                    &power_cell(p.power),
                     &format!(
                         "{}{}",
                         p.planned.as_deref().unwrap_or("—"),
@@ -673,7 +672,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -682,7 +681,7 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
+                &party_tail("w|.|.", &power_cell(None), "Defend"),
             ),
         ];
         for line in &lines {
@@ -758,7 +757,7 @@ mod tests {
                 11,
                 6,
                 "FRONT",
-                &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
+                &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
             ),
             roster_row(
                 " 2 ",
@@ -767,13 +766,13 @@ mod tests {
                 7,
                 3,
                 "FRONT",
-                &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
+                &party_tail("w|.|.", &power_cell(None), "Defend"),
             ),
         ]
         .join("\n");
         assert_eq!(
             block,
-            "   NAME               HP        ATK DEF POS     GEAR  FATIGUE ACTION\n\
+            "   NAME               HP        ATK DEF POS     GEAR    POWER ACTION\n\
              >1 You                21/30      11   6 FRONT   w|a|m  62/100 Attack A\n\
              \u{20}2 Sparkgrub          18/18       7   3 FRONT   w|.|.       — Defend"
         );
@@ -826,9 +825,9 @@ mod tests {
         assert_eq!(at(&row, TAIL_COL + STATUS_W + 1), "     —");
     }
 
-    /// Where FATIGUE begins: the party tail leads with the fixed GEAR cell,
+    /// Where POWER begins: the party tail leads with the fixed GEAR cell,
     /// so everything behind it is offset by that cell and its separator.
-    const FATIGUE_COL: usize = TAIL_COL + GEAR_W + 1;
+    const POWER_COL: usize = TAIL_COL + GEAR_W + 1;
 
     /// And each header label sits over the column it names.
     #[test]
@@ -837,12 +836,18 @@ mod tests {
         assert!(at(&h, MARK_W).starts_with("NAME"));
         assert!(at(&h, MARK_W + NAME_W + 1).starts_with("HP"));
         assert!(at(&h, TAIL_COL).starts_with("GEAR"));
-        assert!(at(&h, FATIGUE_COL).starts_with("FATIGUE"));
-        assert!(at(&h, FATIGUE_COL + FATIGUE_W + 1).starts_with("ACTION"));
+        // Right-aligned in its cell, like the numbers under it — `POWER` is
+        // two cells narrower than the `100/100` that sets the width, so it
+        // does not start at the column edge the way `GEAR` does.
+        assert_eq!(
+            at(&h, POWER_COL).chars().take(POWER_W).collect::<String>(),
+            "  POWER"
+        );
+        assert!(at(&h, POWER_COL + POWER_W + 1).starts_with("ACTION"));
     }
 
     /// The loadout cell is fixed-width, so a member wearing nothing holds
-    /// the same three marks open as one in full gear and FATIGUE does not
+    /// the same three marks open as one in full gear and POWER does not
     /// shift between the two rows. Fully worn and fully bare are the two
     /// extremes; there is nothing wider than either.
     #[test]
@@ -854,7 +859,7 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail("w|a|m", &fatigue_cell(Some(62.0)), "Attack A"),
+            &party_tail("w|a|m", &power_cell(Some(62.0)), "Attack A"),
         );
         let bare = roster_row(
             " 2 ",
@@ -863,7 +868,7 @@ mod tests {
             7,
             3,
             "FRONT",
-            &party_tail(".|.|.", &fatigue_cell(None), "Defend"),
+            &party_tail(".|.|.", &power_cell(None), "Defend"),
         );
         assert_eq!(
             at(&geared, TAIL_COL)
@@ -876,17 +881,17 @@ mod tests {
             at(&bare, TAIL_COL).chars().take(GEAR_W).collect::<String>(),
             ".|.|."
         );
-        assert!(at(&geared, FATIGUE_COL).starts_with(" 62/100"));
-        assert!(at(&bare, FATIGUE_COL).starts_with("      —"));
+        assert!(at(&geared, POWER_COL).starts_with(" 62/100"));
+        assert!(at(&bare, POWER_COL).starts_with("      —"));
     }
 
-    /// FATIGUE is a fixed cell in the party tail, so ACTION starts at the
+    /// POWER is a fixed cell in the party tail, so ACTION starts at the
     /// same column whether the row is the player's or a companion's — and
     /// `100/100`, the widest reading there is, fits under the header without
     /// widening it.
     #[test]
-    fn the_fatigue_column_holds_its_place() {
-        const ACTION_COL: usize = FATIGUE_COL + FATIGUE_W + 1;
+    fn the_power_column_holds_its_place() {
+        const ACTION_COL: usize = POWER_COL + POWER_W + 1;
         let you = roster_row(
             ">1 ",
             "You",
@@ -894,11 +899,7 @@ mod tests {
             11,
             6,
             "FRONT",
-            &party_tail(
-                "w|a|m",
-                &fatigue_cell(Some(NEED_MAX)),
-                "Special: Null Route",
-            ),
+            &party_tail("w|a|m", &power_cell(Some(NEED_MAX)), "Special: Null Route"),
         );
         let pet = roster_row(
             " 2 ",
@@ -907,20 +908,20 @@ mod tests {
             7,
             3,
             "FRONT",
-            &party_tail("w|.|.", &fatigue_cell(None), "Defend"),
+            &party_tail("w|.|.", &power_cell(None), "Defend"),
         );
-        assert_eq!(fatigue_cell(Some(NEED_MAX)).chars().count(), FATIGUE_W);
+        assert_eq!(power_cell(Some(NEED_MAX)).chars().count(), POWER_W);
         assert_eq!(
-            at(&you, FATIGUE_COL)
+            at(&you, POWER_COL)
                 .chars()
-                .take(FATIGUE_W)
+                .take(POWER_W)
                 .collect::<String>(),
             "100/100"
         );
         assert_eq!(
-            at(&pet, FATIGUE_COL)
+            at(&pet, POWER_COL)
                 .chars()
-                .take(FATIGUE_W)
+                .take(POWER_W)
                 .collect::<String>(),
             "      —"
         );
@@ -928,7 +929,7 @@ mod tests {
         assert!(at(&pet, ACTION_COL).starts_with("Defend"));
     }
 
-    /// The picker prices each routine against the FATIGUE column behind it,
+    /// The picker prices each routine against the POWER column behind it,
     /// and an unaffordable one still says what it would have cost — the
     /// number the engine's refusal is talking about.
     #[test]
@@ -962,17 +963,18 @@ mod tests {
         );
     }
 
-    /// Fatigue is one pool and it is the player's — a companion's cell holds
-    /// a dash rather than a copy of that number, which would read as a pool
-    /// of its own.
+    /// A roster member with no reserve of its own holds a dash rather than a
+    /// copy of the player's number, which would read as a pool it could
+    /// actually spend. That dash is the visible symptom of a missing
+    /// `PowerReserve`, so it is worth keeping a case for.
     #[test]
-    fn a_companions_fatigue_cell_is_a_dash() {
-        assert_eq!(fatigue_cell(None), "—");
-        assert_eq!(fatigue_cell(Some(0.0)), "0/100");
+    fn a_companions_power_cell_is_a_dash() {
+        assert_eq!(power_cell(None), "—");
+        assert_eq!(power_cell(Some(0.0)), "0/100");
         // Rounded, not truncated toward a reading the player can't act on:
         // decay leaves fractions, and `4.6` left of a 5.0-cost routine is
         // nearer 5 than 4.
-        assert_eq!(fatigue_cell(Some(61.5)), "62/100");
+        assert_eq!(power_cell(Some(61.5)), "62/100");
     }
 
     /// An over-long name is clipped rather than allowed to shove the stats

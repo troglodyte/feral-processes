@@ -58,13 +58,14 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
 ///
 /// Measured against a stunned companion, which is commanded and then does
 /// not act: both paths advance the clock by one tick (a resolved round always
-/// ticks at the end), so both take the same small natural fatigue regen back
-/// regardless. Comparing the two deltas isolates whatever the *acting* costs
-/// from that shared regen, and the answer must now be nothing.
+/// ticks at the end), so both take the same natural Power drain regardless.
+/// Comparing the two deltas isolates whatever the *acting* costs from that
+/// shared drain, and the answer must be nothing: a companion's Special is
+/// paid out of the companion's own reserve, never the player's.
 #[test]
-fn commanding_a_companion_in_battle_costs_no_fatigue() {
-    let active = fatigue_spent_commanding_companion(84, false);
-    let stunned = fatigue_spent_commanding_companion(85, true);
+fn commanding_a_companion_in_battle_costs_the_player_no_power() {
+    let active = power_spent_commanding_companion(84, false);
+    let stunned = power_spent_commanding_companion(85, true);
     assert!(
         (active - stunned).abs() < 0.001,
         "a companion acting must cost the player exactly what a stunned one \

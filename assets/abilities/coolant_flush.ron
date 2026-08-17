@@ -1,7 +1,0 @@
-(
-    id: "coolant_flush",
-    name: "Coolant Flush Party",
-    description: "+1 Fatigue per turn for 90 turns",
-    target: WholeParty,
-    effect: FieldBuff(kind: Coolant, power: 1, duration: 90, power_cost: 15.0),
-)

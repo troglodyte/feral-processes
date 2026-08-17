@@ -153,14 +153,14 @@ way deleting the Currency item does.
     //     `interval` (optional, defaults to 1) is how many turns pass between
     //     firings — `interval: 4` on a `duration: 300` Regen heals 75 times
     //     over 300 turns rather than 300 times. It only means anything to the
-    //     three over-time kinds below (Regen, Coolant, Trickle); the rest are
+    //     two over-time kinds below (Regen and Trickle); the rest are
     //     read on demand and have no per-tick effect to space out. Make the
     //     duration a multiple of the interval: the cadence is phased off the
     //     turns remaining, so a duration that divides evenly fires on the
     //     first turn and every interval-th turn after, and one that doesn't
     //     simply starts its cadence later.
     //
-    //     `kind` is one of ten, split into two scopes that gate `target`:
+    //     `kind` is one of nine, split into two scopes that gate `target`:
     //
     //       Creature-scoped (`target: OneAlly` or `WholeParty` only —
     //       anything enemy-facing is refused at load, since there is no
@@ -174,25 +174,25 @@ way deleting the Currency item does.
     //       the player regardless of who casts them, so any other target is
     //       a lie about where the buff actually goes, and is refused at
     //       load):
-    //         Coolant       restores Fatigue each turn
     //         Trickle       restores Power each turn
     //         CaptureBoost  percent bonus to capture odds
     //         XpBoost       percent bonus to XP earned
     //         EncounterDamp percent reduction to wild encounter odds
     //         DropBoost     percent bonus to drop rates
     //
-    //     Five of the ten run `power` through the stat-point level/affinity
-    //     scaling (`abilities::scaled_stat_power` — see "Magnitudes scale
-    //     with level")
-    //     before delivering it: Regen, Coolant, Trickle, Def, Atk. The other
-    //     five — Mitigation and the four rate kinds (CaptureBoost, XpBoost,
-    //     EncounterDamp, DropBoost) — are percentage points, delivered at
-    //     exactly the authored `power` regardless of who casts them. A
-    //     percentage already carries its own ceiling; scaling one the way a
-    //     flat amount scales would let it exceed that ceiling, which is what
-    //     the cap on Mitigation exists to prevent. This split is orthogonal
-    //     to the Creature/Run scope above — author `power` as points for the
-    //     first five, percentage points for the rest, regardless of scope.
+    //     Three of the nine run `power` through the stat-point
+    //     level/affinity scaling (`abilities::scaled_stat_power` — see
+    //     "Magnitudes scale with level") before delivering it: Regen, Def,
+    //     Atk. The other six are delivered at exactly the authored `power`
+    //     regardless of who casts them, because each already carries its own
+    //     ceiling and scaling one the way a flat amount scales would let it
+    //     exceed that ceiling — which is what the cap on Mitigation exists to
+    //     prevent. Mitigation and the four rate kinds (CaptureBoost, XpBoost,
+    //     EncounterDamp, DropBoost) are percentage points. Trickle is the
+    //     odd one: it is a flat point amount, but the pool it fills tops out
+    //     at a fixed 100 at every level, unlike Regen's `max_hp`, so scaling
+    //     it would let the level term swamp whatever the file authors. This
+    //     split is orthogonal to the Creature/Run scope above.
     //
     //     `cooldown` and `fatigue_cost` are both dead on this variant — a
     //     field buff runs outside battle, so battle-round throttling doesn't
@@ -261,8 +261,9 @@ way deleting the Currency item does.
     // Setting it on a battle ability is harmless and inert, which is why
     // most of the shipped ones still carry the number they used to charge.
     //
-    // This is Fatigue, not Power: Power is the other need, and it is what
-    // `FieldBuff`'s own `power_cost` spends.
+    // Denominated in Power — the one need. The Fatigue meter this used to
+    // spend was deleted, and the two movement effects now charge this
+    // against the same reserve `FieldBuff`'s own `power_cost` spends.
     fatigue_cost: 8.0,
 
     // Optional; defaults to 0. How likely this ability is to be found

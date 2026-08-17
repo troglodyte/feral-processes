@@ -119,27 +119,25 @@ impl Stats {
 
 /// The satisfied end of a need's range. Lives here beside `Needs` rather
 /// than in `balance_sim`, because it is the type's own documented invariant
-/// rather than a tuning knob: anything writing `hunger` or `fatigue` has to
-/// clamp to it.
+/// rather than a tuning knob: anything writing `hunger` has to clamp to it.
 pub const NEED_MAX: f32 = 100.0;
 /// The critical end. Below it a need is meaningless, and `Needs` readers
 /// (the status bars, `battle::power_attack_multiplier`) assume it holds.
 pub const NEED_MIN: f32 = 0.0;
 
-/// Hunger/fatigue both run `NEED_MIN..=NEED_MAX`; full is satisfied, 0 is
-/// critical.
+/// Power, `NEED_MIN..=NEED_MAX`; full is satisfied, 0 is critical.
+///
+/// One meter, since the Fatigue half was deleted — it refilled on its own and
+/// was spent by two routines, while Power is the only thing that kills by
+/// attrition and the budget every routine call now draws on.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Needs {
     pub hunger: f32,
-    pub fatigue: f32,
 }
 
 impl Default for Needs {
     fn default() -> Self {
-        Self {
-            hunger: NEED_MAX,
-            fatigue: NEED_MAX,
-        }
+        Self { hunger: NEED_MAX }
     }
 }
 
@@ -669,9 +667,8 @@ pub struct CombatBuff {
 ///
 /// **The order of these variants is part of the save format**, the same
 /// constraint `Perk` documents (`perks.rs`): saves are bincode, which
-/// encodes an enum positionally, so `PlayerSave`/`CreatureSave`'s
-/// `field_buffs` store these values directly. Append new variants at the
-/// end; never reorder or remove one.
+/// serializes an enum by *name*, so a variant may be reordered freely and
+/// renaming one is what breaks a save. See `FieldBuffKind` below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffSource {
     Consumable,
@@ -692,13 +689,13 @@ pub enum FieldScope {
 /// running after the map turn it was cast on — through any battle that
 /// follows, unlike `CombatBuff` — and through a save.
 ///
-/// **The order of these variants is part of the save format**, the same
-/// constraint as `BuffSource` above: append new kinds at the end, never
-/// reorder or remove one.
+/// A variant *name* is the save format; the order is not. That is the RON
+/// encoding `SAVE_FORMAT_VERSION` 29 moved to — the claim these two enums
+/// carried about positional bincode had been stale since. Renaming a variant
+/// still breaks a save; reordering no longer does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldBuffKind {
     Regen,
-    Coolant,
     Trickle,
     Def,
     Atk,
@@ -718,9 +715,7 @@ impl FieldBuffKind {
         use FieldBuffKind::*;
         match self {
             Regen | Def | Atk | Mitigation => FieldScope::Creature,
-            Coolant | Trickle | CaptureBoost | XpBoost | EncounterDamp | DropBoost => {
-                FieldScope::Run
-            }
+            Trickle | CaptureBoost | XpBoost | EncounterDamp | DropBoost => FieldScope::Run,
         }
     }
 
@@ -734,7 +729,7 @@ impl FieldBuffKind {
         use crate::abilities::AffinityKind;
         use FieldBuffKind::*;
         match self {
-            Regen | Coolant | Trickle => Some(AffinityKind::Heal),
+            Regen | Trickle => Some(AffinityKind::Heal),
             Def | Atk | Mitigation => Some(AffinityKind::Buff),
             CaptureBoost | XpBoost | EncounterDamp | DropBoost => None,
         }
@@ -742,33 +737,43 @@ impl FieldBuffKind {
 
     /// Whether `Game::cast_field_routine` should run this kind's authored
     /// `power` through `abilities::scaled_stat_power` (level and affinity) or
-    /// deliver it unchanged. The five point-amount kinds scale; the five
-    /// percentage-point kinds do not, for the reason `AbilityEffect::Drain`'s
-    /// `heal_fraction` is excluded from `scaled_hp_power` too: a value that
-    /// already carries its own ceiling doesn't need a second one stacked on
-    /// top. A percentage is a property of the routine, not of how strong the
-    /// caster is — scaling one the way a flat point value scales would let
-    /// an authored 10% cut land anywhere up to 140% off a high-level,
-    /// high-affinity caster, the exact ceiling-defeating outcome the cap on
-    /// `Mitigation` exists to prevent.
+    /// deliver it unchanged. The three point-amount kinds scale; the rest do
+    /// not, for the reason `AbilityEffect::Drain`'s `heal_fraction` is
+    /// excluded from `scaled_hp_power` too: a value that already carries its
+    /// own ceiling doesn't need a second one stacked on top. A percentage is
+    /// a property of the routine, not of how strong the caster is — scaling
+    /// one the way a flat point value scales would let an authored 10% cut
+    /// land anywhere up to 140% off a high-level, high-affinity caster, the
+    /// exact ceiling-defeating outcome the cap on `Mitigation` exists to
+    /// prevent.
+    ///
+    /// **`Trickle` is excluded by that same rule, and it is the difference
+    /// between it and `Regen` that decides it.** Both restore a pool, but
+    /// `Regen`'s ceiling is `max_hp`, which grows with level — so a scaled
+    /// heal stays the same fraction of the bar. Power's ceiling is
+    /// `NEED_MAX`, a fixed 100 forever. Scaled, an authored `power: 1` is 7 a
+    /// turn at the level cap, which pins a full reserve for the buff's whole
+    /// duration and makes the authored number untunable: the level term
+    /// swamps whatever the file says. Unscaled, `power` means what it says
+    /// at every level.
     pub fn scales_with_caster(self) -> bool {
         use FieldBuffKind::*;
         match self {
-            Regen | Coolant | Trickle | Def | Atk => true,
-            Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => false,
+            Regen | Def | Atk => true,
+            Trickle | Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => false,
         }
     }
 
     /// The short tag a buff list shows next to a running entry, e.g.
-    /// `"DEF+2"` or `"XP+15%"`. `power` is points for the five flat kinds
+    /// `"DEF+2"` or `"XP+15%"`. `power` is points for the four flat kinds
     /// and percentage points for the rest. `HP` rather than `INT` for
     /// `Regen`, matching the abbreviation the battle roster header already
-    /// uses for Integrity (`render/battle.rs`) — Power and Fatigue have no
-    /// established short form there, so `PWR`/`FTG` are new.
+    /// uses for Integrity (`render/battle.rs`) — Power had no established
+    /// short form there, so `PWR` is new.
     ///
-    /// `interval` only reaches the three over-time tags, and only shows when
+    /// `interval` only reaches the two over-time tags, and only shows when
     /// it is not 1: `HP+2/4t` reads as "2 every four turns", where the
-    /// `/t` the other two keep already reads as "per turn". The flat and rate
+    /// `/t` the other keeps already reads as "per turn". The flat and rate
     /// kinds have no per-tick effect at all (see `apply_field_buff_tick`), so
     /// a cadence on one of them would be describing something that does not
     /// happen.
@@ -780,7 +785,6 @@ impl FieldBuffKind {
         };
         match self {
             FieldBuffKind::Regen => format!("HP+{power}/{every}t"),
-            FieldBuffKind::Coolant => format!("FTG+{power}/{every}t"),
             FieldBuffKind::Trickle => format!("PWR+{power}/{every}t"),
             FieldBuffKind::Def => format!("DEF+{power}"),
             FieldBuffKind::Atk => format!("ATK+{power}"),

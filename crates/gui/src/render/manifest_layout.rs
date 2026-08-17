@@ -380,9 +380,9 @@ mod tests {
     }
 
     /// Meter counts: a program shows Integrity and Experience, the player
-    /// adds Power and Fatigue.
+    /// adds Power.
     const PROGRAM_METERS: usize = 2;
-    const PLAYER_METERS: usize = 4;
+    const PLAYER_METERS: usize = 3;
 
     /// Boxes are expected to *touch* — stacked meters are laid out
     /// contiguously, and `y + h` of one is exactly the `y` of the next. In f32

@@ -21,23 +21,16 @@ use crate::tuning::{
     MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS,
     NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
 };
-use crate::tuning::{
-    FATIGUE_REGEN_PER_TICK, HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE,
-};
+use crate::tuning::{HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE};
 use crate::world::WorldMap;
 
-/// One tick of the two needs; pulled out of the system so the rates are
+/// One tick of Power's drain; pulled out of the system so the rate is
 /// unit-testable without spinning up an ECS `World`.
 ///
-/// They move in opposite directions — hunger drains, fatigue refills — see
-/// `tuning::FATIGUE_REGEN_PER_TICK`. `hunger_multiplier` scales only the
-/// hunger rate (e.g. `Perk::LowPowerMode`'s per-level reduction); fatigue
-/// is unaffected by it.
-pub fn tick_needs(hunger: f32, fatigue: f32, hunger_multiplier: f32) -> (f32, f32) {
-    (
-        (hunger - HUNGER_DECAY_PER_TICK * hunger_multiplier).max(0.0),
-        (fatigue + FATIGUE_REGEN_PER_TICK).min(NEED_MAX),
-    )
+/// `hunger_multiplier` scales it — e.g. `Perk::LowPowerMode`'s per-level
+/// reduction.
+pub fn tick_needs(hunger: f32, hunger_multiplier: f32) -> f32 {
+    (hunger - HUNGER_DECAY_PER_TICK * hunger_multiplier).max(0.0)
 }
 
 pub fn needs_tick_system(
@@ -50,9 +43,7 @@ pub fn needs_tick_system(
             - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32)
             .max(0.0);
         let was_starving = needs.hunger <= 0.0;
-        let (hunger, fatigue) = tick_needs(needs.hunger, needs.fatigue, hunger_multiplier);
-        needs.hunger = hunger;
-        needs.fatigue = fatigue;
+        needs.hunger = tick_needs(needs.hunger, hunger_multiplier);
         if needs.hunger <= 0.0 {
             stats.hp -= 1;
             if !was_starving {
@@ -1187,10 +1178,7 @@ mod tests {
             .spawn((
                 Player,
                 Position { x: 0, y: 0 },
-                Needs {
-                    hunger,
-                    fatigue: 100.0,
-                },
+                Needs { hunger },
                 PLAYER_BASE_STATS,
             ))
             .id();
@@ -1393,24 +1381,14 @@ mod tests {
     }
 
     #[test]
-    fn hunger_drains_while_fatigue_recovers() {
-        let (hunger, fatigue) = tick_needs(50.0, 50.0, 1.0);
-        assert!((hunger - (50.0 - HUNGER_DECAY_PER_TICK)).abs() < f32::EPSILON);
-        assert!(
-            (fatigue - (50.0 + FATIGUE_REGEN_PER_TICK)).abs() < f32::EPSILON,
-            "fatigue is the ability-energy pool, not a second starvation clock"
-        );
+    fn power_drains_by_its_rate() {
+        let power = tick_needs(50.0, 1.0);
+        assert!((power - (50.0 - HUNGER_DECAY_PER_TICK)).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn hunger_never_goes_negative_and_fatigue_never_passes_full() {
-        let (hunger, _) = tick_needs(0.05, 50.0, 1.0);
-        assert_eq!(hunger, 0.0);
-        let (_, fatigue) = tick_needs(50.0, NEED_MAX - 0.01, 1.0);
-        assert_eq!(
-            fatigue, NEED_MAX,
-            "regen must clamp at full rather than overfilling the pool"
-        );
+    fn power_never_goes_negative() {
+        assert_eq!(tick_needs(0.05, 1.0), 0.0);
     }
 
     #[test]
@@ -1532,12 +1510,8 @@ mod tests {
     }
 
     #[test]
-    fn hunger_multiplier_scales_only_the_hunger_rate() {
-        let (hunger, fatigue) = tick_needs(100.0, 50.0, 0.5);
-        assert!((hunger - (100.0 - HUNGER_DECAY_PER_TICK * 0.5)).abs() < f32::EPSILON);
-        assert!(
-            (fatigue - (50.0 + FATIGUE_REGEN_PER_TICK)).abs() < f32::EPSILON,
-            "fatigue regen shouldn't be affected by the hunger multiplier"
-        );
+    fn the_hunger_multiplier_scales_the_drain() {
+        let power = tick_needs(100.0, 0.5);
+        assert!((power - (100.0 - HUNGER_DECAY_PER_TICK * 0.5)).abs() < f32::EPSILON);
     }
 }

@@ -136,13 +136,6 @@ fn meter_rows(view: &ManifestView) -> Vec<Meter> {
             max: 100.0,
             color: YELLOW,
         });
-        meters.push(Meter {
-            label: "FATIGUE",
-            readout: format!("{:.0}/100", p.fatigue),
-            value: p.fatigue,
-            max: 100.0,
-            color: BLUE,
-        });
     }
     meters
 }

@@ -43,7 +43,7 @@ impl BarStyle {
     }
 }
 
-/// Draws a labeled bar (HP/Power/Fatigue) and returns the y coordinate for
+/// Draws a labeled bar (HP/Power) and returns the y coordinate for
 /// whatever's drawn next.
 pub(super) fn draw_bar(
     g: BarGeometry,

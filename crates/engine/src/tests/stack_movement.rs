@@ -35,9 +35,9 @@ fn surfaced_with_routines_on(mode: DifficultyMode) -> Game {
     game.world
         .entity_mut(player)
         .insert(Routines(vec![PHASE.to_string(), JUMP.to_string()]));
-    // Full Fatigue, so an unrelated need drain can never be what refuses a
-    // cast these tests expect to run.
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 100.0;
+    // Full Power, so an unrelated drain can never be what refuses a cast
+    // these tests expect to run.
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 100.0;
     game
 }
 
@@ -77,11 +77,11 @@ fn facing(game: &Game) -> Dir {
     }
 }
 
-fn fatigue(game: &Game) -> f32 {
+fn power(game: &Game) -> f32 {
     game.world
         .get::<Needs>(game.player_entity())
         .unwrap()
-        .fatigue
+        .hunger
 }
 
 fn trace(game: &Game) -> u32 {
@@ -276,38 +276,38 @@ fn neither_routine_runs_mid_battle_or_after_game_over() {
 }
 
 #[test]
-fn a_refused_cast_spends_no_fatigue_and_raises_no_trace() {
+fn a_refused_cast_spends_no_power_and_raises_no_trace() {
     let mut game = underground();
     let level = frame(&game);
     let (from, dir, _) = wall_site(&level, |l, c| in_bounds(l, c) && !l.walkable(c.0, c.1))
         .expect("two-deep rock somewhere");
     stand(&mut game, from, dir);
-    let (before_fatigue, before_trace) = (fatigue(&game), trace(&game));
+    let (before_power, before_trace) = (power(&game), trace(&game));
 
     assert!(cast(&mut game, PHASE, FieldCastTarget::None).is_err());
     assert!(cast(&mut game, JUMP, FieldCastTarget::Cell(-4, -4)).is_err());
 
-    assert_eq!(fatigue(&game), before_fatigue, "a refusal charged Fatigue");
+    assert_eq!(power(&game), before_power, "a refusal charged Power");
     assert_eq!(trace(&game), before_trace, "a refusal raised Trace");
 }
 
 #[test]
-fn both_routines_charge_fatigue_and_raise_trace_on_success() {
+fn both_routines_charge_power_and_raise_trace_on_success() {
     let mut game = underground();
     let level = frame(&game);
 
     let (from, dir, _) = wall_site(&level, |l, c| l.walkable(c.0, c.1)).unwrap();
     stand(&mut game, from, dir);
-    let before = fatigue(&game);
+    let before = power(&game);
     cast(&mut game, PHASE, FieldCastTarget::None).unwrap();
-    assert!(fatigue(&game) < before, "a phase cost no Fatigue");
+    assert!(power(&game) < before, "a phase cost no Power");
     assert_eq!(trace(&game), TRACE_PER_PHASE);
 
     // Onto the cell it just came from, which is known walkable and known
     // reachable — this test is about the meter, not the landing.
-    let before = fatigue(&game);
+    let before = power(&game);
     cast(&mut game, JUMP, FieldCastTarget::Cell(from.0, from.1)).unwrap();
-    assert!(fatigue(&game) < before, "a jump cost no Fatigue");
+    assert!(power(&game) < before, "a jump cost no Power");
     assert_eq!(trace(&game), TRACE_PER_PHASE + TRACE_PER_JUMP);
 }
 
@@ -523,13 +523,13 @@ fn the_picker_asks_for_a_cell_only_for_the_jump() {
 }
 
 /// The rows are greyed with the permanent objection rather than the
-/// temporary one: telling a player on open grid they are short of Fatigue
+/// temporary one: telling a player on open grid they are short of Power
 /// would send them to rest for a routine that was never going to run there.
 #[test]
-fn the_picker_greys_both_routines_on_the_surface_and_charges_fatigue_not_power() {
+fn the_picker_greys_both_routines_on_the_surface_and_prices_them_in_power() {
     let mut game = surfaced_with_routines();
     for r in game.field_routines() {
-        assert!(r.cost.ends_with("FTG"), "{} costs {}", r.ability, r.cost);
+        assert!(r.cost.ends_with("PWR"), "{} costs {}", r.ability, r.cost);
         assert_eq!(r.unavailable.as_deref(), Some("only in the Stack"));
     }
 }
@@ -540,12 +540,12 @@ fn a_routine_the_player_cannot_pay_for_is_greyed_rather_than_hidden() {
     game.world
         .get_mut::<Needs>(game.player_entity())
         .unwrap()
-        .fatigue = 1.0;
+        .hunger = 1.0;
     let rows = game.field_routines();
     assert_eq!(rows.len(), 2, "an unaffordable routine must not vanish");
     assert!(
         rows.iter()
-            .all(|r| r.unavailable.as_deref() == Some("not enough FTG"))
+            .all(|r| r.unavailable.as_deref() == Some("not enough PWR"))
     );
     assert!(cast(&mut game, PHASE, FieldCastTarget::None).is_err());
 }

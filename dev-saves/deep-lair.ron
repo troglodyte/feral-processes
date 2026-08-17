@@ -9,7 +9,6 @@
         atk: 48,
         def: 48,
         hunger: 99.85,
-        fatigue: 100.0,
         inventory: [
             ("power_cell", 205),
             ("core_fragment", 222),

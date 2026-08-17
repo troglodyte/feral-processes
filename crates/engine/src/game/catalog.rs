@@ -285,9 +285,6 @@ impl Game {
             if c.power != 0.0 {
                 parts.push(format!("+{:.0} power", c.power));
             }
-            if c.fatigue != 0.0 {
-                parts.push(format!("+{:.0} rest", c.fatigue));
-            }
             if c.heal != 0 {
                 parts.push(format!("+{} HP", c.heal));
             }

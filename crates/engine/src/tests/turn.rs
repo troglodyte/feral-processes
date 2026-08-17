@@ -119,8 +119,11 @@ fn idle_tick_advances_the_clock_outside_battle_but_not_during_one() {
     );
 }
 
+/// With Fatigue gone, rest's meter refill lands on Power. That is a real
+/// behaviour change — rest used to leave a drained player drained — and it is
+/// what makes the base the place a casting budget is bought back.
 #[test]
-fn rest_fully_heals_and_restores_fatigue() {
+fn rest_fully_heals_and_restores_power() {
     let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     {
@@ -129,7 +132,7 @@ fn rest_fully_heals_and_restores_fatigue() {
     }
     {
         let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.fatigue = 10.0;
+        needs.hunger = 10.0;
     }
     spawn_rest_structure_at_player(&mut game);
 
@@ -138,7 +141,7 @@ fn rest_fully_heals_and_restores_fatigue() {
     let stats = *game.world.get::<Stats>(player).unwrap();
     let needs = *game.world.get::<Needs>(player).unwrap();
     assert_eq!(stats.hp, stats.max_hp, "rest should fully heal Integrity");
-    assert_eq!(needs.fatigue, 100.0, "rest should fully restore Fatigue");
+    assert_eq!(needs.hunger, 100.0, "rest should fully restore Power");
 }
 
 /// A battle starting mid-`rest` (see the comment at its internal loop in
@@ -192,7 +195,7 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
     }
     {
         let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.fatigue = 10.0;
+        needs.hunger = 10.0;
     }
 
     let nest = spawn_bare_nest(&mut game, ppos.x + 3, ppos.y);
@@ -210,13 +213,13 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
         stats.hp, 1,
         "rest must abort before its heal once a battle starts"
     );
-    // Ordinary per-tick Needs drift moves fatigue a little even during the
+    // Ordinary per-tick Power drain moves the meter a little even during the
     // handful of ticks before the pursuer catches up, so this checks
     // "nowhere near the full restore", not "exactly untouched".
     assert!(
-        needs.fatigue < 50.0,
-        "rest must abort before restoring fatigue to 100, found {}",
-        needs.fatigue
+        needs.hunger < 50.0,
+        "rest must abort before restoring Power to 100, found {}",
+        needs.hunger
     );
 }
 
@@ -410,12 +413,12 @@ fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
         },
         Position { x: pos.x, y: pos.y },
     ));
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 10.0;
 
     game.rest();
 
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().fatigue,
+        game.world.get::<Needs>(player).unwrap().hunger,
         100.0,
         "a rest structure whose def sets no cost should still rest for free, \
          with zero outlets held"
@@ -466,7 +469,7 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
         },
         Position { x: pos.x, y: pos.y },
     ));
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 10.0;
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 10.0;
     let before_tick = game.current_tick();
 
     game.rest();
@@ -481,9 +484,9 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
          whatever it took, not keep the partial payment"
     );
     assert_eq!(
-        game.world.get::<Needs>(player).unwrap().fatigue,
+        game.world.get::<Needs>(player).unwrap().hunger,
         10.0,
-        "a refused rest must not run any ticks, so fatigue is untouched"
+        "a refused rest must not run any ticks, so Power is untouched"
     );
     assert_eq!(
         before_tick,
@@ -523,14 +526,14 @@ fn rest_is_a_no_op_without_a_nearby_rest_structure() {
     let player = game.player_entity();
     {
         let mut needs = game.world.get_mut::<Needs>(player).unwrap();
-        needs.fatigue = 10.0;
+        needs.hunger = 10.0;
     }
 
     game.rest();
 
     let needs = *game.world.get::<Needs>(player).unwrap();
     assert_eq!(
-        needs.fatigue, 10.0,
+        needs.hunger, 10.0,
         "resting with no Home in range shouldn't restore anything"
     );
 }
@@ -639,8 +642,8 @@ fn rest_ages_field_buffs_but_not_temporary_structures() {
     game.arm_field_buff(
         player,
         ActiveFieldBuff {
-            kind: FieldBuffKind::Coolant,
-            name: "Heat Sink".to_string(),
+            kind: FieldBuffKind::Trickle,
+            name: "Power Tap".to_string(),
             power: 1,
             remaining: REST_TICKS + 5,
             interval: 1,
@@ -851,26 +854,14 @@ fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
 }
 
 #[test]
-fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
+fn a_full_tick_applies_trickle_on_top_of_that_ticks_decay() {
     let mut game = Game::new(612, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let (hunger_before, fatigue_before) = {
+    let hunger_before = {
         let mut needs = game.world.get_mut::<Needs>(player).unwrap();
         needs.hunger = 90.0;
-        needs.fatigue = 90.0;
-        (needs.hunger, needs.fatigue)
+        needs.hunger
     };
-    game.arm_field_buff(
-        player,
-        ActiveFieldBuff {
-            kind: FieldBuffKind::Coolant,
-            name: "Heat Sink".to_string(),
-            power: 15,
-            remaining: 5,
-            interval: 1,
-            source: BuffSource::Routine,
-        },
-    );
     game.arm_field_buff(
         player,
         ActiveFieldBuff {
@@ -887,27 +878,19 @@ fn a_full_tick_applies_coolant_and_trickle_on_top_of_that_ticks_decay() {
 
     // `needs_tick_system` runs inside the same tick's schedule, ahead of
     // `tick_field_buffs` (see `tick_inner`), so the restore lands on top of
-    // whatever that tick's own movement was — hunger's drain, fatigue's
-    // regen. Read through the live formula instead of restating its
-    // constants.
-    let (ticked_hunger, ticked_fatigue) =
-        crate::systems::tick_needs(hunger_before, fatigue_before, 1.0);
+    // that tick's own drain. Read through the live formula instead of
+    // restating its constants.
+    let ticked_hunger = crate::systems::tick_needs(hunger_before, 1.0);
     let needs = *game.world.get::<Needs>(player).unwrap();
-    assert_eq!(
-        needs.fatigue,
-        (ticked_fatigue + 15.0).min(NEED_MAX),
-        "Coolant should restore fatigue on top of the tick's own regen"
-    );
     assert_eq!(
         needs.hunger,
         (ticked_hunger + 15.0).min(NEED_MAX),
-        "Trickle should restore hunger the same way"
+        "Trickle should restore Power on top of the tick's own drain"
     );
     assert_eq!(
-        needs.fatigue, NEED_MAX,
+        needs.hunger, NEED_MAX,
         "90 + 15 minus a hair of decay should still clamp to the cap"
     );
-    assert_eq!(needs.hunger, NEED_MAX, "same clamp for hunger");
 }
 
 #[test]
@@ -1032,7 +1015,7 @@ fn use_item_applies_a_power_restore_and_consumes_one() {
     // so `needs_tick_system` also shaves off one tick's worth of hunger
     // (see `HUNGER_DECAY_PER_TICK` in systems.rs) on top of the +25
     // restore — same shared-decay caveat documented on
-    // `commanding_a_companion_in_battle_costs_more_fatigue_than_a_stunned_one`.
+    // `commanding_a_companion_in_battle_costs_the_player_no_power`.
     assert_eq!(game.world.get::<Needs>(player).unwrap().hunger, 75.0 - 0.15);
     assert_eq!(
         game.world

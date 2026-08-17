@@ -1469,26 +1469,24 @@ pub const NEST_CACHE_EQUIPMENT_ROLLS: u32 = 3;
 /// How many ticks a full night's recharge cycle advances the clock by.
 pub const REST_TICKS: u32 = 40;
 
-/// Per-tick movement of the two needs — see `systems::tick_needs`. They run
-/// in opposite directions and are not two clocks of the same kind: hunger
-/// (surfaced as "Power") drains and is the only thing that can starve you,
-/// so it alone paces a session.
+/// Per-tick drain of Power — the one need, see `systems::tick_needs`.
+/// (`Needs::hunger`; "Power" is the player-facing label.) It is the only
+/// thing that can starve you, so it alone paces a session.
 ///
-/// Fatigue *refills*, because it is a pool spent on demand rather than a
-/// survival need. It used to drain too, which left it unrecoverable
-/// underground: the only full restore is `Game::rest`, and that refuses
-/// anywhere but inside the base.
+/// It is now also the budget every routine call is priced in, which changes
+/// what a cost is *worth* without changing this number. Under the Fatigue
+/// meter this replaced — which refilled at 0.08 a tick — `wild_jump`'s 20.0
+/// was about 250 ticks of walking. Denominated in Power, underground, with
+/// the regen hole in `power_regen_system` closed, it is a fifth of a reserve
+/// with no supply. The costs did not move; the denominator did.
 ///
-/// What it buys is now only the Stack's two field routines (`Phase` and
-/// `Jump`, the sole readers of `AbilityDef::fatigue_cost`) — battle
-/// Specials stopped charging it on 2026-08-08 and are throttled by their
-/// cooldowns instead. At this rate `wild_jump`'s 20.0 is worth ~250 ticks of
-/// walking. That number is arithmetic, not playtested.
+/// The one lever over the whole casting curve is
+/// `ROUTINE_POWER_COST_MULTIPLIER`. This constant still only paces
+/// starvation.
 pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
-pub const FATIGUE_REGEN_PER_TICK: f32 = 0.08;
 
 /// What a `DifficultyMode::Forgiving` reboot leaves the player with: max HP
-/// divided by this (never below 1), and both needs topped up to at least the
+/// divided by this (never below 1), and Power topped up to at least the
 /// floor. Enough to keep going, not enough to make dying free — the XP
 /// setback in `SETBACK_XP_PENALTY_FRACTION` applies on top either way.
 pub const FORGIVING_RESPAWN_HP_DIVISOR: i32 = 2;

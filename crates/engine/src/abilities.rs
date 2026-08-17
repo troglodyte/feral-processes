@@ -264,7 +264,7 @@ pub enum AbilityEffect {
         duration: u32,
         /// How many turns pass between firings. `1` — the default, and what
         /// every buff did before this existed — means every turn. Only the
-        /// three over-time kinds (`Regen`, `Coolant`, `Trickle`) have a
+        /// two over-time kinds (`Regen` and `Trickle`) have a
         /// per-tick effect for it to space out; the rest are read on demand
         /// and ignore it.
         ///
@@ -782,17 +782,17 @@ mod tests {
         assert!(warnings[0].contains("Decompile"), "{}", warnings[0]);
     }
 
-    /// `Coolant` is `Run`-scoped (`FieldBuffKind::scope`) — it always lands
+    /// `Trickle` is `Run`-scoped (`FieldBuffKind::scope`) — it always lands
     /// on the player, so authoring `OneAlly` states a target the cast never
     /// actually reaches.
     #[test]
     fn a_run_scoped_field_buff_targeting_one_ally_is_skipped() {
         let mismatched = r#"(
-            id: "test_bad_coolant",
-            name: "Bad Coolant",
+            id: "test_bad_trickle",
+            name: "Bad Trickle",
             description: "d",
             target: OneAlly,
-            effect: FieldBuff(kind: Coolant, power: 4, duration: 20, power_cost: 5.0),
+            effect: FieldBuff(kind: Trickle, power: 4, duration: 20, power_cost: 5.0),
         )"#;
         let (db, warnings) = load(
             "bad_run_scope",
@@ -800,7 +800,7 @@ mod tests {
         );
         assert!(db.get("test_sweep").is_some(), "the valid file still loads");
         assert!(
-            db.get("test_bad_coolant").is_none(),
+            db.get("test_bad_trickle").is_none(),
             "a Run-scoped kind paired with anything but WholeParty must not load"
         );
         assert_eq!(warnings.len(), 1);

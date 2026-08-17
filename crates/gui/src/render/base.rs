@@ -1100,19 +1100,6 @@ fn draw_status_panel(
         painter,
         m,
     );
-    cy = draw_bar(
-        BarGeometry {
-            x: x + m.inset,
-            y: cy,
-            w: w - m.inset * 2.0,
-        },
-        &format!("Fatigue {:.0}/100", status.fatigue),
-        status.fatigue,
-        100.0,
-        BarStyle::plain(BLUE),
-        painter,
-        m,
-    );
     cy += m.gap;
 
     let lines = [

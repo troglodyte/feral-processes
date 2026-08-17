@@ -806,11 +806,10 @@ fn an_affinity_below_the_floor_is_clamped_at_load() {
     assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MIN);
 }
 
-/// The ten field routines this file ships, one per `FieldBuffKind` variant.
+/// The nine field routines this file ships, one per `FieldBuffKind` variant.
 /// Mirrors the table in `assets/abilities/README.md`'s `FieldBuff` section.
 const FIELD_ROUTINE_IDS: &[&str] = &[
     "repair_loop",
-    "coolant_flush",
     "trickle_charge",
     "hardened_shell",
     "overclock",
@@ -821,7 +820,7 @@ const FIELD_ROUTINE_IDS: &[&str] = &[
     "salvage_routine",
 ];
 
-/// Each of the ten field routines loads, carries a `FieldBuff` effect, ships
+/// Each of the nine field routines loads, carries a `FieldBuff` effect, ships
 /// a real description (the picker's only detail line for it — see
 /// `AbilityDef::description`), and stays out of the wild-carrier pool: a
 /// field routine is installed, never found on a hostile.
@@ -865,7 +864,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
     let db = game.world.resource::<crate::abilities::AbilityDb>();
 
     let mut regen = false;
-    let mut coolant = false;
     let mut trickle = false;
     let mut def_kind = false;
     let mut atk = false;
@@ -879,7 +877,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
         if let AbilityEffect::FieldBuff { kind, .. } = &def.effect {
             match kind {
                 FieldBuffKind::Regen => regen = true,
-                FieldBuffKind::Coolant => coolant = true,
                 FieldBuffKind::Trickle => trickle = true,
                 FieldBuffKind::Def => def_kind = true,
                 FieldBuffKind::Atk => atk = true,
@@ -893,7 +890,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
     }
 
     assert!(regen, "no shipped ability grants a Regen field buff");
-    assert!(coolant, "no shipped ability grants a Coolant field buff");
     assert!(trickle, "no shipped ability grants a Trickle field buff");
     assert!(def_kind, "no shipped ability grants a Def field buff");
     assert!(atk, "no shipped ability grants an Atk field buff");

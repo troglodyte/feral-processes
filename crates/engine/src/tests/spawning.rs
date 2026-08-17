@@ -1481,7 +1481,6 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             atk: 6,
             def: 2,
             hunger: 100.0,
-            fatigue: 100.0,
             inventory: Vec::new(),
             level: 1,
             xp: 0,

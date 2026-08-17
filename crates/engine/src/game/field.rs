@@ -26,7 +26,7 @@ impl Game {
     /// means, which is the trap `battle_special_options` fell into before it
     /// started resolving by stable index instead of filtered position. It is
     /// also the only place a row's cost is decided, which is what stops the
-    /// list saying "PWR" about a routine the cast then charges in Fatigue.
+    /// list quoting one price and the cast charging another.
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
         let holders = self.routine_holders();
         let player = self.player_entity();
@@ -47,12 +47,7 @@ impl Game {
                     AbilityEffect::FieldBuff { power_cost, .. } => {
                         (*power_cost, needs.hunger, "PWR")
                     }
-                    // Fatigue rather than a second cost field: for a routine
-                    // that never appears in battle, "what running this costs
-                    // the player" is already precisely what `fatigue_cost`
-                    // means. See the design doc on why `FieldBuff`'s own
-                    // `power_cost` is left where it is.
-                    _ => (def.fatigue_cost, needs.fatigue, "FTG"),
+                    _ => (def.fatigue_cost, needs.hunger, "PWR"),
                 };
                 let stack_only = matches!(def.effect, AbilityEffect::Phase | AbilityEffect::Jump);
                 rows.push(FieldRoutineView {
@@ -64,8 +59,8 @@ impl Game {
                     cost: format!("{cost:.0} {unit}"),
                     // Ordered so the permanent objection is stated ahead of
                     // the temporary one: telling a player on open grid that
-                    // they are short of Fatigue would send them to rest for
-                    // a routine that was never going to run up here.
+                    // they are short of Power would send them to rest for a
+                    // routine that was never going to run up here.
                     unavailable: if stack_only && !underground {
                         Some("only in the Stack".into())
                     } else if held < cost {
@@ -353,7 +348,7 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        self.spend_fatigue(def.fatigue_cost);
+        self.spend_power(def.fatigue_cost);
         self.log_kind(
             MessageKind::Outcome,
             "The wall goes soft for exactly as long as it takes to cross it.",
@@ -381,7 +376,7 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        self.spend_fatigue(def.fatigue_cost);
+        self.spend_power(def.fatigue_cost);
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();
         } else {
@@ -397,13 +392,13 @@ impl Game {
         Ok(())
     }
 
-    /// Takes `cost` off the player's Fatigue, floored at `NEED_MIN`. The
+    /// Takes `cost` off the player's Power, floored at `NEED_MIN`. The
     /// first write of either movement cast, and every refusal is already
     /// behind it.
-    fn spend_fatigue(&mut self, cost: f32) {
+    fn spend_power(&mut self, cost: f32) {
         let player = self.player_entity();
         let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-        needs.fatigue = (needs.fatigue - cost).max(NEED_MIN);
+        needs.hunger = (needs.hunger - cost).max(NEED_MIN);
     }
 
     /// Every buff currently running on the player or a party member, for the

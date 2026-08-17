@@ -200,9 +200,8 @@ pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painte
         ));
     }
     for (i, r) in routines.iter().enumerate() {
-        // `cost` arrives already carrying its unit — a `FieldBuff` spends
-        // Power and a movement routine spends Fatigue, and which noun goes
-        // here is the engine's to decide, not this file's.
+        // `cost` arrives already carrying its unit, which is the engine's to
+        // decide, not this file's.
         let label = format!(
             "[{}] {} — {} — {} ({})",
             menu_shortcut(i),

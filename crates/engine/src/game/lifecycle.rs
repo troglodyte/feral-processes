@@ -370,7 +370,6 @@ impl Game {
                 },
                 Needs {
                     hunger: data.player.hunger,
-                    fatigue: data.player.fatigue,
                 },
                 Experience {
                     level: data.player.level,
@@ -1001,7 +1000,6 @@ impl Game {
                 atk: stats.atk,
                 def: stats.def,
                 hunger: needs.hunger,
-                fatigue: needs.fatigue,
                 inventory,
                 level: exp.level,
                 xp: exp.xp,

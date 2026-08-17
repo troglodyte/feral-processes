@@ -434,7 +434,6 @@ pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App
 
     let mut data = save::load_from_file(&path).unwrap();
     data.player.routines = routines.iter().map(|r| r.to_string()).collect();
-    data.player.fatigue = 100.0;
     data.locale = feral_processes_engine::resources::Locale::Stack {
         depth: 1,
         frames: 2,

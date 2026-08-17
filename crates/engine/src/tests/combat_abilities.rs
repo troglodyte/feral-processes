@@ -8,7 +8,7 @@ use crate::*;
 use super::support::*;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, AFFINITY_PERK_BONUS_PER_LEVEL,
-    AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED,
+    AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED, HUNGER_DECAY_PER_TICK,
 };
 
 #[test]
@@ -337,47 +337,43 @@ fn cooldowns_do_not_survive_the_battle_that_set_them() {
     );
 }
 
-/// The bug this closes: a companion's routine came out of *your* Fatigue,
-/// so the party's own kit was rationed against a pool only the player had.
-/// A Special is now priced in its cooldown alone, whoever runs it.
-///
-/// `cascade_overflow` still declares `fatigue_cost: 8.0` — the field is live
-/// only on the two field routines now, and a battle ability's value is
-/// simply never read. This asserts that directly rather than trusting the
-/// files to be tidy.
+/// The bug this closes: a companion's routine came out of *your* meter, so
+/// the party's own kit was rationed against a pool only the player had.
+/// Whatever a Special costs, the caster is who pays it.
 #[test]
-fn a_companions_special_charges_the_player_no_fatigue() {
+fn a_companions_special_charges_the_player_no_power() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
 
-    let before = game.world.get::<Needs>(player).unwrap().fatigue;
+    let before = game.world.get::<Needs>(player).unwrap().hunger;
     companion_uses_special(
         &mut game,
         sweeper,
         0,
         battle::SpecialTarget::EnemyGroup { group: 0 },
     );
-    let spent = before - game.world.get::<Needs>(player).unwrap().fatigue;
+    let spent = before - game.world.get::<Needs>(player).unwrap().hunger;
 
     assert!(
-        spent <= 0.0,
+        spent <= HUNGER_DECAY_PER_TICK + 1e-4,
         "a commanded routine must take nothing off the player; the round's own \
-         regen is the only movement allowed, spent {spent}"
+         one tick of drain is the only movement allowed, spent {spent}"
     );
 }
 
 #[test]
-fn a_player_out_of_fatigue_can_still_command_a_routine() {
+fn a_player_out_of_power_can_still_command_a_companions_routine() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 0.0;
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 0.0;
 
     let options = game.battle_special_options(1);
     assert_eq!(
         options[1].unavailable, None,
-        "an empty Fatigue pool no longer refuses anything in battle"
+        "the caster's reserve is what gates a Special, and the caster here is \
+         the companion"
     );
     let _ = sweeper;
 }
@@ -403,32 +399,31 @@ fn a_special_option_carries_the_cooldown_it_would_arm() {
     );
 }
 
-/// Fatigue no longer prices anything in battle, but it is still a need the
-/// roster shows and still what the Stack's field routines spend. It rides on
-/// the party slot because the roster shows it as a per-member column — and
-/// only the player has `Needs`, so a companion's cell is honestly empty
-/// rather than a second copy of the player's number.
+/// Power rides on the party slot because the roster shows it as a per-member
+/// column. Only the player holds `Needs` today, so a companion's cell is
+/// honestly empty rather than a second copy of the player's number — and that
+/// empty cell is the visible symptom of a roster member with no reserve.
 #[test]
-fn the_battle_view_carries_the_players_fatigue_and_no_one_elses() {
+fn the_battle_view_carries_the_players_power_and_no_one_elses() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
-    game.world.get_mut::<Needs>(player).unwrap().fatigue = 62.0;
+    game.world.get_mut::<Needs>(player).unwrap().hunger = 62.0;
 
     let view = game.battle_view().expect("the pack opened a battle");
     assert_eq!(
-        view.party[0].fatigue,
+        view.party[0].power,
         Some(62.0),
-        "slot 0 is the player, the only party member with a need to show"
+        "slot 0 is the player, the only party member with a reserve to show"
     );
     assert_eq!(
         view.party[1].entity, sweeper,
         "the sweeper should be the second party slot"
     );
     assert_eq!(
-        view.party[1].fatigue, None,
-        "a companion carries no Needs of its own, and must not be shown the \
-         player's"
+        view.party[1].power, None,
+        "a companion carries no reserve of its own yet, and must not be shown \
+         the player's"
     );
 }
 
@@ -587,16 +582,16 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     );
 }
 
-/// "Even players": the player's own installed routine is priced in its
-/// cooldown too, and spends no Fatigue — `null_route` is the deepest
-/// researched routine in the shipped tree and still charges nothing.
+/// The player's own installed routine is priced in its cooldown alone and
+/// spends no Power — `null_route` is the deepest researched routine in the
+/// shipped tree and still charges nothing.
 ///
 /// Measured against a control round rather than against zero: a round of any
-/// kind hands back a little Fatigue on its own (`tick_needs` regen), so what
-/// the ability costs is the difference between a Special round and a Defend
-/// one, and that difference must be nothing.
+/// kind drains a little Power on its own (`tick_needs`), so what the ability
+/// costs is the difference between a Special round and a Defend one, and
+/// that difference must be nothing.
 #[test]
-fn a_player_special_spends_no_fatigue() {
+fn a_player_special_spends_no_power() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
@@ -609,13 +604,12 @@ fn a_player_special_spends_no_fatigue() {
         let enemy = spawn_wild_on_player_tile(&mut game);
         insert_battle(&mut game, player, vec![enemy]);
 
-        // Start off the cap: a round's own fatigue regen is meant to cancel
-        // between the two measurements, and only does when neither is
-        // clamped at NEED_MAX.
-        game.world.get_mut::<Needs>(player).unwrap().fatigue = 50.0;
-        let before = game.world.get::<Needs>(player).unwrap().fatigue;
+        // Start off the cap: a round's own drain is meant to cancel between
+        // the two measurements, and only does when neither is clamped.
+        game.world.get_mut::<Needs>(player).unwrap().hunger = 50.0;
+        let before = game.world.get::<Needs>(player).unwrap().hunger;
         resolve_round_with(&mut game, action);
-        before - game.world.get::<Needs>(player).unwrap().fatigue
+        before - game.world.get::<Needs>(player).unwrap().hunger
     }
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

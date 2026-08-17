@@ -32,8 +32,6 @@ pub struct ConsumeDef {
     #[serde(default)]
     pub power: f32,
     #[serde(default)]
-    pub fatigue: f32,
-    #[serde(default)]
     pub heal: i32,
     #[serde(default)]
     pub prebattle_buff: Option<PrebattleBuff>,
@@ -212,7 +210,6 @@ impl ItemDef {
         }
         match self.consume {
             Some(c) if !c.power.is_finite() => Some("consume.power"),
-            Some(c) if !c.fatigue.is_finite() => Some("consume.fatigue"),
             _ => None,
         }
     }

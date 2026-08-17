@@ -803,7 +803,6 @@ fn manifest_reports_the_player_with_equipment_folded_into_their_stats() {
         panic!("the player is a Player subject");
     };
     assert_eq!(p.hunger, status.hunger);
-    assert_eq!(p.fatigue, status.fatigue);
     assert_eq!(p.decompiler, status.decompiler);
     assert_eq!(p.zone, status.zone);
     assert_eq!(p.position, status.position);

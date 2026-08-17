@@ -42,7 +42,6 @@ pub(crate) fn death_handling_system(
             DifficultyMode::Forgiving => {
                 stats.hp = (stats.max_hp / FORGIVING_RESPAWN_HP_DIVISOR).max(1);
                 needs.hunger = needs.hunger.max(FORGIVING_RESPAWN_NEED_FLOOR);
-                needs.fatigue = needs.fatigue.max(FORGIVING_RESPAWN_NEED_FLOOR);
                 // Before the warp, not after: `Position` is the entrance
                 // tile until the locale drops, and the line below overwrites
                 // it. Unconditional on a structure being found — a reboot
@@ -110,10 +109,7 @@ mod tests {
                     atk: 1,
                     def: 1,
                 },
-                Needs {
-                    hunger: 0.0,
-                    fatigue: 0.0,
-                },
+                Needs { hunger: 0.0 },
                 Experience {
                     level: 2,
                     xp: 10,
@@ -173,10 +169,7 @@ mod tests {
                     atk: 1,
                     def: 1,
                 },
-                Needs {
-                    hunger: 0.0,
-                    fatigue: 0.0,
-                },
+                Needs { hunger: 0.0 },
                 Experience {
                     level: 2,
                     xp: 10,

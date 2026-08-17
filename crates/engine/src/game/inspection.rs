@@ -701,7 +701,6 @@ impl Game {
             equipment: self.worn_slots(entity),
             subject: ManifestSubject::Player(PlayerManifest {
                 hunger: needs.hunger,
-                fatigue: needs.fatigue,
                 decompiler: self
                     .world
                     .get::<Decompiler>(entity)

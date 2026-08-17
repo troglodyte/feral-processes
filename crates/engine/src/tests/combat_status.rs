@@ -969,7 +969,7 @@ fn field_buff_power_is_zero_when_absent_and_the_stored_value_when_present() {
     game.arm_field_buff(player, routine(FieldBuffKind::Regen, 7));
     assert_eq!(game.field_buff_power(player, FieldBuffKind::Regen), 7);
     assert_eq!(
-        game.field_buff_power(player, FieldBuffKind::Coolant),
+        game.field_buff_power(player, FieldBuffKind::Trickle),
         0,
         "a different kind stays absent"
     );

@@ -531,7 +531,7 @@ impl Game {
                     atk: self.effective_atk(entity),
                     def: self.effective_def(entity),
                     status_effect: self.status_label(entity),
-                    fatigue: self.world.get::<Needs>(entity).map(|n| n.fatigue),
+                    power: self.world.get::<Needs>(entity).map(|n| n.hunger),
                     planned: battle.planned[slot]
                         .as_ref()
                         .map(|action| self.action_label(entity, action)),

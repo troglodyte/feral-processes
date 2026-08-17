@@ -20,7 +20,6 @@ pub struct PlayerSave {
     pub atk: i32,
     pub def: i32,
     pub hunger: f32,
-    pub fatigue: f32,
     pub inventory: Vec<(ItemId, u32)>,
     pub level: u32,
     pub xp: u32,
@@ -560,7 +559,13 @@ pub struct SaveData {
 /// a field removed, or one whose meaning changes under a name it keeps —
 /// and that needs real migration code, which no encoding could have saved
 /// you from.
-pub const SAVE_FORMAT_VERSION: u32 = 29;
+/// 29 → 30: `PlayerSave::fatigue` removed. The Fatigue meter is gone — one
+/// need, Power, is now the budget every routine call draws on — and this is
+/// the first bump of the kind the entry above describes: a field *removed*,
+/// which field-named RON does not save you from. Kept-and-ignored was the
+/// alternative and costs the same bump on the next property while leaving a
+/// lie in the struct.
+pub const SAVE_FORMAT_VERSION: u32 = 30;
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
@@ -748,7 +753,6 @@ mod tests {
                 atk: 6,
                 def: 2,
                 hunger: 100.0,
-                fatigue: 100.0,
                 inventory: Vec::new(),
                 level: 1,
                 xp: 0,
@@ -975,6 +979,23 @@ mod tests {
         assert!(
             err.contains("older version of the game"),
             "the refusal should name the cause, not a byte offset: {err}"
+        );
+    }
+
+    /// The Fatigue meter is gone, so nothing on disk may claim one. Asserted
+    /// against the serialized text and against a payload that omits the key,
+    /// because a field merely left in the struct and ignored would pass a
+    /// struct-level check and still cost the next property a version bump.
+    #[test]
+    fn a_save_neither_writes_nor_requires_a_fatigue_field() {
+        let ron = to_ron(&sample_data()).unwrap();
+        assert!(
+            !ron.contains("fatigue"),
+            "a save must not carry a Fatigue meter:\n{ron}"
+        );
+        assert!(
+            from_ron(&ron).is_ok(),
+            "and a payload written without one has to load"
         );
     }
 

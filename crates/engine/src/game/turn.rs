@@ -517,7 +517,6 @@ impl Game {
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
             needs.hunger = (needs.hunger + effect.power).min(NEED_MAX);
-            needs.fatigue = (needs.fatigue + effect.fatigue).min(NEED_MAX);
         }
         if effect.heal != 0 {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
@@ -665,7 +664,7 @@ impl Game {
         let player = self.player_entity();
         {
             let mut needs = self.world.get_mut::<Needs>(player).unwrap();
-            needs.fatigue = 100.0;
+            needs.hunger = NEED_MAX;
         }
         {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();

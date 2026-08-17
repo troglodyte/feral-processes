@@ -82,7 +82,6 @@ impl Game {
             power: stats.max_hp + atk + def,
             decompiler,
             hunger: needs.hunger,
-            fatigue: needs.fatigue,
             inventory,
             inventory_used: self.inventory_used(),
             pet_count,

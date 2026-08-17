@@ -5,7 +5,7 @@ next time a game session starts — no recompiling required. A malformed file
 is skipped with a warning logged in-game rather than crashing startup. That
 includes a file whose numbers aren't finite: RON accepts bare `NaN` and
 `inf` literals, and they'd otherwise slip past every clamp downstream, so
-any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
+any non-finite `taming_potency`, `consume.power`, or
 `upgrade` percentage disqualifies the whole file.
 
 ## Schema
@@ -152,14 +152,13 @@ any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
     // effect). If set, this item can be used via `Game::use_item` outside
     // battle. All fields inside are optional (default 0/None) so one item
     // can restore several resources and/or arm a field buff:
-    //   power  — restores this much Power
-    //   fatigue — restores this much Fatigue (what the Stack's two movement
-    //             routines are paid out of; it also regenerates on its own)
+    //   power  — restores this much Power (the one need; it drains on its
+    //            own and is what every routine call is paid out of)
     //   heal   — restores this much HP
     //   prebattle_buff — arms a buff that keeps running on the map, through
     //     any battle that follows, and through a save — unlike a buff a
     //     companion's Special arms mid-fight, which is wiped the moment
-    //     that battle ends. `kind` is one of `Regen`, `Coolant`, `Trickle`,
+    //     that battle ends. `kind` is one of `Regen`, `Trickle`,
     //     `Def`, `Atk`, `Mitigation`, `CaptureBoost`, `XpBoost`,
     //     `EncounterDamp`, or `DropBoost`; `power` is its magnitude (flat
     //     for the stat kinds, percentage points for the rest); `ticks` is
@@ -167,7 +166,6 @@ any non-finite `taming_potency`, `consume.power`, `consume.fatigue`, or
     //     it keeps counting down whether or not the player is in a fight).
     consume: Some((
         power: 25.0,
-        fatigue: 10.0,
         heal: 5,
         prebattle_buff: Some((kind: Atk, power: 2, ticks: 30)),
     )),

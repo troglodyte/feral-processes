@@ -734,6 +734,7 @@ fn cronjob_work_grants_no_more_xp_once_the_worker_hits_the_work_level_cap() {
 #[test]
 fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
     let mut unboosted = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_ample_grid_supply(&mut unboosted);
     let worker = spawn_tamed(&mut unboosted, 10, 3);
     let structure = unboosted
         .world
@@ -759,6 +760,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
     let unboosted_xp = unboosted.world.get::<Experience>(worker).unwrap().xp;
 
     let mut boosted = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_ample_grid_supply(&mut boosted);
     let worker = spawn_tamed(&mut boosted, 10, 3);
     let structure = boosted
         .world
@@ -807,6 +809,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
 #[test]
 fn cronjob_work_still_grants_xp_below_the_work_level_cap() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_ample_grid_supply(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     assert!(
         game.world.get::<Experience>(worker).unwrap().level < crate::tuning::WORK_XP_LEVEL_CAP,
@@ -1775,6 +1778,7 @@ fn worked_node_at(
     y: i32,
     capacity: u32,
 ) -> Entity {
+    stand_ample_grid_supply(game);
     let worker = spawn_tamed(game, 10, 3);
     let node = game
         .world

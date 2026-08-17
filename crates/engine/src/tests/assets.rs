@@ -1245,3 +1245,85 @@ fn no_shipped_assembler_builds_another_benchs_product() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// The power grid census — Task 4. `game::base::power::ledger` only ever
+// reads what these three tests check the shipped set for: see
+// `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`, "Which
+// structures draw, and the numbers".
+// ---------------------------------------------------------------------------
+
+/// The gate that stops the sixteenth machine shipping free: every shipped
+/// structure that `runs_a_job()` — an extractor or an assembler, the one
+/// predicate `ledger` and everything else in the base agree on — must
+/// declare a non-zero `power_draw`, or it never enters the sum and runs for
+/// free forever.
+///
+/// Filters on `runs_a_job()` itself rather than re-deriving `work.is_some()
+/// || assembles.is_some()`, which is exactly the drift `runs_a_job`'s own
+/// doc comment warns about.
+#[test]
+fn every_shipped_machine_declares_a_power_draw() {
+    let game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let mut checked = 0;
+    for def in db.all() {
+        if !def.runs_a_job() {
+            continue;
+        }
+        assert!(
+            def.power_draw > 0,
+            "{} runs a job but declares power_draw: 0 — it would run for \
+             free off the grid",
+            def.id
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 15,
+        "the plan's table names 15 machines; if that count changed, change \
+         this deliberately rather than letting the check go vacuous"
+    );
+}
+
+/// Home alone has to open a base: a fresh base with nothing else standing
+/// must be able to run its opening extractors — a Mining Node, a Log
+/// Scraper and a Research Node — before a single Recharger is built.
+/// Stated as a concrete sum because "covers the opening" is not something a
+/// test can check any other way.
+#[test]
+fn home_alone_powers_a_new_bases_opening_extractors() {
+    let game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let home = db.get("home").expect("home ships");
+    let mining_node = db.get("mining_node").expect("mining_node ships");
+    let log_scraper = db.get("log_scraper").expect("log_scraper ships");
+    let research_node = db.get("research_node").expect("research_node ships");
+
+    let opening_draw = mining_node.power_draw + log_scraper.power_draw + research_node.power_draw;
+    assert!(
+        home.power_supply >= opening_draw,
+        "Home supplies {}, but a Mining Node, a Log Scraper and a Research \
+         Node together draw {opening_draw} — a fresh base would open dark",
+        home.power_supply
+    );
+}
+
+/// A structure that both draws from the grid and supplies it is incoherent
+/// — the two would net against each other inside a single building rather
+/// than being separate roles on the base. Cheap enough to enforce outright
+/// rather than merely report.
+#[test]
+fn no_shipped_structure_both_draws_and_supplies() {
+    let game = Game::new(952, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    for def in db.all() {
+        assert!(
+            def.power_draw == 0 || def.power_supply == 0,
+            "{} both draws {} and supplies {} — a structure must not do both",
+            def.id,
+            def.power_draw,
+            def.power_supply
+        );
+    }
+}

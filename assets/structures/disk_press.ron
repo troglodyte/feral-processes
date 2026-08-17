@@ -8,4 +8,5 @@
     work: None,
     capacity: 10,
     assembles: Some((item: "routine_disk", ticks_per_unit: 20)),
+    power_draw: 2,
 )

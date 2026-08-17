@@ -8,4 +8,5 @@
     work: None,
     capacity: 15,
     assembles: Some((item: "hardened_shell", ticks_per_unit: 30)),
+    power_draw: 3,
 )

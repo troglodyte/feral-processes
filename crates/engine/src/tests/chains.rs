@@ -924,7 +924,13 @@ fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, item: &str, qty: u32) ->
 /// Spawns `kind` with the same components `place_structure` gives it,
 /// bypassing the Home, cost and distance rules — these tests are about what
 /// a standing chain does, not about the build rules.
+///
+/// `stand_ample_grid_supply` is what keeps that bypass from also skipping
+/// the base's power supply: every chain here draws power now that Task 4
+/// authored real numbers onto it, and none of these fixtures ever deploys a
+/// Home.
 fn deployed(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    stand_ample_grid_supply(game);
     let capacity = game
         .world
         .resource::<crate::structures::StructureDb>()
@@ -1259,6 +1265,7 @@ fn a_self_referential_recipe_does_not_recurse_forever() {
 #[test]
 fn the_shipped_compiler_compiles_catalysts_out_of_an_adjacent_mining_node() {
     let mut game = Game::new(1012, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_ample_grid_supply(&mut game);
     let batch = game
         .world
         .resource::<ItemDb>()

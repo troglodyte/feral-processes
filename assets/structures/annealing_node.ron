@@ -8,4 +8,5 @@
     work: None,
     capacity: 20,
     assembles: Some((item: "annealed_core", ticks_per_unit: 12)),
+    power_draw: 2,
 )

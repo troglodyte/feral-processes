@@ -1262,6 +1262,20 @@
             tier: None,
         ),
         (
+            kind: "recharger_node",
+            position: (2, 1),
+            resource_amount: None,
+            durability: Some(30),
+            tier: None,
+        ),
+        (
+            kind: "recharger_node",
+            position: (3, 1),
+            resource_amount: None,
+            durability: Some(30),
+            tier: None,
+        ),
+        (
             kind: "market",
             position: (-2, -2),
             resource_amount: None,

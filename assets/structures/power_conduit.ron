@@ -6,4 +6,5 @@
     color: Yellow,
     build_cost: [("core_fragment", 14)],
     work: Some((produces: "power_cell", ticks_per_unit: 6)),
+    power_draw: 1,
 )

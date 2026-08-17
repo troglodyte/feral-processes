@@ -10,4 +10,5 @@
         per_tick: 1.0,
         radius: 10,
     )),
+    power_supply: 4,
 )

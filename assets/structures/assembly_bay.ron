@@ -8,4 +8,5 @@
     work: None,
     capacity: 10,
     assembles: Some((item: "patch_routine", ticks_per_unit: 20)),
+    power_draw: 3,
 )

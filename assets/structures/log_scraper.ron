@@ -7,4 +7,5 @@
     build_cost: [("core_fragment", 14)],
     work: Some((produces: "raw_trace", ticks_per_unit: 10, level: Some(1))),
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
+    power_draw: 1,
 )

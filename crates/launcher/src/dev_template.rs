@@ -230,6 +230,50 @@ mod tests {
         }
     }
 
+    /// The gate that stops the next template being captured short:
+    /// `every_checked_in_template_still_loads` only proves the RON parses —
+    /// this is what proves the base it describes can actually power itself,
+    /// by summing `power_supply`/`power_draw` off the same
+    /// `StructureDef`/`runs_a_job()` the ledger itself reads, over every
+    /// structure the template actually stands (`structure_report`), not the
+    /// full shipped set.
+    #[test]
+    fn every_checked_in_templates_base_can_power_itself() {
+        use std::collections::HashMap;
+
+        for name in list() {
+            let out =
+                std::env::temp_dir().join(format!("feral_processes_template_{name}_power.bin"));
+            generate(&name, &out).unwrap();
+            let mut game = Game::load(&out, &assets_dir()).unwrap();
+            let _ = std::fs::remove_file(&out);
+
+            let defs: HashMap<String, feral_processes_engine::structures::StructureDef> = game
+                .structure_defs()
+                .into_iter()
+                .map(|d| (d.id.clone(), d))
+                .collect();
+
+            let mut supply = 0u32;
+            let mut draw = 0u32;
+            for s in game.structure_report() {
+                let Some(def) = defs.get(&s.kind) else {
+                    continue;
+                };
+                supply += def.power_supply;
+                if def.runs_a_job() {
+                    draw += def.power_draw;
+                }
+            }
+
+            assert!(
+                supply >= draw,
+                "template `{name}`'s base draws {draw} against {supply} supply \
+                 — it would load with a dark machine"
+            );
+        }
+    }
+
     /// **The concrete evidence that gear rarity landed without breaking a
     /// save.** `extraction` is a checked-in v29 file whose `fused_gear` is
     /// four positional `(item, tier, qty)` rows — the shape RON cannot widen

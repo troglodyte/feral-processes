@@ -535,6 +535,51 @@ pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) {
     ));
 }
 
+/// Marks a `Game` that has already had `stand_ample_grid_supply` run against
+/// it, so a helper a test calls more than once (`deployed`, `worked_node_at`,
+/// ...) doesn't pile up a fresh batch of Rechargers on every call.
+#[derive(bevy_ecs::prelude::Resource)]
+struct GridSupplyStood;
+
+/// Stands enough Recharger Nodes on `game`'s base that its grid supply is
+/// never the reason a fixture machine goes dark.
+///
+/// A slew of fixtures across `tests::chains` and `tests::building` spawn a
+/// machine directly via `world.spawn` (`spawn_structure_at` above included),
+/// bypassing `Game::build_structure` and the Home a real base always has
+/// standing — so once Task 4 authored a real `power_draw` onto a shipped
+/// machine, every one of them went dark from the moment it existed. See
+/// `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`.
+///
+/// Deliberately absurd — comfortably past 1,000 supply against draws in the
+/// single digits — for the same reason `tests::power::GRID_SOURCE` picks an
+/// absurd draw for the systems tests: so this stays true no matter how the
+/// Recharger's own `power_supply` is retuned later, rather than being a
+/// number some future change quietly falls under again.
+///
+/// Built out of `spawn_structure_at`, so — like the rest of this file's
+/// fixtures — it carries no `Durability`, which keeps it out of the GC
+/// Entropy Sweep's target pool (`Game::run_raid` filters on
+/// `With<Durability>`). A raidable fixture here would change how many
+/// `GameRng` draws a multi-tick test consumes and shift every roll after it;
+/// see the RNG-stream hazard this file's fixtures already avoid.
+pub(super) fn stand_ample_grid_supply(game: &mut Game) {
+    if game.world.get_resource::<GridSupplyStood>().is_some() {
+        return;
+    }
+    let per = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .get("recharger_node")
+        .map(|d| d.power_supply.max(1))
+        .unwrap_or(1);
+    let count = 1000u32.div_ceil(per);
+    for i in 0..count {
+        spawn_structure_at(game, "recharger_node", -1_000_000, -1_000_000 - i as i32);
+    }
+    game.world.insert_resource(GridSupplyStood);
+}
+
 /// Unlocks `id` and every prerequisite it needs, funding the whole
 /// chain — so a test that just needs a research-gated structure on the
 /// map doesn't have to model the tree itself.
@@ -756,6 +801,7 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
     resource: &str,
     tier: Option<u32>,
 ) -> u32 {
+    stand_ample_grid_supply(game);
     let worker = spawn_tamed(game, 10, 3);
     let mut structure = game.world.spawn((
         Structure {

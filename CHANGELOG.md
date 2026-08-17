@@ -27,7 +27,11 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## 0.10.0
+## 0.11.0
+
+*`0.10.0` is skipped. A stray tag of that name was pushed onto a branch
+commit that carried no release, and moving a published tag is worse than
+spending a number.*
 
 **Existing saves will not load.** `save::SAVE_FORMAT_VERSION` goes 29 → 30:
 `PlayerSave::fatigue` is a field *removed*, which field-named RON does not

@@ -13,7 +13,7 @@ use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
-use crate::resources::{GameRng, MessageKind, MessageLog, ZoneLevel};
+use crate::resources::{GameRng, Locale, MessageKind, MessageLog, ZoneLevel};
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
@@ -937,11 +937,23 @@ pub fn assembler_system(
 /// into range at 0.1 Power is driven to 0 first, docked an Integrity point
 /// and shown the "power reserves are critical!" warning on the very tick
 /// the structure was about to cover them.
+///
+/// Refused outright while underground. The player's `Position` is pinned to
+/// the surface entrance tile for the whole of a Stack run, so without this a
+/// link sited inside a Recharger's radius would top the party up four frames
+/// down — and the Stack's whole Power budget is that there is no supply
+/// underground. Same shape as `nest_aggro_tick`: a reader of the player's
+/// `Position` that never went through `require_surface` but still claims
+/// something about where the party is standing.
 pub fn power_regen_system(
     mut player: Query<(&Position, &mut Needs), With<Player>>,
     structures: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
+    locale: Res<Locale>,
 ) {
+    if !matches!(*locale, Locale::Surface) {
+        return;
+    }
     for (player_pos, mut needs) in &mut player {
         let player_pos = *player_pos;
         for (structure, pos) in &structures {
@@ -972,6 +984,7 @@ pub fn power_regen_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stack::Dir;
     use crate::structures::StructureDb;
     use crate::tuning::PLAYER_BASE_STATS;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -1169,6 +1182,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(db);
         world.insert_resource(MessageLog::default());
+        world.insert_resource(Locale::default());
         let player = world
             .spawn((
                 Player,
@@ -1199,6 +1213,49 @@ mod tests {
         schedule.add_systems(power_regen_system);
         schedule.run(&mut world);
         world.get::<Needs>(player).unwrap().hunger
+    }
+
+    /// `power_regen_system` reads the player's `Position`, and that `Position`
+    /// is pinned to the surface entrance tile for the whole of a Stack run. A
+    /// link sited inside a Recharger's radius would therefore top the party up
+    /// every tick, four frames down — the same trap `nest_aggro_tick` carries,
+    /// and the one that makes an underground Power budget decorative.
+    ///
+    /// Both halves live in one test on purpose: the underground half alone
+    /// passes against a bare `return` at the top of the system.
+    #[test]
+    fn power_regen_stops_underground_and_resumes_on_the_surface() {
+        let mut power = [0.0f32; 2];
+        for (i, locale) in [
+            Locale::Surface,
+            Locale::Stack {
+                depth: 1,
+                frames: 3,
+                x: 4,
+                y: 4,
+                facing: Dir::North,
+                entrance: (0, 0),
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let (mut world, player) =
+                power_regen_world(load_test_recharger(), "test_recharger", 50.0, &[(0, 0)]);
+            world.insert_resource(locale);
+            let mut schedule = Schedule::default();
+            schedule.add_systems(power_regen_system);
+            schedule.run(&mut world);
+            power[i] = world.get::<Needs>(player).unwrap().hunger;
+        }
+        assert_eq!(
+            power[0], 52.0,
+            "the same fixture on the surface must still regenerate"
+        );
+        assert_eq!(
+            power[1], 50.0,
+            "a Recharger on the entrance tile must not reach the party underground"
+        );
     }
 
     #[test]

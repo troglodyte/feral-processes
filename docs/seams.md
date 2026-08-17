@@ -2388,10 +2388,13 @@ were unbounded, and `Rarity::ALL` already isn't.
 
 **Nothing in the nemesis feature draws from `GameRng`.** Naming
 (`nemesis::name_seed`), taunt selection (`nemesis::NemesisDb::taunt`) and
-the promotion multiplier all derive from values already fixed at spawn —
-species, `Potential`, grudge count — the same reasoning `descriptions.rs`
-already established for Stack flavour text: a derived value survives a
-save/load and a stored one drifts the moment the formula changes.
+the promotion multiplier all derive from values that need no roll of their
+own: species and `Potential` are fixed at spawn, and the grudge count is a
+plain incrementing counter read live off `Nemesis` rather than anything
+rolled — it is not fixed at spawn at all, it is what `mark_nemeses` has
+racked up so far. The same reasoning `descriptions.rs` already established
+for Stack flavour text still applies: a derived value survives a save/load
+and a stored one drifts the moment the formula changes.
 The sharper reason here is `end_battle` itself: it is the one path both a
 real fight and a staged `arena` fight tear down through, and `arena`
 exists precisely so a scenario's numbers are reproducible run to run. A

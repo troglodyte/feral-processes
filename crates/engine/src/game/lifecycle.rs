@@ -573,12 +573,13 @@ impl Game {
             }
             // Inserted only when the count is nonzero, the same idiom
             // `Equipment`/`FieldBuff` use below: an absent component must
-            // keep meaning "not a nemesis" for `nemesis_holders`-style
-            // queries. `Stats` above already carry every promotion this
+            // keep meaning "not a nemesis", since `mark_nemeses`' cap counts
+            // live holders by querying `With<Nemesis>` rather than tracking
+            // them anywhere. `Stats` above already carry every promotion this
             // grudge count earned — nothing here may touch them, or a
             // reload would compound `promote_rarity`'s multiplier on top of
-            // itself. See the `c.rarity` comment just below for the same
-            // trap on the tag it promoted.
+            // itself. See the `c.rarity` comment a few lines above for the
+            // same trap on the tag it promoted.
             if c.nemesis_grudges > 0 {
                 entity.insert(Nemesis(c.nemesis_grudges));
             }

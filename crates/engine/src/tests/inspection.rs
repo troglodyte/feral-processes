@@ -533,9 +533,9 @@ fn difficulty_color_never_divides_by_zero_player_power() {
 /// same override shape `is_boss` already has, applied to a second, more
 /// specific reading.
 #[test]
-fn difficulty_color_is_always_cyan_for_a_nemesis_regardless_of_power() {
-    assert_eq!(difficulty_color(1, 1000, false, true), GlyphColor::Cyan);
-    assert_eq!(difficulty_color(1000, 1, false, true), GlyphColor::Cyan);
+fn difficulty_color_is_always_blue_for_a_nemesis_regardless_of_power() {
+    assert_eq!(difficulty_color(1, 1000, false, true), GlyphColor::Blue);
+    assert_eq!(difficulty_color(1000, 1, false, true), GlyphColor::Blue);
 }
 
 /// **Nemesis wins.** Being a boss is a fact about how a creature spawned;
@@ -545,8 +545,8 @@ fn difficulty_color_is_always_cyan_for_a_nemesis_regardless_of_power() {
 /// `difficulty_color` cannot be reordered without a test failing.
 #[test]
 fn a_boss_that_is_also_a_nemesis_draws_the_nemesis_colour_not_magenta() {
-    assert_eq!(difficulty_color(1, 1000, true, true), GlyphColor::Cyan);
-    assert_eq!(difficulty_color(1000, 1, true, true), GlyphColor::Cyan);
+    assert_eq!(difficulty_color(1, 1000, true, true), GlyphColor::Blue);
+    assert_eq!(difficulty_color(1000, 1, true, true), GlyphColor::Blue);
 }
 
 /// The pure `difficulty_color` tests above prove the bucketing logic; this
@@ -585,7 +585,7 @@ fn a_marked_hostile_draws_the_nemesis_colour_on_the_map_not_just_in_the_pure_buc
         .expect("it should still be in view after gaining the component");
     assert_eq!(
         after.color,
-        GlyphColor::Cyan,
+        GlyphColor::Blue,
         "a marked nemesis must draw its reserved colour on the real map, \
          not just inside difficulty_color's own unit tests"
     );

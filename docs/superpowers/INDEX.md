@@ -41,6 +41,16 @@ seam, so their paths are load-bearing:
 
 ## The specs
 
+This table is not scoped to `archive/specs/` alone, whatever the opening
+line above implies — `2026-08-17-nemesis` is still in `specs/` and is
+entered below because it shipped, not because it was archived. Its
+post-2026-08-13 siblings still in `specs/`
+(`2026-08-13-creeping-base-footprint`, `2026-08-13-research-cost-and-zone-gate`,
+`2026-08-13-sector-traits`, `2026-08-14-contracts`, `2026-08-14-work-orders`)
+are absent below; that is a gap in the table, not a claim that they didn't
+ship — see `CLAUDE.md`'s own load-bearing-seam entries for several of them
+instead.
+
 "Release" is the earliest tag containing the commit that added the spec,
 which is the release its branch landed in. It is exact from `v0.3.1`
 onward. Everything at `v0.2.0` or `v0.3.0` predates the one-release-per-change

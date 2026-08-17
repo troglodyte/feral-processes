@@ -1018,14 +1018,18 @@ pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
 }
 
 /// Old-school "con"-style map coloring for a hostile wild program, relative
-/// to the player's current `Stats::power`. A nemesis is always Cyan
+/// to the player's current `Stats::power`. A nemesis is always Blue
 /// regardless of the ratio, checked *before* the boss override so a
 /// creature that is both draws as a nemesis — see `views::EntityView::rarity`
-/// for the argument that spending the con read here is deliberate. A boss
-/// that isn't a nemesis is always Magenta regardless of the ratio; everything
-/// else runs Green (easy) → Yellow (even) → Orange (tough) → Red (hard) as
-/// `creature_power` grows past `player_power`. Pulled out of `view_entities`
-/// so the bucketing is unit-testable without spinning up a `Game`.
+/// for the argument that spending the con read here is deliberate. Blue is
+/// the one `GlyphColor` variant no entity anywhere is ever painted — Cyan
+/// was tried first and rejected, because it is the player's own glyph colour
+/// (`lifecycle.rs`'s `Game::new`/`load`), and a nemesis tile has no business
+/// reading as the player. A boss that isn't a nemesis is always Magenta
+/// regardless of the ratio; everything else runs Green (easy) → Yellow
+/// (even) → Orange (tough) → Red (hard) as `creature_power` grows past
+/// `player_power`. Pulled out of `view_entities` so the bucketing is
+/// unit-testable without spinning up a `Game`.
 pub(crate) fn difficulty_color(
     creature_power: i32,
     player_power: i32,
@@ -1033,7 +1037,7 @@ pub(crate) fn difficulty_color(
     is_nemesis: bool,
 ) -> GlyphColor {
     if is_nemesis {
-        return GlyphColor::Cyan;
+        return GlyphColor::Blue;
     }
     if is_boss {
         return GlyphColor::Magenta;

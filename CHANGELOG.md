@@ -44,8 +44,9 @@ marked a **nemesis**. It gets a name on the spot, drawn from
 `assets/nemesis/names.ron` and salted off its species and stat roll so two
 nemeses of the same species read as different individuals. Meeting it again
 opens the fight with a taunt of its own, from `assets/nemesis/taunts.ron`,
-and every further loss escalates both the taunt's tone and the program's
-grudge count. A grudge promotes the creature's `Rarity` a rung and fully
+picked from a flat pool by folding the grudge count into the same seed —
+so a longer history tends to land on a different line rather than climbing
+some tone ladder. A grudge promotes the creature's `Rarity` a rung and fully
 heals it, so a nemesis is not just a name — it is a program you are actively
 losing ground to. The ladder is bounded by `Rarity::ALL` itself (2.15x
 cumulative, decelerating), and a hard cap of ten held nemeses at once refuses

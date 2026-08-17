@@ -36,6 +36,7 @@ mod nemesis;
 mod party;
 mod perks;
 mod policy;
+mod power;
 mod raids;
 mod refactor;
 mod research;

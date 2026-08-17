@@ -16,5 +16,6 @@
 pub(crate) mod building;
 pub(crate) mod collect;
 pub(crate) mod hauling;
+pub(crate) mod power;
 pub(crate) mod upkeep;
 pub(crate) mod work_orders;

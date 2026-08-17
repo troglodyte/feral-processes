@@ -274,10 +274,20 @@ fn a_second_promotion_to_gold_multiplies_by_the_ratio_not_the_absolute_tier() {
     assert_eq!(stats.def, 18, "15 * 1.2");
 }
 
+/// A Prismatic nemesis has nowhere left to climb, so the stat multiply is a
+/// no-op — but the recharge is not conditioned on the multiply doing
+/// anything. `stats.hp` is deliberately left below `max_hp` before the call
+/// (`spawn_promotable` starts full, which would let a heal-skipping early
+/// return at the ceiling pass unnoticed): a `promote_rarity` that special-
+/// cased `new == old` into an early return, skipping the `hp = max_hp` line
+/// entirely, would leave `hp` at 40 here and fail the last assertion. That
+/// exact mutation was applied and watched fail before this test was kept —
+/// see the report for Finding 1's verification.
 #[test]
-fn a_prismatic_nemesis_does_not_promote_but_can_still_be_marked() {
+fn a_prismatic_nemesis_does_not_promote_but_still_heals_on_a_mark() {
     let mut game = Game::new(49, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_promotable(&mut game, Rarity::Prismatic);
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 40;
 
     let landed = game.promote_rarity(wild);
 
@@ -289,14 +299,10 @@ fn a_prismatic_nemesis_does_not_promote_but_can_still_be_marked() {
     let stats = *game.world.get::<Stats>(wild).unwrap();
     assert_eq!(stats.atk, 10, "a no-op multiplier leaves stats untouched");
     assert_eq!(stats.def, 10);
-
-    // The grudge count is `mark_nemeses`'s own field, not `promote_rarity`'s
-    // — a Prismatic program that keeps beating the party still racks up a
-    // grudge even though there is no rung left for it to climb.
-    game.world.entity_mut(wild).insert(Nemesis(3));
-    let mut nemesis = game.world.get_mut::<Nemesis>(wild).unwrap();
-    nemesis.0 += 1;
-    assert_eq!(game.world.get::<Nemesis>(wild).unwrap().0, 4);
+    assert_eq!(
+        stats.hp, stats.max_hp,
+        "the recharge must still run even when the promotion itself is a no-op"
+    );
 }
 
 #[test]
@@ -331,13 +337,23 @@ fn a_wild_program_never_carries_equipment_so_the_gear_hazard_is_unreachable() {
     );
 }
 
+/// Drives five real losses through the real `mark_nemeses` path (not a
+/// direct `promote_rarity` call), reaching and then passing `Rarity::ALL`'s
+/// ceiling. `Rarity::ALL` has 5 rungs, so the 4th mark is the last rung
+/// climbed (Ordinary -> Silver -> Gold -> Platinum -> Prismatic) and the
+/// 5th is a mark at the ceiling with nowhere left to promote — exercising,
+/// through the real end-of-battle path rather than a unit call, exactly the
+/// "old == new == Prismatic" case Finding 1 is about. The grudge count
+/// keeps counting every loss regardless: it is `mark_nemeses`'s own field,
+/// not `promote_rarity`'s, so a program with no rung left to climb still
+/// racks one up.
 #[test]
-fn grudge_count_and_rarity_receipt_agree_after_three_losses() {
+fn grudge_count_and_rarity_receipt_agree_past_the_promotion_ceiling() {
     let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_overwhelming_wild(&mut game);
     // Pinned rather than left to the spawn roll — `roll_rarity` could hand
-    // this program a head start, and the assertion below needs to know
-    // exactly how many rungs three promotions climb.
+    // this program a head start, and the assertions below need to know
+    // exactly how many rungs each loss climbs.
     game.world.entity_mut(wild).insert(Rarity::Ordinary);
 
     for _ in 0..3 {
@@ -346,11 +362,44 @@ fn grudge_count_and_rarity_receipt_agree_after_three_losses() {
             .unwrap();
         game.battle_resolve_round();
     }
-
     assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(3));
     assert_eq!(
         game.world.get::<Rarity>(wild).copied(),
         Some(Rarity::Platinum),
         "three marks is three promotions: Ordinary -> Silver -> Gold -> Platinum"
+    );
+
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+    assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(4));
+    assert_eq!(
+        game.world.get::<Rarity>(wild).copied(),
+        Some(Rarity::Prismatic),
+        "the 4th mark climbs the last rung"
+    );
+
+    // The 5th mark lands with old == new == Prismatic: nothing left to
+    // promote, but the grudge still rises and the recharge still runs.
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+
+    assert_eq!(
+        game.world.get::<Nemesis>(wild).map(|n| n.0),
+        Some(5),
+        "the grudge keeps counting past the ceiling"
+    );
+    assert_eq!(
+        game.world.get::<Rarity>(wild).copied(),
+        Some(Rarity::Prismatic),
+        "the ceiling holds"
+    );
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(
+        stats.hp, stats.max_hp,
+        "the recharge must still run on a mark that promotes nothing"
     );
 }

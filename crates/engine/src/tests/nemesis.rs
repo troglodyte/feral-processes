@@ -56,12 +56,20 @@ fn a_won_fight_marks_nobody() {
 /// Like `support::flee_until_clear`, but reports which of its two possible
 /// endings actually happened, rather than leaving a caller to assume one.
 /// `flee_until_clear` returns on *either* a landed escape or a failed
-/// attempt's counter-volley flatlining the player first — indistinguishable
-/// from outside, since a Forgiving defeat also leaves a survivor marked at
-/// grudge 1. `start_battle_with_a_wild_program`'s program has `atk: 0` (see
-/// `spawn_wild_on_player_tile`), so the defeat path is unreachable here, but
-/// that has to be an assertion this test makes, not a fact it silently
-/// relies on.
+/// attempt's counter-volley ending the fight in defeat first — both leave a
+/// surviving hostile marked at grudge 1, so asserting only that the battle
+/// is over afterward can't tell a jack-out from a Forgiving loss. Reporting
+/// which one happened lets the test below assert on it directly: if the
+/// defeat path is ever what actually ends the fight, that assertion fails
+/// loudly instead of the test passing for the wrong reason.
+///
+/// A failed attempt is not free of risk here — `battle::compute_damage`
+/// floors every landed hit at `tuning::MIN_DAMAGE`, so even this fixture's
+/// zero-`atk` wild program (`spawn_wild_on_player_tile`) still deals 1
+/// damage per hit; "deals no damage" would be the wrong reason to trust
+/// this loop. What actually keeps 200 straight failures vanishingly
+/// unlikely is `battle::jack_out_chance`'s own floor, `JACK_OUT_CHANCE_MIN`
+/// — the same bound `support::flee_until_clear`'s doc argues from.
 fn flee_until_it_lands(game: &mut Game) -> bool {
     for _ in 0..200 {
         if game.battle_flee() {
@@ -81,9 +89,9 @@ fn a_successful_jack_out_marks_the_surviving_hostile_at_grudge_1() {
 
     assert!(
         flee_until_it_lands(&mut game),
-        "the fixture's wild program deals no damage, so only a landed \
-         escape can end this fight — false here means the roll never \
-         landed in 200 tries, not a legitimate defeat"
+        "the escape roll never landed in 200 tries — jack_out_chance floors \
+         well above zero, so this means the roll itself is broken, not that \
+         a legitimate defeat occurred"
     );
 
     assert_eq!(

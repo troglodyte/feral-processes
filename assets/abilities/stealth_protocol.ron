@@ -1,8 +1,8 @@
 (
     id: "stealth_protocol",
     name: "Stealth Protocol Party",
-    description: "-20% wild encounter chance for 90 turns",
+    description: "-20% wild encounter chance until you rest",
     target: WholeParty,
     power_cost: 18.0,
-    effect: FieldBuff(kind: EncounterDamp, power: 20, duration: 90),
+    effect: FieldBuff(kind: EncounterDamp, power: 20),
 )

@@ -1180,7 +1180,7 @@ pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
     description: "d",
     target: WholeParty,
     power_cost: 3.0,
-    effect: FieldBuff(kind: Def, power: 4, duration: 10),
+    effect: FieldBuff(kind: Def, power: 4),
 )"#;
 
 /// A `Creature`-scoped, percentage-magnitude `FieldBuff` — `Mitigation` is
@@ -1195,7 +1195,7 @@ pub(super) const FIELD_ONLY_MITIGATION_ABILITY: &str = r#"(
     description: "d",
     target: WholeParty,
     power_cost: 5.0,
-    effect: FieldBuff(kind: Mitigation, power: 10, duration: 20),
+    effect: FieldBuff(kind: Mitigation, power: 10),
 )"#;
 
 /// A species declaring two abilities, so the multi-ability paths can be

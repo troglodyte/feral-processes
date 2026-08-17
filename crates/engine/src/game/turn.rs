@@ -670,6 +670,12 @@ impl Game {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
             stats.hp = stats.max_hp;
         }
+        // Down here with the heal and the refill rather than up with the
+        // gates, so a rest that never completed clears nothing: a refusal,
+        // the mid-loop game-over bail and a swarm catching you mid-standby
+        // all leave the party's loadout where it was. The walk is player then
+        // `Party` — the same set `tick_field_buffs` ages.
+        self.drop_until_rest_buffs_on_party();
         // Every tamed program you own gets fully healed too, not just your
         // active party — including any left behind defending a structure
         // from a raid while you were away.

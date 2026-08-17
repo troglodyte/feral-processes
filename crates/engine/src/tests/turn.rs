@@ -539,6 +539,10 @@ fn rest_is_a_no_op_without_a_nearby_rest_structure() {
     );
 }
 
+/// `Regen` rather than a stat kind on purpose: only the two over-time kinds
+/// still carry a turn count when a routine armed them
+/// (`FieldBuffKind::runs_until_rest`), so a `Def` buff here would test the
+/// countdown against a buff that no longer has one and pass vacuously.
 #[test]
 fn tick_field_buffs_decrements_and_expires_after_the_exact_tick_count() {
     let mut game = Game::new(600, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -546,7 +550,7 @@ fn tick_field_buffs_decrements_and_expires_after_the_exact_tick_count() {
     game.arm_field_buff(
         player,
         ActiveFieldBuff {
-            kind: FieldBuffKind::Def,
+            kind: FieldBuffKind::Regen,
             name: "Test Shield".to_string(),
             power: 2,
             remaining: 5,
@@ -600,6 +604,10 @@ fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
     );
 }
 
+/// `Regen` for `tick_field_buffs_decrements_and_expires_after_the_exact_tick_count`'s
+/// reason: a routine-armed `Atk` buff has no count left to age, so the
+/// property this test exists for — that the walk reaches a companion and not
+/// just the player — would go untested.
 #[test]
 fn tick_field_buffs_ages_buffs_on_party_members_too() {
     let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -608,7 +616,7 @@ fn tick_field_buffs_ages_buffs_on_party_members_too() {
     game.arm_field_buff(
         companion,
         ActiveFieldBuff {
-            kind: FieldBuffKind::Atk,
+            kind: FieldBuffKind::Regen,
             name: "Overclock".to_string(),
             power: 3,
             remaining: 2,
@@ -690,6 +698,238 @@ fn rest_ages_field_buffs_but_not_temporary_structures() {
         100,
         "a Temporary structure must not age while the player rests"
     );
+}
+
+/// The tick half of the until-rest rule. Not "ages slowly" and not "expires
+/// late" — a routine-armed buff of a read-on-demand kind is not aged at all,
+/// so its `remaining` is still whatever it was armed with after a run's worth
+/// of turns.
+#[test]
+fn an_until_rest_routine_buff_is_never_aged() {
+    let mut game = Game::new(620, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Overclock Single".to_string(),
+            power: 4,
+            remaining: 1,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    for _ in 0..500 {
+        game.tick_field_buffs();
+    }
+
+    let buff = game
+        .world
+        .get::<FieldBuff>(player)
+        .unwrap()
+        .active
+        .first()
+        .cloned()
+        .expect("an until-rest buff outlasts any number of turns");
+    assert_eq!(
+        buff.remaining, 1,
+        "nothing may decrement an until-rest buff's count — it is not a lifetime"
+    );
+}
+
+/// The `source` half of `ActiveFieldBuff::runs_until_rest`, which is the half
+/// a rule keyed on `kind` alone would have got wrong. `patch_routine` arms
+/// Mitigation from a one-shot item for 120 ticks; that item must still
+/// expire, or its 10% would sit under the routine's forever —
+/// `field_buff_power_of` sums a `Consumable` and a `Routine` entry of one
+/// kind rather than choosing between them.
+#[test]
+fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
+    let mut game = Game::new(621, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Patch Routine".to_string(),
+            power: 10,
+            remaining: 2,
+            interval: 1,
+            source: BuffSource::Consumable,
+        },
+    );
+
+    game.tick_field_buffs();
+    assert_eq!(
+        game.world.get::<FieldBuff>(player).unwrap().active.len(),
+        1,
+        "a 2-tick consumable buff is still running after one tick"
+    );
+
+    game.tick_field_buffs();
+    assert!(
+        game.world
+            .get::<FieldBuff>(player)
+            .unwrap()
+            .active
+            .is_empty(),
+        "an item's buff keeps its own clock however the kind behaves for a routine"
+    );
+}
+
+/// Rest is the expiry event for the until-rest ones, and only for those: a
+/// counted buff comes out of a rest aged by `REST_TICKS`, exactly as it did
+/// before any of this existed.
+#[test]
+fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
+    let mut game = Game::new(622, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    spawn_rest_structure_at_player(&mut game);
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Overclock Single".to_string(),
+            power: 4,
+            remaining: 0,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Loop Single".to_string(),
+            power: 2,
+            remaining: REST_TICKS + 12,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.rest();
+
+    let active = game.world.get::<FieldBuff>(player).unwrap().active.clone();
+    assert_eq!(
+        active.len(),
+        1,
+        "only the until-rest buff should go: {active:?}"
+    );
+    assert_eq!(active[0].kind, FieldBuffKind::Regen);
+    assert_eq!(
+        active[0].remaining, 12,
+        "a counted buff still loses exactly REST_TICKS to a rest"
+    );
+    assert!(
+        game.message_log(20)
+            .iter()
+            .any(|e| e.text.contains("Overclock Single")),
+        "the drop is announced by the name that armed it, as an expiry is"
+    );
+}
+
+/// The drop walks the player *and* the party — the same set
+/// `tick_field_buffs` ages, which is the only set a cast can arm one on.
+#[test]
+fn resting_drops_a_companions_until_rest_buffs_too() {
+    let mut game = Game::new(623, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    spawn_rest_structure_at_player(&mut game);
+    game.arm_field_buff(
+        companion,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Def,
+            name: "Hardened Shell Single".to_string(),
+            power: 4,
+            remaining: 0,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.rest();
+
+    assert!(
+        game.world
+            .get::<FieldBuff>(companion)
+            .unwrap()
+            .active
+            .is_empty(),
+        "a companion's loadout ends with the player's"
+    );
+}
+
+/// The drop sits with the heal and the refill, past every bail — so a rest
+/// that never happened costs nothing. A player who walked to the wrong tile
+/// has not lost what they cast.
+#[test]
+fn a_refused_rest_keeps_until_rest_buffs() {
+    let mut game = Game::new(624, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::XpBoost,
+            name: "Trace Analysis Party".to_string(),
+            power: 20,
+            remaining: 0,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    // No `spawn_rest_structure_at_player`, so the rest is refused outright.
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<FieldBuff>(player).unwrap().active.len(),
+        1,
+        "a refused rest must clear nothing"
+    );
+}
+
+/// The row a buff list draws says which of the two lifetimes it has, and the
+/// engine is what words it — `render/field.rs` puts `remaining` straight into
+/// the row's suffix now rather than formatting a count itself.
+#[test]
+fn an_until_rest_buff_row_says_so_where_a_counted_one_shows_turns() {
+    let mut game = Game::new(625, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Atk,
+            name: "Overclock Single".to_string(),
+            power: 4,
+            remaining: 0,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Repair Loop Single".to_string(),
+            power: 2,
+            remaining: 40,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    let rows = game.active_buffs();
+
+    let overclock = rows.iter().find(|b| b.name == "Overclock Single").unwrap();
+    let repair = rows
+        .iter()
+        .find(|b| b.name == "Repair Loop Single")
+        .unwrap();
+    assert_eq!(overclock.remaining, "until rest");
+    assert_eq!(repair.remaining, "40t");
 }
 
 #[test]

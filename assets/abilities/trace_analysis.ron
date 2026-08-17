@@ -1,8 +1,8 @@
 (
     id: "trace_analysis",
     name: "Trace Analysis Party",
-    description: "+20% XP gained for 100 turns",
+    description: "+20% XP gained until you rest",
     target: WholeParty,
     power_cost: 18.0,
-    effect: FieldBuff(kind: XpBoost, power: 20, duration: 100),
+    effect: FieldBuff(kind: XpBoost, power: 20),
 )

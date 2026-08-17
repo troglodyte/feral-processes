@@ -164,7 +164,7 @@ impl Game {
             .map(|b| RunningBuffView {
                 name: b.name.clone(),
                 magnitude: b.kind.magnitude_label(b.power, b.interval),
-                remaining: b.remaining,
+                remaining: b.duration_label(),
             })
     }
 
@@ -439,9 +439,9 @@ impl Game {
             if let Some(field) = self.world.get::<FieldBuff>(holder) {
                 for buff in field.active.clone() {
                     views.push(ActiveBuffView {
-                        name: buff.name,
+                        name: buff.name.clone(),
                         magnitude: buff.kind.magnitude_label(buff.power, buff.interval),
-                        remaining: buff.remaining,
+                        remaining: buff.duration_label(),
                         holder_label: holder_label.clone(),
                     });
                 }
@@ -462,7 +462,10 @@ impl Game {
                     // A combat buff has no cadence — it is a flat stat while it
                     // lasts — so it asks for the every-turn tag.
                     magnitude: kind.magnitude_label(active.power, 1),
-                    remaining: active.remaining,
+                    // Rounds, and always a count: `ActiveFieldBuff`'s
+                    // until-rest split has no equivalent here, since a combat
+                    // buff cannot outlive the fight it was armed in.
+                    remaining: format!("{}t", active.remaining),
                     holder_label,
                 });
             }

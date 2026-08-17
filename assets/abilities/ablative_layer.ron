@@ -1,8 +1,8 @@
 (
     id: "ablative_layer",
     name: "Ablative Layer Single",
-    description: "-10% incoming damage to one ally for 80 turns",
+    description: "-10% incoming damage to one ally until you rest",
     target: OneAlly,
     power_cost: 20.0,
-    effect: FieldBuff(kind: Mitigation, power: 10, duration: 80),
+    effect: FieldBuff(kind: Mitigation, power: 10),
 )

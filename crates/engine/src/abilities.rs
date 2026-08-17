@@ -262,6 +262,15 @@ pub enum AbilityEffect {
     FieldBuff {
         kind: FieldBuffKind,
         power: i32,
+        /// Turns the armed buff lasts. `#[serde(default)]` to 0, which means
+        /// **absent rather than instant**: the kinds that run until the party
+        /// rests (`FieldBuffKind::runs_until_rest`) have no lifetime to
+        /// author and must leave this off, and the two that do must set it.
+        /// `field_buff_duration_mismatch` refuses both mistakes at load, so a
+        /// 0 reaching `ActiveFieldBuff::remaining` is always an until-rest
+        /// buff whose count nothing reads — never a counted buff that expires
+        /// the turn it was cast.
+        #[serde(default)]
         duration: u32,
         /// How many turns pass between firings. `1` — the default, and what
         /// every buff did before this existed — means every turn. Only the
@@ -527,6 +536,34 @@ impl AbilityDef {
         }
     }
 
+    /// A `FieldBuff` whose `duration` contradicts what its `kind` does with
+    /// one. Both directions are refused rather than quietly resolved, and
+    /// neither is a tidiness check:
+    ///
+    /// - A kind that **runs until rest** never reads `duration`. Authoring
+    ///   one states a lifetime the game will not honour — the mod author's
+    ///   90-turn shield is permanent, and nothing tells them so. This is the
+    ///   case `field_only_dead_fields` merely warns about for `cooldown`;
+    ///   refused here instead, because a dead `cooldown` leaves a routine
+    ///   that still works as written and a dead `duration` does not.
+    /// - A kind that **counts down** with no `duration` arms at 0 and expires
+    ///   on the tick it was cast. That was silently possible before this
+    ///   field defaulted, and it is a routine that spends Power for nothing.
+    fn field_buff_duration_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::FieldBuff { kind, duration, .. } = &self.effect else {
+            return None;
+        };
+        match (kind.runs_until_rest(), *duration) {
+            (true, 0) | (false, 1..) => None,
+            (true, _) => {
+                Some("effect: this FieldBuff kind runs until the party rests and takes no duration")
+            }
+            (false, 0) => {
+                Some("effect: this FieldBuff kind counts turns down and needs a duration")
+            }
+        }
+    }
+
     /// A `Phase` or `Jump` effect paired with a `target` other than
     /// `WholeParty`. Both move the party as a body — there is no mechanic to
     /// phase one companion through a wall and leave the rest behind — so any
@@ -657,6 +694,10 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.field_buff_duration_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     if let Some(reason) = def.movement_target_mismatch() {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
@@ -748,6 +789,59 @@ mod tests {
         target: WholeEnemyGroup,
         effect: Damage(power: 6),
     )"#;
+
+    /// A kind that runs until the party rests never reads `duration`, so a
+    /// file authoring one has stated a lifetime the game will not honour.
+    /// Refused rather than warned: the modder's 90-turn shield would be
+    /// permanent and nothing would tell them.
+    #[test]
+    fn an_until_rest_field_buff_kind_may_not_author_a_duration() {
+        let (db, warnings) = load(
+            "until_rest_duration",
+            &[(
+                "test_timed_shell",
+                r#"(
+        id: "test_timed_shell",
+        name: "Test Timed Shell",
+        description: "d",
+        target: OneAlly,
+        effect: FieldBuff(kind: Def, power: 4, duration: 90),
+    )"#,
+            )],
+        );
+        assert!(db.get("test_timed_shell").is_none());
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("runs until the party rests")),
+            "{warnings:?}"
+        );
+    }
+
+    /// The other direction. `duration` defaults to 0 now, and a counting kind
+    /// armed at 0 expires on the tick it was cast — a routine that spends
+    /// Power for nothing.
+    #[test]
+    fn a_counting_field_buff_kind_must_author_a_duration() {
+        let (db, warnings) = load(
+            "no_duration",
+            &[(
+                "test_endless_regen",
+                r#"(
+        id: "test_endless_regen",
+        name: "Test Endless Regen",
+        description: "d",
+        target: OneAlly,
+        effect: FieldBuff(kind: Regen, power: 2),
+    )"#,
+            )],
+        );
+        assert!(db.get("test_endless_regen").is_none());
+        assert!(
+            warnings.iter().any(|w| w.contains("needs a duration")),
+            "{warnings:?}"
+        );
+    }
 
     #[test]
     fn a_valid_def_loads_with_defaulted_optional_fields() {

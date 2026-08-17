@@ -869,6 +869,32 @@ impl FieldBuffKind {
         }
     }
 
+    /// Whether a **routine**-armed buff of this kind runs until the party
+    /// rests instead of counting turns down. The fourth per-kind rule on
+    /// this enum, beside `scope`, `affinity_kind` and `scales_with_caster`,
+    /// and read only through `ActiveFieldBuff::runs_until_rest` — which is
+    /// where the `BuffSource::Routine` half of the predicate lives, and why
+    /// this one is not called anywhere directly except there and the load
+    /// check that refuses a `duration` it would ignore.
+    ///
+    /// **The two over-time kinds are the exceptions, and both directions of
+    /// that are load-bearing.** `Regen` and `Trickle` are the only kinds
+    /// with a per-tick effect (see `Game::apply_field_buff_tick`); the rest
+    /// are read on demand and do nothing as a turn passes. So an until-rest
+    /// `Regen` is unbounded healing and an until-rest `Trickle` is unbounded
+    /// Power, which is the whole of the Stack's scarcity. They are also the
+    /// only two that use `interval`, whose cadence is phased off
+    /// `ActiveFieldBuff::remaining` — a counter an until-rest buff does not
+    /// have. Excluding them here is what lets `Game::tick_field_buffs` leave
+    /// its cadence filter alone.
+    pub fn runs_until_rest(self) -> bool {
+        use FieldBuffKind::*;
+        match self {
+            Regen | Trickle => false,
+            Def | Atk | Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => true,
+        }
+    }
+
     /// The short tag a buff list shows next to a running entry, e.g.
     /// `"DEF+2"` or `"XP+15%"`. `power` is points for the four flat kinds
     /// and percentage points for the rest. `HP` rather than `INT` for
@@ -913,6 +939,13 @@ pub struct ActiveFieldBuff {
     pub power: i32,
     /// Ticks remaining. Turns (`Game::tick_inner`), not battle rounds like
     /// `ActiveBuff::remaining` — a field buff outlives any one battle.
+    ///
+    /// **Not a lifetime when `runs_until_rest` below says so.** Nothing
+    /// decrements it for those and nothing reads it but the cadence filter,
+    /// which no until-rest kind reaches. An old save's in-flight routine
+    /// buff of such a kind therefore loads with whatever count it had and
+    /// simply stops ageing, which is the new behaviour and needs no
+    /// migration.
     pub remaining: u32,
     /// Turns between firings — see `AbilityEffect::FieldBuff::interval`, which
     /// is where the authored value comes from. Carried on the running buff
@@ -927,6 +960,59 @@ pub struct ActiveFieldBuff {
     #[serde(default = "crate::abilities::every_turn")]
     pub interval: u32,
     pub source: BuffSource,
+}
+
+impl ActiveFieldBuff {
+    /// Whether this buff has no turn count at all and runs until the party
+    /// rests. **The one definition**, read by `Game::tick_field_buffs` (which
+    /// skips ageing it), `drop_until_rest_buffs` below (which ends it) and
+    /// `duration_label` (which says so on the row).
+    ///
+    /// **It reads `source` as well as `kind`, and that half is the load-bearing
+    /// one.** `ItemEffect::prebattle_buff` arms this same struct from a
+    /// one-shot consumable with its own authored `ticks` — `patch_routine`
+    /// arms Mitigation for 120 of them. Keyed on the kind alone, that item
+    /// would have gone permanent too, and since `field_buff_power_of` sums a
+    /// `Consumable` and a `Routine` entry of one kind rather than picking
+    /// between them, its 10% would have stacked under the routine's for the
+    /// rest of the expedition. A routine is repeatable and priced in a
+    /// reserve that rest refills; an item is spent. Only the routine's half
+    /// of that pair was ever meant to last the trip.
+    pub fn runs_until_rest(&self) -> bool {
+        self.source == BuffSource::Routine && self.kind.runs_until_rest()
+    }
+
+    /// The lifetime tag a buff row shows, e.g. `"90t"` or `"until rest"` —
+    /// the sibling of `FieldBuffKind::magnitude_label` and built here for
+    /// the same reason: a row transform belongs to the engine, so the map's
+    /// buff list and the ally picker's "this is what you'd replace" line
+    /// cannot describe one buff two ways.
+    pub fn duration_label(&self) -> String {
+        if self.runs_until_rest() {
+            "until rest".to_string()
+        } else {
+            format!("{}t", self.remaining)
+        }
+    }
+}
+
+/// Ends every until-rest buff on one holder, returning the names of what
+/// went so the caller can log it.
+///
+/// A free function taking the component directly, for exactly the reason
+/// `field_buff_power_of` below is one: the two callers are `Game::rest`, a
+/// method, and `difficulty::death_handling_system`, a plain bevy system with
+/// no `Game` to reach through. The same split
+/// `CLAUDE.md` records for `game::stack::surfaced`.
+pub fn drop_until_rest_buffs(buff: &mut FieldBuff) -> Vec<String> {
+    let dropped: Vec<String> = buff
+        .active
+        .iter()
+        .filter(|b| b.runs_until_rest())
+        .map(|b| b.name.clone())
+        .collect();
+    buff.active.retain(|b| !b.runs_until_rest());
+    dropped
 }
 
 /// Every field buff currently running on this entity. A `Vec`, not a

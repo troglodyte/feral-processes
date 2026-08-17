@@ -417,7 +417,7 @@ fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
         .expect("a routine-armed Regen is exactly what this cast would replace");
 
     assert_eq!(running.name, "Repair Loop Single");
-    assert_eq!(running.remaining, 62);
+    assert_eq!(running.remaining, "62t");
     assert_eq!(
         running.magnitude,
         FieldBuffKind::Regen.magnitude_label(7, 4),
@@ -682,7 +682,7 @@ fn active_buffs_reports_a_player_buff_with_no_holder_label() {
         buffs[0].holder_label, None,
         "the player carries no holder label"
     );
-    assert_eq!(buffs[0].remaining, stored.remaining);
+    assert_eq!(buffs[0].remaining, stored.duration_label());
     assert_eq!(
         buffs[0].magnitude,
         FieldBuffKind::Regen.magnitude_label(stored.power, stored.interval)
@@ -772,6 +772,6 @@ fn active_buffs_includes_a_combat_buff_and_the_map_shows_none_without_one() {
 
     assert_eq!(buffs.len(), 1);
     assert_eq!(buffs[0].name, "Defense");
-    assert_eq!(buffs[0].remaining, 1);
+    assert_eq!(buffs[0].remaining, "1t");
     assert_eq!(buffs[0].holder_label, None);
 }

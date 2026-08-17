@@ -61,6 +61,7 @@
 26. add an outside battle routine timout option to last until rest.
 27. add visual indicator of entity in the stack
 28. shields via outside battle routine
+29. zone changes will give you access to new materials via the mining node so that you can make more advanced structures, etc
 
 # Bugs
 1. spawned entities tend to gather around the players base, when traveling outside this group so that it's no longer on the screen, the entity population is almost non existent. we've run into this issue before, i think it needs further tuning

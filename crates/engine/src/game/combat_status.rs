@@ -238,6 +238,34 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// Ends every until-rest buff on the player and each party member,
+    /// logging one line per drop in the same words an expiry uses — from the
+    /// player's side a loadout ending because they slept is the same event as
+    /// one ending because its clock ran out.
+    ///
+    /// Walks the same player-plus-`Party` set `tick_field_buffs` does, and
+    /// for the same reason: it is the only set a cast will ever arm one on.
+    /// `Game::rest` is one of the two callers; the other is
+    /// `difficulty::death_handling_system`, which is a bevy system and so
+    /// reaches `drop_until_rest_buffs` directly instead of coming through
+    /// here.
+    pub(crate) fn drop_until_rest_buffs_on_party(&mut self) {
+        let player = self.player_entity();
+        let subjects: Vec<Entity> = std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.clone())
+            .collect();
+
+        let mut dropped: Vec<String> = Vec::new();
+        for entity in subjects {
+            if let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) {
+                dropped.extend(components::drop_until_rest_buffs(&mut field_buff));
+            }
+        }
+        for name in dropped {
+            self.log(format!("{name} fades."));
+        }
+    }
+
     /// Applies every field buff's per-tick effect (see
     /// `apply_field_buff_tick`) on the player and each party member, then
     /// ages every buff by one tick, dropping any that just hit zero and
@@ -289,6 +317,15 @@ impl Game {
                 continue;
             };
             field_buff.active.retain_mut(|buff| {
+                // An until-rest buff has no turn count to spend — `rest` and
+                // a Forgiving reboot are what end it, through
+                // `drop_until_rest_buffs`. Skipping the decrement rather than
+                // the whole entry keeps the cadence filter above untouched:
+                // only `Regen` and `Trickle` fire per tick, and neither is
+                // ever an until-rest kind.
+                if buff.runs_until_rest() {
+                    return true;
+                }
                 buff.remaining = buff.remaining.saturating_sub(1);
                 if buff.remaining == 0 {
                     expired.push(buff.name.clone());

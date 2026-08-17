@@ -45,7 +45,7 @@ pub(super) fn buff_rows(buffs: &[ActiveBuffView]) -> Vec<Row> {
                 selected: false,
                 bold: false,
                 color: TEXT,
-                suffix: Some(format!("{}t", b.remaining)),
+                suffix: Some(b.remaining.clone()),
                 icon: None,
             }
         })
@@ -299,11 +299,11 @@ mod tests {
     use crate::text::ui_metrics;
     use feral_processes_engine::RunningBuffView;
 
-    fn buff(name: &str, magnitude: &str, remaining: u32, holder: Option<&str>) -> ActiveBuffView {
+    fn buff(name: &str, magnitude: &str, remaining: &str, holder: Option<&str>) -> ActiveBuffView {
         ActiveBuffView {
             name: name.to_string(),
             magnitude: magnitude.to_string(),
-            remaining,
+            remaining: remaining.to_string(),
             holder_label: holder.map(str::to_string),
         }
     }
@@ -331,8 +331,8 @@ mod tests {
     #[test]
     fn one_row_per_buff_in_the_order_given() {
         let buffs = vec![
-            buff("Hardened Shell", "DEF+2", 5, None),
-            buff("Trace Analysis", "XP+15%", 3, None),
+            buff("Hardened Shell", "DEF+2", "5t", None),
+            buff("Trace Analysis", "XP+15%", "3t", None),
         ];
         let rows = buff_rows(&buffs);
         assert_eq!(rows.len(), 2, "one row per buff");
@@ -343,8 +343,8 @@ mod tests {
     #[test]
     fn only_a_companion_borne_buff_carries_a_holder_tag() {
         let buffs = vec![
-            buff("Hardened Shell", "DEF+2", 5, None),
-            buff("Data Cache", "HP+1/t", 5, Some("Sparkgrub")),
+            buff("Hardened Shell", "DEF+2", "5t", None),
+            buff("Data Cache", "HP+1/t", "5t", Some("Sparkgrub")),
         ];
         let rows = buff_rows(&buffs);
         assert!(
@@ -374,11 +374,11 @@ mod tests {
     #[test]
     fn a_long_buff_name_does_not_push_the_magnitude_out_of_the_panel() {
         let rows = buff_rows(&[
-            buff("Shell", "DEF+2", 5, None),
+            buff("Shell", "DEF+2", "5t", None),
             buff(
                 "A Very Long Field Routine Name That Overruns The Column",
                 "DEF+2",
-                5,
+                "5t",
                 None,
             ),
         ]);
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn remaining_ticks_ride_in_the_rows_suffix() {
-        let rows = buff_rows(&[buff("Shell", "DEF+2", 7, None)]);
+        let rows = buff_rows(&[buff("Shell", "DEF+2", "7t", None)]);
         assert_eq!(suffix_of(&rows[0]), Some("7t"));
     }
 
@@ -409,7 +409,7 @@ mod tests {
     }
 
     fn named_buffs(names: &[&str]) -> Vec<ActiveBuffView> {
-        names.iter().map(|n| buff(n, "DEF+2", 5, None)).collect()
+        names.iter().map(|n| buff(n, "DEF+2", "5t", None)).collect()
     }
 
     /// The battle panel's own bound: more buffs than `BATTLE_BUFF_ROW_CAP`
@@ -535,7 +535,7 @@ mod tests {
                 Some(RunningBuffView {
                     name: "Repair Loop Single".to_string(),
                     magnitude: "HP+7/4t".to_string(),
-                    remaining: 62,
+                    remaining: "62t".to_string(),
                 }),
             ),
         );
@@ -591,7 +591,7 @@ mod tests {
                 running: Some(RunningBuffView {
                     name: widest,
                     magnitude: "HP+9999/99t".to_string(),
-                    remaining: 9999,
+                    remaining: "9999t".to_string(),
                 }),
                 ..target("Overclocked Sentinel [z10]", None)
             },

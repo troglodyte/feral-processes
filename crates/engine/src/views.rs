@@ -1197,7 +1197,11 @@ pub struct RunningBuffView {
     /// `FieldBuffKind::magnitude_label` of the power actually stored, the
     /// same call `ActiveBuffView::magnitude` makes and for the same reason.
     pub magnitude: String,
-    pub remaining: u32,
+    /// `ActiveFieldBuff::duration_label` — `"90t"`, or `"until rest"` for a
+    /// routine buff that has no turn count. Rendered here rather than in the
+    /// renderer for `magnitude`'s reason: two screens describing one buff two
+    /// ways is what building a tag twice buys.
+    pub remaining: String,
 }
 
 /// One row of the buff list — the map screen's field buffs plus, during a
@@ -1211,7 +1215,10 @@ pub struct ActiveBuffView {
     /// is already scaled — see that method's doc for why the tag is built
     /// here rather than in the renderer.
     pub magnitude: String,
-    pub remaining: u32,
+    /// `ActiveFieldBuff::duration_label` for a field buff — `"90t"`, or
+    /// `"until rest"` for a routine buff with no turn count. A `CombatBuff`
+    /// has no such split and is always a round count.
+    pub remaining: String,
     /// `Some(program name)` when the buff sits on a companion, `None` for
     /// the player.
     pub holder_label: Option<String>,

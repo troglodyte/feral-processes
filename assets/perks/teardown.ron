@@ -1,6 +1,6 @@
 (
     id: Teardown,
     name: "Teardown",
-    description: "You strip a dead process to the frame. +1 work resource from every program you defeat, per level.",
+    description: "You strip a dead process to the frame. +1 salvage per kill, per level — usually Core Fragments.",
     cost: 4,
 )

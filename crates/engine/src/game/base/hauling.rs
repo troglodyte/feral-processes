@@ -11,6 +11,7 @@ use std::collections::HashSet;
 use bevy_ecs::system::SystemParam;
 
 use crate::game::base::collect::ORTHOGONAL;
+use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
@@ -84,10 +85,12 @@ type Consumer<'a> = (Position, &'a [(ItemId, u32)]);
 /// waiting for twenty units to accumulate before the first trip serves
 /// nothing.
 ///
-/// Deliberately asked of the *recipe* rather than of whether the neighbour is
-/// currently pulling. A consumer that is unstaffed, starved or clogged is
-/// still the building this output belongs to, and the clog path is what
-/// covers a line that has genuinely backed up.
+/// Still asked of the *recipe* rather than of whether the neighbour is
+/// currently pulling — a consumer that is unstaffed, starved or clogged is
+/// still the building this output belongs to. What it is **not** asked of is
+/// every machine standing there: `haul_step_system` builds `consumers` from
+/// the assemblers the base has a reason to run, so a Lathe nothing has been
+/// ordered from is a bystander rather than a feed target.
 fn consumer_beside(machine: Position, item: &ItemId, consumers: &[Consumer]) -> bool {
     consumers
         .iter()
@@ -272,6 +275,21 @@ pub struct HaulLookups<'w> {
     items: Res<'w, ItemDb>,
 }
 
+/// Everything `haul_step_system` asks before letting a load leave a machine:
+/// has this one backed up, and does the base have any reason to run the
+/// building beside it — an order somewhere in the queue naming what it makes,
+/// or a standing job on it.
+///
+/// Bundled for the reason `HaulLookups` is, and the grouping is as real: the
+/// three together are the whole of the departure decision, and nothing else
+/// in the system reads any of them.
+#[derive(SystemParam)]
+pub struct HaulDeparture<'w, 's> {
+    statuses: Query<'w, 's, &'static MachineStatus>,
+    standing: Query<'w, 's, &'static StandingJob>,
+    orders: Res<'w, resources::WorkOrders>,
+}
+
 /// The structure side of `haul_step_system`, named so the helpers that read
 /// it can say so in a signature.
 type HaulStructures<'w, 's> = Query<'w, 's, HaulStructure, Without<Tamed>>;
@@ -404,12 +422,17 @@ fn nearest_store_holding(
 pub(crate) fn haul_step_system(
     mut workers: Query<Hauler, (With<Tamed>, Without<Structure>)>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
-    statuses: Query<&MachineStatus>,
+    departure: HaulDeparture,
     defs: HaulLookups,
     platform: Res<Platform>,
     mut map: ResMut<WorldMap>,
     mut commands: Commands,
 ) {
+    let HaulDeparture {
+        statuses,
+        standing,
+        orders,
+    } = departure;
     let HaulLookups {
         structures: db,
         items,
@@ -431,13 +454,28 @@ pub(crate) fn haul_step_system(
         .map(|(e, p, _, _)| (e, *p))
         .collect();
 
-    // Every assembler and what it takes, so a producer can be asked whether
-    // the building beside it will ever pull its output. Built per tick for
-    // the same reason `depots` is: a demolished consumer has to stop being
+    // Every assembler the base has a reason to run, and what it takes — so a
+    // producer can be asked whether the building beside it will ever pull its
+    // output. Built per tick for the same reason `depots` is: a demolished
+    // consumer, or one whose order has just been filled, has to stop being
     // one without anything noticing it changed.
+    //
+    // The reason is either the queue naming what it makes, however far down a
+    // recipe tree, or a standing work job — the player saying "keep this
+    // running" outside any order. Without one it pulls nothing at all
+    // (`assembler_system` returns before its pull phase with no program
+    // posted), so counting it would reserve a whole buffer for a machine that
+    // will never take it.
+    let needed = work_orders::queue_needs(&orders.0, &items);
     let consumers: Vec<Consumer> = structures
         .iter()
-        .filter_map(|(_, p, _, s)| Some((*p, assembly_recipe(db.get(&s.kind)?, &items)?)))
+        .filter_map(|(e, p, _, s)| {
+            let def = db.get(&s.kind)?;
+            let recipe = assembly_recipe(def, &items)?;
+            let wanted =
+                needed.contains(produced_item(def)?) || standing.get(e).is_ok_and(|job| job.work);
+            wanted.then_some((*p, recipe))
+        })
         .collect();
 
     // Every Depot whatever its state — the *collect* leg's list, as against
@@ -615,6 +653,12 @@ pub(crate) fn haul_step_system(
                 // while it is (`task_progress_system` gates on `at_station`),
                 // so where the depot stands is now what paces a lone
                 // extractor.
+                //
+                // "No attached building" counts a **bystander** as well as an
+                // empty tile: a machine whose recipe names this product but
+                // which nothing has asked to run is not downstream of
+                // anything, and it pulls nothing at all while unstaffed. See
+                // `consumers` above for what makes one count.
                 //
                 // With nowhere to take a load there is no errand at all,
                 // which is what leaves a depot-less base behaving exactly as

@@ -90,7 +90,9 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // one a machine with nothing downstream starts every cycle — see
     // `a_machine_with_nothing_downstream_delivers_as_it_produces`. Standing
     // there unstaffed it pulls nothing, so the buffer stays where the
-    // fixture put it.
+    // fixture put it — and it takes the order below to make it a consumer at
+    // all, which is
+    // `a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building`.
     spawn_machine_at(&mut game, "lathe", 2, 0);
     // Somewhere to take a load: with no depot there is no errand, which is
     // `with_no_depot_a_clogged_machine_just_stays_clogged` below.
@@ -98,6 +100,8 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
+    game.queue_work_order(ItemId::from("blank_substrate"), 5)
+        .unwrap();
 
     let cap = capacity_of(&game, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
@@ -796,6 +800,10 @@ fn a_machine_with_nothing_downstream_delivers_as_it_produces() {
 /// line: an orthogonal neighbour whose recipe names this machine's product
 /// *is* the attached building, so its feed buffer is left alone for
 /// `assembler_system` to pull from.
+///
+/// The order is what makes the Lathe an attached building rather than a
+/// bystander — see
+/// `a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building`.
 #[test]
 fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
     let mut game = base(31);
@@ -806,19 +814,132 @@ fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
     // business unlocking.
     let node_pos = *game.world.get::<Position>(node).unwrap();
     spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
-    deploy(&mut game, "depot", 4, 0);
+    let depot = deploy(&mut game, "depot", 4, 0);
     let worker = hauler(&mut game);
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
+    game.queue_work_order(ItemId::from("blank_substrate"), 5)
+        .unwrap();
 
     for _ in 0..20 {
         game.tick();
     }
 
-    assert!(
-        game.world.get::<Carrying>(worker).is_none(),
+    // Asserted against the *Depot* rather than against `Carrying`: a load
+    // taken and delivered inside the twenty ticks leaves empty hands behind
+    // it, so a `Carrying` check reads the same either way. What the Depot
+    // holds only ever goes up.
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        0,
         "a machine with a consumer beside it feeds the line, not the depot"
+    );
+    let _ = worker;
+}
+
+/// The case the two halves above did not separate: a neighbour whose recipe
+/// names this machine's product, standing beside it with nothing asking for
+/// what it makes.
+///
+/// An unstaffed assembler pulls nothing (`assembler_system` returns before
+/// its pull phase with no program posted), so treating it as an attached
+/// building reserved the whole buffer for a machine that would never take
+/// it — measured at 400 ticks before a single Core Fragment reached the
+/// Depot, against the first cycle for the same node standing alone.
+#[test]
+fn a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building() {
+    let mut game = base(33);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
+    // The order is for the *node's own* product, so nothing in the queue's
+    // recipe tree names Blank Substrate and the Lathe has no reason to run.
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+
+    tick_until(&mut game, 60, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) > 0,
+        "the goods belong where the base can count them, not reserved for a \
+         machine nobody has ordered from"
+    );
+}
+
+/// The reason `queue_needs` is a *closure* over recipes rather than a look at
+/// the ordered item alone: the order names Routine Disks, and it is the Disk
+/// Press two links down that needs them. A one-hop rule would take the Lathe
+/// for a bystander and dismantle the line the order was filed to run.
+///
+/// Deliberately without the Press standing: what is under test is that the
+/// item tree reaches Core Fragments, and a deployed Press would let the
+/// weaker rule pass by naming Blank Substrate directly.
+#[test]
+fn an_order_two_links_downstream_still_keeps_the_feeder_hoarding() {
+    let mut game = base(34);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    spawn_machine_at(&mut game, "disk_press", node_pos.x + 2, node_pos.y);
+    // Off to the side rather than further along the row: a fourth tile out
+    // is past `MAX_BUILD_DISTANCE_FROM_HOME` once the Press has taken the
+    // third.
+    let depot = deploy(&mut game, "depot", 0, 3);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
+    game.queue_work_order(ItemId::from("routine_disk"), 5)
+        .unwrap();
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        0,
+        "Routine Disks are made of Blank Substrate, which is made of these — \
+         the Lathe is on the ordered line"
+    );
+}
+
+/// The other half of "a reason to run", and the one that has nothing to do
+/// with the queue: a standing work job is the player saying *keep this
+/// running* outside any order, so the machine beside it is feeding a line
+/// whether or not anything is queued.
+#[test]
+fn a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it() {
+    let mut game = base(35);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    let lathe = spawn_machine_at(&mut game, "lathe", node_pos.x + 1, node_pos.y);
+    let depot = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
+    game.world.entity_mut(lathe).insert(StandingJob {
+        work: true,
+        guard: false,
+    });
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        0,
+        "an empty queue is no instruction to take a standing line apart"
     );
 }
 

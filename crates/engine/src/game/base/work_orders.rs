@@ -487,6 +487,43 @@ pub(crate) fn base_holding(game: &Game, item: &ItemId) -> u32 {
         .sum()
 }
 
+/// Every item the queue has asked for, each order's own item together with
+/// everything its recipe tree is made of.
+///
+/// The closure that answers "does the base want what this machine makes",
+/// which is what tells a feed buffer's owner from a bystander standing beside
+/// it — see `hauling::consumer_beside`.
+///
+/// Over **`ItemDef::craftable`, not over deployed machines**, and that is
+/// what makes it usable from a bevy system: `haul_step_system` has
+/// `WorkOrders` and `ItemDb` and no `Game`, so an entity walk like `wants`'
+/// would have had to be copied there. It is also the more stable question of
+/// the two — whether the base has been *asked* for something does not
+/// flicker as machines pass in and out of `can_progress`.
+///
+/// **The whole queue, not the order being worked.** A line feeding order
+/// three must not be taken apart while order one is worked, and the only
+/// thing that would come of it is the same goods walked to a Depot and back.
+pub(crate) fn queue_needs(
+    orders: &[WorkOrder],
+    items: &ItemDb,
+) -> std::collections::HashSet<ItemId> {
+    let mut needed = std::collections::HashSet::new();
+    let mut frontier: Vec<ItemId> = orders.iter().map(|o| o.item.clone()).collect();
+    // `needed` doubles as the seen set, so a mod's pair of items that list
+    // each other as ingredients terminates rather than spinning.
+    while let Some(item) = frontier.pop() {
+        if !needed.insert(item.clone()) {
+            continue;
+        }
+        let Some(recipe) = items.get(item.as_str()).and_then(|d| d.craftable.as_ref()) else {
+            continue;
+        };
+        frontier.extend(recipe.cost.iter().map(|(id, _)| id.clone()));
+    }
+    needed
+}
+
 impl Game {
     /// One tick of base labour: complete what is done, drop what is no
     /// longer wanted, fill what is.

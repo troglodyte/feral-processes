@@ -29,8 +29,18 @@
       here to reopening the unbounded-income hole the scan perk was deleted
       for, since a Mining Node produces sellable salvage forever. Teardown
       shipped instead: bounded by fights taken, which is the spine.
+22. Taking the thought of zones away — brainstormed and **parked** on
+    2026-08-17 with no shape chosen. The itch is that zones are
+    interchangeable and breaching is a grind whose only reward is advancing;
+    the crux found is that `min_zone` gates on Portals *funded* rather than
+    danger *beaten*, and rekeying them to a high-water mark is separable from
+    the world shape. Three candidate shapes, two open questions and two
+    corrected seam docs are written up in
+    `docs/superpowers/specs/2026-08-17-zones-as-difficulty-parked.md`.
+    Supersedes or absorbs item 12. Note in passing:
+    `Game::distance_stat_multiplier` **does not exist** and six doc comments
+    still name it — deleted 2026-08-05 in `30608eb`, worth fixing whether or
+    not this is picked up.
 
 
 # Bugs
-1. if there is a mining node attached to a lathe, and an order comes in for x amount of core fragments. the worker should work the mining node and deliver the core fragments to the depot, not the lathe. the lathe should only 'consume' core fragments if there's a current working order for the lathe. currently, a worker works the mining node and does not deliver core fragments to the depot if the mining node is touching an unworked lathe.
-

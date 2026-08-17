@@ -1835,6 +1835,55 @@ hoarding twenty units where the base cannot count them. Asked of the
 **recipe**, not of whether the neighbour is currently pulling: an unstaffed
 or clogged consumer is still the building the output belongs to, and the
 clog path covers a line that has genuinely backed up.
+
+**But the recipe alone was never enough, and "an unstaffed consumer is
+still the building the output belongs to" was the sentence that hid it.**
+The `consumers` list `consumer_beside` reads is now built only from the
+assemblers **the base has a reason to run** — the work-order queue naming
+what one makes, or a standing work job on it. A Lathe standing beside a
+Mining Node with nothing asking for Blank Substrate pulls *nothing*
+(`assembler_system` returns before its pull phase with no program posted),
+so counting it reserved the node's whole twenty-unit buffer for a machine
+that would never take a unit of it. Measured on the reported case — one
+worker, an order for sixty Core Fragments, a Lathe beside the node — the
+first fragment reached the Depot at tick 500 and the order closed around
+1350, against a delivery on the first cycle for the same node standing
+alone. Nothing was lost: `base_holding` counts machine buffers, so the
+order still completed, which is why this read as sluggishness rather than
+as a stall and survived to 0.9.2.
+
+The reason to run is `work_orders::queue_needs`, the closure of the queue's
+items under `ItemDef::craftable`. Three things about its shape are
+load-bearing:
+
+- **Over items, not over deployed machines.** `haul_step_system` has
+  `WorkOrders` and `ItemDb` and no `Game`, so an entity walk like `wants`'
+  would have had to be copied into the system — the second copy that
+  drifts. The item graph is also the more stable question: whether the base
+  has been *asked* for something does not flicker as machines pass in and
+  out of `can_progress`, which a `wants` reading would have made it do
+  several times a cycle.
+- **A closure, not the ordered item.** An order for Routine Disks reaches
+  Core Fragments two links down, and a one-hop rule would take the Lathe
+  for a bystander and dismantle the very line the order was filed to run
+  (`an_order_two_links_downstream_still_keeps_the_feeder_hoarding`).
+- **The whole queue, not the order being worked.** A line feeding order
+  three must not be taken apart while order one is worked; the only thing
+  that would come of it is the same goods walked to a Depot and back.
+
+The standing-job half is not a special case bolted on: a standing work job
+is the player saying *keep this running* outside any order, and an empty
+queue is not an instruction to take a hand-built line apart
+(`a_standing_job_on_the_neighbour_is_reason_enough_to_keep_feeding_it`).
+
+**What this does not do is bound the hoard**, and that was the other
+candidate fix — reserve the neighbour's `input_room` and haul the surplus.
+It is wrong, and the reason is worth keeping: a producer that hauls its
+surplus never clogs, and **the clog is what hands a lone body downstream**
+(`can_progress` is false for a clogged machine, so it stops wanting a
+body). A one-worker Mining Node → Lathe → Disk Press line was watched
+oscillating on exactly that trigger for 600 ticks; bounding the hoard
+freezes the body at the extractor and the line never runs at all.
 **The cost falls on extractors alone**, and that asymmetry is worth
 knowing before retuning either half: `task_progress_system` gates on
 `at_station`, so a Mining Node pays for every trip its program makes,

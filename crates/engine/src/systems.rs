@@ -13,7 +13,7 @@ use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
-use crate::resources::{GameRng, Locale, MessageKind, MessageLog, ZoneLevel};
+use crate::resources::{GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
@@ -371,6 +371,38 @@ pub(crate) fn set_machine_status(
             format!("The {name} is cut off — its program can't find a way to it.")
         }
         MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
+        // "grid", never "Power": `Power` is already the creature meter in the
+        // status column (`PowerReserve`), and the two are different resources.
+        MachineStatus::Unpowered => format!("The {name} is dark — the grid can't power it."),
+    });
+}
+
+/// Recomputes the base's power ledger and parks it in `resources::PowerGrid`
+/// for the rest of the tick.
+///
+/// **Runs first in the chained base group**, and that is the load-bearing
+/// part of it. The alternative — a power system running *last*, overwriting
+/// whatever the producing systems decided — would have `task_progress_system`
+/// set `Running` and this one set `Unpowered` within the same tick, and
+/// `set_machine_status` logs on every transition: two lines in the base feed
+/// every tick, forever, for as long as the base is short. Deciding the
+/// ledger before anything reads it is what keeps the log quiet.
+///
+/// An **exclusive** system because `game::base::power::ledger` takes a whole
+/// `&World` — it counts every deployed `Structure`, which is not a query this
+/// module gets to narrow — and a bevy system cannot hold `&World` and a
+/// `ResMut` at the same time. The cost is a sync point at the head of a chain
+/// that was already serial, so nothing is lost to it.
+pub fn power_grid_system(world: &mut World) {
+    let grid = {
+        let world: &World = world;
+        let db = world.resource::<StructureDb>();
+        crate::game::base::power::ledger(world, db)
+    };
+    world.insert_resource(PowerGrid {
+        supply: grid.supply,
+        draw: grid.draw,
+        dark: grid.dark,
     });
 }
 
@@ -389,26 +421,46 @@ pub(crate) fn set_machine_status(
 /// structure without working it (see `Game::assign_guard`), so a machine
 /// with only a guard on it really is idle.
 ///
-/// Runs first in the chain, as the baseline the worked-machine systems
-/// refine. It can only ever touch a machine those systems will not look at,
-/// so the order is for legibility rather than to resolve a conflict.
+/// Runs first in the chain (behind `power_grid_system`), as the baseline the
+/// worked-machine systems refine. For `Idle` the order is for legibility
+/// rather than to resolve a conflict — it can only ever touch a machine those
+/// systems will not look at.
+///
+/// For `Unpowered` the order is load-bearing, and this is also the **single
+/// writer** of that status. It already makes one pass over *every*
+/// `Structure`, worked or not, which is why the precedence call lives here:
+/// dark wins over all five other variants, and stating that once, in the one
+/// place that can see both facts, beats spreading it across three systems
+/// that would each have to agree. `task_progress_system` and
+/// `assembler_system` guard on the same `PowerGrid` but write no status.
+///
+/// **Dark is checked before `worked`, deliberately.** A dark machine with a
+/// program posted to it must still report `Unpowered`: the posting is exactly
+/// one of the wasted moves the status exists to tell the player about, and an
+/// early `continue` on `worked` would leave it reporting whatever it held
+/// before the base went short.
 pub fn idle_machine_system(
     mut machines: Query<(Entity, &Structure, &mut MachineStatus)>,
     tasks: Query<&Task>,
     structure_db: Res<StructureDb>,
+    grid: Res<PowerGrid>,
     mut log: ResMut<MessageLog>,
 ) {
     for (machine, structure, mut status) in &mut machines {
+        let name = structure_db
+            .get(&structure.kind)
+            .map(|d| d.name.as_str())
+            .unwrap_or("machine");
+        if grid.is_dark(machine) {
+            set_machine_status(&mut status, MachineStatus::Unpowered, name, &mut log);
+            continue;
+        }
         let worked = tasks
             .iter()
             .any(|t| t.target == machine && matches!(t.kind, TaskKind::GatherResource));
         if worked {
             continue;
         }
-        let name = structure_db
-            .get(&structure.kind)
-            .map(|d| d.name.as_str())
-            .unwrap_or("machine");
         set_machine_status(&mut status, MachineStatus::Idle, name, &mut log);
     }
 }
@@ -453,6 +505,11 @@ pub struct CronjobLookups<'w> {
     items: Res<'w, ItemDb>,
     structures: Res<'w, StructureDb>,
     zone: Res<'w, ZoneLevel>,
+    /// This tick's power ledger, read for the one-line dark guard below.
+    /// Bundled here rather than added as a seventh system parameter for the
+    /// reason the other three are: it is immutable reference data for the
+    /// tick, and the parameter list is already at clippy's threshold.
+    power: Res<'w, PowerGrid>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -493,6 +550,7 @@ pub fn task_progress_system(
         items: item_db,
         structures: structure_db,
         zone,
+        power: grid,
     } = db;
     // Both of these are the player's, not the worker's: `XpBoost` is
     // `FieldScope::Run`, so every worker's cronjob XP rides the same running
@@ -515,6 +573,13 @@ pub fn task_progress_system(
         &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
+            continue;
+        }
+        // A dark machine makes no progress, and this system writes no status
+        // saying so: `idle_machine_system` has already put `Unpowered` on it
+        // this tick, and a second writer would ping-pong the label and log a
+        // transition every tick the base stayed short.
+        if grid.is_dark(task.target) {
             continue;
         }
         let Ok((node, tier, structure, mut stock, mut status, node_pos)) =
@@ -733,6 +798,19 @@ pub fn player_gather_system(
     }
 }
 
+/// The read-only lookups `assembler_system` consults, bundled for exactly the
+/// reason `CronjobLookups` is: bevy injects one parameter per resource, and
+/// the third of them pushed the system past clippy's argument-count
+/// threshold. The grouping is real — all three are immutable reference data
+/// for the tick, two of them describing what a machine is and the third
+/// whether it has the grid capacity to be it.
+#[derive(SystemParam)]
+pub struct AssemblerLookups<'w> {
+    structures: Res<'w, StructureDb>,
+    items: Res<'w, ItemDb>,
+    power: Res<'w, PowerGrid>,
+}
+
 /// One tick of every assembler, in two phases: pull ingredients out of the
 /// neighbours, then work a staged batch into one unit of product.
 ///
@@ -755,10 +833,14 @@ pub fn assembler_system(
     mut stocks: Query<&mut Stock>,
     mut statuses: Query<&mut MachineStatus>,
     mut tasks: Query<(Entity, &mut Task)>,
-    structure_db: Res<StructureDb>,
-    item_db: Res<ItemDb>,
+    db: AssemblerLookups,
     mut log: ResMut<MessageLog>,
 ) {
+    let AssemblerLookups {
+        structures: structure_db,
+        items: item_db,
+        power: grid,
+    } = db;
     let by_tile: std::collections::HashMap<(i32, i32), Entity> =
         structures.iter().map(|(e, _, p)| ((p.x, p.y), e)).collect();
 
@@ -773,6 +855,14 @@ pub fn assembler_system(
     machines.sort_by_key(|(_, tile, _)| *tile);
 
     for (machine, (x, y), def) in machines {
+        // The second of the two guards, and it stops the machine before it
+        // pulls from its neighbours as well as before it works: a dark
+        // assembler must not drain a feeder's output into an input buffer it
+        // will never consume. Writes no status, for the reason
+        // `task_progress_system`'s copy doesn't.
+        if grid.is_dark(machine) {
+            continue;
+        }
         let Some(recipe) = assembly_recipe(def, &item_db) else {
             continue;
         };

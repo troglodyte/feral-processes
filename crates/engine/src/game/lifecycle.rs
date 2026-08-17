@@ -131,6 +131,15 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        // Both doors, like `RunFeats` beside it, and empty at both. Nothing
+        // restores this from a save because nothing saves it: it is a
+        // per-tick cache of `game::base::power::ledger`, and
+        // `systems::power_grid_system` fills it in at the head of the first
+        // tick either constructor's schedule runs. It is inserted here only
+        // so a reader that beats that tick — the base pane's grid header, on
+        // the frame a load finishes — finds an empty grid rather than a
+        // missing resource.
+        world.insert_resource(crate::resources::PowerGrid::default());
         world.insert_resource(achievement_db);
         world.insert_resource(contract_db);
         world.insert_resource(crate::resources::ActiveContracts::default());
@@ -213,6 +222,13 @@ impl Game {
             // because a load is taken off a machine the tick *after* that
             // machine reports itself clogged.
             (
+                // First, and that ordering is the design rather than a
+                // convenience: it decides which machines are dark *before*
+                // anything reads or writes a `MachineStatus`. A power system
+                // running last would overwrite what the producers decided and
+                // log a transition twice per tick for as long as the base was
+                // short — see `systems::power_grid_system`.
+                systems::power_grid_system,
                 systems::idle_machine_system,
                 systems::task_progress_system,
                 systems::player_gather_system,
@@ -331,6 +347,15 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        // Both doors, like `RunFeats` beside it, and empty at both. Nothing
+        // restores this from a save because nothing saves it: it is a
+        // per-tick cache of `game::base::power::ledger`, and
+        // `systems::power_grid_system` fills it in at the head of the first
+        // tick either constructor's schedule runs. It is inserted here only
+        // so a reader that beats that tick — the base pane's grid header, on
+        // the frame a load finishes — finds an empty grid rather than a
+        // missing resource.
+        world.insert_resource(crate::resources::PowerGrid::default());
         world.insert_resource(achievement_db);
         world.insert_resource(contract_db);
         world.insert_resource(crate::resources::ActiveContracts {

@@ -700,7 +700,10 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Clogged => Some("clogged — collect from it with c"),
         MachineStatus::Unstaffed => Some("no one at it — its program is away"),
         MachineStatus::Stranded => Some("cut off — its program can't reach it"),
-        MachineStatus::Running | MachineStatus::Idle => None,
+        // `Unpowered` is a placeholder in this arm, not a considered `None`:
+        // the line a dark machine shows here is Task 6's, written beside the
+        // grid header it refers the player to.
+        MachineStatus::Running | MachineStatus::Idle | MachineStatus::Unpowered => None,
     }
 }
 

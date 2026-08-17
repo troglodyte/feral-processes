@@ -433,6 +433,47 @@ pub struct RunFeats {
     pub kills: Vec<String>,
 }
 
+/// This tick's answer to "what does the base supply, what do its machines
+/// draw, and which of them lost the cut" — `game::base::power::ledger`'s
+/// result, parked where the systems downstream of it can read it.
+///
+/// A **per-tick derived cache**, rewritten from scratch by
+/// `systems::power_grid_system` at the head of the base chain and read by the
+/// three systems behind it. Nothing else recomputes the rule: `ledger` is the
+/// single expression of "is this machine dark", and this resource is how the
+/// one call it gets per tick reaches its readers.
+///
+/// **Not saved**, and that is sound because there is nothing in it a load
+/// could get wrong: every field is a pure function of the structures standing
+/// on the map, which the save does restore, so the first tick after a load
+/// recomputes it exactly. Saving it would be storing an answer next to its
+/// own question. `MachineStatus` is left out of the save for the same reason
+/// and lands back on its `Running` default, so a base that loads over
+/// capacity announces itself dark once — which is information the player
+/// wants.
+///
+/// Inserted at both `Game` constructors anyway, the way `RunFeats` is, so a
+/// reader that runs before the first tick — the base pane's grid header
+/// (Task 5) draws on the frame a load finishes — sees an empty grid rather
+/// than a missing resource.
+#[derive(Resource, Default)]
+pub struct PowerGrid {
+    pub supply: u32,
+    pub draw: u32,
+    pub dark: std::collections::HashSet<Entity>,
+}
+
+impl PowerGrid {
+    /// Whether `machine` lost this tick's cut. The one question the three
+    /// base systems ask of the grid — asked through a method rather than by
+    /// reaching into `dark` so no caller is tempted to re-derive the rule
+    /// from `supply` and `draw`, which are the base-wide totals and cannot
+    /// answer it.
+    pub fn is_dark(&self, machine: Entity) -> bool {
+        self.dark.contains(&machine)
+    }
+}
+
 /// One contract the run has taken on, and how far along it is.
 ///
 /// Holds the **whole resolved `ContractDef`**, not an id plus parameters, for

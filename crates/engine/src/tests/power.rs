@@ -1,19 +1,32 @@
-//! The base power ledger (`game::base::power::ledger`), unit-tested directly
-//! against a bare `World` and a `StructureDb` built from scratch.
+//! The base power grid, in two halves.
 //!
-//! `ledger` takes neither a `Game` nor any shipped asset, so these tests
-//! don't lean on either: every shipped `power_draw`/`power_supply` is
-//! authored `0` until Task 4 lands the real numbers (see
-//! `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`), so
-//! reading them here would make every assertion vacuous. Each test builds
-//! its own tiny `StructureDb` out of throwaway ids instead.
+//! **The ledger** (`game::base::power::ledger`), unit-tested directly against
+//! a bare `World` and a `StructureDb` built from scratch. `ledger` takes
+//! neither a `Game` nor any shipped asset, so those tests don't lean on
+//! either: every shipped `power_draw`/`power_supply` is authored `0` until
+//! Task 4 lands the real numbers (see
+//! `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`), so reading
+//! them here would make every assertion vacuous. Each test builds its own
+//! tiny `StructureDb` out of throwaway ids instead.
+//!
+//! **The systems** (`systems::power_grid_system`, the `Unpowered` writer in
+//! `idle_machine_system` and the two guards), driven through a real `Game`
+//! and a real tick. Those fixtures install their own structure defs on top
+//! of a scratch copy of the shipped assets — see `grid_assets` for why the
+//! numbers are absurd rather than realistic.
 
 use bevy_ecs::prelude::*;
 
-use super::support::scratch_assets_dir;
-use crate::components::{Position, Structure};
+use super::support::{
+    ScratchAssets, copy_shipped_assets, find_structure_by_kind, node_output, park_at_post,
+    scratch_assets_dir, spawn_machine_at, spawn_structure_at, spawn_tamed, stand_player_at,
+    stand_player_at_post,
+};
+use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
+use crate::items::{ItemId, ids};
 use crate::structures::StructureDb;
+use crate::{DifficultyMode, Game};
 
 /// A structure that never runs a job: no `work`, no `assembles`. `power_draw`
 /// is deliberately settable and non-zero on some fixtures even though no
@@ -251,4 +264,306 @@ fn an_unstaffed_machine_still_draws() {
         "an unstaffed machine still draws its full power_draw"
     );
     assert!(result.dark.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The systems: the ledger wired into the tick, the one writer, the two guards.
+// ---------------------------------------------------------------------------
+
+/// A working extractor whose draw is far past anything a base could ever
+/// supply. Deliberately absurd rather than realistic: Task 4 authors the real
+/// `power_supply` onto Home and the Recharger Node *after* this task, and a
+/// fixture machine drawing a plausible 4 would silently stop being dark the
+/// day those numbers land. A draw of a million is dark under any supply this
+/// game will ever ship, which is what keeps these tests reading the guard
+/// rather than reading the asset numbers of the day.
+const GREEDY_NODE: &str = r#"(
+    id: "test_greedy_node",
+    name: "Greedy Node",
+    glyph: 'g',
+    color: Brown,
+    build_cost: [],
+    work: Some((produces: "core_fragment", ticks_per_unit: 40)),
+    capacity: 100,
+    power_draw: 1000000,
+)"#;
+
+/// The same, for the *other* guard: `assembler_system` visits only structures
+/// declaring `assembles`, so the extractor above is invisible to it and one
+/// fixture cannot cover both. `blank_substrate` is the shipped item whose
+/// `craftable.cost` becomes the recipe (see `systems::assembly_recipe`).
+const GREEDY_LATHE: &str = r#"(
+    id: "test_greedy_lathe",
+    name: "Greedy Lathe",
+    glyph: 'l',
+    color: Brown,
+    build_cost: [],
+    work: None,
+    capacity: 100,
+    assembles: Some((item: "blank_substrate", ticks_per_unit: 40)),
+    power_draw: 1000000,
+)"#;
+
+/// Enough supply to light either of the two above, for the half of a test
+/// that is about coming *back*.
+const GRID_SOURCE: &str = r#"(
+    id: "test_grid_source",
+    name: "Grid Source",
+    glyph: 'G',
+    color: Orange,
+    build_cost: [],
+    work: None,
+    power_supply: 2000000,
+)"#;
+
+/// A scratch install of the shipped assets carrying the three fixture
+/// structures above. The shipped set has to come along whole — `Game::new`
+/// checks for the structures that fill required roles — so this is
+/// `copy_shipped_assets` plus three files, not a hand-built install.
+fn grid_assets(tag: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    for (name, body) in [
+        ("test_greedy_node.ron", GREEDY_NODE),
+        ("test_greedy_lathe.ron", GREEDY_LATHE),
+        ("test_grid_source.ron", GRID_SOURCE),
+    ] {
+        std::fs::write(dir.join("structures").join(name), body).unwrap();
+    }
+    dir
+}
+
+/// A game on an install that has the fixture structures but no supply
+/// standing anywhere — so any fixture machine deployed into it is dark from
+/// the first tick.
+fn game_on_a_short_grid(tag: &str, seed: u32) -> Game {
+    let dir = grid_assets(tag);
+    Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap()
+}
+
+fn status_of(game: &Game, machine: Entity) -> Option<MachineStatus> {
+    game.world.get::<MachineStatus>(machine).copied()
+}
+
+/// How many logged lines contain `needle`. Reads the whole log rather than a
+/// recent window: the counts these tests assert on are *totals across the
+/// run*, which is the whole point of "exactly once".
+fn log_hits(game: &Game, needle: &str) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|line| line.text.contains(needle))
+        .count()
+}
+
+/// Posts `worker` to `machine` and leaves it standing at its post, so the
+/// machine is one a working tick really would advance.
+///
+/// This is the fixture the vacuous-test trap turns on: a machine with nobody
+/// posted to it makes no progress anyway, so a "no progress" assertion
+/// against an unstaffed machine passes with the entire feature deleted.
+fn post_a_worker_at(game: &mut Game, machine: Entity) -> Entity {
+    let worker = spawn_tamed(game, 10, 3);
+    stand_player_at_post(game, machine);
+    game.assign_cronjob(worker, machine).unwrap();
+    park_at_post(game, worker, machine);
+    worker
+}
+
+#[test]
+fn a_dark_machine_makes_no_progress_on_a_cronjob() {
+    let mut game = game_on_a_short_grid("power_dark_cronjob", 4001);
+    let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    let worker = post_a_worker_at(&mut game, node);
+
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    assert_eq!(
+        status_of(&game, node),
+        Some(MachineStatus::Unpowered),
+        "a machine drawing more than the base supplies must report Unpowered"
+    );
+    // `ticks_per_unit` is 40 on the fixture, so an unguarded run cannot have
+    // completed a cycle and reset `progress` to 0 behind our backs — a
+    // non-zero count is the only thing four ticks of work could look like.
+    assert_eq!(
+        game.world.get::<Task>(worker).unwrap().progress,
+        0,
+        "the posted program is standing at its post and would otherwise be \
+         advancing — a dark machine must make no progress at all"
+    );
+    assert_eq!(
+        node_output(&game, node, ids::CORE_FRAGMENT),
+        0,
+        "and nothing reaches its output buffer"
+    );
+}
+
+#[test]
+fn a_dark_assembler_makes_no_progress() {
+    let mut game = game_on_a_short_grid("power_dark_assembler", 4002);
+    let lathe = spawn_machine_at(&mut game, "test_greedy_lathe", 3, 4);
+    // Fed and roomy before the worker is posted, because those are
+    // `assembler_system`'s other two stalls: a test about the power guard
+    // must not be able to pass because the machine was starved or clogged.
+    game.world
+        .get_mut::<Stock>(lathe)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 40);
+    let worker = post_a_worker_at(&mut game, lathe);
+
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    assert_eq!(
+        status_of(&game, lathe),
+        Some(MachineStatus::Unpowered),
+        "a dark assembler reports Unpowered, not Starved or Running"
+    );
+    assert_eq!(
+        game.world.get::<Task>(worker).unwrap().progress,
+        0,
+        "a fed, roomy, staffed assembler that is dark must make no progress"
+    );
+    assert!(
+        game.world.get::<Stock>(lathe).unwrap().output.is_empty(),
+        "and it must assemble nothing"
+    );
+}
+
+#[test]
+fn a_dark_and_unstaffed_machine_reports_unpowered_not_idle() {
+    // Both facts are true of this machine at once: nobody is posted to it
+    // *and* it is dark. An implementation that writes `Idle` after the dark
+    // check — or that checks `worked` first and skips a dark machine because
+    // nobody is on it — reports `Idle` here, which is the precedence this
+    // test exists to pin.
+    let mut game = game_on_a_short_grid("power_precedence", 4003);
+    let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+
+    game.tick();
+
+    assert_eq!(
+        status_of(&game, node),
+        Some(MachineStatus::Unpowered),
+        "Unpowered outranks Idle: nothing the player does to an idle machine \
+         makes a dark one run, so the dark reading is the one to show"
+    );
+}
+
+#[test]
+fn going_dark_and_coming_back_each_log_exactly_once() {
+    // The regression guarding the refused ordering. A power system running
+    // *last* would have `idle_machine_system` write `Idle` and the power
+    // system overwrite it with `Unpowered` on every tick, and
+    // `set_machine_status` logs on every transition — so the dark line would
+    // land four times below, not once.
+    let mut game = game_on_a_short_grid("power_log_once", 4004);
+    spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+
+    for _ in 0..4 {
+        game.tick();
+    }
+
+    assert_eq!(
+        log_hits(&game, "is dark — the grid can't power it."),
+        1,
+        "going dark is news once, not once per tick"
+    );
+
+    spawn_structure_at(&mut game, "test_grid_source", 5, 4);
+    for _ in 0..4 {
+        game.tick();
+    }
+
+    assert_eq!(
+        log_hits(&game, "is dark — the grid can't power it."),
+        1,
+        "and standing up supply must not re-announce the state it left"
+    );
+    assert_eq!(
+        log_hits(&game, "sits idle — no program is assigned."),
+        1,
+        "coming back is news exactly once too — the machine is unstaffed, so \
+         it lands on Idle and says so a single time"
+    );
+}
+
+#[test]
+fn power_regen_still_refills_the_party_on_a_dark_base() {
+    // The two Powers do not touch. `power_regen_system` restores the
+    // player's `PowerReserve` from a Recharger's `power_regen`, which is a
+    // different resource from the base grid entirely, and a base short of
+    // grid capacity must not stop it.
+    let mut game = game_on_a_short_grid("power_regen_dark", 4005);
+    let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    spawn_structure_at(&mut game, "recharger_node", 3, 6);
+    stand_player_at(&mut game, 4, 6);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(40.0);
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    game.tick();
+
+    let after = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        after > before,
+        "the Recharger's regen ({before} -> {after}) must survive the base \
+         being over its grid capacity"
+    );
+    assert_eq!(
+        status_of(&game, node),
+        Some(MachineStatus::Unpowered),
+        "and the base really is short while it does — otherwise this test \
+         proves nothing about a dark base"
+    );
+}
+
+#[test]
+fn a_base_over_capacity_survives_a_save_round_trip() {
+    // The proof of the "no `SAVE_FORMAT_VERSION` bump" claim. `MachineStatus`
+    // is not saved at all, so what has to survive is the *base*: a save
+    // written while a machine was dark must load without erroring, and the
+    // first tick after the load must decide it dark again off the standing
+    // structures alone.
+    let dir = grid_assets("power_save_roundtrip");
+    let mut game = Game::new(4006, DifficultyMode::Forgiving, &dir).unwrap();
+    spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    game.tick();
+    let node = find_structure_by_kind(&mut game, "test_greedy_node").unwrap();
+    assert_eq!(
+        status_of(&game, node),
+        Some(MachineStatus::Unpowered),
+        "the base is over capacity before it is saved"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_power_over_capacity_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = find_structure_by_kind(&mut loaded, "test_greedy_node")
+        .expect("the machine must come back off the save");
+    assert_eq!(
+        status_of(&loaded, reloaded),
+        Some(MachineStatus::default()),
+        "MachineStatus is not saved — it comes back at its default and the \
+         first tick is what decides"
+    );
+    loaded.tick();
+    assert_eq!(
+        status_of(&loaded, reloaded),
+        Some(MachineStatus::Unpowered),
+        "and that first tick must find it dark again, from the standing \
+         structures alone"
+    );
 }

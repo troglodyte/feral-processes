@@ -660,6 +660,26 @@ pub enum MachineStatus {
     Stranded,
     /// No program assigned.
     Idle,
+    /// The base's grid can't cover this machine's `power_draw` — see
+    /// `game::base::power::ledger` for which machines lose the cut.
+    ///
+    /// **Top precedence over all five variants above.** Nothing else the
+    /// player can do makes a dark machine run: posting a program, clearing a
+    /// clog, feeding an input, building a depot and clearing a route are all
+    /// wasted moves while it is dark, so this is the reading that has to be
+    /// shown. It is the only status whose fix is "supply more grid".
+    ///
+    /// A sixth variant is allowed here where `views.rs::output_stranded`
+    /// refused one, and the difference is worth keeping straight: a base-wide
+    /// shortfall is *not* what this says. Under the `(x, y)` cut order one
+    /// machine runs while its neighbour two tiles over is dark, so which
+    /// machine lost the cut really is that machine's own state — which is the
+    /// test that enum is held to.
+    ///
+    /// Written by `systems::idle_machine_system` and by nothing else;
+    /// `task_progress_system` and `assembler_system` only guard on the same
+    /// fact via `resources::PowerGrid`, and write no status of their own.
+    Unpowered,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

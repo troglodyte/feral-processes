@@ -930,18 +930,23 @@ impl Potential {
 /// component at all, which reads as `Ordinary`, so no test fixture or
 /// hand-built bundle has to know this exists.
 ///
-/// **This is a record of a multiplier already spent, not a live one.**
-/// `stat_mult` is applied exactly once, inside
+/// **This is a record of a multiplier already spent, not a live one — at
+/// two sites now, not one.** `stat_mult` is applied at spawn, inside
 /// `Game::spawn_wild_creature_scaled`, and baked into `Stats` there the same
-/// way `Potential`'s three stat rolls are. `Game::load` restores those
-/// numbers verbatim and `Game::fuse_companions` derives them from its
-/// parents, so neither may re-apply it — the shape is
+/// way `Potential`'s three stat rolls are. `Game::promote_rarity` is the
+/// second and last: a nemesis mark that ratchets this field up a rung
+/// multiplies `Stats` by the *step* between the old and new tier's
+/// `stat_mult`, never by the new tier's absolute value — reapplying that
+/// would compound the spawn roll a second time. `Game::load` restores the
+/// resulting numbers verbatim and `Game::fuse_companions` derives them from
+/// its parents, so neither of those may apply this at all — the shape is
 /// `EquippedItem::fusion_tier`, whose doc makes the same argument. Applying
-/// it a second time compounds the bonus on every reload, invisibly, because
-/// a stat carries no record of where it came from. The regression to head
-/// off is a later reader finding a multiplier that appears to go unused and
-/// "finishing the job"; `a_shiny_survives_a_save_round_trip` asserts the
-/// stats come back *unchanged* for exactly that reason.
+/// it outside those two sites compounds the bonus on every reload,
+/// invisibly, because a stat carries no record of where it came from. The
+/// regression to head off is a later reader finding a multiplier that
+/// appears to go unused and "finishing the job"; `a_shiny_survives_a_save_
+/// round_trip` asserts the stats come back *unchanged* for exactly that
+/// reason.
 ///
 /// Player-facing text says Optimized/Overclocked rather than silver/gold,
 /// which is the `MessageKind::Raid` / "GC Entropy Sweep" split: the enum and

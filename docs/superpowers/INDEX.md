@@ -108,6 +108,7 @@ the policy", not which change shipped it.
 | `2026-08-11-haul-routing-and-direct-demolish` | Hauler routing, stranded reporting, and direct demolish | v0.7.5 |
 | `2026-08-12-companion-equipment` | Companion equipment | v0.8.0 |
 | `2026-08-12-exclusive-routines` | Disk-first routines and the exclusive pool | v0.8.7 |
+| `2026-08-17-nemesis` | Nemesis: a lost fight gets a name, a rising grudge and a mark on the map | v0.9.3 |
 
 ## Four rows that need a footnote
 

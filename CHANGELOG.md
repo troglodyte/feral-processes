@@ -27,6 +27,42 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.9.3
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29
+— `CreatureSave::nemesis_grudges` is additive and defaults to 0, so nothing
+written before this release loads any differently.
+
+### A program you lose to remembers you losing
+
+Every wild program used to be interchangeable. Win or lose, the encounter
+left nothing behind — a fight you bailed out on was indistinguishable a
+minute later from one that never happened.
+
+A creature that beats the party, or that the party jacks out on, is now
+marked a **nemesis**. It gets a name on the spot, drawn from
+`assets/nemesis/names.ron` and salted off its species and stat roll so two
+nemeses of the same species read as different individuals. Meeting it again
+opens the fight with a taunt of its own, from `assets/nemesis/taunts.ron`,
+and every further loss escalates both the taunt's tone and the program's
+grudge count. A grudge promotes the creature's `Rarity` a rung and fully
+heals it, so a nemesis is not just a name — it is a program you are actively
+losing ground to. The ladder is bounded by `Rarity::ALL` itself (2.15x
+cumulative, decelerating), and a hard cap of ten held nemeses at once refuses
+a new mark once full rather than bumping one out.
+
+Both marks read anywhere the creature does: the map draws a corner mark
+beside its rarity bar, and its glyph draws in a reserved colour regardless
+of the usual con read — the one exception being a program that is also a
+zone boss, where the nemesis mark wins. You already know what fighting this
+one costs; that is the whole justification for spending the "can I win this
+fight" read on its tile.
+
+A breach clears every nemesis in the zone, the same as every other wild
+hostile — there is no separate ledger for the feature to leave behind.
+Rewards flow entirely through the promoted `Rarity` and the existing
+challenge-scaled XP curve; nothing new was added to either.
+
 ## 0.9.2
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29.

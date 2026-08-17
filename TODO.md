@@ -42,6 +42,5 @@
     still name it — deleted 2026-08-05 in `30608eb`, worth fixing whether or
     not this is picked up.
 23. infinite synergy and item stacking. using multiple items with side effects can stack even up to game breaking synergies. maybe burn out?
-24. nemesis, if a program defeats you or makes you run, they get a special name, promoted to silver gold, and taunt you about the defeat during the next battle. can recognize them on the map with some sort of visual indicator.
 
 # Bugs

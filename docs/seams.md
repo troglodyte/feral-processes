@@ -2326,3 +2326,96 @@ exist` refuses `Reward::Item("portal_fragment", n)`, which is the same
 thing through the back door. Nothing gates the XP magnitudes:
 `balance_sim` is RNG-free and cannot see a contract at all, so those
 numbers are opening guesses answerable only by play.
+
+### A nemesis is marked by the one predicate that already decides a win, and no call site has to know about it
+
+**A nemesis is marked by the one predicate that already decides a win, and
+no call site has to know about it.** `Game::end_battle` already computes
+the win as `battle.groups.is_empty()` — the same read the telemetry `won`
+field uses, because "won" has to be read off the enemies rather than the
+player: a Forgiving defeat is absorbed mid-round by
+`difficulty::death_handling_system`, which reboots the player before
+`end_battle` ever runs, so their HP afterwards says nothing about the
+outcome. `Game::mark_nemeses` reuses that same expression, so a Forgiving
+defeat and a jack-out mark a nemesis for the identical reason a won fight
+marks nobody: both leave `groups` non-empty. There is deliberately no
+`fled: bool` parameter threaded through and no marking at any of
+`end_battle`'s four call sites — a fifth cannot forget to call it, because
+none of them call it directly.
+
+Its position inside `end_battle` is a window, not a preference: below the
+`StackSpawn` stray sweep (`Without<Tamed>`, so a Stack pack that outlived
+the fight despawns first) and above `BattleState`'s removal a few lines
+down. Above the sweep, a Stack loss would try to mark entities already
+gone; below the `BattleState` removal, `mark_nemeses`'s own read of the
+battle roster (via `all_living_enemies`) would have nothing left to query.
+A Stack fight therefore marks nobody as a consequence of call order, not
+because of any check `mark_nemeses` itself makes.
+
+### Rarity's multiplier now touches `Stats` at two sites, not one
+
+**Rarity's multiplier now touches `Stats` at two sites, not one.**
+`components::Rarity`'s own doc used to claim `stat_mult` was "applied
+exactly once, inside `Game::spawn_wild_creature_scaled`" — true until this
+feature, and left uncorrected there would have been the kind of stale
+claim `CLAUDE.md`'s comment-discipline rule exists to catch.
+`Game::promote_rarity` is the second site: a nemesis mark that ratchets
+`Rarity` up a rung multiplies `Stats` by the **step** between the old and
+new tier's `stat_mult` (`new.stat_mult() / old.stat_mult()`), never by the
+new tier's absolute value. Applying the absolute value a second time would
+compound the spawn roll on top of itself, the exact bug
+`Game::load` and `Game::fuse_companions` already have to dodge by *never*
+re-applying `stat_mult` at all — this is the one place besides the spawn
+roll that is allowed to. `Rarity::ALL`'s own top is the ceiling past which
+the step is `1.0` and a promotion stops touching `Stats`, though the
+grudge that got a program there keeps rising regardless.
+
+### The nemesis ladder is bounded by `Rarity::ALL` itself, so it needs no second ceiling
+
+**The nemesis ladder is bounded by `Rarity::ALL` itself, so it needs no
+second ceiling.** Escalating a nemesis by rarity rungs rather than by a
+custom multiplier means the feature inherits `Rarity`'s own curve for
+free: `Ordinary` → `Prismatic` compounds to roughly 2.15x, decelerating,
+because each rung's `stat_mult` step shrinks as the tier climbs. That is
+why nothing in `tuning.rs` caps how many times a single program can be
+lost to — `CLAUDE.md`'s "every difficulty curve in the game is linear"
+rule is about a curve that scales with *zone* or *depth*, and a nemesis's
+own growth is neither: it is bounded, self-limiting, and orthogonal to
+both. A second ceiling constant would only be needed if the ladder itself
+were unbounded, and `Rarity::ALL` already isn't.
+
+### Nothing in the nemesis feature draws from `GameRng`
+
+**Nothing in the nemesis feature draws from `GameRng`.** Naming
+(`nemesis::name_seed`), taunt selection (`nemesis::NemesisDb::taunt`) and
+the promotion multiplier all derive from values already fixed at spawn —
+species, `Potential`, grudge count — the same reasoning `descriptions.rs`
+already established for Stack flavour text: a derived value survives a
+save/load and a stored one drifts the moment the formula changes.
+The sharper reason here is `end_battle` itself: it is the one path both a
+real fight and a staged `arena` fight tear down through, and `arena`
+exists precisely so a scenario's numbers are reproducible run to run. A
+`GameRng` draw inside `mark_nemeses` would shift every later roll in every
+arena scenario that ends a fight non-trivially — silently, since nothing
+about a nemesis mark looks like it should touch the RNG stream. "World
+generation must not draw from `resources::GameRng`" above makes the same
+argument for a Stack frame's own seed; this is the battle-teardown
+instance of the identical trap.
+
+### The glyph's colour is no longer reserved for `difficulty_color` alone
+
+**The glyph's colour is no longer reserved for `difficulty_color` alone.**
+`EntityView::rarity`'s doc used to say the map draws a rare tier as a bar
+rather than a recolour "because `color` is already carrying
+`difficulty_color`... and the glyph can only hold one" reading — true when
+written, and it is why rarity still never touches the glyph. A nemesis is
+the exception, added on purpose: `difficulty_color` takes a fourth
+parameter, `is_nemesis`, checked *before* `is_boss` so a program that is
+both draws as a nemesis. The precedent is `is_boss`'s own always-magenta
+override — this is a second non-power reading winning the same channel,
+not a new kind of exception. What makes spending the con read acceptable
+here and nowhere else: a nemesis is a program you have already fought, so
+"can I win this fight" is the least informative thing left for its tile to
+say. `crates/gui/src/render/base.rs` draws a second, independent corner
+mark for the same fact, so the read survives even for a player who reads
+shape before hue.

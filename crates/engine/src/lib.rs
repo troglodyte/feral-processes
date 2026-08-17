@@ -12,6 +12,7 @@ pub mod difficulty;
 mod game;
 pub mod items;
 pub mod items_db;
+pub mod nemesis;
 pub mod perks;
 pub mod policy;
 pub mod progression;

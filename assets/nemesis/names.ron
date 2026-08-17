@@ -1,0 +1,35 @@
+// The pool a nemesis's name is drawn from — see README.md for the schema
+// and `crates/engine/src/nemesis.rs` for how a program's name is derived.
+//
+// Kept to `MAX_CUSTOM_NAME_LEN` (12 characters) apiece: the derived name is
+// written straight into `components::CustomName` through `sanitize`, which
+// truncates rather than rejecting, so a longer entry would just render cut
+// off mid-word instead of failing to load.
+(
+    lines: [
+        "Segfault",
+        "Deadlock",
+        "Null Pointer",
+        "Stack Smash",
+        "Off-By-One",
+        "Double Free",
+        "Memory Leak",
+        "Fork Bomb",
+        "Livelock",
+        "Cache Miss",
+        "Page Fault",
+        "Bit Rot",
+        "Kernel Panic",
+        "Stale Cache",
+        "Watchdog",
+        "Heap Smash",
+        "Checksum",
+        "Backtrace",
+        "Core Dump",
+        "Wild Pointer",
+        "Hard Fault",
+        "Soft Lock",
+        "Sync Error",
+        "Timeout",
+    ],
+)

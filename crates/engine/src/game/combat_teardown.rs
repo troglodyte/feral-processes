@@ -353,23 +353,70 @@ impl Game {
             .iter(&self.world)
             .count();
         for hostile in self.all_living_enemies() {
-            let marked = if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile) {
+            // `fresh` is tracked separately from `marked`: an escalation
+            // (the `nemesis.0 += 1` arm) is a mark too, but the name is
+            // written once, on the grudge that actually inserts `Nemesis`
+            // — see `name_new_nemesis`.
+            let (marked, fresh) = if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile)
+            {
                 nemesis.0 += 1;
-                true
+                (true, false)
             } else if holders < MAX_NEMESES {
                 self.world.entity_mut(hostile).insert(Nemesis(1));
                 holders += 1;
-                true
+                (true, true)
             } else {
-                false
+                (false, false)
             };
             // A hostile the cap refused gets no grudge at all, so it must
             // not climb the rarity ladder either — promotion is what a mark
             // does, not something a fight's mere survival earns.
             if marked {
                 self.promote_rarity(hostile);
+                if fresh {
+                    self.name_new_nemesis(hostile);
+                }
             }
         }
+    }
+
+    /// Writes a bank-derived name to a hostile on its **first** grudge only
+    /// — `mark_nemeses`' `fresh` flag is what enforces that, not a check in
+    /// here, since by the time this runs `Nemesis` is already present on
+    /// every caller and can't tell first from second apart on its own.
+    ///
+    /// The seed is folded from the creature's own identity
+    /// (`nemesis::name_seed`) rather than drawn from `resources::GameRng` —
+    /// see that module's doc for why. `Potential::NEUTRAL` stands in for a
+    /// hand-built test fixture that carries no roll of its own, the same
+    /// fallback `quality_percent` uses. An empty name bank is left silently
+    /// unnamed: `mark_nemeses` still marks, promotes and recharges without
+    /// it — see `NemesisDb`'s own doc for why that is not a fault.
+    fn name_new_nemesis(&mut self, hostile: Entity) {
+        let Some(species) = self
+            .world
+            .get::<Creature>(hostile)
+            .map(|c| c.species.clone())
+        else {
+            return;
+        };
+        let potential = self
+            .world
+            .get::<Potential>(hostile)
+            .copied()
+            .unwrap_or(Potential::NEUTRAL);
+        let seed = crate::nemesis::name_seed(&species, &potential);
+        let Some(name) = self
+            .world
+            .resource::<crate::nemesis::NemesisDb>()
+            .name(seed)
+        else {
+            return;
+        };
+        let Some(sanitized) = CustomName::sanitize(Some(name.to_string())) else {
+            return;
+        };
+        self.world.entity_mut(hostile).insert(CustomName(sanitized));
     }
 
     /// Promotes `entity` one rung up the rarity ladder and fully recharges

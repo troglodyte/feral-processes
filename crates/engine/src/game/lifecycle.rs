@@ -73,6 +73,7 @@ impl Game {
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
+            nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -101,6 +102,7 @@ impl Game {
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
+        world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
@@ -238,6 +240,7 @@ impl Game {
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
+            nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
             research: research_db,
@@ -280,6 +283,7 @@ impl Game {
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
+        world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
         world.insert_resource(GameRng(StdRng::seed_from_u64(data.seed as u64 ^ data.tick)));
@@ -1277,6 +1281,7 @@ struct AssetDbs {
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
+    nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
     structures: StructureDb,
     research: ResearchDb,
@@ -1346,6 +1351,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (descriptions, description_warnings) =
         crate::descriptions::DescriptionDb::load_dir(&assets_dir.join("descriptions"))?;
     warnings.extend(description_warnings);
+    // Same absent-is-silent rule as `SectorDb` and `AffixDb` — see
+    // `NemesisDb`'s own doc.
+    let (nemesis, nemesis_warnings) =
+        crate::nemesis::NemesisDb::load_dir(&assets_dir.join("nemesis"))?;
+    warnings.extend(nemesis_warnings);
     let (contracts, contract_warnings) =
         crate::contracts::ContractDb::load_dir(&assets_dir.join("contracts"))?;
     warnings.extend(contract_warnings);
@@ -1378,6 +1388,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         achievements,
         contracts,
         descriptions,
+        nemesis,
         species,
         structures,
         research,

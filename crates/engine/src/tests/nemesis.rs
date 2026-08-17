@@ -5,6 +5,7 @@
 //! on `world.get::<Nemesis>(e)` rather than through any public API.
 
 use super::support::*;
+use crate::nemesis::{self, NemesisDb};
 use crate::tuning::MAX_NEMESES;
 use crate::*;
 
@@ -522,5 +523,244 @@ fn a_save_written_without_the_nemesis_field_loads_to_an_unmarked_creature() {
         nemesis.is_none(),
         "a save written before this field existed must load an unmarked \
          creature, not error"
+    );
+}
+
+// --- Task 4: the name bank and the derived name ---------------------------
+
+/// The controller ruling this test follows instead of the task brief:
+/// `GameRng` wraps `StdRng`, which is not `PartialEq`, so its state cannot
+/// be snapshotted and compared directly. The differential proof is two
+/// `Game`s built from the same seed — sharing a stream position by
+/// construction, since neither `Game::new` nor `start_battle_with_a_wild_
+/// program` draws from `GameRng` — with only one asked to mark. **Several**
+/// draws afterward, not one: a single draw could coincidentally land on the
+/// same value either way, where a run of five landing on the same sequence
+/// is not a coincidence.
+///
+/// Verified by mutation: a `rng.0.random::<u64>()` draw was added inside
+/// `name_new_nemesis` and this test failed (`marked` and `untouched`
+/// diverged at the very first draw), then the draw was removed. See the
+/// task report for the transcript.
+#[test]
+fn marking_a_nemesis_spends_no_gamerng_draw() {
+    let build = || {
+        let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        (game, wild)
+    };
+    let (mut marked, _) = build();
+    marked.mark_nemeses();
+    let (mut untouched, _) = build();
+
+    let draw_several = |game: &mut Game| -> Vec<u64> {
+        (0..5)
+            .map(|_| game.world.resource_mut::<GameRng>().0.random())
+            .collect()
+    };
+
+    assert_eq!(
+        draw_several(&mut marked),
+        draw_several(&mut untouched),
+        "marking a nemesis must not advance the shared GameRng stream — a \
+         draw here would shift every later roll of this run, and end_battle \
+         runs this on every arena fight, so it would shift every scenario \
+         in dev-arenas/ too"
+    );
+}
+
+/// The name is derived, not looked up by hand — `expected` is computed
+/// through the same public functions `name_new_nemesis` calls
+/// (`nemesis::name_seed` and `NemesisDb::name`), so this pins the write
+/// happening at all rather than duplicating the fold's arithmetic.
+#[test]
+fn a_name_is_derived_and_stored_in_customname_on_the_first_mark() {
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+    let potential = game
+        .world
+        .get::<Potential>(wild)
+        .copied()
+        .unwrap_or(Potential::NEUTRAL);
+    let seed = nemesis::name_seed(&species, &potential);
+    let expected = game
+        .world
+        .resource::<NemesisDb>()
+        .name(seed)
+        .map(str::to_string);
+    assert!(
+        expected.is_some(),
+        "the shipped names.ron must not be empty, or this test proves nothing"
+    );
+
+    flee_until_clear(&mut game);
+
+    assert_eq!(
+        game.world.get::<CustomName>(wild).map(|c| c.0.clone()),
+        expected,
+        "the first mark should have written the bank-derived name"
+    );
+}
+
+/// Verified by mutation: the `fresh` guard in `mark_nemeses` was removed
+/// (calling `name_new_nemesis` unconditionally on every mark) and this test
+/// failed, because the second mark then re-derived and overwrote the name
+/// from a seed the grudge count had shifted — it no longer matched `first`.
+/// The guard was restored and this test passed again.
+#[test]
+fn a_second_grudge_does_not_rename() {
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_overwhelming_wild(&mut game);
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+    let first = game.world.get::<CustomName>(wild).map(|c| c.0.clone());
+    assert!(
+        first.is_some(),
+        "the first loss should have named the program"
+    );
+
+    // `name_seed` folds only the species id and `Potential` — neither
+    // changes across these two losses on its own, so an unconditional
+    // re-derivation on the second mark would silently write back the exact
+    // same string and a plain before/after comparison could not tell that
+    // apart from the guard actually holding. Perturbing `Potential` between
+    // the two marks makes a re-derivation observable: if the guard is gone,
+    // `CustomName` moves to `would_be_second_name` below instead of staying
+    // at `first`.
+    let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+    let perturbed = Potential {
+        hp_roll: 0.2,
+        atk_roll: 0.3,
+        def_roll: 0.25,
+        growth_roll: 0.4,
+    };
+    let would_be_second_name = game
+        .world
+        .resource::<NemesisDb>()
+        .name(nemesis::name_seed(&species, &perturbed))
+        .map(str::to_string);
+    assert_ne!(
+        would_be_second_name, first,
+        "the perturbed Potential must derive a different name than `first`, \
+         or this fixture cannot tell a rename apart from an unconditional \
+         rewrite that happens to land on the same string — change the rolls"
+    );
+    game.world.entity_mut(wild).insert(perturbed);
+
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+
+    assert_eq!(
+        game.world.get::<Nemesis>(wild).map(|n| n.0),
+        Some(2),
+        "the second loss should still have escalated the grudge"
+    );
+    assert_eq!(
+        game.world.get::<CustomName>(wild).map(|c| c.0.clone()),
+        first,
+        "a second grudge must not rename an already-named nemesis"
+    );
+}
+
+#[test]
+fn two_nemeses_of_one_species_with_different_potential_get_different_names() {
+    let potential_a = Potential {
+        hp_roll: 0.8,
+        atk_roll: 0.9,
+        def_roll: 1.0,
+        growth_roll: 1.1,
+    };
+    let potential_b = Potential {
+        hp_roll: 1.2,
+        atk_roll: 1.05,
+        def_roll: 0.95,
+        growth_roll: 0.85,
+    };
+    let name_for = |potential: Potential| {
+        let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let wild = start_battle_with_a_wild_program(&mut game);
+        game.world.entity_mut(wild).insert(potential);
+        flee_until_clear(&mut game);
+        game.world
+            .get::<CustomName>(wild)
+            .map(|c| c.0.clone())
+            .expect("the mark should have named the program")
+    };
+
+    let a = name_for(potential_a);
+    let b = name_for(potential_b);
+
+    assert_ne!(
+        a, b,
+        "two nemeses of the same species with different Potential rolls \
+         should not share a name"
+    );
+}
+
+/// Malformed content is skipped with a warning rather than panicking,
+/// matching `DescriptionDb::load_dir`'s discipline.
+#[test]
+fn a_malformed_bank_file_is_skipped_with_a_warning_and_does_not_panic() {
+    let dir = std::env::temp_dir().join(format!(
+        "feral_nemesis_malformed_bank_{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("names.ron"), "not ( valid ron").unwrap();
+
+    let (db, warnings) = NemesisDb::load_dir(&dir).expect("a malformed file must not error out");
+
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        warnings.len(),
+        1,
+        "the malformed names.ron should have produced exactly one warning"
+    );
+    assert!(
+        warnings[0].contains("names.ron"),
+        "the warning should name the file that was skipped: {warnings:?}"
+    );
+    assert!(
+        db.name(0).is_none(),
+        "a bank that failed to load must leave the pool empty, not panic or \
+         half-populate it"
+    );
+}
+
+/// The absence this pins: an empty (or unloaded) bank is not a fault.
+/// `mark_nemeses` still marks, promotes and recharges — it just writes no
+/// `CustomName`, since `name_new_nemesis` returns early on `NemesisDb::name`
+/// reporting `None`.
+#[test]
+fn with_an_empty_bank_a_nemesis_is_still_marked_promoted_and_recharged_just_unnamed() {
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(NemesisDb::default());
+    let wild = start_battle_with_a_wild_program(&mut game);
+    game.world.entity_mut(wild).insert(Rarity::Ordinary);
+
+    flee_until_clear(&mut game);
+
+    assert_eq!(
+        game.world.get::<Nemesis>(wild).map(|n| n.0),
+        Some(1),
+        "the mark itself does not depend on the name bank"
+    );
+    assert_eq!(
+        game.world.get::<Rarity>(wild).copied(),
+        Some(Rarity::Silver),
+        "promotion does not depend on the name bank either"
+    );
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(stats.hp, stats.max_hp, "the recharge must still run");
+    assert!(
+        game.world.get::<CustomName>(wild).is_none(),
+        "an empty bank must leave the mark unnamed rather than writing a \
+         placeholder or panicking"
     );
 }

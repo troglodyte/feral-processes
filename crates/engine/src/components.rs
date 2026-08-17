@@ -49,11 +49,17 @@ pub struct Creature {
     pub species: SpeciesId,
 }
 
-/// A player-chosen display name that overrides a creature's species name
-/// wherever it's shown — set by `Game::fuse_companions` and
-/// `Game::rename_companion`. The constructor enforces the length; the
-/// tuple field does not, so build one through `sanitize` rather than
-/// wrapping a raw string.
+/// A display name that overrides a creature's species name wherever it's
+/// shown. Two authors, not one: the player, through `Game::fuse_companions`
+/// and `Game::rename_companion`, and — since the nemesis feature —
+/// `Game::mark_nemeses`, which writes a bank-derived name (`nemesis::
+/// NemesisDb`) to a hostile on its first grudge only, never again
+/// (`components::Nemesis`). A nemesis you later decompile joins the roster
+/// still wearing the name it earned, and `rename_companion` can overwrite
+/// it afterward like any other name, because at that point it is yours.
+/// The constructor enforces the length; the tuple field does not, so build
+/// one through `sanitize` rather than wrapping a raw string — every writer,
+/// bank-derived names included, goes through it.
 #[derive(Component, Clone, Debug)]
 pub struct CustomName(pub String);
 

@@ -1,10 +1,10 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 22 of them.
+`assets/research/`. 23 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/research/*.ron` on 2026-08-14 and will drift the moment one of those
+`assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Research Data is the currency, and it comes from one place: a Research Node
@@ -14,12 +14,12 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 22 |
+| nodes | 23 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1288 |
+| total Research Data | 1408 |
 | cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (10), zone 2 (6), zone 3 (6) |
+| zone bands | from turn one (10), zone 2 (6), zone 3 (7) |
 | unlocks | 14 structures, 15 routines, 6 gear recipes |
 
 ## What the zone gates
@@ -34,7 +34,7 @@ ever opening a portal.
 |:---|---:|---:|:---|
 | from turn one | 10 | 188 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication, Heap Allocation |
 | zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
-| zone 3 | 6 | 750 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
+| zone 3 | 7 | 870 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
 
 The gate and the tap compound without either knowing about the other.
 `Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
@@ -69,6 +69,7 @@ Automation (8)
 |   `-- Self-Execution (14)
 |       |-- Field Operations (20)
 |       |   |-- Adaptive Plating (70)
+|       |   |   `-- Mesh Plating (120)
 |       |   `-- Deep Analysis (130)
 |       |       `-- Address Translation (140)
 |       `-- Runtime Patching (60)
@@ -116,13 +117,14 @@ there is no node you can reach two ways.
 | Self-Execution | - | 14 | `routine_fabrication` | `priority_boost` |
 | Ablative Lattice | 3 | 110 | `firewall` | recipe `ablative_plating` at the armory — 12 `portal_fragment` |
 | Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment` |
-| Field Operations | - | 20 | `self_exec` | `repair_loop`, `coolant_flush`, `trickle_charge` |
+| Field Operations | - | 20 | `self_exec` | `repair_loop`, `trickle_charge` |
 | Monofilament Edge | 3 | 110 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
 | Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
 | Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
 | Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
+| Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |
 
 A structure named by **no** research file is buildable from turn one — the
 tree gates the machines that automate a base, not the base itself.
@@ -157,12 +159,13 @@ Monofilament Edge     187  ######################..................
 Deep Analysis         198  #######################.................
 Cortex Hacking        212  #########################...............
 Kernel Privileges     243  #############################...........
+Mesh Plating          258  ###############################.........
 Address Translation   338  ########################################
 ```
 
-The shape to notice is the 6 end-of-branch nodes: Address Translation, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge, Adaptive Plating.
-Each carries 68-198 Research Data of prerequisites behind it before
-its own price is counted, and lands at 138-338 from a
+The shape to notice is the 6 end-of-branch nodes: Address Translation, Mesh Plating, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge.
+Each carries 77-198 Research Data of prerequisites behind it before
+its own price is counted, and lands at 187-338 from a
 standing start — 2x the dearest single node in the
 tree (140) at the top end. The tree is not steep; it is long, and the
 zone bands are what stop that length being paid off in one sitting.

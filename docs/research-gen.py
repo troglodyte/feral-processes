@@ -23,9 +23,10 @@ N = [
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
  ("heap_allocation",     "Heap Allocation",      0,  30, ["power_grid"],      ("structures", ["heap_pillar"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
- ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "coolant_flush", "trickle_charge"])),
+ ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
  ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
  ("adaptive_plating",    "Adaptive Plating",     2,  70, ["field_ops"],       ("abilities", ["hardened_shell", "overclock", "ablative_layer"])),
+ ("mesh_plating",        "Mesh Plating",         3, 120, ["adaptive_plating"], ("abilities", ["hardened_shell_party"])),
  ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"])),
  ("address_translation", "Address Translation",  3, 140, ["deep_analysis"],   ("abilities", ["buffer_overrun", "wild_jump"])),
  ("kernel_privileges",   "Kernel Privileges",    3, 135, ["runtime_patching"], ("abilities", ["null_route"])),
@@ -153,7 +154,7 @@ Every shipped research node in feral-processes, charted from its own file in
 `assets/research/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/research/*.ron` on 2026-08-14 and will drift the moment one of those
+`assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Research Data is the currency, and it comes from one place: a Research Node

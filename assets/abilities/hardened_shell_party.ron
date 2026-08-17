@@ -1,0 +1,15 @@
+(
+    id: "hardened_shell_party",
+    // The wide half of the Def pair. Hardened Shell Single is +4 to one ally;
+    // this is the same +4 to everyone, so what the Power buys is reach rather
+    // than size — unlike the Mitigation pair, where Long Winter Party is a
+    // boss-exclusive prize and raises the magnitude too. The price sits
+    // between one Single and covering a full party a Single at a time, which
+    // is what keeps both worth casting; see
+    // `the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between`.
+    name: "Hardened Shell Party",
+    description: "+4 DEF to the whole party until you rest",
+    target: WholeParty,
+    power_cost: 32.0,
+    effect: FieldBuff(kind: Def, power: 4),
+)

@@ -608,6 +608,52 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
     );
 }
 
+/// The same walk against the **shipped** routine rather than a fixture one:
+/// `hardened_shell_party` hardens the player and every companion off one cast,
+/// which is the whole of what it buys over `hardened_shell` at the same +4.
+///
+/// Worth an asset-level test of its own because everything about the wide cast
+/// is authored: `target: WholeParty` is what reaches the party, and an
+/// `assets/` edit narrowing it to `OneAlly` would leave a routine that still
+/// loads, still lists, still costs the wide price and quietly hardens one body.
+#[test]
+fn the_shipped_party_def_routine_hardens_the_whole_party() {
+    let mut game = Game::new(9105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let first = spawn_tamed(&mut game, 10, 3);
+    let second = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.extend([first, second]);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["hardened_shell_party".to_string()]));
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.ability == "hardened_shell_party")
+        .expect("the party routine is listed once installed");
+    assert_eq!(
+        routines[index].second_pick,
+        FieldCastPick::None,
+        "a WholeParty routine opens no ally picker"
+    );
+
+    game.cast_field_routine(index, FieldCastTarget::None)
+        .expect("a WholeParty cast needs no target");
+
+    let expected = abilities::scaled_stat_power(4, 1, AFFINITY_NEUTRAL);
+    for holder in [player, first, second] {
+        let active = &game.world.get::<FieldBuff>(holder).unwrap().active;
+        assert_eq!(active.len(), 1, "one buff per body");
+        assert_eq!(active[0].kind, FieldBuffKind::Def);
+        assert_eq!(active[0].power, expected);
+        assert!(
+            active[0].runs_until_rest(),
+            "an authored duration would give the wide cast a turn count"
+        );
+    }
+}
+
 #[test]
 fn field_routines_lists_across_holders_and_excludes_non_field() {
     let dir = modded_assets_dir(

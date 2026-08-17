@@ -846,12 +846,14 @@ fn an_affinity_below_the_floor_is_clamped_at_load() {
     assert_eq!(aff.get(AffinityKind::Heal), AFFINITY_MIN);
 }
 
-/// The nine field routines this file ships, one per `FieldBuffKind` variant.
+/// The ten field routines this file ships, at least one per `FieldBuffKind`
+/// variant — `Def` ships two, one per scope.
 /// Mirrors the table in `assets/abilities/README.md`'s `FieldBuff` section.
 const FIELD_ROUTINE_IDS: &[&str] = &[
     "repair_loop",
     "trickle_charge",
     "hardened_shell",
+    "hardened_shell_party",
     "overclock",
     "ablative_layer",
     "deep_scan",
@@ -860,7 +862,7 @@ const FIELD_ROUTINE_IDS: &[&str] = &[
     "salvage_routine",
 ];
 
-/// Each of the nine field routines loads, carries a `FieldBuff` effect, ships
+/// Each of the ten field routines loads, carries a `FieldBuff` effect, ships
 /// a real description (the picker's only detail line for it — see
 /// `AbilityDef::description`), and stays out of the wild-carrier pool: a
 /// field routine is installed, never found on a hostile.
@@ -889,6 +891,63 @@ fn the_ten_field_routines_load_with_real_descriptions_and_no_wild_weight() {
             "{id:?} should never spawn on a wild carrier"
         );
     }
+}
+
+/// The `Def` field routine ships at both scopes, and the Party one is priced
+/// *between* one Single and covering the whole party a Single at a time.
+///
+/// Both bounds are the reason the wide one exists. Under the cheaper bound it
+/// is strictly better than the Single at every party size, which makes the
+/// Single dead content the moment the research lands. Over the dearer one
+/// nobody would ever run it: casting on each body in turn would cost less
+/// Power *and* leave the same buffs standing, and the only thing the wide cast
+/// would still buy is the turns — which are free.
+///
+/// Asserted as a relationship rather than as the three authored numbers, so a
+/// Power retune moves them freely and only an inversion fails. The party size
+/// comes from `Game::pet_capacity` (+1 for the player) rather than
+/// `BASE_PET_CAPACITY`, because a deployed `pet_slot_bonus` widens the party
+/// the cast has to beat.
+#[test]
+fn the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between() {
+    use crate::abilities::{AbilityEffect, AbilityTarget};
+    let game = Game::new(3309, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+
+    let single = db.get("hardened_shell").expect("the Single ships");
+    let party = db.get("hardened_shell_party").expect("the Party one ships");
+
+    assert_eq!(single.target, AbilityTarget::OneAlly);
+    assert_eq!(party.target, AbilityTarget::WholeParty);
+    for def in [single, party] {
+        assert!(
+            matches!(
+                def.effect,
+                AbilityEffect::FieldBuff {
+                    kind: crate::components::FieldBuffKind::Def,
+                    duration: 0,
+                    ..
+                }
+            ),
+            "{:?} should harden until rest, got {:?}",
+            def.id,
+            def.effect
+        );
+    }
+
+    let bodies = (game.pet_capacity() + 1) as f32;
+    assert!(
+        party.power_cost > single.power_cost,
+        "the Party cast ({}) must cost more than one Single ({})",
+        party.power_cost,
+        single.power_cost
+    );
+    assert!(
+        party.power_cost < bodies * single.power_cost,
+        "the Party cast ({}) must undercut {bodies} Singles ({})",
+        party.power_cost,
+        bodies * single.power_cost
+    );
 }
 
 /// Every `FieldBuffKind` variant must be exercised by at least one shipped

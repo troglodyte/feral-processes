@@ -677,8 +677,9 @@ pub enum MachineStatus {
     /// test that enum is held to.
     ///
     /// Written by `systems::idle_machine_system` and by nothing else;
-    /// `task_progress_system` and `assembler_system` only guard on the same
-    /// fact via `resources::PowerGrid`, and write no status of their own.
+    /// `task_progress_system`, `assembler_system` and `player_gather_system`
+    /// only guard on the same fact via `resources::PowerGrid`, and write no
+    /// status of their own.
     Unpowered,
 }
 

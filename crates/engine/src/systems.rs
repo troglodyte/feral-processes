@@ -431,8 +431,9 @@ pub fn power_grid_system(world: &mut World) {
 /// `Structure`, worked or not, which is why the precedence call lives here:
 /// dark wins over all five other variants, and stating that once, in the one
 /// place that can see both facts, beats spreading it across three systems
-/// that would each have to agree. `task_progress_system` and
-/// `assembler_system` guard on the same `PowerGrid` but write no status.
+/// that would each have to agree. `task_progress_system`,
+/// `assembler_system` and `player_gather_system` guard on the same
+/// `PowerGrid` but write no status.
 ///
 /// **Dark is checked before `worked`, deliberately.** A dark machine with a
 /// program posted to it must still report `Unpowered`: the posting is exactly
@@ -702,6 +703,20 @@ pub fn task_progress_system(
     }
 }
 
+/// The read-only lookups `player_gather_system` consults. The third bundle of
+/// this shape, after `CronjobLookups` and `AssemblerLookups`, and for the same
+/// reason: bevy injects one parameter per resource, and adding `PowerGrid`
+/// took this system to eight. A subset of `CronjobLookups` rather than a reuse
+/// of it, because the player has no species and pulling `SpeciesDb` in here
+/// would declare a dependency this system does not have.
+#[derive(SystemParam)]
+pub struct PlayerGatherLookups<'w> {
+    items: Res<'w, ItemDb>,
+    structures: Res<'w, StructureDb>,
+    zone: Res<'w, ZoneLevel>,
+    power: Res<'w, PowerGrid>,
+}
+
 /// The player running a gather job themselves, rather than posting a
 /// program to it — see `Game::work_structure`. The player carries the same
 /// `Task` a worker does and earns through the same `resolve_gather_cycle`,
@@ -715,17 +730,48 @@ pub fn task_progress_system(
 /// player's cargo — the player is standing beside the node, so it is one `c`
 /// away, and routing this path around the buffer would leave the deposit
 /// pool as the only thing pacing it. That pool is gone.
+///
+/// **The third dark guard lives here**, and it is not optional even though
+/// the design spec's chain diagram left this system unmarked: the spec's prose
+/// says nothing the player can do makes a dark machine run, and cranking the
+/// handle yourself is the largest hole there is in that. See the guard itself
+/// for the second, independent reason.
 pub fn player_gather_system(
     mut player: Query<(&mut Task, Option<&Perks>, &mut Inventory), With<Player>>,
     mut nodes: Query<WorkedNode>,
-    item_db: Res<ItemDb>,
-    structure_db: Res<StructureDb>,
-    zone: Res<ZoneLevel>,
+    db: PlayerGatherLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
 ) {
+    let PlayerGatherLookups {
+        items: item_db,
+        structures: structure_db,
+        zone,
+        power: grid,
+    } = db;
     for (mut task, perks, mut inventory) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
+            continue;
+        }
+        // The third of the three dark guards, in the same shape as the other
+        // two and writing no status for the same reason.
+        //
+        // Two arguments, either one sufficient. It produces: this path calls
+        // `deliver_payout`, so without the guard a player standing at a dark
+        // node hand-cranks resources out of a machine the ledger has already
+        // declared dark. And it *writes a status*: on its payout tick it sets
+        // `Running` on a machine `idle_machine_system` set to `Unpowered`
+        // earlier in the same tick, which is exactly the twice-per-transition
+        // logging the design refused when it rejected a last-in-chain power
+        // system — leaking back in through a third path.
+        //
+        // Ahead of `resolve_gather_cycle`, which draws from `GameRng`. Placing
+        // it here means a dark node skips that draw, and skipping a draw
+        // shifts the stream for everything behind it; that is safe only
+        // because nothing goes dark until a structure authors a non-zero
+        // `power_draw`. Moving this guard later to "protect the stream" would
+        // trade a real production hole for a hypothetical one.
+        if grid.is_dark(task.target) {
             continue;
         }
         // The node's `Position` goes unread here, and it takes both halves to
@@ -855,7 +901,7 @@ pub fn assembler_system(
     machines.sort_by_key(|(_, tile, _)| *tile);
 
     for (machine, (x, y), def) in machines {
-        // The second of the two guards, and it stops the machine before it
+        // The second of the three guards, and it stops the machine before it
         // pulls from its neighbours as well as before it works: a dark
         // assembler must not drain a feeder's output into an input buffer it
         // will never consume. Writes no status, for the reason

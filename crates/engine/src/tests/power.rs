@@ -10,10 +10,11 @@
 //! tiny `StructureDb` out of throwaway ids instead.
 //!
 //! **The systems** (`systems::power_grid_system`, the `Unpowered` writer in
-//! `idle_machine_system` and the two guards), driven through a real `Game`
-//! and a real tick. Those fixtures install their own structure defs on top
-//! of a scratch copy of the shipped assets — see `grid_assets` for why the
-//! numbers are absurd rather than realistic.
+//! `idle_machine_system`, and the three guards — cronjob, assembler and the
+//! player's own hands), driven through a real `Game` and a real tick. Those
+//! fixtures install their own structure defs on top of a scratch copy of the
+//! shipped assets — see `grid_assets` for why the numbers are absurd rather
+//! than realistic.
 
 use bevy_ecs::prelude::*;
 
@@ -267,7 +268,7 @@ fn an_unstaffed_machine_still_draws() {
 }
 
 // ---------------------------------------------------------------------------
-// The systems: the ledger wired into the tick, the one writer, the two guards.
+// The systems: the ledger wired into the tick, the one writer, three guards.
 // ---------------------------------------------------------------------------
 
 /// A working extractor whose draw is far past anything a base could ever
@@ -304,6 +305,28 @@ const GREEDY_LATHE: &str = r#"(
     power_draw: 1000000,
 )"#;
 
+/// The same extractor on a one-tick cycle, for the hand-work guard. The short
+/// cycle is the point: `hand_working_a_dark_machine_yields_nothing` has to be
+/// a test about a machine that really would have *paid out*, not one that
+/// would merely have inched along, and `GREEDY_NODE`'s 40-tick cycle cannot
+/// deliver that inside a short fixture.
+///
+/// No `level` on the `work`, deliberately, exactly as `GREEDY_NODE` has none:
+/// `resolve_gather_cycle` rolls its fizzle check only for a node with a
+/// `level`, so this node's payout is deterministic and the test cannot flake
+/// on a bad roll. It also means these fixtures make no `GameRng` draw at all,
+/// so nothing here can shift the stream either way.
+const GREEDY_QUICK_NODE: &str = r#"(
+    id: "test_greedy_quick_node",
+    name: "Greedy Quick Node",
+    glyph: 'q',
+    color: Brown,
+    build_cost: [],
+    work: Some((produces: "core_fragment", ticks_per_unit: 1)),
+    capacity: 100,
+    power_draw: 1000000,
+)"#;
+
 /// Enough supply to light either of the two above, for the half of a test
 /// that is about coming *back*.
 const GRID_SOURCE: &str = r#"(
@@ -325,6 +348,7 @@ fn grid_assets(tag: &str) -> ScratchAssets {
     copy_shipped_assets(&dir, &[]);
     for (name, body) in [
         ("test_greedy_node.ron", GREEDY_NODE),
+        ("test_greedy_quick_node.ron", GREEDY_QUICK_NODE),
         ("test_greedy_lathe.ron", GREEDY_LATHE),
         ("test_grid_source.ron", GRID_SOURCE),
     ] {
@@ -431,6 +455,56 @@ fn a_dark_assembler_makes_no_progress() {
     assert!(
         game.world.get::<Stock>(lathe).unwrap().output.is_empty(),
         "and it must assemble nothing"
+    );
+}
+
+#[test]
+fn hand_working_a_dark_machine_yields_nothing() {
+    // The third guard, in `player_gather_system`. The player is the one
+    // cranking the handle here, not a posted program, and this path is the
+    // largest hole in "nothing the player can do makes a dark machine run":
+    // it calls `deliver_payout`, and on its payout tick it also writes
+    // `Running` over the `Unpowered` that `idle_machine_system` set earlier in
+    // the same tick.
+    //
+    // `test_greedy_quick_node` runs a one-tick cycle with a deterministic
+    // payout, so with the guard gone this machine does not merely inch along —
+    // it pays out, repeatedly, inside the window below.
+    let mut game = game_on_a_short_grid("power_hand_work", 4007);
+    let node = spawn_machine_at(&mut game, "test_greedy_quick_node", 3, 4);
+    // `work_structure` refuses a node the player is not at the station of, so
+    // this stand is what makes the hand-work legal — and it ticks once itself.
+    stand_player_at_post(&mut game, node);
+    game.work_structure(node).unwrap();
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Task>(player).unwrap().progress,
+        0,
+        "the player is mid-gather at the node and would otherwise be \
+         advancing — a dark machine must make no progress under a hand, \
+         either"
+    );
+    assert_eq!(
+        node_output(&game, node, ids::CORE_FRAGMENT),
+        0,
+        "and nothing may be hand-cranked out of a machine the ledger has \
+         already declared dark"
+    );
+    assert_eq!(
+        status_of(&game, node),
+        Some(MachineStatus::Unpowered),
+        "the status stays Unpowered too: this system must not write Running \
+         over it on a payout tick, which is the twice-per-tick transition \
+         logging the design refused"
+    );
+    assert_eq!(
+        log_hits(&game, "is dark — the grid can't power it."),
+        1,
+        "and going dark is still news exactly once across all six ticks"
     );
 }
 

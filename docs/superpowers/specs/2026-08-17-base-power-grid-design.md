@@ -282,12 +282,24 @@ a running base.
 
 ### The templates will load dark
 
-Every built-out `dev-saves/` template has more machines than one Home's
-worth of supply, and will load with its tail dark until a Recharger goes up.
-That is the mechanic working rather than a bug, but it makes the templates
-worse at their job, which is opening on a state you can test from. Expect to
-re-capture `chains` and `extraction` with a Recharger or two standing, in
-the same change.
+Three of the six will load short, and each already stands one Recharger:
+
+| template | draw | supply | short by |
+| --- | --- | --- | --- |
+| `chains` | 15 | 8 | 7 |
+| `contracts` | 15 | 8 | 7 |
+| `deep-lair` | 17 | 8 | 9 |
+| `extraction`, `rarity-preview`, `stack` | 6 | 8 | — |
+
+That is the mechanic working rather than a bug, but it makes those three
+worse at their job, which is opening on a state you can test *from*. They
+are repaired by adding Recharger entries to the checked-in `.ron` directly
+— no re-capture and no play needed, since a template is a save file in RON.
+
+The gate is already written: `dev_template.rs`'s
+`the_chains_template_starts_with_a_chain_that_actually_runs` fails the
+moment the numbers land, which is why authoring the numbers and repairing
+the templates have to be one commit rather than two.
 
 ## What the player sees
 
@@ -379,10 +391,17 @@ Every one of these lands in the same change, not after it.
 
 - `assets/structures/README.md` — both new fields, since it is the schema
   reference a modder reads.
-- `docs/structures-gen.py` — a **hand transcription**, not a parser. The
-  per-structure tuples carry an effect string; fold the draw and supply into
-  those rather than adding a 12th column, which would mean editing 25 rows
-  to say `0` in ten of them. Regenerate `docs/structures.md` from it.
+- `docs/structures-gen.py` — a **hand transcription**, not a parser. It gains
+  two columns, `draw` and `supply`, both `0` on the ten structures that have
+  neither.
+
+  Folding the numbers into the existing free-form effect string was the first
+  plan and is wrong: that column is `makes / does`, and for a producer or an
+  assembler it holds the **item id**, which the script reads back to draw the
+  production-line diagram. Appending "draws 2" to it would corrupt the
+  diagram. The effect string is only free-form on the utility rows.
+
+  Regenerate `docs/structures.md` from it in the same change.
 - `CHANGELOG.md` and the workspace version, at the merge, per the
   one-release-per-change rule.
 - `CLAUDE.md` and `docs/seams.md` gain the matching pair of entries: the

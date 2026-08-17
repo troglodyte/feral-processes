@@ -30,7 +30,7 @@ S = [
  ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None),
  ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None),
  ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None),
- ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 14)],                   "utility",  "posts contracts, takes deliveries",None, None, None,         None),
+ ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 5)] ,                   "utility",  "posts contracts, takes deliveries",None, None, None,         None),
  ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None),
  ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs stock it and fetch from it",None, 100, None,        None),
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None),

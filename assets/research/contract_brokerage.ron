@@ -1,7 +1,0 @@
-(
-    id: "contract_brokerage",
-    name: "Contract Brokerage",
-    description: "Handshake protocols for work orders. Unlocks the Contract Broker.",
-    cost: 10,
-    unlocks_structures: ["contract_broker"],
-)

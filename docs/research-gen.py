@@ -15,7 +15,6 @@ N = [
  # id                    name                  zone cost requires             unlocks (kind, [ids])
  ("automation",          "Automation",           0,   8, [],                  ("structures", ["compiler"])),
  ("commerce",            "Isometric Commerce",   0,  14, [],                  ("structures", ["market"])),
- ("contract_brokerage",  "Contract Brokerage",   0,  10, [],                  ("structures", ["contract_broker"])),
  ("power_grid",          "Power Grid",           0,  10, [],                  ("structures", ["power_conduit"])),
  ("armor_bench",         "Reactive Armor",       0,  24, ["automation"],      ("structures", ["armory"])),
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),

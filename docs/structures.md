@@ -44,7 +44,7 @@ that automate a base, not the base itself.
 | `A` | Annealing Node | 16 `core_fragment` | 20 | `annealed_core` |
 | `X` | Refactor Bench | 22 `core_fragment`, 4 `annealed_core` | 10 | `recompile_kernel` |
 | `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
-| `!` | Contract Broker | 14 `core_fragment` | - | posts contracts, takes deliveries |
+| `!` | Contract Broker | 5 `core_fragment` | - | posts contracts, takes deliveries |
 | `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
 | `D` | Depot | 12 `core_fragment` | 100 | programs stock it and fetch from it |
 | `^` | Shield | 16 `core_fragment` | - | -2 sweep damage, base-wide |

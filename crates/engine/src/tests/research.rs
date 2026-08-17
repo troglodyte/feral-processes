@@ -370,6 +370,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
         sorted,
         vec![
             "assembly_bay".to_string(),
+            "contract_broker".to_string(),
             "data_cache".to_string(),
             "depot".to_string(),
             "home".to_string(),

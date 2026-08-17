@@ -967,24 +967,25 @@ fn a_deployed_broker_reports_the_flag_and_nothing_else_does() {
     );
 }
 
+/// Contracts are what onboards a new run, so the Broker is deliberately
+/// behind no research at all — a structure no research file names is
+/// unlocked by default (`Game::structure_unlocked`). A node added later that
+/// names it would re-gate it silently, which is what this catches.
 #[test]
-fn the_broker_is_unlocked_by_a_reachable_research_node() {
+fn the_broker_is_buildable_from_turn_one() {
     let game = fresh();
-    let node = game
-        .world
-        .resource::<crate::research::ResearchDb>()
-        .all()
-        .find(|d| d.unlocks_structures.iter().any(|s| s == "contract_broker"))
-        .expect("something in the tree has to unlock the Broker, or it is unbuildable");
     assert!(
-        node.requires.is_empty()
-            || node.requires.iter().all(|r| game
-                .world
-                .resource::<crate::research::ResearchDb>()
-                .get(r)
-                .is_some()),
-        "{} names a prerequisite that does not exist",
-        node.id
+        game.world
+            .resource::<crate::research::ResearchDb>()
+            .all()
+            .all(|d| !d.unlocks_structures.iter().any(|s| s == "contract_broker")),
+        "no research node may gate the Broker"
+    );
+    assert!(
+        game.buildable_structure_defs()
+            .iter()
+            .any(|d| d.id == "contract_broker"),
+        "the Broker must be in the build menu on turn one"
     );
 }
 

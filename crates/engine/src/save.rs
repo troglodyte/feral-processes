@@ -238,6 +238,20 @@ pub struct CreatureSave {
     /// through, which is the migration path.
     #[serde(default)]
     pub equipment: Vec<(EquipmentSlot, EquippedItemSave)>,
+    /// How many times this program has driven the party out of a fight —
+    /// see `components::Nemesis`. Zero (and no component on load) for an
+    /// ordinary program.
+    ///
+    /// Additive and defaulted, so this needed no `SAVE_FORMAT_VERSION`
+    /// bump — the save has been field-named RON since v29, which is what
+    /// retired migrations for exactly this shape of change; see that
+    /// constant's docs. The multiplier this count's promotions spent is
+    /// already sitting in `Stats` above and the promoted `rarity` receipt
+    /// above that, so `Game::load` must restore the count without
+    /// re-applying `promote_rarity` — the same trap `rarity`'s own comment
+    /// documents just above.
+    #[serde(default)]
+    pub nemesis_grudges: u32,
     /// Whether this program has been given to the base rather than kept in
     /// the party — see `components::BaseStaff`. Only meaningful when
     /// `tamed` is true.
@@ -814,6 +828,7 @@ mod tests {
             pursuing: false,
             carrying: None,
             rarity: Rarity::Ordinary,
+            nemesis_grudges: 0,
             equipment: Vec::new(),
             staff: false,
         }

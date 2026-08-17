@@ -403,3 +403,124 @@ fn grudge_count_and_rarity_receipt_agree_past_the_promotion_ceiling() {
         "the recharge must still run on a mark that promotes nothing"
     );
 }
+
+/// Saves `game` to a fresh temp file and loads it straight back, mirroring
+/// `spawning::a_wild_carrier_survives_a_save_load_round_trip` and
+/// `spawning::a_nest_survives_a_save_load_round_trip` — one file per test
+/// (via `tag`) and per process, so parallel test runs don't collide.
+fn round_trip(game: &mut Game, tag: &str) -> Game {
+    let path = std::env::temp_dir().join(format!(
+        "feral_nemesis_save_{tag}_{}.sav",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    loaded
+}
+
+// The three round-trip tests below all spawn their one creature of interest
+// at coordinates well outside `tuning::INITIAL_SPAWN_SCATTER_TILES` (40) of
+// the zone spawn point, so `Game::new`'s own habitat spawning can't roll a
+// second creature onto the same tile and make the `find` below ambiguous
+// about which entity is "the" nemesis — the same precaution
+// `spawning::a_nest_survives_a_save_load_round_trip` takes by filtering on
+// tile.
+
+#[test]
+fn a_nemesis_survives_a_save_load_round_trip() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = game.spawn_wild_creature("construct", 300, 300).unwrap();
+    game.world.entity_mut(wild).insert(Nemesis(3));
+
+    let mut loaded = round_trip(&mut game, "grudge");
+
+    let mut query = loaded.world.query::<(&Position, Option<&Nemesis>)>();
+    let (_, nemesis) = query
+        .iter(&loaded.world)
+        .find(|(pos, _)| pos.x == 300 && pos.y == 300)
+        .expect("the nemesis must survive the round trip");
+    assert_eq!(
+        nemesis.map(|n| n.0),
+        Some(3),
+        "the grudge count must round-trip"
+    );
+}
+
+/// The compounding guard this task exists to pin: `promote_rarity`'s
+/// multiplier is already baked into `Stats` before the save happens, and
+/// `CreatureSave::rarity` is restored as a tag only (`lifecycle.rs`, beside
+/// where `c.rarity` is inserted). If a reload ever re-applied the
+/// multiplier on top of the saved numbers, `after` would differ from
+/// `before` here — this was verified by temporarily reintroducing that
+/// exact bug in the loader, watching this assertion fail, and reverting.
+#[test]
+fn a_promoted_nemesis_stats_are_byte_identical_across_a_save_load_round_trip() {
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = game.spawn_wild_creature("construct", 301, 301).unwrap();
+    game.world.entity_mut(wild).insert(Rarity::Ordinary);
+    game.promote_rarity(wild);
+    game.world.entity_mut(wild).insert(Nemesis(1));
+    let before = *game.world.get::<Stats>(wild).unwrap();
+
+    let mut loaded = round_trip(&mut game, "stats");
+
+    let mut query = loaded.world.query::<(&Position, &Stats)>();
+    let (_, after) = query
+        .iter(&loaded.world)
+        .find(|(pos, _)| pos.x == 301 && pos.y == 301)
+        .expect("the promoted nemesis must survive the round trip");
+    assert_eq!(after.hp, before.hp, "hp must round-trip exactly");
+    assert_eq!(
+        after.max_hp, before.max_hp,
+        "a reload must not re-apply promote_rarity's multiplier on top of \
+         the numbers already saved — this is the compounding trap"
+    );
+    assert_eq!(
+        after.atk, before.atk,
+        "same trap as max_hp — atk would compound too"
+    );
+    assert_eq!(
+        after.def, before.def,
+        "same trap as max_hp — def would compound too"
+    );
+}
+
+/// A save written before `nemesis_grudges` existed has no such key in its
+/// RON at all — `#[serde(default)]` is what makes that load rather than
+/// error, and a stripped-down file is how a v29-shaped save without this
+/// field is reproduced without hand-maintaining a second save fixture.
+#[test]
+fn a_save_written_without_the_nemesis_field_loads_to_an_unmarked_creature() {
+    let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.spawn_wild_creature("construct", 302, 302).unwrap();
+
+    let path =
+        std::env::temp_dir().join(format!("feral_nemesis_no_field_{}.sav", std::process::id()));
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("nemesis_grudges"),
+        "a fresh save must carry the field, or stripping it below proves nothing"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("nemesis_grudges"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let mut query = loaded.world.query::<(&Position, Option<&Nemesis>)>();
+    let (_, nemesis) = query
+        .iter(&loaded.world)
+        .find(|(pos, _)| pos.x == 302 && pos.y == 302)
+        .expect("the creature must still load without the field");
+    assert!(
+        nemesis.is_none(),
+        "a save written before this field existed must load an unmarked \
+         creature, not error"
+    );
+}

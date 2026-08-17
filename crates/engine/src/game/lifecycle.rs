@@ -567,6 +567,17 @@ impl Game {
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
             }
+            // Inserted only when the count is nonzero, the same idiom
+            // `Equipment`/`FieldBuff` use below: an absent component must
+            // keep meaning "not a nemesis" for `nemesis_holders`-style
+            // queries. `Stats` above already carry every promotion this
+            // grudge count earned — nothing here may touch them, or a
+            // reload would compound `promote_rarity`'s multiplier on top of
+            // itself. See the `c.rarity` comment just below for the same
+            // trap on the tag it promoted.
+            if c.nemesis_grudges > 0 {
+                entity.insert(Nemesis(c.nemesis_grudges));
+            }
             // Inserted only when something is worn, so an absent component
             // keeps meaning "wears nothing" — the invariant `Game::equip`
             // relies on when it grows one on demand. A v27 dump defaults
@@ -827,6 +838,7 @@ impl Game {
                 Option<&Refactors>,
                 Option<&PurchasedTiers>,
                 Option<&Equipment>,
+                Option<&Nemesis>,
             ),
         )>();
         for (
@@ -843,7 +855,16 @@ impl Game {
             fusions,
             routines,
             field_buff,
-            (nest_guardian, pursuing, carrying, rarity, refactors, purchased_tiers, equipment),
+            (
+                nest_guardian,
+                pursuing,
+                carrying,
+                rarity,
+                refactors,
+                purchased_tiers,
+                equipment,
+                nemesis,
+            ),
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
@@ -902,6 +923,7 @@ impl Game {
                 pursuing: pursuing.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
                 rarity: rarity.copied().unwrap_or_default(),
+                nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL

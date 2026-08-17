@@ -59,6 +59,7 @@ fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_f
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     game.install_innate_routines(scrapper);

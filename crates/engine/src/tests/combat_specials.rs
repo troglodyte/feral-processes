@@ -200,6 +200,7 @@ fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     game.install_innate_routines(plain);

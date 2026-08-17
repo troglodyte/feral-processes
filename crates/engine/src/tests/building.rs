@@ -653,6 +653,7 @@ fn cronjob_assignment_survives_save_and_load() {
         },
         Tamed { owner: player },
         Experience::default(),
+        PowerReserve::default(),
         Task {
             kind: TaskKind::GatherResource,
             target: structure,

@@ -660,3 +660,43 @@ fn a_wielded_program_survives_a_save_and_load() {
         "and the bonus is back in the player's attack"
     );
 }
+
+/// The proc is the one carve-out from "every routine call costs Power".
+/// `tuning::WIELDED_ROUTINE_PROC_CHANCE` states that the 25% rate *is* the
+/// routine's whole price, and charging the program's reserve on top would
+/// quietly degrade a feature that is already an easter egg.
+///
+/// This is why the charge lives at the `BattleAction::Special` site rather
+/// than in `use_ability` — that function is also the path the proc and
+/// hostile casts take.
+#[test]
+fn a_proc_charges_neither_the_player_nor_the_program() {
+    let game = first_seed_where(
+        |rng_seed| armed_battle(9115, rng_seed, "kernel_panic", 9999),
+        |g| damage_in(g, "Blade hits").is_some(),
+    );
+    let program = game.wielded_program().unwrap();
+    let cost = abilities::routine_power_cost(&ability(&game, "kernel_panic"));
+    assert!(
+        cost > 0.0,
+        "kernel_panic has to cost something to prove this"
+    );
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(program).map(|r| r.get()),
+        Some(POWER_MAX),
+        "a wielded program's reserve is never drawn on"
+    );
+    // The player attacked, which costs nothing beyond the round's own drain
+    // — anything approaching `cost` would mean the proc billed them.
+    let player_power = game
+        .world
+        .get::<PowerReserve>(game.player_entity())
+        .unwrap()
+        .get();
+    assert!(
+        POWER_MAX - player_power < cost,
+        "the player was charged {} for a proc that is meant to be free",
+        POWER_MAX - player_power
+    );
+}

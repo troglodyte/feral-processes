@@ -596,6 +596,7 @@ fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp(
                     def: 10,
                 },
                 Tamed { owner: player },
+                PowerReserve::default(),
                 Experience {
                     level: 1,
                     xp: 0,

@@ -48,6 +48,7 @@ fn battle_with_a_companion_of(game: &mut Game, species: &SpeciesId) {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     game.world.resource_mut::<Party>().0.push(companion);

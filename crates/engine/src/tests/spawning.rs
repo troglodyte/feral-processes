@@ -507,6 +507,7 @@ fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
                 def: 1,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
         ));
     }
 
@@ -802,6 +803,7 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 growth_roll: MIN_INDIVIDUAL_ROLL,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 1,
                 xp: 0,
@@ -829,6 +831,7 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 growth_roll: MAX_INDIVIDUAL_ROLL,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 1,
                 xp: 0,

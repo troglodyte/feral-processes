@@ -845,11 +845,18 @@ impl Game {
     /// Every reason is refused in `battle_set_action` too, so a greyed row
     /// can never be planned and silently waste the member's round.
     ///
-    /// A reserve is deliberately not among them *yet*: a Special is still
-    /// priced in its cooldown alone here, so an exhausted player is not
-    /// barred from ordering one. `AbilityDef::power_cost` now reaches every
-    /// routine in the game rather than only the two Stack field ones, and
-    /// this is where that price gets refused.
+    /// **The reserve is read off `entity`, and that is the whole of what
+    /// makes companion reserves work.** The caster pays, so asking the entity
+    /// being enquired about — rather than assuming the player — gives a
+    /// companion's Special its own budget with no second code path. A routine
+    /// is priced in a cooldown *and* a Power cost: the cooldown says "not
+    /// again yet", the reserve says "not any more".
+    ///
+    /// **A missing `PowerReserve` refuses rather than permits.** Hostiles
+    /// hold none by design, and they never reach here — `choose_wild_action`
+    /// picks their moves. Between a companion that cannot cast because a
+    /// roster door skipped `roster_parts`, and one with silently unlimited
+    /// Power, the first is the failure that gets reported.
     pub(crate) fn ability_unavailable(
         &self,
         entity: Entity,
@@ -862,6 +869,15 @@ impl Game {
             .unwrap_or(0);
         if remaining > 0 {
             return Some(format!("{remaining} more rounds"));
+        }
+        let cost = abilities::routine_power_cost(ability);
+        if cost > 0.0
+            && !self
+                .world
+                .get::<PowerReserve>(entity)
+                .is_some_and(|r| r.holds(cost))
+        {
+            return Some(format!("needs {cost:.0} PWR"));
         }
         // Decompile is refused for two reasons no other ability has. They
         // used to live in `attempt_decompile`, which refunded the round

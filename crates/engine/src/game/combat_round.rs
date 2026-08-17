@@ -252,11 +252,19 @@ impl Game {
                     // entity that has already been cleaned up, and survive
                     // into the next fight.
                     self.arm_cooldown(entity, &ability);
-                    // Nothing else is charged: the cooldown above is the whole
-                    // price of a Special, whoever runs it. Directing a
-                    // companion used to come out of the player's Fatigue,
+                    // Charged here rather than in `use_ability`, for the same
+                    // reason and at the same moment as the cooldown above.
+                    // `use_ability` is also the path `proc_wielded_routine`
+                    // and hostile casts take, and both are deliberately free —
+                    // the proc's 25% rate is its whole price, and hostiles
+                    // hold no reserve at all.
+                    //
+                    // The *caster* pays: `entity` is whoever is acting, so a
+                    // companion's Special draws on the companion's reserve.
+                    // Directing one used to come out of the player's meter,
                     // which rationed the party's own kit against a pool only
                     // the player had.
+                    self.spend_power(entity, abilities::routine_power_cost(&ability));
 
                     // Decompile needs the *group index*, not the recipient
                     // entity: a successful capture drops the target out of

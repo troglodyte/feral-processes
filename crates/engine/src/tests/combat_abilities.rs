@@ -136,6 +136,7 @@ fn game_with_a_sweeper() -> (Game, Entity) {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     // Routine slots are level-gated (see `abilities::companion_routine_slots`):
@@ -400,11 +401,13 @@ fn a_special_option_carries_the_cooldown_it_would_arm() {
 }
 
 /// Power rides on the party slot because the roster shows it as a per-member
-/// column. Only the player holds `PowerReserve` today, so a companion's cell is
-/// honestly empty rather than a second copy of the player's number — and that
-/// empty cell is the visible symptom of a roster member with no reserve.
+/// column, and **every member now has its own number to show** — a companion
+/// pays for its own Specials out of its own reserve.
+///
+/// `None` survives as the shape for a roster member holding no reserve at
+/// all, which after `Game::roster_parts` means a door that skipped it.
 #[test]
-fn the_battle_view_carries_the_players_power_and_no_one_elses() {
+fn the_battle_view_carries_a_reserve_for_every_party_member() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     battle_with_a_pack_of(&mut game, 2, 500);
@@ -421,9 +424,9 @@ fn the_battle_view_carries_the_players_power_and_no_one_elses() {
         "the sweeper should be the second party slot"
     );
     assert_eq!(
-        view.party[1].power, None,
-        "a companion carries no reserve of its own yet, and must not be shown \
-         the player's"
+        view.party[1].power,
+        Some(POWER_MAX),
+        "a companion shows its own reserve, not the player's 62"
     );
 }
 
@@ -582,16 +585,16 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     );
 }
 
-/// The player's own installed routine is priced in its cooldown alone and
-/// spends no Power — `null_route` is the deepest researched routine in the
-/// shipped tree and still charges nothing.
+/// A routine is priced in a cooldown **and** a Power cost, and the player is
+/// not exempt — `null_route` is the deepest researched routine in the shipped
+/// tree and it charges what its file says.
 ///
 /// Measured against a control round rather than against zero: a round of any
-/// kind drains a little Power on its own, so what the ability
-/// costs is the difference between a Special round and a Defend one, and
-/// that difference must be nothing.
+/// kind drains a little Power on its own, so what the *ability* costs is the
+/// difference between a Special round and a Defend one. That difference used
+/// to be nothing, which is what pricing routine calls in Power changed.
 #[test]
-fn a_player_special_spends_no_power() {
+fn a_player_special_spends_its_authored_power_cost() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
@@ -623,10 +626,10 @@ fn a_player_special_spends_no_power() {
         .iter()
         .position(|a| a.id == "null_route")
         .expect("kernel_privileges grants null_route");
+    let cost = crate::abilities::routine_power_cost(&abilities[index]);
     assert!(
-        abilities[index].power_cost > 0.0,
-        "null_route declares a power_cost — the point is that nothing in \
-         battle reads it yet"
+        cost > 0.0,
+        "null_route has to declare a cost to be about this"
     );
 
     let idle = round_cost(BattleAction::Defend);
@@ -635,9 +638,10 @@ fn a_player_special_spends_no_power() {
         target: battle::SpecialTarget::AllEnemies,
     });
 
-    assert_eq!(
-        special, idle,
-        "running your own routine must cost exactly what bracing costs"
+    assert!(
+        (special - idle - cost).abs() < 1e-4,
+        "a Special should cost bracing plus its authored {cost}; bracing cost \
+         {idle} and the Special cost {special}"
     );
 }
 
@@ -1484,6 +1488,7 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     let hot_patch = ability(&game, "hot_patch");
@@ -1970,5 +1975,108 @@ fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right
         healed,
         "the committed Special must have run the heal behind the filtered entry, not \
          silently resolved to nothing or to the wrong ability"
+    );
+}
+
+/// The gate and the plan must never disagree — a routine the picker offers
+/// has to be one the cast can pay for. `ability_unavailable` is the one seam
+/// both read, and this asserts both halves rather than trusting that.
+#[test]
+fn an_empty_reserve_greys_a_special_and_refuses_the_same_plan() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    battle_with_a_pack_of(&mut game, 2, 500);
+    *game.world.get_mut::<PowerReserve>(sweeper).unwrap() = PowerReserve::new(0.0);
+
+    let options = game.battle_special_options(1);
+    // Index 0 is cascade_overflow — see `game_with_a_sweeper`'s kit order.
+    let costed = &options[0];
+    assert!(
+        costed.unavailable.is_some(),
+        "an empty reserve must grey the row with a reason"
+    );
+
+    assert!(
+        game.battle_set_action(
+            1,
+            BattleAction::Special {
+                ability: costed.index,
+                target: battle::SpecialTarget::EnemyGroup { group: 0 },
+            },
+        )
+        .is_err(),
+        "and the same plan must be refused, or a greyed row is planable"
+    );
+}
+
+/// **The caster pays.** This is the assertion that "every companion tracks
+/// their power level" actually shipped: a companion's Special draws on the
+/// companion's own reserve and leaves the player's alone.
+#[test]
+fn a_casting_companion_pays_from_its_own_reserve_not_the_players() {
+    let (mut game, sweeper) = game_with_a_sweeper();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 2, 500);
+
+    let cost = {
+        let db = game.world.resource::<crate::abilities::AbilityDb>();
+        crate::abilities::routine_power_cost(db.get("cascade_overflow").unwrap())
+    };
+    assert!(cost > 0.0, "the fixture routine has to cost something");
+
+    let player_before = game.world.get::<PowerReserve>(player).unwrap().get();
+    let companion_before = game.world.get::<PowerReserve>(sweeper).unwrap().get();
+
+    companion_uses_special(
+        &mut game,
+        sweeper,
+        0,
+        battle::SpecialTarget::EnemyGroup { group: 0 },
+    );
+
+    let companion_spent = companion_before - game.world.get::<PowerReserve>(sweeper).unwrap().get();
+    let player_spent = player_before - game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        (companion_spent - cost).abs() < 1e-4,
+        "the companion should have paid {cost}, paid {companion_spent}"
+    );
+    assert!(
+        player_spent <= HUNGER_DECAY_PER_TICK + 1e-4,
+        "the player pays only the round's own drain, paid {player_spent}"
+    );
+}
+
+/// Hostiles get no reserve, deliberately: `Game::choose_wild_action`'s
+/// policy weights were trained against today's action distribution, and a
+/// Power constraint would change which moves are available in which rounds.
+/// A missing reserve must therefore leave a hostile's casting untouched —
+/// `spend_power` is a no-op rather than a branch.
+#[test]
+fn a_hostile_with_no_reserve_casts_normally() {
+    let (mut game, _) = game_with_a_sweeper();
+    let player = game.player_entity();
+    battle_with_a_pack_of(&mut game, 2, 500);
+    let hostiles: Vec<Entity> = {
+        let mut q = game.world.query_filtered::<Entity, With<Hostile>>();
+        q.iter(&game.world).collect()
+    };
+    assert!(!hostiles.is_empty(), "the pack has to exist");
+    assert!(
+        hostiles
+            .iter()
+            .all(|&h| game.world.get::<PowerReserve>(h).is_none()),
+        "hostiles hold no reserve, which is what this test is about"
+    );
+
+    let before = game.world.get::<Stats>(player).unwrap().hp;
+    for _ in 0..6 {
+        if !game.has_active_battle() {
+            break;
+        }
+        resolve_round_with(&mut game, BattleAction::Defend);
+    }
+
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp < before,
+        "a reserve-less hostile must still be able to act"
     );
 }

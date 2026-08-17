@@ -473,6 +473,7 @@ fn fuse_companions_averages_the_parents_potential() {
                 growth_roll: 0.8,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 5,
                 xp: 3,
@@ -498,6 +499,7 @@ fn fuse_companions_averages_the_parents_potential() {
                 growth_roll: 1.2,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 2,
                 xp: 1,
@@ -545,6 +547,7 @@ fn a_creatures_potential_survives_save_and_load() {
         },
         Tamed { owner: player },
         Experience::default(),
+        PowerReserve::default(),
     ));
 
     let path = std::env::temp_dir().join(format!(
@@ -1027,6 +1030,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
                 def: 4,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 5,
                 xp: 3,
@@ -1048,6 +1052,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
                 def: 2,
             },
             Tamed { owner: player },
+            PowerReserve::default(),
             Experience {
                 level: 2,
                 xp: 1,

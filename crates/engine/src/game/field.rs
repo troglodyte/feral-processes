@@ -299,7 +299,8 @@ impl Game {
             power
         };
 
-        self.spend_power(routine_power_cost(&def));
+        let player = self.player_entity();
+        self.spend_power(player, routine_power_cost(&def));
         for entity in recipients {
             self.arm_field_buff(
                 entity,
@@ -344,7 +345,8 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        self.spend_power(routine_power_cost(def));
+        let caster = self.player_entity();
+        self.spend_power(caster, routine_power_cost(def));
         self.log_kind(
             MessageKind::Outcome,
             "The wall goes soft for exactly as long as it takes to cross it.",
@@ -372,7 +374,8 @@ impl Game {
         let pos = self.movement_cast_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        self.spend_power(routine_power_cost(def));
+        let caster = self.player_entity();
+        self.spend_power(caster, routine_power_cost(def));
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();
         } else {
@@ -388,15 +391,25 @@ impl Game {
         Ok(())
     }
 
-    /// Takes `cost` off the player's Power, floored at `POWER_MIN`. The
-    /// first write of either movement cast, and every refusal is already
-    /// behind it.
-    fn spend_power(&mut self, cost: f32) {
-        let player = self.player_entity();
-        self.world
-            .get_mut::<PowerReserve>(player)
-            .unwrap()
-            .spend(cost);
+    /// Takes `cost` off `entity`'s reserve — **the one write path**, and the
+    /// only place a routine's price is charged.
+    ///
+    /// `entity` rather than the player, because the caster pays: a
+    /// companion's Special draws on the companion's own reserve. That single
+    /// parameter is the whole of "every companion tracks their power level"
+    /// on the spending side.
+    ///
+    /// **A missing reserve is a no-op**, which is what makes hostiles safe
+    /// here without a branch — they hold none by design and are never gated
+    /// on one. It is the mirror of `ability_unavailable`, where a missing
+    /// reserve *refuses*: nothing may be charged that was never offered, and
+    /// nothing may be offered that cannot be charged.
+    ///
+    /// Every refusal is already behind it at every call site.
+    pub(crate) fn spend_power(&mut self, entity: Entity, cost: f32) {
+        if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(entity) {
+            reserve.spend(cost);
+        }
     }
 
     /// Every buff currently running on the player or a party member, for the

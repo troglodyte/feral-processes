@@ -1248,6 +1248,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     game.install_innate_routines(medic);
@@ -1310,6 +1311,7 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
             },
             Tamed { owner: player },
             Experience::default(),
+            PowerReserve::default(),
         ))
         .id();
     game.install_innate_routines(crowded);

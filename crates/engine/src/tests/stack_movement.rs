@@ -591,3 +591,36 @@ fn seen(game: &Game, cell: (i32, i32)) -> bool {
         .get(&(pos.entrance, pos.depth))
         .is_some_and(|m| m.seen.contains(&cell))
 }
+
+/// A lethal Jump still charges. The routine ran, and what it found at the
+/// address is not something the party gets refunded for — same reasoning
+/// `cast_jump` already carried, now that the meter it spends is the one with
+/// no supply underground.
+///
+/// Asserted on Permadeath, where nothing else can touch the reserve
+/// afterwards: `difficulty.rs`'s Forgiving reboot raises it to a floor, which
+/// would mask what the cast took.
+#[test]
+fn a_lethal_jump_still_charges_its_power_cost() {
+    let mut game = underground_on(DifficultyMode::Permadeath);
+    let level = frame(&game);
+    let rock = solid_cell(&level);
+    let cost = {
+        let db = game.world.resource::<AbilityDb>();
+        crate::abilities::routine_power_cost(db.get(JUMP).unwrap())
+    };
+    assert!(cost > 0.0, "the jump has to cost something to prove this");
+    let before = power(&game);
+
+    cast(&mut game, JUMP, FieldCastTarget::Cell(rock.0, rock.1))
+        .expect("jumping into rock is allowed — that is the gamble");
+
+    // Plus the tick the cast itself advances, the same drain a Defend round
+    // or a step would have cost.
+    let expected = cost + crate::systems::power_drain_per_tick(1.0);
+    assert!(
+        (before - power(&game) - expected).abs() < 1e-4,
+        "expected {expected} spent, {} was",
+        before - power(&game)
+    );
+}

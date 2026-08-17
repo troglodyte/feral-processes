@@ -1,10 +1,10 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. 71 of them.
+`assets/abilities/`. 70 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/abilities/*.ron` on 2026-08-11 and will drift the moment one of those
+`assets/abilities/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 A species grants abilities by naming their ids with a level to unlock each at;
@@ -13,10 +13,10 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 71 |
+| abilities | 70 |
 | effect shapes | 10 |
 | target shapes | 5 |
-| field routines (run outside battle) | 13 |
+| field routines (run outside battle) | 12 |
 | of those, Stack-only movement | 2 |
 
 ## The naming scheme
@@ -47,7 +47,7 @@ Rollback        Single v1.0 (10), Single v2.0 (20), Single v3.0 (35)
 Segfault        Single v1.0 (6), Single v2.0 (11), Single v3.0 (17)
 Flush Cache     Single (0), Party (0)
 
-one of a kind: Ablative Layer, Buffer Overrun, Coolant Flush, Deadman, Decompile, Deep Scan, Hard Fault, Hardened Shell, Kernel Shear, Long Winter, Null Cache, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge, Watchdog, Wild Jump
+one of a kind: Ablative Layer, Buffer Overrun, Deadman, Decompile, Deep Scan, Hard Fault, Hardened Shell, Kernel Shear, Long Winter, Null Cache, Overclock, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge, Watchdog, Wild Jump
 ```
 
 The number in brackets is the effect's power, and a `v2.0` at the same scope
@@ -68,12 +68,12 @@ TARGET AGAINST EFFECT
                       Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom  Phase   Jump
 
 OneAlly                   .      .      5      6      .      4      1      .      .      .
-WholeParty                .      .      2      2      .      7      2      .      1      1
+WholeParty                .      .      2      2      .      6      2      .      1      1
 OneEnemyGroupFront        6      5      2      .      4      .      .      1      .      .
 WholeEnemyGroup           5      2      2      .      3      .      .      .      .      .
 AllEnemies                4      3      2      .      1      .      .      .      .      .
 
-                         15     10     13      8      8     11      3      1      1      1
+                         15     10     13      8      8     10      3      1      1      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
@@ -143,17 +143,16 @@ with nothing to scale.
 | `skim_v1` | Skim Single v1.0 | OneEnemyGroupFront | Drain | 5 | - | - | 2 |
 | `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 4 | - | - | 5 |
 | `skim_group` | Skim Group | WholeEnemyGroup | Drain | 4 | - | - | 3 |
-| `long_winter` | Long Winter Party | WholeParty | FieldBuff Mitigation | 25 | 300 | - | - |
-| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | 100 | - | - |
-| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | 100 | - | - |
-| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | 90 | - | - |
-| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | 100 | - | - |
-| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | 80 | - | - |
-| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | 90 | - | - |
-| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | 90 | - | - |
-| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 100 | - | - |
-| `coolant_flush` | Coolant Flush Party | WholeParty | FieldBuff Coolant | 1 | 90 | - | - |
-| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 80 | - | - |
+| `long_winter` | Long Winter Party | WholeParty | FieldBuff Mitigation | 25 | - | - | - |
+| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | - | - | - |
+| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | - | - | - |
+| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | - | - | - |
+| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | - | - | - |
+| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | - | - | - |
+| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | - | - | - |
+| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | - | - | - |
+| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 300 | - | - |
+| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 60 | - | - |
 | `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 |
 | `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 |
 | `watchdog` | Watchdog Party | WholeParty | Cleanse | 0 | - | - | 4 |
@@ -222,29 +221,29 @@ program you have just tamed reads as generic before it reads as its class.
 
 ## Field routines
 
-These 11 do not run in battle at all. They are written onto Routine Disks
-and cost **Power** rather than Fatigue, and their durations are measured in
-turns of walking around rather than rounds of combat.
+These 10 do not run in battle at all. They are written onto Routine Disks
+and cost **Power**. Most of them have no duration at all: they run until the
+party rests, so they are bought at base as a loadout for a trip rather than
+timed against a fight. The two that restore a pool over time keep a turn
+count, because an unbounded one is unbounded healing or unbounded Power.
 
 | Routine | Effect | Power | Duration | Costs |
 |:---|:---|---:|---:|---:|
-| Long Winter Party | Mitigation | 25 | 300 turns | 40 |
-| Deep Scan Party | CaptureBoost | 20 | 100 turns | 18 |
-| Repair Loop Single | Regen | 2 | 100 turns | 18 |
-| Salvage Routine Party | DropBoost | 20 | 100 turns | 18 |
-| Trace Analysis Party | XpBoost | 20 | 100 turns | 18 |
-| Coolant Flush Party | Coolant | 1 | 90 turns | 15 |
-| Hardened Shell Single | Def | 4 | 90 turns | 14 |
-| Overclock Single | Atk | 4 | 90 turns | 14 |
-| Stealth Protocol Party | EncounterDamp | 20 | 90 turns | 18 |
-| Ablative Layer Single | Mitigation | 10 | 80 turns | 20 |
-| Trickle Charge Party | Trickle | 1 | 80 turns | 20 |
+| Repair Loop Single | Regen | 2 | 300 turns | 18 |
+| Trickle Charge Party | Trickle | 1 | 60 turns | 25 |
+| Ablative Layer Single | Mitigation | 10 | until rest | 20 |
+| Deep Scan Party | CaptureBoost | 20 | until rest | 18 |
+| Hardened Shell Single | Def | 4 | until rest | 14 |
+| Long Winter Party | Mitigation | 25 | until rest | 40 |
+| Overclock Single | Atk | 4 | until rest | 14 |
+| Salvage Routine Party | DropBoost | 20 | until rest | 18 |
+| Stealth Protocol Party | EncounterDamp | 20 | until rest | 18 |
+| Trace Analysis Party | XpBoost | 20 | until rest | 18 |
 
 4 of them are not buffs in any combat sense — CaptureBoost, XpBoost,
 DropBoost and EncounterDamp change the odds of a whole run rather than the
 outcome of a fight, which is what Deep Analysis is buying at the far end of
-the research tree. The other 7 are ordinary stat and regeneration work, just
-measured in turns.
+the research tree. The other 6 are ordinary stat and regeneration work.
 
 Getting one into a slot is where a known routine meets an item, and it takes
 two steps. **Etching** burns a blank Routine Disk with a routine you know and

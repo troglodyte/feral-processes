@@ -140,15 +140,31 @@ way deleting the Currency item does.
     //     `decompile.ron` uses; there is no reason to declare a second
     //     ability with this effect.
     //
-    //   FieldBuff(kind: Regen, power: 3, duration: 40, power_cost: 15.0)
+    //   FieldBuff(kind: Regen, power: 3, duration: 40)
+    //   FieldBuff(kind: Atk, power: 4)
     //     The field-only marker: an ability carrying this effect never
     //     appears in the in-battle Special picker and a wild carrier never
     //     retaliates with it — there is no separate `field_cast: bool` to
     //     set, this variant *is* the flag. Instead it arms a running field
     //     buff outside battle, through whatever cast path spends `power_cost`
-    //     of the caster's Power to start it. `duration` is in turns, not
-    //     battle rounds, and keeps ticking through any battle that follows
-    //     until it runs out.
+    //     of the caster's Power to start it.
+    //
+    //     **Whether you write a `duration` at all is decided by `kind`, and
+    //     both mistakes are refused at load rather than resolved quietly.**
+    //     The two over-time kinds (Regen and Trickle) count turns down and
+    //     *require* a `duration`; every other kind runs until the party
+    //     rests and must *omit* it. A duration on one of those states a
+    //     lifetime the game will never read — your 90-turn shield would be
+    //     permanent and nothing would say so — and a missing one on an
+    //     over-time kind arms at zero and expires on the turn it was cast.
+    //
+    //     `duration` is in turns, not battle rounds, and keeps ticking
+    //     through any battle that follows until it runs out. An until-rest
+    //     buff is ended by a rest, by a Forgiving reboot, or by another
+    //     routine of the same kind displacing it — and by nothing else. Note
+    //     that a *consumable*'s buff (`ItemEffect::prebattle_buff`) always
+    //     keeps its own `ticks` count whatever kind it arms: the rule above
+    //     is about routines.
     //
     //     `interval` (optional, defaults to 1) is how many turns pass between
     //     firings — `interval: 4` on a `duration: 300` Regen heals 75 times

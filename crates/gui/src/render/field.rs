@@ -401,6 +401,79 @@ mod tests {
         assert_eq!(suffix_of(&rows[0]), Some("7t"));
     }
 
+    /// The map's copy of this panel measures nothing — `draw_status_buffs`
+    /// draws into the status column and `draw_row` clips rows vertically but
+    /// never horizontally, so a row too wide runs off the panel silently.
+    /// `"until rest"` is seven characters longer than the `"90t"` it replaced
+    /// on eight shipped routines, which is exactly the kind of change that
+    /// pays for itself off-screen.
+    ///
+    /// Bounds the **player's own** rows only. A companion-borne row carries a
+    /// trailing holder tag and already overran this column by ~200px before
+    /// any of this — measured, not assumed — so asserting on one here would
+    /// be pinning a bug rather than a guarantee. `TODO.md` records it.
+    #[test]
+    fn the_widest_until_rest_buff_row_fits_the_status_column() {
+        use feral_processes_engine::abilities::{AbilityDb, AbilityEffect};
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = AbilityDb::load_dir(&dir).expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        let rows: Vec<ActiveBuffView> = db
+            .all()
+            .filter_map(|d| match d.effect {
+                AbilityEffect::FieldBuff {
+                    kind,
+                    power,
+                    duration,
+                    interval,
+                } => {
+                    let lifetime = if kind.runs_until_rest() {
+                        "rest".to_string()
+                    } else {
+                        format!("{duration}t")
+                    };
+                    Some(buff(
+                        &d.name,
+                        &kind.magnitude_label(power, interval),
+                        &lifetime,
+                        // No holder tag: a companion-borne row already
+                        // overflows this column by ~200px with any suffix at
+                        // all, which is a pre-existing bug of its own (see
+                        // `TODO.md`) rather than something this tag caused.
+                        None,
+                    ))
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(!rows.is_empty(), "the shipped set has field buffs to draw");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // The status panel is the window's width less the map pane's
+            // `PANE_W`, and `draw_status_buffs` is called one inset in — the
+            // same 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * (1.0 - super::super::base::PANE_W) - m.inset * 2.0;
+            for row in buff_rows(&rows) {
+                let Row::Item { text, suffix, .. } = &row else {
+                    continue;
+                };
+                let mut drawn = p.measure_ui_advance(format!("  {text}"), m.font_size);
+                if let Some(suffix) = suffix {
+                    drawn += m.inset + p.measure_ui_advance(suffix, m.font_size);
+                }
+                assert!(
+                    drawn <= room,
+                    "a buff row overflows the status column by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{text} [{suffix:?}]",
+                    drawn - room
+                );
+            }
+        });
+    }
+
     fn indicator_of(row: &Row) -> Option<&str> {
         match row {
             Row::TextColored(s, _) => Some(s),

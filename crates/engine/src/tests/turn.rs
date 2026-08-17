@@ -928,7 +928,7 @@ fn an_until_rest_buff_row_says_so_where_a_counted_one_shows_turns() {
         .iter()
         .find(|b| b.name == "Repair Loop Single")
         .unwrap();
-    assert_eq!(overclock.remaining, "until rest");
+    assert_eq!(overclock.remaining, "rest");
     assert_eq!(repair.remaining, "40t");
 }
 

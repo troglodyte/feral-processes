@@ -116,6 +116,37 @@ the level term swamps. It no longer scales, by the rule that arm of the
 match already stated — Regen's ceiling is `max_hp` and grows with level,
 Power's is a fixed 100 forever.
 
+### Field routines run until you rest
+
+Eight of the ten out-of-battle routines no longer count turns down. Overclock,
+Hardened Shell, Ablative Layer, Long Winter, Deep Scan, Trace Analysis,
+Salvage Routine and Stealth Protocol run until the party rests, and a
+Forgiving reboot is the only other thing that ends one. That turns them from
+something you cast just before a fight — timing an 80-turn window against a
+walk you can't predict the length of — into an expedition loadout you buy at
+base and carry until you come home.
+
+Repair Loop and Trickle Charge keep their counters, and the line is a rule
+rather than a list: `Regen` and `Trickle` are the only kinds with a per-tick
+effect, so an until-rest one is unbounded healing or unbounded Power, and
+Power underground is the whole of the Stack's scarcity. They are also the only
+two that use `interval`, whose cadence is phased off the very counter an
+until-rest buff no longer has.
+
+An *item's* buff still keeps its own clock whatever kind it arms — a Patch
+Routine is spent when you use it, where a routine can be run again on the next
+charge. That distinction is why the rule reads the buff's source and not just
+its kind: a consumable and a routine of one kind stack rather than displacing
+each other, so a permanent item buff would have compounded under the routine's.
+
+For modders, `duration` on a `FieldBuff` is now decided by `kind`, and both
+mistakes are refused at load with a named reason rather than resolved
+quietly: a duration on a kind that ignores it, and a missing one on a kind
+that counts (which armed at zero and expired on the turn it was cast — silently
+possible before). Buff rows show `rest` where they used to show a tick count.
+No save-format change; a buff already running in an old save simply stops
+ageing.
+
 ## 0.9.3
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29

@@ -16,7 +16,7 @@
 # rider on a Damage effect, flattened to "kind chance duration".
 A = [
  # id                   name                       target                effect       sub              pow  dur  status             cd  cost
- ("ablative_layer",    "Ablative Layer Single",   "OneAlly",            "FieldBuff", "Mitigation",     10,   80, "",                 0, 20.0),
+ ("ablative_layer",    "Ablative Layer Single",   "OneAlly",            "FieldBuff", "Mitigation",     10,    0, "",                 0, 20.0),
  ("acid_wash",         "Etch Single",             "OneEnemyGroupFront", "Buff",      "Def",            -5,    3, "",                 2, 0),
  ("bastion",           "Bastion Party",           "WholeParty",         "Buff",      "Def",             4,    3, "",                 3, 0),
  ("bastion_shield_v2", "Bastion Single v2.0",     "OneAlly",            "Buff",      "Def",             5,    3, "",                 2, 0),
@@ -33,18 +33,17 @@ A = [
  ("checksum_repair",   "Patch Single v2.0",       "OneAlly",            "Heal",      "",               25,    0, "",                 3, 0),
  ("clock_gate",        "Throttle Single",         "OneEnemyGroupFront", "Buff",      "Atk",            -5,    3, "",                 2, 0),
  ("cold_boot",         "Patch Single v3.0",       "OneAlly",            "Heal",      "",               50,    0, "",                 5, 0),
- ("coolant_flush",     "Coolant Flush Party",     "WholeParty",         "FieldBuff", "Coolant",         1,   90, "",                 0, 15.0),
  ("cycle_harvest",     "Leech Everyone",          "AllEnemies",         "Drain",     "",                4,    0, "",                 5, 0),
  ("deadlock",          "Hard Lock Single v1.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    1, "",                 2, 0),
  ("deadman",          "Deadman Everyone",        "AllEnemies",         "Damage",    "",               14,    0, "",                 4, 0),
  ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,    0, "",                 0, 0),
- ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,  100, "",                 0, 18.0),
+ ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,    0, "",                 0, 18.0),
  ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Def",            -4,    3, "",                 3, 0),
  ("flush_cache",       "Flush Cache Party",       "WholeParty",         "Cleanse",   "",                0,    0, "",                 3, 0),
  ("fork_bomb",         "Fork Bomb Group",         "WholeEnemyGroup",    "Damage",    "",               15,    0, "Bleed 35% 2r",     3, 0),
  ("hard_fault",       "Hard Fault Everyone",     "AllEnemies",         "Debuff",    "Stun",            0,    2, "",                 5, 0),
  ("hard_lock",         "Hard Lock Single v2.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    2, "",                 4, 0),
- ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,   90, "",                 0, 14.0),
+ ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,    0, "",                 0, 14.0),
  ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,    3, "",                 3, 0),
  ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,    0, "",                 1, 0),
  ("hyperthread",       "Hyperthread Single v2.0", "OneAlly",            "Buff",      "Atk",             6,    4, "",                 3, 0),
@@ -52,12 +51,12 @@ A = [
  ("kernel_panic",      "Packet Shred Single",     "OneEnemyGroupFront", "Damage",    "",               16,    0, "",                 3, 0),
  ("kernel_shear",     "Kernel Shear Group",      "WholeEnemyGroup",    "Damage",    "",               22,    0, "Bleed 75% 4r",     4, 0),
  ("leech_array",       "Leech Group",             "WholeEnemyGroup",    "Drain",     "",                6,    0, "",                 4, 0),
- ("long_winter",      "Long Winter Party",       "WholeParty",         "FieldBuff", "Mitigation",     25,  300, "",                 0, 40.0),
+ ("long_winter",      "Long Winter Party",       "WholeParty",         "FieldBuff", "Mitigation",     25,    0, "",                 0, 40.0),
  ("memory_leak",       "Bit Rot Single v1.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           2,    3, "",                 1, 0),
  ("mirror_restore",    "Patch Party v1.0",        "WholeParty",         "Heal",      "",                8,    0, "",                 2, 0),
  ("null_cache",       "Null Cache Group",        "WholeEnemyGroup",    "Drain",     "",               12,    0, "",                 3, 0),
  ("null_route",        "Hard Lock Everyone",      "AllEnemies",         "Debuff",    "Stun",            0,    1, "",                 5, 0),
- ("overclock",         "Overclock Single",        "OneAlly",            "FieldBuff", "Atk",             4,   90, "",                 0, 14.0),
+ ("overclock",         "Overclock Single",        "OneAlly",            "FieldBuff", "Atk",             4,    0, "",                 0, 14.0),
  ("overclock_array",   "Hyperthread Party",       "WholeParty",         "Buff",      "Atk",             3,    3, "",                 3, 0),
  ("oxide_strip",       "Etch Everyone",           "AllEnemies",         "Buff",      "Def",            -3,    3, "",                 5, 0),
  ("packet_shred",      "Packet Shred Group v2.0", "WholeEnemyGroup",    "Damage",    "",               10,    0, "",                 3, 0),
@@ -66,11 +65,11 @@ A = [
  ("priority_boost",    "Hyperthread Single v1.0", "OneAlly",            "Buff",      "Atk",             3,    3, "",                 1, 0),
  ("race_condition",    "Hard Lock Group",         "WholeEnemyGroup",    "Debuff",    "Stun",            0,    1, "",                 4, 0),
  ("redundancy_sync",   "Patch Party v1.1",        "WholeParty",         "Heal",      "",               10,    0, "",                 3, 0),
- ("repair_loop",       "Repair Loop Single",      "OneAlly",            "FieldBuff", "Regen",           2,  100, "",                 0, 18.0),
+ ("repair_loop",       "Repair Loop Single",      "OneAlly",            "FieldBuff", "Regen",           2,  300, "",                 0, 18.0),
  ("rollback_v1",       "Rollback Single v1.0",    "OneAlly",            "Heal",      "",               10,    0, "",                 2, 0),
  ("rollback_v2",       "Rollback Single v2.0",    "OneAlly",            "Heal",      "",               20,    0, "",                 3, 0),
  ("rollback_v3",       "Rollback Single v3.0",    "OneAlly",            "Heal",      "",               35,    0, "",                 4, 0),
- ("salvage_routine",   "Salvage Routine Party",   "WholeParty",         "FieldBuff", "DropBoost",      20,  100, "",                 0, 18.0),
+ ("salvage_routine",   "Salvage Routine Party",   "WholeParty",         "FieldBuff", "DropBoost",      20,    0, "",                 0, 18.0),
  ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Def",             3,    3, "",                 1, 0),
  ("segfault_v1",       "Segfault Single v1.0",    "OneEnemyGroupFront", "Damage",    "",                6,    0, "",                 2, 0),
  ("segfault_v2",       "Segfault Single v2.0",    "OneEnemyGroupFront", "Damage",    "",               11,    0, "",                 3, 0),
@@ -81,10 +80,10 @@ A = [
  ("skim_v2",           "Skim Single v2.0",        "OneEnemyGroupFront", "Drain",     "",                9,    0, "",                 3, 0),
  ("skim_v3",           "Skim Single v3.0",        "OneEnemyGroupFront", "Drain",     "",               14,    0, "",                 4, 0),
  ("stack_smash",       "Fork Bomb Single",        "OneEnemyGroupFront", "Damage",    "",                9,    0, "Bleed 60% 3r",     2, 0),
- ("stealth_protocol",  "Stealth Protocol Party",  "WholeParty",         "FieldBuff", "EncounterDamp",  20,   90, "",                 0, 18.0),
+ ("stealth_protocol",  "Stealth Protocol Party",  "WholeParty",         "FieldBuff", "EncounterDamp",  20,    0, "",                 0, 18.0),
  ("throttle",          "Throttle Group",          "WholeEnemyGroup",    "Buff",      "Atk",            -4,    3, "",                 3, 0),
- ("trace_analysis",    "Trace Analysis Party",    "WholeParty",         "FieldBuff", "XpBoost",        20,  100, "",                 0, 18.0),
- ("trickle_charge",    "Trickle Charge Party",    "WholeParty",         "FieldBuff", "Trickle",         1,   80, "",                 0, 20.0),
+ ("trace_analysis",    "Trace Analysis Party",    "WholeParty",         "FieldBuff", "XpBoost",        20,    0, "",                 0, 18.0),
+ ("trickle_charge",    "Trickle Charge Party",    "WholeParty",         "FieldBuff", "Trickle",         1,   60, "",                 0, 25.0),
  ("watchdog",         "Watchdog Party",          "WholeParty",         "Cleanse",   "",                0,    0, "",                 4, 0),
  ("wild_jump",         "Wild Jump Party",         "WholeParty",         "Jump",      "",                0,    0, "",                 0, 20.0),
 ]
@@ -189,7 +188,7 @@ Every shipped ability in feral-processes, charted from its own file in
 `assets/abilities/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/abilities/*.ron` on 2026-08-11 and will drift the moment one of those
+`assets/abilities/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 A species grants abilities by naming their ids with a level to unlock each at;
@@ -290,19 +289,21 @@ program you have just tamed reads as generic before it reads as its class.
 ## Field routines
 
 These {len(FIELD)} do not run in battle at all. They are written onto Routine Disks
-and cost **Power** rather than Fatigue, and their durations are measured in
-turns of walking around rather than rounds of combat.
+and cost **Power**. Most of them have no duration at all: they run until the
+party rests, so they are bought at base as a loadout for a trip rather than
+timed against a fight. The two that restore a pool over time keep a turn
+count, because an unbounded one is unbounded healing or unbounded Power.
 
 {table(["Routine", "Effect", "Power", "Duration", "Costs"],
-       [[r["name"], r["sub"], r["power"], f'{r["dur"]} turns', f'{r["cost"]:.0f}']
-        for r in sorted(FIELD, key=lambda r: -r["dur"])],
+       [[r["name"], r["sub"], r["power"],
+         f'{r["dur"]} turns' if r["dur"] else "until rest", f'{r["cost"]:.0f}']
+        for r in sorted(FIELD, key=lambda r: (-r["dur"], r["name"]))],
        ["l", "l", "r", "r", "r"])}
 
 {len([r for r in FIELD if r["sub"] in ("CaptureBoost", "XpBoost", "DropBoost", "EncounterDamp")])} of them are not buffs in any combat sense — CaptureBoost, XpBoost,
 DropBoost and EncounterDamp change the odds of a whole run rather than the
 outcome of a fight, which is what Deep Analysis is buying at the far end of
-the research tree. The other {len(FIELD) - len([r for r in FIELD if r["sub"] in ("CaptureBoost", "XpBoost", "DropBoost", "EncounterDamp")])} are ordinary stat and regeneration work, just
-measured in turns.
+the research tree. The other {len(FIELD) - len([r for r in FIELD if r["sub"] in ("CaptureBoost", "XpBoost", "DropBoost", "EncounterDamp")])} are ordinary stat and regeneration work.
 
 Getting one into a slot is where a known routine meets an item, and it takes
 two steps. **Etching** burns a blank Routine Disk with a routine you know and

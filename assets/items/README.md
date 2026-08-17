@@ -164,6 +164,15 @@ any non-finite `taming_potency`, `consume.power`, or
     //     for the stat kinds, percentage points for the rest); `ticks` is
     //     how many game ticks it lasts (ordinary turns, not battle rounds —
     //     it keeps counting down whether or not the player is in a fight).
+    //
+    //     **`ticks` always applies here, whatever `kind` you pick.** A
+    //     *routine* arming most of these kinds runs until the party rests
+    //     instead of counting down (see assets/abilities/README.md), but an
+    //     item is spent when you use it and a routine can be run again on
+    //     the next charge, so only the routine's half of that pair was ever
+    //     meant to last a whole expedition. A consumable and a routine of the
+    //     same kind stack rather than displacing each other, which is what
+    //     would have made a permanent item buff compound with one.
     consume: Some((
         power: 25.0,
         heal: 5,

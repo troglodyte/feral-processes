@@ -2565,6 +2565,80 @@ Power source and so the highest-leverage number in the feature. Its numbers
 per cast and take 60 underground turns to collect, which is a real Trace and
 encounter cost: a sustain rather than a tap.
 
+### A field buff's lifetime is decided by its kind *and* its source, and the source half is the load-bearing one
+
+**A field buff's lifetime is decided by its kind and its source, and
+`ActiveFieldBuff::runs_until_rest` is the one predicate.** A routine-armed
+buff of a read-on-demand kind has no turn count at all: it runs until the
+party rests, or until a Forgiving reboot ends the expedition, or until
+another routine of the same kind displaces it. Nothing else touches it, and
+nothing decrements it — `remaining` stops being a lifetime for those, which
+is why an in-flight buff from an old save simply stops ageing and needs no
+migration.
+
+**The `source` half is what a rule keyed on `kind` alone would have got
+wrong.** `ItemEffect::prebattle_buff` arms the very same struct from a
+one-shot consumable with its own authored `ticks`, and `patch_routine` — the
+one shipped item with a side effect at all — arms Mitigation for 120 of
+them. Worse, `field_buff_power_of` deliberately *sums* a `Consumable` and a
+`Routine` entry of one kind rather than choosing between them, which is
+`arm_field_buff`'s whole reason for two separate displacement rules. So a
+kind-only rule would have made that item permanent and stacked its 10% under
+Ablative Layer's for the rest of the expedition. A routine is repeatable and
+priced in a reserve that rest refills; an item is spent. Only the routine's
+half of that pair was ever meant to last the trip.
+
+**`Regen` and `Trickle` are the exceptions, and both directions of that are
+load-bearing.** They are the only kinds with a per-tick effect
+(`apply_field_buff_tick`); everything else is read on demand and does nothing
+as a turn passes — so an until-rest `Regen` is unbounded healing and an
+until-rest `Trickle` is unbounded Power, which is the entirety of the Stack's
+scarcity, freshly retuned two entries above. They are also the only two that
+use `interval`, whose cadence is phased off `remaining` — a counter an
+until-rest buff does not have. Excluding them is what let `tick_field_buffs`
+keep its cadence filter untouched and add one early return.
+
+`duration` therefore defaults, and `field_buff_duration_mismatch` refuses
+both invalid corners at load rather than resolving either quietly: a lifetime
+authored on a kind that ignores it (the modder's 90-turn shield is permanent
+and nothing says so — refused, where `field_only_dead_fields` merely warns
+about a dead `cooldown`, because a dead cooldown leaves a routine that still
+works as written), and a counting kind with none, which armed at 0 and
+expired on the turn it was cast. That second corner was silently reachable
+before the field defaulted.
+
+Two smaller consequences worth knowing. The drop is a **free function on the
+component**, `components::drop_until_rest_buffs`, for exactly the reason
+`field_buff_power_of` is one: the two callers are `Game::rest`, a method, and
+`difficulty::death_handling_system`, a plain bevy system with no `Game` to
+reach through — the same split `stack::surfaced` already makes in that arm.
+And in `rest` it sits **down with the heal and the refill rather than up with
+the gates**, so a refusal, the mid-loop game-over bail and a swarm catching
+the party mid-standby all leave the loadout where it was: a rest that never
+happened clears nothing.
+
+**The economy this creates is untested by anything.** The Power cost stops
+being a budget and becomes a one-time toll, since rest refills the reserve
+for free — the steady state is a party that is always fully buffed, at
+roughly 66 of 100 PWR for four of the eight converted routines, and
+`cast_field_routine` charges the *player's* reserve even when a companion
+holds the routine, so it is one pool for the lot. `balance_sim` models no
+abilities (next entry), so nothing in the suite can see this. It shipped on
+the reading that the displacement rule is cap enough and repricing is a
+`.ron` edit if play says otherwise.
+
+**The player-facing tag is `"rest"`, one word, and that is a width
+constraint rather than a style choice.** `draw_status_buffs` measures
+nothing and `draw_row` clips rows vertically but never horizontally, so the
+map's status column takes whatever it is given and silently runs off the
+panel. Measured at the 1440x900 geometry `ui_metrics` is calibrated for:
+`"until rest"` overflows a player-borne row by 24px and `"til rest"` by 2px.
+`the_widest_until_rest_buff_row_fits_the_status_column` pins it. That test
+deliberately stops at the player's own rows — a companion-borne row carries a
+trailing holder tag and already overran the column by ~200px before any of
+this, which is a pre-existing bug recorded in `TODO.md` rather than something
+this tag caused.
+
 ### `balance_sim` gates none of the Power economy
 
 **`balance_sim` gates none of the Power economy.** It models no abilities at

@@ -989,7 +989,13 @@ impl ActiveFieldBuff {
     /// cannot describe one buff two ways.
     pub fn duration_label(&self) -> String {
         if self.runs_until_rest() {
-            "until rest".to_string()
+            // One word, not "until rest": the map's status column has room
+            // for a seven-character tag beside a full-width name and
+            // magnitude, and `draw_status_buffs` measures nothing —
+            // `draw_row` clips rows vertically and never horizontally, so a
+            // longer tag runs off the panel in silence. Pinned by
+            // `render::field::tests::the_widest_until_rest_buff_row_fits_the_status_column`.
+            "rest".to_string()
         } else {
             format!("{}t", self.remaining)
         }

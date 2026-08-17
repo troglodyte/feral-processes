@@ -58,10 +58,20 @@
     `Game::raise_trace` returns silently on the surface, so it would be a
     mechanic that only exists underground.
 25. base needs power to run, structures consume power, and power rechargers produce power. for now power rechargers can be anywhere in the base, no proximity. requires more power rechargers for more buildings.
-26. add an outside battle routine timout option to last until rest.
 27. add visual indicator of entity in the stack
 28. shields via outside battle routine
 29. zone changes will give you access to new materials via the mining node so that you can make more advanced structures, etc
 
 # Bugs
 1. spawned entities tend to gather around the players base, when traveling outside this group so that it's no longer on the screen, the entity population is almost non existent. we've run into this issue before, i think it needs further tuning
+2. A companion-borne buff row overruns the map's status column. Measured
+   2026-08-17 at the 1440x900 geometry `ui_metrics` is calibrated for: a row
+   whose name fills `BUFF_NAME_W` draws 614px into 417px of room once the
+   trailing `(holder)` tag is on it — ~200px off the panel, and it predates
+   the until-rest work by a long way. `draw_status_buffs` measures nothing
+   and `draw_row` clips rows vertically but never horizontally, so it runs
+   off in silence; the boxed battle copy of the same panel is fine, because
+   `buff_panel_width` measures. Same class as the unbounded player-authored
+   name the Party popup carries.
+   `render::field::tests::the_widest_until_rest_buff_row_fits_the_status_column`
+   bounds the player's own rows and deliberately stops short of this one.

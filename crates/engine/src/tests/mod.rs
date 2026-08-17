@@ -32,6 +32,7 @@ mod inspection;
 mod level_up;
 mod listen;
 mod message_log;
+mod nemesis;
 mod party;
 mod perks;
 mod policy;

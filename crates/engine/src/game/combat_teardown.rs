@@ -5,7 +5,7 @@
 //! exists at all: `BattleState::planned` indexes `Party` positionally, so a
 //! member killed mid-fight cannot leave the roster until the fight does.
 
-use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN};
+use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_NEMESES};
 use crate::*;
 
 impl Game {
@@ -276,6 +276,10 @@ impl Game {
         for stray in strays {
             self.world.despawn(stray);
         }
+        // Below the stray sweep and above `BattleState`'s removal a few
+        // lines down — see `mark_nemeses`'s own doc for why that window is
+        // narrow rather than a preference.
+        self.mark_nemeses();
         // The blow-by-blow has done its job by now — the battle pane showed
         // it live. What follows the player onto the map is the results.
         self.world
@@ -303,6 +307,45 @@ impl Game {
             && self.lair_cleared(lair.pos)
         {
             self.collapse_stack(lair.pos.entrance);
+        }
+    }
+
+    /// Marks every living hostile still in the fight when it tears down —
+    /// the trigger a jack-out and a Forgiving defeat share, since both leave
+    /// `BattleState::groups` non-empty exactly like the telemetry `won` field
+    /// above reads it. A fight that emptied every group marks nobody.
+    ///
+    /// A Stack fight's survivors are already gone by the time this runs — the
+    /// `StackSpawn` stray sweep above despawns them first, so
+    /// `all_living_enemies` finds nothing left with live `Stats` to query
+    /// against. Underground losses marking nobody is therefore a consequence
+    /// of call order, not a check this function makes.
+    ///
+    /// The cap (`MAX_NEMESES`) is counted by querying live holders rather
+    /// than tracked anywhere — the entities are the ledger. An
+    /// already-marked hostile always escalates even with the cap full; only
+    /// a *fresh* mark is refused, which is what keeps this asymmetric rather
+    /// than needing a demotion path.
+    pub(crate) fn mark_nemeses(&mut self) {
+        let fled = self
+            .world
+            .get_resource::<BattleState>()
+            .is_some_and(|b| !b.groups.is_empty());
+        if !fled {
+            return;
+        }
+        let mut holders = self
+            .world
+            .query_filtered::<Entity, With<Nemesis>>()
+            .iter(&self.world)
+            .count();
+        for hostile in self.all_living_enemies() {
+            if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile) {
+                nemesis.0 += 1;
+            } else if holders < MAX_NEMESES {
+                self.world.entity_mut(hostile).insert(Nemesis(1));
+                holders += 1;
+            }
         }
     }
 }

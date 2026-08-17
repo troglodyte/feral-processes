@@ -2260,6 +2260,20 @@ pub const MAX_PROFILE_PERK_POINTS: u32 = 5;
 pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 
 // ---------------------------------------------------------------------------
+// Nemesis
+// ---------------------------------------------------------------------------
+
+/// Ceiling on how many wild programs may carry `components::Nemesis` at
+/// once, counted by querying live holders (`Game::mark_nemeses`) rather than
+/// tracked in a resource — the entities already are the ledger, so there is
+/// nothing to save and nothing that can drift out of step with them.
+///
+/// Set well above what a run realistically holds: a nemesis dies when you
+/// kill it, and a breach wipes every hostile in the zone along with it. This
+/// reads as a runaway backstop, not a difficulty knob.
+pub const MAX_NEMESES: usize = 10;
+
+// ---------------------------------------------------------------------------
 // Sector traits
 // ---------------------------------------------------------------------------
 

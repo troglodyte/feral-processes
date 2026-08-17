@@ -51,10 +51,10 @@ use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BaseStaff, BuffKind, BuffSource,
     Carrying, CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem,
     Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile,
-    Inventory, MachineStatus, NEED_MAX, Needs, Nest, NestGuardian, Perks, Player, Position,
-    Potential, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn,
-    StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier,
-    SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Inventory, MachineStatus, NEED_MAX, Needs, Nemesis, Nest, NestGuardian, Perks, Player,
+    Position, Potential, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines,
+    StackSpawn, StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded, Structure,
+    StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::stack_view::ExamineDir;

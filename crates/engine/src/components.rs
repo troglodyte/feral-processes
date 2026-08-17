@@ -1114,6 +1114,15 @@ pub struct SurfaceLink;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct StackSpawn;
 
+/// How many times this program has sent the party away from a fight —
+/// escalated by `Game::mark_nemeses` on a jack-out or a Forgiving defeat,
+/// never a win. Absent means it never has, and nothing in this feature ever
+/// takes it back to absent: the cap (`tuning::MAX_NEMESES`) refuses a *new*
+/// mark once full, but an existing one always still escalates, so demotion
+/// is not a case any caller has to handle.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Nemesis(pub u32);
+
 /// Tags a wild creature as tethered to a `Nest` — see
 /// `systems::wander_ai_system`'s radius check. Removed (not the
 /// creature) when its nest is destroyed (`Game::attack_nest`) or when the

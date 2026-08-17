@@ -44,6 +44,7 @@ A = [
  ("hard_fault",       "Hard Fault Everyone",     "AllEnemies",         "Debuff",    "Stun",            0,    2, "",                 5, 0),
  ("hard_lock",         "Hard Lock Single v2.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,    2, "",                 4, 0),
  ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,    0, "",                 0, 14.0),
+ ("hardened_shell_party", "Hardened Shell Party", "WholeParty",         "FieldBuff", "Def",             4,    0, "",                 0, 32.0),
  ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,    3, "",                 3, 0),
  ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,    0, "",                 1, 0),
  ("hyperthread",       "Hyperthread Single v2.0", "OneAlly",            "Buff",      "Atk",             6,    4, "",                 3, 0),

@@ -1,0 +1,9 @@
+(
+    id: "mesh_plating",
+    name: "Mesh Plating",
+    description: "One hardening pass that covers every process you brought instead of one at a time. Compiles Hardened Shell Party into cargo.",
+    cost: 120,
+    min_zone: 3,
+    requires: ["adaptive_plating"],
+    unlocks_abilities: ["hardened_shell_party"],
+)

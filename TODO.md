@@ -59,7 +59,6 @@
     mechanic that only exists underground.
 25. base needs power to run, structures consume power, and power rechargers produce power. for now power rechargers can be anywhere in the base, no proximity. requires more power rechargers for more buildings.
 27. add visual indicator of entity in the stack
-28. shields via outside battle routine
 29. zone changes will give you access to new materials via the mining node so that you can make more advanced structures, etc
 
 # Bugs

@@ -457,22 +457,22 @@ fn find_target_in_direction_never_looks_behind_the_player() {
 #[test]
 fn difficulty_color_buckets_relative_power_into_con_colors() {
     assert_eq!(
-        difficulty_color(50, 100, false),
+        difficulty_color(50, 100, false, false),
         GlyphColor::Green,
         "much weaker than the player"
     );
     assert_eq!(
-        difficulty_color(100, 100, false),
+        difficulty_color(100, 100, false, false),
         GlyphColor::Yellow,
         "an even match"
     );
     assert_eq!(
-        difficulty_color(140, 100, false),
+        difficulty_color(140, 100, false, false),
         GlyphColor::Orange,
         "notably tougher"
     );
     assert_eq!(
-        difficulty_color(200, 100, false),
+        difficulty_color(200, 100, false, false),
         GlyphColor::Red,
         "far stronger than the player"
     );
@@ -499,7 +499,7 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
     // going to be anyway, and an even matchup draws Yellow — which is
     // exactly what a first draft of this test collided with.
     let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().power, false);
+    let expected = difficulty_color(power, game.player_status().power, false, false);
     let shiny = game
         .view_entities(5, 5)
         .into_iter()
@@ -520,13 +520,80 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
 
 #[test]
 fn difficulty_color_is_always_magenta_for_a_boss_regardless_of_power() {
-    assert_eq!(difficulty_color(1, 1000, true), GlyphColor::Magenta);
-    assert_eq!(difficulty_color(1000, 1, true), GlyphColor::Magenta);
+    assert_eq!(difficulty_color(1, 1000, true, false), GlyphColor::Magenta);
+    assert_eq!(difficulty_color(1000, 1, true, false), GlyphColor::Magenta);
 }
 
 #[test]
 fn difficulty_color_never_divides_by_zero_player_power() {
-    assert_eq!(difficulty_color(10, 0, false), GlyphColor::Red);
+    assert_eq!(difficulty_color(10, 0, false, false), GlyphColor::Red);
+}
+
+/// The reserved nemesis colour, requested regardless of power ratio — the
+/// same override shape `is_boss` already has, applied to a second, more
+/// specific reading.
+#[test]
+fn difficulty_color_is_always_cyan_for_a_nemesis_regardless_of_power() {
+    assert_eq!(difficulty_color(1, 1000, false, true), GlyphColor::Cyan);
+    assert_eq!(difficulty_color(1000, 1, false, true), GlyphColor::Cyan);
+}
+
+/// **Nemesis wins.** Being a boss is a fact about how a creature spawned;
+/// being a nemesis is a fact about what it did to you, which is both more
+/// specific and the one a player can act on — so a creature that is both
+/// draws as a nemesis, not magenta. Pinned so the two branches inside
+/// `difficulty_color` cannot be reordered without a test failing.
+#[test]
+fn a_boss_that_is_also_a_nemesis_draws_the_nemesis_colour_not_magenta() {
+    assert_eq!(difficulty_color(1, 1000, true, true), GlyphColor::Cyan);
+    assert_eq!(difficulty_color(1000, 1, true, true), GlyphColor::Cyan);
+}
+
+/// The pure `difficulty_color` tests above prove the bucketing logic; this
+/// proves `build_views` actually threads a real `Nemesis` component through
+/// to it. Compared against the *computed* pre-mark colour (the same trick
+/// `a_shiny_hostile_still_reports_its_difficulty_colour` uses above) rather
+/// than a hard-coded bucket, so the test can't pass by accident if the
+/// fixture's power ratio happens to change: a call site that silently
+/// dropped `is_nemesis` (always passing `false`) would still pass every
+/// pure `difficulty_color` test and only this one would catch it.
+#[test]
+fn a_marked_hostile_draws_the_nemesis_colour_on_the_map_not_just_in_the_pure_bucketing() {
+    let mut game = Game::new(9031, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("scrapper", pos.x + 1, pos.y)
+        .expect("scrapper ships with the game");
+
+    let power = game.world.get::<Stats>(wild).unwrap().power();
+    let unmarked_expected = difficulty_color(power, game.player_status().power, false, false);
+    let before = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("the wild program should be in view");
+    assert_eq!(
+        before.color, unmarked_expected,
+        "setup: an unmarked hostile should still read by power ratio"
+    );
+
+    game.world.entity_mut(wild).insert(Nemesis(1));
+    let after = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("it should still be in view after gaining the component");
+    assert_eq!(
+        after.color,
+        GlyphColor::Cyan,
+        "a marked nemesis must draw its reserved colour on the real map, \
+         not just inside difficulty_color's own unit tests"
+    );
+    assert_ne!(
+        after.color, before.color,
+        "the mark has to actually change what's drawn, not merely agree \
+         with an unmarked colour by coincidence"
+    );
 }
 
 #[test]

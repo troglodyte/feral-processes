@@ -433,6 +433,11 @@ pub struct EntityView {
     /// "finished". Neither value alone distinguishes those.
     pub max_tier: Option<u32>,
     pub is_boss: bool,
+    /// Whether this (creature) entity has beaten the party or driven them
+    /// off — see `components::Nemesis`. Wins the glyph colour in
+    /// `difficulty_color` over both the power-ratio con read and the boss
+    /// override; see `rarity`'s doc for what that costs.
+    pub nemesis: bool,
     pub can_work: bool,
     /// Whether this (structure) entity is a trading post (see
     /// `StructureDef::trade`).
@@ -512,7 +517,13 @@ pub struct EntityView {
     /// The map draws it as a bar along the top edge of the tile rather than
     /// by recolouring the glyph, because `color` above is already carrying
     /// `difficulty_color` for a hostile: how dangerous something is and how
-    /// rare it is are two readings, and the glyph can only hold one.
+    /// rare it is are two readings, and the glyph can only hold one — with
+    /// one deliberate exception. A nemesis (see `nemesis` above) spends that
+    /// reading on purpose: `difficulty_color` returns a reserved colour for
+    /// one regardless of power ratio, because you have already fought this
+    /// one and it has since gotten stronger, which makes "can I win this
+    /// fight" the least informative thing its tile could say. Rarity still
+    /// never gets the glyph — it keeps the bar, nemesis or not.
     pub rarity: Rarity,
     /// Why this (structure) entity is or isn't producing, or `None` for
     /// anything that runs no job and so has no state to be in. Lets the map

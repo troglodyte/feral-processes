@@ -30,6 +30,34 @@ const VIGNETTE_MIN: f32 = 0.75;
 const STAFFED_MARK: f32 = 0.28;
 const STAFFED_MARK_INSET: f32 = 2.0;
 
+/// The nemesis mark's side, as a fraction of the tile, and how far it sits
+/// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
+/// opposite corner (top-right rather than bottom-left), so a marked program
+/// standing on a machine-adjacent tile can never collide with either a
+/// staffed mark or the outline `outline_open` drops along a chained pair's
+/// shared edge.
+const NEMESIS_MARK: f32 = 0.22;
+const NEMESIS_MARK_INSET: f32 = 2.0;
+
+/// Where the nemesis mark sits on a tile — the top-right corner, dropped
+/// below `RARITY_BAR_PX` so it never overlaps the bar running the width of
+/// the top edge, and inset from both remaining edges for the same reason
+/// `STAFFED_MARK_INSET` is: flush into a corner it would read as painting
+/// back in an edge `outline_open` deliberately left off.
+///
+/// A free function rather than inlined at the call site so the geometry is
+/// unit-testable without a `Painter` — see the `nemesis_mark_clears_the_
+/// rarity_bar` test.
+fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let size = (tile_px - 1.0) * NEMESIS_MARK;
+    Rect::new(
+        px + tile_px - 1.0 - NEMESIS_MARK_INSET - size,
+        py + RARITY_BAR_PX + NEMESIS_MARK_INSET,
+        size,
+        size,
+    )
+}
+
 /// A tile's own brightness multiplier, so a field of one biome reads as
 /// ground rather than as a flat colour swatch.
 ///
@@ -819,10 +847,14 @@ fn draw_surface_map(
             }
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is
-            // already spoken for: a hostile is tinted by `difficulty_color`
+            // usually spoken for: a hostile is tinted by `difficulty_color`
             // (green through red by power ratio against the player), which
-            // is the "can I win this fight" read and cannot be given up.
-            // Two readings, two channels — the glyph says how dangerous,
+            // is the "can I win this fight" read. That read is not sacred,
+            // though — a nemesis spends it on purpose (see the mark just
+            // below and `EntityView::rarity`'s doc), so "cannot be given
+            // up" is no longer true of it. It just doesn't happen to be
+            // rarity that spends it. Two readings, two channels — the glyph
+            // says how dangerous (or, for a nemesis, that you already know),
             // the bar says how rare.
             //
             // Keyed off `actor` and never `structure`: a structure has no
@@ -835,6 +867,22 @@ fn draw_surface_map(
                     tile_px - 1.0,
                     RARITY_BAR_PX,
                     Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
+                );
+            }
+            // A nemesis draws a second mark on top of its reserved glyph
+            // colour — belt and braces, since a nemesis is worth noticing
+            // even at a glance that only catches shape and not hue. Its own
+            // corner rather than sharing the bar's, so a nemesis that is
+            // also rare (the two are independent) shows both without either
+            // being spent to make room.
+            if actor.is_some_and(|ev| ev.nemesis) {
+                let mark = nemesis_mark_rect(px, py, tile_px);
+                painter.rect(
+                    mark.x,
+                    mark.y,
+                    mark.w,
+                    mark.h,
+                    Color::new(CYAN.r * vig, CYAN.g * vig, CYAN.b * vig, CYAN.a),
                 );
             }
             // Marks where the player materialized on breaching into this
@@ -1590,5 +1638,67 @@ mod tests {
         let small = vignette(100.0, 75.0, 400.0, 300.0);
         let large = vignette(200.0, 150.0, 800.0, 600.0);
         assert!((small - large).abs() < 1e-6, "{small} vs {large}");
+    }
+
+    /// The tile mark's whole job is not fighting the rarity bar for the
+    /// same pixels — see the block comment above `nemesis_mark_rect`'s call
+    /// site. `RARITY_BAR_PX` is the bar's full-width strip along the top;
+    /// the mark must start at or below it.
+    #[test]
+    fn the_nemesis_mark_never_overlaps_the_rarity_bar() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let mark = nemesis_mark_rect(100.0, 200.0, tile_px);
+            assert!(
+                mark.y >= 200.0 + RARITY_BAR_PX,
+                "at tile_px={tile_px}, mark.y={} starts above the rarity bar's \
+                 {} px strip",
+                mark.y,
+                RARITY_BAR_PX
+            );
+        }
+    }
+
+    /// Inset from every edge the way `STAFFED_MARK_INSET` is, and for the
+    /// same reason: flush against an edge, it would read as painting back
+    /// in a wall `outline_open` deliberately left off a chained structure.
+    /// Creatures are never chained, but the mark's geometry shouldn't rely
+    /// on that to stay clear.
+    #[test]
+    fn the_nemesis_mark_stays_inside_the_tile_and_off_every_edge() {
+        let (px, py, tile_px) = (50.0_f32, 60.0_f32, 40.0_f32);
+        let mark = nemesis_mark_rect(px, py, tile_px);
+
+        assert!(mark.x > px, "mark's left edge touches the tile's left edge");
+        assert!(
+            mark.x + mark.w < px + tile_px - 1.0,
+            "mark's right edge touches or crosses the tile's right edge"
+        );
+        assert!(
+            mark.y + mark.h < py + tile_px - 1.0,
+            "mark's bottom edge touches or crosses the tile's bottom edge"
+        );
+        assert!(mark.w > 0.0 && mark.h > 0.0, "the mark must have real size");
+    }
+
+    /// Opposite corners: `STAFFED_MARK` sits bottom-left, this sits
+    /// top-right (and below the bar). A nemesis that is also a staffed
+    /// program's target — unreachable in play, since a nemesis is wild and
+    /// a staffed mark is tamed, but the geometry itself should not depend
+    /// on that being true — still can't have the two marks land on the
+    /// same pixels.
+    #[test]
+    fn the_nemesis_mark_sits_in_the_opposite_corner_from_the_staffed_mark() {
+        let tile_px = 40.0_f32;
+        let (px, py) = (0.0, 0.0);
+        let nemesis = nemesis_mark_rect(px, py, tile_px);
+        let staffed_size = (tile_px - 1.0) * STAFFED_MARK;
+        let staffed_y = py + tile_px - 1.0 - STAFFED_MARK_INSET - staffed_size;
+
+        assert!(
+            nemesis.y + nemesis.h < staffed_y,
+            "the nemesis mark's bottom ({}) reaches into the staffed mark's \
+             row (starts at {staffed_y})",
+            nemesis.y + nemesis.h
+        );
     }
 }

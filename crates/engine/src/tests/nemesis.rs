@@ -898,3 +898,65 @@ fn a_higher_grudge_count_can_select_a_different_taunt_line() {
         lines.len()
     );
 }
+
+/// `views::EntityView::nemesis` is `Game::build_views`'s own reading of
+/// `components::Nemesis`, not a copy of it — this is what would catch the
+/// field being wired to the wrong query or left `false` unconditionally.
+#[test]
+fn entity_view_nemesis_is_true_for_a_marked_hostile_and_false_otherwise() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let unmarked = game
+        .spawn_wild_creature("construct", pos.x, pos.y)
+        .expect("construct ships with the game");
+
+    let before = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == unmarked)
+        .expect("the freshly spawned wild program should be in view");
+    assert!(
+        !before.nemesis,
+        "a wild program that has never fought the party is not a nemesis"
+    );
+
+    game.world.entity_mut(unmarked).insert(Nemesis(1));
+    let after = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == unmarked)
+        .expect("it should still be in view after gaining the component");
+    assert!(
+        after.nemesis,
+        "inserting Nemesis should flip the view's own field, not just the \
+         raw component at {pos:?}"
+    );
+}
+
+/// Breaching despawns every zone-local hostile (`enter_next_zone`'s stale
+/// sweep, `Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>`), and a
+/// nemesis is nothing but `Nemesis` riding on one of those entities — so
+/// there is no separate ledger for this task to forget to clear. The test
+/// exists to pin that structural fact, not to add a new sweep.
+#[test]
+fn a_breach_clears_every_nemesis() {
+    let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_overwhelming_wild(&mut game);
+    game.start_battle(vec![wild]);
+    game.battle_set_action(0, BattleAction::Attack { group: 0 })
+        .unwrap();
+    game.battle_resolve_round();
+    assert_eq!(
+        game.world.get::<Nemesis>(wild).map(|n| n.0),
+        Some(1),
+        "setup: the fixture should have marked a nemesis before the breach"
+    );
+
+    game.enter_next_zone();
+
+    assert!(
+        nemesis_holders(&mut game).is_empty(),
+        "no entity anywhere in the world should still carry Nemesis after \
+         a breach"
+    );
+}

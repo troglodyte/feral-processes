@@ -773,6 +773,7 @@ mod tests {
             ceiling: Some(ceiling),
             max_tier: Some(max_tier),
             is_boss: false,
+            nemesis: false,
             can_work: false,
             can_trade: false,
             issues_contracts: false,

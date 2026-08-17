@@ -216,10 +216,12 @@ impl Game {
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
         let rarity = self.roll_rarity(&species, x, y);
-        // Rarity multiplies here and exactly here. It is baked into `Stats`
-        // the same way `Potential`'s three stat rolls are, and the component
-        // that rides along is the receipt — see `Rarity`'s doc for why
-        // nothing downstream may apply it a second time.
+        // Rarity multiplies here, and in exactly one other place:
+        // `Game::promote_rarity`, which escalates a nemesis's tier by the
+        // *ratio* between its old and new multiplier rather than reapplying
+        // this one. It is baked into `Stats` the same way `Potential`'s
+        // three stat rolls are, and the component that rides along is the
+        // receipt — see `Rarity`'s doc for why nothing else may apply it.
         let rarity_mult = rarity.stat_mult();
         let scale = |base: i32, roll: f32| {
             ((base as f32) * mult * depth_mult * rarity_mult * roll).round() as i32

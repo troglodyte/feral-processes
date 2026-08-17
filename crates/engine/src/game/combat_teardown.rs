@@ -353,12 +353,69 @@ impl Game {
             .iter(&self.world)
             .count();
         for hostile in self.all_living_enemies() {
-            if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile) {
+            let marked = if let Some(mut nemesis) = self.world.get_mut::<Nemesis>(hostile) {
                 nemesis.0 += 1;
+                true
             } else if holders < MAX_NEMESES {
                 self.world.entity_mut(hostile).insert(Nemesis(1));
                 holders += 1;
+                true
+            } else {
+                false
+            };
+            // A hostile the cap refused gets no grudge at all, so it must
+            // not climb the rarity ladder either — promotion is what a mark
+            // does, not something a fight's mere survival earns.
+            if marked {
+                self.promote_rarity(hostile);
             }
         }
+    }
+
+    /// Promotes `entity` one rung up the rarity ladder and fully recharges
+    /// it, returning the tier it lands on. The only caller is
+    /// `mark_nemeses`, on a living `Hostile` — see `spawning.rs`'s "Rarity
+    /// multiplies here and exactly here" comment for the other site.
+    ///
+    /// `Rarity` is a *receipt* for a multiplier already baked into `Stats`
+    /// at spawn (`spawn_wild_creature_scaled`), not a value anything may
+    /// apply on its own. So this does not multiply by `new.stat_mult()` —
+    /// that number is measured from `Ordinary` and would compound on top of
+    /// whatever the spawn roll already spent. It multiplies by the **step**
+    /// between the two tiers, `new.stat_mult() / old.stat_mult()`, and
+    /// writes the new tier back as the updated receipt. The same class of
+    /// bug already has a guard on the load path (`lifecycle.rs`, loading a
+    /// `CreatureSave`) with the same reasoning — this is the second and
+    /// last place a rarity multiplier is allowed to touch `Stats`.
+    ///
+    /// `Rarity::ALL`'s own top is the ceiling: past `Prismatic` the step is
+    /// `1.0` and this is a no-op on stats, though the grudge that got the
+    /// program here keeps rising regardless — that increment lives in the
+    /// loop above, not here.
+    ///
+    /// The recharge is folded in rather than left to a second call, because
+    /// nothing in this feature ever wants a promotion without the heal that
+    /// follows it — `hp = max_hp` raises HP, which is why this stays clear
+    /// of `apply_damage`'s rule that it is the only path allowed to lower
+    /// it.
+    pub(crate) fn promote_rarity(&mut self, entity: Entity) -> Rarity {
+        let old = self
+            .world
+            .get::<Rarity>(entity)
+            .copied()
+            .unwrap_or_default();
+        let new = Rarity::ALL
+            .get(old.rank() as usize + 1)
+            .copied()
+            .unwrap_or(old);
+        let step = new.stat_mult() / old.stat_mult();
+        if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
+            stats.max_hp = (stats.max_hp as f32 * step).round() as i32;
+            stats.atk = (stats.atk as f32 * step).round() as i32;
+            stats.def = (stats.def as f32 * step).round() as i32;
+            stats.hp = stats.max_hp;
+        }
+        self.world.entity_mut(entity).insert(new);
+        new
     }
 }

@@ -212,3 +212,145 @@ fn an_already_marked_nemesis_still_escalates_while_the_cap_is_full() {
         "an existing nemesis should escalate even with no room for a new one"
     );
 }
+
+/// A bare stand-in for a marked hostile, carrying only what `promote_rarity`
+/// touches — spawned directly rather than through `spawn_wild_creature`, so
+/// the numbers are round and the ratio math has nothing to round against.
+fn spawn_promotable(game: &mut Game, rarity: Rarity) -> Entity {
+    game.world
+        .spawn((
+            Stats {
+                hp: 100,
+                max_hp: 100,
+                atk: 10,
+                def: 10,
+            },
+            Hostile,
+            rarity,
+        ))
+        .id()
+}
+
+#[test]
+fn an_ordinary_nemesis_promotes_to_silver_at_the_full_multiplier() {
+    let mut game = Game::new(47, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_promotable(&mut game, Rarity::Ordinary);
+
+    let landed = game.promote_rarity(wild);
+
+    assert_eq!(landed, Rarity::Silver);
+    assert_eq!(
+        game.world.get::<Rarity>(wild).copied(),
+        Some(Rarity::Silver)
+    );
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(stats.max_hp, 150, "100 * SILVER_STAT_MULT (1.5)");
+    assert_eq!(stats.atk, 15, "10 * SILVER_STAT_MULT (1.5)");
+    assert_eq!(stats.def, 15, "10 * SILVER_STAT_MULT (1.5)");
+}
+
+/// The trap this pins: a second promotion must multiply by the **ratio**
+/// between tiers (1.8 / 1.5 = 1.2 here), not by `GOLD_STAT_MULT` (1.8)
+/// applied fresh to the already-Silver stats. The two disagree —
+/// 150 * 1.2 = 180 against 150 * 1.8 = 270 — so this fails loudly if
+/// `promote_rarity` ever regresses to applying the absolute tier multiplier
+/// instead of the step between tiers.
+#[test]
+fn a_second_promotion_to_gold_multiplies_by_the_ratio_not_the_absolute_tier() {
+    let mut game = Game::new(48, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_promotable(&mut game, Rarity::Ordinary);
+    game.promote_rarity(wild);
+
+    let landed = game.promote_rarity(wild);
+
+    assert_eq!(landed, Rarity::Gold);
+    assert_eq!(game.world.get::<Rarity>(wild).copied(), Some(Rarity::Gold));
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(
+        stats.max_hp, 180,
+        "150 * (GOLD 1.8 / SILVER 1.5) = 150 * 1.2"
+    );
+    assert_eq!(stats.atk, 18, "15 * 1.2");
+    assert_eq!(stats.def, 18, "15 * 1.2");
+}
+
+#[test]
+fn a_prismatic_nemesis_does_not_promote_but_can_still_be_marked() {
+    let mut game = Game::new(49, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_promotable(&mut game, Rarity::Prismatic);
+
+    let landed = game.promote_rarity(wild);
+
+    assert_eq!(
+        landed,
+        Rarity::Prismatic,
+        "already at the top of the ladder"
+    );
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(stats.atk, 10, "a no-op multiplier leaves stats untouched");
+    assert_eq!(stats.def, 10);
+
+    // The grudge count is `mark_nemeses`'s own field, not `promote_rarity`'s
+    // — a Prismatic program that keeps beating the party still racks up a
+    // grudge even though there is no rung left for it to climb.
+    game.world.entity_mut(wild).insert(Nemesis(3));
+    let mut nemesis = game.world.get_mut::<Nemesis>(wild).unwrap();
+    nemesis.0 += 1;
+    assert_eq!(game.world.get::<Nemesis>(wild).unwrap().0, 4);
+}
+
+#[test]
+fn promotion_fully_heals_to_the_new_max_hp() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_promotable(&mut game, Rarity::Ordinary);
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 40;
+
+    game.promote_rarity(wild);
+
+    let stats = *game.world.get::<Stats>(wild).unwrap();
+    assert_eq!(stats.max_hp, 150);
+    assert_eq!(
+        stats.hp, stats.max_hp,
+        "recharge fills to the promoted max, not the old one"
+    );
+}
+
+/// The "no stats operation may run while a gear bonus sits in `Stats`" rule
+/// is unreachable for `promote_rarity` because a wild program is never
+/// equipped — pin the invariant rather than leaving it to the reader, per
+/// the design doc.
+#[test]
+fn a_wild_program_never_carries_equipment_so_the_gear_hazard_is_unreachable() {
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    assert!(
+        game.world.get::<Equipment>(wild).is_none(),
+        "a wild program's Stats must stay pure spawn+rarity, or promote_rarity's \
+         multiply would weld a gear bonus permanently into the base"
+    );
+}
+
+#[test]
+fn grudge_count_and_rarity_receipt_agree_after_three_losses() {
+    let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_overwhelming_wild(&mut game);
+    // Pinned rather than left to the spawn roll — `roll_rarity` could hand
+    // this program a head start, and the assertion below needs to know
+    // exactly how many rungs three promotions climb.
+    game.world.entity_mut(wild).insert(Rarity::Ordinary);
+
+    for _ in 0..3 {
+        game.start_battle(vec![wild]);
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_resolve_round();
+    }
+
+    assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(3));
+    assert_eq!(
+        game.world.get::<Rarity>(wild).copied(),
+        Some(Rarity::Platinum),
+        "three marks is three promotions: Ordinary -> Silver -> Gold -> Platinum"
+    );
+}

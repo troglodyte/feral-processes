@@ -43,8 +43,12 @@ impl App {
         }
         if let GameKey::Char(c) = key {
             if let Some(d) = c.to_digit(10) {
-                let d = d as usize;
-                return (d >= 1 && d <= len).then_some(d - 1);
+                // Rows are labelled from `1` (see `menu_shortcut`), so `0`
+                // labels nothing and must fall out here. Subtracting through
+                // `checked_sub` rather than guarding with `d >= 1` is what
+                // keeps that structural: `then_some` takes its argument by
+                // value, so a guard leaves `0usize - 1` still evaluated.
+                return (d as usize).checked_sub(1).filter(|&idx| idx < len);
             }
             // Lowercase only. Uppercase is reserved for screen actions —
             // `S`/`B` quick-trade a single unit off the highlighted row —

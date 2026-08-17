@@ -55,6 +55,23 @@ fn letters_pick_no_row_in_a_menu_shorter_than_ten_rows() {
     }
 }
 
+/// No row ever advertises `[0]` — `menu_shortcut` starts at `1` — so the key
+/// is only ever a mis-hit. It still has to be *ignored*: `then_some` takes its
+/// argument by value, so a `d - 1` written inside one is computed whether or
+/// not the guard holds, and `0usize - 1` is a panic that takes the whole
+/// renderer down from any menu on the screen.
+#[test]
+fn zero_picks_no_row_rather_than_underflowing() {
+    let mut app = test_app(922);
+    for len in [1, 5, DIGIT_ROWS, 35] {
+        assert_eq!(
+            app.selected_index(GameKey::Char('0'), len),
+            None,
+            "[0] labels no row in a {len}-row menu"
+        );
+    }
+}
+
 #[test]
 fn the_party_menu_opens_the_manifest_picker_and_esc_backs_out() {
     let mut app = test_app(70);

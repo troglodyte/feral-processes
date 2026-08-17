@@ -64,6 +64,79 @@ hostile — there is no separate ledger for the feature to leave behind.
 Rewards flow entirely through the promoted `Rarity` and the existing
 challenge-scaled XP curve; nothing new was added to either.
 
+### Contracts meet a new run where it starts
+
+Contracts were meant to onboard a run and were sitting behind the tree they
+were supposed to introduce: the Contract Broker wanted a 10 Research Data
+node and 14 Core Fragments before it could be built. The Contract Brokerage
+research node is deleted rather than zeroed — a structure no research file
+names is unlocked by default — and the build drops to 5 Core Fragments, so
+the Broker is buildable from turn one. An old save that had already
+researched Contract Brokerage still loads; the id simply names nothing now.
+
+The board itself was a coin flip. It draws three slots uniformly out of
+everything eligible, and a zone-1 pool is nine authored contracts plus up to
+five rolled, so "deliver twenty-five Core Fragments" was as likely to be a
+new run's first job as anything. Seven **starter** contracts now lead the
+queue in sector 1 — a first kill, a first delivery, a Mining Node, a Research
+Node, a Recharger Node, one frame down a stack, and the breach into sector 2.
+Past zone 1 a starter is still offerable, just no longer ahead of anything,
+so a mid-run board is untouched and no seeded board moved.
+
+### The board reads anywhere, and signs on the base
+
+One call was answering two different questions — whether there was a board to
+draw, and whether the player could act on it — measured as two tiles from the
+Broker's own tile. So a player who had built the thing could not read their
+own mission status from across their own base, and the board went dark four
+frames down a Stack.
+
+`Game::broker_reach` splits it into three states: no Broker, off the base, at
+the Broker. The offers list wherever the party is standing, underground
+included, because a board seeded off the sector and the epoch makes no claim
+about where anyone is — there was never anything for distance to invalidate.
+Accepting and delivering still require standing on the base, and the screen's
+header says so rather than leaving you to press a key and read a refusal.
+
+"At the Broker" now measures the base slab rather than the distance to the
+Broker. A Broker is on the slab by construction, so its tile carries no
+information the slab does not, and `CONTRACT_BOARD_RANGE_TILES` was deleted
+rather than widened — a constant there would have frozen the desk at the
+radius a base *starts* at, while a base's footprint is derived and grows.
+
+### A staff row says what a program is worth at a post
+
+The Base Staff screen's decision is who the scheduler may draw on, and the
+row left you to judge by name. Each row now names the program's cycle speed,
+extraction aptitude and base job, with its current activity on a continuation
+line beneath. `Game::work_profile` answers all three off the same
+`SpeciesDef`, so the walk from an entity to its def is written once; the
+class label goes through the manifest's existing exhaustive mapping, so a
+sixth class cannot ship without deciding what it does at a post.
+
+### Fixed
+
+- **The `0` key crashed any menu that was open.** The digit-to-row conversion
+  guarded itself with `d >= 1` but wrote the subtraction inside `then_some`,
+  which takes its argument by value — so `0usize - 1` was evaluated on every
+  `0` keypress whether the guard held or not, panicking the menu and taking
+  the renderer down with it. `checked_sub` makes the absence of a row `0`
+  structural rather than a guard someone has to keep in step.
+- **A feed buffer needs a neighbour with a reason to run.** A Lathe standing
+  beside a Mining Node counted as an attached building on its recipe alone,
+  so the node hoarded its whole twenty-unit buffer for a machine that pulls
+  nothing while unstaffed. Attachment now means the base has a reason to run
+  that assembler — the work-order queue naming what it makes, or a standing
+  work job on it. With an order in for Core Fragments, the first fragment
+  reached the Depot at tick 500 against the first cycle for the same node
+  standing alone.
+- **Teardown's description names the salvage it actually adds.** "Work
+  resource" is the name of a `SpeciesDef` field, not a word the game shows
+  anywhere else, and it said nothing about what a kill drops. It now names
+  Core Fragments, and the line comes back under `ROW_WRAP_COLUMNS` — nothing
+  clamps a popup row horizontally, and the old 172-column line ran well past
+  the body.
+
 ## 0.9.2
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 29.

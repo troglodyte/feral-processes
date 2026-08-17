@@ -136,6 +136,11 @@ the game, and a nonzero default under that reach silently prices every
 ability a mod ships. Free-by-default is the only safe default once a field's
 audience widens; a mod that means to charge says so.
 
+It is also what keeps the five uncosted shipped abilities behaving exactly
+as they do today — see the content pass below. Every ability the game means
+to charge for already carries a number, so the default is a genuine
+fallback rather than a disguised game-wide price.
+
 `DEFAULT_ROUTINE_FATIGUE_COST` is deleted. So is
 `a_field_buff_leaving_fatigue_cost_at_its_default_is_silent` and the
 dead-fields-warning exemption it guards — with one field there is no longer
@@ -315,33 +320,68 @@ irreplaceable reserve. `tuning.rs:1483` already admits the current number is
 "arithmetic, not playtested"; it is now arithmetic against a different
 denominator.
 
-### The 71 ability files
+### The 71 ability files: the costs already exist
 
-Every non-passive, non-field routine needs a `power_cost` authored. This is
-the bulk of the work and effectively all of the balance risk.
+**No costs are authored for this change.** The numbers are already in the
+files, and the content pass is a mechanical key flip.
 
-**Author to a rubric, not per-file taste.** Without a stated rule, 71
-independent judgements are worse than one flat table — they cannot be
-reviewed, and nobody can say later why any given number is what it is. The
-rubric:
+`AbilityDef::fatigue_cost` is documented in three places as reaching only
+`Phase` and `Jump` — `tuning.rs:445` says the default "covers a mod that
+omits it rather than anything in the game", and `combat.rs:850` says the
+field "is read only by the two Stack field routines". Both are true about
+what the *engine reads*. Neither is true about what the *assets contain*:
 
-- Cost rises with the routine's magnitude.
-- Cost **falls** with its cooldown. A long cooldown is already a price;
-  charging full Power on top taxes the same routine twice.
-- Field routines keep the numbers they have.
-- Passives cost nothing. They are never called.
+| files | today | after |
+|---|---|---|
+| 55 | author a `fatigue_cost`, **never read by anything** | key renamed to `power_cost`, values unchanged |
+| 11 | author `power_cost` inside the `FieldBuff(…)` effect | hoisted to the top level, values unchanged |
+| 5 | author no cost at all | untouched; inherit the 0.0 default |
 
-Two abilities need a decision rather than a rubric application:
+The 55 are vestigial from before 2026-08-08, when battle Specials still
+charged Fatigue. They were priced when the field meant exactly what
+`power_cost` is about to mean — "what running this costs the player" — and
+they are a real distribution rather than a placeholder: 0.0 to 20.0 against
+a pool of 100, clustered at 8–12. This change brings dead data back to life
+instead of inventing new data beside it.
 
-- **`Decompile`** is already priced in an ICE Breaker catalyst and refuses
-  itself in `ability_unavailable` for two reasons no other ability has.
-  Recommend 0.0: a Power price on top makes taming a third thing to afford,
-  and taming is the design spine.
-- **`proc_wielded_routine` stays free.** `tuning.rs:490` states that the 25%
-  proc rate *is* the routine's whole price, and the `W` key is an
-  undocumented easter egg. Charging the wielded program's reserve would
-  quietly degrade it. This leaves a hole — wield a program with an expensive
-  routine and fire it free at 25% — bounded by the proc rate, and accepted.
+`decompile.ron` already carries `fatigue_cost: 0.0`, independently agreeing
+with the argument that taming is priced in its ICE Breaker catalyst and must
+not become a third thing to afford.
+
+The five uncosted files — `deadlock`, `hot_patch`, `memory_leak`,
+`priority_boost`, `sandbox` — inherit 0.0 and so keep behaving exactly as
+they do today. That is the desirable outcome rather than an accepted gap:
+`priority_boost` is the fallback every companion has when its species grants
+nothing, and a companion whose only routine is unaffordable has nothing to
+choose but a plain attack.
+
+### One knob, because the scale is wrong even though the shape is right
+
+Those 55 values were tuned against a Fatigue pool refilling at 0.08 a tick —
+cheap and renewable. They will now be spent from an irreplaceable
+underground reserve. The relative ordering between abilities is worth
+keeping; the absolute scale almost certainly is not.
+
+`tuning::ROUTINE_POWER_COST_MULTIPLIER`, default 1.0, applied wherever a
+cost is read — so both the refusal in `ability_unavailable` and the spend in
+`spend_power` scale together and cannot disagree. It covers `Phase` and
+`Jump` too; one knob, no exemptions.
+
+This gives tuning two levels with different costs. The whole curve moves by
+editing one constant and rebuilding. A single ability moves by editing its
+`.ron` and restarting the game — no rebuild, which is the faster loop and
+the one that matters during a session.
+
+Because the multiplier is a difficulty knob rather than content, it lives in
+`tuning.rs`, where `CLAUDE.md` requires it.
+
+### `proc_wielded_routine` stays free
+
+`tuning.rs:490` states that the 25% proc rate *is* the routine's whole
+price, and the `W` key is an undocumented easter egg a gui test holds the
+help text to never naming. Charging the wielded program's reserve would
+quietly degrade it. This leaves a hole — wield a program with an expensive
+routine and fire it free at 25% — bounded by the proc rate, and accepted.
 
 ## Hostiles get no reserve
 
@@ -418,14 +458,25 @@ fix removed and read as coverage.
 
 ### What is not gated
 
-`balance_sim` models no abilities at all, so **none of the 71 authored costs
-is covered by the balance regression suite**, and neither is
-`trickle_charge`'s retune. The `balance_sim` curve tests will pass against a
-game whose entire casting economy has changed.
+`balance_sim` models no abilities at all, so **none of the 66 inherited
+costs is covered by the balance regression suite**, and neither is
+`ROUTINE_POWER_COST_MULTIPLIER` nor `trickle_charge`'s retune. The
+`balance_sim` curve tests will pass against a game whose entire casting
+economy has changed.
 
-The instruments that can see this are `dev-arenas/` and play. Re-run the
-shipped scenarios after the costs are authored, and read
+That is the accepted trade rather than an oversight. Tuning happens in play,
+which is what the multiplier and the per-file `.ron` values are for; the
+suite's job here is to prove the *mechanism* works — costs are charged, the
+right entity pays, an empty reserve refuses — not that any number is right.
+
+The instruments that can see the numbers are `dev-arenas/` and a session.
+Re-run the shipped scenarios once the flip lands, and read
 `docs/measurements/README.md` before running anything broader.
+
+One test does belong to the numbers: an assertion over the real assets that
+every `power_cost` is finite and non-negative. `AbilityDef::validate`
+already refuses a non-finite `fatigue_cost`, and that check must survive the
+rename rather than being lost with it.
 
 ## Out of scope
 

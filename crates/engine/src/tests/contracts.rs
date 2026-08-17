@@ -350,6 +350,7 @@ fn def(id: &str, objective: Objective, reward: Vec<Reward>) -> ContractDef {
         reward,
         min_zone: 0,
         repeatable: false,
+        starter: false,
     }
 }
 
@@ -999,12 +1000,161 @@ fn deploy_broker(game: &mut Game) {
     deploy(game, "contract_broker", pos.x + 1, pos.y);
 }
 
+/// Marks every shipped starter finished. A test about the rest of the board's
+/// machinery is otherwise reading an onboarding board — an unfinished starter
+/// outranks everything, rolled contracts included.
+fn skip_the_starters(game: &mut Game) {
+    let ids: Vec<ContractId> = game
+        .world
+        .resource::<ContractDb>()
+        .iter()
+        .filter(|def| def.starter)
+        .map(|def| def.id.clone())
+        .collect();
+    game.world
+        .resource_mut::<ActiveContracts>()
+        .done
+        .extend(ids);
+}
+
 fn board_ids(game: &mut Game) -> Vec<ContractId> {
     game.contract_board()
         .expect("a Broker is deployed")
         .into_iter()
         .map(|row| row.id)
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Starters
+// ---------------------------------------------------------------------------
+
+/// Six contracts, two of them starters, loaded over the shipped set — so
+/// these are tests about the queue rather than about which three the roll
+/// happened to pick out of the real catalogue.
+fn board_with_starters(tag: &str) -> Game {
+    let files: Vec<(String, String)> = (0..2)
+        .map(|i| {
+            (
+                format!("s{i}.ron"),
+                format!(
+                    r#"(id: "s{i}", name: "S{i}", description: "d",
+                        objective: Terminate(species: None, count: 3),
+                        reward: [Xp(40)], starter: true)"#
+                ),
+            )
+        })
+        .chain((0..4).map(|i| {
+            (
+                format!("n{i}.ron"),
+                format!(
+                    r#"(id: "n{i}", name: "N{i}", description: "d",
+                        objective: Terminate(species: None, count: 3),
+                        reward: [Xp(40)])"#
+                ),
+            )
+        }))
+        .collect();
+    let borrowed: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(n, b)| (n.as_str(), b.as_str()))
+        .collect();
+    let (db, warnings) = load(tag, &borrowed);
+    assert!(warnings.is_empty(), "{warnings:?}");
+
+    let mut game = fresh();
+    game.world.insert_resource(db);
+    deploy_broker(&mut game);
+    game
+}
+
+/// The whole of the onboarding: three slots drawn uniformly out of a pool of
+/// fourteen made a new run's first contract a coin flip, and "deliver
+/// twenty-five Core Fragments" was as likely to be it as anything.
+#[test]
+fn an_unfinished_starter_fills_the_board_before_anything_else() {
+    let mut game = board_with_starters("starters_first");
+    let ids = board_ids(&mut game);
+    assert_eq!(ids.len(), 3, "the board fills its slots");
+    assert_eq!(
+        ids.iter().filter(|id| id.as_str().starts_with('s')).count(),
+        2,
+        "both starters are on the board, and the third slot falls through to \
+         an ordinary contract rather than being left empty: {ids:?}"
+    );
+}
+
+/// Onboarding is the first sector's business. A starter stays *offerable*
+/// past it — nothing about it is unfinishable in zone 4 — but a Broker four
+/// sectors out no longer leads with "go and kill three programs".
+#[test]
+fn a_starter_stops_jumping_the_queue_once_the_run_has_breached() {
+    let mut game = board_with_starters("starters_past_zone_one");
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+
+    let ids = board_ids(&mut game);
+    assert_eq!(ids.len(), 3);
+    assert!(
+        ids.iter().any(|id| id.as_str().starts_with('n')),
+        "past the first sector the board draws uniformly again, so an \
+         ordinary contract reaches it: {ids:?}"
+    );
+}
+
+#[test]
+fn the_board_returns_to_normal_once_the_starters_are_done() {
+    let mut game = board_with_starters("starters_done");
+    game.world.resource_mut::<ActiveContracts>().done =
+        vec![ContractId::from("s0"), ContractId::from("s1")];
+
+    let ids = board_ids(&mut game);
+    assert_eq!(ids.len(), 3);
+    assert!(
+        ids.iter().all(|id| id.as_str().starts_with('n')),
+        "a finished starter is out of the pool like any other one-shot: {ids:?}"
+    );
+}
+
+/// The starters are what a run is handed before it knows what a Broker is
+/// for, so each has to be finishable with what a fresh sector holds: no zone
+/// gate, and no second helping.
+#[test]
+fn every_shipped_starter_is_a_one_shot_offered_from_the_first_sector() {
+    let (contracts, _) = shipped_contracts();
+    let starters: Vec<_> = contracts.iter().filter(|d| d.starter).collect();
+    assert!(
+        starters.len() >= 5,
+        "the shipped set carries an onboarding arc, not one lonely job"
+    );
+    for def in starters {
+        assert_eq!(
+            def.min_zone, 0,
+            "{} is a starter behind a zone gate, so a new run never sees it",
+            def.id
+        );
+        assert!(
+            !def.repeatable,
+            "{} is a repeatable starter, so it holds a board slot for the \
+             whole run rather than being the thing you did once",
+            def.id
+        );
+    }
+}
+
+#[test]
+fn a_new_runs_first_board_is_nothing_but_starters() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let ids = board_ids(&mut game);
+    assert_eq!(ids.len(), 3);
+    for id in &ids {
+        let def = game
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .get(id)
+            .unwrap_or_else(|| panic!("{id} is rolled, so a template outranked a starter"));
+        assert!(def.starter, "{id} is not a starter");
+    }
 }
 
 #[test]
@@ -1751,6 +1901,7 @@ fn every_shipped_template_rolls_something_finishable_in_a_fresh_sector() {
 fn a_rolled_contract_can_be_accepted() {
     let mut game = fresh();
     deploy_broker(&mut game);
+    skip_the_starters(&mut game);
 
     // Walk the epochs until a rolled contract surfaces on the board, rather
     // than depending on which three slots one seed happened to pick.
@@ -1786,6 +1937,7 @@ fn a_rolled_contract_can_be_accepted() {
 fn the_same_rolled_contract_comes_back_after_a_save_and_load() {
     let mut game = fresh();
     deploy_broker(&mut game);
+    skip_the_starters(&mut game);
     let before = board_ids(&mut game);
     assert!(
         before.iter().any(|id| id.as_str().contains('#')),

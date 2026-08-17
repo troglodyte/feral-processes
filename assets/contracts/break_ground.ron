@@ -1,0 +1,8 @@
+(
+    id: "break_ground",
+    name: "Break Ground",
+    description: "Mining by hand is a way to spend a run. Stand up a Mining Node and let it work while you do something else.",
+    objective: Build(structure: "mining_node"),
+    reward: [Credits(20), Item("core_fragment", 8), Xp(70)],
+    starter: true,
+)

@@ -1,0 +1,8 @@
+(
+    id: "raw_stock",
+    name: "Raw Stock",
+    description: "Everything out here starts as scrap somebody chipped loose. Bring six Core Fragments back to the Broker.",
+    objective: Deliver(item: "core_fragment", count: 6),
+    reward: [Credits(20), Xp(60)],
+    starter: true,
+)

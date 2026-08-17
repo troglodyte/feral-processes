@@ -2147,6 +2147,34 @@ party at a Broker four frames above. `Game::active_contracts` is the half
 that reads anywhere, and the base-menu row is `surface_only: false`
 precisely because the *engine* refuses rather than the frontend guessing.
 
+### A starter contract jumps the board queue, and only in the first sector
+
+**A starter contract jumps the board queue, and only in the first sector.**
+`ContractDef::starter` is a `#[serde(default)]` flag, and `Game::board_defs`
+partitions the eligible pool on it and fills its three slots from the
+starters before it touches anything else. The reason is arithmetic rather
+than taste: the board draws uniformly, a zone-1 pool is nine authored
+contracts plus up to five rolled, and three slots out of fourteen make a new
+run's first job a coin flip. `min_zone: 0` is not the same statement — it
+says a contract *may* be offered, not that it is offered first — and it was
+what the shipped set had been relying on.
+
+Two properties fall out of how the partition is written. The second tier
+draws exactly as the single loop used to, so a board with no starters left
+spends the same `StdRng` draws in the same order it did before starters
+existed — no seeded board moved. And the partition predicate carries
+`ZoneLevel <= 1`, so past the first sector the flag stops meaning anything
+at all: a starter is still offerable (nothing about killing three programs
+becomes unfinishable in zone 4), it simply stops outranking. That gate was
+added because the `contracts` dev template — a zone-3 world — had its board
+taken over by beginner errands, which is exactly what a mid-run save would
+have looked like on load. Onboarding ends at the breach, and one of the
+seven shipped starters *is* that breach.
+
+Templates carry no such field and `ContractTemplate::roll` writes
+`starter: false`, so a rolled contract can never jump the queue. An arc that
+this sector's habitat pools got a vote in is not an arc.
+
 ### `RunFeats` has two fields and two drainers, one each, and merging them is the change to refuse
 
 **`RunFeats` has two fields and two drainers, one each, and merging them

@@ -1,0 +1,8 @@
+(
+    id: "live_fire",
+    name: "Live Fire",
+    description: "The Broker deals with people who can hold a line and nobody else. Put three wild programs down, whatever they turn out to be.",
+    objective: Terminate(species: None, count: 3),
+    reward: [Credits(15), Xp(45)],
+    starter: true,
+)

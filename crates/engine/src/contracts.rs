@@ -154,6 +154,18 @@ pub struct ContractDef {
     /// Whether finishing it puts it back on the board.
     #[serde(default)]
     pub repeatable: bool,
+    /// Whether this is one of the jobs a run is onboarded with. An unfinished
+    /// starter takes a board slot ahead of everything else — see
+    /// `Game::board_defs`. A `min_zone` of 0 is not the same thing and cannot
+    /// stand in for it: the board draws its three uniformly, so a starter that
+    /// merely *may* be offered is a coin flip rather than the first thing a
+    /// player is handed.
+    ///
+    /// Authored only. A template has no such field, so a rolled contract is
+    /// never a starter — the arc is a written sequence, not whatever this
+    /// sector happened to supply.
+    #[serde(default)]
+    pub starter: bool,
 }
 
 /// Separates a template's id from the parameters a roll filled in —
@@ -344,6 +356,7 @@ impl ContractTemplate {
                 .collect(),
             min_zone: self.min_zone,
             repeatable: self.repeatable,
+            starter: false,
         })
     }
 }

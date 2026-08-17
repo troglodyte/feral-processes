@@ -1,0 +1,8 @@
+(
+    id: "out_of_the_shallows",
+    name: "Out of the Shallows",
+    description: "This sector is a starter sector and everyone knows it. Breach outward and reach sector 2.",
+    objective: Breach(zone: 2),
+    reward: [Credits(50), Xp(150)],
+    starter: true,
+)

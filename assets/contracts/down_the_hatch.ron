@@ -1,0 +1,8 @@
+(
+    id: "down_the_hatch",
+    name: "Down the Hatch",
+    description: "There is a way under this sector and nobody has stood in it. Find a stack link and go one frame down.",
+    objective: Descend(depth: 1),
+    reward: [Credits(25), Xp(90)],
+    starter: true,
+)

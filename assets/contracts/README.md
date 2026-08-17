@@ -64,6 +64,10 @@ loses its progress; it is not banked.
     // Optional, default false. Whether finishing it puts it back on the
     // board.
     repeatable: true,
+
+    // Optional, default false. One of the jobs a new run is onboarded with.
+    // See "Starters" below.
+    starter: false,
 )
 ```
 
@@ -127,6 +131,28 @@ for rather than whatever was nearest.
 A reward of `0` (`Credits(0)`, `Item(_, 0)`, `Xp(0)`), or an empty `reward`
 list, is skipped with a warning, the same way a zero-paying achievement is: a
 contract that pays nothing is a mistake that reads as a working file.
+
+## Starters
+
+A contract marked `starter: true` takes a board slot **ahead of everything
+else** while it is unfinished. The board is three slots drawn uniformly out of
+everything eligible, and a fresh sector has a dozen or more eligible contracts —
+so without this a new player's first job is a coin flip, and "deliver
+twenty-five Core Fragments" is as likely to be it as "kill three programs".
+`min_zone: 0` cannot stand in for it: it says a contract *may* be offered, not
+that it is offered first.
+
+The queue belongs to the **first sector only**. Past zone 1 a starter is still
+offered, just no longer ahead of anything — breaching is where onboarding ends,
+and a Broker four sectors out leading with a beginner's errand reads as broken
+rather than as helpful. Finishing one takes it off the board like any other
+one-shot, so mark starters `repeatable: false` or they hold a slot for the whole
+run.
+
+Templates have no `starter` field, so a rolled contract is never one: the arc is
+a written sequence, not whatever this sector happened to supply. The shipped set
+ships seven, all `min_zone: 0` — a first kill, a first delivery, three
+first structures, a first descent and the breach out of sector 1.
 
 ## Templates
 

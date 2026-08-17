@@ -1,0 +1,8 @@
+(
+    id: "standing_current",
+    name: "Standing Current",
+    description: "A program with nothing left in it is furniture. Stand up a Recharger Node and keep the base on its feet.",
+    objective: Build(structure: "recharger_node"),
+    reward: [Credits(25), Xp(70)],
+    starter: true,
+)

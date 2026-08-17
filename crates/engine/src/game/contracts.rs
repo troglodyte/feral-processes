@@ -243,10 +243,26 @@ impl Game {
         }
         let mut pool = self.offerable_contracts();
         pool.extend(self.rolled_contracts());
+        // Starters first, and only then the rest of the pool. Three slots
+        // drawn uniformly out of everything eligible left a new run's first
+        // contract to chance, which is not what an onboarding job is for.
+        // Both halves draw the same way, so a board with no starters left
+        // spends its draws exactly as it did before they existed.
+        //
+        // The queue is the **first sector's** only: a starter is still
+        // offerable past it, just no longer ahead of everything else. Breaching
+        // is where onboarding ends — one of the shipped starters is that very
+        // breach — and a board that kept pushing them would hand a zone-4 run's
+        // Broker a job to go and kill three drones.
+        let onboarding = self.world.resource::<ZoneLevel>().0 <= 1;
+        let (mut starters, mut rest): (Vec<_>, Vec<_>) =
+            pool.into_iter().partition(|def| onboarding && def.starter);
         let mut rng = StdRng::seed_from_u64(self.board_seed());
         let mut defs = Vec::new();
-        for _ in 0..crate::tuning::CONTRACT_BOARD_SLOTS.min(pool.len()) {
-            defs.push(pool.swap_remove(rng.random_range(0..pool.len())));
+        for tier in [&mut starters, &mut rest] {
+            while defs.len() < crate::tuning::CONTRACT_BOARD_SLOTS && !tier.is_empty() {
+                defs.push(tier.swap_remove(rng.random_range(0..tier.len())));
+            }
         }
         Some(defs)
     }

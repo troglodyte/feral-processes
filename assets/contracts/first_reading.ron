@@ -1,0 +1,8 @@
+(
+    id: "first_reading",
+    name: "First Reading",
+    description: "Nothing gets built twice out here unless somebody wrote down how. Stand up a Research Node and start banking readings.",
+    objective: Build(structure: "research_node"),
+    reward: [Item("core_fragment", 8), Xp(70)],
+    starter: true,
+)

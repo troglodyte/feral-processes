@@ -53,12 +53,38 @@ fn a_won_fight_marks_nobody() {
     );
 }
 
+/// Like `support::flee_until_clear`, but reports which of its two possible
+/// endings actually happened, rather than leaving a caller to assume one.
+/// `flee_until_clear` returns on *either* a landed escape or a failed
+/// attempt's counter-volley flatlining the player first — indistinguishable
+/// from outside, since a Forgiving defeat also leaves a survivor marked at
+/// grudge 1. `start_battle_with_a_wild_program`'s program has `atk: 0` (see
+/// `spawn_wild_on_player_tile`), so the defeat path is unreachable here, but
+/// that has to be an assertion this test makes, not a fact it silently
+/// relies on.
+fn flee_until_it_lands(game: &mut Game) -> bool {
+    for _ in 0..200 {
+        if game.battle_flee() {
+            return true;
+        }
+        if !game.has_active_battle() {
+            return false;
+        }
+    }
+    panic!("200 jack-out attempts all failed — the escape roll is broken");
+}
+
 #[test]
 fn a_successful_jack_out_marks_the_surviving_hostile_at_grudge_1() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = start_battle_with_a_wild_program(&mut game);
 
-    flee_until_clear(&mut game);
+    assert!(
+        flee_until_it_lands(&mut game),
+        "the fixture's wild program deals no damage, so only a landed \
+         escape can end this fight — false here means the roll never \
+         landed in 200 tries, not a legitimate defeat"
+    );
 
     assert_eq!(
         game.world.get::<Nemesis>(wild).map(|n| n.0),

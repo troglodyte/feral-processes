@@ -327,6 +327,19 @@ impl Game {
     /// a *fresh* mark is refused, which is what keeps this asymmetric rather
     /// than needing a demotion path.
     pub(crate) fn mark_nemeses(&mut self) {
+        // Belt and braces with `all_living_enemies()` returning empty on a
+        // win: `remove_member` already empties `groups` there, so this guard
+        // is provably redundant against the loop below as the code stands
+        // today, and no test can tell the two apart — deleting it leaves
+        // every test in `tests/nemesis.rs` green. It stays anyway, because
+        // it is the spec's rule in its own words ("if the groups are
+        // non-empty when the battle tears down, every living hostile is
+        // marked"), stated rather than inferred from another function's
+        // incidental behaviour. Without it, a future change to
+        // `remove_member` that left an emptied-but-present group behind
+        // would start marking hostiles on wins with nothing here to catch
+        // it. Don't "clean this up" for being uncovered — it is uncovered on
+        // purpose.
         let fled = self
             .world
             .get_resource::<BattleState>()

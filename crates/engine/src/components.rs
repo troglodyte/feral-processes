@@ -1120,7 +1120,7 @@ pub struct StackSpawn;
 /// takes it back to absent: the cap (`tuning::MAX_NEMESES`) refuses a *new*
 /// mark once full, but an existing one always still escalates, so demotion
 /// is not a case any caller has to handle.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, Debug)]
 pub struct Nemesis(pub u32);
 
 /// Tags a wild creature as tethered to a `Nest` — see

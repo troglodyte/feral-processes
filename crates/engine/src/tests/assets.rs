@@ -56,6 +56,40 @@ fn game_load_aborts_when_the_item_set_is_missing_the_currency_role() {
     );
 }
 
+/// The moddability guarantee for the two new grid fields: a structure file
+/// written before they existed — the common case, since every shipped file
+/// predates them too — must still parse, reading both as `0` (draws
+/// nothing, supplies nothing) rather than failing to load.
+#[test]
+fn a_structure_file_without_the_power_fields_still_parses() {
+    const NO_POWER_FIELDS_STRUCTURE: &str = r#"(
+        id: "no_power_fields_structure",
+        name: "No Power Fields Structure",
+        glyph: '?',
+        color: White,
+        build_cost: [],
+        work: None,
+    )"#;
+    let dir = assets_dir_with_extra_structure(
+        "no_power_fields_structure",
+        "no_power_fields_structure.ron",
+        NO_POWER_FIELDS_STRUCTURE,
+    );
+    let game = Game::new(905, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let def = db
+        .get("no_power_fields_structure")
+        .expect("the fixture structure loaded");
+
+    assert_eq!(def.power_draw, 0, "an old-format file should draw nothing");
+    assert_eq!(
+        def.power_supply, 0,
+        "an old-format file should supply nothing"
+    );
+}
+
 #[test]
 fn every_shipped_asset_file_loads_without_a_warning() {
     // A malformed shipped asset is warn-and-skipped like a mod's would

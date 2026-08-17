@@ -152,6 +152,26 @@ is skipped with a warning logged in-game rather than crashing startup.
         radius: 10,
     )),
 
+    // Optional; can be left out entirely (defaults to 0). What this
+    // structure needs from the base's Grid to run, summed every tick
+    // against every deployed structure's `power_supply`. A machine whose
+    // draw doesn't fit the base's remaining supply goes unpowered and makes
+    // no progress until the base has spare capacity again.
+    //
+    // The Grid is NOT the same resource as `power_regen` above: `power_regen`
+    // restores the player's Power (their `PowerReserve` stat), while the Grid
+    // is a base-wide capacity that only machines draw against. A structure
+    // can set either, both, or neither — the Recharger Node sets both, at
+    // different values, which is exactly why they're two fields instead of
+    // one block.
+    power_draw: 2,
+
+    // Optional; can be left out entirely (defaults to 0). What this
+    // structure contributes to the base's Grid — see `power_draw` above for
+    // what draws against it. Home always supplies some, so a fresh base
+    // isn't stuck at zero capacity before anything is built.
+    power_supply: 4,
+
     // Optional; can be left out entirely (defaults to no symlink). If set,
     // this structure is a symlink target: the player can "use symlink" (`u`)
     // to instantly teleport to it from anywhere on the map, paying the

@@ -222,6 +222,26 @@ pub struct StructureDef {
     /// existed still parse (defaulting to no regeneration).
     #[serde(default)]
     pub power_regen: Option<PowerRegenDef>,
+    /// What this structure needs from the base's Grid to run. Summed against
+    /// every deployed structure's `power_supply` every tick; see
+    /// `game::base::power`. A machine whose draw doesn't fit the base's
+    /// remaining supply reports `MachineStatus::Unpowered` and makes no
+    /// progress. `#[serde(default)]` so existing structure files (including
+    /// mods) written before this field existed still parse, as a machine
+    /// that draws nothing.
+    #[serde(default)]
+    pub power_draw: u32,
+    /// What this structure contributes to the base's Grid — see
+    /// `game::base::power`. A separate field from `power_regen` rather than
+    /// a third member of `PowerRegenDef`, because they answer different
+    /// questions and one structure (the Recharger) is about to carry both
+    /// with different values: `power_regen` restores a creature's
+    /// `PowerReserve`, a different resource entirely, while this feeds
+    /// every machine on the base. `#[serde(default)]` so existing structure
+    /// files (including mods) written before this field existed still
+    /// parse, as a building that supplies nothing.
+    #[serde(default)]
+    pub power_supply: u32,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is

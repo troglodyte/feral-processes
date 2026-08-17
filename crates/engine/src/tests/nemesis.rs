@@ -702,8 +702,12 @@ fn two_nemeses_of_one_species_with_different_potential_get_different_names() {
     );
 }
 
-/// Malformed content is skipped with a warning rather than panicking,
-/// matching `DescriptionDb::load_dir`'s discipline.
+/// Both banks are exercised the same way — malformed content is skipped
+/// with a warning rather than panicking, matching `DescriptionDb::
+/// load_dir`'s discipline. Only `names.ron` is written invalid here;
+/// `taunts.ron` is left entirely absent, which `load_bank`'s `NotFound` arm
+/// treats identically (silent, empty pool) — both are exercised by this one
+/// directory.
 #[test]
 fn a_malformed_bank_file_is_skipped_with_a_warning_and_does_not_panic() {
     let dir = std::env::temp_dir().join(format!(
@@ -730,6 +734,11 @@ fn a_malformed_bank_file_is_skipped_with_a_warning_and_does_not_panic() {
         db.name(0).is_none(),
         "a bank that failed to load must leave the pool empty, not panic or \
          half-populate it"
+    );
+    assert!(
+        db.taunt(0, 1).is_none(),
+        "taunts.ron was never written at all, which load_bank's own NotFound \
+         arm must also treat as silently empty"
     );
 }
 
@@ -762,5 +771,130 @@ fn with_an_empty_bank_a_nemesis_is_still_marked_promoted_and_recharged_just_unna
         game.world.get::<CustomName>(wild).is_none(),
         "an empty bank must leave the mark unnamed rather than writing a \
          placeholder or panicking"
+    );
+}
+
+// --- Task 5: the taunt ------------------------------------------------------
+
+#[test]
+fn a_battle_opened_against_a_marked_nemesis_logs_its_taunt() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    flee_until_clear(&mut game);
+
+    game.start_battle(vec![wild]);
+
+    let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+    let potential = game
+        .world
+        .get::<Potential>(wild)
+        .copied()
+        .unwrap_or(Potential::NEUTRAL);
+    let grudges = game.world.get::<Nemesis>(wild).unwrap().0;
+    let seed = nemesis::name_seed(&species, &potential);
+    let line = game
+        .world
+        .resource::<NemesisDb>()
+        .taunt(seed, grudges)
+        .expect("the shipped taunts.ron must not be empty")
+        .to_string();
+    let label = game.creature_label(wild);
+    let expected = format!("{label} {line}");
+
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|l| l.text == expected && l.kind == MessageKind::Info),
+        "expected the taunt line {expected:?} in the recent log, got {:?}",
+        game.message_log(10)
+    );
+}
+
+#[test]
+fn a_battle_against_an_unmarked_program_logs_no_taunt() {
+    let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let before = game.message_log(50).len();
+
+    game.start_battle(vec![wild]);
+
+    let after = game.message_log(50).len();
+    assert_eq!(
+        after,
+        before + 1,
+        "an unmarked program should add only the intercept line — no taunt"
+    );
+}
+
+/// Verified by mutation: `MessageKind::Info` was changed to `MessageKind::
+/// Outcome` at the `log_kind` call in `log_nemesis_taunt`, and the second
+/// assertion below (the line surviving `end_battle`'s prune) started
+/// failing, because `retain_outcomes_since_battle` keeps `Outcome` lines.
+/// Reverted after confirming the failure.
+#[test]
+fn the_taunt_is_info_kind_and_is_pruned_once_its_battle_ends() {
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    flee_until_clear(&mut game);
+
+    game.start_battle(vec![wild]);
+    let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+    let potential = game
+        .world
+        .get::<Potential>(wild)
+        .copied()
+        .unwrap_or(Potential::NEUTRAL);
+    let grudges = game.world.get::<Nemesis>(wild).unwrap().0;
+    let seed = nemesis::name_seed(&species, &potential);
+    let line = game
+        .world
+        .resource::<NemesisDb>()
+        .taunt(seed, grudges)
+        .unwrap()
+        .to_string();
+    let label = game.creature_label(wild);
+    let expected = format!("{label} {line}");
+    assert!(
+        game.message_log(10)
+            .iter()
+            .any(|l| l.text == expected && l.kind == MessageKind::Info),
+        "the taunt should be logged as Info at the top of the battle"
+    );
+
+    flee_until_clear(&mut game);
+
+    assert!(
+        !game.message_log(50).iter().any(|l| l.text == expected),
+        "the taunt should be pruned once the battle it belongs to ends, the \
+         same as any other Info line inside a battle's range"
+    );
+}
+
+/// Drives the pure selection function directly rather than through combat:
+/// `taunt`'s only documented contract is "folds `grudges` into `seed`", so
+/// the property under test — that varying `grudges` can move the pick — is
+/// a property of `NemesisDb::taunt` itself, and sweeping a range here is
+/// what makes this robust against one unlucky pair of grudge counts
+/// coinciding on the same line by chance.
+///
+/// Verified by mutation: `NemesisDb::taunt` was changed to ignore `grudges`
+/// entirely (`pick(&self.taunts, seed)`) and this test failed — every
+/// draw across the swept range landed on the same line. Reverted after
+/// confirming the failure.
+#[test]
+fn a_higher_grudge_count_can_select_a_different_taunt_line() {
+    let game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let seed = nemesis::name_seed("construct", &Potential::NEUTRAL);
+    let db = game.world.resource::<NemesisDb>();
+
+    let lines: std::collections::HashSet<&str> = (1..=12u32)
+        .filter_map(|grudges| db.taunt(seed, grudges))
+        .collect();
+
+    assert!(
+        lines.len() > 1,
+        "sweeping grudges 1..=12 never selected more than one line out of \
+         {} possible — the grudge fold looks like a no-op",
+        lines.len()
     );
 }

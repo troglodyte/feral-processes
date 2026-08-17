@@ -1,0 +1,31 @@
+// What a nemesis says when a fight with it opens — see README.md for the
+// schema and `crates/engine/src/game/combat.rs`'s `begin_battle` for the
+// trigger. Selected by `NemesisDb::taunt`, which folds the grudge count
+// into the same seed `names.ron` was picked with, so a longer history
+// tends to land on a different line rather than repeating one forever.
+//
+// Each line completes "<name> " as a third-person verb phrase, matching
+// `game/taunt.rs`'s `GENERIC_TAUNTS`. None of them may assume *how* the
+// party left last time — a defeat and a jack-out share the trigger
+// (`Game::mark_nemeses`), so a line claiming "you ran" would be wrong half
+// the time.
+(
+    lines: [
+        "has been waiting for a rematch since the last one.",
+        "remembers exactly how that fight ended.",
+        "recognizes your signal before you're in range.",
+        "already has your last approach logged.",
+        "still carries the scar tissue from round one.",
+        "isn't running the same routine it lost with.",
+        "has rewritten itself since you last saw it.",
+        "counts this as a continuation, not a new fight.",
+        "clocks you the moment you're in range.",
+        "hasn't forgotten who left first.",
+        "queues up the exact counter it needed last time.",
+        "logs your approach and does not flinch.",
+        "has kept every byte of what happened before.",
+        "opens with the move that worked last time.",
+        "treats this as unfinished business.",
+        "has had nothing to do but get ready for this.",
+    ],
+)

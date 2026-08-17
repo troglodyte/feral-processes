@@ -226,6 +226,59 @@ impl Game {
         } else {
             self.log(format!("A rogue {name} intercepts your signal!"));
         }
+        // The first nemesis in the opening groups, group-then-slot order —
+        // deterministic, and there is no notion of "the" nemesis when a
+        // pack holds two, so picking one rather than logging every one of
+        // them is the whole rule. `all_living_enemies` reads `BattleState`,
+        // so this has to run after it's inserted above.
+        if let Some(taunter) = self
+            .all_living_enemies()
+            .into_iter()
+            .find(|&e| self.world.get::<Nemesis>(e).is_some())
+        {
+            self.log_nemesis_taunt(taunter);
+        }
+    }
+
+    /// Logs what `hostile` — already known to carry `Nemesis` — has to say
+    /// at the top of this fight, or nothing on an empty taunt bank.
+    ///
+    /// `MessageKind::Info`, matching `game/taunt.rs`'s player-triggered
+    /// counterpart exactly and for the same reason:
+    /// `MessageLog::retain_outcomes_since_battle` keeps only `Outcome`,
+    /// `Loot`, `LevelUp`, `Raid` and `Complete`, so this line is pruned the
+    /// moment the fight ends and never follows the player onto the map.
+    fn log_nemesis_taunt(&mut self, hostile: Entity) {
+        let Some(nemesis) = self.world.get::<Nemesis>(hostile).copied() else {
+            return;
+        };
+        let Some(species) = self
+            .world
+            .get::<Creature>(hostile)
+            .map(|c| c.species.clone())
+        else {
+            return;
+        };
+        let potential = self
+            .world
+            .get::<Potential>(hostile)
+            .copied()
+            .unwrap_or(Potential::NEUTRAL);
+        // The same seed `name_new_nemesis` derived this program's name
+        // from — `NemesisDb::taunt` folds the grudge count on top of it,
+        // rather than this call site folding its own, so the fold lives in
+        // exactly one place.
+        let seed = crate::nemesis::name_seed(&species, &potential);
+        let Some(line) = self
+            .world
+            .resource::<crate::nemesis::NemesisDb>()
+            .taunt(seed, nemesis.0)
+            .map(str::to_string)
+        else {
+            return;
+        };
+        let label = self.creature_label(hostile);
+        self.log_kind(MessageKind::Info, format!("{label} {line}"));
     }
 
     /// The front member of `group` — the only one that takes hits.

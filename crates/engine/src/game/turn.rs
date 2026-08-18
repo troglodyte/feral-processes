@@ -117,6 +117,11 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
+        // Before the ambient roll, not after: the roll's density gate reads
+        // `local_hostile_count`, and asking it about ground that has not been
+        // stocked yet would answer "empty" and spend a spawn filling in what
+        // is about to arrive properly.
+        self.ensure_local_population();
         self.maybe_spawn_wild_creature();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.

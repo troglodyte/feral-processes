@@ -617,8 +617,13 @@ fn a_leech_fills_a_node_buffer_faster_than_a_striker() {
 
 #[test]
 fn a_sharper_program_mines_more_from_the_same_node() {
-    let sharp = units_mined_by("int_sharp", "sharpmon", 250);
-    let dull = units_mined_by("int_dull", "dullmon", 250);
+    // The tick budget is bounded on both sides and neither bound is slack:
+    // too few and the two programs have not diverged, too many and the
+    // faster one fills the buffer and the comparison flattens. It was 250
+    // until per-chunk population shifted the RNG stream and the sharp run
+    // landed exactly on the cap.
+    let sharp = units_mined_by("int_sharp", "sharpmon", 180);
+    let dull = units_mined_by("int_dull", "dullmon", 180);
     assert!(
         sharp > dull,
         "who you post to a node has to change what it produces \

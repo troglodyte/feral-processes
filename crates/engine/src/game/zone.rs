@@ -5,7 +5,7 @@
 use crate::tuning::{
     MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, NEST_CACHE_CREDIT_ZONE_BONUS,
     NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT,
-    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP, initial_wild_population,
+    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -587,6 +587,13 @@ impl Game {
         // matching coordinate.
         self.world.insert_resource(StackMemory::default());
 
+        // And the same reason a third time, with a sharper edge: a mark left
+        // behind tells the new sector that ground it has never stocked is
+        // already full, so every chunk the old zone had populated would be
+        // born empty here and stay that way.
+        self.world
+            .insert_resource(crate::resources::PopulatedChunks::default());
+
         let spendable = [self.currency(), self.craft_currency()];
         let player = self.player_entity();
         let lost: Vec<(ItemId, u32)> = {
@@ -623,7 +630,7 @@ impl Game {
                 "Your caches decohere in transit — {manifest} lost to the breach."
             ));
         }
-        self.spawn_initial_creatures(initial_wild_population());
+        self.ensure_local_population();
         self.spawn_surface_links(STACK_LINKS_PER_ZONE);
     }
 

@@ -468,6 +468,17 @@ pub struct SaveData {
     /// that is saved rather than regenerated: a frame is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
     pub stack_memory: crate::resources::StackMemory,
+    /// Which world chunks of this zone have had their wild population
+    /// placed — see `resources::PopulatedChunks`. Saved rather than derived
+    /// because it is history, not geometry: the chunks a run has stocked
+    /// depend on where that run walked. Without it a reload would re-stock
+    /// every chunk the player had already cleared out.
+    ///
+    /// `#[serde(default)]` earns its keep here — an older save simply
+    /// carries no marks, so the ground around wherever it left the player is
+    /// stocked once on load and the rest arrives as they travel.
+    #[serde(default)]
+    pub populated_chunks: crate::resources::PopulatedChunks,
     /// How loud the party has been in the stack they are currently in — see
     /// `resources::Trace`. Zero whenever `locale` is `Surface`, since
     /// `Game::clear_stack` is the one place it resets.
@@ -809,6 +820,7 @@ mod tests {
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
+            populated_chunks: crate::resources::PopulatedChunks::default(),
             trace: 0,
             contracts: Vec::new(),
             contracts_done: Vec::new(),

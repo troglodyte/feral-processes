@@ -846,6 +846,22 @@ pub(super) fn find_structure_by_kind(game: &mut Game, kind: &str) -> Option<Enti
 /// first — otherwise they'd be at the mercy of the seed's RNG instead of
 /// testing the method itself.
 pub(super) fn clear_creatures_east_of_player(game: &mut Game, start: Position, range: i32) {
+    clear_creatures_along_ray(game, start, 1, 0, range);
+}
+
+/// The same cleanup along an arbitrary ray, for a test that scans in more
+/// than one direction. Clearing only eastward used to be enough by luck: the
+/// ground west of the player happened to be empty on the seeds those tests
+/// use. It stopped being once wild programs became a property of place
+/// rather than of where the player had walked, since every chunk is now
+/// stocked whether or not anyone has been there.
+pub(super) fn clear_creatures_along_ray(
+    game: &mut Game,
+    start: Position,
+    dx: i32,
+    dy: i32,
+    range: i32,
+) {
     // Exactly the row `Game::find_target_in_direction` reads, and no wider.
     // It used to clear a 90° cone, matching the scan when the scan was one;
     // a cone-shaped cleanup for a ray-shaped read despawns creatures no test
@@ -855,8 +871,7 @@ pub(super) fn clear_creatures_east_of_player(game: &mut Game, start: Position, r
         query
             .iter(&game.world)
             .filter(|(_, pos, _)| {
-                let (ddx, ddy) = (pos.x - start.x, pos.y - start.y);
-                ddy == 0 && ddx >= 1 && ddx <= range
+                (1..=range).any(|step| pos.x - start.x == dx * step && pos.y - start.y == dy * step)
             })
             .map(|(e, ..)| e)
             .collect()

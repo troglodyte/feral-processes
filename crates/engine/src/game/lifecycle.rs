@@ -7,7 +7,7 @@
 use crate::abilities::AbilityId;
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, initial_wild_population};
+use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -129,6 +129,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -199,7 +200,7 @@ impl Game {
         for warning in load_warnings {
             game.log(warning);
         }
-        game.spawn_initial_creatures(initial_wild_population());
+        game.ensure_local_population();
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         Ok(game)
@@ -345,6 +346,7 @@ impl Game {
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
+        world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -797,6 +799,7 @@ impl Game {
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
         game.world.insert_resource(data.stack_memory);
+        game.world.insert_resource(data.populated_chunks);
         game.world
             .insert_resource(crate::resources::Trace(data.trace));
         // Last, and after the WorldMap is in place: restoring a Stack
@@ -1111,6 +1114,10 @@ impl Game {
             },
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
+            populated_chunks: self
+                .world
+                .resource::<crate::resources::PopulatedChunks>()
+                .clone(),
             trace: self.trace(),
             contracts: self
                 .world

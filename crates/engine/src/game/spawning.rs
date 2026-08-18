@@ -1,16 +1,19 @@
 //! Populating a zone with wild programs, nests, and habitat-born
 //! creatures.
 
+use crate::resources::PopulatedChunks;
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, INITIAL_SPAWN_SCATTER_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE,
-    NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, PACK_GATHER_RADIUS, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
+    BOSS_SPAWN_CHANCE, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX,
+    NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, OPENING_RING_TILES,
+    PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
+    chunk_wild_population,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
     MAX_GROUP_SIZE_STEPS, PLATINUM_SPAWN_CHANCE, PRISMATIC_SPAWN_CHANCE, SILVER_SPAWN_CHANCE,
     WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
+use crate::world::CHUNK_SIZE;
 use crate::*;
 
 /// How large a pack may roll once Trace has been folded in: `base` scaled by
@@ -583,42 +586,156 @@ impl Game {
     /// leave the zone nearly empty whenever that happens. Bounded to
     /// `count * 20` attempts so a pathologically bad pocket can't loop
     /// forever instead of just spawning fewer than `count`.
-    pub(crate) fn spawn_initial_creatures(&mut self, count: usize) {
-        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
-        // A base platform lists no habitat species, so every roll landing
-        // inside one is a guaranteed miss. The player materializes at the
-        // platform's centre, so without pushing the scatter out past its
-        // edge a zone breached into with a base would be born completely
-        // empty — and the edge moves, since a base grows.
-        let platform = *self.world.resource::<Platform>();
-        let reach = INITIAL_SPAWN_SCATTER_TILES
-            + if platform.center.is_some() {
-                platform.radius
-            } else {
-                0
-            };
-        let mut spawned = 0;
+    /// Stocks every chunk within `POPULATION_CHUNK_MARGIN` of the player's
+    /// own that has not been stocked before, and marks it.
+    ///
+    /// This is where the sector's population comes from. The map is
+    /// unbounded — `world::WorldMap` generates a chunk of terrain whenever
+    /// something asks about a tile in it — so there is no finite area a
+    /// one-time seed could cover, and a per-tick roll near the player cannot
+    /// fill space either: walking costs a tick a tile, so a player crossing
+    /// one density box buys about a spare roll of
+    /// `WILD_SPAWN_CHANCE` against a target of `WILD_LOCAL_DENSITY_TARGET`.
+    /// Measured before the change: zero to two programs per box across 240
+    /// tiles of walked ground (`docs/measurements/`).
+    ///
+    /// Deliberately *not* guarded by `Game::require_surface` or an
+    /// `is_underground` check, unlike `power_regen_system` and
+    /// `nest_aggro_tick`. Those refuse because they would otherwise reach the
+    /// party through a `Position` pinned to the entrance tile. This one makes
+    /// no claim about the party at all — it stocks ground — and the surface
+    /// is meant to keep living while they are below, which is the same rule
+    /// `Trace`'s group-size lever states about surface spawns continuing to
+    /// roll underground.
+    pub(crate) fn ensure_local_population(&mut self) {
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
+        for cy in (py - POPULATION_CHUNK_MARGIN)..=(py + POPULATION_CHUNK_MARGIN) {
+            for cx in (px - POPULATION_CHUNK_MARGIN)..=(px + POPULATION_CHUNK_MARGIN) {
+                if !self
+                    .world
+                    .resource_mut::<PopulatedChunks>()
+                    .0
+                    .insert((cx, cy))
+                {
+                    continue;
+                }
+                self.populate_chunk(cx, cy);
+            }
+        }
+    }
+
+    /// Places one chunk's worth of wild programs inside chunk `(cx, cy)`.
+    ///
+    /// The mark is written by the caller *before* this runs, so a chunk that
+    /// turns out to hold nothing placeable — open water, a biome with no
+    /// habitat species, ground already crowded by a neighbour — is still
+    /// marked and is not retried every tick for the rest of the run.
+    ///
+    /// Draws from `resources::GameRng` rather than seeding a local `StdRng`
+    /// off the chunk coordinates, which is the opposite of what
+    /// `stack::generate` does and is deliberate. A frame must regenerate
+    /// identically because the party has *seen* it; a chunk's population is
+    /// explicitly not reproducible — `Game::cull_to_cap` evicts and forgets
+    /// whole chunks, so walking back to one is meant to find different
+    /// programs. Pinning it to the place would be a promise the eviction
+    /// breaks on purpose, and it keeps `try_spawn_habitat_creature` — which
+    /// owns species, rarity, the opening ring and boss substitution — free
+    /// of a threaded seed.
+    fn populate_chunk(&mut self, cx: i32, cy: i32) {
+        let target = chunk_wild_population();
+        self.cull_to_cap(target * self.max_group_size(None) as usize);
+        let (ox, oy) = (cx * CHUNK_SIZE, cy * CHUNK_SIZE);
+        let mut placed = 0;
         let mut attempts = 0;
-        while spawned < count && attempts < count * 20 {
+        while placed < target && attempts < target * 20 {
             attempts += 1;
             let (dx, dy) = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 (
-                    rng.0.random_range(-reach..=reach),
-                    rng.0.random_range(-reach..=reach),
+                    rng.0.random_range(0..CHUNK_SIZE),
+                    rng.0.random_range(0..CHUNK_SIZE),
                 )
             };
-            let (x, y) = (player_pos.x + dx, player_pos.y + dy);
-            // Seeding obeys the same density target the ambient roll does, so
-            // a zone is born at the density it will be kept at rather than at
-            // whatever `initial_wild_population` happened to work out to.
-            // This is also what makes that count an upper bound it is safe to
-            // over-estimate: a roll places a *group*, so without the gate a
-            // deep zone's larger packs would seed far past the target.
+            let (x, y) = (ox + dx, oy + dy);
+            // The same gate the ambient roll applies, so a chunk cannot be
+            // stocked past the density the roll would then maintain — and so
+            // a chunk placed beside an already-full one fills only the part
+            // of itself that is actually empty.
             if self.local_hostile_count(x, y) < WILD_LOCAL_DENSITY_TARGET
                 && self.try_spawn_habitat_creature(x, y)
             {
-                spawned += 1;
+                placed += 1;
+            }
+        }
+    }
+
+    /// Makes room for `needed` more `Hostile`s under `WILD_CREATURE_CAP` by
+    /// evicting whole chunks, farthest from the player first.
+    ///
+    /// Whole chunks rather than individual creatures because a chunk is the
+    /// unit population is placed in: evicting one creature from a chunk would
+    /// leave the chunk marked as stocked while thinning it, and clearing the
+    /// mark for one creature would leave a chunk marked-unstocked while it
+    /// still held most of its programs. Evicting the chunk and dropping its
+    /// mark together keeps the mark meaning exactly what it says, and keeps
+    /// `PopulatedChunks` bounded by the cap rather than by how far the player
+    /// has ever walked.
+    ///
+    /// Candidates come from **where the hostiles actually stand**, not from
+    /// `PopulatedChunks`. Culling the marked set instead reads better and is
+    /// wrong: a program that wanders across a chunk boundary into ground
+    /// nothing stocked would be immune to eviction forever, so the leak the
+    /// cap exists to stop would reopen slowly through the wander AI. The mark
+    /// is cleared as a *consequence* of evicting a chunk, which is why it may
+    /// be absent.
+    ///
+    /// The player's own neighbourhood is never a candidate — evicting the
+    /// ground under their feet is visible, and is the one place the cap must
+    /// not reach. `NestGuardian`s are eligible like any other hostile; an
+    /// eviction is a plain despawn, so it deliberately doesn't feed the
+    /// nest's `pending_respawns` the way an actual defeat does. Guardian
+    /// counts are best-effort once a nest is far behind the player.
+    pub(crate) fn cull_to_cap(&mut self, needed: usize) {
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
+        loop {
+            let hostiles: Vec<(Entity, (i32, i32))> = {
+                let mut query = self
+                    .world
+                    .query_filtered::<(Entity, &Position), With<Hostile>>();
+                query
+                    .iter(&self.world)
+                    .map(|(e, p)| (e, (p.x.div_euclid(CHUNK_SIZE), p.y.div_euclid(CHUNK_SIZE))))
+                    .collect()
+            };
+            if hostiles.len() + needed <= WILD_CREATURE_CAP {
+                return;
+            }
+            // `max_by_key` over a *total* order, not distance alone: bevy's
+            // query iteration order is not stable, so two chunks equally far
+            // out would evict differently between runs and a save would stop
+            // being reproducible. Same reasoning as `assembler_system`'s sort
+            // and `drawn_on_surface_map`'s tie-break.
+            let victim = hostiles
+                .iter()
+                .map(|&(_, chunk)| chunk)
+                .filter(|&(cx, cy)| (cx - px).abs().max((cy - py).abs()) > POPULATION_CHUNK_MARGIN)
+                .max_by_key(|&(cx, cy)| ((cx - px).abs().max((cy - py).abs()), cx, cy));
+            // Everything left is under the player's feet. Better an over-full
+            // map than an infinite loop; the cap is a bound on simulation
+            // cost, not a rule the game owes the player.
+            let Some(victim) = victim else {
+                return;
+            };
+            self.world
+                .resource_mut::<PopulatedChunks>()
+                .0
+                .remove(&victim);
+            for (entity, chunk) in hostiles {
+                if chunk == victim {
+                    self.world.despawn(entity);
+                }
             }
         }
     }
@@ -699,36 +816,7 @@ impl Game {
             )
         };
         let (tx, ty) = (player_pos.x + dx, player_pos.y + dy);
-        // Make room for the whole group this roll may place, by despawning
-        // the `Hostile`s farthest (Chebyshev, matching 8-directional
-        // movement) from where the player is now — the ones least likely to
-        // ever be encountered again. `NestGuardian`s are eligible like any
-        // other hostile; a cull is a plain despawn, so it deliberately
-        // doesn't feed the nest's `pending_respawns` the way an actual
-        // defeat does. Guardian counts are best-effort once a nest is far
-        // behind the player.
-        let needed = self.max_group_size(None) as usize;
-        let mut hostiles: Vec<(Entity, i32)> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), With<Hostile>>();
-            query
-                .iter(&self.world)
-                .map(|(e, p)| {
-                    (
-                        e,
-                        (p.x - player_pos.x).abs().max((p.y - player_pos.y).abs()),
-                    )
-                })
-                .collect()
-        };
-        let over = (hostiles.len() + needed).saturating_sub(WILD_CREATURE_CAP);
-        if over > 0 {
-            hostiles.sort_by_key(|&(_, dist)| std::cmp::Reverse(dist));
-            for &(entity, _) in hostiles.iter().take(over) {
-                self.world.despawn(entity);
-            }
-        }
+        self.cull_to_cap(self.max_group_size(None) as usize);
         self.try_spawn_habitat_creature(tx, ty);
     }
 

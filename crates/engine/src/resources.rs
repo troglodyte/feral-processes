@@ -1176,6 +1176,28 @@ pub struct FrameMemory {
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
+/// Which world chunks have had their wild population placed — see
+/// `Game::ensure_local_population`. A chunk in here is one the sector has
+/// already stocked; a chunk absent from it is ground nothing has ever lived
+/// on, and will be stocked the first time the player comes within a chunk of
+/// it.
+///
+/// This is what makes the wild population a property of *place* rather than
+/// a record of where the player has stood. The map is unbounded and
+/// generated a chunk at a time (see `world::WorldMap::ensure_chunk`), so
+/// there is no finite area a one-time seed could cover; population has to
+/// follow terrain and arrive on demand.
+///
+/// A `BTreeSet` rather than a `HashSet` for the reason `Stock` keys by
+/// `BTreeMap`: this is serialized, and a hash set would make the save
+/// encoding differ between runs holding identical state.
+///
+/// Zone-local, like `BuybackLedger` and `StackMemory`, and so has to be
+/// wiped **by name** in `Game::enter_next_zone` — a mark left behind would
+/// tell the new sector that ground it has never populated is already full.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

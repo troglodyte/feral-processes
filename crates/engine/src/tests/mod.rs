@@ -52,5 +52,6 @@ mod throw;
 mod trade;
 mod turn;
 mod wielded;
+mod wild_density_probe;
 mod work_orders;
 mod zone;

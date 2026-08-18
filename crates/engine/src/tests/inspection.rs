@@ -439,7 +439,10 @@ fn two_things_on_one_tile_resolve_the_same_way_however_they_were_spawned() {
 fn find_target_in_direction_never_looks_behind_the_player() {
     let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
-    clear_creatures_east_of_player(&mut game, start, 10);
+    // Both rays, because this test scans both ways: the westward assertion
+    // below is meaningless if the sector put its own program on that row.
+    clear_creatures_along_ray(&mut game, start, 1, 0, 10);
+    clear_creatures_along_ray(&mut game, start, -1, 0, 10);
 
     let behind = spawn_marker_creature(&mut game, start, -3, 0);
     assert_eq!(

@@ -684,54 +684,39 @@ pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 /// the entire map beyond 40 tiles. Both numbers are the same bug.
 pub const WILD_LOCAL_DENSITY_TARGET: usize = 12;
 
-/// How far from the player a zone's opening wild programs scatter (see
-/// `Game::spawn_initial_creatures`). Widened by the platform radius when
-/// the player has a base, since nothing can spawn on platform floor.
+/// The wild population one chunk of the world holds — see
+/// `Game::populate_chunk`. Terrain arrives a `world::CHUNK_SIZE` square at a
+/// time and so does what lives on it, which is what lets the sector be
+/// populated everywhere rather than only where the player has been.
 ///
-/// Matched to `STACK_LINK_SCATTER_TILES` deliberately: that constant is
-/// already the game's statement of how far out a player is expected to
-/// travel, so seeding any tighter leaves the ground the links send them to
-/// born empty. It was 15, and the per-tick roll cannot make up the
-/// difference — walking costs a tick a tile against `WILD_SPAWN_CHANCE`, so
-/// the player outruns the spawner and finds the far field abandoned.
-pub const INITIAL_SPAWN_SCATTER_TILES: i32 = 40;
-
-/// Seeding must reach at least as far as the links a zone scatters, or the
-/// ground the game sends the player to is born empty and only the per-tick
-/// roll ever populates it — which a walking player outruns.
+/// Derived rather than tuned, for the reason the old `initial_wild_population`
+/// was: the density a patch of ground is *born* at and the density
+/// `Game::maybe_spawn_wild_creature` *maintains* must not be able to drift
+/// apart. It is `WILD_LOCAL_DENSITY_TARGET` scaled from one spawn box up to
+/// one chunk.
 ///
-/// A compile-time assertion rather than a test: this is a relationship
-/// between two constants, so it can be caught by the build rather than by
-/// running anything, and a `#[test]` on it is a constant expression clippy
-/// rightly objects to.
-const _: () = assert!(
-    INITIAL_SPAWN_SCATTER_TILES >= STACK_LINK_SCATTER_TILES,
-    "wild programs must be seeded at least as far out as Stack links scatter"
-);
-
-/// How many wild spawn rolls a zone is seeded with on entry, before any
-/// per-tick spawn rolls — see `Game::spawn_initial_creatures`. Applies both
-/// to a new run and to every zone breached afterwards, so a fresh sector is
-/// never empty while the spawn rolls warm up.
-///
-/// Derived rather than tuned, so the density a zone is *born* at and the
-/// density `maybe_spawn_wild_creature` *maintains* cannot drift apart: it is
-/// `WILD_LOCAL_DENSITY_TARGET` scaled from one spawn box up to the whole
-/// seeded area. Tuning the two independently is exactly what let them
-/// disagree — the old pair (14 rolls across 15 tiles) worked out to ~9 per
-/// box, near the target by luck rather than by construction, and widening
-/// the scatter without touching the count would have thinned the zone
-/// tenfold instead of spreading it.
-///
-/// An upper bound on attempts rather than a promise. Seeding consults the
-/// same density gate the ambient roll does, so a roll that would overfill
-/// its own patch is skipped — which is what keeps this honest even though a
-/// roll places a *group* of up to `max_group_size` rather than one creature.
-pub const fn initial_wild_population() -> usize {
-    let seeded = (2 * INITIAL_SPAWN_SCATTER_TILES + 1) as usize;
+/// It is an upper bound rather than an exact count, and safe to
+/// over-estimate: `populate_chunk` applies the same density gate the ambient
+/// roll does, so a placement that would overfill its own patch is skipped —
+/// which matters because one placement puts down a *group* of up to
+/// `max_group_size`, not one creature.
+pub const fn chunk_wild_population() -> usize {
+    let chunk = crate::world::CHUNK_SIZE as usize;
     let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as usize;
-    (seeded * seeded * WILD_LOCAL_DENSITY_TARGET) / (spawn_box * spawn_box)
+    (chunk * chunk * WILD_LOCAL_DENSITY_TARGET) / (spawn_box * spawn_box)
 }
+
+/// How many chunks out from the player's own get stocked, as a Chebyshev
+/// radius — so 1 is the 3x3 neighbourhood around them.
+///
+/// One, not zero. Stocking only the chunk the player stepped into would pop
+/// programs into view inside ground they can already see: a chunk is 32
+/// tiles and the map pane shows roughly 33x19, so a chunk-edge arrival would
+/// draw the spawn. One chunk of margin is at worst 32 tiles and at best 64,
+/// both comfortably outside the pane, which preserves the property
+/// `WILD_SPAWN_RADIUS_TILES` was chosen for: a spawn lands off-screen and is
+/// walked into rather than appearing on top of you.
+pub const POPULATION_CHUNK_MARGIN: i32 = 1;
 
 /// How many Stack links a zone is seeded with — see
 /// `Game::spawn_surface_links`. Deliberately few: a link is
@@ -740,8 +725,14 @@ pub const fn initial_wild_population() -> usize {
 pub const STACK_LINKS_PER_ZONE: usize = 3;
 
 /// How far from the player's arrival point a zone's Stack links
-/// scatter. Wider than `INITIAL_SPAWN_SCATTER_TILES` so finding one is a
-/// trip rather than a glance.
+/// scatter — far enough that finding one is a trip rather than a glance.
+///
+/// It used to be pinned by a `const _: () = assert!` to sit inside the
+/// distance a zone's wild programs were seeded to, or a link sent the
+/// player onto ground that had been born empty. That relationship
+/// dissolved when population became a property of place: ground stocks
+/// itself when the player reaches it, however far out it is, so a link may
+/// now scatter as far as it likes.
 ///
 /// It does *not* keep links off the base platform, and neither does the
 /// on-ramp's ring by itself — that ring is measured from the slab that
@@ -2313,16 +2304,16 @@ mod tests {
     /// allows exactly that and no more — a derivation that drifted by a
     /// whole creature per box would be a real disagreement.
     #[test]
-    fn a_zone_is_seeded_at_the_density_it_is_maintained_at() {
-        let seeded = (2 * INITIAL_SPAWN_SCATTER_TILES + 1) as usize;
-        let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as usize;
-        let boxes_covered = (seeded * seeded) as f64 / (spawn_box * spawn_box) as f64;
-        let per_box = initial_wild_population() as f64 / boxes_covered;
+    fn a_chunk_is_stocked_at_the_density_it_is_maintained_at() {
+        let chunk = crate::world::CHUNK_SIZE as f64;
+        let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as f64;
+        let boxes_covered = (chunk * chunk) / (spawn_box * spawn_box);
+        let per_box = chunk_wild_population() as f64 / boxes_covered;
 
         assert!(
             (per_box - WILD_LOCAL_DENSITY_TARGET as f64).abs() < 1.0,
-            "seeding places {per_box:.2} per spawn box but the ambient roll \
-             maintains {WILD_LOCAL_DENSITY_TARGET}"
+            "a chunk is stocked at {per_box:.2} per spawn box but the ambient \
+             roll maintains {WILD_LOCAL_DENSITY_TARGET}"
         );
     }
 

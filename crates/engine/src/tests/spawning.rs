@@ -3,7 +3,8 @@
 use super::support::*;
 use crate::tuning::{
     NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET, WILD_SPAWN_RADIUS_TILES,
+    OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
+    WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
 };
 use crate::*;
 
@@ -1558,6 +1559,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         link_sites: Vec::new(),
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
+        populated_chunks: crate::resources::PopulatedChunks::default(),
         trace: 0,
         contracts: Vec::new(),
         contracts_done: Vec::new(),
@@ -2154,4 +2156,288 @@ fn a_pack_member_is_never_placed_where_it_could_never_step() {
             pos.y
         );
     }
+}
+
+/// The bug this whole mechanism exists to close: ground the player travels
+/// to used to be born empty and stay that way. Population was placed only
+/// relative to the player — a one-time seeded disc plus a per-tick roll
+/// inside `WILD_SPAWN_RADIUS_TILES` — in a world map that is unbounded and
+/// generated a chunk at a time, so crossing one density box bought about a
+/// spare `WILD_SPAWN_CHANCE` roll against a target of twelve.
+///
+/// Asserted on the *mark* as well as the population, because the two are
+/// different claims: the mark says the sector took responsibility for that
+/// ground, the count says it actually put something there.
+#[test]
+fn walking_into_new_ground_stocks_it() {
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // Five chunks out: far past anything `Game::new` stocked, and far past
+    // the radius the ambient roll can reach from where the player began.
+    let far = Position {
+        x: start.x + 5 * crate::world::CHUNK_SIZE,
+        y: start.y,
+    };
+    let chunk = (
+        far.x.div_euclid(crate::world::CHUNK_SIZE),
+        far.y.div_euclid(crate::world::CHUNK_SIZE),
+    );
+
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .contains(&chunk),
+        "the premise: ground five chunks out has not been stocked yet"
+    );
+    assert_eq!(
+        game.local_hostile_count(far.x, far.y),
+        0,
+        "the premise: and nothing lives there"
+    );
+
+    *game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap() = far;
+    game.tick();
+
+    assert!(
+        game.world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .contains(&chunk),
+        "arriving marks the chunk as stocked"
+    );
+    let neighbourhood: usize = {
+        let mut q = game.world.query_filtered::<&Position, With<Hostile>>();
+        q.iter(&game.world)
+            .filter(|p| {
+                let (cx, cy) = (
+                    p.x.div_euclid(crate::world::CHUNK_SIZE),
+                    p.y.div_euclid(crate::world::CHUNK_SIZE),
+                );
+                (cx - chunk.0).abs() <= POPULATION_CHUNK_MARGIN
+                    && (cy - chunk.1).abs() <= POPULATION_CHUNK_MARGIN
+            })
+            .count()
+    };
+    // One chunk's worth across the nine that were stocked, which is a fifth
+    // of what they should hold. Loose on purpose: how much of a given nine
+    // chunks is walkable, and how many of their biomes list habitat species,
+    // is a property of the terrain seed and not of this mechanism. The
+    // density itself is pinned by `tuning`'s derivation test and measured in
+    // `docs/measurements/`.
+    assert!(
+        neighbourhood >= chunk_wild_population(),
+        "and stocks it: {neighbourhood} wild programs across the nine chunks \
+         around the arrival, expected at least {}",
+        chunk_wild_population()
+    );
+}
+
+/// Standing on ground already stocked must not stock it again. Without the
+/// mark, `ensure_local_population` would top every chunk around the player
+/// back up to target every single tick, which is the old base-halo bug with
+/// a much bigger engine behind it.
+#[test]
+fn ground_already_stocked_is_not_stocked_again() {
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.tick();
+    let marks = game
+        .world
+        .resource::<crate::resources::PopulatedChunks>()
+        .0
+        .len();
+    let before = {
+        let mut q = game.world.query_filtered::<(), With<Hostile>>();
+        q.iter(&game.world).count()
+    };
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .len(),
+        marks,
+        "a player who never left their chunk stocked no new ground"
+    );
+    let after = {
+        let mut q = game.world.query_filtered::<(), With<Hostile>>();
+        q.iter(&game.world).count()
+    };
+    // The ambient roll is still running and is allowed to top the local box
+    // back up, so this bounds the growth rather than forbidding it. A
+    // re-stocking bug puts a chunk's worth down every tick and would clear
+    // this by two orders of magnitude.
+    assert!(
+        after < before + chunk_wild_population(),
+        "standing still added {} programs in 200 ticks, which is re-stocking \
+         rather than the ambient roll topping up",
+        after - before
+    );
+}
+
+/// `PopulatedChunks` is zone-local, like `BuybackLedger` and `StackMemory`,
+/// and so has to be wiped **by name** on a breach. A mark carried forward
+/// tells the new sector that ground it has never stocked is already full,
+/// which would make the new zone empty exactly where the old one was
+/// populated.
+#[test]
+fn breaching_forgets_which_chunks_were_stocked() {
+    let mut game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.tick();
+    // A mark far from where anyone arrives. Asserting on the chunks the old
+    // zone actually stocked would be vacuous: a breach lands the player at
+    // roughly the same coordinates, so those same chunks are stocked again
+    // on the way in and the marks are back before anything can look.
+    let distant = (500, 500);
+    game.world
+        .resource_mut::<crate::resources::PopulatedChunks>()
+        .0
+        .insert(distant);
+
+    game.enter_next_zone();
+
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .contains(&distant),
+        "the new sector inherited a stocked-ground mark from the old one, so          that ground will never be populated here"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .is_empty(),
+        "and the ground the party breached onto was stocked on arrival"
+    );
+}
+
+/// The cap evicts the unit population is placed in, and drops the mark with
+/// it — so walking back to evicted ground finds it stocked afresh rather
+/// than permanently dead.
+///
+/// Candidates are taken from where hostiles actually stand rather than from
+/// `PopulatedChunks`, which is why this test never marks the chunk it fills:
+/// a program that wandered into unstocked ground must still be evictable, or
+/// the wander AI slowly reopens the leak the cap exists to close.
+#[test]
+fn the_cap_evicts_a_whole_chunk_and_forgets_it() {
+    let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let far = Position {
+        x: start.x + 20 * crate::world::CHUNK_SIZE,
+        y: start.y,
+    };
+    let victim = (
+        far.x.div_euclid(crate::world::CHUNK_SIZE),
+        far.y.div_euclid(crate::world::CHUNK_SIZE),
+    );
+    game.world
+        .resource_mut::<crate::resources::PopulatedChunks>()
+        .0
+        .insert(victim);
+
+    let already = {
+        let mut q = game.world.query_filtered::<(), With<Hostile>>();
+        q.iter(&game.world).count()
+    };
+    for i in 0..(WILD_CREATURE_CAP - already) {
+        game.world.spawn((
+            Creature {
+                species: species_id.clone(),
+            },
+            Position {
+                x: far.x + (i % 8) as i32,
+                y: far.y,
+            },
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                def: 1,
+            },
+            Hostile,
+        ));
+    }
+
+    game.cull_to_cap(1);
+
+    let left_in_victim = {
+        let mut q = game.world.query_filtered::<&Position, With<Hostile>>();
+        q.iter(&game.world)
+            .filter(|p| {
+                (
+                    p.x.div_euclid(crate::world::CHUNK_SIZE),
+                    p.y.div_euclid(crate::world::CHUNK_SIZE),
+                ) == victim
+            })
+            .count()
+    };
+    assert_eq!(
+        left_in_victim, 0,
+        "the farthest chunk is evicted whole, not thinned"
+    );
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0
+            .contains(&victim),
+        "and its mark goes with it, or walking back finds it dead forever"
+    );
+}
+
+/// The cap must never reach the ground the player is standing on, however
+/// crowded the map gets — an eviction there is one the player watches
+/// happen.
+#[test]
+fn the_cap_never_evicts_the_ground_under_the_player() {
+    let mut game = Game::new(9005, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species_id = game.species_defs().into_iter().next().unwrap().id;
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    let already = {
+        let mut q = game.world.query_filtered::<(), With<Hostile>>();
+        q.iter(&game.world).count()
+    };
+    let local: Vec<Entity> = (0..(WILD_CREATURE_CAP - already))
+        .map(|_| {
+            game.world
+                .spawn((
+                    Creature {
+                        species: species_id.clone(),
+                    },
+                    Position {
+                        x: start.x,
+                        y: start.y,
+                    },
+                    Stats {
+                        hp: 10,
+                        max_hp: 10,
+                        atk: 1,
+                        def: 1,
+                    },
+                    Hostile,
+                ))
+                .id()
+        })
+        .collect();
+
+    game.cull_to_cap(500);
+
+    assert!(
+        local.iter().all(|&e| game.world.get::<Stats>(e).is_some()),
+        "the cap evicted creatures standing on the player's own chunk"
+    );
 }

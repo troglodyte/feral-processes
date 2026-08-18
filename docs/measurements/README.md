@@ -54,6 +54,13 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-18 — The wild population is a halo around the player](2026-08-18-wild-population-halo.md)
+  — 15 in the box at the base, 10/6/3/1 at 25/50/75/100 tiles out, and
+  zero to two per box along 300 tiles of walked ground against a target of
+  12. Why `0.5.12`'s density target flattened the peak without changing the
+  shape, and the arithmetic showing the ambient roll is an order of
+  magnitude too slow to fill ground at walking speed.
+
 - [2026-08-15 — Challenge-scaled XP pacing](2026-08-15-challenge-xp-pacing.md)
   — what a level costs now that a kill is priced by difficulty: 34 kills to
   level 5 in the opening, 208 to grind zone 1 from 5 to 10, 37 to do it four

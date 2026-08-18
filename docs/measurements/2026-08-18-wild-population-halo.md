@@ -1,5 +1,10 @@
 # 2026-08-18 — The wild population is a halo around the player, not a property of the sector
 
+**Acted on the same day.** Population became a property of place
+(`resources::PopulatedChunks`), and the after-numbers are in *The numbers*
+below. This file is kept because the before-numbers are the argument for
+why, and they cannot be re-measured — the code that produced them is gone.
+
 ## The claim
 
 The wild population still decays monotonically with distance from wherever
@@ -52,6 +57,8 @@ comparable to `WILD_LOCAL_DENSITY_TARGET`.
 
 ## The numbers
 
+### Before
+
 Density boxes along the +x axis, target 12 in every cell:
 
 | scenario | at player | +25 | +50 | +75 | +100 | total live |
@@ -69,6 +76,38 @@ Travel, every box centred on the walked path:
 
 New here: the travel row, and the mill gradient. Both are what the bug
 report describes and neither had been measured.
+
+### After
+
+Same probe, same seed, same four scenarios, run against per-chunk
+population:
+
+| scenario | at player | +25 | +50 | +75 | +100 | total live |
+|---|---|---|---|---|---|---|
+| entry | 9 | 11 (at +20) | 7 (at +40) | 9 (at +60) | 0 | 185 |
+| camp, 20k ticks | 15 | — | — | — | — | 241 |
+| mill, 20k ticks | 16 | 13 | 14 | 4 | 3 | 365 |
+| travel, 300 tiles | — | 8 | 13 | 12 | 12 | 716 |
+
+Travel, every box centred on the walked path — the row this change exists
+for:
+
+| tiles out | 25 | 50 | 75 | 100 | 125 | 150 | 175 | 200 | 225 | 250 | 275 | 300 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| in box | 8 | 13 | 12 | 12 | 12 | 15 | 14 | 14 | 14 | 13 | 8 | 12 |
+
+The mill row still falls off at 75 and 100 tiles out, and that is the
+design rather than a residual bug: those chunks were never stocked because
+the player never came within a chunk of them. The 4 and 3 there are
+wandering diffusion. Ground stocks when the player approaches it, a chunk
+ahead of the map pane, which is what the travel row measures.
+
+**Simulation cost.** The probe's 60,000 ticks went from 4.7s to 13.9s in a
+debug build — about 0.23ms a tick at ~700 live hostiles, against ~0.08ms
+before. That is the price of there being three to five times as many
+creatures to wander. At the `WILD_CREATURE_CAP` ceiling of 2000 it
+extrapolates to ~0.66ms a tick, still debug. The game ticks once per player
+action and once a second when idle, so this is nowhere near a frame.
 
 Replicating what was already believed: the entry row reproduces the
 `0.5.12` design — a 40-tile disc seeded at the target, hard edge just past
@@ -103,11 +142,18 @@ Peak observed population across all four scenarios is 215.
 
 ## Open questions
 
-- If population becomes a property of place, what happens to ground the
-  player cleared and walked away from — does it stay cleared, and for how
-  long? The probe cannot answer this because it never kills anything.
-- `WILD_CREATURE_CAP`'s cull despawns the farthest hostiles from the
-  player. In an unbounded world where population is placed per chunk,
-  that cull and a per-chunk "already populated" mark disagree: walking
-  back to a culled chunk would find it permanently empty unless the cull
-  also clears the mark.
+- **Does cleared ground read as dead on the way home?** A chunk the player
+  emptied by fighting through it stays empty until the cap evicts it and
+  they return. `Game::maybe_spawn_wild_creature` still regrows the box the
+  player is standing in, so the ground under their feet recovers and the
+  ground behind them does not. The probe cannot answer this because it never
+  kills anything; it is a play question.
+- **Is 12 per screen the right number?** Unchanged by this work — the probe
+  measures against the existing target and has nothing to say about whether
+  the target is right. It is now reached everywhere rather than only near a
+  base, so if 12 was tuned by feel against a sector that only ever hit it at
+  home, the whole game is now denser than whoever set it intended.
+- **What does the cap feel like when it starts firing?** It never fired
+  before (peak 215 of 2000); the travel scenario alone reaches 716. A long
+  session of exploration will reach 2000 and start evicting, which nothing
+  has ever exercised in play.

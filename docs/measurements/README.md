@@ -59,7 +59,9 @@ an honest "unknown".
   zero to two per box along 300 tiles of walked ground against a target of
   12. Why `0.5.12`'s density target flattened the peak without changing the
   shape, and the arithmetic showing the ambient roll is an order of
-  magnitude too slow to fill ground at walking speed.
+  magnitude too slow to fill ground at walking speed. Carries the
+  after-numbers for the per-chunk population that replaced it, and the
+  simulation cost of holding three to five times as many creatures alive.
 
 - [2026-08-15 — Challenge-scaled XP pacing](2026-08-15-challenge-xp-pacing.md)
   — what a level costs now that a kill is priced by difficulty: 34 kills to

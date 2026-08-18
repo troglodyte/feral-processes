@@ -571,38 +571,102 @@ raising them empties the ring while leaving it looking intact.
 `the_shipped_roster_has_species_on_both_sides_of_the_opening_ring` is what
 catches that, and it is a census that a retune can break from either end.
 
-### Wild population is a density target, not a total, and both halves of it read one constant
+### Wild population is a property of place, and the density target is what "populated" means
 
-**Wild population is a density target, not a total, and both halves of it
-read one constant.** `WILD_LOCAL_DENSITY_TARGET` is how many `Hostile`s
-belong within `WILD_SPAWN_RADIUS_TILES` — a 25x25 box, near enough the
-map pane's own ~33x19 that the knob is legible on screen.
-`Game::local_hostile_count` is the single definition of "how crowded is
-it here", and `spawn_initial_creatures` seeds *to* it while
-`maybe_spawn_wild_creature` tops back up *to* it, so a zone is kept at
-the density it was born at. `initial_wild_population()` is derived from
-the target and the two radii rather than tuned, because the pair that
-preceded it (14 rolls across 15 tiles) agreed with the maintained density
-by luck and would have silently disagreed the moment either moved.
-Three things about it are load-bearing. The gate sits in
+**Wild population is a property of place, and the density target is what
+"populated" means.** `WILD_LOCAL_DENSITY_TARGET` is how many `Hostile`s
+belong within `WILD_SPAWN_RADIUS_TILES` — a 25x25 box, near enough the map
+pane's own ~33x19 that the knob is legible on screen.
+`Game::local_hostile_count` is the single definition of "how crowded is it
+here". `Game::ensure_local_population` stocks any world chunk within
+`POPULATION_CHUNK_MARGIN` of the player's own that `resources::PopulatedChunks`
+has not already marked, and `maybe_spawn_wild_creature` tops the local box
+back up — so space is filled by the first and regrowth is done by the
+second, each with a job the other cannot do.
+
+The history is the argument, because the shape has been wrong twice and the
+second wrong shape looked right. Originally there was no target at all and
+nothing ever removed a creature, so density was simply the integral of where
+the player had stood: a real save measured 65 in one box around a worked-at
+base and 7 in the entire map past 40 tiles. `0.5.12` added the density
+target and seeded a zone across a 40-tile disc, which flattened the peak and
+was believed to have fixed it. It had not. Measured on 2026-08-18
+(`docs/measurements/2026-08-18-wild-population-halo.md`): after 20,000 ticks
+of pottering around a base, the boxes at 0, 25, 50, 75 and 100 tiles out
+held 15, 10, 6, 3 and 1 against a target of 12 — the same halo, one third as
+steep. Walking 300 tiles in a line left **zero to two per box** past 60
+tiles.
+
+The reason is arithmetic and not tuning, which is why a third pass at the
+knobs would have failed too. `world::WorldMap` is unbounded and generates a
+chunk of terrain whenever anything asks about a tile in it, so there is no
+finite area a one-time seed can cover; and `move_player` ticks once per
+tile, so a player crossing one 25-tile density box buys 25 ticks of
+`WILD_SPAWN_CHANCE` — about 1.25 rolls against a target of 12. Raising the
+chance to 1.0 still only places ~25 per box crossed, while firing a spawn
+beside the player every single tick. Whatever the constants say, a
+player-relative spawner in an unbounded world cannot populate ground at
+walking speed.
+
+Five things about the shape are load-bearing:
+
+- **The mark is written before the chunk is stocked, not after.** A chunk
+  that turns out to hold nothing placeable — open water, a biome with no
+  habitat species, ground a neighbour already crowded — is marked anyway,
+  or it is retried every tick for the rest of the run.
+- **`POPULATION_CHUNK_MARGIN` is 1, not 0.** Stocking only the chunk the
+  player stepped into pops programs into view inside ground they can already
+  see: a chunk is 32 tiles and the pane shows ~33x19. One chunk of margin is
+  32 tiles at worst, which preserves what `WILD_SPAWN_RADIUS_TILES` was
+  chosen for — a spawn lands off-screen and is walked into.
+- **It draws from `GameRng` rather than seeding a local `StdRng` off the
+  chunk coordinates**, which is the opposite of `stack::generate` and is
+  deliberate. A frame must regenerate identically because the party has
+  *seen* it. A chunk's population is explicitly not reproducible:
+  `cull_to_cap` evicts and forgets whole chunks, so walking back is meant to
+  find different programs. Pinning it to the place would be a promise the
+  eviction breaks on purpose, and it keeps `try_spawn_habitat_creature` —
+  which owns species, rarity, the opening ring and boss substitution — free
+  of a threaded seed.
+- **`PopulatedChunks` is zone-local**, so like `BuybackLedger` and
+  `StackMemory` it must be wiped **by name** in `enter_next_zone`. A mark
+  carried forward tells the new sector that ground it has never stocked is
+  already full, which empties the new zone exactly where the old one was
+  populated.
+- **`cull_to_cap` takes its candidates from where hostiles actually stand,
+  not from the mark set.** Reading the marks instead is the version that
+  reads better and is wrong: a program that wanders across a chunk boundary
+  into unstocked ground would be immune to eviction forever, so `wander_ai_system`
+  would slowly reopen the very leak `WILD_CREATURE_CAP` exists to close. The
+  mark is dropped as a *consequence* of evicting a chunk, which is why it may
+  be absent. It evicts whole chunks because a chunk is the unit population is
+  placed in — thinning one leaves it marked-but-empty, and unmarking it for
+  one creature leaves it marked-unstocked while still full. It never touches
+  the player's own neighbourhood, which is the one place an eviction would be
+  watched.
+
+Two more, inherited from the density target and still true. The gate sits in
 `maybe_spawn_wild_creature` and *not* in `spawn_wild_nearby`, because
 `dev_force_encounter` shares that body and must still place a fight in a
-crowd — density paces an ambient spawn, it is not part of what a spawn
-*is*. It is checked **after** the roll, which keeps the scan off the 95%
-of ticks that spawn nothing and leaves the RNG sequence the seeded spawn
-tests depend on untouched on a miss. And `INITIAL_SPAWN_SCATTER_TILES`
-is pinned by a `const _: () = assert!` to reach at least
-`STACK_LINK_SCATTER_TILES`: seeding tighter than the links a zone
-scatters leaves the ground the game sends the player to born empty, and
-the per-tick roll cannot make it up — walking costs a tick a tile
-against a 5% roll, so the player outruns the spawner. Before all this
-there was no target at all and nothing ever removed a creature
-(`WILD_CREATURE_CAP` is 2000 and has never fired), so density was the
-integral of where the player had stood: a real save measured 65 in one
-box around a worked-at base and 7 in the whole map past 40 tiles.
-Raising the target is cheap; raising it without re-reading
-`no_craftable_item...`-style census tests is not, since the seeded count
-scales with it.
+crowd — density paces an ambient spawn, it is not part of what a spawn *is*.
+And it is checked **after** the roll, which keeps the scan off the 95% of
+ticks that spawn nothing and leaves the RNG sequence the seeded spawn tests
+depend on untouched on a miss.
+
+`chunk_wild_population()` is derived from the target and the two sizes
+rather than tuned, for the reason the deleted `initial_wild_population()`
+was: the density a patch of ground is born at and the density the ambient
+roll maintains must not be able to drift apart. Its predecessor pair (14
+rolls across 15 tiles) agreed by luck and would have disagreed the moment
+either moved.
+
+What this cost: `WILD_CREATURE_CAP` stops being decorative. It had never
+fired at a peak of 215; the travel measurement alone reaches 716, and a long
+session of exploration will reach 2000 and start evicting, which nothing has
+exercised in play. Simulation cost went from ~0.08ms to ~0.23ms a tick in a
+debug build at ~700 hostiles — the game ticks once per player action and once
+a second idle, so it is nowhere near a frame, but it is three times what it
+was.
 
 ### `Tile::open_to_hostiles` is the base slab's fourth reader, and `walkable` alone has never been the rule
 
@@ -677,8 +741,9 @@ derivable from centre and radius; nobody has needed that yet.
 and reading it where the question is about a base that exists is the
 mistake to watch for: four readers were converted on 2026-08-13
 (`place_structure`, `distance_from_danger_origin`,
-`spawn_initial_creatures`, and `HAUL_WALK_RADIUS`, which stopped being a
-constant at all — a fully grown base would otherwise refuse postings
+`spawn_initial_creatures` — since deleted, along with the whole
+player-relative seeding it belonged to — and `HAUL_WALK_RADIUS`, which
+stopped being a constant at all — a fully grown base would otherwise refuse postings
 across its own width, and `post_reach` is the single predicate the cronjob
 menu and the assignment share). `clear_platform` is the one deliberate
 holdout: it sweeps `MAX_BUILD_RADIUS_TILES`, not the live radius, because

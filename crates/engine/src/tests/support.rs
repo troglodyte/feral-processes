@@ -381,6 +381,12 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // out loud. `assets_dir_with_sectors` is how a test asks for a
         // *different* pool, including an empty one.
         "sectors",
+        // And these, for the third time the same argument: an install with
+        // no affix pool rolls every drop plain, so anything about what gear
+        // is worth would be measured against gear that cannot be affixed —
+        // silently, since an empty pool is a supported state and not a
+        // warning.
+        "affixes",
     ] {
         let dst = dir.join(sub);
         std::fs::create_dir_all(&dst).unwrap();

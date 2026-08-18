@@ -456,3 +456,61 @@ fn item_grant_reports_the_routines_own_name_and_prose() {
         "gear that grants nothing has no row to draw"
     );
 }
+
+/// A grant is read off the item id, so every axis a *copy* carries —
+/// rarity, fusion tier, an affix — is orthogonal to it. Worth pinning
+/// rather than reasoning about: `Game::copy_bonus` folds all three into the
+/// wearer's stats, and a Damage passive scales with its caster's ATK, so
+/// the two systems do meet — just not at the lookup.
+#[test]
+fn a_rare_fused_affixed_copy_grants_the_same_routine() {
+    let game = Game::new(3403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain = crate::items::GearCopy::plain(ItemId("interrupt_coil".into()));
+    let decorated = crate::items::GearCopy {
+        rarity: Rarity::Gold,
+        tier: 2,
+        affix: Some("honed".into()),
+        ..plain.clone()
+    };
+
+    assert_eq!(
+        game.item_grant(&decorated.item),
+        game.item_grant(&plain.item),
+        "the grant hangs off the item, not off what the copy rolled"
+    );
+    assert!(
+        game.copy_bonus(&decorated, 12).unwrap().atk > game.copy_bonus(&plain, 12).unwrap().atk,
+        "the affix is doing something, or this test proves nothing"
+    );
+}
+
+/// And the whole way through, not just at the lookup: an affixed copy fires
+/// its grant in a real round, and hits harder for the affix — the passive
+/// casts as its wearer, so the ATK the copy added is ATK the routine swings
+/// with.
+#[test]
+fn an_affixed_copy_fires_its_grant_and_the_affix_reaches_the_damage() {
+    let dir = assets_with_granting_gear("affixed");
+
+    let mut honed = battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
+        let player = g.player_entity();
+        let copy = crate::items::GearCopy {
+            affix: Some("honed".into()),
+            ..crate::items::GearCopy::plain(ItemId("test_grant_weapon".into()))
+        };
+        g.add_copies(&copy, 1);
+        g.equip(player, &copy).unwrap();
+    });
+    let mut plain = battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_grant_weapon");
+    });
+
+    let with_affix = damage_in_one_defended_round(&mut honed);
+    let without = damage_in_one_defended_round(&mut plain);
+    assert!(without > 0, "the plain copy never fired: {without}");
+    assert!(
+        with_affix > without,
+        "the affix should reach the passive's swing: {with_affix} against {without}"
+    );
+}

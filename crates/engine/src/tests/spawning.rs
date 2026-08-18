@@ -2,9 +2,9 @@
 
 use super::support::*;
 use crate::tuning::{
-    NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
-    WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
+    BOSS_SPAWN_CHANCE, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
+    NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, OPENING_RING_TILES, POPULATION_CHUNK_MARGIN,
+    WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET, WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
 };
 use crate::*;
 
@@ -1918,14 +1918,14 @@ fn a_boss_never_rolls_a_rarity() {
     let far = OPENING_RING_TILES + 50;
     for _ in 0..200 {
         assert_eq!(
-            game.roll_rarity(&boss, far, far),
+            game.roll_rarity(&boss, far, far, false),
             Rarity::Ordinary,
             "a boss's stats are hand-authored; a multiplier discards that"
         );
     }
     assert!(
         rng_unadvanced_by(9021, |g| {
-            g.roll_rarity(&boss, far, far);
+            g.roll_rarity(&boss, far, far, false);
         }),
         "refusing a boss must not spend a draw from the shared stream"
     );
@@ -1941,7 +1941,7 @@ fn no_shiny_spawns_in_the_opening_ring() {
         .expect("ordinary species should ship");
     for _ in 0..500 {
         assert_eq!(
-            game.roll_rarity(&ordinary, 0, 0),
+            game.roll_rarity(&ordinary, 0, 0, false),
             Rarity::Ordinary,
             "balance_sim::beatable_by_a_fresh_player guarantees a fresh \
              player can beat one program in the ring"
@@ -1949,7 +1949,7 @@ fn no_shiny_spawns_in_the_opening_ring() {
     }
     assert!(
         rng_unadvanced_by(9022, |g| {
-            g.roll_rarity(&ordinary, 0, 0);
+            g.roll_rarity(&ordinary, 0, 0, false);
         }),
         "refusing an opening-ring spawn must not spend a draw"
     );
@@ -1974,7 +1974,7 @@ fn every_rare_tier_is_reachable_and_rarer_than_the_one_below() {
 
     let mut counts = [0usize; Rarity::ALL.len()];
     for _ in 0..200_000 {
-        counts[game.roll_rarity(&ordinary, far, far).rank() as usize] += 1;
+        counts[game.roll_rarity(&ordinary, far, far, false).rank() as usize] += 1;
     }
 
     for tier in Rarity::ALL {
@@ -2592,5 +2592,106 @@ fn a_save_without_the_boss_field_loads_un_bossed() {
             .iter()
             .all(|&e| loaded.world.get::<Boss>(e).is_none()),
         "a file with the field stripped must load with nothing bossed"
+    );
+}
+
+/// An apex species is authored tough and must not be scaled on top of that;
+/// an ordinary species rolled into a boss has nothing but the multiplier.
+///
+/// Asserted against the *ceiling* of an unbossed roll rather than against a
+/// paired spawn, because `roll_potential` gives every spawn an independent
+/// ±20% and nothing in the fixture can pin it. `MAX_INDIVIDUAL_ROLL` is 1.2
+/// and `BOSS_STAT_MULT * MIN_INDIVIDUAL_ROLL` is 1.4, so the two bands do not
+/// overlap and the comparison is exact rather than probabilistic.
+#[test]
+fn a_rolled_boss_is_scaled_and_an_apex_boss_is_not() {
+    let mut game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let zone_mult = game.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    let plain_ceiling = (ordinary.base_hp as f32 * zone_mult * MAX_INDIVIDUAL_ROLL).round() as i32;
+    let bossed = game
+        .spawn_wild_creature_scaled(&ordinary.id, pos.x + 3, pos.y + 3, 1.0, true)
+        .expect("a shipped species should spawn");
+    assert!(
+        game.world.get::<Stats>(bossed).unwrap().max_hp > plain_ceiling,
+        "a rolled boss must out-scale the luckiest ordinary roll of its own species"
+    );
+
+    let apex = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.is_boss)
+        .expect("at least one apex species ships");
+    let apex_ceiling = (apex.base_hp as f32 * zone_mult * MAX_INDIVIDUAL_ROLL).round() as i32;
+    let apex_spawn = game
+        .spawn_wild_creature_scaled(&apex.id, pos.x + 4, pos.y + 4, 1.0, true)
+        .expect("a shipped apex species should spawn");
+    assert!(
+        game.world.get::<Stats>(apex_spawn).unwrap().max_hp <= apex_ceiling,
+        "an apex species must not take BOSS_STAT_MULT on top of its authored stats"
+    );
+}
+
+/// A boss's stats are the whole of what it is worth, and a rare tier on top
+/// would be a second, invisible multiplier — the same reason an apex spawn
+/// has always been excluded. Spawned well outside the opening ring, or the
+/// ring's own exclusion would be what makes this pass.
+#[test]
+fn a_rolled_boss_never_rolls_a_rare_tier() {
+    let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    let far = OPENING_RING_TILES * 4;
+    for i in 0..200 {
+        let spawned = game
+            .spawn_wild_creature_scaled(&ordinary.id, pos.x + far + i, pos.y + far, 1.0, true)
+            .expect("a shipped species should spawn");
+        assert_eq!(
+            *game.world.get::<Rarity>(spawned).unwrap(),
+            Rarity::Ordinary,
+            "a rolled boss must never carry a rare tier"
+        );
+    }
+}
+
+/// A boss is one group; the escort standing with it is a second, and is
+/// never itself a boss. Zone 1 has room for only one group, so this run
+/// usually places the boss alone — the assertion is written as "exactly one
+/// of whatever spawned" so it holds either way.
+#[test]
+fn a_boss_pack_marks_the_boss_and_not_its_escort() {
+    use crate::game::spawning::SpawnEscalation;
+    let mut game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    let pack = game.spawn_pack(
+        &ordinary.id,
+        true,
+        pos.x + OPENING_RING_TILES * 4,
+        pos.y,
+        SpawnEscalation::surface(),
+    );
+    assert!(
+        !pack.is_empty(),
+        "a boss pack should place at least the boss"
+    );
+    assert_eq!(
+        pack.iter().filter(|&&e| game.is_boss_creature(e)).count(),
+        1,
+        "exactly one member of a boss pack is the boss"
     );
 }

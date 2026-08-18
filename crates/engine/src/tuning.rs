@@ -1281,6 +1281,22 @@ pub const WILD_CREATURE_CAP: usize = 2000;
 /// has at least one boss defined for it.
 pub const BOSS_SPAWN_CHANCE: f64 = 0.04;
 
+/// Multiplier on every stat of an **ordinary** species rolled into a boss.
+/// An apex species (`SpeciesDef::is_boss`) never takes it — its stats are
+/// hand-authored, and a blanket multiplier would discard the authoring, the
+/// same reason it rolls no rare tier.
+///
+/// Calibrated against the ladder rather than picked: apex totals are 206 and
+/// 236 against a band-2 median of 140, so ~1.5x is "one band up". 1.75 puts a
+/// rolled boss above an Overclocked spawn (`GOLD_STAT_MULT`), which is what
+/// makes it read as a wall rather than as a shiny — and a boss rolls no rare
+/// tier on top, so this is the whole of its elevation.
+///
+/// **Ungated by `balance_sim`**, which models no bosses at all: see
+/// `toughest_ordinary_species`, which excludes them. `dev-arenas/` is the
+/// instrument for this number.
+pub const BOSS_STAT_MULT: f32 = 1.75;
+
 /// How often a wild spawn comes up rare, and what it's worth when it does —
 /// see `Game::roll_rarity` and `components::Rarity`. The chances are checked
 /// against **one** roll in tier order, rarest first, so they can't sum past

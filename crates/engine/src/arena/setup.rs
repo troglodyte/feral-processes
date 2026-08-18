@@ -135,7 +135,7 @@ pub(crate) fn build_opponents(
         let mut members = Vec::with_capacity(row.count as usize);
         for _ in 0..row.count {
             let member = game
-                .spawn_wild_creature_scaled(&row.species, pos.x, pos.y, 1.0)
+                .spawn_wild_creature_scaled(&row.species, pos.x, pos.y, 1.0, false)
                 .ok_or_else(|| format!("unknown opponent species `{}`", row.species))?;
             members.push(member);
         }

@@ -1307,7 +1307,7 @@ impl Game {
     fn grant_starting_program(&mut self, species_id: &str) -> Option<String> {
         let player = self.player_entity();
         let at = *self.world.get::<Position>(player)?;
-        let program = self.spawn_wild_creature_scaled(species_id, at.x, at.y, 1.0)?;
+        let program = self.spawn_wild_creature_scaled(species_id, at.x, at.y, 1.0, false)?;
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();

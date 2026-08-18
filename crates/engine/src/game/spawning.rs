@@ -191,7 +191,7 @@ impl Game {
         x: i32,
         y: i32,
     ) -> Option<Entity> {
-        self.spawn_wild_creature_scaled(species_id, x, y, 1.0)
+        self.spawn_wild_creature_scaled(species_id, x, y, 1.0, false)
     }
 
     /// `spawn_wild_creature` with `depth_mult` folded into every stat.
@@ -207,6 +207,7 @@ impl Game {
         x: i32,
         y: i32,
         depth_mult: f32,
+        boss: bool,
     ) -> Option<Entity> {
         let species = self
             .world
@@ -218,7 +219,15 @@ impl Game {
         let zone = zone_level.0;
         let potential = self.roll_potential();
         let routines = self.roll_wild_routine();
-        let rarity = self.roll_rarity(&species, x, y);
+        let rarity = self.roll_rarity(&species, x, y, boss);
+        // An apex species is authored tough; only a rolled boss takes the
+        // multiplier. The component goes on both, so a query need not ask
+        // which.
+        let boss_mult = if boss && !species.is_boss {
+            crate::tuning::BOSS_STAT_MULT
+        } else {
+            1.0
+        };
         // Rarity multiplies here, and in exactly one other place:
         // `Game::promote_rarity`, which escalates a nemesis's tier by the
         // *ratio* between its old and new multiplier rather than reapplying
@@ -227,35 +236,41 @@ impl Game {
         // receipt — see `Rarity`'s doc for why nothing else may apply it.
         let rarity_mult = rarity.stat_mult();
         let scale = |base: i32, roll: f32| {
-            ((base as f32) * mult * depth_mult * rarity_mult * roll).round() as i32
+            ((base as f32) * mult * depth_mult * boss_mult * rarity_mult * roll).round() as i32
         };
-        Some(
-            self.world
-                .spawn((
-                    Creature {
-                        species: species.id.clone(),
-                    },
-                    Position { x, y },
-                    Glyph {
-                        ch: species.glyph,
-                        color: species.color,
-                    },
-                    Stats {
-                        hp: scale(species.base_hp, potential.hp_roll),
-                        max_hp: scale(species.base_hp, potential.hp_roll),
-                        atk: scale(species.base_atk, potential.atk_roll),
-                        def: scale(species.base_def, potential.def_roll),
-                    },
-                    potential,
-                    rarity,
-                    Hostile,
-                    WanderAi::default(),
-                    ZonePortal(zone),
-                    StatusEffects::default(),
-                    Routines(routines),
-                ))
-                .id(),
-        )
+        let entity = self
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Position { x, y },
+                Glyph {
+                    ch: species.glyph,
+                    color: species.color,
+                },
+                Stats {
+                    hp: scale(species.base_hp, potential.hp_roll),
+                    max_hp: scale(species.base_hp, potential.hp_roll),
+                    atk: scale(species.base_atk, potential.atk_roll),
+                    def: scale(species.base_def, potential.def_roll),
+                },
+                potential,
+                rarity,
+                Hostile,
+                WanderAi::default(),
+                ZonePortal(zone),
+                StatusEffects::default(),
+                Routines(routines),
+            ))
+            .id();
+        // Kept out of the spawn tuple: it is already near bevy's arity
+        // limit, and a conditional insert is what the load path does for
+        // `Nemesis`.
+        if boss {
+            self.world.entity_mut(entity).insert(Boss);
+        }
+        Some(entity)
     }
 
     /// Spawns a program of `species_id` at `(x, y)` already tamed and
@@ -312,7 +327,7 @@ impl Game {
         y: i32,
         stat_mult: f32,
     ) -> Option<Entity> {
-        let program = self.spawn_wild_creature_scaled(species_id, x, y, stat_mult)?;
+        let program = self.spawn_wild_creature_scaled(species_id, x, y, stat_mult, false)?;
         self.world
             .entity_mut(program)
             .remove::<(Hostile, WanderAi)>();
@@ -459,8 +474,19 @@ impl Game {
     /// rarest-first for that reason, and `rarity_ladder` is the single
     /// definition of them — shared with `Game::roll_gear_rarity`, so a
     /// program and a dropped weapon cannot come up rare at different rates.
-    pub(crate) fn roll_rarity(&mut self, species: &SpeciesDef, x: i32, y: i32) -> Rarity {
-        if species.is_boss || self.in_opening_ring(x, y) {
+    pub(crate) fn roll_rarity(
+        &mut self,
+        species: &SpeciesDef,
+        x: i32,
+        y: i32,
+        boss: bool,
+    ) -> Rarity {
+        // A boss, rolled or apex, never rolls a tier. An apex species'
+        // stats are hand-authored and a multiplier would discard the
+        // authoring; a rolled boss's `BOSS_STAT_MULT` is the whole of what
+        // it is worth, and a rare tier would be a second, invisible
+        // multiplier on top of it.
+        if boss || species.is_boss || self.in_opening_ring(x, y) {
             return Rarity::Ordinary;
         }
         let mut rng = self.world.resource_mut::<GameRng>();
@@ -966,9 +992,9 @@ impl Game {
     ) -> Vec<Entity> {
         if !is_boss {
             let size = self.roll_group_size(esc);
-            return self.spawn_group(species_id, size, x, y, esc);
+            return self.spawn_group(species_id, size, x, y, esc, false);
         }
-        let mut spawned = self.spawn_group(species_id, 1, x, y, esc);
+        let mut spawned = self.spawn_group(species_id, 1, x, y, esc, true);
         // A boss is one group; an escort needs a second one to stand in.
         // Zone 1 has no room for it, which is deliberate — the opening
         // zone's boss is the one fight where "a single very large program"
@@ -977,7 +1003,7 @@ impl Game {
             && let Some(escort) = self.pick_escort_species(x, y)
         {
             let size = self.roll_group_size(esc);
-            let escort_pack = self.spawn_group(&escort, size, x, y, esc);
+            let escort_pack = self.spawn_group(&escort, size, x, y, esc, false);
             spawned.extend(escort_pack);
         }
         spawned
@@ -1059,6 +1085,7 @@ impl Game {
         x: i32,
         y: i32,
         esc: SpawnEscalation,
+        boss: bool,
     ) -> Vec<Entity> {
         // Hoisted above the loop deliberately: it takes no RNG, so the
         // seeded sequence every spawn test depends on is untouched.
@@ -1072,7 +1099,13 @@ impl Game {
             } else {
                 self.scatter_open_tile(x, y, radius)
             };
-            spawned.extend(self.spawn_wild_creature_scaled(species_id, gx, gy, esc.stat_mult));
+            spawned.extend(self.spawn_wild_creature_scaled(
+                species_id,
+                gx,
+                gy,
+                esc.stat_mult,
+                boss,
+            ));
         }
         spawned
     }

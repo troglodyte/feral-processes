@@ -1,6 +1,7 @@
 //! Zone depth scaling and what survives a breach into the next zone.
 
 use super::support::*;
+use crate::tuning::BOSS_STAT_MULT;
 use crate::tuning::{
     MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
     NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_WORK_RESOURCE_MULT,
@@ -38,15 +39,16 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
     let species_db = game.species_defs();
     let mut query = game
         .world
-        .query_filtered::<(&Creature, &Stats, &Position, Option<&Rarity>), With<Hostile>>();
+        .query_filtered::<(&Creature, &Stats, &Position, Option<&Rarity>, Option<&Boss>), With<Hostile>>();
     let results: Vec<_> = query
         .iter(&game.world)
-        .map(|(c, s, p, r)| {
+        .map(|(c, s, p, r, b)| {
             (
                 c.species.clone(),
                 s.max_hp,
                 *p,
                 r.copied().unwrap_or_default(),
+                b.is_some(),
             )
         })
         .collect();
@@ -54,7 +56,7 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         !results.is_empty(),
         "zone 2 should have spawned wild creatures"
     );
-    for (species_id, max_hp, _pos, rarity) in results {
+    for (species_id, max_hp, _pos, rarity, boss) in results {
         let species = species_db.iter().find(|s| s.id == species_id).unwrap();
         // Zone 2 doubles base stats (`ZoneLevel::stat_multiplier`) and the
         // spawn's own `Potential::hp_roll` scales it within
@@ -70,8 +72,19 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         // exactly *once* — a second application anywhere downstream lands
         // outside these bounds rather than passing quietly.
         let rare = rarity.stat_mult();
+        // Folded in per creature for exactly the reason `rare` is: an
+        // ordinary spawn stays held to the tight range, and this asserts
+        // `BOSS_STAT_MULT` was applied exactly *once*. A rolled boss is an
+        // ordinary species carrying `Boss` — reading `is_boss` off the
+        // species would miss it.
+        let boss_mult = if boss && !species.is_boss {
+            BOSS_STAT_MULT
+        } else {
+            1.0
+        };
         assert!(
-            (max_hp as f32) >= (species.base_hp as f32) * 2.0 * rare * MIN_INDIVIDUAL_ROLL,
+            (max_hp as f32)
+                >= (species.base_hp as f32) * 2.0 * rare * boss_mult * MIN_INDIVIDUAL_ROLL,
             "zone 2 wild creatures should have at least doubled stats, times the roll floor"
         );
         // Rounded, because `spawn_wild_creature_scaled` rounds: a 112-HP
@@ -82,7 +95,8 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         // that the common case.
         assert!(
             (max_hp as f32)
-                <= ((species.base_hp as f32) * 2.0 * rare * MAX_INDIVIDUAL_ROLL).round(),
+                <= ((species.base_hp as f32) * 2.0 * rare * boss_mult * MAX_INDIVIDUAL_ROLL)
+                    .round(),
             "zone 2 wild creatures shouldn't exceed the zone doubling times the roll ceiling"
         );
     }
@@ -1882,11 +1896,14 @@ fn destroying_a_nest_rolls_its_species_gear_table_repeatedly() {
 
     let gear = ItemId::from("shiv_routine");
     let nest = game.spawn_nest("nest_cache_test", 440, 440);
-    let before = held(&game, &gear);
+    // `held_any`, because the question is how many rolls landed and not what
+    // tier they came up: `grant_gear_drop` files a rare copy in `GearCopies`
+    // rather than `Inventory`, so counting the plain store alone loses one.
+    let before = held_any(&game, &gear);
 
     one_shot_nest(&mut game, nest);
 
-    let after = held(&game, &gear);
+    let after = held_any(&game, &gear);
     assert!(
         after >= before + 2,
         "a guaranteed gear roll repeated NEST_CACHE_EQUIPMENT_ROLLS times should yield more \

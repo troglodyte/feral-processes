@@ -460,7 +460,7 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             open[rng.0.random_range(0..open.len())]
         };
-        let Some((species, _)) = self.pick_habitat_species(tx, ty, false) else {
+        let Some((species, _)) = self.pick_habitat_species(tx, ty, None, false) else {
             return;
         };
         let pack = self.spawn_pack(&species, false, tx, ty, SpawnEscalation::surface());

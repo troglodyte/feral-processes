@@ -47,7 +47,7 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
         // The two halves of `try_spawn_habitat_creature`, minus its nest
         // branch: a nest is not a fight, and a roll that placed one would
         // leave the arena with nobody to fight at all.
-        Encounter::Field { .. } => match game.pick_habitat_species(x, y, true) {
+        Encounter::Field { .. } => match game.pick_habitat_species(x, y, None, true) {
             Some((species, is_boss)) => {
                 game.spawn_pack(&species, is_boss, x, y, SpawnEscalation::surface())
             }
@@ -244,13 +244,7 @@ mod tests {
             let groups = roll(&mut game, &encounter).unwrap();
             members(&groups)
                 .into_iter()
-                .filter(|&e| {
-                    let species = &game.world.get::<Creature>(e).unwrap().species;
-                    game.world
-                        .resource::<SpeciesDb>()
-                        .get(species)
-                        .is_some_and(|d| d.is_boss)
-                })
+                .filter(|&e| game.is_boss_creature(e))
                 .count()
         };
 

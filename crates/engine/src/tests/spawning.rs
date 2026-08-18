@@ -1,6 +1,7 @@
 //! Populating a zone: wild programs, the spawn cap, nests, and guardians.
 
 use super::support::*;
+use crate::species::DangerBand;
 use crate::tuning::{
     BOSS_SPAWN_CHANCE, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
     NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, OPENING_RING_TILES, POPULATION_CHUNK_MARGIN,
@@ -438,15 +439,51 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
 /// The counterpart to the ring test above: one step out, the species it
 /// turns away are all still there to be met. A buffer that quietly became
 /// a zone-wide difficulty cut would be a worse bug than the one it fixes.
+///
+/// The danger window narrowed what zone 1 fields at all, so this can no
+/// longer be read off the whole roster: every band-0 species is one a fresh
+/// player can beat, so in zone 1 the ring now has nothing left to gentle.
+/// The zone is raised to the first step whose window admits a band the ring
+/// *does* refuse, which is where the claim is still measurable — and the
+/// ring is a distance from the danger origin rather than a property of zone
+/// 1, so raising the zone does not take it away.
 #[test]
 fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
     let mut game = Game::new(444, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 1 + crate::tuning::TIER_ENTRY_STEPS);
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    let out = spawn.x + OPENING_RING_TILES + 1;
-    for dy in -20..=20 {
-        for dx in 0..40 {
-            game.try_spawn_habitat_creature(out + dx, spawn.y + dy);
+
+    // Tiles beyond the ring whose window offers a species the ring's
+    // gentling turns away. Located rather than assumed, so this fails as
+    // "the window left nothing for the ring to refuse" rather than going
+    // quietly vacuous.
+    let mut refusable: Vec<(i32, i32)> = Vec::new();
+    for dy in -60..=60 {
+        for dx in -60..=60 {
+            let (x, y) = (spawn.x + dx, spawn.y + dy);
+            if dx.abs() <= OPENING_RING_TILES && dy.abs() <= OPENING_RING_TILES {
+                continue;
+            }
+            let Some((ordinary, _)) = game.habitat_pools(x, y, None) else {
+                continue;
+            };
+            let db = game.world.resource::<SpeciesDb>();
+            if ordinary.iter().any(|id| {
+                db.get(id)
+                    .is_some_and(|s| !crate::balance_sim::beatable_by_a_fresh_player(s))
+            }) {
+                refusable.push((x, y));
+            }
         }
+    }
+    assert!(
+        !refusable.is_empty(),
+        "no tile past the ring offers a species the ring would refuse — the \
+         window has left this test nothing to measure"
+    );
+
+    for &(x, y) in &refusable {
+        game.try_spawn_habitat_creature(x, y);
     }
 
     let spawned: Vec<String> = {
@@ -2694,4 +2731,146 @@ fn a_boss_pack_marks_the_boss_and_not_its_escort() {
         1,
         "exactly one member of a boss pack is the boss"
     );
+}
+
+/// The headline. A fresh run's zone fields the easy end of the ladder and
+/// nothing else — the thing that reads wrong today, where a level-1 player
+/// can meet a band-2 species outside the seven-tile ring.
+///
+/// StaticField is the exception and is asserted rather than excused: it
+/// ships no band-0 species, so the fallback reaches band 1 there.
+#[test]
+fn zone_one_fields_only_the_easiest_band() {
+    let mut game = Game::new(4301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Hoisted: `species_defs()` clones the whole db, and this walk visits
+    // thousands of tiles.
+    let bands: std::collections::HashMap<String, DangerBand> = game
+        .species_defs()
+        .into_iter()
+        .map(|s| (s.id.clone(), s.danger_band()))
+        .collect();
+    let mut checked = 0;
+    for dx in -30..=30 {
+        for dy in -30..=30 {
+            let Some((ordinary, _)) = game.habitat_pools(dx, dy, None) else {
+                continue;
+            };
+            let biome = game.world.resource_mut::<WorldMap>().tile(dx, dy).biome;
+            let expected = if biome == Biome::StaticField {
+                DangerBand::Tier(1)
+            } else {
+                DangerBand::Tier(0)
+            };
+            for id in &ordinary {
+                let band = bands[id];
+                assert_eq!(band, expected, "zone 1 offered {id} on {biome:?}");
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 0, "the walk found no populated tiles at all");
+}
+
+/// A hand-authored boss must not turn up in a fresh run. It can today.
+#[test]
+fn zone_one_never_fields_an_apex_species() {
+    let mut game = Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for dx in -30..=30 {
+        for dy in -30..=30 {
+            if let Some((_, apex)) = game.habitat_pools(dx, dy, None) {
+                assert!(
+                    apex.is_empty(),
+                    "zone 1 offered apex species {apex:?} at ({dx}, {dy})"
+                );
+            }
+        }
+    }
+}
+
+/// The window follows depth underground, not the zone the entrance sat at —
+/// the same rule `danger_steps` already applies to the two group curves.
+#[test]
+fn the_stack_window_follows_depth_not_the_surface_zone() {
+    let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bands: std::collections::HashMap<String, DangerBand> = game
+        .species_defs()
+        .into_iter()
+        .map(|s| (s.id.clone(), s.danger_band()))
+        .collect();
+    let mut found = false;
+    for dx in -30..=30 {
+        for dy in -30..=30 {
+            let (Some((deep, _)), Some((shallow, _))) = (
+                game.habitat_pools(dx, dy, Some(6)),
+                game.habitat_pools(dx, dy, None),
+            ) else {
+                continue;
+            };
+            if deep.iter().any(|id| bands[id] == DangerBand::Tier(2))
+                && shallow.iter().all(|id| bands[id] != DangerBand::Tier(2))
+            {
+                found = true;
+            }
+        }
+    }
+    assert!(
+        found,
+        "no tile fielded a band-2 species at depth 6 that zone 1 withholds — \
+         depth is not moving the window"
+    );
+}
+
+/// The boss roll fires everywhere outside the opening ring, and before
+/// `APEX_ENTRY_STEP` it can only produce a rolled boss — the whole of "easy
+/// bosses on the surface, hard ones deep".
+#[test]
+fn an_early_boss_is_a_rolled_one() {
+    let mut game = Game::new(4304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let far = OPENING_RING_TILES * 3;
+    let apex: std::collections::HashSet<String> = game
+        .species_defs()
+        .into_iter()
+        .filter(|s| s.is_boss)
+        .map(|s| s.id.clone())
+        .collect();
+    let mut bosses = 0;
+    for i in 0..4000 {
+        let (x, y) = (pos.x + far + (i % 40), pos.y + far + (i / 40));
+        let Some((species, is_boss)) = game.pick_habitat_species(x, y, None, true) else {
+            continue;
+        };
+        if is_boss {
+            bosses += 1;
+            assert!(
+                !apex.contains(&species),
+                "zone 1 named the apex species {species} as a boss"
+            );
+        }
+    }
+    assert!(
+        bosses > 0,
+        "4000 picks produced no boss at all at a {BOSS_SPAWN_CHANCE} rate — \
+         the roll is not firing"
+    );
+}
+
+/// The opening ring turns a boss away, the same as it turns a rare tier
+/// away, and for the same reason: a `BOSS_STAT_MULT` spawn in the nursery
+/// falsifies `balance_sim::beatable_by_a_fresh_player`.
+#[test]
+fn the_opening_ring_refuses_a_boss() {
+    let mut game = Game::new(4305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    for _ in 0..2000 {
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if let Some((species, is_boss)) =
+                    game.pick_habitat_species(pos.x + dx, pos.y + dy, None, true)
+                {
+                    assert!(!is_boss, "the opening ring produced a boss: {species}");
+                }
+            }
+        }
+    }
 }

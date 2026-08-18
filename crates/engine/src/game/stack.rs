@@ -780,7 +780,8 @@ impl Game {
         let groups = self.max_enemy_groups(esc.depth);
         let mut pack = Vec::new();
         for _ in 0..groups {
-            let Some((species, _)) = self.pick_habitat_species(ex, ey, false) else {
+            let Some((species, _)) = self.pick_habitat_species(ex, ey, Some(pos.depth), false)
+            else {
                 continue;
             };
             pack.extend(self.spawn_pack(&species, false, ex, ey, esc));

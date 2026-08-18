@@ -536,7 +536,7 @@ impl Game {
     /// respawns keep rolling every tick while the party is underground, and
     /// anything read off the party's own locale in here would size those
     /// from the party's depth.
-    fn danger_steps(&self, depth: Option<u32>) -> u32 {
+    pub(crate) fn danger_steps(&self, depth: Option<u32>) -> u32 {
         let steps = match depth {
             Some(depth) => depth.saturating_sub(1) / GROUP_SIZE_STEP_FRAMES,
             None => self
@@ -865,25 +865,35 @@ impl Game {
         &mut self,
         x: i32,
         y: i32,
+        depth: Option<u32>,
         allow_boss: bool,
     ) -> Option<(String, bool)> {
-        let (candidates, boss_candidates) = self.habitat_pools(x, y)?;
-        // A boss takes the tile's one spawn slot instead of an ordinary
-        // habitat creature, but only rarely, and only where one is defined
-        // for this biome at all.
-        let spawn_boss = allow_boss && !boss_candidates.is_empty() && {
+        let (candidates, boss_candidates) = self.habitat_pools(x, y, depth)?;
+        // The ring turns a boss away the same way it turns a rare tier away:
+        // a `BOSS_STAT_MULT` spawn in the nursery falsifies
+        // `balance_sim::beatable_by_a_fresh_player`. This sits exactly where
+        // `!boss_candidates.is_empty()` used to, so the draw count is
+        // unchanged — every biome ships an apex species, so that guard was
+        // true everywhere except the ring, which is the only place it
+        // short-circuited.
+        let spawn_boss = allow_boss && !self.in_opening_ring(x, y) && {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(BOSS_SPAWN_CHANCE)
         };
-        let pool = if spawn_boss || candidates.is_empty() {
-            if !allow_boss {
-                // Only reachable with an empty ordinary pool: a biome whose
-                // sole residents are bosses has nothing an ambush may field.
-                return None;
-            }
-            &boss_candidates
+        let pool = if spawn_boss {
+            // A boss is drawn from the whole window, apex included where the
+            // step admits it. Below `APEX_ENTRY_STEP` that leaves the
+            // ordinary pool, which is the point: an early boss is a rolled
+            // one. Sorted because the draw picks by index and concatenating
+            // two sorted vectors does not give a sorted one.
+            let mut both = candidates;
+            both.extend(boss_candidates);
+            both.sort();
+            both
+        } else if candidates.is_empty() {
+            return None;
         } else {
-            &candidates
+            candidates
         };
         let pick = {
             let mut rng = self.world.resource_mut::<GameRng>();
@@ -905,23 +915,35 @@ impl Game {
     /// caller instead is exactly the duplicated-formula trap this repo keeps
     /// falling into.
     ///
+    /// `depth` is handed in rather than read off the party's locale, for the
+    /// reason `SpawnEscalation`'s doc already gives: ambient surface spawns
+    /// and nest respawns keep rolling on every tick while the party is
+    /// underground, so a step read inside here would size those from the
+    /// party's depth.
+    ///
     /// `allow_boss` is deliberately not a parameter: both places it is
     /// consulted sit *after* the pools are built, so it stays with the draw.
     /// That is also why this split changes `pick_habitat_species`'s RNG draw
     /// order not at all, which the seeded spawn tests depend on.
-    pub(crate) fn habitat_pools(&mut self, x: i32, y: i32) -> Option<(Vec<String>, Vec<String>)> {
+    pub(crate) fn habitat_pools(
+        &mut self,
+        x: i32,
+        y: i32,
+        depth: Option<u32>,
+    ) -> Option<(Vec<String>, Vec<String>)> {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
             return None;
         }
+        let step = self.danger_steps(depth);
         let species_db = self.world.resource::<SpeciesDb>();
         let mut candidates: Vec<String> = species_db
-            .habitat_matches(tile.biome)
+            .windowed_matches(tile.biome, step)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
         let mut boss_candidates: Vec<String> = species_db
-            .boss_habitat_matches(tile.biome)
+            .windowed_boss_matches(tile.biome, step)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
@@ -1000,7 +1022,7 @@ impl Game {
         // zone's boss is the one fight where "a single very large program"
         // is still the whole encounter.
         if self.max_enemy_groups(esc.depth) >= 2
-            && let Some(escort) = self.pick_escort_species(x, y)
+            && let Some(escort) = self.pick_escort_species(x, y, esc.depth)
         {
             let size = self.roll_group_size(esc);
             let escort_pack = self.spawn_group(&escort, size, x, y, esc, false);
@@ -1028,8 +1050,8 @@ impl Game {
     /// sites hand `spawn_pack` the tile whose biome chose the boss (the
     /// surface roll its own, `rouse_lair` the Stack entrance it read), so
     /// this is the right pool for either.
-    fn pick_escort_species(&mut self, x: i32, y: i32) -> Option<String> {
-        let (candidates, _) = self.habitat_pools(x, y)?;
+    fn pick_escort_species(&mut self, x: i32, y: i32, depth: Option<u32>) -> Option<String> {
+        let (candidates, _) = self.habitat_pools(x, y, depth)?;
         if candidates.is_empty() {
             return None;
         }
@@ -1117,7 +1139,7 @@ impl Game {
     /// matching species, so callers (see `spawn_initial_creatures`) can
     /// retry elsewhere instead of silently losing that spawn slot.
     pub(crate) fn try_spawn_habitat_creature(&mut self, x: i32, y: i32) -> bool {
-        let Some((pick, spawn_boss)) = self.pick_habitat_species(x, y, true) else {
+        let Some((pick, spawn_boss)) = self.pick_habitat_species(x, y, None, true) else {
             return false;
         };
 

@@ -400,6 +400,11 @@ fn a_back_group_with_a_ranged_move_still_connects() {
 fn an_engaged_group_still_uses_its_melee_moves() {
     let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let construct = game.spawn_wild_creature("construct", 5, 5).unwrap();
+    // A carrier spends its round on the routine rather than a move (see
+    // `wild_retaliate`), and whether this one rolled a routine is a property
+    // of where the shared `GameRng` stream happened to be. The claim here is
+    // about *moves*, so the roll is taken out of it.
+    game.world.entity_mut(construct).insert(Routines(vec![]));
     game.start_battle(vec![construct]);
     let player = game.player_entity();
     let hp_before = game.world.get::<Stats>(player).unwrap().hp;

@@ -599,6 +599,7 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
         .iter()
         .filter(|s| s.workable && s.assignees.is_empty())
         .count();
+    let (draw, supply) = game.base_power();
     let mut rows = vec![
         text_row(format!(
             "{} structure{}, {assigned} program{} assigned, {idle} idle",
@@ -606,6 +607,7 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
             if report.len() == 1 { "" } else { "s" },
             if assigned == 1 { "" } else { "s" },
         )),
+        grid_header_row(draw, supply),
         text_row(""),
     ];
     if report.is_empty() {
@@ -637,6 +639,22 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
         "Up/Down to scroll, Enter to staff, Esc to close."
     }));
     draw_popup("Structures", PopupSize::Large, &rows, painter, m);
+}
+
+/// The roster's second header row: the base's grid, red when it is short.
+///
+/// Reads `draw` and `supply` straight from `Game::base_power` rather than
+/// comparing any one machine's numbers — which machine went dark is
+/// `MachineStatus::Unpowered`'s job, not this row's. **"Grid", never
+/// "Power"**: `Power` already names a creature's `PowerReserve` in the status
+/// column, and this pane sits two panels from it.
+fn grid_header_row(draw: u32, supply: u32) -> Row {
+    let text = format!("Grid  {draw} / {supply}");
+    if draw > supply {
+        Row::TextColored(text, RED)
+    } else {
+        text_row(text)
+    }
 }
 
 /// A workable structure with nobody posted to it — the one thing on either
@@ -700,10 +718,8 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Clogged => Some("clogged — collect from it with c"),
         MachineStatus::Unstaffed => Some("no one at it — its program is away"),
         MachineStatus::Stranded => Some("cut off — its program can't reach it"),
-        // `Unpowered` is a placeholder in this arm, not a considered `None`:
-        // the line a dark machine shows here is Task 6's, written beside the
-        // grid header it refers the player to.
-        MachineStatus::Running | MachineStatus::Idle | MachineStatus::Unpowered => None,
+        MachineStatus::Unpowered => Some("dark — the grid is short, build a Recharger Node"),
+        MachineStatus::Running | MachineStatus::Idle => None,
     }
 }
 
@@ -892,6 +908,80 @@ mod tests {
             assert!(
                 text_w + 2.0 * m.pad < box_w,
                 "an assignee row is {text_w}px inside a {box_w}px sheet: {line:?}"
+            );
+        });
+    }
+
+    /// The roster's second header row: what it says, and — the actual point
+    /// of the row — that it goes red exactly when the grid can't cover its
+    /// machines. A flush grid stays a plain row so red keeps meaning "short".
+    #[test]
+    fn the_roster_header_reports_the_grid() {
+        let short = grid_header_row(15, 12);
+        assert_eq!(row_text(&short), "Grid  15 / 12");
+        match short {
+            Row::TextColored(_, color) => {
+                assert_eq!(color, RED, "a grid short of supply should read red")
+            }
+            Row::Text(_) | Row::Item { .. } => panic!("a grid short of supply should read red"),
+        }
+
+        let flush = grid_header_row(12, 15);
+        assert_eq!(row_text(&flush), "Grid  12 / 15");
+        assert!(
+            matches!(flush, Row::Text(_)),
+            "a grid with supply to spare should not read red"
+        );
+    }
+
+    fn structure_report(status: MachineStatus) -> StructureReport {
+        StructureReport {
+            entity: Entity::PLACEHOLDER,
+            kind: "mining_node".to_string(),
+            label: "Mining Node".to_string(),
+            pos: (0, 0),
+            distance: 0,
+            tier: None,
+            durability: None,
+            is_home: false,
+            workable: true,
+            player_adjacent: false,
+            input: Vec::new(),
+            output: Vec::new(),
+            output_capacity: 0,
+            status: Some(status),
+            assignees: Vec::new(),
+        }
+    }
+
+    /// `Unpowered` is the only status whose fix is a build rather than
+    /// waiting or walking over — the stall line is the one place that says
+    /// so, since the grid header it points at can't name a machine.
+    #[test]
+    fn a_dark_machines_row_names_the_recharger() {
+        assert_eq!(
+            stall_line(&structure_report(MachineStatus::Unpowered)),
+            Some("dark — the grid is short, build a Recharger Node")
+        );
+    }
+
+    /// `draw_structures` is a `PopupSize::Large` box and, per the
+    /// `popup row width IS testable headlessly` memory, `draw_row` never
+    /// clips a row horizontally — an overlong row just runs off the edge.
+    /// The grid header is short and fixed, so this confirms that rather
+    /// than assuming it: worst-case four-digit numbers on both sides still
+    /// fit comfortably inside the roster.
+    #[test]
+    fn the_grid_header_row_fits_the_structure_roster() {
+        let m = crate::text::ui_metrics(900.0);
+        let row = grid_header_row(9999, 9999);
+        let line = row_text(&row);
+        crate::paint::with_painter(|p| {
+            let box_w = p.screen_w() * 0.88;
+            let text_w = p.measure_ui_advance(line, m.font_size);
+            assert!(
+                text_w + 2.0 * m.pad < box_w,
+                "the grid header is {text_w}px inside an {box_w}px roster: {line:?}"
             );
         });
     }

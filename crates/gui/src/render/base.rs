@@ -1040,12 +1040,10 @@ fn machine_color(status: MachineStatus) -> Color {
         MachineStatus::Starved | MachineStatus::Unstaffed => YELLOW,
         // Red rather than yellow: unlike `Unstaffed`, waiting does not fix
         // this one, so it belongs with the states that are asking for you.
-        MachineStatus::Clogged | MachineStatus::Stranded => RED,
+        // `Unpowered` joins them for the same reason — a dark machine never
+        // resolves itself either, only a Recharger Node fixes it.
+        MachineStatus::Clogged | MachineStatus::Stranded | MachineStatus::Unpowered => RED,
         MachineStatus::Idle => TEXT_DIM,
-        // Placeholder, and deliberately the dimmest reading rather than a
-        // wrong-but-loud one: the colour a dark machine actually wears is
-        // Task 6's, along with the pane copy that goes with it.
-        MachineStatus::Unpowered => TEXT_DIM,
     }
 }
 

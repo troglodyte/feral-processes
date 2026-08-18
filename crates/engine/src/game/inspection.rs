@@ -651,6 +651,26 @@ impl Game {
         report
     }
 
+    /// The base's `Grid` header, as `(draw, supply)`.
+    ///
+    /// Calls `game::base::power::ledger` directly rather than reading
+    /// `resources::PowerGrid` — the per-tick cache `systems::power_grid_system`
+    /// fills at the head of the base chain. That keeps this correct on the
+    /// very first frame after a load, before any tick has run and while the
+    /// resource still holds its `Default`. Iterating a base's handful of
+    /// structures once per frame is not a cost worth optimising ahead of
+    /// evidence.
+    ///
+    /// `PowerLedger` itself stays engine-internal — its `dark` set holds
+    /// `Entity`, which is not the renderer's business. A machine's own dark
+    /// state reaches the gui the same way any other status does, through
+    /// `EntityView::machine_status` and `MachineStatus::Unpowered`.
+    pub fn base_power(&self) -> (u32, u32) {
+        let db = self.world.resource::<StructureDb>();
+        let ledger = crate::game::base::power::ledger(&self.world, db);
+        (ledger.draw, ledger.supply)
+    }
+
     /// A species' affinities, or `None` if no such species loaded.
     pub fn species_affinities(&self, id: &str) -> Option<Affinities> {
         self.world

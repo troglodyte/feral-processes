@@ -641,3 +641,32 @@ fn a_base_over_capacity_survives_a_save_round_trip() {
          structures alone"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The view: `Game::base_power`, which the base pane's `Grid` header reads.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn base_power_reports_draw_and_supply_before_the_first_tick() {
+    // No `game.tick()` anywhere in this test — that omission is the whole
+    // point. `Game::new` leaves `resources::PowerGrid` at its `Default`
+    // (supply 0, draw 0) until `systems::power_grid_system` first runs, so
+    // an implementation of `base_power` that reads the resource instead of
+    // calling `ledger` directly would report `(0, 0)` here rather than the
+    // numbers the standing structures actually add up to.
+    let mut game = game_on_a_short_grid("power_view_before_tick", 4008);
+    spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
+    spawn_structure_at(&mut game, "test_grid_source", 5, 4);
+
+    let (draw, supply) = game.base_power();
+
+    assert_eq!(
+        draw, 1_000_000,
+        "the one deployed machine's full, unstaffed draw"
+    );
+    assert_eq!(
+        supply, 2_000_000,
+        "the one deployed source's supply — `Game::new` deploys no Home or \
+         any other structure on its own, so this is the total"
+    );
+}

@@ -443,6 +443,10 @@ pub enum PassiveTrigger {
     AllyDropped,
     /// A status condition landed on the holder this round.
     Afflicted,
+    /// The round opened. Unlike the other two this is not a fact about the
+    /// holder at all — nothing has to have *happened* — which is what makes
+    /// it the one trigger a piece of gear can carry and be worth wearing.
+    RoundStart,
 }
 
 /// What running `def` actually costs its caster: the authored

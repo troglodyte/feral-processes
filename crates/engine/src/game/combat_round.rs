@@ -76,6 +76,21 @@ impl Game {
         let mut battle = self.world.resource_mut::<BattleState>();
         battle.round_targets = battle.groups.iter().map(|g| g.members.clone()).collect();
 
+        // Under the round header, so the narration reads inside the round it
+        // opens, and ahead of every chosen action, because that is the whole
+        // of what this trigger means. After `round_targets`, not before: an
+        // enemy-facing passive resolves its group through `Game::retarget`,
+        // which reads it, and last round's snapshot would aim at a group that
+        // may not be standing any more.
+        //
+        // The whole living party rather than one combatant, the way
+        // `AllyDropped` does — a round starting is a fact about the round.
+        let living = self.living_party();
+        self.fire_passives(PassiveTrigger::RoundStart, &living);
+        if self.world.get_resource::<BattleState>().is_none() {
+            return;
+        }
+
         // Bracing is a stance held for the whole round, not an action that
         // only pays off when you win initiative — so it is applied before
         // anyone acts. A defender is therefore already covered against a

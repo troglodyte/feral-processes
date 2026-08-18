@@ -19,7 +19,7 @@
 //! They occupy a slot like anything else and cost the holder their pick of
 //! what else could be in it; what they never cost is a turn.
 
-use crate::abilities::{AbilityDef, PassiveTrigger};
+use crate::abilities::{AbilityDef, AbilityTarget, PassiveTrigger};
 use crate::battle;
 use crate::components::{Routines, StatusEffects};
 use crate::*;
@@ -64,11 +64,8 @@ impl Game {
                     break;
                 }
                 self.arm_cooldown(holder, &ability);
-                let recipients = self.ability_recipients(
-                    holder,
-                    ability.target,
-                    &battle::SpecialTarget::WholeParty,
-                );
+                let chosen = self.passive_target(holder, ability.target);
+                let recipients = self.ability_recipients(holder, ability.target, &chosen);
                 if recipients.is_empty() {
                     continue;
                 }
@@ -79,6 +76,35 @@ impl Game {
                 );
                 self.use_ability(&ability, holder, &name, &recipients);
             }
+        }
+    }
+
+    /// What a passive would have picked, had anything picked it.
+    ///
+    /// The two triggers that shipped first were only ever carried by
+    /// routines reaching the whole party or the whole field, so this used to
+    /// be a hardcoded `SpecialTarget::WholeParty` — which
+    /// `ability_recipients` answers with an empty list for anything
+    /// Single-scope. That is a routine that arms its cooldown, logs that it
+    /// cut in, and lands on nobody: the authored-and-never-runs failure this
+    /// module refuses everywhere else, arriving at cast time instead of at
+    /// load.
+    ///
+    /// The holder is the answer for an ally-facing routine — a passive is
+    /// something you carry, so the thing it looks after is you — and the
+    /// first group still standing for an enemy-facing one, which is where
+    /// the `Attack` action's own default lands too.
+    fn passive_target(&self, holder: Entity, target: AbilityTarget) -> battle::SpecialTarget {
+        match target {
+            AbilityTarget::OneAlly => self
+                .party_slot_of(holder)
+                .map(|slot| battle::SpecialTarget::Ally { slot })
+                .unwrap_or(battle::SpecialTarget::WholeParty),
+            AbilityTarget::OneEnemyGroupFront | AbilityTarget::WholeEnemyGroup => {
+                battle::SpecialTarget::EnemyGroup { group: 0 }
+            }
+            AbilityTarget::WholeParty => battle::SpecialTarget::WholeParty,
+            AbilityTarget::AllEnemies => battle::SpecialTarget::AllEnemies,
         }
     }
 

@@ -1869,11 +1869,25 @@ pub(crate) fn passive_id(game: &Game, trigger: PassiveTrigger) -> String {
 /// A battle with the player holding `passive` and one companion fielded
 /// beside them — the smallest shape in which an ally can drop.
 pub(crate) fn battle_with_a_passive_holder(seed: u32, passive: &str) -> Game {
-    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    battle_with_a_passive_holder_in(&test_assets_dir(), seed, Some(passive))
+}
+
+/// The same shape against an arbitrary asset install, and with the routine
+/// optional — the two things a gear grant needs that an installed one does
+/// not. `None` is the control half every test of a passive needs: an
+/// otherwise identical battle where nothing is armed.
+pub(crate) fn battle_with_a_passive_holder_in(
+    assets: &std::path::Path,
+    seed: u32,
+    passive: Option<&str>,
+) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, assets).unwrap();
     let player = game.player_entity();
     set_level(&mut game, player, 40);
-    give_etched_disks(&mut game, passive, 1);
-    game.install_disk(player, passive).unwrap();
+    if let Some(passive) = passive {
+        give_etched_disks(&mut game, passive, 1);
+        game.install_disk(player, passive).unwrap();
+    }
 
     let ally = spawn_tamed(&mut game, 30, 3);
     game.add_companion(ally).unwrap();

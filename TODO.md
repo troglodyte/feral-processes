@@ -1,4 +1,5 @@
 # Todos
+1. placing a 'block tile', which is an individual base tile so that the base can be expanded one block at a time. costs 5 core fragments. unlockable research, cheap and early. adjust pillars to also supply grid energy.
 2. some ambiguity|routines for examining entities
 3. environment effects
 4. unorthodox solutions
@@ -60,6 +61,7 @@
 25. base needs power to run, structures consume power, and power rechargers produce power. for now power rechargers can be anywhere in the base, no proximity. requires more power rechargers for more buildings.
 27. add visual indicator of entity in the stack
 29. zone changes will give you access to new materials via the mining node so that you can make more advanced structures, etc
+30. lets move entity species into zones/stacks. see only easiest ones on the surface, zone 1. stacks expose harder entities.
 
 # Bugs
 1. spawned entities tend to gather around the players base, when traveling outside this group so that it's no longer on the screen, the entity population is almost non existent. we've run into this issue before, i think it needs further tuning

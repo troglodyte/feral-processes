@@ -1,0 +1,14 @@
+(
+    id: "core_dump",
+    name: "Core Dump Single",
+    // PASSIVE on `AllyDropped`, which is the trigger `deadman` already
+    // occupies at Everyone scope. This is the rung a player can reach
+    // without beating Wintermute: one target, less than half the power, and
+    // carried by an item rather than learned.
+    description: "When one of yours goes down, what it was holding dumps into the nearest hostile",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 9),
+    cooldown: 3,
+    power_cost: 0.0,
+    triggers: Some(AllyDropped),
+)

@@ -10,7 +10,7 @@
 //! what the battle does with one it accepted.
 
 use super::support::*;
-use crate::abilities::AbilityDb;
+use crate::abilities::{AbilityDb, PassiveTrigger};
 use crate::items_db::ItemDb;
 use crate::*;
 
@@ -428,8 +428,66 @@ fn every_shipped_grant_names_a_real_battle_passive() {
         granting += 1;
     }
     assert!(
-        granting >= 3,
-        "the shipped set should carry the three gear passives, found {granting}"
+        granting >= 8,
+        "the shipped set should carry the gear passives, found {granting}"
+    );
+}
+
+/// Every trigger has gear that reaches it. Not decoration: a trigger no
+/// item names is a `PassiveTrigger` variant only a boss drop can ever fire,
+/// which is the state this whole feature exists to leave — and the gap
+/// would be invisible, since each variant would still have its call site
+/// and its shipped ability.
+#[test]
+fn the_shipped_grants_between_them_reach_every_trigger() {
+    let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let abilities = game.world.resource::<AbilityDb>();
+    let reached: Vec<PassiveTrigger> = game
+        .item_defs()
+        .iter()
+        .filter_map(|def| def.grants.as_ref())
+        .filter_map(|id| abilities.get(id))
+        .filter_map(|def| def.triggers)
+        .collect();
+
+    for trigger in [
+        PassiveTrigger::RoundStart,
+        PassiveTrigger::AllyDropped,
+        PassiveTrigger::Afflicted,
+    ] {
+        assert!(
+            reached.contains(&trigger),
+            "no shipped item grants anything that fires on {trigger:?}"
+        );
+    }
+}
+
+/// One shipped item, all the way through a real round, on the real assets
+/// — everything above this runs against scratch content, so a shipped file
+/// with a target the passive path cannot resolve would go unnoticed.
+/// `ragged_edge` is the one that lands a *condition* rather than damage,
+/// which is the effect with the most between authoring it and seeing it.
+#[test]
+fn a_shipped_granting_weapon_lands_its_condition_in_a_real_round() {
+    let mut game = battle_with_a_passive_holder_prepared(&test_assets_dir(), 9301, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "ragged_edge");
+    });
+
+    resolve_a_planned_round(&mut game);
+
+    let bleeding = game
+        .world
+        .resource::<BattleState>()
+        .groups
+        .iter()
+        .flat_map(|grp| grp.members.iter())
+        .filter_map(|&e| game.world.get::<StatusEffects>(e))
+        .filter_map(|s| s.active.as_ref())
+        .any(|status| status.kind == StatusKind::Bleed);
+    assert!(
+        bleeding,
+        "the round opened and nothing on the other side is bleeding"
     );
 }
 

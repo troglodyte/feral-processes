@@ -626,6 +626,11 @@ mod tests {
             ("interrupt_coil", EquipmentSlot::Weapon, 3, 0, 0),
             ("parity_weave", EquipmentSlot::Armor, 0, 3, 0),
             ("watchdog_tap", EquipmentSlot::Module, 0, 2, 0),
+            ("crash_handler", EquipmentSlot::Weapon, 2, 0, 0),
+            ("ragged_edge", EquipmentSlot::Weapon, 2, 0, 0),
+            ("sandbox_liner", EquipmentSlot::Armor, 0, 2, 0),
+            ("redundant_bank", EquipmentSlot::Module, 0, 1, 0),
+            ("deadman_relay", EquipmentSlot::Module, 0, 2, 0),
         ];
         for (id, want_slot, atk, def, decompiler) in equipment {
             let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
@@ -641,7 +646,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 57);
+        assert_eq!(db.all().count(), 62);
     }
 
     #[test]

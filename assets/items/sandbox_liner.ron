@@ -1,0 +1,10 @@
+(
+    id: "sandbox_liner",
+    name: "Sandbox Liner",
+    description: "Scavenged armour. A thin isolation layer between the wearer and whatever just got through.",
+    value: Some(115),
+    equipment: Some((Armor, (def: 2))),
+    grants: Some("quarantine"),
+    droppable: Some([("cipher", 0.10), ("proxy", 0.08)]),
+    cache_drop: Some(0.04),
+)

@@ -1,0 +1,15 @@
+(
+    id: "clock_skew",
+    name: "Clock Skew Single",
+    // PASSIVE on `RoundStart`, and the one that opens with a *condition*
+    // rather than damage. Two points of Bleed over two rounds against a
+    // four-round cooldown is deliberately under half uptime: a rider the
+    // player can rely on every round stops being something they read the
+    // fight around.
+    description: "The round opens a fraction out of step, and the nearest hostile pays the drift",
+    target: OneEnemyGroupFront,
+    effect: Debuff(kind: Bleed, power: 2, duration: 2),
+    cooldown: 4,
+    power_cost: 0.0,
+    triggers: Some(RoundStart),
+)

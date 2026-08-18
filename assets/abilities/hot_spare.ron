@@ -1,0 +1,15 @@
+(
+    id: "hot_spare",
+    name: "Hot Spare Single",
+    // PASSIVE on `AllyDropped`, ally-facing where `core_dump` is
+    // enemy-facing — the same event read as "cover the gap" rather than as
+    // "make them pay". Both are Single scope and neither is exclusive, so a
+    // player can be wearing both and have the round a companion drops be
+    // the round they hit hardest and healed most.
+    description: "A companion going down brings the wearer's spare capacity online",
+    target: OneAlly,
+    effect: Heal(power: 8),
+    cooldown: 3,
+    power_cost: 0.0,
+    triggers: Some(AllyDropped),
+)

@@ -1,0 +1,14 @@
+(
+    id: "quarantine",
+    name: "Quarantine Single",
+    // PASSIVE on `Afflicted`, and the single-target rung under `watchdog`'s
+    // Party one: the wearer sheds what landed on them, and nobody else's
+    // problem is solved. That gap is the whole reason `watchdog` can stay
+    // exclusive while this ships on a common piece of armour.
+    description: "Whatever lands on the wearer is walled off before it settles",
+    target: OneAlly,
+    effect: Cleanse,
+    cooldown: 4,
+    power_cost: 0.0,
+    triggers: Some(Afflicted),
+)

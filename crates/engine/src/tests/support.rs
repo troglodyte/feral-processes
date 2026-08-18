@@ -1079,6 +1079,11 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
                 atk: 0,
                 def: 1,
             },
+            // The real spawner (`spawning.rs`) always gives a hostile one,
+            // and `Game::arm_status` is a silent no-op without it — so a
+            // fixture short this component makes every Debuff landing on
+            // this creature disappear, and reads as the debuff not working.
+            StatusEffects::default(),
         ))
         .id()
 }

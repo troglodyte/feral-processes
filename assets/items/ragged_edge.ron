@@ -1,0 +1,10 @@
+(
+    id: "ragged_edge",
+    name: "Ragged Edge",
+    description: "Scavenged weapon. Never quite in phase with the round it opens, and neither is anything it touches.",
+    value: Some(115),
+    equipment: Some((Weapon, (atk: 2))),
+    grants: Some("clock_skew"),
+    droppable: Some([("worm", 0.10), ("scrapper", 0.08)]),
+    cache_drop: Some(0.04),
+)

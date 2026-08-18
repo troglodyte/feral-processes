@@ -1,0 +1,18 @@
+(
+    id: "deadman_relay",
+    name: "Deadman Relay",
+    description: "Scavenged module. Wintermute's own switch, cut out of the wreck and wired to the party bus.",
+    // The second item to grant a routine that already ships, and the louder
+    // case: `deadman` is `exclusive`, an Everyone-scope routine three times
+    // `core_dump`'s power, and until now reachable only by beating
+    // Wintermute for the disk. This is still that — the relay drops from
+    // Wintermute and nothing else — but it spends a module slot rather than
+    // a routine slot, and unlike the disk it cannot be etched or taught on.
+    // Exclusivity was never about how many things can carry a routine; it is
+    // about the routine never entering `KnownRoutines`, and a grant is
+    // derived off the worn item rather than learned.
+    value: Some(180),
+    equipment: Some((Module, (def: 2))),
+    grants: Some("deadman"),
+    droppable: Some([("wintermute", 0.12)]),
+)

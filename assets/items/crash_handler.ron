@@ -1,0 +1,10 @@
+(
+    id: "crash_handler",
+    name: "Crash Handler",
+    description: "Scavenged weapon. Wired to the party bus, so a companion dropping is the thing that arms it.",
+    value: Some(115),
+    equipment: Some((Weapon, (atk: 2))),
+    grants: Some("core_dump"),
+    droppable: Some([("virus", 0.10), ("glitch", 0.08)]),
+    cache_drop: Some(0.04),
+)

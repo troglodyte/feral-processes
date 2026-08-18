@@ -113,18 +113,54 @@ impl Game {
     ///
     /// Collected up front rather than iterated lazily because firing one
     /// mutates the world underneath the `Routines` borrow.
+    ///
+    /// **Two sources, and worn gear is the second.** An `ItemDef::grants`
+    /// is never written into `Routines` — it is read off `Equipment` here,
+    /// every time a trigger comes round — so taking the item off ends the
+    /// passive by omission, nothing about it reaches the save, and a gear
+    /// bonus and a stats operation can never disagree about who owns the
+    /// routine. Installed routines first, so today's slot order is
+    /// untouched and gear is what got appended.
+    ///
+    /// **A routine fires once per source; the cooldown is per id.** A grant
+    /// and an installed copy of the same routine therefore both fire, and
+    /// the first arms the cooldown the second is no longer checked against
+    /// — that is the reward for spending a slot on what your gear already
+    /// gives you, and deduping across the two sources would silently delete
+    /// it. Two *slots* naming one routine is the opposite case and does
+    /// dedupe: nothing was spent, so there is nothing to pay out.
     fn ready_passives(&self, holder: Entity, trigger: PassiveTrigger) -> Vec<AbilityDef> {
         let cooling = self
             .world
             .get::<AbilityCooldowns>(holder)
             .map(|c| c.0.clone())
             .unwrap_or_default();
+        let items = self.world.resource::<ItemDb>();
+        let mut worn: Vec<&str> = self
+            .world
+            .get::<Equipment>(holder)
+            .map(|eq| {
+                [&eq.weapon, &eq.armor, &eq.module]
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|worn| items.get(worn.copy.item.as_str()))
+                    .filter_map(|def| def.grants.as_deref())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Not `Vec::dedup`, which only sees neighbours — the two slots
+        // naming one routine are as likely to be the weapon and the module.
+        let mut seen = std::collections::HashSet::new();
+        worn.retain(|id| seen.insert(*id));
+
         let db = self.world.resource::<AbilityDb>();
         self.world
             .get::<Routines>(holder)
             .map(|r| r.0.as_slice())
             .unwrap_or_default()
             .iter()
+            .map(|id| id.as_str())
+            .chain(worn)
             .filter(|id| !cooling.contains_key(*id))
             .filter_map(|id| db.get(id))
             .filter(|def| def.triggers == Some(trigger))

@@ -12,6 +12,7 @@
 use super::support::*;
 use crate::abilities::AbilityDb;
 use crate::items_db::ItemDb;
+use crate::*;
 
 /// Loads the shipped abilities, then `files` as items on top of a scratch
 /// dir. The cross-database check `grants` needs cannot run inside
@@ -192,4 +193,207 @@ fn a_round_start_passive_fires_on_a_round_where_nothing_happens() {
         armed_damage > quiet_damage,
         "the passive should open the round: {armed_damage} with it, {quiet_damage} without"
     );
+}
+
+// --------------------------------------------------------- gear grants fire
+
+/// The same passive as above, granted by three wearable items rather than
+/// installed. Two of them name it deliberately: one routine granted twice
+/// is the case that must *not* pay twice.
+const A_GRANTING_WEAPON: &str = r#"(
+    id: "test_grant_weapon", name: "Test Grant Weapon", description: "d",
+    equipment: Some((Weapon, (atk: 1))), grants: Some("test_round_start"),
+)"#;
+
+const A_GRANTING_MODULE: &str = r#"(
+    id: "test_grant_module", name: "Test Grant Module", description: "d",
+    equipment: Some((Module, (def: 1))), grants: Some("test_round_start"),
+)"#;
+
+/// Wearable, grants nothing, and stat-for-stat identical to its granting
+/// twin — the control for "the gear did it" against "wearing anything at
+/// all did it". A stat line that differed by a point would move the
+/// passive's own damage, since a Damage effect scales with its caster.
+const A_PLAIN_MODULE: &str = r#"(
+    id: "test_plain_module", name: "Test Plain Module", description: "d",
+    equipment: Some((Module, (def: 1))),
+)"#;
+
+const A_PLAIN_WEAPON: &str = r#"(
+    id: "test_plain_weapon", name: "Test Plain Weapon", description: "d",
+    equipment: Some((Weapon, (atk: 1))),
+)"#;
+
+fn assets_with_granting_gear(tag: &str) -> ScratchAssets {
+    modded_assets_dir(
+        tag,
+        &[],
+        &[
+            ("test_grant_weapon.ron", A_GRANTING_WEAPON),
+            ("test_grant_module.ron", A_GRANTING_MODULE),
+            ("test_plain_module.ron", A_PLAIN_MODULE),
+            ("test_plain_weapon.ron", A_PLAIN_WEAPON),
+        ],
+        &[],
+        &[],
+        &[("test_round_start.ron", A_ROUND_START_PASSIVE)],
+    )
+}
+
+/// Damage the enemy took in one round where every party member defended —
+/// so the passive is the only thing in the round that can move it.
+fn damage_in_one_defended_round(game: &mut Game) -> i32 {
+    let before = total_enemy_hp(game);
+    resolve_a_planned_round(game);
+    before - total_enemy_hp(game)
+}
+
+/// The feature, and its own control. The stripped half is what stops this
+/// passing with the `Equipment` source deleted: worn and unworn differ only
+/// in which module is on, so nothing but the grant can explain a gap.
+#[test]
+fn a_worn_grant_fires_and_a_plain_item_in_the_same_slot_does_not() {
+    let dir = assets_with_granting_gear("worn_or_not");
+
+    let mut worn = battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_grant_module");
+    });
+    let mut bare = battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_plain_module");
+    });
+
+    assert!(
+        damage_in_one_defended_round(&mut worn) > damage_in_one_defended_round(&mut bare),
+        "the grant is the only difference between these two battles"
+    );
+}
+
+/// A routine fires once per source. Spending a slot on what your gear
+/// already gives you is meant to pay, and deduping across the two sources
+/// would silently delete that — while the cooldown, keyed on the id, is
+/// still one entry.
+#[test]
+fn a_grant_and_an_installed_copy_both_fire_and_share_one_cooldown() {
+    let dir = assets_with_granting_gear("two_sources");
+
+    let mut both =
+        battle_with_a_passive_holder_prepared(&dir, 9202, Some("test_round_start"), |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_grant_module");
+        });
+    let mut installed_only = battle_with_a_passive_holder_in(&dir, 9202, Some("test_round_start"));
+
+    let twice = damage_in_one_defended_round(&mut both);
+    let once = damage_in_one_defended_round(&mut installed_only);
+    assert!(
+        twice > once,
+        "two sources should land twice: {twice} against {once}"
+    );
+
+    let player = both.player_entity();
+    let cooling = both
+        .world
+        .get::<AbilityCooldowns>(player)
+        .map(|c| c.0.len())
+        .unwrap_or(0);
+    assert_eq!(cooling, 1, "the cooldown is per id, not per source");
+}
+
+/// The mirror case: nothing was spent on the second slot, so there is
+/// nothing to pay out for it.
+#[test]
+fn two_slots_granting_one_routine_fire_it_once() {
+    let dir = assets_with_granting_gear("two_slots");
+
+    let mut two = battle_with_a_passive_holder_prepared(&dir, 9203, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_grant_weapon");
+        wear(g, player, "test_grant_module");
+    });
+    let mut one = battle_with_a_passive_holder_prepared(&dir, 9203, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_plain_weapon");
+        wear(g, player, "test_grant_module");
+    });
+
+    assert_eq!(
+        damage_in_one_defended_round(&mut two),
+        damage_in_one_defended_round(&mut one),
+        "a second slot naming the same routine buys nothing"
+    );
+}
+
+/// Gear is wearable by any owned program, so a granted passive is a
+/// companion's as readily as the player's — and that case is what the
+/// feature adds for free.
+#[test]
+fn a_companions_worn_grant_fires() {
+    let dir = assets_with_granting_gear("companion");
+
+    let mut armed = battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
+        let ally = g.world.resource::<Party>().0[0];
+        wear(g, ally, "test_grant_module");
+    });
+    let mut bare = battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
+        let ally = g.world.resource::<Party>().0[0];
+        wear(g, ally, "test_plain_module");
+    });
+
+    assert!(
+        damage_in_one_defended_round(&mut armed) > damage_in_one_defended_round(&mut bare),
+        "a companion wearing the grant should fire it"
+    );
+}
+
+/// The cooldown is the whole of what keeps a `RoundStart` passive from
+/// being a free extra action every single round.
+#[test]
+fn a_fired_grant_does_not_fire_again_next_round() {
+    let dir = assets_with_granting_gear("cooldown");
+
+    let mut game = battle_with_a_passive_holder_prepared(&dir, 9205, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_grant_module");
+    });
+
+    let first = damage_in_one_defended_round(&mut game);
+    let second = damage_in_one_defended_round(&mut game);
+    assert!(first > 0, "the fixture never fired: {first}");
+    assert_eq!(
+        second, 0,
+        "a four-round cooldown should hold the next round"
+    );
+}
+
+/// Nothing about a grant reaches the save — it is derived off the worn item
+/// every time the trigger comes round. A RON round trip cannot see that;
+/// only a real save and load can.
+#[test]
+fn a_grant_survives_a_save_and_load_with_no_field_of_its_own() {
+    let dir = assets_with_granting_gear("roundtrip");
+    let path = std::env::temp_dir().join(format!("feral_gear_passive_{}.bin", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    let mut game = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_grant_module");
+        g.save(&path).unwrap();
+    });
+    let live = damage_in_one_defended_round(&mut game);
+
+    let mut loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let wild = spawn_wild_on_player_tile(&mut loaded);
+    {
+        let mut stats = loaded.world.get_mut::<Stats>(wild).unwrap();
+        stats.max_hp = 40_000;
+        stats.hp = 40_000;
+    }
+    loaded.start_battle(vec![wild]);
+    let after = damage_in_one_defended_round(&mut loaded);
+
+    assert!(live > 0, "the fixture never fired before the save: {live}");
+    assert_eq!(after, live, "the grant is read off the item, not the save");
 }

@@ -1881,6 +1881,19 @@ pub(crate) fn battle_with_a_passive_holder_in(
     seed: u32,
     passive: Option<&str>,
 ) -> Game {
+    battle_with_a_passive_holder_prepared(assets, seed, passive, |_| {})
+}
+
+/// The same again with a hook that runs once the party is assembled and
+/// before the fight opens. Equipping is what needs it — `Game::equip`
+/// refuses mid-battle, so gear a battle is supposed to test has to go on
+/// while there is still no battle.
+pub(crate) fn battle_with_a_passive_holder_prepared(
+    assets: &std::path::Path,
+    seed: u32,
+    passive: Option<&str>,
+    prepare: impl FnOnce(&mut Game),
+) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, assets).unwrap();
     let player = game.player_entity();
     set_level(&mut game, player, 40);
@@ -1891,6 +1904,7 @@ pub(crate) fn battle_with_a_passive_holder_in(
 
     let ally = spawn_tamed(&mut game, 30, 3);
     game.add_companion(ally).unwrap();
+    prepare(&mut game);
 
     // Enough Integrity on the hostile that a round cannot end the battle
     // before the passives are reached, and a whole-party routine so the
@@ -1948,4 +1962,15 @@ pub(crate) fn total_enemy_hp(game: &Game) -> i32 {
         .filter_map(|&e| game.world.get::<Stats>(e))
         .map(|s| s.hp.max(0))
         .sum()
+}
+
+/// Puts one plain copy of `item` in cargo and wears it on `wearer`. The
+/// two halves are one helper because a copy nobody is carrying cannot be
+/// equipped, and a test that forgot the first half reads as the feature not
+/// working.
+pub(crate) fn wear(game: &mut Game, wearer: Entity, item: &str) {
+    let copy = crate::items::GearCopy::plain(crate::items::ItemId(item.into()));
+    game.add_copies(&copy, 1);
+    game.equip(wearer, &copy)
+        .unwrap_or_else(|e| panic!("equipping {item}: {e}"));
 }

@@ -346,7 +346,7 @@ impl App {
     /// has been revealed and stripped of base news — see `battle_rows`. The
     /// pane draws the tail of this once it overflows, which is what makes
     /// lines scroll up as new ones arrive.
-    pub fn revealed_battle_log(&self) -> Vec<LogLine> {
+    pub fn revealed_battle_log(&self) -> Vec<LogEntry> {
         let Some(game) = &self.game else {
             return Vec::new();
         };
@@ -406,7 +406,7 @@ impl App {
     /// Row selection lives here rather than in the renderer for the same
     /// reason the history screen's fold does: app-core owns what a read-only
     /// screen's rows *are*, and gui draws them.
-    pub fn visible_log(&self, capacity: usize) -> Vec<LogLine> {
+    pub fn visible_log(&self, capacity: usize) -> Vec<LogEntry> {
         let Some(game) = &self.game else {
             return Vec::new();
         };

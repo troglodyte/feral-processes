@@ -363,7 +363,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
         if ly + m.line_height > party_top {
             break;
         }
-        draw_message_line(e.kind, &e.text, margin + m.inset, ly, painter, m);
+        draw_message_line(e, margin + m.inset, ly, painter, m);
         ly += m.line_height;
     }
     // Only when there is something out of sight: a pane showing the whole

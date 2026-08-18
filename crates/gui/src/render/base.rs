@@ -532,7 +532,7 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         if ly > painter.screen_h() - m.gap {
             break;
         }
-        draw_message_line(e.kind, &e.text, m.inset, ly, painter, m);
+        draw_message_line(e, m.inset, ly, painter, m);
         ly += m.line_height;
     }
 }

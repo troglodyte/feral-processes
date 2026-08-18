@@ -309,17 +309,23 @@ pub struct LogEntry {
 ///
 /// Not in `tuning.rs`: that file is how hard the game is, and this is how the
 /// screen reads.
-pub(crate) const CONDENSE_LOOKBACK: usize = 4;
+pub const CONDENSE_LOOKBACK: usize = 4;
 
-/// Folds repeated lines together for the history screen — the `L` log,
-/// nowhere else. The map's pane and the battle pane show every line, since
-/// the battle narration's reveal pacing counts rows.
+/// Folds repeated lines together for every screen that draws the log: the
+/// history screen (`L`), the map's pane and the battle pane.
 ///
 /// Deliberately a view over the stored log rather than a collapse in
 /// `MessageLog::push_kind`: storage carries the mark arithmetic that
 /// `since_round` and `retain_outcomes_since_battle` slice with, and merging a
 /// new round's first line backwards across `open_round` would drop it out of
 /// the battle pane's range entirely.
+///
+/// A view is also what keeps the battle pane's reveal intact. Pacing counts
+/// *raw* lines — `App::hidden_log_lines` chops the same figure off the map
+/// pane's tail, and `Game::battle_view_at` replays the timeline by it — so
+/// the fold has to land after that arithmetic, on the rows about to be
+/// drawn. A round that kills seven programs still takes seven beats to
+/// scroll in; what it no longer does is say the same sentence seven times.
 ///
 /// Lives here rather than in a frontend because both consumers have to agree
 /// on the row count — app-core scrolls the screen (`App::handle_history_key`)
@@ -330,7 +336,7 @@ pub(crate) const CONDENSE_LOOKBACK: usize = 4;
 /// `Outcome` is styled differently and means something different. `source` is
 /// part of it for the same reason — the two channels are read separately, so
 /// identical text from the base and from the field is two events.
-pub(crate) fn condense(lines: &[LogLine]) -> Vec<LogEntry> {
+pub fn condense(lines: &[LogLine]) -> Vec<LogEntry> {
     let mut entries: Vec<LogEntry> = Vec::new();
     for line in lines {
         let window = entries.len().saturating_sub(CONDENSE_LOOKBACK);

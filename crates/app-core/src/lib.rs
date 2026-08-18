@@ -34,8 +34,9 @@ use feral_processes_engine::tuning::{
 };
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, ContractRefusal, ContractRow, DifficultyMode, Entity,
-    EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogLine,
+    EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogEntry, LogLine,
     MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, SlotShift, WorkOrderReport, WorkProfile,
+    condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -443,8 +444,9 @@ struct BattleReveal {
 /// travels the other way, because only the frontend knows how many rows fit
 /// in the pixels it has, exactly as `App::visible_log` already takes it.
 pub struct BattlePane {
-    /// Oldest first, like every other log pane.
-    pub rows: Vec<LogLine>,
+    /// Oldest first, like every other log pane. Folded rows rather than raw
+    /// lines — see `battle_rows`.
+    pub rows: Vec<LogEntry>,
     /// Revealed lines above the window — what scrolling up would reach.
     pub above: usize,
     /// Revealed lines below it — what scrolling down would come back to.
@@ -548,15 +550,18 @@ impl LogFilter {
 }
 
 /// Picks the map log pane's rows out of the retained log: drop the battle
-/// results that have not scrolled in yet, apply the filter, then keep the
-/// newest `capacity`.
+/// results that have not scrolled in yet, apply the filter, fold repeats
+/// together, then keep the newest `capacity`.
 ///
 /// The order is load-bearing. `hidden` counts *raw* tail lines (see
 /// `App::hidden_log_lines`), so it has to come off before the filter thins the
 /// list — chopping the same count out of a filtered list would eat lines that
-/// had already been revealed. And the filter has to come off before the
-/// capacity cut, or a screenful of base chatter would leave the field pane
-/// blank while older field lines were still in reach.
+/// had already been revealed. The filter has to come off before the fold, or
+/// identical text from the base and from the field would fold together and
+/// then be drawn under whichever channel won. And the fold has to happen
+/// before the capacity cut, or a screenful of base chatter — or of one
+/// sentence repeated — would leave the field pane blank while older field
+/// lines were still in reach.
 ///
 /// A free function rather than a method so it can be tested against a
 /// hand-built log; `App::visible_log` is the one caller that has a `Game`.
@@ -565,13 +570,14 @@ pub fn pane_rows(
     hidden: usize,
     filter: LogFilter,
     capacity: usize,
-) -> Vec<LogLine> {
+) -> Vec<LogEntry> {
     let shown = lines.len().saturating_sub(hidden);
-    let mut rows: Vec<LogLine> = lines[..shown]
+    let kept: Vec<LogLine> = lines[..shown]
         .iter()
         .filter(|l| filter.accepts(l.source))
         .cloned()
         .collect();
+    let mut rows = condense(&kept);
     if rows.len() > capacity {
         rows.drain(0..rows.len() - capacity);
     }
@@ -579,7 +585,10 @@ pub fn pane_rows(
 }
 
 /// Picks the battle pane's rows out of the round's range: truncate to what
-/// the reveal has released, then drop everything that is not the fight.
+/// the reveal has released, drop everything that is not the fight, then fold
+/// repeats together — a round that kills seven programs pushes the same
+/// `Outcome` sentence seven times, and `resources::condense` is where that
+/// becomes one row and a count.
 ///
 /// `MessageLog::since_round` slices by position, so the range covers whatever
 /// the `tick` inside a battle action pushed as well as the narration itself —
@@ -589,9 +598,12 @@ pub fn pane_rows(
 ///
 /// The order matters for the same reason it does in `pane_rows`, from the
 /// other side: `revealed` counts *raw* lines, because `App::hidden_log_lines`
-/// chops that same figure off the map pane's tail. Filtering first would let
-/// the narration outrun its own pacing by however much base chatter had landed
-/// in the round, and would put the two panes' arithmetic out of step.
+/// chops that same figure off the map pane's tail and `Game::battle_view_at`
+/// replays the timeline by it. Filtering first would let the narration outrun
+/// its own pacing by however much base chatter had landed in the round, and
+/// would put the two panes' arithmetic out of step. The fold sits last for
+/// the same reason: the count ticks up as the kills scroll in, rather than
+/// the reveal skipping six beats it has already spent.
 ///
 /// A free function for the same reason `pane_rows` is one: no app-core fixture
 /// can stage a background system logging mid-fight, so the only way to test
@@ -603,13 +615,14 @@ pub fn pane_rows(
 /// per tick against a running base, so that is usually no beat at all — and
 /// the alternative is a source-aware chop, which `pane_rows`' contiguous raw
 /// suffix cannot express.
-pub fn battle_rows(lines: &[LogLine], revealed: usize) -> Vec<LogLine> {
-    lines
+pub fn battle_rows(lines: &[LogLine], revealed: usize) -> Vec<LogEntry> {
+    let kept: Vec<LogLine> = lines
         .iter()
         .take(revealed)
         .filter(|l| l.source == MessageSource::Field)
         .cloned()
-        .collect()
+        .collect();
+    condense(&kept)
 }
 
 /// How many of `lines` the filter is holding back — the header's "there is

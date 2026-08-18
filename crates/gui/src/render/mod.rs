@@ -347,15 +347,19 @@ fn emphasizes_numbers(kind: MessageKind) -> bool {
     matches!(kind, MessageKind::PartyDamage | MessageKind::Heal)
 }
 
-/// Draws one log line in its kind's style.
-fn draw_message_line(
-    kind: MessageKind,
-    text: &str,
-    x: f32,
-    y: f32,
-    painter: &Painter,
-    m: &Metrics,
-) {
+/// Draws one log-pane row in its kind's style, with the `×N` a folded
+/// row carries — see `resources::condense`. The same suffix the history
+/// screen's `counted_item_row` writes, so one repeated line reads the same
+/// wherever it is drawn; a row standing for a single line carries nothing.
+fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Metrics) {
+    let kind = entry.kind;
+    let counted;
+    let text: &str = if entry.repeats > 1 {
+        counted = format!("{} \u{d7}{}", entry.text, entry.repeats);
+        &counted
+    } else {
+        &entry.text
+    };
     let color = message_color(kind);
     match kind {
         k if emphasizes_numbers(k) => {

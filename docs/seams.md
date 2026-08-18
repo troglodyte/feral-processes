@@ -1906,11 +1906,53 @@ chop-before-filter order, not because anything currently chops.
 asymmetry is deliberate.** `App::log_filter` thins the pane through
 `pane_rows`, whose stage order is load-bearing: an unrevealed tail would be
 counted in *raw* lines (`hidden_log_lines`) so it comes off before the
-filter, and the filter comes off before the capacity cut or a screenful of
-base chatter leaves the field pane blank with older field lines still in
-reach. History stays complete because its row count is shared — app-core
-bounds the scroll while gui draws the rows, so filtering one side only
-would open the screen on a row that isn't drawn.
+filter, the filter comes off before the fold or identical text from the
+base and from the field would merge and then be drawn under whichever
+channel won, and the fold comes off before the capacity cut or a screenful
+of base chatter — or of one sentence repeated — leaves the field pane blank
+with older field lines still in reach. History stays complete because its
+row count is shared — app-core bounds the scroll while gui draws the rows,
+so filtering one side only would open the screen on a row that isn't
+drawn.
+
+### All three log surfaces fold repeats, and the fold is always the last stage
+
+**All three log surfaces fold repeats — the history screen, the map pane
+and the battle pane — and the fold is always the last stage before the
+capacity cut.** `resources::condense` is the one definition and was the
+history screen's alone until 2026-08-18, when a round that killed seven
+programs was reported as reading "The rogue program crashes and deletes
+itself!" seven times over. That line (`Game::finish_member`) names nothing,
+so seven copies carry exactly as much as one and a count.
+
+Two placements were available and only one is safe. **Collapsing in
+storage** is what `condense`'s own doc has always refused: `MessageLog`
+carries the mark arithmetic that `since_round` and
+`retain_outcomes_since_battle` slice with, and merging a new round's first
+line backwards across `open_round` would drop it out of the battle pane's
+range entirely. **Folding upstream of the pacing** breaks a different
+thing: `revealed`, `hidden_log_lines` and `BattleTimeline`'s frames all
+count *raw* lines, and `Game::battle_view_at` replays the roster by that
+same figure — so a folded count reaching any of them steps the roster to
+the wrong moment.
+
+So the fold sits in `pane_rows` and `battle_rows`, on the rows about to be
+drawn, after the truncation and the source filter. The consequence is
+visible and was chosen rather than tolerated: seven kills still take seven
+beats to scroll in, and what the player watches is the count ticking up on
+one row. The alternative — one row appearing and the reveal skipping six
+beats — would make a wipe read as a single kill.
+
+It borrows `CONDENSE_LOOKBACK` rather than folding adjacent runs because
+adjacent runs would fold nothing here: `finish_member` logs "Another rogue
+program from the pack engages!" between kills whenever the front rank
+falls, so the copies are never neighbours. The window is what the history
+screen already used for exactly this shape — two producers interleaving
+their lines each cycle.
+
+gui draws the count through one function, `draw_message_line`, in the same
+`×N` form `popup.rs::counted_item_row` writes on the history screen, so a
+repeated line reads the same on all three surfaces.
 
 ### `MessageLog::retain_outcomes_since_battle` keeps only `Outcome`, `Loot`, `LevelUp`, `Raid` and `Complete`
 

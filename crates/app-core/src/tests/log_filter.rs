@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::{LogLine, MessageKind, MessageSource};
+use feral_processes_engine::{LogEntry, LogLine, MessageKind, MessageSource};
 
 fn field(text: &str) -> LogLine {
     LogLine {
@@ -21,8 +21,20 @@ fn base(text: &str) -> LogLine {
     }
 }
 
-fn texts(rows: Vec<LogLine>) -> Vec<String> {
+fn outcome(text: &str) -> LogLine {
+    LogLine {
+        kind: MessageKind::Outcome,
+        source: MessageSource::Field,
+        text: text.to_string(),
+    }
+}
+
+fn texts(rows: Vec<LogEntry>) -> Vec<String> {
     rows.into_iter().map(|e| e.text).collect()
+}
+
+fn shape(rows: &[LogEntry]) -> Vec<(&str, usize)> {
+    rows.iter().map(|e| (e.text.as_str(), e.repeats)).collect()
 }
 
 #[test]
@@ -166,4 +178,81 @@ fn the_hidden_count_reports_the_channel_being_suppressed() {
     let lines = vec![base("base 0"), base("base 1"), base("base 2"), field("f")];
     assert_eq!(filtered_out_count(&lines, LogFilter::Field), 3);
     assert_eq!(filtered_out_count(&lines, LogFilter::Base), 1);
+}
+
+/// A round that kills seven programs pushes the same `Outcome` sentence
+/// seven times, and reading it seven times says nothing the count does not.
+///
+/// Folded here rather than in storage, and after the truncation rather than
+/// before it: the reveal paces on *raw* lines, so the count ticks up as the
+/// kills scroll in and `App::hidden_log_lines` still agrees with the map.
+#[test]
+fn the_battle_pane_folds_a_repeated_line() {
+    let mut lines = vec![field("── round 1 ──")];
+    lines.extend(
+        std::iter::repeat_with(|| outcome("The rogue program crashes and deletes itself!")).take(7),
+    );
+    assert_eq!(
+        shape(&battle_rows(&lines, lines.len())),
+        [
+            ("── round 1 ──", 1),
+            ("The rogue program crashes and deletes itself!", 7),
+        ]
+    );
+}
+
+/// Kills arrive interleaved with the line announcing who steps up behind
+/// them, so an adjacent-runs-only fold would collapse nothing at all. This
+/// is the whole reason the pane borrows `condense`'s lookback window rather
+/// than folding neighbours.
+#[test]
+fn the_battle_pane_folds_through_an_interleaved_line() {
+    let mut lines = Vec::new();
+    for _ in 0..3 {
+        lines.push(outcome("The rogue program crashes and deletes itself!"));
+        lines.push(field("Another rogue program from the pack engages!"));
+    }
+    assert_eq!(
+        shape(&battle_rows(&lines, lines.len())),
+        [
+            ("The rogue program crashes and deletes itself!", 3),
+            ("Another rogue program from the pack engages!", 3),
+        ]
+    );
+}
+
+/// The map pane folds too — a finished fight keeps its `Outcome` lines, so
+/// the seven kills land there as well once the map is back.
+#[test]
+fn the_map_pane_folds_a_repeated_line() {
+    let mut lines = vec![field("You step east.")];
+    lines.extend(
+        std::iter::repeat_with(|| outcome("The rogue program crashes and deletes itself!")).take(7),
+    );
+    assert_eq!(
+        shape(&pane_rows(&lines, 0, LogFilter::All, 40)),
+        [
+            ("You step east.", 1),
+            ("The rogue program crashes and deletes itself!", 7),
+        ]
+    );
+}
+
+/// The fold comes before the capacity cut, so a burst of repeats costs the
+/// pane one row rather than a screenful — the older lines it would otherwise
+/// have pushed out are still in reach.
+#[test]
+fn the_map_pane_folds_before_the_capacity_cut() {
+    let mut lines = vec![field("older field line")];
+    lines.extend(
+        std::iter::repeat_with(|| outcome("The rogue program crashes and deletes itself!")).take(7),
+    );
+    let shown = texts(pane_rows(&lines, 0, LogFilter::All, 2));
+    assert_eq!(
+        shown,
+        [
+            "older field line",
+            "The rogue program crashes and deletes itself!"
+        ]
+    );
 }

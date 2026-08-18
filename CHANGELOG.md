@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.4
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+`Platform::claimed` is additive behind `#[serde(default)]`: a save written
+before ground claims existed loads with an empty claim set, which is what it
+had. A patch rather than a minor for that reason — while the project is `0.x`,
+"breaking" means a save that stops loading, and this has none.
+
+### A base that grows a tile at a time
+
+The Heap Block claims one tile of ground at the platform's edge instead of
+standing a structure on it. Where the Heap Pillar is the tool for area — a
+whole ring in every direction — the Block is the tool for shape, so a base can
+be run out along a ridge or squared off around a Stack link rather than only
+ever growing as a circle. It costs one Blank Substrate and sits behind Page
+Allocation, a cheap early research.
+
+A claim has to touch the base, and it **refuses** a Stack link, a nest or a
+hostile rather than taking the ground out from under them the way a Pillar's
+ring does. Paid-for ground travels with the base on a breach.
+
+`StructureDef::claims_ground` is the data half, so a modder ships a
+ground-claiming build with no Rust. The footprint half is stored rather than
+derived, because a claim leaves no entity to count it back from — `covers`
+stays the one statement of where the base is.
+
+### The Pillar feeds the grid
+
+A Heap Pillar now supplies grid energy while it stands, and costs six Blank
+Substrates alongside its fragments. Growing the base is also how the base is
+powered, and both growth tools now run off the Lathe a base already needed for
+Routine Disks.
+
+### Every log pane folds a repeated line into one row and a count
+
+A round that wipes seven programs used to push "The rogue program crashes and
+deletes itself!" seven times. The line names nobody, so seven copies say
+exactly what one and a count say. The history screen already folded repeats;
+the map pane and the battle pane now do too.
+
+A wipe still takes one beat per kill, and what you watch is the count ticking
+up — the fold sits on the rows about to be drawn, after the truncation, because
+the battle reveal, the unread-line count and the battle roster replay all count
+raw lines. Seven deaths would otherwise read as one.
+
 ## 0.11.3
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

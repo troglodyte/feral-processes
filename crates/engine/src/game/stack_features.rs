@@ -192,26 +192,39 @@ impl Game {
         let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
         let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
 
-        let bosses: Vec<String> = self
-            .world
-            .resource::<SpeciesDb>()
-            .boss_habitat_matches(biome)
+        let step = self.danger_steps(Some(pos.depth));
+
+        // Apex species first where the depth admits them — a hand-authored
+        // boss is the better guardian when one is available — and the
+        // windowed ordinary pool otherwise. Either way the guardian **is** a
+        // boss: the fallback used to return `false`, which paid no Portal
+        // Fragments and made a stack under a biome with no apex species
+        // unbreachable in everything but name.
+        //
+        // The old fallback took the toughest ordinary species by flat stat
+        // total. The window is what decides difficulty now, so picking the
+        // toughest of it as well would double-count.
+        let db = self.world.resource::<SpeciesDb>();
+        let mut pool: Vec<String> = db
+            .windowed_boss_matches(biome, step)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
-        if !bosses.is_empty() {
-            // Salted off the level's own stream so the choice of guardian
-            // doesn't correlate with the shape of the room it stands in.
-            const LAIR_SALT: u64 = 0x1A19_B055;
-            let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ LAIR_SALT);
-            return Some((bosses[rng.random_range(0..bosses.len())].clone(), true));
+        if pool.is_empty() {
+            pool = db
+                .windowed_matches(biome, step)
+                .into_iter()
+                .map(|s| s.id.clone())
+                .collect();
         }
-
-        let db = self.world.resource::<SpeciesDb>();
-        db.habitat_matches(biome)
-            .into_iter()
-            .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
-            .map(|s| (s.id.clone(), false))
+        if pool.is_empty() {
+            return None;
+        }
+        // Salted off the level's own stream so the choice of guardian
+        // doesn't correlate with the shape of the room it stands in.
+        const LAIR_SALT: u64 = 0x1A19_B055;
+        let mut rng = StdRng::seed_from_u64(spec.rng_seed() ^ LAIR_SALT);
+        Some((pool[rng.random_range(0..pool.len())].clone(), true))
     }
 
     /// Whether the sealed door on `cell` has already been forced open.

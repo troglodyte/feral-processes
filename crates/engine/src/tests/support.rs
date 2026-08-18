@@ -1107,15 +1107,18 @@ pub(super) fn spawn_boss_on_player_tile(game: &mut Game) -> Entity {
 /// Opens a lair fight in the frame the party is standing in, against a
 /// guardian the game will actually let the player decompile.
 ///
-/// A real `rouse_lair` cannot produce one: every walkable biome fields a
-/// boss (`every_biome_a_stack_link_can_open_in_fields_a_boss`) and a boss
-/// is refused as a decompile target before the roll. What is left is
-/// `pick_lair_species`'s fallback — the toughest *ordinary* program a
-/// biome with no boss can field, which a mod can reach and which carries
-/// no `is_boss` to refuse on. Installing that case by hand is cheaper than
-/// a bossless install and names the same state `rouse_lair` writes: the
-/// pack in the fight, `StackSpawn` on it, and `BattleState::lair` pointing
-/// at the guardian.
+/// A real `rouse_lair` can no longer produce one at all: a guardian is a
+/// boss whatever it was drawn from — `pick_lair_species` marks its ordinary
+/// fallback as one too, since a guardian that is not a boss pays no Portal
+/// Fragments — and a boss is refused as a decompile target before the roll.
+/// So this installs the state by hand rather than reaching for a case the
+/// game still has, naming exactly what `rouse_lair` writes: the pack in the
+/// fight, `StackSpawn` on it, and `BattleState::lair` pointing at the
+/// guardian.
+///
+/// Do not "fix" this by making some guardians tameable.
+/// `Game::is_boss_creature` refusing a decompile is the rule; this fixture
+/// reaching around it is a fixture.
 ///
 /// Softened to 1 HP, so a test about what a capture *does* is not also a
 /// test of whether the roll lands.

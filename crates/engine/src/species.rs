@@ -911,6 +911,17 @@ impl SpeciesDb {
         self.species.insert(def.id.clone(), def);
     }
 
+    /// Drops every species `keep` refuses.
+    ///
+    /// Test-only for the same reason `insert` is: it exists for a fixture
+    /// that has to reach a case the shipped assets cannot produce — a biome
+    /// with no apex species, which both shipped bosses' four-biome habitat
+    /// lists rule out.
+    #[cfg(test)]
+    pub(crate) fn retain(&mut self, keep: impl Fn(&SpeciesDef) -> bool) {
+        self.species.retain(|_, s| keep(s));
+    }
+
     /// Ordinary (non-boss) species that can inhabit `biome` — the pool the
     /// normal per-tile spawn roll draws from. Sorted by `id` for the same
     /// reason `all` is, and more urgently: the spawn roll picks out of this

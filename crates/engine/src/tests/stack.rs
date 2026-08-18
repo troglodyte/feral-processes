@@ -4,6 +4,7 @@
 use super::support::*;
 use crate::game::stack::StackPos;
 use crate::resources::{CurrentStack, Locale};
+use crate::species::DangerBand;
 use crate::stack::{CellKind, Dir};
 use crate::tuning::{STACK_COLLAPSE_RELINK_TILES, STACK_MIN_LINK_TILES};
 use crate::*;
@@ -5060,5 +5061,67 @@ fn a_base_at_the_ceiling_still_gets_its_zones_links() {
         entrance_tiles(&mut game).len(),
         crate::tuning::STACK_LINKS_PER_ZONE,
         "a zone under a base at the ceiling got fewer links than it owes"
+    );
+}
+
+/// The trap, pinned. A guardian used to fall back to the toughest *ordinary*
+/// species and come back `false`, which pays no Portal Fragments — a stack
+/// that is unbreachable in everything but name. It is unreachable against
+/// the shipped assets only because both apex species happen to list all four
+/// biomes, so this asserts it against a db with them removed.
+#[test]
+fn a_lair_guardian_is_a_boss_even_where_the_biome_has_no_apex_species() {
+    let mut game = game();
+    let entrance = descend(&mut game);
+    {
+        let mut db = game.world.resource_mut::<SpeciesDb>();
+        db.retain(|s| !s.is_boss);
+    }
+    let pos = game.stack_pos().expect("descend installed a frame");
+    let (species, is_boss) = game
+        .pick_lair_species(pos)
+        .expect("a biome with ordinary species must still field a guardian");
+    assert!(
+        is_boss,
+        "the guardian {species} at {entrance:?} came back not-a-boss, so it \
+         pays no Portal Fragments and the stack cannot be breached"
+    );
+    assert!(
+        game.species_defs()
+            .into_iter()
+            .any(|s| s.id == species && !s.is_boss),
+        "with the apex species removed the guardian must be a rolled one"
+    );
+}
+
+/// A guardian is drawn from the window at its own depth, which is what makes
+/// a deep lair a different fight from a shallow one. Asserted as "never
+/// easier deeper" rather than as an exact band, because a biome with a hole
+/// in its ladder falls back and the fallback is allowed to repeat.
+#[test]
+fn a_deeper_lair_draws_a_guardian_no_easier_than_a_shallow_one() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    let band_at = |game: &mut Game, depth: u32| {
+        game.descend_to(depth, depth, entrance);
+        let pos = game.stack_pos().expect("descend_to installed a frame");
+        let (species, _) = game
+            .pick_lair_species(pos)
+            .expect("a walkable entrance fields a guardian");
+        game.species_defs()
+            .into_iter()
+            .find(|s| s.id == species)
+            .expect("a picked id is a loaded species")
+            .danger_band()
+    };
+    let shallow = band_at(&mut game, 1);
+    let deep = band_at(&mut game, 6);
+    let rank = |b: DangerBand| match b {
+        DangerBand::Tier(i) => i,
+        DangerBand::Apex => usize::MAX,
+    };
+    assert!(
+        rank(deep) >= rank(shallow),
+        "a depth-6 guardian ({deep:?}) is easier than a depth-1 one ({shallow:?})"
     );
 }

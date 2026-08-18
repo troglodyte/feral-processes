@@ -193,15 +193,26 @@ of being spread across three systems that would each have to agree.
     systems::power_grid_system,       // new, first: computes the ledger
     systems::idle_machine_system,     // writes Unpowered, then Idle
     systems::task_progress_system,    // guard: skip a dark machine
-    systems::player_gather_system,
+    systems::player_gather_system,    // guard: skip a dark machine
     systems::assembler_system,        // guard: skip a dark machine
     hauling::haul_step_system,
 ).chain()
 ```
 
 `task_progress_system` and `assembler_system` each get a one-line `continue`
-guard so a dark machine makes no progress. They do not write the status —
-that stays one writer plus two guards.
+guard so a dark machine makes no progress. **A third guard belongs on
+`player_gather_system` as well**, added during implementation once the two
+above turned out not to be the whole surface: it is the player hand-working a
+node directly, and without a guard a player standing at a dark machine could
+still call `deliver_payout` and pull a real unit of production out of it —
+the mechanic working exactly as before, just with the pane's status lying
+about it. Worse, `deliver_payout` writes `MachineStatus::Running` on its own
+tick, which would flip a machine `idle_machine_system` had just set to
+`Unpowered` right back, every single tick, reopening the very twice-per-tick
+transition log a last-in-chain power system was refused specifically to
+avoid — just through a third door instead of the one that design refused.
+So it is one writer plus **three** guards, not two. None of them write the
+status — that stays `idle_machine_system`'s alone.
 
 **The alternative was refused:** a power system running *last* and
 overwriting whatever the others decided. `set_machine_status` logs only on
@@ -324,11 +335,13 @@ No `SAVE_FORMAT_VERSION` bump.
 - Both new `StructureDef` fields are additive and behind `#[serde(default)]`
   — they are asset schema, not save schema, and `assets/*` is not saved.
 - `resources::PowerGrid` is derived per tick and not saved.
-- `MachineStatus` gains a variant. The save is field-named RON, so an enum
-  serialises by name; an old save simply never contains `Unpowered`, and one
-  written today is read by any build that knows the variant. A save from
-  before this change loads and the first tick decides which of its machines
-  are dark.
+- `MachineStatus` gains a variant, and that costs nothing because
+  `MachineStatus` is never saved at all: it derives `Component, Clone, Copy,
+  Debug, Default, PartialEq, Eq` (`components.rs:635`) — no serde traits —
+  and appears nowhere in `save.rs`. It initialises to `Running` and is
+  corrected on the first tick after load, so a save from before this change
+  loads exactly as it always has and that first tick decides which of its
+  machines are dark.
 
 This is the additive-behind-`serde(default)` case the save-format seam
 covers explicitly. Nothing is removed and nothing changes meaning under a

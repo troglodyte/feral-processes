@@ -252,7 +252,7 @@ Commit: `feat(base): the power ledger`
     systems::power_grid_system,     // new — computes the ledger
     systems::idle_machine_system,   // writes Unpowered, else Idle
     systems::task_progress_system,  // guard: skip a dark machine
-    systems::player_gather_system,
+    systems::player_gather_system,  // guard: skip a dark machine
     systems::assembler_system,      // guard: skip a dark machine
     hauling::haul_step_system,
 ).chain()
@@ -264,10 +264,18 @@ tick forever** while a base is short (`task_progress_system` sets `Running`,
 the power system sets `Unpowered`). Running the ledger first is what keeps
 the log quiet.
 
-**One writer, two guards.** `idle_machine_system` already makes one pass over
-every `Structure` and already runs first, so it is where the precedence call
-lives: dark wins, else the existing unworked→`Idle` rule. `task_progress_system`
-and `assembler_system` each get a one-line `continue` and write no status.
+**One writer, three guards.** `idle_machine_system` already makes one pass
+over every `Structure` and already runs first, so it is where the precedence
+call lives: dark wins, else the existing unworked→`Idle` rule.
+`task_progress_system` and `assembler_system` each get a one-line `continue`
+and write no status. **A third guard was added during implementation**, on
+`player_gather_system`: without it, a player hand-working a dark node could
+still call `deliver_payout` and pull a real payout out of it, and that path
+writes `MachineStatus::Running` on its own tick — reopening the twice-per-tick
+transition log the last-in-chain design was refused specifically to avoid,
+through a door this plan did not anticipate. This document originally
+described two guards; the controller ruling that added the third is recorded
+in `docs/seams.md`'s "One writer and three guards" entry.
 
 **Precedence:** `Unpowered` outranks all five existing variants. Nothing the
 player can do — posting a program, clearing a clog, feeding an input,

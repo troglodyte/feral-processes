@@ -2770,3 +2770,19 @@ sourced from the grid rather than from a `Task` or a `Stock`. A base-wide
 shortfall reads through the cut order into a fact that is, tile by tile,
 each machine's own — which is exactly why `views.rs:504`'s test says yes to
 a sixth `MachineStatus` variant here where it said no to `output_stranded`.
+
+**`Unpowered`'s precedence over `Clogged` can pause a `Tend` errand that a
+plain clog would not have.** `Errand::Tend` (`hauling.rs:670`) skips a
+machine when it is both *not* `Clogged` and has an attached downstream
+neighbour — so a backed-up machine that also feeds a neighbour keeps getting
+tended regardless of any other status. Once the grid goes short and
+`idle_machine_system` overwrites that machine's status with `Unpowered`,
+`clogged` reads false, and an attached machine stops being tended for as
+long as the base stays dark, even though its buffer is still sitting full.
+This is self-correcting rather than a bug: the machine makes no progress
+while dark anyway, so nothing is lost by not hauling from it, and the moment
+supply returns and the machine reports `Clogged` again — one tick later —
+tending resumes. It is, however, an unstated consequence of putting
+`Unpowered` at the top of the precedence table: any future reader of
+`Errand::Tend` who assumes "clogged" and "backed up" are synonyms will be
+surprised that a dark, backed-up machine reads neither.

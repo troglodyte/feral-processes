@@ -74,7 +74,12 @@ pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
             machines.push((entity_ref.id(), (pos.x, pos.y), def.power_draw));
         }
     }
-    machines.sort_by_key(|(_, tile, _)| *tile);
+    // The entity rides along in the key, not just the tile: `place_structure`
+    // refuses an occupied tile, but a hand-edited or corrupt save can still
+    // land two machines on one, and a stable sort on `tile` alone would then
+    // break the tie on `world.iter_entities()` order — the exact instability
+    // this sort exists to remove.
+    machines.sort_by_key(|(e, tile, _)| (*tile, *e));
 
     let draw: u32 = machines
         .iter()

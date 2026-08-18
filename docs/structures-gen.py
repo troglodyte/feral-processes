@@ -114,7 +114,7 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-14 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed on the base slab — within 4 tiles of a Home,
@@ -145,6 +145,14 @@ Two glyph collisions are worth knowing before you read a map: the Mining Node
 and the iso Market both draw as `$`, and the Recharger Node draws as `z`, the
 same as a ZeroDay. Colour is what separates them — and in the last case,
 position: wild programs never spawn on your base platform.
+
+`Draw` and `Supply` are the base's **Grid** — a base-level capacity, not the
+`Power` a creature spends on routines; the two share a word and nothing else.
+Every tick, `Supply` is summed across every deployed structure and compared
+against `Draw`, summed across every machine that runs a job whether or not
+anyone is posted to it. If draw outruns supply, machines are cut in `(x, y)`
+order until what is left fits, and a cut machine reports `Unpowered` and
+makes no progress — the fix is always the same one: build a Recharger Node.
 
 ## The production lines
 

@@ -1,0 +1,15 @@
+(
+    id: "watchdog_tap",
+    name: "Watchdog Tap",
+    description: "Scavenged module. Bleeds a hostile Overseer's own watchdog line back into the party.",
+    // Grants a routine that already ships, which is the case a modder hits
+    // most and the one worth having in the shipped set. `watchdog` is
+    // `exclusive`, and that is not a contradiction: exclusivity is about
+    // never entering `KnownRoutines`, and a grant is derived off the worn
+    // item every time its trigger comes round rather than learned.
+    value: Some(130),
+    equipment: Some((Module, (def: 2))),
+    grants: Some("watchdog"),
+    droppable: Some([("overseer", 0.08)]),
+    cache_drop: Some(0.03),
+)

@@ -1,0 +1,19 @@
+(
+    id: "parity_guard",
+    name: "Parity Single",
+    // PASSIVE, `OneAlly` scope, and the ally it lands on is its own holder:
+    // `Game::passive_target` answers an ally-facing passive with the
+    // combatant carrying it. Armour that braces the wearer, not the party —
+    // a party-wide rung would be a `Bastion` the player never has to cast.
+    //
+    // Three rounds against a four-round cooldown, so there is a round in
+    // every cycle without it. A duration at or above the cooldown would make
+    // this permanent and take the number out of the player's reading of a
+    // fight entirely.
+    description: "As the round opens, the wearer's parity lines hold a little harder",
+    target: OneAlly,
+    effect: Buff(kind: Def, power: 3, duration: 3),
+    cooldown: 4,
+    power_cost: 0.0,
+    triggers: Some(RoundStart),
+)

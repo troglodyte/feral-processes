@@ -1,0 +1,15 @@
+(
+    id: "interrupt_coil",
+    name: "Interrupt Coil",
+    description: "Scavenged weapon. Holds a charge across the round boundary and dumps it the moment the next one opens.",
+    // Priced above its stat line on purpose: three points of ATK is a
+    // scavenged weapon's worth, and the routine it carries is the rest.
+    value: Some(110),
+    equipment: Some((Weapon, (atk: 3))),
+    grants: Some("interrupt_request"),
+    // Drop-only, with no recipe at all, which keeps this whole item out of
+    // the bench-versus-scavenged policy `standard_and_premium_gear_is_made_
+    // from_intermediates` and its opposite number enforce.
+    droppable: Some([("trojan", 0.10), ("rootkit", 0.08)]),
+    cache_drop: Some(0.04),
+)

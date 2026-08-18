@@ -397,3 +397,38 @@ fn a_grant_survives_a_save_and_load_with_no_field_of_its_own() {
     assert!(live > 0, "the fixture never fired before the save: {live}");
     assert_eq!(after, live, "the grant is read off the item, not the save");
 }
+
+// ------------------------------------------------------------- the content
+
+/// A census rather than a list of three ids: it is what stops a later edit
+/// orphaning a grant, and it puts any item a mod adds under the same rule
+/// the shipped three are held to. The loader already refuses a bad one, so
+/// what this really asserts is that the shipped set *has* some — a rename
+/// that emptied it would leave every test above passing against fixtures.
+#[test]
+fn every_shipped_grant_names_a_real_battle_passive() {
+    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let abilities = game.world.resource::<AbilityDb>();
+    let mut granting = 0;
+    for def in game.item_defs() {
+        let Some(id) = &def.grants else { continue };
+        let ability = abilities
+            .get(id)
+            .unwrap_or_else(|| panic!("{} grants {id:?}, which is not an ability", def.id));
+        assert!(
+            ability.is_passive() && !ability.effect.field_only(),
+            "{} grants {id:?}, which can never fire",
+            def.id
+        );
+        assert!(
+            def.equipment.is_some(),
+            "{} grants {id:?} but cannot be worn, so nothing will ever read it",
+            def.id
+        );
+        granting += 1;
+    }
+    assert!(
+        granting >= 3,
+        "the shipped set should carry the three gear passives, found {granting}"
+    );
+}

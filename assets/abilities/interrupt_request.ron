@@ -1,0 +1,20 @@
+(
+    id: "interrupt_request",
+    name: "Interrupt Single",
+    // PASSIVE, and not exclusive. Every passive before this one was a boss
+    // drop, which made `exclusive` and `triggers` look like the same idea;
+    // they never were. This one is carried by a piece of gear — see
+    // `ItemDef::grants` — so a routine's "only source" claim would be a lie
+    // the moment the item dropped.
+    //
+    // Four rounds, the same cooldown `deadman` and `watchdog` pay, and for
+    // the harder reason: `RoundStart` fires on every round there is. Priced
+    // low as well as slow, because it costs the holder neither a turn nor a
+    // routine slot — the item is what was spent.
+    description: "The moment the round opens, an unmasked interrupt lands on the nearest hostile",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 5),
+    cooldown: 4,
+    power_cost: 0.0,
+    triggers: Some(RoundStart),
+)

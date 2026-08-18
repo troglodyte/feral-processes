@@ -621,6 +621,11 @@ mod tests {
             ("kernel_key", EquipmentSlot::Module, 0, 0, 4),
             ("oracle_core", EquipmentSlot::Module, 2, 0, 3),
             ("singularity_matrix", EquipmentSlot::Module, 3, 3, 3),
+            // Grant-carrying tier — drop-only, and priced above the stat
+            // line because the routine is the rest of what they are worth.
+            ("interrupt_coil", EquipmentSlot::Weapon, 3, 0, 0),
+            ("parity_weave", EquipmentSlot::Armor, 0, 3, 0),
+            ("watchdog_tap", EquipmentSlot::Module, 0, 2, 0),
         ];
         for (id, want_slot, atk, def, decompiler) in equipment {
             let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
@@ -636,7 +641,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 54);
+        assert_eq!(db.all().count(), 57);
     }
 
     #[test]

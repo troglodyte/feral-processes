@@ -109,6 +109,15 @@ creatures to wander. At the `WILD_CREATURE_CAP` ceiling of 2000 it
 extrapolates to ~0.66ms a tick, still debug. The game ticks once per player
 action and once a second when idle, so this is nowhere near a frame.
 
+The number that could have bitten is the *worst* tick rather than the mean,
+because stocking is bursty: crossing a chunk boundary stocks up to three new
+chunks in one tick, and each placement attempt runs a full
+`local_hostile_count` query. Measured across the 300-step walk, the worst
+single tick was **6.81ms** — debug build, ~700 live hostiles. At the 2000
+cap that query scans three times as much, so budget ~20ms debug for the
+worst case, which release puts comfortably inside a frame. No batching or
+spatial index is warranted on this evidence.
+
 Replicating what was already believed: the entry row reproduces the
 `0.5.12` design — a 40-tile disc seeded at the target, hard edge just past
 it. Ring totals at entry (23 inside 20 tiles, 96 in 20-40, 10 in 40-60) are

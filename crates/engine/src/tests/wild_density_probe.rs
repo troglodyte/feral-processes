@@ -82,6 +82,8 @@ fn probe_wild_density() {
     // --- Travel: one tile per tick, the real walking rate. ---
     let mut trav = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut waypoints = Vec::new();
+    let mut worst = std::time::Duration::ZERO;
+    let mut worst_at = 0;
     for step in 1..=300 {
         if step % 100 == 0 {
             keep_alive(&mut trav);
@@ -91,7 +93,13 @@ fn probe_wild_density() {
             let mut pos = trav.world.get_mut::<Position>(p).unwrap();
             pos.x += 1;
         }
+        let t0 = std::time::Instant::now();
         trav.tick();
+        let dt = t0.elapsed();
+        if dt > worst {
+            worst = dt;
+            worst_at = step;
+        }
         if step % 25 == 0 {
             let x = ox + step;
             waypoints.push((step, x));
@@ -99,6 +107,11 @@ fn probe_wild_density() {
     }
     let pts = hostiles(&mut trav);
     println!("\n=== AFTER WALKING 300 TILES EAST (1 tile/tick) ===");
+    println!(
+        "worst single tick: {:.2}ms at step {worst_at} (debug build; a chunk \
+         boundary is where stocking happens)",
+        worst.as_secs_f64() * 1000.0
+    );
     println!("total hostiles: {}", pts.len());
     println!("{}", rings(&pts, ox, oy));
     for (step, x) in waypoints {

@@ -17,6 +17,7 @@
 //! before `visible_rows` existed.
 
 use super::stack::StackPos;
+use super::stack_features::AdoptBlock;
 use crate::stack::{CellKind, Dir, Frame};
 use crate::*;
 
@@ -117,90 +118,63 @@ fn visible_rows(level: &Frame, x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32
 /// subject/condition pair absent from this table appends nothing, which is
 /// every arm that reports rather than offers.
 ///
-/// A named struct rather than the tuple this shipped as: `condition` and
-/// `blocked` are both `Option<&str>`, and a positional destructure could
-/// swap them silently.
-struct UnderfootPrompt {
-    subject: &'static str,
-    condition: Option<&'static str>,
-    /// What the row appends when the party can act on the cell.
-    offer: &'static str,
-    /// What it appends instead when they cannot pay for what the cell
-    /// offers. `None` on every row whose cell asks for nothing, which is
-    /// all of them but the orphan.
-    ///
-    /// **Affordability lives here rather than on `condition` for a
-    /// reason.** That axis is the *place* — it is what `Game::subject_of`
-    /// resolves a cell to, and the same pair keys the description bank. A
-    /// cell's prose is derived from the place alone; routing "your pack is
-    /// empty" through it would change what a corridor says about itself
-    /// when you drop an item.
-    blocked: Option<&'static str>,
-}
-
-const UNDERFOOT_SUFFIXES: &[UnderfootPrompt] = &[
-    UnderfootPrompt {
-        subject: "stack.link_down",
-        condition: None,
-        offer: "  [>] descend",
-        blocked: None,
-    },
-    UnderfootPrompt {
-        subject: "stack.link_up",
-        condition: Some("surface"),
-        offer: "  [<] surface",
-        blocked: None,
-    },
-    UnderfootPrompt {
-        subject: "stack.link_up",
-        condition: None,
-        offer: "  [<] climb",
-        blocked: None,
-    },
-    UnderfootPrompt {
-        subject: "stack.orphan",
-        condition: None,
-        offer: "  [o] adopt",
-        // Names the item rather than dropping the prompt: a player who has
-        // never held an `ice_breaker` would otherwise never learn the cell
-        // is adoptable. The em-dash matches corruption's note below, and
-        // this is the longest form `MAX_UNDERFOOT_LINE` leaves room for
-        // beside the shipped clause.
-        blocked: Some("  [o] adopt — no ICE Breaker"),
-    },
-    UnderfootPrompt {
-        subject: "stack.market",
-        condition: None,
-        offer: "  [t] trade",
-        blocked: None,
-    },
-    UnderfootPrompt {
-        subject: "stack.corruption",
-        condition: None,
-        offer: "  — moving on costs",
-        blocked: None,
-    },
+const UNDERFOOT_SUFFIXES: &[(&str, Option<&str>, &str)] = &[
+    ("stack.link_down", None, "  [>] descend"),
+    ("stack.link_up", Some("surface"), "  [<] surface"),
+    ("stack.link_up", None, "  [<] climb"),
+    ("stack.orphan", None, "  [o] adopt"),
+    ("stack.market", None, "  [t] trade"),
+    ("stack.corruption", None, "  \u{2014} moving on costs"),
 ];
-
-fn underfoot_prompt(subject: &str, condition: Option<&str>) -> Option<&'static UnderfootPrompt> {
-    UNDERFOOT_SUFFIXES
-        .iter()
-        .find(|p| p.subject == subject && p.condition == condition)
-}
 
 /// Looks up `UNDERFOOT_SUFFIXES`, or `""` for a subject/condition pair that
 /// appends nothing.
 pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'static str {
-    underfoot_prompt(subject, condition).map_or("", |p| p.offer)
+    UNDERFOOT_SUFFIXES
+        .iter()
+        .find(|&&(s, c, _)| s == subject && c == condition)
+        .map_or("", |&(_, _, suffix)| suffix)
 }
 
-/// The same row's prompt for a party that cannot pay what the cell asks,
-/// falling back to the offer where the cell asks for nothing — see
-/// `UnderfootPrompt::blocked`. Defined for every row so the census in
-/// `tests::descriptions` can size both forms against `MAX_UNDERFOOT_LINE`
-/// without knowing which rows have a price.
-pub(crate) fn underfoot_suffix_blocked(subject: &str, condition: Option<&str>) -> &'static str {
-    underfoot_prompt(subject, condition).map_or("", |p| p.blocked.unwrap_or(p.offer))
+/// The orphan's prompt when the party cannot take it — the only cell on this
+/// screen with a price, and so the only subject with a second form.
+///
+/// **These live beside the table rather than in it, and the axis is the
+/// reason.** `UNDERFOOT_SUFFIXES` is keyed on the pair `Game::subject_of`
+/// resolves a *cell* to, and the description bank shares that key; a cell's
+/// prose is derived from the place alone, so "your pack is empty" cannot
+/// travel on it without making a corridor describe itself differently when
+/// you drop an item. This is keyed on `AdoptBlock` — the party — instead.
+///
+/// Each fits `MAX_UNDERFOOT_LINE` beside the shipped clause, with the em-dash
+/// corruption's note above already uses. `widest_underfoot_suffix` is what
+/// holds them to it.
+pub(crate) fn orphan_blocked_suffix(block: AdoptBlock) -> &'static str {
+    match block {
+        AdoptBlock::NoCatalyst => "  [o] adopt \u{2014} no ICE Breaker",
+        AdoptBlock::RosterFull => "  [o] adopt \u{2014} roster full",
+    }
+}
+
+/// The longest prompt a row can ever draw, offer and blocked forms together.
+///
+/// `tests::descriptions::every_shipped_underfoot_line_fits_the_standing_on_row`
+/// sizes the bank against this rather than against `underfoot_suffix`, or the
+/// blocked forms — which are the long ones — would ship unmeasured. That
+/// census is its only caller, hence the `cfg`: production draws one prompt at
+/// a time and never needs to know which is widest.
+#[cfg(test)]
+pub(crate) fn widest_underfoot_suffix(subject: &str, condition: Option<&str>) -> &'static str {
+    let offer = underfoot_suffix(subject, condition);
+    if subject != "stack.orphan" || condition.is_some() {
+        return offer;
+    }
+    [AdoptBlock::NoCatalyst, AdoptBlock::RosterFull]
+        .into_iter()
+        .map(orphan_blocked_suffix)
+        .chain(std::iter::once(offer))
+        .max_by_key(|s| s.chars().count())
+        .unwrap()
 }
 
 /// Which way the examine key is looking, in **view space**.
@@ -665,10 +639,9 @@ impl Game {
             CellKind::Orphan if self.orphan_present(pos, (x, y)) => Some(format!(
                 "{}{}",
                 described("An orphaned process"),
-                if self.taming_catalyst().is_some() {
-                    underfoot_suffix("stack.orphan", None)
-                } else {
-                    underfoot_suffix_blocked("stack.orphan", None)
+                match self.adopt_block() {
+                    None => underfoot_suffix("stack.orphan", None),
+                    Some(block) => orphan_blocked_suffix(block),
                 }
             )),
             CellKind::Orphan => None,

@@ -4146,6 +4146,65 @@ fn an_orphan_you_cannot_pay_for_says_so_underfoot() {
     );
 }
 
+/// The second half of the same rule. A full roster refuses an adoption just
+/// as flatly as an empty pack, so the row has to say which of the two is in
+/// the way — naming only the catalyst leaves a player holding one wondering
+/// why the key does nothing.
+#[test]
+fn an_orphan_with_nowhere_to_put_it_says_so_underfoot() {
+    let mut game = game();
+    descend(&mut game);
+    ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+    while game.pet_count() < game.pet_capacity() {
+        spawn_tamed(&mut game, 10, 2);
+    }
+
+    let blocked = game.stack_view().unwrap().standing_on.unwrap();
+    assert!(
+        blocked.ends_with("  [o] adopt \u{2014} roster full"),
+        "a full roster still read as an open offer: {blocked:?}"
+    );
+    assert!(
+        blocked.chars().count() <= crate::MAX_UNDERFOOT_LINE,
+        "the blocked row runs off the pane: {} chars",
+        blocked.chars().count()
+    );
+}
+
+/// The row and the key must never disagree about whether an adoption is on,
+/// which is why both read `Game::adopt_block` rather than each testing the
+/// catalyst and the roster for themselves. Two copies of that ladder drift,
+/// and the drift is invisible: the row keeps offering while the key refuses.
+#[test]
+fn the_underfoot_offer_and_the_key_agree_on_every_refusal() {
+    for (label, empty_pack, fill_roster) in [
+        ("nothing in the way", false, false),
+        ("no catalyst", true, false),
+        ("full roster", false, true),
+        ("neither", true, true),
+    ] {
+        let mut game = game();
+        descend(&mut game);
+        ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+        if fill_roster {
+            while game.pet_count() < game.pet_capacity() {
+                spawn_tamed(&mut game, 10, 2);
+            }
+        }
+        if empty_pack {
+            set_inventory(&mut game, &[]);
+        }
+
+        let row = game.stack_view().unwrap().standing_on.unwrap();
+        let offers = row.ends_with("  [o] adopt");
+        assert_eq!(
+            offers,
+            game.adopt_orphan().is_ok(),
+            "{label}: the row and the key disagree — row was {row:?}"
+        );
+    }
+}
+
 fn ice_breakers(game: &Game) -> u32 {
     game.world
         .get::<Inventory>(game.player_entity())

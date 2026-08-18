@@ -511,14 +511,9 @@ fn every_shipped_underfoot_line_fits_the_standing_on_row() {
             // the longer one whenever the party cannot pay — and that is
             // the form with no headroom left. Sizing only the offer would
             // leave the blocked row unmeasured against the budget.
-            let suffix = [
-                crate::game::stack_view::underfoot_suffix(subject, condition),
-                crate::game::stack_view::underfoot_suffix_blocked(subject, condition),
-            ]
-            .iter()
-            .map(|s| s.chars().count())
-            .max()
-            .unwrap();
+            let suffix = crate::game::stack_view::widest_underfoot_suffix(subject, condition)
+                .chars()
+                .count();
             for seed in 0..64u64 {
                 let Some(line) = db.underfoot(subject, condition, seed) else {
                     continue;

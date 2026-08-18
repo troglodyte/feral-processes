@@ -411,12 +411,14 @@ impl Game {
         if self.cell_underfoot() != Some(CellKind::Orphan) || !self.orphan_present(pos, cell) {
             return Err("There's nothing like that here.".into());
         }
-        let Some((catalyst, _)) = self.taming_catalyst() else {
-            return Err("You need an ICE Breaker to adopt a process.".into());
-        };
-        if self.pet_count() >= self.pet_capacity() {
-            return Err("Your roster is full.".into());
+        if let Some(block) = self.adopt_block() {
+            return Err(block.refusal().into());
         }
+        // `adopt_block` just cleared the pack, and nothing between here and
+        // there can empty it.
+        let (catalyst, _) = self
+            .taming_catalyst()
+            .expect("adopt_block reported no obstacle");
         let species = self
             .orphan_species(pos)
             .ok_or_else(|| "The process is too far gone to reach.".to_string())?;
@@ -441,6 +443,29 @@ impl Game {
             format!("{name} has been running alone down here. It comes with you."),
         );
         Ok(())
+    }
+
+    /// What stands between the party and the orphan underfoot, or `None` if
+    /// nothing does.
+    ///
+    /// **The one ladder for that question.** `adopt_orphan` refuses on it and
+    /// `Game::stack_view` warns with it, so the row underfoot and the key can
+    /// never disagree about whether an adoption is on. Two copies of these
+    /// two checks would drift, and the drift is the invisible kind: the row
+    /// goes on offering while the key quietly refuses.
+    ///
+    /// Only the obstacles the player can *do something about*. `adopt_orphan`
+    /// also refuses mid-battle and at a cell with no orphan on it, but the
+    /// first cannot be true while this view is drawn and the second is what
+    /// the match arm calling this has already decided.
+    pub(crate) fn adopt_block(&self) -> Option<AdoptBlock> {
+        if self.taming_catalyst().is_none() {
+            return Some(AdoptBlock::NoCatalyst);
+        }
+        if self.pet_count() >= self.pet_capacity() {
+            return Some(AdoptBlock::RosterFull);
+        }
+        None
     }
 
     /// Which program this frame's orphan is, or `None` if the entrance's
@@ -541,5 +566,30 @@ impl Game {
             return;
         };
         self.frame_memory_mut(pos).fights.insert((pos.x, pos.y));
+    }
+}
+
+/// Why an adoption underfoot would be refused — see `Game::adopt_block`.
+///
+/// Read on two surfaces that want different lengths of the same fact: a
+/// sentence on `App::status_line` when the key is pressed, and a few words
+/// appended to the row underfoot before it is. Both mappings are exhaustive
+/// matches, so a third obstacle fails to compile at both rather than
+/// silently going unreported on one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AdoptBlock {
+    NoCatalyst,
+    RosterFull,
+}
+
+impl AdoptBlock {
+    /// The refusal `adopt_orphan` returns, which lands alone on
+    /// `App::status_line` — so a full sentence, not one of
+    /// `Game::ability_unavailable`'s battle-row fragments.
+    pub(crate) fn refusal(self) -> &'static str {
+        match self {
+            Self::NoCatalyst => "You need an ICE Breaker to adopt a process.",
+            Self::RosterFull => "Your roster is full.",
+        }
     }
 }

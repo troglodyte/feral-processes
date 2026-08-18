@@ -27,6 +27,106 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.2
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+`ItemDef::grants` is asset schema behind `#[serde(default)]`, and the passive
+it names is **derived at fire time** off the wearer's `Equipment` rather than
+written into `Routines` — so nothing about a granted routine reaches a file,
+and taking the item off ends it by omission. `PopulatedChunks`, below, is an
+additive save field behind the same default: an older save carries no marks
+and stocks the ground around wherever it left the player.
+
+### Gear that carries a routine
+
+Every passive routine in the game was a boss drop, which made `exclusive` and
+`triggers` look like the same idea. They never were. An item may now name a
+routine it grants while worn, and eight scavenged pieces do — three weapons,
+two pieces of armour, three modules — carrying six new passives between them.
+A granted routine costs no turn and no routine slot; the item is what was
+spent.
+
+Two new triggers come with them, each with its one call site in
+`battle_resolve_round`. `RoundStart` fires as the round opens, which is the
+trigger that fires every round there is, so all three routines on it pay a
+four-round cooldown. `AllyWounded` fires when a party member crosses
+`tuning::WOUNDED_INTEGRITY_FRACTION` — a third of Integrity — **downward in
+one round**, which is a crossing rather than a level: a fight that grinds
+somebody down slowly never fires it, and a burst that drops them does.
+
+`AllyDropped` stays reachable by exactly one item, deliberately. A dropped
+companion is dissolved with no revive at any difficulty, so a routine paying
+out there only pays a player who has already lost more than the payout is
+worth.
+
+Gear is wearable by any owned program, so a companion carries a granted
+passive as readily as the player does — and unlike a Special, a passive costs
+no turn, so it is the first companion-side ability effect that fires without
+anybody choosing it. The item describe page names what a piece grants.
+
+### What the eight items are worth
+
+Measured before the merge rather than after, against 100 paired fights per
+item, controlled by the item's own `grants` line and validated against the
+shipped stat twins: `docs/measurements/2026-08-18-gear-passive-worth.md`.
+
+Nothing in it moved a number, which is the result. `WOUNDED_INTEGRITY_FRACTION`
+fires in 5% of the runs of a fight the party wins easily, 25% of the fights
+they win on curve, and **100% of losses in every band** — neither dead nor a
+slower `RoundStart`. Uptime on a four-round cooldown measured 0.230 firings a
+round against a nominal 0.250, and it does not front-load.
+
+Two things the run found that nobody had asked about. A bare `def: 2` module
+with no grant at all is worth more at level 12 than the strongest grant
+measured, and worth **exactly nothing** at level 36, where that same item's
+grant ends fights — so the two halves of a granting item invert in importance
+across the level range. And `deadman_relay` is not merely comparable to the
+etched disk that carries the same routine, it is identical: 100 of 100 reps
+agreed on outcome, rounds, Integrity and companions lost. Which of them is
+worth carrying is a question about slots, not about effect.
+
+**None of it was played.** `balance_sim` models no abilities and gates none
+of this, so the arena and a session are the only instruments, and only the
+first has been run. Whether three passive lines in a round read as your gear
+working or as noise in the log is still open.
+
+### The sector is populated where you go, not where you have been
+
+Wild population was placed only relative to the player — a one-time seeded
+disc around the arrival point, plus a 5%-per-tick roll within twelve tiles of
+wherever they stood. The map is unbounded and generated a chunk at a time, so
+no finite seed could cover it, and the roll could not fill space either:
+walking costs a tick a tile, which buys about one spare roll per density box
+against a target of twelve.
+
+Measured before: zero to two programs per box across 240 tiles of walked
+ground, and a clean halo around the base — 15 at the player, then 10, 6, 3, 1
+at 25-tile intervals. After: 8, 13, 12, 12, 12, 15, 14, 14, 14, 13, 8, 12
+across the same 300 tiles.
+
+Population is a property of place now. `PopulatedChunks` records which world
+chunks the sector has stocked and `ensure_local_population` stocks any chunk
+within one of the player's, so ground arrives populated a chunk ahead of the
+pane rather than filling in behind you. `WILD_CREATURE_CAP` stops being
+decorative: its cull is shared by both placers and evicts whole chunks,
+farthest first, taking the mark with the creatures.
+
+### Two refusals in the Stack
+
+Pressing `o` on an orphan with no ICE Breaker reported as "nothing happens".
+The key was bound and the engine was refusing correctly; the refusal was
+borrowed from a battle row, where a lowercase fragment sits under a greyed
+option — alone on the status line for four seconds it reads as no response at
+all. Both refusals are sentences now, and the underfoot row names the missing
+item instead of advertising `[o] adopt` regardless.
+
+A full roster was the same bug wearing the other obstacle: a party holding a
+catalyst but no room still read `[o] adopt` and only learned otherwise by
+pressing it. Both obstacles go through one `Game::adopt_block` that the key
+refuses on and the row warns with, so the offer and the key cannot drift —
+which is the invisible kind of drift, the row going on offering while the key
+quietly refuses.
+
 ## 0.11.1
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

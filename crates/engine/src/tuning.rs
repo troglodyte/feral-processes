@@ -270,6 +270,29 @@ pub const GROUP_SIZE_STEP_FRAMES: u32 = 1;
 /// happened to wander.
 pub const GROUP_SIZE_STEP_ZONES: u32 = 1;
 
+/// Danger steps between one growth band entering the spawn pool and the
+/// next, and how many steps a band stays in it once it has — the window
+/// that decides which species a zone or a Stack depth may field.
+///
+/// Read against `Game::danger_steps`, the same scalar the two group-size
+/// curves take, so there is no second difficulty axis to keep in step with
+/// the first. Band `b` is live from `b * TIER_ENTRY_STEPS` through
+/// `b * TIER_ENTRY_STEPS + TIER_WINDOW_STEPS` **inclusive**.
+///
+/// The top band never exits, whatever these say. Steps are unbounded
+/// because zones and depth are, so a closed top empties the world.
+pub const TIER_ENTRY_STEPS: u32 = 2;
+pub const TIER_WINDOW_STEPS: u32 = 3;
+
+/// The step a boss species (`SpeciesDef::is_boss`) becomes eligible at, and
+/// it never exits either.
+///
+/// Apex is outside the growth ladder, so its entry is a constant rather than
+/// a fourth rung of `TIER_ENTRY_STEPS`. Before this step a boss roll still
+/// fires — it just draws an ordinary species and marks it, which is the
+/// whole of "easy bosses early, hard bosses deep".
+pub const APEX_ENTRY_STEP: u32 = 4;
+
 /// Extra members each zone level adds to the group-size cap: zone 1 is solo,
 /// and every level after adds this against `MAX_GROUP_SIZE`
 /// (1, 10, 19, 28, 37, ... saturating at zone 12). Only

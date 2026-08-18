@@ -454,6 +454,54 @@ impl SpeciesDef {
     }
 }
 
+impl DangerBand {
+    /// The first danger step this band may spawn at.
+    pub fn entry_step(self) -> u32 {
+        match self {
+            DangerBand::Tier(i) => i as u32 * crate::tuning::TIER_ENTRY_STEPS,
+            DangerBand::Apex => crate::tuning::APEX_ENTRY_STEP,
+        }
+    }
+
+    /// The last step this band may spawn at, or `None` for a band that never
+    /// leaves. The top rung and apex both never leave: steps are unbounded
+    /// because zones and depth are, so a closed top empties the world.
+    pub fn exit_step(self) -> Option<u32> {
+        match self {
+            DangerBand::Apex => None,
+            DangerBand::Tier(i) if i + 1 >= GROWTH_TIERS.len() => None,
+            DangerBand::Tier(i) => {
+                Some(i as u32 * crate::tuning::TIER_ENTRY_STEPS + crate::tuning::TIER_WINDOW_STEPS)
+            }
+        }
+    }
+
+    pub fn live_at(self, step: u32) -> bool {
+        step >= self.entry_step() && self.exit_step().is_none_or(|last| step <= last)
+    }
+
+    /// How far `step` sits outside this band's window, zero inside it. The
+    /// fallback's ranking key — never a difficulty number.
+    fn window_distance(self, step: u32) -> u32 {
+        let entry = self.entry_step();
+        if step < entry {
+            return entry - step;
+        }
+        match self.exit_step() {
+            Some(last) if step > last => step - last,
+            _ => 0,
+        }
+    }
+
+    /// Rung index for tie-breaking; apex ranks above every tier.
+    fn rank(self) -> usize {
+        match self {
+            DangerBand::Tier(i) => i,
+            DangerBand::Apex => GROWTH_TIERS.len(),
+        }
+    }
+}
+
 /// Total HP+ATK+DEF a species of each growth band is built from, before its
 /// class weight. Taken from the bands' own means at the time the classes
 /// landed, so the ladder itself did not move.
@@ -878,6 +926,50 @@ impl SpeciesDb {
         self.sorted_matches(|s| s.is_boss && s.habitats.contains(&biome))
     }
 
+    /// The ordinary species `biome` may field at danger `step` — the pool the
+    /// per-tile spawn roll draws from, after the window and before any draw.
+    ///
+    /// Never empty for a biome that has any ordinary species at all. Where the
+    /// window admits nothing the biome holds, this falls back to the band
+    /// **nearest** the window, ties resolving upward. That fallback is
+    /// load-bearing rather than defensive: StaticField ships no band-0 species
+    /// and OpenGrid no band-2 species, so it fires against the real assets at
+    /// both ends. `every_biome_fields_something_at_every_danger_step` is the
+    /// census; the honest fix for either hole is a species file, not a wider
+    /// window.
+    ///
+    /// Apex is never a fallback. A boss is a rare outcome the window admits,
+    /// not a biome's last resort — see `windowed_boss_matches`.
+    pub fn windowed_matches(&self, biome: Biome, step: u32) -> Vec<&SpeciesDef> {
+        let ordinary = self.habitat_matches(biome);
+        let live: Vec<&SpeciesDef> = ordinary
+            .iter()
+            .copied()
+            .filter(|s| s.danger_band().live_at(step))
+            .collect();
+        if !live.is_empty() {
+            return live;
+        }
+        let key = |s: &SpeciesDef| {
+            let band = s.danger_band();
+            (band.window_distance(step), std::cmp::Reverse(band.rank()))
+        };
+        let Some(best) = ordinary.iter().map(|s| key(s)).min() else {
+            return Vec::new();
+        };
+        ordinary.into_iter().filter(|s| key(s) == best).collect()
+    }
+
+    /// The apex species `biome` may field at danger `step`. No fallback: below
+    /// `APEX_ENTRY_STEP` this is empty, which is what stops a fresh run meeting
+    /// a hand-authored boss in zone 1.
+    pub fn windowed_boss_matches(&self, biome: Biome, step: u32) -> Vec<&SpeciesDef> {
+        self.boss_habitat_matches(biome)
+            .into_iter()
+            .filter(|s| s.danger_band().live_at(step))
+            .collect()
+    }
+
     fn sorted_matches(&self, keep: impl Fn(&SpeciesDef) -> bool) -> Vec<&SpeciesDef> {
         let mut matches: Vec<&SpeciesDef> = self.species.values().filter(|s| keep(s)).collect();
         matches.sort_by(|a, b| a.id.cmp(&b.id));
@@ -912,6 +1004,146 @@ mod tests {
         )
         .unwrap()
         .0
+    }
+
+    /// The schedule the design is written against. Spelled out as a table
+    /// rather than recomputed from the constants, so moving a constant fails
+    /// here loudly instead of silently redefining what a zone means.
+    #[test]
+    fn the_window_schedule_matches_the_design() {
+        let live = |step: u32| {
+            let mut bands = Vec::new();
+            for i in 0..GROWTH_TIERS.len() {
+                if DangerBand::Tier(i).live_at(step) {
+                    bands.push(i as i32);
+                }
+            }
+            if DangerBand::Apex.live_at(step) {
+                bands.push(-1);
+            }
+            bands
+        };
+        assert_eq!(live(0), vec![0]);
+        assert_eq!(live(1), vec![0]);
+        assert_eq!(live(2), vec![0, 1]);
+        assert_eq!(live(3), vec![0, 1]);
+        assert_eq!(live(4), vec![1, 2, -1]);
+        assert_eq!(live(5), vec![1, 2, -1]);
+        assert_eq!(live(6), vec![2, -1]);
+        assert_eq!(live(7), vec![2, -1]);
+    }
+
+    /// Steps are unbounded because zones and depth are, so a closed top band
+    /// empties the world past step 7. Both the top rung and apex stay open.
+    #[test]
+    fn the_top_band_and_apex_never_exit() {
+        for step in [8u32, 40, 4_000] {
+            assert!(DangerBand::Tier(GROWTH_TIERS.len() - 1).live_at(step));
+            assert!(DangerBand::Apex.live_at(step));
+            assert!(!DangerBand::Tier(0).live_at(step));
+        }
+    }
+
+    /// StaticField ships no band-0 species and OpenGrid no band-2 species, so
+    /// the fallback is load-bearing against the real assets rather than
+    /// defensive. Asserted as a census over every biome and every step a run
+    /// can reach.
+    #[test]
+    fn every_biome_fields_something_at_every_danger_step() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for biome in [
+            Biome::Mainframe,
+            Biome::OpenGrid,
+            Biome::NullSector,
+            Biome::StaticField,
+        ] {
+            for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
+                assert!(
+                    !db.windowed_matches(biome, step).is_empty(),
+                    "{biome:?} fields nothing at step {step}; the window has \
+                     emptied a biome the fallback was supposed to cover"
+                );
+            }
+        }
+    }
+
+    /// The two known fallback sites, pinned by name so a content change that
+    /// closes one is visible rather than silent.
+    #[test]
+    fn the_fallback_fires_where_the_roster_has_a_hole() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+
+        // StaticField has no band-0 species: step 0 falls upward to band 1.
+        let early = db.windowed_matches(Biome::StaticField, 0);
+        assert!(
+            early.iter().all(|s| s.danger_band() == DangerBand::Tier(1)),
+            "StaticField at step 0 should fall back to band 1, got {:?}",
+            early.iter().map(|s| &s.id).collect::<Vec<_>>()
+        );
+
+        // OpenGrid has no band-2 species: a deep step falls back to band 1.
+        let deep = db.windowed_matches(Biome::OpenGrid, 7);
+        assert!(
+            deep.iter().all(|s| s.danger_band() == DangerBand::Tier(1)),
+            "OpenGrid at step 7 should fall back to band 1, got {:?}",
+            deep.iter().map(|s| &s.id).collect::<Vec<_>>()
+        );
+    }
+
+    /// Apex is a rare outcome the window admits, never a biome's last resort:
+    /// a boss must not be handed to a step the ladder has nothing else for.
+    #[test]
+    fn the_fallback_never_reaches_for_an_apex_species() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for biome in [
+            Biome::Mainframe,
+            Biome::OpenGrid,
+            Biome::NullSector,
+            Biome::StaticField,
+        ] {
+            for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
+                assert!(
+                    db.windowed_matches(biome, step).iter().all(|s| !s.is_boss),
+                    "windowed_matches leaked an apex species into {biome:?} at step {step}"
+                );
+            }
+        }
+    }
+
+    /// Apex enters at its own step and is empty before it, which is what stops
+    /// a fresh run meeting Wintermute in zone 1.
+    #[test]
+    fn apex_species_are_absent_before_their_entry_step() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for step in 0..crate::tuning::APEX_ENTRY_STEP {
+            assert!(
+                db.windowed_boss_matches(Biome::Mainframe, step).is_empty(),
+                "an apex species is eligible at step {step}, below APEX_ENTRY_STEP"
+            );
+        }
+        assert!(
+            !db.windowed_boss_matches(Biome::Mainframe, crate::tuning::APEX_ENTRY_STEP)
+                .is_empty(),
+            "no apex species is eligible at APEX_ENTRY_STEP, so bosses never arrive"
+        );
+    }
+
+    /// The draw picks out of these pools by index, so an unsorted order makes
+    /// two `Game::new(seed)` runs diverge — the same reason `habitat_matches`
+    /// sorts.
+    #[test]
+    fn windowed_pools_are_sorted_by_id() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
+            let ids: Vec<&String> = db
+                .windowed_matches(Biome::Mainframe, step)
+                .iter()
+                .map(|s| &s.id)
+                .collect();
+            let mut sorted = ids.clone();
+            sorted.sort();
+            assert_eq!(ids, sorted, "unsorted pool at step {step}");
+        }
     }
 
     #[test]

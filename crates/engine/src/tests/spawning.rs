@@ -2441,3 +2441,52 @@ fn the_cap_never_evicts_the_ground_under_the_player() {
         "the cap evicted creatures standing on the player's own chunk"
     );
 }
+
+/// The marks have to survive a save, or a reload re-stocks every chunk the
+/// run had already emptied — which would hand back a full sector's worth of
+/// programs for the price of quitting to the menu.
+///
+/// This is the test the RON round trip cannot stand in for: `#[serde(skip)]`
+/// drops a field from *both* encodings it compares, so that test stays green
+/// while the field never reaches disk.
+#[test]
+fn stocked_ground_survives_a_save() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(9006, DifficultyMode::Forgiving, &assets).unwrap();
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // Somewhere the run has actually been, so the mark is one play produced
+    // rather than one the test wrote by hand.
+    *game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap() = Position {
+        x: start.x + 4 * crate::world::CHUNK_SIZE,
+        y: start.y,
+    };
+    game.tick();
+    let before = game
+        .world
+        .resource::<crate::resources::PopulatedChunks>()
+        .clone();
+    assert!(
+        before.0.len() > 9,
+        "the premise: two neighbourhoods were stocked"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_population_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded
+            .world
+            .resource::<crate::resources::PopulatedChunks>()
+            .0,
+        before.0,
+        "a reload forgot which ground the sector had already stocked"
+    );
+}

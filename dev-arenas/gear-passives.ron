@@ -1,0 +1,29 @@
+// What the three grant-carrying items are worth in a fight, against the
+// same fight without them.
+//
+// `equip` is **top-level**, not inside `Fresh(...)` — a row in the wrong
+// place is ignored silently, and identical numbers across a sweep read as
+// a dead feature rather than an unread input.
+//
+// The companion is carrying one too, which is the case the feature adds for
+// free and the one no other instrument reaches: gear is wearable by any
+// owned program, so a granted passive is a companion's as readily as the
+// player's.
+//
+// To read this, run it against a scenario with the same three slots filled
+// by plain gear of the same tier — the numbers here mean nothing on their
+// own, only beside that. Arena figures compare within one build only.
+(
+    player: Fresh(level: 12, zone: 3),
+    equip: [
+        (item: "interrupt_coil"),
+        (item: "parity_weave"),
+        (item: "watchdog_tap"),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [(item: "parity_weave")]),
+    ],
+    opponents: [(species: "rootkit", count: 3)],
+    reps: 30,
+    seed: 7,
+)

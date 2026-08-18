@@ -432,3 +432,27 @@ fn every_shipped_grant_names_a_real_battle_passive() {
         "the shipped set should carry the three gear passives, found {granting}"
     );
 }
+
+/// The describe page is a read-only screen, so the row it shows has to be
+/// derived here rather than in the renderer — and it is derived off the
+/// *ability*, because the item's own prose is mod-controlled free text that
+/// nothing keeps in step with `grants`.
+#[test]
+fn item_grant_reports_the_routines_own_name_and_prose() {
+    let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ability = game
+        .world
+        .resource::<AbilityDb>()
+        .get("interrupt_request")
+        .expect("the routine ships");
+
+    assert_eq!(
+        game.item_grant(&ItemId("interrupt_coil".into())),
+        Some((ability.name.as_str(), ability.description.as_str()))
+    );
+    assert_eq!(
+        game.item_grant(&ItemId("kinetic_edge".into())),
+        None,
+        "gear that grants nothing has no row to draw"
+    );
+}

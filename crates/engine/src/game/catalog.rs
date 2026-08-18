@@ -253,6 +253,28 @@ impl Game {
         (!def.description.is_empty()).then_some(def.description.as_str())
     }
 
+    /// The name and description of the passive routine this item grants
+    /// while worn, if it grants one.
+    ///
+    /// Derived from the ability rather than left to the item's own
+    /// `description`, which is mod-controlled free text and cannot be
+    /// trusted to stay in step with `grants` — an item whose prose still
+    /// names the routine it used to carry is exactly the drift the field
+    /// exists to remove. Derived in the engine rather than in the renderer
+    /// for the standing reason a read-only screen's rows are: app-core owns
+    /// the row count and gui draws it, so a per-row transform folded into
+    /// the renderer opens a screen on a row nobody drew.
+    pub fn item_grant(&self, id: &ItemId) -> Option<(&str, &str)> {
+        let granted = self
+            .world
+            .resource::<ItemDb>()
+            .get(id.as_str())?
+            .grants
+            .as_ref()?;
+        let def = self.world.resource::<AbilityDb>().get(granted)?;
+        Some((def.name.as_str(), def.description.as_str()))
+    }
+
     /// A two-or-three word gloss of what an item *does*, for menus that list
     /// items by name and cost without saying why you'd want one.
     ///

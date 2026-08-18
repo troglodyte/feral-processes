@@ -290,6 +290,18 @@ pub(super) fn draw_item_describe(
         ),
         None => rows.push(text_row("(no description)")),
     }
+    // The routine's own name and prose, off `Game::item_grant` — an item's
+    // authored description is free text and may say nothing about what it
+    // grants, or say it about a routine it no longer carries.
+    if let Some((name, effect)) = game.item_grant(&copy.item) {
+        rows.push(text_row(""));
+        rows.push(text_row(format!("Grants: {name}")));
+        rows.extend(
+            wrap_text(effect, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        );
+    }
     rows.push(text_row(""));
     rows.push(text_row("Any key to go back"));
     draw_popup("Item", PopupSize::Large, &rows, painter, m);

@@ -27,6 +27,63 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.1
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+The two new structure fields are asset schema behind `#[serde(default)]`, and
+`MachineStatus` — which gains a variant here — is never serialised at all: it
+carries no serde traits and appears nowhere in `save.rs`. A save written
+before this release loads, and the first tick decides which of its machines
+are dark.
+
+### The base power grid
+
+A base had no reason not to sprawl. Every structure was bounded by its build
+cost and by `MAX_BUILD_DISTANCE_FROM_HOME`, both paid once; a structure that
+existed cost nothing to keep. So the optimal base was every machine you could
+afford, and the only ongoing decision a base asked of you was where to post
+programs.
+
+Machines now draw on a grid, and the grid has to cover them. Every tick the
+base sums what its structures supply against what its machines draw, and if
+the draw is over, machines are cut in `(x, y)` order until the rest fit. A cut
+machine reads **dark** — it makes no progress on a cronjob, an assembler
+neither works nor pulls from its neighbours, and hand-working it yourself
+yields nothing either. The base pane header reads `Grid  15 / 16`, red when
+short.
+
+The cut does not stop at the first machine that will not fit: a 3-draw machine
+that cannot fit a 2-unit budget goes dark while a 1-draw machine behind it
+still runs. Stopping early would darken an arbitrary tail. The order is
+arbitrary but it never changes, so the far corner drops first and you can lay
+out around it.
+
+**A machine draws whether or not anyone is posted to it.** The building is
+plugged in; the worker is a separate question. That makes an idle machine you
+keep around "for later" a real expense — demolish it or power it — and it is
+the only version you can plan against, since supply covers the base you built
+rather than the base you happen to have staffed this minute.
+
+The Recharger Node is what settles this. It was a one-time purchase that
+deleted a need meter and then became furniture; there was never a reason to
+build a second. It now supplies 4 to the grid, as Home does, and there is no
+cap on how many you build.
+
+**This is called the Grid, never Power.** `Power` already means a program's own
+reserve, two panels away in the status column — the Recharger still trickles
+that back, and the two are separate resources that happen to share a word.
+
+**The numbers are unmeasured.** `balance_sim` models battles and has no
+base-production term at all, so it gates none of this. Home supplies 4,
+each Recharger 4; extractors draw 1, base assemblers 2, late assemblers 3.
+They are a starting point for a session, not a tuned claim, and the first
+thing to change if play says otherwise.
+
+Three of the six `dev-saves/` templates stood more machines than a single
+Recharger could carry and are given the Rechargers to match — `chains` and
+`contracts` run 15 against 16, `deep-lair` 17 against 20. A new gate keeps the
+next template from being captured short.
+
 ## 0.11.0
 
 *`0.10.0` is skipped. A stray tag of that name was pushed onto a branch

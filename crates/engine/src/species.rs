@@ -412,6 +412,48 @@ fn pct(value: i32, percent: i32) -> i32 {
 /// outside the class system entirely — the shipped two sit at `2.0`.
 pub const GROWTH_TIERS: [f32; 3] = [crate::tuning::BASELINE_GROWTH_MULTIPLIER, 1.25, 1.5];
 
+/// Which rung of the difficulty ladder a species stands on, and therefore
+/// which danger steps it may spawn at.
+///
+/// Derived from `growth_multiplier` rather than authored, for the reason
+/// `affinity_class` is derived from `affinities`: a species' rung is a fact
+/// about numbers it already carries, and a second authored field is a second
+/// thing that can disagree with the first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DangerBand {
+    /// A rung of `GROWTH_TIERS`, by index.
+    Tier(usize),
+    /// A boss species. Outside the ladder, as it is outside the class system.
+    Apex,
+}
+
+impl SpeciesDef {
+    /// This species' rung. `Apex` for a boss whatever it grows at — the two
+    /// shipped ones sit at 2.0, off the ladder's top, so reading the
+    /// multiplier first would file them beside the ordinary hard species.
+    ///
+    /// A multiplier between rungs snaps to the nearest. That is the same
+    /// concession `tier_budget` makes on the same midpoints, and the same one
+    /// `assets/species/README.md` already documents about the stat budget
+    /// being a step function: a mod is never refused, it just stops being
+    /// readable against the shipped ladder.
+    pub fn danger_band(&self) -> DangerBand {
+        if self.is_boss {
+            return DangerBand::Apex;
+        }
+        let mut best = 0;
+        let mut best_gap = f32::INFINITY;
+        for (i, rung) in GROWTH_TIERS.iter().enumerate() {
+            let gap = (self.growth_multiplier - rung).abs();
+            if gap < best_gap {
+                best_gap = gap;
+                best = i;
+            }
+        }
+        DangerBand::Tier(best)
+    }
+}
+
 /// Total HP+ATK+DEF a species of each growth band is built from, before its
 /// class weight. Taken from the bands' own means at the time the classes
 /// landed, so the ladder itself did not move.
@@ -870,6 +912,64 @@ mod tests {
         )
         .unwrap()
         .0
+    }
+
+    #[test]
+    fn the_shipped_roster_fills_three_bands_and_an_apex() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let mut counts = [0usize; 4];
+        for s in db.all() {
+            match s.danger_band() {
+                DangerBand::Tier(i) => counts[i] += 1,
+                DangerBand::Apex => counts[3] += 1,
+            }
+        }
+        assert_eq!(
+            counts,
+            [5, 5, 5, 2],
+            "the ladder is five species a band and two apex; a roster that has \
+             drifted off that is a content change, not a test failure"
+        );
+    }
+
+    /// A boss is apex whatever it grows at. The two shipped ones sit at 2.0,
+    /// which is off the ladder entirely — reading the multiplier first would
+    /// snap them onto band 2 beside the ordinary hard species.
+    #[test]
+    fn is_boss_decides_the_band_before_the_multiplier_does() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        for s in db.all().filter(|s| s.is_boss) {
+            assert_eq!(s.danger_band(), DangerBand::Apex, "{} is apex", s.id);
+        }
+    }
+
+    /// A modded multiplier between rungs snaps to the nearest, on the same
+    /// midpoints `tier_budget` already splits on — 1.125 and 1.375. A mod is
+    /// never refused for it; it just stops being readable against the ladder.
+    #[test]
+    fn an_off_ladder_multiplier_snaps_to_the_nearest_band() {
+        let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
+        let base = db.all().find(|s| !s.is_boss).unwrap().clone();
+        let cases = [
+            (1.0, 0usize),
+            (1.1, 0),
+            (1.2, 1),
+            (1.25, 1),
+            (1.3, 1),
+            (1.45, 2),
+            (1.5, 2),
+            (9.0, 2),
+        ];
+        for (growth, band) in cases {
+            let mut def = base.clone();
+            def.is_boss = false;
+            def.growth_multiplier = growth;
+            assert_eq!(
+                def.danger_band(),
+                DangerBand::Tier(band),
+                "growth {growth} should read as band {band}"
+            );
+        }
     }
 
     /// A class is readable at runtime, not only from a census. Phase 5's

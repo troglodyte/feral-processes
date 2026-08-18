@@ -630,6 +630,32 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     }
 }
 
+/// Stocks every material a structure upgrade asks for *besides* the fragment
+/// economy, so a fixture that only wanted to raise a tier does not have to
+/// know which zone's material the ladder currently runs on.
+///
+/// Derived from the shipped `UpgradeDef`s rather than named here: a second
+/// material tier joins this the moment its `.ron` file does, which is the
+/// whole reason it exists — seven fixtures went red at once when the first
+/// one landed, none of them about upgrades costing a new thing.
+///
+/// Deliberately leaves the currencies alone. Several callers assert on an
+/// exact fragment delta across the upgrade, and topping those up here would
+/// quietly rewrite what they measure.
+pub(super) fn stock_upgrade_materials(game: &mut Game, qty: u32) {
+    let currencies = [game.currency(), game.craft_currency()];
+    let wanted: std::collections::BTreeSet<ItemId> = game
+        .structure_defs()
+        .iter()
+        .filter_map(|def| def.upgrade.as_ref())
+        .flat_map(|upgrade| upgrade.cost.iter().map(|(id, _)| id.clone()))
+        .filter(|id| !currencies.contains(id))
+        .collect();
+    for id in wanted {
+        give(game, &id, qty);
+    }
+}
+
 /// Reads the bank directly rather than through `PlayerStatus::inventory`,
 /// which deliberately omits banked items — see `Game::banked`.
 pub(super) fn research_data_held(game: &Game) -> u32 {

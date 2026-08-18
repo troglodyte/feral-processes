@@ -1,0 +1,11 @@
+(
+    id: "cache_tap",
+    name: "Cache Tap",
+    description: "Assign a program here to draw Cache Grain out of the sector's cache fabric. Slower than a Mining Node and worth more: the second zone and everything past it is built out of what this produces.",
+    glyph: 'C',
+    color: Cyan,
+    build_cost: [("core_fragment", 20), ("blank_substrate", 2)],
+    work: Some((produces: "cache_grain", ticks_per_unit: 14, level: Some(1))),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
+    power_draw: 2,
+)

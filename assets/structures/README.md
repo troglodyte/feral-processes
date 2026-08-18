@@ -316,7 +316,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // for: `max_deployed: 5`, so a base grows five rings and no further.
     // Bounding growth by the engine's backstop radius instead would put the
     // limit ninety-six purchases away, which is no limit a player will ever
-    // meet. Every other shipped structure leaves this at 0.
+    // meet. The Line Driver is bounded for the same reason at 3, and every
+    // other shipped structure leaves this at 0.
     max_deployed: 5,
 
     // Optional; can be left out entirely (defaults to false). Whether

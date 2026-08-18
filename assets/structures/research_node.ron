@@ -6,6 +6,6 @@
     color: Cyan,
     build_cost: [("core_fragment", 10)],
     work: Some((produces: "research_data", ticks_per_unit: 14, level: Some(1))),
-    upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 10), ("cache_grain", 1)])),
     power_draw: 1,
 )

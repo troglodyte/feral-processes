@@ -7,7 +7,7 @@
     requires: ["armor_bench"],
     unlocks_recipes: [(
         result: "firewall_plating",
-        cost: [("portal_fragment", 6)],
+        cost: [("portal_fragment", 6), ("cache_grain", 2)],
         requires_structure: Some("armory"),
     )],
 )

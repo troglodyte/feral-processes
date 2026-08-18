@@ -1,0 +1,9 @@
+(
+    id: "cache_coherence",
+    name: "Cache Coherence",
+    description: "Read the sector's cache fabric without corrupting it. Unlocks the Cache Tap, which draws Cache Grain, and the Line Driver it pays for. Everything a second sector is built out of starts here.",
+    cost: 40,
+    min_zone: 2,
+    requires: ["power_grid"],
+    unlocks_structures: ["cache_tap", "line_driver"],
+)

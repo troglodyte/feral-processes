@@ -7,7 +7,7 @@
     requires: ["weapon_bench"],
     unlocks_recipes: [(
         result: "neural_amplifier",
-        cost: [("portal_fragment", 6)],
+        cost: [("portal_fragment", 6), ("cache_grain", 2)],
         requires_structure: Some("fabricator"),
     )],
 )

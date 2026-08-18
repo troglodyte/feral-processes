@@ -7,7 +7,7 @@
     requires: ["overclock"],
     unlocks_recipes: [(
         result: "monofilament_whip",
-        cost: [("portal_fragment", 12)],
+        cost: [("portal_fragment", 12), ("cache_grain", 3)],
         requires_structure: Some("fabricator"),
     )],
 )

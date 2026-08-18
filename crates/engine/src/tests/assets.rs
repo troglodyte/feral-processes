@@ -352,8 +352,8 @@ fn every_base_produced_item_sits_at_the_floor_price() {
         checked += 1;
     }
     assert_eq!(
-        checked, 4,
-        "expected the four producing structures; the press ceiling has to cover every one"
+        checked, 5,
+        "expected the five producing structures; the press ceiling has to cover every one"
     );
 }
 
@@ -1280,9 +1280,10 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 15,
-        "the plan's table names 15 machines; if that count changed, change \
-         this deliberately rather than letting the check go vacuous"
+        checked, 16,
+        "the plan's table named 15 machines and the Cache Tap is the \
+         sixteenth; if that count changed, change this deliberately rather \
+         than letting the check go vacuous"
     );
 }
 
@@ -1326,4 +1327,76 @@ fn no_shipped_structure_both_draws_and_supplies() {
             def.power_supply
         );
     }
+}
+
+/// The materials a breach unlocks, in the order the zones hand them over.
+/// A list here rather than a derivation, because "this item is what zone N
+/// pays you" is a content decision and there is nothing in `ItemDef` that
+/// could be read to recover it — see the two censuses below, which are what
+/// stop the decision being reverted one `.ron` file at a time.
+const ZONE_MATERIALS: &[&str] = &["cache_grain"];
+
+/// A breach has to change *what* you can make, not only how fast. Every
+/// gear recipe a zone-gated research node hands over is denominated in the
+/// material of the zone that gates it, so the Cache Tap is on the path to
+/// the gear rather than beside it.
+///
+/// Asserted over the recipes rather than the item files because that is
+/// where the zone gate already lives: `ResearchDef::min_zone` and
+/// `unlocks_recipes` are one file, so a node that keeps its gate and loses
+/// its material is a single-line edit this catches.
+#[test]
+fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
+    let game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.world.resource::<crate::research::ResearchDb>().all() {
+        if def.min_zone < 2 {
+            continue;
+        }
+        for recipe in &def.unlocks_recipes {
+            assert!(
+                recipe
+                    .cost
+                    .iter()
+                    .any(|(id, _)| ZONE_MATERIALS.contains(&id.as_str())),
+                "{} is gated on zone {} but its recipe for {} names no zone material, so breaching buys the blueprint and nothing has to be mined for it",
+                def.id.as_str(),
+                def.min_zone,
+                recipe.result.as_str()
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(
+        checked, 6,
+        "expected the six zone-gated gear recipes; one that lost its recipe would drop out of this scan unnoticed"
+    );
+}
+
+/// The upgrade half of the same payoff. `upgrade_ceiling` is already
+/// `min(max_tier, zone)`, so tier 2 is unreachable before the second zone —
+/// which is what makes naming the zone-2 material in an upgrade cost free of
+/// any effect on zone 1, and what makes it the natural place to spend one.
+#[test]
+fn every_upgrade_path_asks_for_a_zone_material() {
+    let game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.structure_defs() {
+        let Some(upgrade) = &def.upgrade else {
+            continue;
+        };
+        assert!(
+            upgrade
+                .cost
+                .iter()
+                .any(|(id, _)| ZONE_MATERIALS.contains(&id.as_str())),
+            "{} upgrades on fragments alone, so every tier past the first is reachable the moment the zone number allows it",
+            def.id.as_str()
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 6,
+        "expected the six upgradeable structures; one that lost its path would drop out of this scan unnoticed"
+    );
 }

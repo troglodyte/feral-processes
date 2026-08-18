@@ -592,7 +592,13 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .into_iter()
         .find(|r| r.result == ItemId::from(ids::FIREWALL_PLATING))
         .expect("researching it and building an Armory should unlock the recipe");
-    assert_eq!(recipe.cost, vec![(ItemId::from(ids::PORTAL_FRAGMENT), 6)]);
+    assert_eq!(
+        recipe.cost,
+        vec![
+            (ItemId::from(ids::PORTAL_FRAGMENT), 6),
+            (ItemId::from("cache_grain"), 2),
+        ]
+    );
 
     // Exactly the recipe's cost (6), not a padded amount: any excess
     // pushes cargo over the inventory cap and the compile is refused.
@@ -600,6 +606,7 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 6);
+    give(&mut game, &ItemId::from("cache_grain"), 2);
     game.craft(&ItemId::from(ids::FIREWALL_PLATING), 1).unwrap();
     assert_eq!(
         game.world
@@ -984,6 +991,8 @@ fn upgrading_a_node_costs_materials_and_raises_its_tier() {
     );
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
+    stock_upgrade_materials(&mut game, 20);
+
     game.upgrade_structure(node).unwrap();
 
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
@@ -1005,6 +1014,7 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
 
     assert_eq!(game.world.get::<ResourceNode>(node).unwrap().level, Some(1));
+    stock_upgrade_materials(&mut game, 20);
     game.upgrade_structure(node).unwrap();
     assert_eq!(
         game.world.get::<ResourceNode>(node).unwrap().level,
@@ -1041,6 +1051,7 @@ fn upgrading_refuses_past_max_tier_and_without_materials() {
         .unwrap()
         .max_tier;
     for _ in 1..max {
+        stock_upgrade_materials(&mut game, 20);
         game.upgrade_structure(node).unwrap();
     }
     let err = game
@@ -1082,6 +1093,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
 
     set_zone(&mut game, 2);
+    stock_upgrade_materials(&mut game, 20);
     game.upgrade_structure(node).unwrap();
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
 
@@ -1111,6 +1123,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
         .unwrap()
         .max_tier;
     for _ in 1..max {
+        stock_upgrade_materials(&mut game, 20);
         game.upgrade_structure(node).unwrap();
     }
     let err = game
@@ -1157,6 +1170,7 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
     set_zone(&mut game, 3);
+    stock_upgrade_materials(&mut game, 20);
     game.upgrade_structure(node).unwrap();
     game.upgrade_structure(node).unwrap();
 
@@ -2642,8 +2656,8 @@ fn a_structure_that_declares_no_limit_is_unlimited() {
         .collect();
     assert_eq!(
         capped,
-        vec!["heap_pillar".to_string()],
-        "only the Pillar is capped; the field defaults to no limit"
+        vec!["heap_pillar".to_string(), "line_driver".to_string()],
+        "only the two grid suppliers are capped; the field defaults to no limit"
     );
 }
 
@@ -2937,5 +2951,105 @@ fn a_shipped_heap_block_claims_ground() {
             .biome,
         Biome::Platform,
         "and the tile it was aimed at is base floor now"
+    );
+}
+
+/// The zone-2 material is gated twice, and both gates already existed: the
+/// research entry's `min_zone` and the research itself. Asserted through the
+/// shipped assets rather than a fixture, because the whole feature is
+/// `.ron` — an entry that lost its `min_zone` would still place a Cache Tap
+/// in zone 1 and nothing else in the suite would notice.
+#[test]
+fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
+    let mut game = Game::new(801, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
+    grant_research_data(&mut game, 1000);
+
+    let unresearched = game
+        .place_structure("cache_tap", 1, 0)
+        .expect_err("the Tap waits on Cache Coherence");
+    assert!(unresearched.contains("researched"), "{unresearched}");
+
+    // Prereqs are checked ahead of the zone gate, so the Grid has to be in
+    // hand for the refusal under test to be the zone rather than the tree.
+    game.unlock_research("power_grid")
+        .expect("the Grid is a zone-1 node");
+    let too_early = game
+        .unlock_research("cache_coherence")
+        .expect_err("and Cache Coherence waits on the breach");
+    assert!(too_early.contains("Zone 2"), "{too_early}");
+
+    set_zone(&mut game, 2);
+    game.unlock_research("cache_coherence")
+        .expect("a breached run may learn it");
+    game.place_structure("cache_tap", 1, 0)
+        .expect("and then stand a Tap up");
+}
+
+/// The layering property, which is the whole of "a new material does not
+/// retire the old one": breaching past the zone that introduced Cache Grain
+/// leaves Core Fragments extractable exactly as before. A tier that replaced
+/// its predecessor would strand every recipe still denominated in fragments.
+#[test]
+fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
+    let mut game = Game::new(802, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 120);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
+    unlock_research_chain(&mut game, "cache_coherence");
+    set_zone(&mut game, 3);
+
+    game.place_structure("mining_node", 1, 0)
+        .expect("a Mining Node is still a thing you can build in zone 3");
+    game.place_structure("cache_tap", -1, 0)
+        .expect("and the Tap does not expire when the next zone arrives");
+
+    let defs = game.structure_defs();
+    let produced = |id: &str| {
+        defs.iter()
+            .find(|d| d.id.as_str() == id)
+            .and_then(|d| d.work.as_ref())
+            .map(|w| w.produces.clone())
+            .expect("both are producing structures")
+    };
+    assert_eq!(
+        produced("mining_node"),
+        ItemId::from(ids::CORE_FRAGMENT),
+        "the Mining Node's output is untouched by the tier above it"
+    );
+    assert_eq!(
+        produced("cache_tap"),
+        ItemId::from("cache_grain"),
+        "and the Tap is what the new material comes out of"
+    );
+}
+
+/// The advanced building half of the payoff: a Line Driver is denominated in
+/// the zone-2 material, so the grid stops growing at five Pillars until the
+/// run has a Tap running. Refused for the material alone, with the research
+/// already in hand and fragments to spare.
+#[test]
+fn a_line_driver_is_refused_without_the_zone_two_material() {
+    let mut game = Game::new(803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
+    unlock_research_chain(&mut game, "cache_coherence");
+
+    let broke = game
+        .place_structure("line_driver", 1, 0)
+        .expect_err("fragments alone do not buy one");
+    assert!(broke.contains("Cache Grain"), "{broke}");
+
+    let (_, before) = game.base_power();
+    give(&mut game, &ItemId::from("cache_grain"), 12);
+    game.place_structure("line_driver", 1, 0)
+        .expect("with the grain in hand it stands up");
+    let (_, after) = game.base_power();
+    assert!(
+        after > before,
+        "and it feeds the grid it was bought to feed: {before} -> {after}"
     );
 }

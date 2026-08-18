@@ -3030,3 +3030,56 @@ tending resumes. It is, however, an unstated consequence of putting
 `Unpowered` at the top of the precedence table: any future reader of
 `Errand::Tend` who assumes "clogged" and "backed up" are synonyms will be
 surprised that a dark, backed-up machine reads neither.
+
+### A zone's material is a content decision, and two censuses are what hold it
+
+`assets/items/cache_grain.ron` and the Cache Tap that produces it exist so a
+breach changes *what* a base can make rather than only how fast. Nothing in
+`ItemDef` records that Cache Grain is what the second zone pays you — it is a
+plain item with a floor price, and the tier it belongs to is a fact about the
+content set, not about the type.
+
+That makes it exactly the kind of decision that gets reverted one `.ron` file
+at a time. An upgrade cost trimmed back to fragments, a zone-gated blueprint
+whose recipe drops its material — each reads as a small balance tweak in
+isolation, and there is no compiler and no formula that notices when the last
+one goes. So the rule is written as two censuses in
+`crates/engine/src/tests/assets.rs`, over `ZONE_MATERIALS`:
+`every_zone_gated_gear_recipe_asks_for_a_zone_material` and
+`every_upgrade_path_asks_for_a_zone_material`.
+
+**Why the upgrade half costs nothing in zone 1.** `Game::upgrade_ceiling` is
+`min(def.max_tier, zone)`, and a structure deploys at tier 1 — so at zone 1
+the ceiling *is* 1 and every upgrade is already refused before any material
+is counted. Naming a zone-2 material in an upgrade cost therefore cannot
+strand an unbreached run; it can only spend a material that exists by the
+time the tier does. That coincidence is what made the upgrade ladder the
+right place to put the second payoff, and it is worth re-deriving before
+anyone "fixes" the ladder by making tier 2 reachable in zone 1.
+
+**Why the gear half rides the research file rather than the item file.** Six
+research nodes carry both `min_zone` and `unlocks_recipes`, so the gate and
+the recipe are already one file and one edit. Putting the material on
+`ItemDef::craftable` instead would have split them across two files that can
+disagree, and would have hit the scavenged tier —
+`scavenged_gear_stays_benchless_and_fragment_only` exists to keep a raided-
+flat run able to re-equip, and a zone material in one of those recipes is
+precisely what it refuses.
+
+**Cache Grain survives a breach and Core Fragments do not.** `enter_next_zone`
+wipes exactly `currency()` and `craft_currency()`; everything else in the
+inventory travels. Cache Grain declares no `role`, so it crosses — which is
+deliberate, since the alternative is a run that breaches into zone 3 holding
+nothing the zone-2 ladder wants and cannot upgrade until it has re-tapped.
+The layering property has its own test,
+`core_fragments_keep_flowing_once_the_second_zone_material_arrives`: a new
+tier must not retire the one below it, or every recipe still denominated in
+fragments is stranded.
+
+**Fixtures go through `stock_upgrade_materials`.** Seven existing tests went
+red at once when the first material landed, none of them about upgrades
+costing a new thing. The helper derives what to stock from the shipped
+`UpgradeDef`s, so a second material tier joins every fixture the moment its
+`.ron` file exists. It deliberately leaves the currencies alone: several
+callers assert on an exact fragment delta across the upgrade, and topping
+those up would quietly rewrite what they measure.

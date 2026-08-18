@@ -9,6 +9,6 @@
     capacity: 20,
     assembles: Some((item: "ice_breaker", ticks_per_unit: 8)),
     extracts_routines: true,
-    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12)])),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
     power_draw: 3,
 )

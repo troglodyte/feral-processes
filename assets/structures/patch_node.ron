@@ -7,5 +7,5 @@
     build_cost: [("core_fragment", 18), ("power_cell", 4)],
     work: None,
     repair: Some((per_tier: 1)),
-    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12)])),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
 )

@@ -352,7 +352,10 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
 
     assert_eq!(
         game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE)),
-        vec![(ItemId::from(ids::PORTAL_FRAGMENT), 6)]
+        vec![
+            (ItemId::from(ids::PORTAL_FRAGMENT), 6),
+            (ItemId::from("cache_grain"), 2),
+        ]
     );
 }
 

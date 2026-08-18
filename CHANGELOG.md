@@ -27,6 +27,57 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.3
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+`CreatureSave::boss` is additive behind `#[serde(default)]`, which under
+field-named RON costs no bump: a file written before rolled bosses existed
+loads with every creature un-bossed, which is what it was. A patch rather
+than a minor for that reason — under the policy above, "breaking" while the
+project is `0.x` means a save that stops loading, and this has none.
+
+### Which species a zone or a depth may field
+
+A species' danger band is now derived from its `growth_multiplier`, and each
+band is eligible only inside a window of danger steps — the zone number on
+the surface, the frame depth underground, the same scalar the group-size
+curves already take. So a fresh run meets the gentle end of the ladder and
+nothing else, the middle band takes over a few zones in, and the hardest band
+arrives last and never leaves. It used to be possible for a level-1 player to
+walk seven tiles off their landing site and meet the toughest program in the
+game.
+
+No asset changed. The band is derived rather than authored, for the reason a
+species' class is: a rung is a fact about numbers the species already
+carries, and a second authored field is a second thing that can disagree with
+the first. A modded multiplier between rungs snaps to the nearest and is
+never refused.
+
+Where a biome has a hole in its ladder, the pool falls back to the nearest
+band that biome does hold, so no biome is ever empty. That fires against the
+real roster at both ends — Static Field ships no easiest-band species and
+Open Grid no hardest-band one — and the honest fix for either is a species
+file, not a wider window.
+
+### Any species can spawn as a boss
+
+`is_boss` in `assets/species/*.ron` now marks an *apex* species: always a
+boss, never scaled by the engine, and eligible only deep into a run. Boss-hood
+itself became a per-individual roll available to every species — outside the
+opening ring a spawn can come up a boss, and where no apex species is
+eligible yet it is an ordinary one scaled up instead. Bosses now arrive early
+and easy, late and hand-authored, rather than being two fixed programs you
+either had met or hadn't.
+
+Neither kind rolls a rare tier, since the boss multiplier is the whole of
+what one is worth and a tier on top would be a second, invisible one. The
+opening ring refuses a boss the same way it already refused a rare tier.
+
+A lair guardian is drawn from the same window at its own depth and is always
+a boss. That closes a standing trap: a guardian in a biome with no apex
+species used to come back not-a-boss and pay no Portal Fragments, leaving a
+stack unbreachable in everything but name.
+
 ## 0.11.2
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

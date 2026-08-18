@@ -22,6 +22,28 @@ const BUFF_NAME_W: usize = 20;
 /// the full list is always available on the map.
 const BATTLE_BUFF_ROW_CAP: usize = 4;
 
+/// Width of a holder tag on its own line, in monospace cells. The status
+/// column is 38 cells wide at the geometry `ui_metrics` is calibrated for
+/// and the tag is drawn four in, so this is the room that is left. A
+/// companion's label is a species name, a rarity tier, a zone tag and
+/// possibly a player-chosen name, with no length bound of its own — see
+/// `Game::creature_label` — so it is clipped here rather than trusted.
+const BUFF_HOLDER_W: usize = 32;
+
+/// How a companion's holder tag rides its buff row, which is a property of
+/// the panel rather than of the buff: the battle box measures itself and
+/// grows to whatever it holds, so it can afford the tag inline, while the
+/// status column is a fixed slice of the window and cannot. The two panels
+/// pick their own; `buff_entries` stays the one statement of what a row
+/// says either way.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum TagStyle {
+    /// Appended to the row text, growing it. For a panel that can widen.
+    Inline,
+    /// A second, dimmed, indented row beneath. For a panel that cannot.
+    OwnLine,
+}
+
 /// One row per running buff, in the order the engine hands them back — see
 /// `Game::active_buffs`. Sorting is out of scope; this draws whatever it is
 /// given, in that order.
@@ -31,43 +53,69 @@ const BATTLE_BUFF_ROW_CAP: usize = 4;
 /// already understood to be theirs. Ticks remaining ride in the row's
 /// `suffix`, the same slot the history screen uses for a repeat count — an
 /// annotation set apart from the row's own text rather than folded into it.
-pub(super) fn buff_rows(buffs: &[ActiveBuffView]) -> Vec<Row> {
+pub(super) fn buff_entries(buffs: &[ActiveBuffView], style: TagStyle) -> Vec<Vec<Row>> {
     buffs
         .iter()
         .map(|b| {
-            let holder = b
-                .holder_label
-                .as_deref()
-                .map(|h| format!(" ({h})"))
-                .unwrap_or_default();
-            Row::Item {
-                text: format!("{} {}{holder}", cell(&b.name, BUFF_NAME_W), b.magnitude),
+            let inline = match (style, b.holder_label.as_deref()) {
+                (TagStyle::Inline, Some(h)) => format!(" ({h})"),
+                _ => String::new(),
+            };
+            let mut entry = vec![Row::Item {
+                text: format!("{} {}{inline}", cell(&b.name, BUFF_NAME_W), b.magnitude),
                 selected: false,
                 bold: false,
                 color: TEXT,
                 suffix: Some(b.remaining.clone()),
                 icon: None,
+            }];
+            if let (TagStyle::OwnLine, Some(h)) = (style, b.holder_label.as_deref()) {
+                // Four spaces, not two: `draw_row` gives a `Row::Item` a
+                // two-space prefix of its own and a text row none, so this
+                // lands two cells right of the name it belongs to rather
+                // than flush with it.
+                entry.push(Row::TextColored(
+                    format!("    {}", cell(h, BUFF_HOLDER_W)),
+                    TEXT_DIM,
+                ));
             }
+            entry
         })
         .collect()
 }
 
-/// Caps `rows` at `limit` total rows, trading the last slot for a "N more"
-/// indicator when the list doesn't fit. Shared by both panels — a fixed
-/// display cap for the battle box, however many lines are left in the
+/// Caps `entries` at `limit` drawn rows, trading the last row for a
+/// "N more" indicator when the list doesn't fit. Shared by both panels — a
+/// fixed display cap for the battle box, however many lines are left in the
 /// status column for the map panel — so a truncated list reads as one
-/// feature in either place rather than two different-looking cutoffs. A
-/// list that already fits within `limit` is returned untouched, indicator
-/// and all, so nothing here fires when there's nothing to hide.
-fn cap_rows(rows: Vec<Row>, limit: usize) -> Vec<Row> {
-    if rows.len() <= limit {
-        return rows;
+/// feature in either place rather than two different-looking cutoffs.
+///
+/// Counts in **entries and rows at once**, which is why it does not take a
+/// flat row list: under `TagStyle::OwnLine` a companion's buff is two rows,
+/// so a flat cap would both split a tag off the name it belongs to and
+/// report "+2 more" for one hidden routine. An entry is kept whole or not
+/// at all, and the indicator counts routines.
+fn cap_entries(entries: Vec<Vec<Row>>, limit: usize) -> Vec<Row> {
+    let total: usize = entries.iter().map(Vec::len).sum();
+    if total <= limit {
+        return entries.into_iter().flatten().collect();
     }
-    let keep = limit.saturating_sub(1);
-    let hidden = rows.len() - keep;
-    let mut capped: Vec<Row> = rows.into_iter().take(keep).collect();
-    capped.push(Row::TextColored(format!("+{hidden} more"), TEXT_DIM));
-    capped
+    // One row of the budget goes to the indicator itself, so what is left
+    // has to hold whole entries.
+    let room = limit.saturating_sub(1);
+    let count = entries.len();
+    let mut kept: Vec<Row> = Vec::new();
+    let mut shown = 0;
+    for entry in entries {
+        if kept.len() + entry.len() > room {
+            break;
+        }
+        kept.extend(entry);
+        shown += 1;
+    }
+    let hidden = count - shown;
+    kept.push(Row::TextColored(format!("+{hidden} more"), TEXT_DIM));
+    kept
 }
 
 /// `buff_rows` drawn as a plain vertical list from `(x, y)`, no box or
@@ -108,14 +156,14 @@ pub(super) fn draw_status_buffs(
     painter: &Painter,
     m: &Metrics,
 ) -> f32 {
-    let rows = buff_rows(buffs);
-    if rows.is_empty() || y + m.line_height * 2.0 > max_y {
+    let entries = buff_entries(buffs, TagStyle::OwnLine);
+    if entries.is_empty() || y + m.line_height * 2.0 > max_y {
         return y;
     }
     painter.ui("Routines:", x, y, m.font_size, TEXT);
     let heading_bottom = y + m.line_height;
     let slots = ((max_y - heading_bottom) / m.line_height).floor() as usize;
-    let cy = draw_buff_list(&cap_rows(rows, slots), x, heading_bottom, painter, m);
+    let cy = draw_buff_list(&cap_entries(entries, slots), x, heading_bottom, painter, m);
     cy + m.gap
 }
 
@@ -170,7 +218,7 @@ pub(super) fn draw_battle_buffs(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = cap_rows(buff_rows(buffs), BATTLE_BUFF_ROW_CAP);
+    let rows = cap_entries(buff_entries(buffs, TagStyle::Inline), BATTLE_BUFF_ROW_CAP);
     if rows.is_empty() {
         return;
     }
@@ -308,6 +356,12 @@ mod tests {
         }
     }
 
+    /// `buff_entries` flattened. Only the shape assertions want a buff list
+    /// as plain rows — both panels draw entries, because both cap them.
+    fn buff_rows(buffs: &[ActiveBuffView], style: TagStyle) -> Vec<Row> {
+        buff_entries(buffs, style).into_iter().flatten().collect()
+    }
+
     fn text_of(row: &Row) -> &str {
         match row {
             Row::Item { text, .. } => text,
@@ -334,7 +388,7 @@ mod tests {
             buff("Hardened Shell", "DEF+2", "5t", None),
             buff("Trace Analysis", "XP+15%", "3t", None),
         ];
-        let rows = buff_rows(&buffs);
+        let rows = buff_rows(&buffs, TagStyle::Inline);
         assert_eq!(rows.len(), 2, "one row per buff");
         assert!(text_of(&rows[0]).contains("Hardened Shell"));
         assert!(text_of(&rows[1]).contains("Trace Analysis"));
@@ -346,7 +400,7 @@ mod tests {
             buff("Hardened Shell", "DEF+2", "5t", None),
             buff("Data Cache", "HP+1/t", "5t", Some("Sparkgrub")),
         ];
-        let rows = buff_rows(&buffs);
+        let rows = buff_rows(&buffs, TagStyle::Inline);
         assert!(
             !text_of(&rows[0]).contains('('),
             "the player's own buff picked up a holder tag: {:?}",
@@ -359,12 +413,79 @@ mod tests {
         );
     }
 
+    /// The same two buffs under the status column's style: the tag is the
+    /// same fact, moved off a row that has no room for it. The player's own
+    /// buff is still exactly one row, so an untagged list is untouched by
+    /// the style that exists for tagged ones.
+    #[test]
+    fn own_line_style_moves_the_holder_tag_to_a_row_of_its_own() {
+        let entries = buff_entries(
+            &[
+                buff("Hardened Shell", "DEF+2", "5t", None),
+                buff("Data Cache", "HP+1/t", "5t", Some("Sparkgrub")),
+            ],
+            TagStyle::OwnLine,
+        );
+        assert_eq!(entries[0].len(), 1, "the player's own buff is one row");
+        assert!(
+            !text_of(&entries[0][0]).contains('('),
+            "and carries no tag: {:?}",
+            text_of(&entries[0][0])
+        );
+
+        assert_eq!(entries[1].len(), 2, "a companion's buff is two");
+        assert!(
+            !text_of(&entries[1][0]).contains("Sparkgrub"),
+            "the name row stays clear of the tag: {:?}",
+            text_of(&entries[1][0])
+        );
+        let Row::TextColored(tag, color) = &entries[1][1] else {
+            panic!("the holder line should be a dimmed text row");
+        };
+        assert!(tag.contains("Sparkgrub"), "{tag:?}");
+        assert!(
+            tag.starts_with("    "),
+            "the holder line is indented under its name: {tag:?}"
+        );
+        assert_eq!(*color, TEXT_DIM, "and reads as secondary to it");
+    }
+
+    /// A holder label has no length bound of its own — `creature_label`
+    /// glues a rarity tier, a species name and a zone tag together, and a
+    /// fused companion's name is player-chosen on top of that. Its own line
+    /// is still a line in a fixed column, so it clips like every other.
+    #[test]
+    fn a_long_holder_label_is_clipped_on_its_own_line() {
+        let entries = buff_entries(
+            &[buff(
+                "Data Cache",
+                "HP+1/t",
+                "5t",
+                Some("Bare-Metal Recursive Sentinel Of Very Many Words (Z3)"),
+            )],
+            TagStyle::OwnLine,
+        );
+        let Row::TextColored(tag, _) = &entries[0][1] else {
+            panic!("the holder line should be a dimmed text row");
+        };
+        assert!(
+            tag.contains('\u{2026}'),
+            "an overlong holder has to show it was clipped: {tag:?}"
+        );
+        assert_eq!(
+            tag.chars().count(),
+            BUFF_HOLDER_W + 4,
+            "clipped to its column plus the indent: {tag:?}"
+        );
+    }
+
     /// The panel hides entirely when nothing is running — not an empty box,
     /// not a "None" placeholder — so an empty list has to mean zero rows,
     /// not one saying so.
     #[test]
     fn no_active_buffs_produces_no_rows() {
-        assert!(buff_rows(&[]).is_empty());
+        assert!(buff_rows(&[], TagStyle::Inline).is_empty());
+        assert!(buff_rows(&[], TagStyle::OwnLine).is_empty());
     }
 
     /// The magnitude sits at the same fixed column whether the name ahead
@@ -373,15 +494,18 @@ mod tests {
     /// many characters it overran by.
     #[test]
     fn a_long_buff_name_does_not_push_the_magnitude_out_of_the_panel() {
-        let rows = buff_rows(&[
-            buff("Shell", "DEF+2", "5t", None),
-            buff(
-                "A Very Long Field Routine Name That Overruns The Column",
-                "DEF+2",
-                "5t",
-                None,
-            ),
-        ]);
+        let rows = buff_rows(
+            &[
+                buff("Shell", "DEF+2", "5t", None),
+                buff(
+                    "A Very Long Field Routine Name That Overruns The Column",
+                    "DEF+2",
+                    "5t",
+                    None,
+                ),
+            ],
+            TagStyle::Inline,
+        );
         let magnitude_col = BUFF_NAME_W + 1;
         assert!(at(text_of(&rows[0]), magnitude_col).starts_with("DEF+2"));
         assert!(
@@ -397,7 +521,7 @@ mod tests {
 
     #[test]
     fn remaining_ticks_ride_in_the_rows_suffix() {
-        let rows = buff_rows(&[buff("Shell", "DEF+2", "7t", None)]);
+        let rows = buff_rows(&[buff("Shell", "DEF+2", "7t", None)], TagStyle::Inline);
         assert_eq!(suffix_of(&rows[0]), Some("7t"));
     }
 
@@ -408,10 +532,10 @@ mod tests {
     /// on eight shipped routines, which is exactly the kind of change that
     /// pays for itself off-screen.
     ///
-    /// Bounds the **player's own** rows only. A companion-borne row carries a
-    /// trailing holder tag and already overran this column by ~200px before
-    /// any of this — measured, not assumed — so asserting on one here would
-    /// be pinning a bug rather than a guarantee. `TODO.md` records it.
+    /// Bounds the **player's own** rows. The companion-borne case is the
+    /// test below: a trailing holder tag used to overrun this column by
+    /// 360px, which is why it now draws on a line of its own rather than on
+    /// this one.
     #[test]
     fn the_widest_until_rest_buff_row_fits_the_status_column() {
         use feral_processes_engine::abilities::{AbilityDb, AbilityEffect};
@@ -438,10 +562,9 @@ mod tests {
                         &d.name,
                         &kind.magnitude_label(power, interval),
                         &lifetime,
-                        // No holder tag: a companion-borne row already
-                        // overflows this column by ~200px with any suffix at
-                        // all, which is a pre-existing bug of its own (see
-                        // `TODO.md`) rather than something this tag caused.
+                        // No holder tag: the tagged case is its own test,
+                        // and under `TagStyle::OwnLine` the tag is not on
+                        // this row to measure anyway.
                         None,
                     ))
                 }
@@ -456,7 +579,7 @@ mod tests {
             // `PANE_W`, and `draw_status_buffs` is called one inset in — the
             // same 1440x900 geometry `ui_metrics` is calibrated for.
             let room = 1440.0 * (1.0 - super::super::base::PANE_W) - m.inset * 2.0;
-            for row in buff_rows(&rows) {
+            for row in buff_rows(&rows, TagStyle::OwnLine) {
                 let Row::Item { text, suffix, .. } = &row else {
                     continue;
                 };
@@ -472,6 +595,121 @@ mod tests {
                 );
             }
         });
+    }
+
+    /// The companion-borne half the test above deliberately stops short of:
+    /// the same widest shipped row, with a holder tag on it. `buff_rows` is
+    /// the one place a row's text is built and it bounds only the *name*, so
+    /// the tag is unbounded — and the status column, unlike the battle box,
+    /// cannot grow to meet it.
+    #[test]
+    fn the_widest_companion_borne_buff_row_fits_the_status_column() {
+        use feral_processes_engine::abilities::{AbilityDb, AbilityEffect};
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = AbilityDb::load_dir(&dir).expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        // A real `creature_label`: rarity tier, species name and zone tag,
+        // which is what a companion carrying a routine actually reports.
+        let holder = "Bare-Metal Recursive Sentinel (Z3)";
+        let rows: Vec<ActiveBuffView> = db
+            .all()
+            .filter_map(|d| match d.effect {
+                AbilityEffect::FieldBuff {
+                    kind,
+                    power,
+                    duration,
+                    interval,
+                } => {
+                    let lifetime = if kind.runs_until_rest() {
+                        "rest".to_string()
+                    } else {
+                        format!("{duration}t")
+                    };
+                    Some(buff(
+                        &d.name,
+                        &kind.magnitude_label(power, interval),
+                        &lifetime,
+                        Some(holder),
+                    ))
+                }
+                _ => None,
+            })
+            .collect();
+        assert!(!rows.is_empty(), "the shipped set has field buffs to draw");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * (1.0 - super::super::base::PANE_W) - m.inset * 2.0;
+            for row in buff_rows(&rows, TagStyle::OwnLine) {
+                // Both kinds, and measured the way `buff_panel_width`
+                // measures each: a holder line that overran would be just
+                // as far off the panel as the name row this moved it off,
+                // and skipping text rows here is what would make this pass
+                // against no fix at all.
+                let (drawn, what) = match &row {
+                    Row::Item { text, suffix, .. } => {
+                        let mut w = p.measure_ui_advance(format!("  {text}"), m.font_size);
+                        if let Some(suffix) = suffix {
+                            w += m.inset + p.measure_ui_advance(suffix, m.font_size);
+                        }
+                        (w, text.clone())
+                    }
+                    Row::Text(t) | Row::TextColored(t, _) => {
+                        (p.measure_ui(t, m.font_size).width, t.clone())
+                    }
+                };
+                assert!(
+                    drawn <= room,
+                    "a companion-borne buff row overflows the status column by \
+                     {:.0}px ({drawn:.0} drawn into {room:.0} of room):\n{what}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// Capping counts entries and rows at once. A flat row cap would do two
+    /// wrong things at the boundary: strand a holder line's name outside the
+    /// list, and count hidden *lines* where the reader is counting routines.
+    #[test]
+    fn a_cap_landing_mid_entry_keeps_the_entry_whole_and_counts_routines() {
+        let buffs: Vec<ActiveBuffView> = (0..4)
+            .map(|i| buff("Data Cache", "HP+1/t", "5t", Some(&format!("Program {i}"))))
+            .collect();
+        let entries = buff_entries(&buffs, TagStyle::OwnLine);
+        assert_eq!(entries.iter().map(Vec::len).sum::<usize>(), 8);
+
+        // Five rows of room: the indicator takes one, leaving four — which
+        // is two whole entries, not two and a half.
+        let rows = cap_entries(entries, 5);
+        assert_eq!(rows.len(), 5, "the cap is a row count, indicator included");
+        assert_eq!(
+            indicator_of(rows.last().unwrap()),
+            Some("+2 more"),
+            "two routines are hidden, not the four rows they occupy"
+        );
+        assert!(
+            matches!(&rows[3], Row::TextColored(t, _) if t.contains("Program 1")),
+            "the last kept entry keeps its holder line"
+        );
+    }
+
+    /// The odd-room corner of the same rule: room for one entry and a half
+    /// spends the spare row on nothing rather than on half a routine.
+    #[test]
+    fn odd_room_under_own_line_style_never_splits_a_holder_off_its_name() {
+        let buffs: Vec<ActiveBuffView> = (0..3)
+            .map(|i| buff("Data Cache", "HP+1/t", "5t", Some(&format!("Program {i}"))))
+            .collect();
+        let rows = cap_entries(buff_entries(&buffs, TagStyle::OwnLine), 4);
+        assert_eq!(
+            rows.len(),
+            3,
+            "one whole entry plus the indicator, with the odd row left unspent"
+        );
+        assert_eq!(indicator_of(rows.last().unwrap()), Some("+2 more"));
     }
 
     fn indicator_of(row: &Row) -> Option<&str> {
@@ -492,7 +730,7 @@ mod tests {
     #[test]
     fn a_list_longer_than_the_battle_cap_emits_exactly_the_cap_including_the_indicator() {
         let buffs = named_buffs(&["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"]);
-        let rows = cap_rows(buff_rows(&buffs), BATTLE_BUFF_ROW_CAP);
+        let rows = cap_entries(buff_entries(&buffs, TagStyle::Inline), BATTLE_BUFF_ROW_CAP);
         assert_eq!(
             rows.len(),
             BATTLE_BUFF_ROW_CAP,
@@ -518,14 +756,17 @@ mod tests {
     #[test]
     fn a_list_at_or_under_the_battle_cap_emits_no_indicator() {
         let at_cap = named_buffs(&["Alpha", "Bravo", "Charlie", "Delta"]);
-        let rows = cap_rows(buff_rows(&at_cap), BATTLE_BUFF_ROW_CAP);
+        let rows = cap_entries(buff_entries(&at_cap, TagStyle::Inline), BATTLE_BUFF_ROW_CAP);
         assert_eq!(rows.len(), 4);
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
         assert!(text_of(&rows[0]).contains("Alpha"));
         assert!(text_of(&rows[3]).contains("Delta"));
 
         let under_cap = named_buffs(&["Alpha", "Bravo"]);
-        let rows = cap_rows(buff_rows(&under_cap), BATTLE_BUFF_ROW_CAP);
+        let rows = cap_entries(
+            buff_entries(&under_cap, TagStyle::Inline),
+            BATTLE_BUFF_ROW_CAP,
+        );
         assert_eq!(rows.len(), 2);
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
     }
@@ -540,7 +781,7 @@ mod tests {
     {
         let buffs = named_buffs(&["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
         let slots = 3;
-        let rows = cap_rows(buff_rows(&buffs), slots);
+        let rows = cap_entries(buff_entries(&buffs, TagStyle::Inline), slots);
         assert_eq!(rows.len(), slots);
         assert!(text_of(&rows[0]).contains("Alpha"));
         assert!(text_of(&rows[1]).contains("Bravo"));
@@ -554,11 +795,11 @@ mod tests {
     #[test]
     fn a_list_that_fits_the_available_map_slots_emits_no_indicator() {
         let buffs = named_buffs(&["Alpha", "Bravo", "Charlie"]);
-        let rows = cap_rows(buff_rows(&buffs), 3);
+        let rows = cap_entries(buff_entries(&buffs, TagStyle::Inline), 3);
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
 
-        let rows = cap_rows(buff_rows(&buffs), 10);
+        let rows = cap_entries(buff_entries(&buffs, TagStyle::Inline), 10);
         assert_eq!(rows.len(), 3);
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
     }

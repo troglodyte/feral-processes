@@ -3083,3 +3083,47 @@ costing a new thing. The helper derives what to stock from the shipped
 `.ron` file exists. It deliberately leaves the currencies alone: several
 callers assert on an exact fragment delta across the upgrade, and topping
 those up would quietly rewrite what they measure.
+
+### The status column cannot grow, so a buff row's holder tag gets its own line
+
+Two panels draw the same buff list and only one of them can widen. The battle
+box calls `buff_panel_width`, measures its content and sizes itself to fit —
+so an inline `(holder)` tag costs it nothing but pixels it can take. The map's
+status column is a fixed slice of the window (`1 - base::PANE_W`, one inset
+either side) and `draw_row` clips rows **vertically only**, so a row too wide
+for it runs off the panel in silence.
+
+Measured at the 1440x900 geometry `ui_metrics` is calibrated for: the column
+holds **38.5 monospace cells**, the widest shipped routine row plus its
+`rest` suffix already spends 376 of its 417 pixels, and a companion-borne row
+drew **777px — 360px off the panel**. That is why no amount of clipping the
+tag was going to fix this: there were **3.8 characters** of room left before
+the tag started, and `" (X)"` is four.
+
+So `TagStyle` is a parameter on `buff_entries` rather than a fact about a
+buff. `Inline` keeps the tag in the row text for the panel that can widen;
+`OwnLine` gives it a dimmed, indented row of its own for the panel that
+cannot. One statement of what a row says, two layouts, chosen by the caller
+that knows its own constraint. The alternative considered was making both
+panels use the second line, which is simpler — and silently halves
+`BATTLE_BUFF_ROW_CAP` from four companion buffs to two, in a panel with no
+overflow problem to solve.
+
+**The indent is four spaces, not two.** `draw_row` gives a `Row::Item` a
+two-space prefix of its own and a text row none, so four is what lands the
+tag two cells right of the name it belongs to.
+
+**`cap_entries` counts entries and rows at once**, which is why it takes
+`Vec<Vec<Row>>` rather than a flat list. Under `OwnLine` a companion's buff
+is two rows, so a flat cap would strand a holder line's name outside the list
+*and* report "+2 more" for one hidden routine. An entry is kept whole or not
+at all, and odd room is left unspent rather than spent on half a routine.
+
+**The trap to watch in the test.** A width test that iterates rows and
+`continue`s on anything that is not a `Row::Item` measures nothing under
+`OwnLine` — the tag is no longer on an item row — and passes against no fix
+at all. `the_widest_companion_borne_buff_row_fits_the_status_column` measures
+both kinds, each the way `buff_panel_width` measures it: advance for an item
+row (its two-space prefix has no ink), ink for a text row. Mutating the style
+back to `Inline` reproduces the original 360px overflow, which is what says
+the test is holding something.

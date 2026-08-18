@@ -371,10 +371,19 @@ impl Game {
     ///
     /// **Every refusal lands before anything is spent and before anything is
     /// spawned**, which is the whole of this function's ordering and the one
-    /// thing worth reading it for. `attempt_decompile` is the model, and the
-    /// refusal strings are deliberately its own — this is the second way
-    /// into the roster and it should not invent a second vocabulary for
-    /// being full.
+    /// thing worth reading it for. `attempt_decompile` is the model for that
+    /// ordering.
+    ///
+    /// It is **not** the model for the refusal strings, and that is a
+    /// reversal worth reading before "restoring" one vocabulary. Its
+    /// `no taming catalyst` / `roster is full` are `ability_unavailable`
+    /// reasons, built to sit *after* a greyed-out battle row
+    /// ("Decompile — no taming catalyst"). These land alone on
+    /// `App::status_line` for four seconds, where a lowercase fragment reads
+    /// as no response at all — which is how a player reported the `o` key as
+    /// doing nothing. The concept is shared; the rendering is not, and the
+    /// split already existed: `Game::purchase_stack_program` refuses a full
+    /// roster with this exact sentence.
     ///
     /// Deliberately **not** done, each for a reason a later reader should
     /// not undo:
@@ -403,10 +412,10 @@ impl Game {
             return Err("There's nothing like that here.".into());
         }
         let Some((catalyst, _)) = self.taming_catalyst() else {
-            return Err("no taming catalyst".into());
+            return Err("You need an ICE Breaker to adopt a process.".into());
         };
         if self.pet_count() >= self.pet_capacity() {
-            return Err("roster is full".into());
+            return Err("Your roster is full.".into());
         }
         let species = self
             .orphan_species(pos)

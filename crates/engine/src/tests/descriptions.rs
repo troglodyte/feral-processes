@@ -507,16 +507,26 @@ fn every_shipped_underfoot_line_fits_the_standing_on_row() {
     let (db, _) = DescriptionDb::load_dir(&dir).unwrap();
     for (subject, conditions) in SHIPPED {
         for condition in std::iter::once(None).chain(conditions.iter().map(|c| Some(*c))) {
-            let suffix = crate::game::stack_view::underfoot_suffix(subject, condition)
-                .chars()
-                .count();
+            // Both forms of the prompt, because a cell with a price draws
+            // the longer one whenever the party cannot pay — and that is
+            // the form with no headroom left. Sizing only the offer would
+            // leave the blocked row unmeasured against the budget.
+            let suffix = [
+                crate::game::stack_view::underfoot_suffix(subject, condition),
+                crate::game::stack_view::underfoot_suffix_blocked(subject, condition),
+            ]
+            .iter()
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap();
             for seed in 0..64u64 {
                 let Some(line) = db.underfoot(subject, condition, seed) else {
                     continue;
                 };
                 assert!(
                     line.chars().count() + suffix <= crate::MAX_UNDERFOOT_LINE,
-                    "{subject} {condition:?} underfoot is {} chars: {line:?}",
+                    "{subject} {condition:?} underfoot is {} chars, and the longest prompt \
+                     it can draw is {suffix}: {line:?}",
                     line.chars().count()
                 );
                 assert!(

@@ -116,22 +116,91 @@ fn visible_rows(level: &Frame, x: i32, y: i32, facing: Dir) -> Vec<Vec<(i32, i32
 /// reads it to size the per-subject budget it holds the shipped bank to. A
 /// subject/condition pair absent from this table appends nothing, which is
 /// every arm that reports rather than offers.
-const UNDERFOOT_SUFFIXES: &[(&str, Option<&str>, &str)] = &[
-    ("stack.link_down", None, "  [>] descend"),
-    ("stack.link_up", Some("surface"), "  [<] surface"),
-    ("stack.link_up", None, "  [<] climb"),
-    ("stack.orphan", None, "  [o] adopt"),
-    ("stack.market", None, "  [t] trade"),
-    ("stack.corruption", None, "  — moving on costs"),
+///
+/// A named struct rather than the tuple this shipped as: `condition` and
+/// `blocked` are both `Option<&str>`, and a positional destructure could
+/// swap them silently.
+struct UnderfootPrompt {
+    subject: &'static str,
+    condition: Option<&'static str>,
+    /// What the row appends when the party can act on the cell.
+    offer: &'static str,
+    /// What it appends instead when they cannot pay for what the cell
+    /// offers. `None` on every row whose cell asks for nothing, which is
+    /// all of them but the orphan.
+    ///
+    /// **Affordability lives here rather than on `condition` for a
+    /// reason.** That axis is the *place* — it is what `Game::subject_of`
+    /// resolves a cell to, and the same pair keys the description bank. A
+    /// cell's prose is derived from the place alone; routing "your pack is
+    /// empty" through it would change what a corridor says about itself
+    /// when you drop an item.
+    blocked: Option<&'static str>,
+}
+
+const UNDERFOOT_SUFFIXES: &[UnderfootPrompt] = &[
+    UnderfootPrompt {
+        subject: "stack.link_down",
+        condition: None,
+        offer: "  [>] descend",
+        blocked: None,
+    },
+    UnderfootPrompt {
+        subject: "stack.link_up",
+        condition: Some("surface"),
+        offer: "  [<] surface",
+        blocked: None,
+    },
+    UnderfootPrompt {
+        subject: "stack.link_up",
+        condition: None,
+        offer: "  [<] climb",
+        blocked: None,
+    },
+    UnderfootPrompt {
+        subject: "stack.orphan",
+        condition: None,
+        offer: "  [o] adopt",
+        // Names the item rather than dropping the prompt: a player who has
+        // never held an `ice_breaker` would otherwise never learn the cell
+        // is adoptable. The em-dash matches corruption's note below, and
+        // this is the longest form `MAX_UNDERFOOT_LINE` leaves room for
+        // beside the shipped clause.
+        blocked: Some("  [o] adopt — no ICE Breaker"),
+    },
+    UnderfootPrompt {
+        subject: "stack.market",
+        condition: None,
+        offer: "  [t] trade",
+        blocked: None,
+    },
+    UnderfootPrompt {
+        subject: "stack.corruption",
+        condition: None,
+        offer: "  — moving on costs",
+        blocked: None,
+    },
 ];
+
+fn underfoot_prompt(subject: &str, condition: Option<&str>) -> Option<&'static UnderfootPrompt> {
+    UNDERFOOT_SUFFIXES
+        .iter()
+        .find(|p| p.subject == subject && p.condition == condition)
+}
 
 /// Looks up `UNDERFOOT_SUFFIXES`, or `""` for a subject/condition pair that
 /// appends nothing.
 pub(crate) fn underfoot_suffix(subject: &str, condition: Option<&str>) -> &'static str {
-    UNDERFOOT_SUFFIXES
-        .iter()
-        .find(|&&(s, c, _)| s == subject && c == condition)
-        .map_or("", |&(_, _, suffix)| suffix)
+    underfoot_prompt(subject, condition).map_or("", |p| p.offer)
+}
+
+/// The same row's prompt for a party that cannot pay what the cell asks,
+/// falling back to the offer where the cell asks for nothing — see
+/// `UnderfootPrompt::blocked`. Defined for every row so the census in
+/// `tests::descriptions` can size both forms against `MAX_UNDERFOOT_LINE`
+/// without knowing which rows have a price.
+pub(crate) fn underfoot_suffix_blocked(subject: &str, condition: Option<&str>) -> &'static str {
+    underfoot_prompt(subject, condition).map_or("", |p| p.blocked.unwrap_or(p.offer))
 }
 
 /// Which way the examine key is looking, in **view space**.
@@ -588,10 +657,19 @@ impl Game {
             // else underfoot has already happened by the time this is read;
             // an orphan costs a catalyst, so it waits for the key — and
             // stops offering once it has been taken.
+            //
+            // The only prompt on this screen with a price, so the only one
+            // that has to ask whether the party can pay it. `adopt_orphan`
+            // is what actually refuses; this stops the row promising an
+            // adoption the key will then decline.
             CellKind::Orphan if self.orphan_present(pos, (x, y)) => Some(format!(
                 "{}{}",
                 described("An orphaned process"),
-                underfoot_suffix("stack.orphan", None)
+                if self.taming_catalyst().is_some() {
+                    underfoot_suffix("stack.orphan", None)
+                } else {
+                    underfoot_suffix_blocked("stack.orphan", None)
+                }
             )),
             CellKind::Orphan => None,
             // The second arm that offers rather than reports, and the only

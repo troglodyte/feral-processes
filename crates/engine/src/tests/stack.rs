@@ -4112,6 +4112,40 @@ fn ready_to_adopt(game: &mut Game) -> Option<(i32, i32)> {
     Some(cell)
 }
 
+/// The underfoot row is the only place the adopt key is named, so it has to
+/// stop promising an action the party cannot pay for — and say which item is
+/// missing rather than silently dropping the offer, or a player who has never
+/// held an `ice_breaker` never learns the cell is adoptable at all.
+///
+/// Affordability is a property of the *pack*, so it deliberately does not
+/// travel on `Game::subject_of`'s condition axis: that pair also keys the
+/// description bank, and a cell's prose must stay derived from the place.
+/// The blocked form is a second column on `UNDERFOOT_SUFFIXES` instead.
+#[test]
+fn an_orphan_you_cannot_pay_for_says_so_underfoot() {
+    let mut game = game();
+    descend(&mut game);
+    ready_to_adopt(&mut game).expect("this seed's depth 1 leaves an orphan");
+
+    let offered = game.stack_view().unwrap().standing_on.unwrap();
+    assert!(
+        offered.ends_with("  [o] adopt"),
+        "holding a catalyst, the row should offer the key plainly: {offered:?}"
+    );
+
+    set_inventory(&mut game, &[]);
+    let blocked = game.stack_view().unwrap().standing_on.unwrap();
+    assert!(
+        blocked.ends_with("  [o] adopt \u{2014} no ICE Breaker"),
+        "with an empty pack the row still promised a free adoption: {blocked:?}"
+    );
+    assert!(
+        blocked.chars().count() <= crate::MAX_UNDERFOOT_LINE,
+        "the blocked row runs off the pane: {} chars",
+        blocked.chars().count()
+    );
+}
+
 fn ice_breakers(game: &Game) -> u32 {
     game.world
         .get::<Inventory>(game.player_entity())
@@ -4178,7 +4212,10 @@ fn adopting_without_a_catalyst_is_refused_before_anything_is_spawned() {
     let before = game.pet_count();
 
     let err = game.adopt_orphan().unwrap_err();
-    assert!(err.contains("no taming catalyst"), "{err}");
+    assert_eq!(
+        err, "You need an ICE Breaker to adopt a process.",
+        "the refusal lands alone on the status line and has to read as a sentence"
+    );
     assert_eq!(game.pet_count(), before, "a refused adoption still spawned");
 }
 
@@ -4196,7 +4233,10 @@ fn adopting_with_a_full_roster_is_refused_before_the_catalyst_is_spent() {
     let before = game.pet_count();
 
     let err = game.adopt_orphan().unwrap_err();
-    assert!(err.contains("roster is full"), "{err}");
+    assert_eq!(
+        err, "Your roster is full.",
+        "the same sentence `stack_market` already refuses a purchase with"
+    );
     assert_eq!(
         ice_breakers(&game),
         1,

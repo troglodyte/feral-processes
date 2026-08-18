@@ -13,6 +13,12 @@
 // To read this, run it against a scenario with the same three slots filled
 // by plain gear of the same tier — the numbers here mean nothing on their
 // own, only beside that. Arena figures compare within one build only.
+//
+// Four rootkits and not three, since 2026-08-18. Three measured 100% wins at
+// 97% Integrity remaining, which is a fight where a defensive passive has
+// nothing to show because nobody was ever in danger; four is the on-curve
+// band of `docs/measurements/2026-08-18-gear-passive-worth.md` — 70% wins on
+// plain gear — and it is where every item on the branch reads clearest.
 (
     player: Fresh(level: 12, zone: 3),
     equip: [
@@ -23,7 +29,7 @@
     party: [
         (species: "scrapper", level: 12, equip: [(item: "parity_weave")]),
     ],
-    opponents: [(species: "rootkit", count: 3)],
+    opponents: [(species: "rootkit", count: 4)],
     reps: 30,
     seed: 7,
 )

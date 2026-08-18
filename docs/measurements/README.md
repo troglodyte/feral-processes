@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-18 — What the eight granting items are worth](2026-08-18-gear-passive-worth.md)
+  — the gear-passive branch measured before merge. Seven of eight items earn
+  their slot on curve and `watchdog_tap` rescued one fight in a hundred;
+  `AllyWounded` fires in 5% of easy runs, 25% of on-curve wins and 100% of
+  losses, so `WOUNDED_INTEGRITY_FRACTION` stays at 0.33; `RoundStart` uptime
+  is flat at ~1-in-4.3 and does not front-load. Carries the two findings
+  nobody asked for: a bare `def: 2` module beats every grant at level 12 and
+  is worth *exactly nothing* at 36, and `deadman_relay` is identical to the
+  etched disk rep for rep over 100 fights.
+
 - [2026-08-18 — The wild population is a halo around the player](2026-08-18-wild-population-halo.md)
   — 15 in the box at the base, 10/6/3/1 at 25/50/75/100 tiles out, and
   zero to two per box along 300 tiles of walked ground against a target of

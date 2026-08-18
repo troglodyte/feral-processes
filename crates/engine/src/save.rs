@@ -895,6 +895,10 @@ mod tests {
             facing: crate::stack::Dir::West,
             entrance: (4, -7),
         };
+        // A `BTreeSet` of tuples, which is the same place a text encoding
+        // tends to give up.
+        data.populated_chunks.0.insert((3, -2));
+        data.populated_chunks.0.insert((-14, 9));
         data.stack_memory.0.insert(
             ((4, -7), 2),
             crate::resources::FrameMemory {

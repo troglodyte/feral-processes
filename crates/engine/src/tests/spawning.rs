@@ -1543,6 +1543,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             pursuing: true,
             carrying: None,
             rarity: Rarity::Ordinary,
+            boss: false,
             nemesis_grudges: 0,
             staff: false,
             equipment: Vec::new(),
@@ -2488,5 +2489,108 @@ fn stocked_ground_survives_a_save() {
             .0,
         before.0,
         "a reload forgot which ground the sector had already stocked"
+    );
+}
+
+/// The one door. A creature carrying `Boss` is a boss even though its
+/// species is not, and an apex species is a boss even without the component
+/// — a fixture that hand-spawns one outside `spawn_pack` never gets one.
+#[test]
+fn is_boss_creature_reads_the_component_or_the_species() {
+    let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let wild = spawn_wild_on_player_tile(&mut game);
+    assert!(
+        !game.is_boss_creature(wild),
+        "an ordinary species with no component is not a boss"
+    );
+    game.world.entity_mut(wild).insert(Boss);
+    assert!(
+        game.is_boss_creature(wild),
+        "the component alone must make a creature a boss"
+    );
+
+    // The species half still has to answer: this fixture spawns outside the
+    // boss path, so no component is written.
+    let apex = spawn_boss_on_player_tile(&mut game);
+    assert!(
+        game.world.get::<Boss>(apex).is_none(),
+        "this fixture spawns outside the boss path, so the component is the \
+         wrong thing to be asserting on"
+    );
+    assert!(
+        game.is_boss_creature(apex),
+        "an apex species is a boss without a component"
+    );
+}
+
+/// The receipt must survive a reload, or a boss killed after a save/load
+/// pays nothing and reads as the drop rate having moved. A RON round-trip
+/// cannot catch a load path that drops the component — this has to go
+/// through `Game::save` and `Game::load`.
+#[test]
+fn a_rolled_boss_keeps_its_component_across_a_save_and_load() {
+    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    let species = game.world.get::<Creature>(wild).unwrap().species.clone();
+    let pos = *game.world.get::<Position>(wild).unwrap();
+    game.world.entity_mut(wild).insert(Boss);
+
+    let dir = scratch_assets_dir("rolled_boss");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("rolled_boss.sav");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let mut q = loaded.world.query::<(Entity, &Creature, &Position)>();
+    let found: Vec<Entity> = q
+        .iter(&loaded.world)
+        .filter(|(_, c, p)| c.species == species && p.x == pos.x && p.y == pos.y)
+        .map(|(e, _, _)| e)
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "exactly one creature should match the saved one"
+    );
+    assert!(
+        loaded.is_boss_creature(found[0]),
+        "a rolled boss must come back a boss — the load path dropped `Boss`"
+    );
+}
+
+/// The field is additive behind `#[serde(default)]`, which is what buys this
+/// change no `SAVE_FORMAT_VERSION` bump: a file written before rolled bosses
+/// existed must load rather than be refused.
+#[test]
+fn a_save_without_the_boss_field_loads_un_bossed() {
+    let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    game.world.entity_mut(wild).insert(Boss);
+
+    let dir = scratch_assets_dir("boss_default");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("boss_default.sav");
+    game.save(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("boss: true"),
+        "a fresh save must carry the field, or stripping it below proves nothing"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("boss:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let mut q = loaded.world.query::<(Entity, &Creature)>();
+    let creatures: Vec<Entity> = q.iter(&loaded.world).map(|(e, _)| e).collect();
+    assert!(
+        creatures
+            .iter()
+            .all(|&e| loaded.world.get::<Boss>(e).is_none()),
+        "a file with the field stripped must load with nothing bossed"
     );
 }

@@ -435,7 +435,10 @@ impl Game {
             .kills
             .push(species_id.clone());
 
-        if species.is_boss {
+        // Through the one door rather than off the species: a rolled boss is
+        // an ordinary species carrying `components::Boss`, and would have paid
+        // nothing here.
+        if self.is_boss_creature(wild) {
             // Third consumer of the same "it actually died" guarantee. The
             // record is all that happens here: what it earned is
             // `achievement_system`'s to decide, in this same tick.

@@ -49,13 +49,13 @@ use battle::{
     SpecialOption, TargetSpec,
 };
 use components::{
-    AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BaseStaff, BuffKind, BuffSource,
-    Carrying, CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment, EquippedItem,
-    Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile,
-    Inventory, MachineStatus, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player, Position,
-    Potential, PowerReserve, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines,
-    StackSpawn, StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded, Structure,
-    StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BaseStaff, Boss, BuffKind,
+    BuffSource, Carrying, CombatBuff, Creature, CustomName, Decompiler, Durability, Equipment,
+    EquippedItem, Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor,
+    Hostile, Inventory, MachineStatus, Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player,
+    Position, Potential, PowerReserve, PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode,
+    Routines, StackSpawn, StandingJob, Stats, StatusEffects, StatusKind, Stock, Stranded,
+    Structure, StructureTier, SurfaceLink, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::stack_view::ExamineDir;

@@ -172,10 +172,18 @@ impl Game {
         }
     }
 
-    /// Whether `entity` is a creature of a boss species (`SpeciesDef::is_boss`).
-    /// `false` for anything that isn't a creature, or whose species failed
-    /// to resolve.
+    /// Whether `entity` is a boss — either because it was spawned as one
+    /// (`components::Boss`, written at every boss spawn, rolled or apex) or
+    /// because its species is apex (`SpeciesDef::is_boss`).
+    ///
+    /// The species half stays because a fixture that hand-spawns an apex
+    /// species outside `spawn_pack` never gets a component, and must still be
+    /// a boss. `false` for anything that isn't a creature, or whose species
+    /// failed to resolve.
     pub(crate) fn is_boss_creature(&self, entity: Entity) -> bool {
+        if self.world.get::<crate::components::Boss>(entity).is_some() {
+            return true;
+        }
         self.world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))

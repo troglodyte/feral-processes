@@ -1416,3 +1416,33 @@ fn an_overwhelming_program_pays_no_more_than_the_ceiling() {
         "however far out of its depth, a kill pays its bar times the ceiling"
     );
 }
+
+/// The payout gate used to read `SpeciesDef::is_boss` directly, so a rolled
+/// boss would have died underground paying nothing. Asserted on a species
+/// that is deliberately **not** apex.
+#[test]
+fn a_rolled_boss_pays_the_stack_boss_cache() {
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ordinary = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    stand_in_the_stack(&mut game, 1);
+
+    let wild = corpse_of(&mut game, &ordinary.id);
+    game.world.entity_mut(wild).insert(Boss);
+    game.award_loot(wild);
+
+    let qty = game
+        .world
+        .get::<Inventory>(player)
+        .unwrap()
+        .count(&ItemId::from(ids::PORTAL_FRAGMENT));
+    assert!(
+        STACK_BOSS_PORTAL_FRAGMENT_DROP.contains(&qty),
+        "a rolled boss killed at depth 1 should pay a cache in \
+         {STACK_BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
+    );
+}

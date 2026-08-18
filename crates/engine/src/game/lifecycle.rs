@@ -607,6 +607,15 @@ impl Game {
             if c.nemesis_grudges > 0 {
                 entity.insert(Nemesis(c.nemesis_grudges));
             }
+            // Inserted only when set, so an absent component keeps meaning
+            // "not a boss" — `is_boss_creature`'s species fallback still
+            // answers for an apex species loaded from a file written before
+            // this field existed. `Stats` above already carry
+            // `BOSS_STAT_MULT` from the spawn that rolled it; nothing here
+            // may re-apply it, the same trap `c.rarity` documents.
+            if c.boss {
+                entity.insert(Boss);
+            }
             // Inserted only when something is worn, so an absent component
             // keeps meaning "wears nothing" — the invariant `Game::equip`
             // relies on when it grows one on demand. A v27 dump defaults
@@ -871,6 +880,7 @@ impl Game {
                 Option<&Equipment>,
                 Option<&Nemesis>,
                 Option<&PowerReserve>,
+                Option<&Boss>,
             ),
         )>();
         for (
@@ -897,6 +907,7 @@ impl Game {
                 equipment,
                 nemesis,
                 reserve,
+                boss,
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -955,6 +966,7 @@ impl Game {
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,
                 pursuing: pursuing.is_some(),
+                boss: boss.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
                 rarity: rarity.copied().unwrap_or_default(),
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),

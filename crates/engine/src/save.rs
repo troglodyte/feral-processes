@@ -234,6 +234,18 @@ pub struct CreatureSave {
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     #[serde(default)]
     pub rarity: Rarity,
+    /// Whether this creature spawned as a boss — see `components::Boss`.
+    ///
+    /// Written for an apex species too, redundantly with its own `is_boss`
+    /// flag, so the field means one thing rather than "the rolled half".
+    ///
+    /// Additive, named and defaulted, so this needs **no**
+    /// `SAVE_FORMAT_VERSION` bump — the save has been field-named RON since
+    /// v29, which is what retired migrations for exactly this shape of
+    /// change. A save written before rolled bosses existed loads with every
+    /// creature un-bossed, which is what it was.
+    #[serde(default)]
+    pub boss: bool,
     /// What this program is wearing — see `components::Equipment`. Only
     /// meaningful when `tamed` is true; nothing else may be geared.
     ///
@@ -861,6 +873,7 @@ mod tests {
             pursuing: false,
             carrying: None,
             rarity: Rarity::Ordinary,
+            boss: false,
             nemesis_grudges: 0,
             equipment: Vec::new(),
             staff: false,

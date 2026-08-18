@@ -819,7 +819,7 @@ impl Game {
                 is_hostile: self.world.get::<Hostile>(entity).is_some(),
                 is_tamed,
                 is_companion: self.world.resource::<Party>().0.contains(&entity),
-                is_boss: species.is_boss,
+                is_boss: self.is_boss_creature(entity),
                 activity: is_tamed.then(|| self.program_activity(entity)),
                 post: self.program_post(entity),
                 potential: self

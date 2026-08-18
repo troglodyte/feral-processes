@@ -1347,6 +1347,20 @@ pub struct SurfaceLink;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct StackSpawn;
 
+/// A creature that spawned as a boss.
+///
+/// Two things are bosses and only one of them is a species. An **apex**
+/// species (`SpeciesDef::is_boss`) is always one and is hand-authored tough;
+/// any other species can be **rolled** into one at `BOSS_SPAWN_CHANCE` and is
+/// scaled by `tuning::BOSS_STAT_MULT` instead. This component is written at
+/// both, so a query can ask without reaching for the db.
+///
+/// `Game::is_boss_creature` is still the one door, and it keeps the species
+/// fallback: a fixture that hand-spawns an apex species outside `spawn_pack`
+/// never gets a component, and must still be a boss.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Boss;
+
 /// How many times this program has sent the party away from a fight —
 /// escalated by `Game::mark_nemeses` on a jack-out or a Forgiving defeat,
 /// never a win. Absent means it never has, and nothing in this feature ever

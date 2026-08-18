@@ -1145,11 +1145,12 @@ mod tests {
     /// the real `research_data` rather than a fixture that merely claims to
     /// resemble it — the whole point of that exclusion is a specific item.
     fn shipped_items() -> ItemDb {
-        ItemDb::load_dir(
-            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"),
-        )
-        .unwrap()
-        .0
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        ItemDb::load_dir(&assets.join("items"), &abilities)
+            .unwrap()
+            .0
     }
 
     /// What one cycle against an always-yielding node of `resource` pays a

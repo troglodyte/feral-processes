@@ -231,10 +231,10 @@ fn the_shipped_contracts_name_things_that_exist() {
     );
     assert!(contracts.iter().count() >= 8, "the shipped set is authored");
 
-    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items")).unwrap();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
     let (structures, _) =
         crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
-    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
     let (species, _) =
         crate::species::SpeciesDb::load_dir(&assets.join("species"), &abilities).unwrap();
 
@@ -288,7 +288,8 @@ fn the_shipped_contracts_name_things_that_exist() {
 fn a_shipped_delivery_never_asks_for_the_bank() {
     let assets = test_assets_dir();
     let (contracts, _) = shipped_contracts();
-    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items")).unwrap();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
 
     for def in contracts.iter() {
         let Objective::Deliver { item, .. } = &def.objective else {

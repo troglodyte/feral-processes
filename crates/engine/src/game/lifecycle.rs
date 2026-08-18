@@ -1352,7 +1352,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (research, research_warnings) =
         ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
     warnings.extend(research_warnings);
-    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"))?;
+    let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);
     // After the files, and after `abilities`, because every etched disk is
     // derived from an ability — this is the one ordering dependency the two

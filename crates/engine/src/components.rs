@@ -1557,7 +1557,10 @@ mod inventory_tests {
     use std::path::Path;
 
     fn item_db() -> ItemDb {
-        ItemDb::load_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items"))
+        let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        ItemDb::load_dir(&assets.join("items"), &abilities)
             .unwrap()
             .0
     }

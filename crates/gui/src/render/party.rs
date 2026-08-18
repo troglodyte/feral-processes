@@ -433,9 +433,13 @@ mod tests {
         // Straight off the item files rather than through a `Game`: the
         // picker lists cargo, and a census wants every shipped upgrade
         // whether or not a player is carrying it.
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (abilities, _) =
+            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
+                .expect("the abilities load");
         let (items, warnings) =
-            feral_processes_engine::items_db::ItemDb::load_dir(&dir).expect("the items load");
+            feral_processes_engine::items_db::ItemDb::load_dir(&assets.join("items"), &abilities)
+                .expect("the items load");
         assert!(warnings.is_empty(), "{warnings:?}");
         let described: Vec<String> = items
             .all()

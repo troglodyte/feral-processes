@@ -579,7 +579,9 @@ mod tests {
         use crate::items::ids;
         use crate::items_db::ItemDb;
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
-        let (db, _) = ItemDb::load_dir(&dir).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&dir.with_file_name("abilities")).unwrap();
+        let (db, _) = ItemDb::load_dir(&dir, &abilities).unwrap();
         let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
         let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
         (weapon, armor)

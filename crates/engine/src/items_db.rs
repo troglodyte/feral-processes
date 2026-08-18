@@ -141,6 +141,15 @@ pub struct ItemDef {
     /// cargo.
     #[serde(default)]
     pub upgrade: Option<CompanionUpgradeDef>,
+    /// A passive routine this item grants while it is worn, by ability id.
+    ///
+    /// Never written into the wearer's `Routines` — `Game::ready_passives`
+    /// reads `Equipment` as a second source at fire time, so taking the item
+    /// off ends the passive by omission and nothing about it reaches the
+    /// save. Refused at load if the id names no ability or names one that
+    /// could never fire; see `ItemDb::load_dir`.
+    #[serde(default)]
+    pub grants: Option<crate::abilities::AbilityId>,
 }
 
 impl ItemDef {
@@ -213,6 +222,25 @@ impl ItemDef {
             _ => None,
         }
     }
+
+    /// Why this item's `grants` could never fire, if it couldn't. Skipping
+    /// the item rather than dropping the field, because an item whose whole
+    /// point is the routine it carries is worth less than nothing if it
+    /// silently carries none — the same call `passive_field_mismatch` makes
+    /// about an ability that can never reach its trigger.
+    ///
+    /// A field-only routine needs no arm of its own: `AbilityDb::load_dir`
+    /// refuses a `triggers` on one, so nothing field-only is ever passive.
+    fn ungrantable_ability(&self, abilities: &crate::abilities::AbilityDb) -> Option<String> {
+        let id = self.grants.as_ref()?;
+        match abilities.get(id) {
+            None => Some(format!("grants: no ability {id:?}")),
+            Some(def) if !def.is_passive() => Some(format!(
+                "grants: {id:?} is chosen on a turn and has no trigger to fire on"
+            )),
+            Some(_) => None,
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -229,7 +257,16 @@ impl ItemDb {
     /// skipped with a returned warning rather than aborting the load, same
     /// as `StructureDb::load_dir`. A duplicated economy role also warns and
     /// keeps the first-seen holder.
-    pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
+    ///
+    /// Takes the `AbilityDb` for the one check `ItemDef` cannot make on its
+    /// own — whether a `grants` id names an ability that can actually fire.
+    /// `SpeciesDb::load_dir` and `ResearchDb::load_dir` take their
+    /// cross-database dependency the same way, and `game::lifecycle` already
+    /// loads abilities before items, so nothing reorders for this.
+    pub fn load_dir(
+        dir: &Path,
+        abilities: &crate::abilities::AbilityDb,
+    ) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = ItemDb::default();
         let mut warnings = Vec::new();
         for entry in std::fs::read_dir(dir)? {
@@ -244,6 +281,10 @@ impl ItemDb {
                         warnings.push(format!(
                             "skipped invalid item file {path:?}: {field} is not a finite number"
                         ));
+                        continue;
+                    }
+                    if let Some(reason) = def.ungrantable_ability(abilities) {
+                        warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
                         continue;
                     }
                     if let Some(role) = def.role {
@@ -341,6 +382,9 @@ impl ItemDb {
                     craftable: None,
                     droppable: ability.boss_drop.clone(),
                     cache_drop: None,
+                    // A disk *installs* its routine; it is not worn, so
+                    // there is nothing for a worn grant to hang off.
+                    grants: None,
                     upgrade: None,
                 },
             );
@@ -417,7 +461,10 @@ mod tests {
         for (n, b) in files {
             std::fs::write(dir.join(n), b).unwrap();
         }
-        let out = ItemDb::load_dir(&dir).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets_items_dir().with_file_name("abilities"))
+                .unwrap();
+        let out = ItemDb::load_dir(&dir, &abilities).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         out
     }
@@ -504,7 +551,10 @@ mod tests {
 
     #[test]
     fn the_shipped_items_load_cleanly_with_all_roles_and_fields() {
-        let (db, warnings) = ItemDb::load_dir(&assets_items_dir()).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets_items_dir().with_file_name("abilities"))
+                .unwrap();
+        let (db, warnings) = ItemDb::load_dir(&assets_items_dir(), &abilities).unwrap();
         assert!(
             warnings.is_empty(),
             "shipped items should parse clean: {warnings:?}"

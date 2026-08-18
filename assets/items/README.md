@@ -288,6 +288,24 @@ any non-finite `taming_potency`, `consume.power`, or
         zone_bump: false,
     )),
 
+    // Optional; can be left out entirely (defaults to no grant). A **passive
+    // routine this item grants while it is worn**, by ability id — the same
+    // ids `../abilities/` declares. The wearer fires it exactly as though it
+    // were installed in one of their own slots, without spending one.
+    //
+    // Only useful on an item that also declares `equipment`, since nothing
+    // else can be worn. Any owned program can wear gear, so a granted
+    // passive is a companion's as readily as the player's.
+    //
+    // The named ability must exist and must be a **passive** — one declaring
+    // `triggers`. A routine chosen on a turn has no trigger to fire on, so an
+    // item naming one is skipped with a warning rather than worn as a
+    // decoration that never runs.
+    //
+    // Nothing about a grant is saved. It is read off the worn item every time
+    // its trigger comes round, so taking the item off ends it.
+    grants: Some("watchdog"),
+
 )
 ```
 

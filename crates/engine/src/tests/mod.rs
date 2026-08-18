@@ -27,6 +27,7 @@ mod easter_eggs;
 mod equipment;
 mod exclusive_routines;
 mod field;
+mod gear_passives;
 mod hauling;
 mod inspection;
 mod level_up;

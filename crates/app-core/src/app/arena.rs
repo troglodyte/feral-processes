@@ -51,7 +51,8 @@ impl ArenaCatalog {
         let (abilities, _) = AbilityDb::load_dir(&assets_dir.join("abilities")).unwrap_or_default();
         let (species_db, _) =
             SpeciesDb::load_dir(&assets_dir.join("species"), &abilities).unwrap_or_default();
-        let (item_db, _) = ItemDb::load_dir(&assets_dir.join("items")).unwrap_or_default();
+        let (item_db, _) =
+            ItemDb::load_dir(&assets_dir.join("items"), &abilities).unwrap_or_default();
 
         let mut species: Vec<String> = species_db.all().map(|d| d.id.to_string()).collect();
         species.sort();

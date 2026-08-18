@@ -164,14 +164,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     equipment_drop: Some(("firewall_plating", 0.3)),
 
     // Optional; can be left out entirely (defaults to false). If true, this
-    // species is a boss: it's excluded from the normal per-tile habitat spawn
-    // roll and spawns in its place only rarely (see `BOSS_SPAWN_CHANCE` in
-    // the engine), rendered bold on the map and tagged "[BOSS]" in the
-    // inspect/battle screens. Defeating one guarantees a cache of 3-6 Portal
-    // Fragments instead of the flat drop chance every other species rolls.
-    // There's no separate engine-side stat multiplier for a boss — make
-    // `base_hp`/`base_atk`/`base_def` tough here directly (a boss's stats
-    // still double per zone level like any other species, on top of this).
+    // species is *apex*: always a boss, never scaled up by the engine, and
+    // eligible only from `APEX_ENTRY_STEP` onwards — deep in a Stack or far
+    // into the zones, never in a fresh run. Make
+    // `base_hp`/`base_atk`/`base_def` tough here directly; there's no
+    // engine-side multiplier on an apex species (its stats still rise per
+    // zone level like any other species, on top of this).
+    //
+    // This flag is not what makes a boss. **Any** species can spawn as one:
+    // outside the opening ring a per-tile roll at `BOSS_SPAWN_CHANCE` marks
+    // the spawn a boss, and where no apex species is eligible yet that lands
+    // on an ordinary one, which the engine then scales by `BOSS_STAT_MULT`
+    // instead of it being authored tough. Either way the creature is
+    // rendered bold on the map, tagged "[BOSS]" in the inspect and battle
+    // screens, spawns as its own group, and pays a cache of Portal Fragments
+    // when it dies underground rather than the flat drop chance every other
+    // kill rolls.
     //
     // A boss can also never be decompiled: it's refused as a target when the
     // action is chosen, so it costs neither the round nor the catalyst, and
@@ -331,11 +339,39 @@ The chances and the multipliers live in `crates/engine/src/tuning.rs`
 difficulty knob does: content is moddable, how hard the game is, is not.
 
 Two spawns never roll a tier, and both are relevant when authoring a
-species. A `is_boss: true` species is excluded, because its stats are
-already hand-authored and a blanket multiplier would discard that tuning —
-so make a boss as tough as you want it to be, here, and nothing will scale
-it further. And nothing rolls one inside the opening ring around the
-player's landing site, which is what keeps a fresh run winnable.
+species. A boss is excluded — rolled or apex, and for the same reason in
+both cases: an apex species' stats are already hand-authored and a blanket
+multiplier would discard that tuning, and a rolled boss's `BOSS_STAT_MULT`
+is the whole of what it is worth, so a rare tier on top would be a second,
+invisible multiplier. Make an apex species as tough as you want it to be,
+here, and nothing will scale it further. And nothing rolls a tier — or a
+boss — inside the opening ring around the player's landing site, which is
+what keeps a fresh run winnable.
+
+## Which zones and depths a species spawns in
+
+A species does not spawn everywhere. Its **danger band** is derived from
+`growth_multiplier` — the same rungs `GROWTH_TIERS` names, with a value
+between rungs snapping to the nearest — and each band is eligible only
+inside a window of danger steps: the zone number on the surface, the frame
+depth underground. `TIER_ENTRY_STEPS`, `TIER_WINDOW_STEPS` and
+`APEX_ENTRY_STEP` in `crates/engine/src/tuning.rs` are the schedule; there
+is no field here for it, because a species' rung is a fact about numbers it
+already carries and a second authored field is a second thing that can
+disagree with the first.
+
+So the gentle end of the ladder fills a fresh run, the middle takes over a
+few zones in, and the hardest band and the apex species arrive last and
+never leave. A species whose `growth_multiplier` sits on a shipped rung is
+readable against that schedule; one between rungs still spawns, it just
+stops being readable.
+
+Where a biome has a hole in its ladder — no species at all in the band the
+window admits — the pool falls back to the *nearest* band that biome does
+hold, ties resolving upward, so no biome is ever empty. Apex is never a
+fallback: a boss is a rare outcome the window admits, not a biome's last
+resort. If you want your species to be met everywhere, give it habitats in
+every biome; if you want it met early, sit it on the lowest rung.
 
 ## The five classes
 

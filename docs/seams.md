@@ -143,10 +143,13 @@ written anyway.** Taming spends no `award_loot`, so a capture cleared
 nothing: the lair refilled on the next visit over a stack that could never
 be finished, and the guardian could be farmed. Closed 2026-08-15 at both
 ends. `battle_set_action` refuses a guardian as a decompile target beside
-the boss it already refused — every shipped guardian *is* a boss
-(`every_biome_a_stack_link_can_open_in_fields_a_boss`), so what this clause
-actually catches is `pick_lair_species`'s fallback, the ordinary program a
-biome with no boss fields, which is reachable from a mod. And
+the boss it already refused — and since 2026-08-18 every guardian *is* a
+boss, drawn from the danger window and marked one even when the draw came
+out of the ordinary pool, so the guardian clause now catches nothing the
+boss clause would have missed. It stays because the two are different
+statements: "this is a boss" and "this is what the stack is guarding" are
+read from different places, and a mod that widens either must not be able
+to open a gap between them. And
 `attempt_decompile` calls `mark_lair_cleared` regardless, which is now
 unreachable and kept deliberately: the record is what the collapse reads,
 and a third way out of a fight should not have to remember to write it.
@@ -829,16 +832,91 @@ so the usual balance gate does not apply; the arena is the instrument and
 asset, so deleting `assets/policies/enemy_battle.ron` restores the
 pre-policy game exactly and is a supported way to play.
 
-### `is_boss` means "spawns as its own group", not "is scaled up"
+### `is_boss` marks an apex species, and any species can be rolled into a boss
 
-**`is_boss` means "spawns as its own group", not "is scaled up".** A boss
-is an ordinary spawn of a species whose `.ron` base stats are large, so
-the whole boss-to-ordinary gap is data and moves by editing two files.
-Past zone 1 a boss also brings an escort group drawn from its own tile's
-`habitat_pools` — which is the right pool for both boss sites, since the
-surface roll passes its own tile and `rouse_lair` passes the Stack
-entrance whose biome chose the boss. Zone 1 fields one group, so the
-opening zone's boss is the one that still fights alone.
+**`is_boss` marks an *apex* species — always a boss, never engine-scaled —
+while any species can be *rolled* into one.** The flag used to be the whole
+of what a boss was: an ordinary spawn of a species whose `.ron` base stats
+are large, so the gap was data and moved by editing two files. That is
+still true of the two shipped apex species, and is why nothing scales
+them — a blanket multiplier would discard the authoring.
+
+What changed is that boss-hood stopped being a property of the species
+alone. Outside the opening ring a per-tile roll at `BOSS_SPAWN_CHANCE`
+marks the spawn, drawing from the whole window: apex where the danger step
+admits one, an ordinary species where it does not. A rolled boss takes
+`tuning::BOSS_STAT_MULT` and nothing else — no rare tier on top, for the
+same reason an apex spawn never rolled one, since the multiplier is the
+whole of what it is worth. So the shape is "easy bosses early, hard bosses
+deep" without a second difficulty axis: `APEX_ENTRY_STEP` is the only new
+number, and before it every boss is a rolled one.
+
+Two halves hold the fact. `components::Boss` is written at every boss
+spawn, rolled or apex, and saved (`CreatureSave::boss`, additive behind
+`#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump). `Game::is_boss_
+creature` is the **one door** and keeps the species fallback beside the
+component, because a fixture that hand-spawns an apex species outside
+`spawn_pack` never gets a component and must still be a boss. Three
+readers go through that door rather than reading `SpeciesDef::is_boss`:
+the payout gate in `award_loot`, the view builder, and the arena's boss
+census. A fourth reader added against the species flag would silently pay
+nothing for a rolled boss.
+
+A boss still spawns as its own group, and past zone 1 also brings an
+escort group drawn from its own tile's `habitat_pools` — which is the
+right pool for both boss sites, since the surface roll passes its own tile
+and `rouse_lair` passes the Stack entrance whose biome chose the boss. The
+escort is never itself a boss. Zone 1 fields one group, so the opening
+zone's boss is the one that still fights alone.
+
+`balance_sim` gates none of this: it models no bosses at all (see
+`toughest_ordinary_species`, which excludes them), so `BOSS_STAT_MULT` is
+an arena question. Measured 2026-08-18 on `dev-arenas/lair-on-curve.ron`,
+the one shipped scenario whose guardian is drawn ordinary: 2.6 rounds at
+1.0 against 3.9 at 1.75, win rate 100% either way. `geared-vs-boss` and
+`deep-lair` did not move at all, which is the apex exemption showing up as
+a measurement.
+
+### A species' danger band is derived, and the window is what decides where it spawns
+
+**A species' danger band is derived, and the window is what decides where
+it spawns.** `SpeciesDef::danger_band` reads `growth_multiplier` against
+`GROWTH_TIERS`, snapping a between-rungs value to the nearest — the same
+concession `tier_budget` makes on the same midpoints, so a mod is never
+refused, it just stops being readable against the shipped ladder. It is
+derived rather than authored for the reason `affinity_class` is: a rung is
+a fact about numbers the species already carries, and a second authored
+field is a second thing that can disagree with the first. `is_boss` is
+read **first**, because both shipped apex species sit at 2.0 — off the
+ladder's top — and reading the multiplier first would file them beside the
+ordinary hard species.
+
+The window is `tuning.rs`'s: band `b` is live from `b * TIER_ENTRY_STEPS`
+through `+ TIER_WINDOW_STEPS` inclusive, apex from `APEX_ENTRY_STEP`. It
+is read against `Game::danger_steps`, the **same scalar** the two
+group-size curves already take — zone on the surface, frame depth
+underground — so there is no second difficulty axis to keep in step with
+the first. The top band and apex **never exit**, whatever the constants
+say: steps are unbounded because zones and depth are, so a closed top
+empties the world past step 7.
+
+Two things about the plumbing are easy to get wrong. `habitat_pools` takes
+`depth` as a **parameter** rather than reading the party's locale, for the
+reason `SpawnEscalation`'s doc already gives — ambient surface spawns and
+nest respawns keep rolling on every tick while the party is underground,
+and a step read inside would size those from the party's depth. And both
+windowed pools build on the sorted primitives, because the draw picks **by
+index**: concatenating two sorted vectors does not give a sorted one, which
+is why `pick_habitat_species` sorts the union.
+
+The per-biome fallback is load-bearing rather than defensive. Where the
+window admits nothing a biome holds, `windowed_matches` falls back to the
+band **nearest** the window, ties resolving upward. That fires against the
+real assets at both ends: StaticField ships no band-0 species and OpenGrid
+no band-2. `every_biome_fields_something_at_every_danger_step` is the
+census, and the honest fix for either hole is a species file, not a wider
+window. Apex is never a fallback — a boss is a rare outcome the window
+admits, not a biome's last resort.
 
 ### Which side of the ground a boss dies on decides what it pays, and one of the two answers is the game's only source of the breaching currency
 
@@ -855,14 +933,21 @@ ordinary species — a payout keyed on "died in a lair" would pay for the
 escort too. `surface_boss_loot` derives its band from `ItemDef::value`,
 giving that field a second meaning documented in
 `assets/items/README.md`: a mispriced equippable trades fine and drops
-at the wrong point in the run. And `pick_lair_species` *falls back* to
-the toughest ordinary program when a biome fields no boss, which is
-`is_boss: false` — so removing a habitat from the last boss covering
-some terrain makes every stack under it unbreachable while looking like
-a tuning edit. `every_biome_a_stack_link_can_open_in_fields_a_boss`
-(`species.rs`) is the census that catches it, and it checks only
-walkable biomes because `spawn_surface_links` refuses an unwalkable
-tile — `Biome::walkable` is the one predicate both ask.
+at the wrong point in the run. And `pick_lair_species` used to *fall
+back* to the toughest ordinary program when a biome fielded no boss,
+returning `is_boss: false` — so removing a habitat from the last boss
+covering some terrain made every stack under it unbreachable while
+looking like a tuning edit. **That is closed.** The guardian is now drawn
+from the window at its own depth — apex where the depth admits one, the
+windowed ordinary pool otherwise — and is marked a boss either way, so a
+biome with no eligible apex species yields a rolled guardian that pays
+normally. `a_lair_guardian_is_a_boss_even_where_the_biome_has_no_apex_
+species` pins it against a db with the apex species removed, since both
+shipped ones list all four biomes and the case is otherwise unreachable.
+`every_biome_a_stack_link_can_open_in_fields_a_boss` (`species.rs`)
+remains the census over the shipped roster, and it checks only walkable
+biomes because `spawn_surface_links` refuses an unwalkable tile —
+`Biome::walkable` is the one predicate both ask.
 
 ### `Game::adopt_program` is the one way a program joins the roster without being beaten in a fight
 

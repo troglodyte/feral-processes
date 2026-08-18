@@ -295,7 +295,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Optional; can be left out entirely (defaults to 0). How many tiles
     // this structure widens the base platform by while it's deployed. The
     // base's radius is `4 + the sum of this across every deployed
-    // structure`, capped at 10, so several of them stack and each lays one
+    // structure`, capped at 100, so several of them stack and each lays one
     // more ring of platform floor. This is how the Heap Pillar works:
     // `build_radius_bonus: 1` with no `work` recipe.
     //
@@ -318,6 +318,33 @@ is skipped with a warning logged in-game rather than crashing startup.
     // limit ninety-six purchases away, which is no limit a player will ever
     // meet. Every other shipped structure leaves this at 0.
     max_deployed: 5,
+
+    // Optional; can be left out entirely (defaults to false). Whether
+    // deploying this CLAIMS the tile it is aimed at instead of standing a
+    // structure on it. No entity is spawned: the ground becomes base floor
+    // and stays empty, which is the whole point — a building on the tile
+    // would make the tile useless. This is how the Heap Block works:
+    // `claims_ground: true` with a one-item `build_cost` and nothing else.
+    //
+    // It is the other half of how a base grows, and deliberately a different
+    // shape from `build_radius_bonus` above. A Pillar adds a ring to the
+    // circle, in every direction at once; a claim bolts one tile onto the
+    // footprint in the one direction you chose. Neither affects the other: a
+    // Pillar grown after a corridor of claims still adds exactly one ring to
+    // the circle.
+    //
+    // Four engine rules come with it, none configurable. A claim must touch
+    // ground the base already covers, so the base stays one connected blob
+    // and paving out prices itself a tile at a time. It is refused on ground
+    // the base already reaches, on terrain that is not walkable, and on a
+    // tile with a Stack link, a nest or a hostile standing on it — a single
+    // tile is trivially re-sited, so it refuses rather than obliterating the
+    // way a Pillar's ring does. And it is permanent: there is no entity to
+    // demolish, and claimed ground goes away only when the Home does.
+    //
+    // `max_deployed` and `build_radius_bonus` say nothing on a def that sets
+    // this. Both are counted over deployed entities, and a claim leaves none.
+    claims_ground: true,
 
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while

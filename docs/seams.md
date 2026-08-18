@@ -769,6 +769,58 @@ than answering it.** `remove_structure` refuses anything with a bonus
 outside a Home cascade, so there is no reachable state with structures
 standing outside the slab, no partial `clear_platform`, and nothing the
 build rules call impossible.
+**The Heap Block is the one part of the footprint this does not cover**,
+and the entry below is where that argument lives. The radius is still
+derived and still written at those same three sites; what the claimed set
+adds is a fourth *field* written at the same three, not a fourth writer.
+
+### The base grows on two independent axes, and only one of them is derivable
+
+**The base grows on two independent axes, and only one of them is
+derivable.** A Heap Pillar adds a ring to the circle, in every direction
+at once, and is counted back off the structures standing in the base. A
+Heap Block claims a single tile in the one direction the player chose, and
+leaves nothing behind to count — it *cannot*, because the whole point of
+the tile is that it stays empty and buildable. So
+`resources::Platform::claimed` is stored where `radius` is derived, as
+offsets from `center`, and rides an additive `#[serde(default)]` field on
+`SaveData`. No version bump: the encoding has been field-named RON since
+29. Offsets rather than absolute tiles is what makes the claims travel
+with the base on a breach, the same way every structure's position does —
+paid-for ground is part of the base, and the base travels whole.
+`Platform::covers` stays the one statement of the footprint (circle *or*
+claim), so `broker_reach`, `place_structure`'s reach check and
+`stamp_platform`'s obliteration sweep pick up claimed ground with no code
+of their own, and `open_to_hostiles` gets it free off the stamped biome.
+`in_shape` is the circle alone, split out because `stamp_platform` needs
+to ask which claims the circle has since grown over — those are dropped,
+so the saved set stays the ground actually bought.
+**The trap this closes is `build_radius`'s covering term.** "The slab
+always covers every structure standing on it" was inert while
+`place_structure` refused everything outside the footprint; claimed ground
+makes it reachable, and one machine on a paved tile twenty out would grow
+the circle to radius 20 *in every direction* — a slab over the sector, and
+a Pillar's ring then added to that. So the term skips structures standing
+on a claimed tile. That is also what makes "a Pillar adds one ring to the
+circle, never an extension of the paving" true rather than incidental, and
+`a_machine_on_claimed_ground_does_not_grow_the_slab` is the test that
+fails if either half is undone.
+**A claim refuses rather than obliterates**, which is the deliberate
+difference from the Pillar's ring. A ring lands on whatever it lands on
+and the last-link rule is what bounds the damage; a single tile is
+trivially re-sited, so a link, a nest or a hostile standing there is a
+refusal — and a nest left inside the slab would breed guardians in the one
+place nothing is meant to stand. It must also *touch* the base, which
+keeps the footprint one connected blob and prices distance in tiles rather
+than in a second radius: paving twenty out costs twenty claims. The far
+ceiling is `MAX_BUILD_RADIUS_TILES` for a reason that is not balance —
+`clear_platform` sweeps exactly that box, and floor outside it would be
+left behind forever.
+**Both growth tools now run off the same chain.** A Block costs one Blank
+Substrate and a Pillar six alongside its fragments, so the Lathe a base
+already needs for Routine Disks is what feeds its expansion too — and the
+Pillar supplies grid energy while it stands, which is the one thing that
+makes growth pay for something other than area.
 
 ### A slab wide enough eats the Stack on-ramp's draw box, and the failure is the whole zone rather than one link
 

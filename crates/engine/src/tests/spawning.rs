@@ -1588,6 +1588,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         structures: Vec::new(),
         nests: Vec::new(),
         tile_overrides: Vec::new(),
+        claimed_tiles: Vec::new(),
         zone: 1,
         spawn_point: (spawn.x, spawn.y),
         buyback: Vec::new(),

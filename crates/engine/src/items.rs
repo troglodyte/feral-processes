@@ -108,6 +108,7 @@ pub mod ids {
     /// machine builds is authored in `assets/structures/*.ron`, and each
     /// recipe in the item's own file.
     pub const BYTECODE_BLOCK: &str = "bytecode_block";
+    pub const BLANK_SUBSTRATE: &str = "blank_substrate";
     pub const CHARGE_COIL: &str = "charge_coil";
     pub const PATCH_ROUTINE: &str = "patch_routine";
 }

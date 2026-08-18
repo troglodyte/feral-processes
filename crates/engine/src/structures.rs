@@ -316,6 +316,24 @@ pub struct StructureDef {
     /// what happens to structures left standing outside a shrinking slab.
     #[serde(default)]
     pub build_radius_bonus: i32,
+    /// Whether deploying this claims the tile it is aimed at instead of
+    /// standing a structure on it — see `Game::claim_ground`. No entity is
+    /// spawned: the ground becomes base floor and stays empty, which is the
+    /// whole point, since a building on the tile would make the tile useless.
+    ///
+    /// This is the other half of how a base grows, and the two are
+    /// deliberately different shapes. `build_radius_bonus` adds a ring to
+    /// the circle and is derived back from the structures standing in the
+    /// base; a claim bolts one tile onto the footprint and, leaving nothing
+    /// behind to count, is saved. `#[serde(default)]` so existing structure
+    /// files (including mods) keep spawning structures, same as before it
+    /// existed.
+    ///
+    /// `max_deployed` and `build_radius_bonus` say nothing on a def that
+    /// sets this — both are counted over deployed entities, and a claim
+    /// leaves none.
+    #[serde(default)]
+    pub claims_ground: bool,
     /// How many of this structure may stand at once. `0` — the default, and
     /// what every shipped structure but the Heap Pillar leaves it at — means
     /// no limit, so an existing file and any mod that never heard of the

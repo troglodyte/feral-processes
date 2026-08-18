@@ -244,24 +244,44 @@ impl Game {
         // Computed before the map borrow: `build_radius` needs `&mut self`
         // and the stamping loop holds `WorldMap` across its whole run.
         let radius = self.build_radius();
-        self.world.resource_mut::<Platform>().radius = radius;
-        let platform = *self.world.resource::<Platform>();
+        {
+            // The grown circle on its own, to ask `in_shape` of while the
+            // resource itself is borrowed mutably.
+            let circle = Platform {
+                radius,
+                ..Default::default()
+            };
+            let mut platform = self.world.resource_mut::<Platform>();
+            platform.radius = radius;
+            // A claim the circle has since grown over is redundant, and
+            // dropping it here is what keeps the saved set to ground the
+            // player actually bought rather than to every tile a Pillar
+            // later covered anyway.
+            platform
+                .claimed
+                .retain(|&(dx, dy)| !circle.in_shape(dx, dy));
+        }
+        let platform = self.world.resource::<Platform>().clone();
+        let floor = Tile {
+            biome: Biome::Platform,
+            walkable: true,
+        };
         {
             let mut map = self.world.resource_mut::<WorldMap>();
             for dy in -radius..=radius {
                 for dx in -radius..=radius {
-                    if !platform.covers(dx, dy) {
+                    if !platform.in_shape(dx, dy) {
                         continue;
                     }
-                    map.set_override(
-                        cx + dx,
-                        cy + dy,
-                        Tile {
-                            biome: Biome::Platform,
-                            walkable: true,
-                        },
-                    );
+                    map.set_override(cx + dx, cy + dy, floor);
                 }
+            }
+            // Claimed ground sits outside the circle by construction, so it
+            // needs its own pass — the box above cannot reach it, and a
+            // re-stamp that skipped it would take back paid-for floor on the
+            // next Pillar or the next breach.
+            for &(dx, dy) in &platform.claimed {
+                map.set_override(cx + dx, cy + dy, floor);
             }
         }
 
@@ -352,6 +372,7 @@ impl Game {
         let mut platform = self.world.resource_mut::<Platform>();
         platform.center = None;
         platform.radius = MAX_BUILD_DISTANCE_FROM_HOME;
+        platform.claimed.clear();
     }
 
     /// Every tile a deployed structure stands on — the set a hauler's walk

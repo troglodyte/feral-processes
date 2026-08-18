@@ -4973,7 +4973,7 @@ fn a_fully_grown_base_still_gets_its_zones_links() {
     // 201x201 tiles measures the stamp rather than the draw.
     const GROWN: i32 = 20;
     game.world.resource_mut::<Platform>().radius = GROWN;
-    let platform = *game.world.resource::<Platform>();
+    let platform = game.world.resource::<Platform>().clone();
     {
         let mut map = game.world.resource_mut::<WorldMap>();
         let r = GROWN;
@@ -5036,7 +5036,7 @@ fn a_base_at_the_ceiling_still_gets_its_zones_links() {
     let r = crate::tuning::MAX_BUILD_RADIUS_TILES;
     game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
     game.world.resource_mut::<Platform>().radius = r;
-    let platform = *game.world.resource::<Platform>();
+    let platform = game.world.resource::<Platform>().clone();
     {
         let mut map = game.world.resource_mut::<WorldMap>();
         for dy in -r..=r {

@@ -587,7 +587,7 @@ impl Game {
         let Some(here) = self.world.get::<Position>(self.player_entity()).copied() else {
             return BrokerReach::OffBase;
         };
-        let platform = *self.world.resource::<crate::resources::Platform>();
+        let platform = self.world.resource::<crate::resources::Platform>().clone();
         match platform.center {
             Some((cx, cy)) if platform.covers(here.x - cx, here.y - cy) => BrokerReach::AtBroker,
             _ => BrokerReach::OffBase,

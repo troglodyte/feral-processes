@@ -512,11 +512,20 @@ impl Game {
             .filter_map(|(k, _)| db.get(k.as_str()))
             .map(|def| def.build_radius_bonus)
             .sum();
+        let claimed = &self.world.resource::<Platform>().claimed;
         let covering = home
             .map(|h| {
                 deployed
                     .iter()
-                    .map(|(_, p)| (p.x - h.x).abs().max((p.y - h.y).abs()))
+                    .map(|(_, p)| (p.x - h.x, p.y - h.y))
+                    // A machine standing on ground bought a tile at a time
+                    // is already on the slab, and the circle owes it
+                    // nothing. Counting it would grow the circle out to it
+                    // in *every* direction — one paved corridor and the
+                    // next stamp lays a slab over the sector, with a
+                    // Pillar's ring then added to that.
+                    .filter(|offset| !claimed.contains(offset))
+                    .map(|(dx, dy)| dx.abs().max(dy.abs()))
                     .max()
                     .unwrap_or(0)
             })

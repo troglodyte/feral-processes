@@ -783,6 +783,7 @@ impl Game {
             let mut platform = game.world.resource_mut::<Platform>();
             platform.center = Some((home.x, home.y));
             platform.radius = radius;
+            platform.claimed = data.claimed_tiles.iter().copied().collect();
         }
 
         // Reconnect each restored cronjob to its target structure now that
@@ -1031,6 +1032,18 @@ impl Game {
             .map(|(k, v)| (*k, *v))
             .collect();
 
+        let claimed_tiles = {
+            let mut tiles: Vec<(i32, i32)> = self
+                .world
+                .resource::<Platform>()
+                .claimed
+                .iter()
+                .copied()
+                .collect();
+            tiles.sort_unstable();
+            tiles
+        };
+
         let data = save::SaveData {
             seed: self.world.resource::<WorldMap>().seed(),
             tick: self.world.resource::<GameClock>().tick,
@@ -1088,6 +1101,7 @@ impl Game {
             structures,
             nests,
             tile_overrides,
+            claimed_tiles,
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {
                 let p = self.world.resource::<ZoneSpawnPoint>();

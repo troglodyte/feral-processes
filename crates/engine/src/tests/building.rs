@@ -2230,10 +2230,10 @@ fn demolishing_a_home_clears_floor_wider_than_the_current_radius() {
 fn base_ready_for_pillars(seed: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game, 0, 0);
-    game.world
-        .get_mut::<Inventory>(game.player_entity())
-        .unwrap()
-        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    // A Pillar is part of the same chain the Heap Block is — plate turned
+    // at a Lathe — so a fixture buying one has to hold the plate too.
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 500);
     game.world
         .resource_mut::<Research>()
         .0
@@ -2644,5 +2644,298 @@ fn a_structure_that_declares_no_limit_is_unlimited() {
         capped,
         vec!["heap_pillar".to_string()],
         "only the Pillar is capped; the field defaults to no limit"
+    );
+}
+
+/// A structure that claims the ground it is aimed at instead of standing on
+/// it — the shape the Heap Block ships in, written here as a mod so the
+/// mechanism is under test independently of the shipped asset's cost and
+/// research gate.
+const CLAIMING_TILE: &str = r#"(
+    id: "test_tile",
+    name: "Test Tile",
+    description: "Claims one tile of ground.",
+    glyph: '.',
+    color: Cyan,
+    build_cost: [("core_fragment", 1)],
+    work: None,
+    raidable: false,
+    claims_ground: true,
+)"#;
+
+/// A base with a Home down, a claiming structure available, and enough
+/// salvage that no test below is measuring the materials check.
+fn base_ready_for_claims(tag: &str, seed: u32) -> Game {
+    let dir = assets_dir_with_extra_structure(tag, "test_tile.ron", CLAIMING_TILE);
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    let _ = std::fs::remove_dir_all(&dir);
+    game
+}
+
+/// Stands the player on the slab's edge in whichever cardinal direction has
+/// claimable ground one tile past it, and returns that direction. A fixture
+/// that picks a fixed compass point is at the mercy of the seed: the tile
+/// east of the base can be a hole in the map, a Stack link, or have a nest
+/// standing on it, and all three are refusals this is not trying to test.
+fn stand_at_a_claimable_edge(game: &mut Game) -> (i32, i32) {
+    let home = game.home_position().expect("a Home is deployed");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        let (tx, ty) = (home.x + dx * (edge + 1), home.y + dy * (edge + 1));
+        if !game.world.resource_mut::<WorldMap>().tile(tx, ty).walkable {
+            continue;
+        }
+        if game.find_surface_link_at(tx, ty).is_some() {
+            continue;
+        }
+        let occupied = {
+            let mut query = game
+                .world
+                .query_filtered::<&Position, Or<(With<Hostile>, With<Nest>)>>();
+            query.iter(&game.world).any(|p| p.x == tx && p.y == ty)
+        };
+        if occupied {
+            continue;
+        }
+        stand_player_at(game, home.x + dx * edge, home.y + dy * edge);
+        return (dx, dy);
+    }
+    panic!("no cardinal direction off this base offered claimable ground");
+}
+
+/// The whole point of the feature: ground claimed one tile at a time is
+/// buildable ground. Asserted as the refusal disappearing rather than as a
+/// set gaining an entry, so it fails if claiming stops widening the
+/// footprint `place_structure` measures against.
+#[test]
+fn claimed_ground_becomes_buildable() {
+    let mut game = base_ready_for_claims("claim_buildable", 730);
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+
+    assert!(
+        game.place_structure("mining_node", dx, dy).is_err(),
+        "precondition: one tile past the edge is off the slab"
+    );
+
+    game.place_structure("test_tile", dx, dy)
+        .expect("a tile touching the slab may be claimed");
+
+    game.place_structure("mining_node", dx, dy)
+        .expect("claimed ground is buildable ground");
+}
+
+/// Claimed ground is base, so it is safe ground: nothing may stand on it
+/// and nothing spawns there. That comes from the stamped biome rather than
+/// from any new code, which is exactly what this pins.
+#[test]
+fn claimed_ground_is_stamped_as_base_floor() {
+    let mut game = base_ready_for_claims("claim_floor", 731);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+    game.place_structure("test_tile", dx, dy).unwrap();
+
+    let tile = game
+        .world
+        .resource_mut::<WorldMap>()
+        .tile(home.x + dx * (edge + 1), home.y + dy * (edge + 1));
+    assert_eq!(tile.biome, Biome::Platform);
+    assert!(
+        !tile.open_to_hostiles(),
+        "a claimed tile is the base's safe ground like any other"
+    );
+}
+
+/// The base stays one connected blob: a claim has to touch floor that is
+/// already base.
+#[test]
+fn a_claim_must_touch_the_base() {
+    let mut game = base_ready_for_claims("claim_adjacent", 732);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    stand_player_at(&mut game, home.x + edge + 4, home.y);
+
+    let refusal = game
+        .place_structure("test_tile", 1, 0)
+        .expect_err("a tile out in the wild does not touch the base");
+    assert!(
+        refusal.contains("touch"),
+        "the refusal should say what is wrong with the site: {refusal}"
+    );
+}
+
+/// Claiming ground the base already covers is a refusal rather than a
+/// silent no-op, because the materials are spent either way.
+#[test]
+fn a_claim_inside_the_base_is_refused() {
+    let mut game = base_ready_for_claims("claim_inside", 733);
+    let home = game.home_position().expect("the fixture just placed one");
+    stand_player_at(&mut game, home.x + 1, home.y);
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+
+    assert!(
+        game.place_structure("test_tile", 1, 0).is_err(),
+        "the base already reaches there"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        held,
+        "and a refused claim costs nothing"
+    );
+}
+
+/// The trap the feature would otherwise ship. `build_radius`'s covering
+/// term grows the slab to cover every structure standing on it, which was
+/// inert while `place_structure` refused everything outside the footprint.
+/// Claimed ground makes it reachable: one machine on a paved tile would
+/// stamp a slab out to it in every direction, and a Pillar would then add
+/// its ring to *that*.
+#[test]
+fn a_machine_on_claimed_ground_does_not_grow_the_slab() {
+    let mut game = base_ready_for_claims("claim_no_growth", 734);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+    game.place_structure("test_tile", dx, dy).unwrap();
+    game.place_structure("mining_node", dx, dy).unwrap();
+
+    assert_eq!(
+        game.build_radius(),
+        MAX_BUILD_DISTANCE_FROM_HOME,
+        "paving out to a machine must not widen the circle the Pillar grows"
+    );
+    game.stamp_platform(home.x, home.y);
+    assert_ne!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + edge + 1, home.y + edge + 1)
+            .biome,
+        Biome::Platform,
+        "and re-stamping must not lay floor the claim never bought"
+    );
+}
+
+/// Claimed ground is not derivable from anything deployed — no entity
+/// stands on it — so unlike the radius it has to be saved. Additive behind
+/// `#[serde(default)]`, so this must pass at the current
+/// `SAVE_FORMAT_VERSION`.
+#[test]
+fn claimed_ground_survives_a_save_and_load() {
+    let dir = assets_dir_with_extra_structure("claim_save", "test_tile.ron", CLAIMING_TILE);
+    let mut game = Game::new(735, DifficultyMode::Forgiving, &dir).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    let home = game.home_position().expect("the fixture just placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+    game.place_structure("test_tile", dx, dy).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_claimed_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    stand_player_at(&mut loaded, home.x + dx * edge, home.y + dy * edge);
+    loaded
+        .place_structure("mining_node", dx, dy)
+        .expect("the claim came back with the save");
+}
+
+/// The base travels whole — structures keep their offsets from the Home —
+/// and paid-for ground is part of the base, so it travels too. Storing the
+/// claims as offsets from the center is what makes that free.
+#[test]
+fn claimed_ground_travels_with_the_base_on_a_breach() {
+    let mut game = base_ready_for_claims("claim_breach", 736);
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+    game.place_structure("test_tile", dx, dy).unwrap();
+
+    game.enter_next_zone();
+
+    let home = game.home_position().expect("the base travels");
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + dx * (edge + 1), home.y + dy * (edge + 1))
+            .biome,
+        Biome::Platform,
+        "the claimed tile arrived in the next sector"
+    );
+}
+
+/// The Home is what the slab is defined against, so demolishing it takes
+/// the claims with the rest of the floor.
+#[test]
+fn demolishing_the_home_takes_the_claims_with_it() {
+    let mut game = base_ready_for_claims("claim_clear", 737);
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+    game.place_structure("test_tile", dx, dy).unwrap();
+
+    game.clear_platform();
+
+    assert!(
+        game.world.resource::<Platform>().claimed.is_empty(),
+        "no Home, no slab, and no claims either"
+    );
+}
+
+/// A Pillar claims address space and wires it in: growing the base is now
+/// also how the base is powered. Asserted as the supply rising rather than
+/// as the authored number, which belongs to the asset.
+#[test]
+fn a_heap_pillar_supplies_grid_energy() {
+    let mut game = base_ready_for_pillars(716);
+    let (_, before) = game.base_power();
+
+    game.place_structure("heap_pillar", 1, 0).unwrap();
+
+    let (_, after) = game.base_power();
+    assert!(
+        after > before,
+        "a deployed Pillar should feed the grid: {before} -> {after}"
+    );
+}
+
+/// The shipped Heap Block through the real research gate and the real
+/// chain, where the modded fixture above proves the mechanism and this
+/// proves the asset: the id, the `claims_ground` flag, and a build cost
+/// denominated in a plate that has to come off a Lathe.
+#[test]
+fn a_shipped_heap_block_claims_ground() {
+    let mut game = Game::new(738, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 0);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 4);
+    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
+
+    let locked = game
+        .place_structure("heap_block", dx, dy)
+        .expect_err("the Block waits on Page Allocation");
+    assert!(locked.contains("researched"), "{locked}");
+
+    unlock_research_chain(&mut game, "page_allocation");
+    game.place_structure("heap_block", dx, dy)
+        .expect("a researched Block lays a tile of base");
+
+    assert_eq!(
+        count_item(&game, "blank_substrate"),
+        3,
+        "and it spends one plate to do it"
+    );
+    let home = game.home_position().expect("the fixture placed one");
+    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
+    assert_eq!(
+        game.world
+            .resource_mut::<WorldMap>()
+            .tile(home.x + dx * edge, home.y + dy * edge)
+            .biome,
+        Biome::Platform,
+        "and the tile it was aimed at is base floor now"
     );
 }

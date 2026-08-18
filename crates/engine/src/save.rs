@@ -431,6 +431,20 @@ pub struct SaveData {
     /// most of the way to its cache.
     pub nests: Vec<NestSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
+    /// Base ground bought a tile at a time, as offsets from the Home — see
+    /// `resources::Platform::claimed`.
+    ///
+    /// The one piece of the footprint that is not derivable: a claim leaves
+    /// no entity behind, so unlike the radius there is nothing to count it
+    /// back from. `tile_overrides` carries the *floor*, but not the fact
+    /// that the base owns it, and without that a re-stamp — the next Pillar,
+    /// the next breach — would take it away again.
+    ///
+    /// Sorted on write for the reason `researched` is: the encoded bytes
+    /// must not depend on set iteration order. Additive behind
+    /// `#[serde(default)]`, so it earns no version bump.
+    #[serde(default)]
+    pub claimed_tiles: Vec<(i32, i32)>,
     /// Which zone sector the player had breached into.
     pub zone: u32,
     /// Where the player materialized on breaching into that zone — see
@@ -823,6 +837,7 @@ mod tests {
             structures: Vec::new(),
             nests: Vec::new(),
             tile_overrides: Vec::new(),
+            claimed_tiles: Vec::new(),
             zone: 1,
             spawn_point: (0, 0),
             buyback: Vec::new(),

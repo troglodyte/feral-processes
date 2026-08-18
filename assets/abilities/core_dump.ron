@@ -1,14 +1,19 @@
 (
     id: "core_dump",
     name: "Core Dump Single",
-    // PASSIVE on `AllyDropped`, which is the trigger `deadman` already
-    // occupies at Everyone scope. This is the rung a player can reach
-    // without beating Wintermute: one target, less than half the power, and
-    // carried by an item rather than learned.
-    description: "When one of yours goes down, what it was holding dumps into the nearest hostile",
+    // PASSIVE on `AllyWounded`: the wearer has just been driven under a
+    // third of their Integrity, and what they were holding goes out at
+    // whatever did it.
+    //
+    // Deliberately *not* `AllyDropped`, which was where this started. A
+    // dropped companion is dissolved and despawned with no revive at any
+    // difficulty, so a routine paying out there only ever pays a player who
+    // has already lost far more than the payout is worth — and the only way
+    // to use the item would be to let a program die. See `PassiveTrigger`.
+    description: "Driven low, the wearer dumps what it was holding into the nearest hostile",
     target: OneEnemyGroupFront,
     effect: Damage(power: 9),
     cooldown: 3,
     power_cost: 0.0,
-    triggers: Some(AllyDropped),
+    triggers: Some(AllyWounded),
 )

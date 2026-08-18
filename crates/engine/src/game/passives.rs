@@ -168,6 +168,53 @@ impl Game {
             .collect()
     }
 
+    /// Every living party member's Integrity as a fraction of their
+    /// maximum, taken at the top of a round so `newly_wounded_party` has
+    /// something to compare against.
+    ///
+    /// Paired by entity rather than by slot: `BattleState::planned` indexes
+    /// `Party` positionally and nothing may leave it mid-battle, but a
+    /// member who *died* mid-round still holds their slot, and comparing by
+    /// position would then read the dead member's zero as a crossing.
+    pub(crate) fn party_integrity(&self) -> Vec<(Entity, f32)> {
+        self.living_party()
+            .into_iter()
+            .filter_map(|e| self.world.get::<Stats>(e).map(|s| (e, hp_fraction(s))))
+            .collect()
+    }
+
+    /// Which living party members crossed below
+    /// `tuning::WOUNDED_INTEGRITY_FRACTION` this round — the holders an
+    /// `AllyWounded` passive fires for.
+    ///
+    /// The holders are the wounded themselves and not the whole party,
+    /// which is `Afflicted`'s shape rather than `AllyDropped`'s: being hurt
+    /// is a fact about one combatant, so what answers it is that
+    /// combatant's own kit. That is also what makes a self-heal on this
+    /// trigger read the right way round — the wearer patches themselves
+    /// when they are the one in trouble, rather than being paid for
+    /// somebody else's misfortune.
+    ///
+    /// **A crossing, not a state.** Someone already under the line when the
+    /// round opened is not newly wounded, so a party pinned low for six
+    /// rounds is one event and not six. Someone who *died* is not here
+    /// either — they are `AllyDropped`'s, and reporting them in both would
+    /// pay a player twice for the round they lost a program.
+    pub(crate) fn newly_wounded_party(&self, before: &[(Entity, f32)]) -> Vec<Entity> {
+        let threshold = crate::tuning::WOUNDED_INTEGRITY_FRACTION;
+        before
+            .iter()
+            .filter(|(_, was)| *was > threshold)
+            .map(|(e, _)| *e)
+            .filter(|&e| self.creature_alive(e))
+            .filter(|&e| {
+                self.world
+                    .get::<Stats>(e)
+                    .is_some_and(|s| hp_fraction(s) <= threshold)
+            })
+            .collect()
+    }
+
     /// Which living party members took a status this round — the holders an
     /// `Afflicted` passive fires for.
     ///
@@ -191,4 +238,15 @@ impl Game {
             })
             .collect()
     }
+}
+
+/// Integrity as a fraction of maximum, with a zero maximum reading as
+/// unwounded rather than as a division by zero. A free function because
+/// both halves of the `AllyWounded` comparison need it and a doc comment
+/// claiming they agree would not keep them agreeing.
+fn hp_fraction(stats: &Stats) -> f32 {
+    if stats.max_hp <= 0 {
+        return 1.0;
+    }
+    stats.hp.max(0) as f32 / stats.max_hp as f32
 }

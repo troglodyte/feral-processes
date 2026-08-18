@@ -439,8 +439,8 @@ claim to name the routine's only source, and they name different ones.
 
 ## Passives
 
-`triggers: Some(AllyDropped)` — or `Some(Afflicted)` — makes a routine fire
-on an event instead of being chosen on a turn. A passive occupies a slot
+`triggers: Some(RoundStart)` — or `AllyWounded`, `Afflicted`, `AllyDropped`
+— makes a routine fire on an event instead of being chosen on a turn. A passive occupies a slot
 like anything else and appears in no menu: not the Special picker, not the
 field cast list, and not a wild carrier's options. It costs no turn, so its
 `power_cost` is never charged; `cooldown` is its whole price and is honoured
@@ -452,9 +452,27 @@ no call site would be a routine that silently never runs. `triggers` on a
 field-only effect is refused at load for that reason: there is no battle
 moment for it to fire in.
 
-`AllyDropped` fires for every living party member when any party member goes
-down that round. `Afflicted` fires only for the combatant a status condition
-just landed on.
+The four triggers, and who each one fires for:
+
+| Trigger | Fires when | Holders |
+|---|---|---|
+| `RoundStart` | the round opens | every living party member |
+| `AllyWounded` | a living member crosses below a third Integrity **this round** | the wounded member alone |
+| `Afflicted` | a status condition lands on a combatant | the afflicted member alone |
+| `AllyDropped` | a party member goes down that round | every living party member |
+
+`AllyWounded` is a *crossing*, not a state: a member held low for six rounds
+is one event, not six. Someone who died is `AllyDropped`'s and is never also
+reported as wounded.
+
+**Think twice before authoring on `AllyDropped`.** A dropped companion is
+dissolved and despawned when the battle ends, with no revive at any
+difficulty — so a routine paying out there only ever pays a player who has
+already lost far more than the payout is worth, and the only way to use it
+is to let a program die. It suits an exclusive last-stand routine like
+`deadman`, which is meant to be the thing you never want to see fire. For
+anything a player *chooses* to carry — an item's `grants` especially —
+`AllyWounded` is the recoverable crisis you probably meant.
 
 ## The hunt-only set
 

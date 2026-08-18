@@ -440,7 +440,24 @@ pub struct AbilityDef {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveTrigger {
     /// A member of the holder's own group was dropped this round.
+    ///
+    /// A poor basis for anything a player *chooses* to carry: a dropped
+    /// companion is dissolved and despawned at `end_battle` with no revive
+    /// at any difficulty, so a routine that pays out here only ever pays a
+    /// player who has already lost more than the payout is worth. It suits
+    /// `deadman` — an exclusive last-stand routine is meant to be the thing
+    /// you never want to see fire — and `AllyWounded` is what gear reaching
+    /// for "the party is in trouble" actually wants.
     AllyDropped,
+    /// A living member of the holder's own group crossed below
+    /// `tuning::WOUNDED_INTEGRITY_FRACTION` this round.
+    ///
+    /// The recoverable crisis, and the one a player can be glad of: they
+    /// wanted to survive the hit, and something they were carrying answered.
+    /// *Crossed*, not *is under* — a member held at 20% for six rounds is
+    /// one crisis and not six, which is a stronger rule than the cooldown
+    /// alone would give.
+    AllyWounded,
     /// A status condition landed on the holder this round.
     Afflicted,
     /// The round opened. Unlike the other two this is not a fact about the

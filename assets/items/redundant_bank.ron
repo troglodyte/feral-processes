@@ -1,7 +1,7 @@
 (
     id: "redundant_bank",
     name: "Redundant Bank",
-    description: "Scavenged module. Capacity held back and idle, for the moment the party is one short.",
+    description: "Scavenged module. Capacity held back and idle, for the moment the wearer needs it most.",
     value: Some(120),
     equipment: Some((Module, (def: 1))),
     grants: Some("hot_spare"),

@@ -224,6 +224,35 @@ const A_PLAIN_WEAPON: &str = r#"(
     equipment: Some((Weapon, (atk: 1))),
 )"#;
 
+/// A grant on `AllyWounded`, on a module so the wearer's own stat line is
+/// untouched by which of the two fixtures they are in.
+const A_WOUNDING_PASSIVE: &str = r#"(
+    id: "test_wounded",
+    name: "Test Wound Single",
+    description: "Fires when the holder is driven low",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 9),
+    cooldown: 2,
+    power_cost: 0.0,
+    triggers: Some(AllyWounded),
+)"#;
+
+const A_WOUNDING_MODULE: &str = r#"(
+    id: "test_wound_module", name: "Test Wound Module", description: "d",
+    equipment: Some((Module, (def: 1))), grants: Some("test_wounded"),
+)"#;
+
+fn assets_with_a_wounding_passive(tag: &str) -> ScratchAssets {
+    modded_assets_dir(
+        tag,
+        &[],
+        &[("test_wound_module.ron", A_WOUNDING_MODULE)],
+        &[],
+        &[],
+        &[("test_wounded.ron", A_WOUNDING_PASSIVE)],
+    )
+}
+
 fn assets_with_granting_gear(tag: &str) -> ScratchAssets {
     modded_assets_dir(
         tag,
@@ -433,33 +462,50 @@ fn every_shipped_grant_names_a_real_battle_passive() {
     );
 }
 
-/// Every trigger has gear that reaches it. Not decoration: a trigger no
-/// item names is a `PassiveTrigger` variant only a boss drop can ever fire,
-/// which is the state this whole feature exists to leave — and the gap
-/// would be invisible, since each variant would still have its call site
-/// and its shipped ability.
+/// Which triggers gear reaches, pinned as a *decision* rather than as
+/// coverage. The first version of this test asserted every
+/// `PassiveTrigger` variant had gear on it, which turned a deliberate hole
+/// into an omission and is what put two items on `AllyDropped` — a trigger
+/// whose event is a companion being dissolved and despawned, with no
+/// revive at any difficulty. A player never wants that to fire, so nothing
+/// they choose to wear should be built around it.
+///
+/// `deadman` is the exception the list names: an exclusive last-stand
+/// routine is supposed to be the thing you never want to see, and Deadman
+/// Relay is a Wintermute curio rather than a build.
 #[test]
-fn the_shipped_grants_between_them_reach_every_trigger() {
+fn gear_reaches_the_triggers_a_player_can_want_and_only_deadman_reaches_the_other() {
     let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let abilities = game.world.resource::<AbilityDb>();
-    let reached: Vec<PassiveTrigger> = game
+    let granted: Vec<(&str, PassiveTrigger)> = game
         .item_defs()
         .iter()
         .filter_map(|def| def.grants.as_ref())
         .filter_map(|id| abilities.get(id))
-        .filter_map(|def| def.triggers)
+        .filter_map(|def| def.triggers.map(|t| (def.id.as_str(), t)))
         .collect();
 
     for trigger in [
         PassiveTrigger::RoundStart,
-        PassiveTrigger::AllyDropped,
+        PassiveTrigger::AllyWounded,
         PassiveTrigger::Afflicted,
     ] {
         assert!(
-            reached.contains(&trigger),
+            granted.iter().any(|(_, t)| *t == trigger),
             "no shipped item grants anything that fires on {trigger:?}"
         );
     }
+
+    let on_a_death: Vec<&str> = granted
+        .iter()
+        .filter(|(_, t)| *t == PassiveTrigger::AllyDropped)
+        .map(|(id, _)| *id)
+        .collect();
+    assert_eq!(
+        on_a_death,
+        vec!["deadman"],
+        "gear built around losing a program is a design mistake, not a gap to fill"
+    );
 }
 
 /// One shipped item, all the way through a real round, on the real assets
@@ -570,5 +616,104 @@ fn an_affixed_copy_fires_its_grant_and_the_affix_reaches_the_damage() {
     assert!(
         with_affix > without,
         "the affix should reach the passive's swing: {with_affix} against {without}"
+    );
+}
+
+// ------------------------------------------------------ the AllyWounded trigger
+
+/// Puts `entity` one point of Integrity above the wounded line, so the
+/// hostile's own sweep is what carries them across it. Derived from
+/// `WOUNDED_INTEGRITY_FRACTION` rather than written as a number: a fixture
+/// that hardcoded 0.35 would stop testing a crossing the moment the
+/// threshold moved, and would read as the trigger not firing.
+fn park_just_above_the_wounded_line(game: &mut Game, entity: Entity) {
+    let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
+    let line = (stats.max_hp as f32 * tuning::WOUNDED_INTEGRITY_FRACTION).floor() as i32;
+    stats.hp = (line + 1).clamp(1, stats.max_hp);
+}
+
+/// Drives `entity` to `fraction` of its maximum Integrity directly.
+fn set_integrity(game: &mut Game, entity: Entity, fraction: f32) {
+    let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
+    stats.hp = ((stats.max_hp as f32 * fraction).round() as i32).max(1);
+}
+
+/// A grant on `AllyWounded`, and the control that says the wound is what
+/// did it: the same battle where the wearer stays healthy fires nothing.
+#[test]
+fn a_wounded_wearer_fires_its_grant_and_a_healthy_one_does_not() {
+    let dir = assets_with_a_wounding_passive("wounded");
+
+    let mut hurt = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_wound_module");
+    });
+    let player = hurt.player_entity();
+    park_just_above_the_wounded_line(&mut hurt, player);
+    let wounded_damage = damage_in_one_defended_round(&mut hurt);
+
+    let mut healthy = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_wound_module");
+    });
+    let healthy_damage = damage_in_one_defended_round(&mut healthy);
+
+    assert!(
+        wounded_damage > healthy_damage,
+        "crossing the line is what fires it: {wounded_damage} against {healthy_damage}"
+    );
+}
+
+/// The rule the cooldown alone would not give: a party pinned under the
+/// line is one crisis, not one per round. Asserted with the *cooldown
+/// already expired*, or this passes against a passive that simply hasn't
+/// come off cooldown yet.
+#[test]
+fn a_member_already_under_the_line_is_not_newly_wounded() {
+    let dir = assets_with_a_wounding_passive("already_low");
+
+    let mut game = battle_with_a_passive_holder_prepared(&dir, 9402, None, |g| {
+        let player = g.player_entity();
+        wear(g, player, "test_wound_module");
+    });
+    let player = game.player_entity();
+    // Well under the threshold before the round opens, so nothing that
+    // happens in it can be a crossing.
+    set_integrity(&mut game, player, 0.10);
+
+    let mut landed = 0;
+    for _ in 0..6 {
+        if damage_in_one_defended_round(&mut game) > 0 {
+            landed += 1;
+        }
+    }
+    assert_eq!(
+        landed, 0,
+        "a member held low is one crisis; six rounds under the line fired {landed} times"
+    );
+}
+
+/// A dropped member belongs to `AllyDropped` and must not also be reported
+/// as wounded — a round that costs a player a program should not pay them
+/// twice for it.
+#[test]
+fn a_member_who_died_is_not_reported_as_wounded() {
+    let dir = assets_with_a_wounding_passive("died");
+    let mut game = battle_with_a_passive_holder_in(&dir, 9403, None);
+
+    let ally = game.world.resource::<Party>().0[0];
+    let before = game.party_integrity();
+    assert!(
+        before.iter().any(|(e, _)| *e == ally),
+        "the fixture's companion should be in the snapshot"
+    );
+    {
+        let mut stats = game.world.get_mut::<Stats>(ally).unwrap();
+        stats.hp = 0;
+    }
+
+    assert!(
+        !game.newly_wounded_party(&before).contains(&ally),
+        "a dead member is AllyDropped's, not AllyWounded's"
     );
 }

@@ -471,6 +471,17 @@ pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
 /// high-defense matchup where `move_power + atk - def` goes non-positive.
 pub const MIN_DAMAGE: i32 = 1;
 
+/// The Integrity fraction a party member has to cross *downward* in one
+/// round to count as wounded — what fires `PassiveTrigger::AllyWounded`.
+///
+/// A third rather than a half, because half is where an ordinary exchange
+/// puts somebody most fights: a threshold that common makes the trigger
+/// indistinguishable from `RoundStart` on anything with a cooldown, and
+/// stops the moment reading as a crisis at all. Low enough to mean trouble,
+/// high enough that the answer still has a round or two to matter — under a
+/// quarter, most of what could fire has already stopped helping.
+pub const WOUNDED_INTEGRITY_FRACTION: f32 = 0.33;
+
 /// What the player's attack total falls to at zero Power. Between zero and
 /// `LOW_POWER_ATTACK_THRESHOLD` the multiplier interpolates linearly from
 /// this up to full strength — see `battle::power_attack_multiplier`.

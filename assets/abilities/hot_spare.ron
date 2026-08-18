@@ -1,15 +1,20 @@
 (
     id: "hot_spare",
     name: "Hot Spare Single",
-    // PASSIVE on `AllyDropped`, ally-facing where `core_dump` is
-    // enemy-facing — the same event read as "cover the gap" rather than as
-    // "make them pay". Both are Single scope and neither is exclusive, so a
-    // player can be wearing both and have the round a companion drops be
-    // the round they hit hardest and healed most.
-    description: "A companion going down brings the wearer's spare capacity online",
+    // PASSIVE on `AllyWounded`, ally-facing where `core_dump` is
+    // enemy-facing — the same crossing read as "cover the gap" rather than
+    // as "make them pay". `Game::newly_wounded_party` hands the trigger the
+    // wounded combatant rather than the whole party, so this patches the
+    // wearer when the wearer is the one in trouble. On `AllyDropped` it
+    // would have read as being paid for a companion's death.
+    //
+    // Heals less than `core_dump` hits, because a heal on the way down is
+    // worth more than damage: it buys the round the crisis is supposed to
+    // be survivable in.
+    description: "Driven low, the wearer brings its spare capacity online",
     target: OneAlly,
     effect: Heal(power: 8),
     cooldown: 3,
     power_cost: 0.0,
-    triggers: Some(AllyDropped),
+    triggers: Some(AllyWounded),
 )

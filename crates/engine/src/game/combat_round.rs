@@ -115,6 +115,11 @@ impl Game {
         // friendly-fire sweep all reach the same end state, and only one of
         // them would have remembered to set the flag.
         let party_before = self.living_party();
+        // The same snapshot again, with Integrity, because `AllyWounded`
+        // asks whether a member *crossed* the line rather than whether they
+        // are under it — a member sitting at 20% for six rounds is one
+        // crisis, not six.
+        let integrity_before = self.party_integrity();
 
         for actor in self.roll_initiative() {
             if self.world.get_resource::<BattleState>().is_none() {
@@ -144,13 +149,23 @@ impl Game {
         }
 
         // Passives, after every chosen action and before the round is
-        // closed out. Both triggers are answered from state rather than
-        // from an event stream, which is what lets them sit here in one
-        // place instead of at every site that could cause them.
+        // closed out. All three triggers are answered from state rather
+        // than from an event stream, which is what lets them sit here in
+        // one place instead of at every site that could cause them.
         //
         // `Afflicted` is read *before* `tick_round_status_effects`, which
         // clears `landed_this_round` — see `Game::newly_afflicted_party`.
+        //
+        // `AllyWounded` before `AllyDropped` and not after: a round that
+        // takes a member from healthy to dead is the second event, not both,
+        // and `newly_wounded_party` keeps them disjoint by only reporting
+        // survivors. Ordering them this way means a member wounded by the
+        // same round that killed a *different* one still gets their answer.
         if self.world.get_resource::<BattleState>().is_some() {
+            let wounded = self.newly_wounded_party(&integrity_before);
+            if !wounded.is_empty() {
+                self.fire_passives(PassiveTrigger::AllyWounded, &wounded);
+            }
             if party_before.iter().any(|&e| !self.creature_alive(e)) {
                 let living = self.living_party();
                 self.fire_passives(PassiveTrigger::AllyDropped, &living);

@@ -25,33 +25,33 @@ that automate a base, not the base itself.
 
 ## Everything that can be built
 
-|  | Structure | Build cost | Cap | Makes / does |
-|:---|:---|:---|---:|:---|
-| `H` | Home | 5 `core_fragment` | - | anchors the base, radius 4 and up |
-| `$` | Mining Node | 12 `core_fragment` | - | `core_fragment` |
-| `T` | Log Scraper | 14 `core_fragment` | - | `raw_trace` |
-| `R` | Research Node | 10 `core_fragment` | - | `research_data` |
-| `+` | Power Conduit | 14 `core_fragment` | - | `power_cell` |
-| `&` | Compiler | 16 `core_fragment` | 20 | `ice_breaker` |
-| `L` | Lathe | 18 `core_fragment` | 20 | `blank_substrate` |
-| `B` | Refinery | 18 `core_fragment` | 20 | `bytecode_block` |
-| `S` | Transcriber | 18 `core_fragment` | 20 | `logic_wafer` |
-| `W` | Winding Node | 18 `core_fragment` | 20 | `charge_coil` |
-| `P` | Disk Press | 20 `core_fragment`, 4 `blank_substrate` | 10 | `routine_disk` |
-| `%` | Armory | 18 `core_fragment` | 15 | `hardened_shell` |
-| `*` | Fabricator | 18 `core_fragment` | 15 | `trace_sniffer` |
-| `Y` | Assembly Bay | 20 `core_fragment`, 4 `charge_coil` | 10 | `patch_routine` |
-| `A` | Annealing Node | 16 `core_fragment` | 20 | `annealed_core` |
-| `X` | Refactor Bench | 22 `core_fragment`, 4 `annealed_core` | 10 | `recompile_kernel` |
-| `$` | iso Market | 16 `core_fragment` | - | buys and sells, 1 Credit a unit |
-| `!` | Contract Broker | 5 `core_fragment` | - | posts contracts, takes deliveries |
-| `=` | Data Cache | 10 `core_fragment` | - | +5 roster slots while standing |
-| `D` | Depot | 12 `core_fragment` | 100 | programs stock it and fetch from it |
-| `^` | Shield | 16 `core_fragment` | - | -2 sweep damage, base-wide |
-| `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | +1 Durability per tier / 20 ticks |
-| `z` | Recharger Node | 10 `core_fragment` | - | +1 Power a tick, base-wide |
-| `I` | Heap Pillar | 14 `core_fragment` | - | +1 tile of base radius, max 5 |
-| `O` | Zone Portal | 10 `portal_fragment` | - | breaches to the next sector |
+|  | Structure | Build cost | Cap | Draw | Supply | Makes / does |
+|:---|:---|:---|---:|---:|---:|:---|
+| `H` | Home | 5 `core_fragment` | - | - | 4 | anchors the base, radius 4 and up |
+| `$` | Mining Node | 12 `core_fragment` | - | 1 | - | `core_fragment` |
+| `T` | Log Scraper | 14 `core_fragment` | - | 1 | - | `raw_trace` |
+| `R` | Research Node | 10 `core_fragment` | - | 1 | - | `research_data` |
+| `+` | Power Conduit | 14 `core_fragment` | - | 1 | - | `power_cell` |
+| `&` | Compiler | 16 `core_fragment` | 20 | 3 | - | `ice_breaker` |
+| `L` | Lathe | 18 `core_fragment` | 20 | 2 | - | `blank_substrate` |
+| `B` | Refinery | 18 `core_fragment` | 20 | 2 | - | `bytecode_block` |
+| `S` | Transcriber | 18 `core_fragment` | 20 | 2 | - | `logic_wafer` |
+| `W` | Winding Node | 18 `core_fragment` | 20 | 2 | - | `charge_coil` |
+| `P` | Disk Press | 20 `core_fragment`, 4 `blank_substrate` | 10 | 2 | - | `routine_disk` |
+| `%` | Armory | 18 `core_fragment` | 15 | 3 | - | `hardened_shell` |
+| `*` | Fabricator | 18 `core_fragment` | 15 | 3 | - | `trace_sniffer` |
+| `Y` | Assembly Bay | 20 `core_fragment`, 4 `charge_coil` | 10 | 3 | - | `patch_routine` |
+| `A` | Annealing Node | 16 `core_fragment` | 20 | 2 | - | `annealed_core` |
+| `X` | Refactor Bench | 22 `core_fragment`, 4 `annealed_core` | 10 | 3 | - | `recompile_kernel` |
+| `$` | iso Market | 16 `core_fragment` | - | - | - | buys and sells, 1 Credit a unit |
+| `!` | Contract Broker | 5 `core_fragment` | - | - | - | posts contracts, takes deliveries |
+| `=` | Data Cache | 10 `core_fragment` | - | - | - | +5 roster slots while standing |
+| `D` | Depot | 12 `core_fragment` | 100 | - | - | programs stock it and fetch from it |
+| `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage, base-wide |
+| `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
+| `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
+| `I` | Heap Pillar | 14 `core_fragment` | - | - | - | +1 tile of base radius, max 5 |
+| `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node
 and the iso Market both draw as `$`, and the Recharger Node draws as `z`, the

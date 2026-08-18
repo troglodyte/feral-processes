@@ -12,34 +12,34 @@
 # hand-arranged, and it is what `every_shipped_assembler_recipe_is_a_single_
 # ingredient` holds to one input apiece.
 S = [
- # id               name             glyph color    build cost                                 kind        makes / does                    ticks cap  feeder          upgrade
- ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 4 and up", None, None, None,          None),
- ("mining_node",    "Mining Node",    "$", "Brown",  [("core_fragment", 12)],                   "producer", "core_fragment",                    10, None, None,          10),
- ("log_scraper",    "Log Scraper",    "T", "Cyan",   [("core_fragment", 14)],                   "producer", "raw_trace",                        10, None, None,          10),
- ("research_node",  "Research Node",  "R", "Cyan",   [("core_fragment", 10)],                   "producer", "research_data",                    14, None, None,          10),
- ("power_conduit",  "Power Conduit",  "+", "Yellow", [("core_fragment", 14)],                   "producer", "power_cell",                        6, None, None,          None),
- ("compiler",       "Compiler",       "&", "Green",  [("core_fragment", 16)],                   "assembler","ice_breaker",                       8,   20, "mining_node", 12),
- ("lathe",          "Lathe",          "L", "Brown",  [("core_fragment", 18)],                   "assembler","blank_substrate",                  12,   20, "mining_node", None),
- ("refinery",       "Refinery",       "B", "Orange", [("core_fragment", 18)],                   "assembler","bytecode_block",                   12,   20, "mining_node", None),
- ("transcriber",    "Transcriber",    "S", "Cyan",   [("core_fragment", 18)],                   "assembler","logic_wafer",                      12,   20, "mining_node", None),
- ("winding_node",   "Winding Node",   "W", "Blue",   [("core_fragment", 18)],                   "assembler","charge_coil",                      12,   20, "mining_node", None),
- ("disk_press",     "Disk Press",     "P", "Magenta",[("core_fragment", 20), ("blank_substrate", 4)], "assembler","routine_disk",              20,   10, "lathe",       None),
- ("armory",         "Armory",         "%", "Blue",   [("core_fragment", 18)],                   "assembler","hardened_shell",                   30,   15, "refinery",    None),
- ("fabricator",     "Fabricator",     "*", "White",  [("core_fragment", 18)],                   "assembler","trace_sniffer",                    30,   15, "transcriber", None),
- ("assembly_bay",   "Assembly Bay",   "Y", "Magenta",[("core_fragment", 20), ("charge_coil", 4)],"assembler","patch_routine",                   20,   10, "winding_node",None),
- ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None),
- ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None),
- ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None),
- ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 5)] ,                   "utility",  "posts contracts, takes deliveries",None, None, None,         None),
- ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None),
- ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs stock it and fetch from it",None, 100, None,        None),
- ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None),
- ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12),
- ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None),
- ("heap_pillar",    "Heap Pillar",    "I", "Cyan",   [("core_fragment", 14)],                   "utility",  "+1 tile of base radius, max 5",   None, None, None,          None),
- ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None),
+ # id               name             glyph color    build cost                                 kind        makes / does                    ticks cap  feeder          upgrade          draw supply
+ ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 4 and up", None, None, None,          None,            0,   4),
+ ("mining_node",    "Mining Node",    "$", "Brown",  [("core_fragment", 12)],                   "producer", "core_fragment",                    10, None, None,          10,              1,   0),
+ ("log_scraper",    "Log Scraper",    "T", "Cyan",   [("core_fragment", 14)],                   "producer", "raw_trace",                        10, None, None,          10,              1,   0),
+ ("research_node",  "Research Node",  "R", "Cyan",   [("core_fragment", 10)],                   "producer", "research_data",                    14, None, None,          10,              1,   0),
+ ("power_conduit",  "Power Conduit",  "+", "Yellow", [("core_fragment", 14)],                   "producer", "power_cell",                        6, None, None,          None,            1,   0),
+ ("compiler",       "Compiler",       "&", "Green",  [("core_fragment", 16)],                   "assembler","ice_breaker",                       8,   20, "mining_node", 12,              3,   0),
+ ("lathe",          "Lathe",          "L", "Brown",  [("core_fragment", 18)],                   "assembler","blank_substrate",                  12,   20, "mining_node", None,            2,   0),
+ ("refinery",       "Refinery",       "B", "Orange", [("core_fragment", 18)],                   "assembler","bytecode_block",                   12,   20, "mining_node", None,            2,   0),
+ ("transcriber",    "Transcriber",    "S", "Cyan",   [("core_fragment", 18)],                   "assembler","logic_wafer",                      12,   20, "mining_node", None,            2,   0),
+ ("winding_node",   "Winding Node",   "W", "Blue",   [("core_fragment", 18)],                   "assembler","charge_coil",                      12,   20, "mining_node", None,            2,   0),
+ ("disk_press",     "Disk Press",     "P", "Magenta",[("core_fragment", 20), ("blank_substrate", 4)], "assembler","routine_disk",              20,   10, "lathe",       None,            2,   0),
+ ("armory",         "Armory",         "%", "Blue",   [("core_fragment", 18)],                   "assembler","hardened_shell",                   30,   15, "refinery",    None,            3,   0),
+ ("fabricator",     "Fabricator",     "*", "White",  [("core_fragment", 18)],                   "assembler","trace_sniffer",                    30,   15, "transcriber", None,            3,   0),
+ ("assembly_bay",   "Assembly Bay",   "Y", "Magenta",[("core_fragment", 20), ("charge_coil", 4)],"assembler","patch_routine",                   20,   10, "winding_node",None,            3,   0),
+ ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None,            2,   0),
+ ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None,          3,   0),
+ ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None,            0,   0),
+ ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 5)] ,                   "utility",  "posts contracts, takes deliveries",None, None, None,         None,            0,   0),
+ ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None,            0,   0),
+ ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs stock it and fetch from it",None, 100, None,        None,            0,   0),
+ ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None,            0,   0),
+ ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12,              0,   0),
+ ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
+ ("heap_pillar",    "Heap Pillar",    "I", "Cyan",   [("core_fragment", 14)],                   "utility",  "+1 tile of base radius, max 5",   None, None, None,          None,            0,   0),
+ ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),
 ]
-K = "id name glyph color cost kind does ticks cap feeder upgrade".split()
+K = "id name glyph color cost kind does ticks cap feeder upgrade draw supply".split()
 R = [dict(zip(K, r)) for r in S]
 BY = {r["id"]: r for r in R}
 
@@ -135,10 +135,11 @@ that automate a base, not the base itself.
 
 ## Everything that can be built
 
-{table(["", "Structure", "Build cost", "Cap", "Makes / does"],
+{table(["", "Structure", "Build cost", "Cap", "Draw", "Supply", "Makes / does"],
        [[f'`{r["glyph"]}`', r["name"], cost_text(r["cost"]), r["cap"] or "-",
+         r["draw"] or "-", r["supply"] or "-",
          (f'`{r["does"]}`' if r["kind"] != "utility" else r["does"])] for r in R],
-       ["l", "l", "l", "r", "l"])}
+       ["l", "l", "l", "r", "r", "r", "l"])}
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node
 and the iso Market both draw as `$`, and the Recharger Node draws as `z`, the

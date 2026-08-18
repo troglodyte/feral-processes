@@ -2652,3 +2652,121 @@ shape as "`balance_sim` has no Stack term at all" above. The suite's job
 here is to prove the *mechanism* — costs are charged, the right entity pays,
 an empty reserve refuses — and no number in it. The instruments that can see
 the numbers are `dev-arenas/` and a session.
+
+### The ledger is one pure function with two callers, and `runs_a_job()` is its "is this a machine" predicate
+
+**`game::base::power::ledger` is one pure function with two callers**:
+`systems::power_grid_system`, which parks the result in `resources::PowerGrid`
+for the systems behind it in the chain, and `Game::base_power`, which the
+base pane's grid header reads directly so the number is right on the very
+first frame after a load — before any tick has run and while `PowerGrid`
+still holds its `Default`. One function rather than a rule stated twice: the
+tick-cache path and the read-before-any-tick path would otherwise be two
+copies of "sum supply, sum draw over machines, cut in `(x, y)` order",
+exactly the shape `CLAUDE.md`'s comment-discipline rule already warns is the
+one that drifts.
+
+**`StructureDef::runs_a_job()` — `self.work.is_some() || self.assembles.is_some()`
+— is the ledger's "is this a machine" predicate, and the ledger is the
+*fourth* caller that has to agree with it, not the first.** Three call sites
+already used it to answer the same question before the grid existed:
+`building.rs`'s spawn path and `lifecycle.rs`'s load path both gate whether an
+entity gets a `MachineStatus` component at all, and
+`Game::accepts_a_program` gates whether the cronjob menu offers a structure a
+posting. `ledger` is what decides whether that same structure can go dark —
+and it has to walk in step with the other three, because `PowerLedger::dark`
+holds `Entity`, and the only thing that can *read* a dark verdict back off an
+entity is a `MachineStatus` component. A structure that `runs_a_job()` for
+the ledger's purposes but didn't get one at spawn would be counted against
+the supply, possibly darkened, and have nowhere to show it — silently eating
+budget on the player's behalf with no way to diagnose it from the pane. A
+structure that has a `MachineStatus` but the ledger doesn't count is the
+opposite fault: it never draws and can never go dark no matter how far the
+base overruns, which reads as a machine the grid quietly forgot to charge.
+Four sites reading the same boolean off the same method is what keeps those
+two failure modes from opening up between them; a fifth "is this a machine"
+check written by hand anywhere in the base code is the one to catch in
+review.
+
+### One writer and three guards, and why the power system runs first
+
+**`idle_machine_system` is the single writer of `MachineStatus::Unpowered`,
+and three systems behind it in the chain — `task_progress_system`,
+`assembler_system`, and `player_gather_system` — guard on the same fact
+(`resources::PowerGrid::is_dark`) without writing a status of their own.**
+That is three guards, not two. The plan and the design spec both under-count
+it at two, because both were written against the two-system chain the base
+had before this feature — a cronjob worker (`task_progress_system`) and an
+assembler (`assembler_system`). `player_gather_system`, the player
+hand-working a node themselves, was not a guard either draft anticipated
+needing, and it turned out to need one for the same reason the other two do:
+without it, a player standing at a dark node could still call
+`deliver_payout` and pull a real, paid-out unit of production out of a
+machine the ledger had already declared dark — the mechanic working exactly
+as before, just with the pane's status label lying about it. Worse, that
+payout path *writes* `MachineStatus::Running` on its own tick, so a player
+willing to stand at the node could flip a machine `idle_machine_system` had
+just set to `Unpowered` back to `Running` every single tick — the very
+twice-per-transition logging the design rejected a last-in-chain power
+system specifically to avoid, reopened through a third door neither the plan
+nor the spec had a system standing behind at the time either was written.
+This was a controller ruling made during Task 3's implementation, not a
+scope change signed off in either document; both should be read as
+describing a system that no longer exists until they're corrected to match.
+
+**Why the guards write nothing.** All three run *after* `idle_machine_system`
+in the chain, so the tick's `Unpowered` verdict is already on the component
+by the time any of them would touch it. A guard that also wrote a status —
+`Running` on progress, or anything else — would have `idle_machine_system`
+put `Unpowered` back on at the top of the *next* tick, and the guard flip it
+right back, forever, for as long as the base stayed short. `set_machine_status`
+logs on every transition, so that isn't just a wasted write: it's a message
+in the base log every tick the grid is short, for however many machines are
+dark.
+
+**Why `power_grid_system` runs first, ahead of even `idle_machine_system`.**
+`Game::build_schedule` chains it at the head of the base group specifically
+so which machines are dark is decided *before* anything reads or writes a
+`MachineStatus` that tick. A power system placed last in the chain instead
+would compute this tick's cut only after the other four systems had already
+acted on last tick's verdict — so a machine that just lost supply would keep
+producing for one more tick under a status that no longer described it, and
+the correction landing last would itself be the second write of the tick,
+which is the same ping-pong the three-guard design exists to prevent, just
+moved from "guards write" to "the source of truth arrives late."
+
+### Why `Unpowered` was allowed a sixth `MachineStatus` variant where `output_stranded` was refused one
+
+**`components::MachineStatus` gained a sixth variant, `Unpowered`, at the top
+of its precedence over the five that existed before it — but `views.rs`'s
+`output_stranded` field, a fact of the same rough shape ("this machine isn't
+producing and the player needs to know why"), was deliberately kept *out* of
+the enum rather than added as its own sixth variant when depots shipped.**
+The two decisions look inconsistent until the actual test is named, and it's
+stated at `views.rs:504`: a `MachineStatus` variant has to be **one
+machine's own state** — a fact fully determined by looking at that structure
+alone — not a fact about the base as a whole that merely happens to be
+displayed on every structure it affects.
+
+`output_stranded` fails that test. It's true (or false) for *every* machine
+whose output is full while the base has nowhere to route it — one condition,
+"no depot with room exists," read off the whole base and stamped onto
+however many machines are backed up behind it at once. Folding it into
+`MachineStatus` would have meant deciding its precedence against all five
+existing variants for a fact that isn't really about any one of them; a
+`Clogged` machine and a `Stranded` machine could both also be
+`output_stranded`, and the enum can hold exactly one variant at a time.
+
+`Unpowered` passes the same test only because of the ledger's `(x, y)` cut
+order. The *shortfall* is base-wide — one number, `draw > supply` — but
+*which machines lose the cut* is not: the ledger sorts every job-running
+machine by position and walks the list once, so machine A can end up
+`Unpowered` while machine B, two tiles over and otherwise identical, keeps
+running because the budget ran out on A first. Whether *this* machine is
+dark is therefore fully decided by looking at this machine's own draw
+against its own place in the cut order — the same kind of fact `Running`,
+`Starved`, `Clogged`, `Unstaffed`, `Stranded` and `Idle` already are, just
+sourced from the grid rather than from a `Task` or a `Stock`. A base-wide
+shortfall reads through the cut order into a fact that is, tile by tile,
+each machine's own — which is exactly why `views.rs:504`'s test says yes to
+a sixth `MachineStatus` variant here where it said no to `output_stranded`.

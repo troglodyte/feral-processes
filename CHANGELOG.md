@@ -27,6 +27,64 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.8
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+A biome was renamed, which sounds like a save break and is not: the old name
+is kept as an alias, so a save written before this release loads and reads
+back as the new one.
+
+**One mod-facing schema change.** A sector file's `static_temperature` key is
+now `deadlock_temperature`, matching the biome it names. The old key still
+works — a sector written before this release applies its threshold exactly as
+it did — but new sectors should use the new name. See
+`assets/sectors/README.md`.
+
+### The ground has a name, and past the first sector it does something
+
+Terrain has been scenery since the game started. It decided what spawned on
+it and what colour it drew, and that was the whole of it — the player could
+not even find out what they were walking on.
+
+Every biome now has a name, and crossing from one into another says so. That
+much happens from the first step of a new run, in every sector, including the
+first.
+
+Past sector 1, three of them also do something. Deadlock queues you: a step
+onto it costs an extra tick, and the world keeps running through it — a
+production cycle finishes, a need decays, a wandering program gets one move
+closer. Null Sector and Mainframe cost Integrity instead, a small fraction of
+your maximum on every step, so crossing one is a supply problem rather than a
+countdown. Open Grid, which most of the map is made of, stays exactly as it
+was. Sector 1 is neutral ground throughout; it is where a run learns the
+game, and ground that bit there would be a tax on the tutorial rather than an
+exception to it.
+
+The bite goes through the same path a hit in a fight does, so mitigation
+applies to it — Ablative Layer is worth something on a long crossing. Only
+the player takes it; the party is never touched. Terrain never costs Power
+and never raises Trace.
+
+### Ambient effects are a content directory
+
+`assets/environment/` is the new one, and it works the way the others do: one
+`.ron` file per effect, a malformed one skipped with a warning rather than a
+crash, and a schema reference in `assets/environment/README.md`. A file names
+the biomes it claims and one of two effect shapes. **Deleting the directory
+restores the pre-effects game exactly**, the same supported way deleting
+`assets/sectors/` does.
+
+Three refusals are enforced at load, each protecting something a file has no
+business revoking: the base slab may not be claimed — it is the one safe
+ground in the game — and both magnitudes are capped, against ground that
+kills in two steps and against a step that reads as a hang.
+
+### The cold biome is called Deadlock
+
+Static Field is now Deadlock. The rename frees the word "static" for a
+weather layer this is the first phase of, and the new name says what the
+ground is: allocations that never resolved and are still waiting.
+
 ## 0.11.7
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

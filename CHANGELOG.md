@@ -27,6 +27,49 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.7
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+Nothing here touches what a save holds — one of these is a base-logic fix and
+the other is a renderer change to what an existing screen prints.
+
+### A work order sees the route its haulers already walk
+
+Standing a Compiler and a Lathe on the slab could leave the Request row
+missing from the base menu entirely, with nothing anywhere saying why. The
+picker only offers an item some standing machine can actually make, and the
+question it asked was whether a feeder for every ingredient stood
+*orthogonally beside* the bench.
+
+That was never the rule the base ran on. A worker fetches a missing
+ingredient off a Depot shelf and walks it back, and the scheduler has staffed
+a machine on the strength of that since Depots shipped. So a base with a
+Mining Node, a Depot holding fragments, and two benches a couple of tiles
+away was already able to run both of them — and was refused an order for what
+they make, silently, because the machine that decides what to offer and the
+machine that decides who to post were reading two different rules.
+
+They read one rule now: a bench is fed by a neighbour, or, when a Depot is
+standing, by any producer in the base. The walk that decides who to post
+reaches through the same route, which is what keeps the order moving once the
+shelf runs thin rather than stalling with nobody working anything. A base
+with no Depot behaves exactly as it did, and the refusal still names the
+ingredient nothing is making.
+
+### An item says what it does, where you are looking at it
+
+Seven of the shipped modules grant a passive routine while worn. Six items
+permanently upgrade a companion. There are two consumables and a taming
+catalyst. None of that appeared on any screen that *lists* items — an
+inventory row said what the item would add to your stats and nothing else,
+and the effect was visible only on the description page two keypresses
+further in.
+
+Every extra effect an item carries now prints on its own line under the item,
+in the inventory, on a trader's three shelves, on a Stack market's sell list
+and on the action screen you open a row into. A stat bonus stays where it
+was, on the row itself, since it was never the thing that was missing.
+
 ## 0.11.6
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

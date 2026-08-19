@@ -1037,10 +1037,16 @@ Heap Block claims a single tile in the one direction the player chose, and
 leaves nothing behind to count — it *cannot*, because the whole point of
 the tile is that it stays empty and buildable. So
 `resources::Platform::claimed` is stored where `radius` is derived, as
-offsets from `center`, and rides an additive `#[serde(default)]` field on
-`SaveData`. No version bump: the encoding has been field-named RON since
-29. Offsets rather than absolute tiles is what makes the claims travel
-with the base on a breach, the same way every structure's position does —
+offsets from `center`. **Stale as of `SAVE_FORMAT_VERSION` 32** (TODO #36,
+"the base, out of phase"): the `#[serde(default)]` field this paragraph
+describes, `SaveData::claimed_tiles`, is gone rather than superseded, so a
+claim bought this session no longer survives a reload — `resources::Platform`
+itself retires later in the same slice, replaced by `base_grid::BaseGrid`.
+Until that migration lands, everything below about *live*, in-session
+behaviour (offsets from `center`, `covers`, the growth-axis argument, the
+refusal rules) is still accurate; only persistence changed. Offsets rather
+than absolute tiles is what makes the claims travel with the base on a
+breach within a session, the same way every structure's position does —
 paid-for ground is part of the base, and the base travels whole.
 `Platform::covers` stays the one statement of the footprint (circle *or*
 claim), so `broker_reach`, `place_structure`'s reach check and

@@ -466,20 +466,26 @@ pub struct SaveData {
     /// most of the way to its cache.
     pub nests: Vec<NestSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
-    /// Base ground bought a tile at a time, as offsets from the Home — see
-    /// `resources::Platform::claimed`.
+    /// The base's pocket-dimension coordinate space — see
+    /// `base_grid::BaseGrid`. Saved wholesale, the same way `stack_memory`
+    /// below is: no seed can reproduce what the player mined and floored, so
+    /// unlike zone terrain there is nothing to regenerate it from.
     ///
-    /// The one piece of the footprint that is not derivable: a claim leaves
-    /// no entity behind, so unlike the radius there is nothing to count it
-    /// back from. `tile_overrides` carries the *floor*, but not the fact
-    /// that the base owns it, and without that a re-stamp — the next Pillar,
-    /// the next breach — would take it away again.
+    /// Supersedes `claimed_tiles`, which named ground the base owned but
+    /// carried no state of its own — a claim leaves no entity behind, and
+    /// `tile_overrides` only carried the *floor* it stamped, not the fact
+    /// that the base owned it. `BaseGrid` needs neither workaround: base
+    /// space is its own coordinate system, so a floored cell already *is*
+    /// the record of ownership.
     ///
-    /// Sorted on write for the reason `researched` is: the encoded bytes
-    /// must not depend on set iteration order. Additive behind
-    /// `#[serde(default)]`, so it earns no version bump.
+    /// `#[serde(default)]` does nothing for the *real* save file — a v31
+    /// file never reaches this deserializer, refused by the version line in
+    /// `load_from_file` before RON is even parsed — but it is here for the
+    /// field-named RON that `dev-saves/` templates are written in, matching
+    /// `known_routines`/`trace`/`rarity`: an existing template loads with an
+    /// empty (fully solid) base rather than needing a hand recapture.
     #[serde(default)]
-    pub claimed_tiles: Vec<(i32, i32)>,
+    pub base_grid: crate::base_grid::BaseGrid,
     /// Which zone sector the player had breached into.
     pub zone: u32,
     /// Where the player materialized on breaching into that zone — see
@@ -656,7 +662,15 @@ pub struct SaveData {
 /// read as 6% mitigation rather than 6 points of soak, so it is refused by
 /// version instead. `FieldBuffKind::Mitigation` folding into `Mitigation` rides the
 /// same bump.
-pub const SAVE_FORMAT_VERSION: u32 = 31;
+/// 31 → 32: `claimed_tiles` removed, `base_grid` added — the base is
+/// leaving the zone surface for its own pocket-dimension coordinate space
+/// (`base_grid::BaseGrid`; see TODO #36, "the base, out of phase"). A field
+/// *removed* is exactly the case field-named RON does not excuse from a
+/// bump, the same reasoning `fatigue`'s removal at 30 spent. This is the
+/// only bump the whole migration needs: later tasks in the same slice add
+/// further save fields (an anchor's position, among them) behind
+/// `#[serde(default)]`, which is additive and free.
+pub const SAVE_FORMAT_VERSION: u32 = 32;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -879,7 +893,7 @@ mod tests {
             structures: Vec::new(),
             nests: Vec::new(),
             tile_overrides: Vec::new(),
-            claimed_tiles: Vec::new(),
+            base_grid: crate::base_grid::BaseGrid::default(),
             zone: 1,
             spawn_point: (0, 0),
             buyback: Vec::new(),

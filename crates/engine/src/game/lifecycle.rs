@@ -352,6 +352,7 @@ impl Game {
         }));
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(Platform::default());
+        world.insert_resource(data.base_grid);
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -805,12 +806,19 @@ impl Game {
         // structures are both — the Home's position for one, and every
         // `build_radius_bonus` among them for the other. Structures are
         // already back by this point, so `build_radius` is correct here.
+        //
+        // `claimed` is deliberately left at `Platform::default`'s empty set:
+        // `SAVE_FORMAT_VERSION` 32 dropped `claimed_tiles` (see that
+        // constant's docs), and `resources::Platform` itself retires later
+        // in this slice in favour of `base_grid::BaseGrid`. Until then, a
+        // claim bought this session does not survive a reload — a known,
+        // temporary gap on the way to the pocket dimension rather than an
+        // oversight here.
         if let Some(home) = game.home_position() {
             let radius = game.build_radius();
             let mut platform = game.world.resource_mut::<Platform>();
             platform.center = Some((home.x, home.y));
             platform.radius = radius;
-            platform.claimed = data.claimed_tiles.iter().copied().collect();
         }
 
         // Reconnect each restored cronjob to its target structure now that
@@ -1067,17 +1075,7 @@ impl Game {
             .map(|(k, v)| (*k, *v))
             .collect();
 
-        let claimed_tiles = {
-            let mut tiles: Vec<(i32, i32)> = self
-                .world
-                .resource::<Platform>()
-                .claimed
-                .iter()
-                .copied()
-                .collect();
-            tiles.sort_unstable();
-            tiles
-        };
+        let base_grid = self.world.resource::<crate::base_grid::BaseGrid>().clone();
 
         let data = save::SaveData {
             seed: self.world.resource::<WorldMap>().seed(),
@@ -1136,7 +1134,7 @@ impl Game {
             structures,
             nests,
             tile_overrides,
-            claimed_tiles,
+            base_grid,
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {
                 let p = self.world.resource::<ZoneSpawnPoint>();

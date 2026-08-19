@@ -13,9 +13,10 @@
 use std::collections::BTreeMap;
 
 use bevy_ecs::prelude::Resource;
+use serde::{Deserialize, Serialize};
 
 /// One cell of base space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseCell {
     /// Carved out but not yet floored: walkable, but not a `Floor` for
     /// whatever a later task ties to build placement. `mined_at` is the
@@ -30,7 +31,17 @@ pub enum BaseCell {
 /// A `Resource` distinct from `WorldMap`: base space is not a zone, has no
 /// biome, and is never generated from a seed. Every coordinate starts and
 /// stays solid until `open` or `lay_floor` puts a cell there.
-#[derive(Resource, Default)]
+///
+/// `Serialize`/`Deserialize` derive straight onto this struct — `cells`
+/// stays private, since serde's derive is generated inside this module and
+/// does not need a public field the way an external encoder would — and it
+/// is embedded directly in `save::SaveData` as `base_grid`, the same way
+/// `resources::StackMemory`/`PopulatedChunks` are: it is saved wholesale
+/// rather than mirrored into a separate save-shaped type, because there is
+/// no engine-internal reason to keep this type out of the save (unlike, say,
+/// `components::TaskKind`, which stays un-derived and gets `save::CronjobKind`
+/// as its mirror instead).
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BaseGrid {
     cells: BTreeMap<(i32, i32), BaseCell>,
 }

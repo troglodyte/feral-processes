@@ -2831,12 +2831,16 @@ fn a_machine_on_claimed_ground_does_not_grow_the_slab() {
     );
 }
 
-/// Claimed ground is not derivable from anything deployed — no entity
-/// stands on it — so unlike the radius it has to be saved. Additive behind
-/// `#[serde(default)]`, so this must pass at the current
-/// `SAVE_FORMAT_VERSION`.
+/// Claimed ground no longer survives a save and load. It used to: this test
+/// asserted the opposite until `SAVE_FORMAT_VERSION` 32 dropped
+/// `save::SaveData::claimed_tiles` (see that constant's docs), which was the
+/// field carrying it. `resources::Platform` — the whole slab-and-claims
+/// system, `claimed` included — retires later in this same slice, replaced
+/// by `base_grid::BaseGrid`; until that migration lands, a claim bought this
+/// session is real for the session and gone on reload, rather than silently
+/// wrong.
 #[test]
-fn claimed_ground_survives_a_save_and_load() {
+fn claimed_ground_does_not_survive_a_save_and_load() {
     let dir = assets_dir_with_extra_structure("claim_save", "test_tile.ron", CLAIMING_TILE);
     let mut game = Game::new(735, DifficultyMode::Forgiving, &dir).unwrap();
     place_home(&mut game, 0, 0);
@@ -2856,9 +2860,10 @@ fn claimed_ground_survives_a_save_and_load() {
     let _ = std::fs::remove_dir_all(&dir);
 
     stand_player_at(&mut loaded, home.x + dx * edge, home.y + dy * edge);
-    loaded
-        .place_structure("mining_node", dx, dy)
-        .expect("the claim came back with the save");
+    assert!(
+        loaded.place_structure("mining_node", dx, dy).is_err(),
+        "the claim must not survive a reload now that claimed_tiles is gone"
+    );
 }
 
 /// The base travels whole — structures keep their offsets from the Home —

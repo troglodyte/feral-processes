@@ -1383,6 +1383,49 @@ which is the same argument `Rarity::label` makes for the tier word alone.
 Note the consequence for `equip_preview_tag`: it deliberately does *not*
 repeat the tier, because the name beside it already carries it.
 
+### An item's extra effects are three lengths of one derivation, and each has its own audience
+
+**`Game::item_effects` is the one place a listing screen learns what an
+item does beyond its stat block.** It returns one short line per effect an
+item declares — a passive routine granted while worn, what consuming it
+does, what refactoring a companion with it does, what it adds to a
+decompile — and `render/inventory.rs::effect_lines` is the one place those
+become indented rows. The inventory list, a trader's three shelves, a
+Stack market's sell shelf and the item action screen all draw it.
+
+The three lengths are deliberate and are **not** interchangeable.
+`item_blurb` is a two-or-three word gloss for the crafting menu, which
+lists things you do *not* have and needs a reason to want one.
+`item_effects` is the middle length, for a screen listing what you *do*
+have, where the answer has to fit on a row beside four columns.
+`item_grant` hands the describe page a routine's full authored prose. The
+middle one **calls** `item_grant` rather than reading `grants` a second
+time, and prices a pre-battle buff through
+`FieldBuffKind::magnitude_label`, the same call the running buff list
+makes — so a bottle and the buff it arms cannot quote different numbers.
+
+**A stat bonus is not an effect here.** It already rides
+`equip_preview_tag` on the row's own line, and repeating it underneath is
+the column twice — the same call `item_blurb` makes about not naming a
+slot beside an `ItemCategory::short_label` column.
+
+The trap is **units**, and both shipped shapes are counter-intuitive.
+`CompanionUpgradeDef`'s percentages are percentage *points* —
+`refactor::raised` divides by 100 — so a `× 100.0` here reported a Buffer
+Extension's +5% HP as +500%. `ItemDef::taming_potency` is the opposite: a
+0..1 fraction, and not an addend at all but the **base**
+`taming::capture_chance` multiplies by resistance, skill and any running
+`CaptureBoost`. The line says "base capture 40%" rather than "+40%"
+because a flat-bonus reading is a claim the formula does not make. Both
+are pinned by tests that assert against the shipped defs' own values
+rather than against a literal containing a `%`, which is what let the
+100× error pass the first time.
+
+Adding a fifth effect field to `ItemDef` is caught by
+`every_shipped_item_with_an_effect_field_gets_a_line`, a census in both
+directions — the guard against a field shipping while reaching no screen,
+which is exactly how `power_cost` reached nothing for three releases.
+
 ### An affix is data and its absence is supported
 
 **An affix is data and its absence is supported.** `assets/affixes/*.ron`

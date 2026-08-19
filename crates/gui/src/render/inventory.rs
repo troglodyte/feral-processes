@@ -109,6 +109,26 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }
 
+/// The indented lines an item's extra effects contribute under its row,
+/// empty for an item that has none.
+///
+/// **The one place a listing screen turns `Game::item_effects` into rows.**
+/// The inventory list, a trader's three shelves and a Stack market all draw
+/// it, and each rebuilding the same `continuation_lines` call is how four
+/// screens end up indenting an effect three different ways.
+///
+/// Wrapped rather than packed onto the head: an effect is prose, not one of
+/// the parenthesised tag segments `wrapped_row_lines` shuffles, and it
+/// answers a different question from the row's own columns. Sitting under
+/// the row unconditionally is also what lets a player scan a shelf for the
+/// one module that grants something without opening each in turn.
+pub(super) fn effect_lines(game: &Game, item: &ItemId) -> Vec<String> {
+    game.item_effects(item)
+        .iter()
+        .flat_map(|effect| continuation_lines(effect))
+        .collect()
+}
+
 /// One carried item's lines: the count, category and name every row carries,
 /// then `equip_preview_tag` if it still fits — shed onto an indented
 /// continuation by `wrapped_row_lines` when it doesn't.
@@ -143,7 +163,9 @@ fn inventory_row_lines(
         game.item_category(&copy.item).short_label(),
         game.copy_name(copy),
     );
-    wrapped_row_lines(head, &[equip_preview_tag(game, copy, zone)])
+    let mut lines = wrapped_row_lines(head, &[equip_preview_tag(game, copy, zone)]);
+    lines.extend(effect_lines(game, &copy.item));
+    lines
 }
 
 pub(super) fn equipped_row(
@@ -330,7 +352,11 @@ pub(super) fn draw_inventory_item_action(
         game.copy_name(&copy),
         equip_preview_tag(game, &copy, zone_level)
     );
-    let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
+    let mut rows = vec![Row::TextColored(title, TEXT)];
+    // The same lines the list this screen was opened from carries, so the
+    // effect does not vanish the moment you select the item to act on it.
+    rows.extend(effect_lines(game, &copy.item).into_iter().map(text_row));
+    rows.push(text_row(""));
     for (i, (_, label)) in inventory_item_actions(game, &copy.item).iter().enumerate() {
         rows.push(item_row(label.clone(), i == selected));
     }
@@ -460,6 +486,55 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// **An item's extra effects get their own line under it.** The equip
+    /// tag answers "what would this do if I put it on"; nothing on a listing
+    /// row answered "and what else does it do", so seven shipped modules
+    /// granted a passive routine that was visible only on the describe page
+    /// two keypresses away.
+    ///
+    /// Asserted through `Game::item_effects` rather than against a literal,
+    /// so the renderer cannot be the place a wording drifts.
+    #[test]
+    fn a_granting_module_carries_its_passive_on_a_line_of_its_own() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(32, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let copy = GearCopy::plain("watchdog_tap".into());
+        let effects = game.item_effects(&copy.item);
+        assert_eq!(effects.len(), 1, "precondition: {effects:?}");
+
+        let lines = inventory_row_lines(&game, menu_shortcut(3), &copy, 1, 1);
+
+        assert!(
+            lines.len() > 1,
+            "the effect must land on a line of its own: {lines:?}"
+        );
+        assert!(
+            lines[1..].iter().any(|l| l.contains(&effects[0])),
+            "and must be the sentence the engine wrote: {lines:?}"
+        );
+        assert!(
+            !lines[0].contains(&effects[0]),
+            "never packed onto the head, which carries the row key: {lines:?}"
+        );
+    }
+
+    /// And an item with nothing extra to say is the single line it always
+    /// was — the list a player scrolls must not double in length for free.
+    #[test]
+    fn an_item_with_no_effects_is_still_one_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(33, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let copy = GearCopy::plain("core_fragment".into());
+        assert!(game.item_effects(&copy.item).is_empty(), "precondition");
+
+        assert_eq!(
+            inventory_row_lines(&game, menu_shortcut(3), &copy, 1, 1).len(),
+            1
+        );
     }
 
     /// The wrap is paid by the row that needs it and by no other. The census

@@ -275,6 +275,100 @@ impl Game {
         Some((def.name.as_str(), def.description.as_str()))
     }
 
+    /// Every extra effect this item carries, one short line each, for the
+    /// screens that *list* items rather than describe one.
+    ///
+    /// The four fields an item can carry beyond its stat block: a passive
+    /// routine granted while worn, what consuming it does, what refactoring
+    /// a companion with it does, and what it adds to a decompile. An item
+    /// declaring none returns an empty list, which is what tells a renderer
+    /// to draw no continuation at all.
+    ///
+    /// **A stat bonus is deliberately not an effect here.** It already
+    /// rides the equip tag on the row's own line (`equip_preview_tag`,
+    /// itself built off `Game::copy_bonus`), and repeating it underneath is
+    /// the column twice — the same call `item_blurb` makes about naming the
+    /// slot beside an `ItemCategory::short_label` column.
+    ///
+    /// Distinct from `item_blurb`, which is a two-or-three word gloss for a
+    /// crafting menu listing things you do not have, and from `item_grant`,
+    /// which hands the describe page a routine's full prose. This one is
+    /// the middle length, and it **calls** `item_grant` rather than reading
+    /// `grants` a second time: an item whose own description still names
+    /// the routine it used to carry is exactly the drift that field exists
+    /// to remove.
+    ///
+    /// A magnitude is never formatted here twice either — a pre-battle buff
+    /// is priced through `FieldBuffKind::magnitude_label`, the same call the
+    /// running buff list makes, so a bottle and the buff it arms cannot
+    /// quote different numbers.
+    ///
+    /// Answers for an unknown id with an empty list rather than refusing:
+    /// every caller is a renderer that would only turn a `None` back into
+    /// the same empty draw.
+    pub fn item_effects(&self, id: &ItemId) -> Vec<String> {
+        let Some(def) = self.world.resource::<ItemDb>().get(id.as_str()) else {
+            return Vec::new();
+        };
+        let mut lines = Vec::new();
+        // Copied out of the borrow: `item_grant` takes `&self` again, and a
+        // `&ItemDef` held across it would keep the `ItemDb` read alive.
+        let consume = def.consume;
+        let upgrade = def.upgrade;
+        let potency = def.taming_potency;
+
+        if let Some((name, _)) = self.item_grant(id) {
+            lines.push(format!("Grants: {name}"));
+        }
+        if let Some(c) = consume {
+            let mut parts = Vec::new();
+            if c.heal != 0 {
+                parts.push(format!("+{} HP", c.heal));
+            }
+            if c.power != 0.0 {
+                parts.push(format!("+{:.0} Power", c.power));
+            }
+            if let Some(b) = c.prebattle_buff {
+                parts.push(format!(
+                    "{} for {}t",
+                    b.kind.magnitude_label(b.power, 1),
+                    b.ticks
+                ));
+            }
+            if !parts.is_empty() {
+                lines.push(format!("Use: {}", parts.join("  ")));
+            }
+        }
+        if let Some(u) = upgrade {
+            let mut parts = Vec::new();
+            for (pct, label) in [
+                (u.hp_percent, "HP"),
+                (u.atk_percent, "ATK"),
+                (u.def_percent, "DEF"),
+            ] {
+                // Percentage *points* already — `refactor::raised` divides
+                // by 100, so a second conversion here would quote a Buffer
+                // Extension's +5% HP as +500%.
+                if pct != 0.0 {
+                    parts.push(format!("+{pct:.0}% {label}"));
+                }
+            }
+            if u.zone_bump {
+                parts.push("zone rebuild".to_string());
+            }
+            if !parts.is_empty() {
+                lines.push(format!("Refactor: {}", parts.join("  ")));
+            }
+        }
+        // The *base* `taming::capture_chance` multiplies, not an addend:
+        // resistance, skill and any `CaptureBoost` all scale it afterwards.
+        // Saying "base" is what stops the line reading as a flat bonus.
+        if let Some(p) = potency {
+            lines.push(format!("Decompile: base capture {:.0}%", p * 100.0));
+        }
+        lines
+    }
+
     /// A two-or-three word gloss of what an item *does*, for menus that list
     /// items by name and cost without saying why you'd want one.
     ///

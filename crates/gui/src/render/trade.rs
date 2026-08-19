@@ -95,6 +95,9 @@ pub(super) fn draw_trade_action_menu(
             row.copy.tier,
             row.copy.rarity,
         ));
+        for line in effect_lines(game, &row.copy.item) {
+            rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
+        }
         idx += 1;
     }
     rows.push(text_row(""));
@@ -113,6 +116,7 @@ pub(super) fn draw_trade_action_menu(
             ),
             idx == selected,
         ));
+        rows.extend(effect_lines(game, item).into_iter().map(text_row));
         idx += 1;
     }
     // What this trader has bought off the player, offered back at a markup.
@@ -136,6 +140,7 @@ pub(super) fn draw_trade_action_menu(
                 ),
                 idx == selected,
             ));
+            rows.extend(effect_lines(game, &row.copy.item).into_iter().map(text_row));
             idx += 1;
         }
     }

@@ -65,7 +65,7 @@ use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
-    draw_item_describe,
+    draw_item_describe, effect_lines,
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{

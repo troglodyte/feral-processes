@@ -74,6 +74,9 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
             row.copy.tier,
             row.copy.rarity,
         ));
+        for line in effect_lines(game, &row.copy.item) {
+            rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
+        }
         idx += 1;
     }
     rows.push(text_row(""));

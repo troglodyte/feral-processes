@@ -191,6 +191,20 @@ pub struct CreatureSave {
     /// loads as an undeveloped program, which it was.
     #[serde(default)]
     pub ring: u32,
+    /// Which talent nodes this program has bought, in purchase order — see
+    /// `components::Talents`. Ids rather than an index, so a tree edited
+    /// between sessions cannot silently hand a program a different node.
+    ///
+    /// A **receipt**. `hp`/`max_hp`/`atk`/`def` above already carry every
+    /// `Stat` node's effect, so nothing on the load path may re-apply this
+    /// list — that would compound the bonus on every reload, which is the same
+    /// rule `refactors` follows and the reason `Rarity`'s tag is written
+    /// without its multiplier.
+    ///
+    /// Additive on a field-named RON struct, so no version bump: an older file
+    /// carries no key and loads as a program that has bought nothing.
+    #[serde(default)]
+    pub talents: Vec<String>,
     /// The abilities installed in this program's routine slots, in menu
     /// order — see `components::Routines`. Persisted rather than re-derived
     /// from its species, because an innate routine can be popped out and a
@@ -895,6 +909,7 @@ mod tests {
             refactors: 0,
             purchased_tiers: 0,
             ring: 0,
+            talents: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,

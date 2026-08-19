@@ -26,7 +26,7 @@ use crate::*;
 /// rounds straight back to 3, so without it a percentage buff would do
 /// nothing at all to exactly the weak programs it exists to rescue — and
 /// would charge them a permanent slot for the privilege.
-fn raised(old: i32, pct: f32) -> i32 {
+pub(crate) fn raised(old: i32, pct: f32) -> i32 {
     if pct == 0.0 {
         return old;
     }

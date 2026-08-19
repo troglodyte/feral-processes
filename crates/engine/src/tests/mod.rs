@@ -47,6 +47,7 @@ mod sectors;
 mod spawning;
 mod stack;
 mod stack_movement;
+mod talents;
 mod taming;
 mod taunt;
 mod telemetry;

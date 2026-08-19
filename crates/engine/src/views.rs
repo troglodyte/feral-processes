@@ -373,6 +373,10 @@ pub struct PetInfo {
     /// ceiling and pays a talent point per level earned above the base cap;
     /// `Game::companion_level_cap` is what the ceiling itself reads off.
     pub ring: u32,
+    /// How many talent nodes this program has bought — see
+    /// `components::Talents`. The count rather than the list, because every
+    /// screen that lists a row goes through `Game::talent_options`.
+    pub talents: u32,
     /// This program's rare-spawn tier — see `components::Rarity`. Already
     /// spelled into `name` as a prefix by `Game::creature_label`; carried
     /// separately so a menu can also colour the row without parsing it back
@@ -386,6 +390,43 @@ pub struct PetInfo {
     /// than three booleans because `CompanionInfo` shows the same cell on the
     /// status panel, and one loadout must not read two ways.
     pub gear: String,
+}
+
+/// What a companion has earned and spent on its talent tree.
+///
+/// Both halves are **derived** — `earned` from the level, `spent` from the
+/// length of `components::Talents` — so neither is a save field and neither
+/// can desync from the other. See `game/talents.rs`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TalentPoints {
+    pub earned: u32,
+    pub spent: u32,
+}
+
+impl TalentPoints {
+    pub fn unspent(self) -> u32 {
+        self.earned.saturating_sub(self.spent)
+    }
+}
+
+/// One row of the talent ladder — see `Game::talent_options`.
+///
+/// It carries what a menu row needs and nothing more. `tag` is the node's
+/// shape rather than its magnitude, because a screen that formats the
+/// magnitude itself is a screen that can disagree with the one next to it.
+pub struct TalentOption {
+    /// 1-based, for the ladder's headings.
+    pub tier: u32,
+    pub id: crate::talents::TalentId,
+    pub name: String,
+    pub description: String,
+    /// One word for what kind of node this is: "stat", "affinity", "routine"
+    /// or "slot".
+    pub tag: &'static str,
+    /// Already bought.
+    pub taken: bool,
+    /// Buyable *right now* — in the next untaken tier, with a point unspent.
+    pub takeable: bool,
 }
 
 /// Snapshot of the player's active companion, shown in the status panel

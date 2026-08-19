@@ -352,6 +352,7 @@ impl Game {
                     fusions: self.fusion_count(entity),
                     refactors: self.refactor_count(entity),
                     ring: self.world.get::<KernelRing>(entity).map_or(0, |r| r.0),
+                    talents: self.talent_points(entity).spent,
                     rarity: self.rarity_of(entity),
                     wielded: self.wielded_program() == Some(entity),
                     gear: self.gear_tag(entity),

@@ -1314,6 +1314,18 @@ pub struct PurchasedTiers(pub u32);
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct KernelRing(pub u32);
 
+/// Which talent nodes this program has bought, in the order it bought them —
+/// see `Game::take_talent`. Absent means none, like `KernelRing` above.
+///
+/// It is a **receipt**, not a source of truth for anything numeric. A `Stat`
+/// node is baked into `Stats` at purchase exactly as a refactor is, so nothing
+/// may re-apply this list on load; the other three kinds are read on demand
+/// off it. Its length is also the whole of "how many points are spent" — there
+/// is no stored count, because a count can desync from the list and from the
+/// level while a derivation cannot.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Talents(pub Vec<crate::talents::TalentId>);
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.

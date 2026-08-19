@@ -1574,6 +1574,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             refactors: 0,
             purchased_tiers: 0,
             ring: 0,
+            talents: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             // No NestSave anywhere in this data names this tile.

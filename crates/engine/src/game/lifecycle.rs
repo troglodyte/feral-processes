@@ -606,6 +606,18 @@ impl Game {
             if c.ring > 0 {
                 entity.insert(KernelRing(c.ring));
             }
+            // The receipt only. `Stats` above are the recorded numbers and
+            // already carry every `Stat` node this list names — re-applying
+            // here would compound the bonus on every reload, the same trap
+            // `c.rarity` above documents.
+            if !c.talents.is_empty() {
+                entity.insert(Talents(
+                    c.talents
+                        .iter()
+                        .map(|id| crate::talents::TalentId::from(id.as_str()))
+                        .collect(),
+                ));
+            }
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
             }
@@ -893,6 +905,7 @@ impl Game {
                 Option<&Refactors>,
                 Option<&PurchasedTiers>,
                 Option<&KernelRing>,
+                Option<&Talents>,
                 Option<&Equipment>,
                 Option<&Nemesis>,
                 Option<&PowerReserve>,
@@ -921,6 +934,7 @@ impl Game {
                 refactors,
                 purchased_tiers,
                 ring,
+                talents,
                 equipment,
                 nemesis,
                 reserve,
@@ -980,6 +994,9 @@ impl Game {
                 refactors: refactors.map(|r| r.0).unwrap_or(0),
                 purchased_tiers: purchased_tiers.map(|t| t.0).unwrap_or(0),
                 ring: ring.map(|r| r.0).unwrap_or(0),
+                talents: talents
+                    .map(|t| t.0.iter().map(|id| id.to_string()).collect())
+                    .unwrap_or_default(),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,

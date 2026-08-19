@@ -1400,3 +1400,69 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         "expected the six upgradeable structures; one that lost its path would drop out of this scan unnoticed"
     );
 }
+
+/// The census over the shipped ambient effects. `EnvironmentDb::load_dir`
+/// already refuses a file over either ceiling with a warning, so this is not
+/// re-asserting the validator — it is asserting that nothing *shipped* is
+/// riding on that refusal, which would be a file the game silently ignores.
+#[test]
+fn every_shipped_environment_file_loads_and_stays_inside_its_ceiling() {
+    use crate::environment::EnvironmentEffect;
+    use crate::tuning::{MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS};
+
+    let (db, warnings) =
+        crate::environment::EnvironmentDb::load_dir(&test_assets_dir().join("environment"))
+            .unwrap();
+    assert!(
+        warnings.is_empty(),
+        "shipped environment files should all load: {warnings:?}"
+    );
+    assert!(db.all().next().is_some(), "the directory shipped empty");
+    for def in db.all() {
+        match def.effect {
+            EnvironmentEffect::Attrition {
+                hp_percent,
+                min_damage,
+            } => {
+                assert!(
+                    (0.0..=MAX_ENVIRONMENT_ATTRITION).contains(&hp_percent),
+                    "{} authors hp_percent {hp_percent}",
+                    def.id
+                );
+                assert!(
+                    min_damage >= 0,
+                    "{} authors min_damage {min_damage}",
+                    def.id
+                );
+            }
+            EnvironmentEffect::Drag { extra_ticks } => assert!(
+                extra_ticks <= MAX_ENVIRONMENT_DRAG_TICKS,
+                "{} authors extra_ticks {extra_ticks}",
+                def.id
+            ),
+        }
+    }
+}
+
+/// The base slab is the one safe ground in the game. A shipped file claiming
+/// it would be skipped at load anyway, so this is really about the *content*
+/// never trying.
+#[test]
+fn no_shipped_environment_file_claims_the_base_slab() {
+    let (db, _) =
+        crate::environment::EnvironmentDb::load_dir(&test_assets_dir().join("environment"))
+            .unwrap();
+    assert!(db.for_biome(world::Biome::Platform).is_none());
+}
+
+/// Open Grid is the default ground — the biome the neutral shape sorts most
+/// of the map into. Leaving it neutral is what makes "ground that does
+/// something" read as an exception rather than a tax on walking, and it is a
+/// content decision nothing else in the code holds.
+#[test]
+fn the_default_ground_stays_neutral() {
+    let (db, _) =
+        crate::environment::EnvironmentDb::load_dir(&test_assets_dir().join("environment"))
+            .unwrap();
+    assert!(db.for_biome(world::Biome::OpenGrid).is_none());
+}

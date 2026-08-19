@@ -1,0 +1,8 @@
+// Mainframe: hardware that has never once idled. The floor is the heatsink.
+(
+    id: "thermal_load",
+    name: "Thermal Load",
+    description: "Waste heat pours off machinery that has not stopped in years.",
+    biomes: [Mainframe],
+    effect: Attrition(hp_percent: 0.03, min_damage: 2),
+)

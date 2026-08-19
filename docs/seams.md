@@ -3242,3 +3242,66 @@ today, since every authored ability defaults to `ranged: false`.
 It is the balance gate; reading the converted list could only ever produce
 the same numbers, and reading the authored one makes that obvious instead of
 requiring a proof.
+
+### The ground
+
+**`Game::ground_effect` is the one door onto what terrain does to you, and
+the zone-1 gate lives inside it.**
+
+Ambient effects are keyed to the biome and loaded from
+`assets/environment/*.ron`. Three things could each have held the zone-1
+rule — the loader, the reader, or the hook in `move_player` — and only one of
+them survives a second consumer.
+
+The loader is wrong because a db is not a place: `EnvironmentDb` has no idea
+what zone the party is in, and giving it one would make the same install load
+differently depending on when it was asked. The hook is wrong for the reason
+this repo has hit four times elsewhere: a rule at a call site is a rule that
+holds until the second call site appears, and the obvious second one is
+already visible — a screen that names the ground you are standing on, an
+examine line, a scan. Either would read the db directly, get an answer, and
+show the player a hazard that zone 1 does not apply.
+
+So the reader holds it, and the reader takes a *coordinate* rather than a
+biome. Taking a biome would have been a smaller function and would have let
+the caller do the map lookup it was doing anyway; it would also have meant
+every caller could get the same answer without going through the gate, which
+is the property the whole arrangement exists for.
+
+**The trap is that the biome's name is deliberately on the other side of
+it.** Zone 1's neutrality is about *effects* — the opening zone is where a
+run learns the game, and ground that bites there is a tax on the tutorial
+rather than an exception to it. None of that argues for hiding what the
+ground is called, and the first player-facing name the terrain has ever had
+would be a strange thing to withhold from a new player specifically.
+
+The shape of the mistake is a later change that "tidies" the hook by wrapping
+the whole block, name included, in the gate. It looks like a simplification
+and it costs a run's first three zones their only sense of place.
+`zone_one_takes_no_bite_but_still_names_the_ground` is what refuses it, and
+it asserts both halves in one function on purpose: the effect half alone
+passes against exactly the bare early return being guarded against.
+
+Three smaller rules, each with the same one-place shape:
+
+- **Terrain never costs Power and never raises Trace.** Both are resources
+  the player spends deliberately and budgets for something else — Power for
+  routines, Trace as the Stack's own pressure. Ground that drained either
+  would price walking in a currency already committed, and would make the
+  Stack's Power scarcity a function of the surface route taken to reach it.
+- **The player alone takes environment damage.** Corrupting the party would
+  route program deaths — and, under Permadeath, the run-ending path — through
+  something that is not a fight, which is the one thing the game's whole
+  progression spine says is where consequences come from.
+- **The bite goes through `Game::apply_damage`.** That is the one code path
+  that lowers a creature's HP, so mitigation, affinities and every other
+  incoming-damage rule apply to terrain without a line of code. A "simpler"
+  direct write to `Stats::hp` would silently make Ablative Layer stop working
+  on the one damage source it most obviously should.
+
+The load-time refusals are argued in `assets/environment/README.md`, since
+they are the modding contract rather than an engine seam. The one worth
+repeating here is that the base slab may not be claimed: it is the one safe
+ground in the game, nothing spawns there and no ambush fires there, and a
+base is stamped over whatever terrain it lands on — so ground that bit there
+would make the safe floor depend on where the player happened to build.

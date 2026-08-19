@@ -1,0 +1,9 @@
+// Deadlock: allocations that never resolved, frost-locked and still
+// waiting. The ground doesn't hurt you — it makes you queue.
+(
+    id: "lock_contention",
+    name: "Lock Contention",
+    description: "Every step waits its turn behind something that never let go.",
+    biomes: [Deadlock],
+    effect: Drag(extra_ticks: 1),
+)

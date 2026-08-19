@@ -1,0 +1,9 @@
+// Null Sector: memory nothing owns any more. Reads come back as noise, and
+// walking through it is one long read.
+(
+    id: "dangling_reads",
+    name: "Dangling Reads",
+    description: "Nothing here is addressed. What you touch answers with garbage.",
+    biomes: [NullSector],
+    effect: Attrition(hp_percent: 0.02, min_damage: 1),
+)

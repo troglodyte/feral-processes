@@ -48,10 +48,14 @@ Recorded so they are not relitigated.
 4. **Growth stays economy-gated.** Mining yields nothing. Tiling costs
    `blank_substrate`, at Heap Block's current price, so the existing material
    sink is preserved exactly and the Lathe keeps its customer.
-5. **A run opens onto a small pre-cleared pocket** — floor laid, Home
-   standing, roughly today's starting slab. A new run is not blocked on a
-   build loop before it has any substrate, and the opening plays as it does
-   now.
+5. **Deploying the Home opens a small pre-cleared pocket** — floor laid,
+   roughly today's starting slab. Corrected 2026-08-19 during planning: a new
+   run has no base at all, because `game/base/building.rs:25` refuses every
+   structure until a Home exists and the Home is player-built. So the pocket
+   cannot exist at `Game::new`. Laying it when the Home is deployed is a
+   one-for-one replacement for `stamp_platform`, called from the same site,
+   and it keeps the opening playing exactly as it does now. Until then base
+   space is solid and the anchor refuses entry for want of a base.
 6. **The anchor is auto-placed at each zone's spawn point**, free and
    indestructible. You can always get home. A buildable anchor would let a
    run breach into a zone it cannot afford a door for and be cut off from its
@@ -211,7 +215,13 @@ is a pure relocation, which is what makes it verifiable: anything that plays
 differently after slice 1 is a bug in it.
 
 **2. Mining, tiling, entropy.** Two actions, one system, one price, one
-timer. Heap Pillar and Heap Block retire.
+timer.
+
+Heap Pillar and Heap Block retire in slice **1**, not here — corrected
+2026-08-19 during planning. Their entire mechanism is `build_radius_bonus`
+and `claims_ground`, both of which die with `Platform` in slice 1; leaving
+them shipped through slice 1 would leave two structures that cost materials
+and do nothing.
 
 **3. Surface cleanup.** The link spawner, `open_to_hostiles`, `pursuit_field`,
 and the `tuning.rs` doc comments that describe a slab. Kept separate so slice

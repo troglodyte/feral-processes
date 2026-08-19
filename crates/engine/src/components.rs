@@ -740,6 +740,16 @@ pub enum StatusKind {
     Bleed,
     /// Causes the afflicted side to lose their next action in battle.
     Stun,
+    /// Cuts the afflicted side's Evasion by `EXPOSED_EVASION_PERCENT` — see
+    /// `Game::combatant_profile`. Armed by the first rung of the fumble
+    /// ladder, and **free for content**: `MoveEffect` already lets any
+    /// species move inflict a status from `.ron`, so a debuffer species
+    /// costs no Rust the day this exists.
+    ///
+    /// It belongs in `StatusEffects` — conditions inflicted on you, always
+    /// unwanted — rather than in `CombatBuff`, which holds one *wanted* buff
+    /// at a time.
+    Exposed,
 }
 
 /// One combatant's currently active status condition, and how long it has

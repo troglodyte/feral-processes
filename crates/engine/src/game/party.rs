@@ -378,6 +378,7 @@ impl Game {
         Some(match active.kind {
             StatusKind::Bleed => format!("Bleeding ({})", active.remaining),
             StatusKind::Stun => format!("Stunned ({})", active.remaining),
+            StatusKind::Exposed => format!("Exposed ({})", active.remaining),
         })
     }
 

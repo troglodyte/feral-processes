@@ -1015,6 +1015,9 @@ impl Game {
                     match kind {
                         StatusKind::Bleed => self.log(format!("{name} corrupts {on}'s data!")),
                         StatusKind::Stun => self.log(format!("{name} locks up {on}!")),
+                        StatusKind::Exposed => {
+                            self.log(format!("{name} pries {on}'s guard wide open!"))
+                        }
                     }
                 }
                 AbilityEffect::Damage {

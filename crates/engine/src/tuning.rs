@@ -2492,6 +2492,16 @@ pub const FUMBLE_RECOIL_FRACTION: f32 = 0.5;
 /// until their next turn.
 pub const EXPOSED_EVASION_PERCENT: i32 = 50;
 
+/// How long the Exposed rung lasts. One round, because
+/// `ActiveStatus::landed_this_round` already exempts the round a condition
+/// lands in — so a duration of 1 is exactly "until the fumbler's next turn",
+/// which is the rung's wording.
+pub const EXPOSED_DURATION_ROUNDS: u32 = 1;
+/// How long the Crash rung's stun lasts. One round, for the same reason
+/// `EXPOSED_DURATION_ROUNDS` is: it costs the fumbler their next action and
+/// nothing beyond it.
+pub const CRASH_DURATION_ROUNDS: u32 = 1;
+
 /// Ceiling on total mitigation, strictly below 100. Load-bearing twice: it
 /// stops the damage path reaching immunity, and it is what keeps
 /// `Stats::power`'s effective-HP denominator away from zero.

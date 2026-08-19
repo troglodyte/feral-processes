@@ -1239,3 +1239,103 @@ fn innate_mitigation_cuts_incoming_damage() {
     assert_eq!(soft_lost, 40);
     assert_eq!(armoured_lost, 20, "half of it shrugged off");
 }
+
+// ------------------------------------------------------------ fumble ladder
+
+/// Exposed cuts the fumbler's evasion until their next turn — which is what
+/// makes rung 1 a cost rather than flavour. Delete the
+/// `EXPOSED_EVASION_PERCENT` term in `combatant_profile` and this fails.
+#[test]
+fn exposed_cuts_the_fumblers_evasion() {
+    let mut game = Game::new(780, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let victim = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let clean = game
+        .combatant_profile(victim, battle::DamageRange::default())
+        .evasion;
+    game.arm_status(victim, StatusKind::Exposed, 1, 0);
+    let exposed = game
+        .combatant_profile(victim, battle::DamageRange::default())
+        .evasion;
+    assert!(exposed < clean, "{exposed} should be below {clean}");
+}
+
+/// Every rung of the ladder that deals damage goes through `apply_damage`,
+/// which stays the only path that damages a creature — and it lands on the
+/// *fumbler*, never on what they were swinging at.
+#[test]
+fn a_recoil_fumble_hurts_the_fumbler_and_not_the_target() {
+    let mut game = Game::new(781, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let fumbler = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let target = game.player_entity();
+    let fumbler_before = game.world.get::<Stats>(fumbler).unwrap().hp;
+    let target_before = game.world.get::<Stats>(target).unwrap().hp;
+
+    game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Recoil { dmg: 4 });
+
+    assert!(game.world.get::<Stats>(fumbler).unwrap().hp < fumbler_before);
+    assert_eq!(game.world.get::<Stats>(target).unwrap().hp, target_before);
+}
+
+/// Rung 4 costs the fumbler their next action, through the machinery Stun
+/// already has.
+#[test]
+fn a_crash_fumble_costs_the_fumbler_their_next_action() {
+    let mut game = Game::new(782, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let fumbler = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let target = game.player_entity();
+    game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Crash);
+    assert!(game.is_stunned(fumbler));
+}
+
+/// Rungs replace rather than stack — a cumulative top rung is a run-ender.
+#[test]
+fn a_second_fumble_replaces_the_first_rung() {
+    let mut game = Game::new(783, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let fumbler = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let target = game.player_entity();
+    game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Exposed);
+    game.apply_fumble_rung(fumbler, target, battle::FumbleRung::Crash);
+    assert!(game.is_stunned(fumbler));
+    assert_eq!(
+        game.status_label(fumbler).as_deref(),
+        Some("Stunned (1)"),
+        "one status at a time — the second must clobber the first"
+    );
+}
+
+/// Landing a fumble rung must spend no further `GameRng` draws — the roll
+/// happened inside `resolve_attack`. A draw here would shift every seeded
+/// run's stream by however many fumbles it happened to contain.
+#[test]
+fn landing_a_fumble_rung_spends_no_rng() {
+    use rand::RngExt;
+    let mut game = Game::new(784, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Spawned *before* the snapshot: `spawn_wild_creature` draws, which is
+    // why `rng_unadvanced_by` cannot measure this one — its closure has to
+    // contain the setup as well as the act.
+    let fumbler = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let target = game.player_entity();
+
+    // Pinned to a known seed and compared against a fresh stream on the same
+    // one: `StdRng` is not `Clone`, so a snapshot has to be reconstructed
+    // rather than copied.
+    reseed_rng(&mut game, 991);
+    for rung in [
+        battle::FumbleRung::Recoil { dmg: 4 },
+        battle::FumbleRung::Crash,
+        battle::FumbleRung::Exposed,
+        battle::FumbleRung::Opening { dmg: 3 },
+    ] {
+        game.apply_fumble_rung(fumbler, target, rung);
+    }
+
+    let mut untouched: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(991);
+    let expected: u64 = untouched.random();
+    let actual: u64 = game.world.resource_mut::<GameRng>().0.random();
+    assert_eq!(
+        actual, expected,
+        "landing four rungs moved the stream — the rolls all happened inside \
+         `resolve_attack`, and a draw here would shift every seeded run by \
+         however many fumbles it contained"
+    );
+}

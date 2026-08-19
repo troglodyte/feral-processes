@@ -46,6 +46,9 @@ impl Game {
                 format!("{target_label} starts bleeding corrupted data!"),
             ),
             StatusKind::Stun => self.log_kind(kind, format!("{target_label} locks up, stunned!")),
+            StatusKind::Exposed => {
+                self.log_kind(kind, format!("{target_label} is left wide open!"))
+            }
         }
     }
 
@@ -135,6 +138,7 @@ impl Game {
             match active.kind {
                 StatusKind::Bleed => self.log(format!("{label}'s bleed clears.")),
                 StatusKind::Stun => self.log(format!("{label} shakes off the stun.")),
+                StatusKind::Exposed => self.log(format!("{label} recovers its guard.")),
             }
         }
     }

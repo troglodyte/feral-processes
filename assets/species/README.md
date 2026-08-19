@@ -161,13 +161,20 @@ is skipped with a warning logged in-game rather than crashing startup.
         // *after* the round it landed in — a `duration: 1` stun costs its
         // victim the next round's action, not a round it may already have
         // acted in. A combatant can only carry one status condition at a
-        // time — a fresh one overwrites whatever was active. `kind: Bleed`
-        // deals `power` extra damage at the end of every round it's active;
-        // `kind: Stun` causes the afflicted side to lose their next action
-        // instead (`power` is required by the schema but unused for Stun —
-        // just set it to 0).
-        (name: "Corrupted Move", power: 6, effect: Some((
-            kind: Bleed,       // or `Stun`
+        // time — a fresh one overwrites whatever was active. A status only
+        // lands on a *hit*: a missed or fumbled move inflicts nothing.
+        //
+        //   Bleed    deals `power` extra damage at the end of every round it
+        //            is active
+        //   Stun     costs the afflicted side their next action (`power` is
+        //            required by the schema but unused — set it to 0)
+        //   Exposed  cuts the afflicted side's Evasion, so they are easier to
+        //            hit until it clears (`power` unused — set it to 0). The
+        //            fumble ladder arms this on a botched swing, and a move
+        //            may inflict it too: a debuffer species needs no engine
+        //            change.
+        (name: "Corrupted Move", power: 6, spread: 2, effect: Some((
+            kind: Bleed,       // or `Stun`, or `Exposed`
             chance: 0.4,
             duration: 3,
             power: 3,

@@ -80,11 +80,69 @@ impl Game {
         let gear = self.gear_bonus(entity);
         let level = self.ability_user_level(entity);
         let speed = self.species_base_speed(entity);
+        let evasion = battle::evasion_of(speed, level, gear.evasion);
+        // The Exposed rung's whole cost. Read here rather than folded into
+        // `evasion_of` because it is entity state rather than a property of
+        // the numbers, and `evasion_of` is what `balance_sim` calls with no
+        // ECS to ask.
+        let exposed = self
+            .world
+            .get::<StatusEffects>(entity)
+            .and_then(|s| s.active)
+            .is_some_and(|a| a.kind == StatusKind::Exposed);
+        let evasion = if exposed {
+            evasion * (100 - crate::tuning::EXPOSED_EVASION_PERCENT) as f64 / 100.0
+        } else {
+            evasion
+        };
         battle::Combatant {
             accuracy: battle::accuracy_of(speed, level, gear.accuracy),
-            evasion: battle::evasion_of(speed, level, gear.evasion),
+            evasion,
             atk: self.effective_atk(entity),
             range,
+        }
+    }
+
+    /// Lands one rung of the fumble ladder on `fumbler`.
+    ///
+    /// **Rungs replace rather than stack.** `StatusEffects` holds one
+    /// condition at a time and both status rungs go through `arm_status`, so
+    /// a second fumble clobbers the first rather than compounding it — a
+    /// cumulative top rung is a run-ender.
+    ///
+    /// The Opening rung's damage was already rolled inside
+    /// `battle::resolve_attack`, non-recursively, so a fumbled free swing
+    /// resolved as a plain miss. All this does is land it, through
+    /// `apply_damage` like every other rung that hurts someone — and like
+    /// every rung, it hurts the *fumbler*, which is why `_target` is unused.
+    pub(crate) fn apply_fumble_rung(
+        &mut self,
+        fumbler: Entity,
+        _target: Entity,
+        rung: battle::FumbleRung,
+    ) {
+        match rung {
+            battle::FumbleRung::Exposed => {
+                self.arm_status(
+                    fumbler,
+                    StatusKind::Exposed,
+                    crate::tuning::EXPOSED_DURATION_ROUNDS,
+                    0,
+                );
+            }
+            battle::FumbleRung::Recoil { dmg } | battle::FumbleRung::Opening { dmg } => {
+                if dmg > 0 {
+                    self.apply_damage(fumbler, dmg);
+                }
+            }
+            battle::FumbleRung::Crash => {
+                self.arm_status(
+                    fumbler,
+                    StatusKind::Stun,
+                    crate::tuning::CRASH_DURATION_ROUNDS,
+                    0,
+                );
+            }
         }
     }
 
@@ -112,6 +170,9 @@ impl Game {
         };
         let rolled = outcome.damage_to_defender();
         if rolled <= 0 {
+            if let battle::AttackOutcome::Fumble(rung) = outcome {
+                self.apply_fumble_rung(attacker, defender, rung);
+            }
             return outcome;
         }
         // **The returned outcome carries what *landed*, not what was

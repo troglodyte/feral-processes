@@ -111,4 +111,12 @@ that way.
    The cap bounds the total, but a full party may now read as immune. This
    slice left both unchanged deliberately.
 4. **Does the arena need harder scenarios?** Nine walkovers out of fourteen is
-   the finding above, and it predates this branch.
+   the finding above, and it predates this branch — `lair-on-curve` measured
+   100% at 3.3 rounds the day before it. **Answered in part**: seven of the
+   nine are supposed to be walkovers (they isolate a mechanism, or are
+   authored to be lost), and only `full-group` and `lair-on-curve` are
+   difficulty gates that no longer gate. `dev-arenas/README.md` carries the
+   split, and the measured levers for both — depth for the lair, opponent
+   count for the group. What is *not* settled is the target: nothing says how
+   hard a set-piece should be, and `opening-fight`'s 98%/58% is the only
+   shipped example of a fight that reads as one.

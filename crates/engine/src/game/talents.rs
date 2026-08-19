@@ -204,7 +204,9 @@ impl Game {
                     stats.max_hp = raised;
                 }
                 TalentStat::Atk => stats.atk = crate::game::refactor::raised(stats.atk, percent),
-                TalentStat::Def => stats.def = crate::game::refactor::raised(stats.def, percent),
+                TalentStat::Def => {
+                    stats.mitigation = crate::game::refactor::raised(stats.mitigation, percent)
+                }
             }
         }
         self.apply_equipment_delta(entity, gear, 1);

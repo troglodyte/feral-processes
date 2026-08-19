@@ -96,8 +96,22 @@ pub struct ZonePortal(pub u32);
 pub struct Stats {
     pub hp: i32,
     pub max_hp: i32,
+    /// Damage only. The to-hit roll comes from speed on both sides — see
+    /// `battle::accuracy_of`. Feeding this to-hit as well would compound
+    /// quadratically and move every `balance_sim` curve.
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points**, not subtractive absorption. Innate plus
+    /// whatever gear `Game::apply_equipment_delta` has baked in; buffs and
+    /// the cap are applied on top by `Game::effective_mitigation`.
+    ///
+    /// **Never scaled by level or zone.** A percentage that grows per level
+    /// approaches immunity, so `progression::stats_after_levels` and
+    /// `ZoneLevel::stat_multiplier` both leave it alone. Levelling buys HP,
+    /// attack, accuracy and evasion; mitigation comes from gear and from
+    /// what a species innately is. This is the rule that keeps the
+    /// percentage form safe, and the one most likely to be "corrected" by
+    /// someone restoring symmetry with the other stats.
+    pub mitigation: i32,
 }
 
 impl Stats {
@@ -109,11 +123,24 @@ impl Stats {
         }
     }
 
-    /// A rough "how strong is this" scalar — max HP plus Attack plus
-    /// Defense, unweighted — used to gauge relative difficulty (see
-    /// `difficulty_color`) without singling out any one stat.
+    /// A rough "how strong is this" scalar — effective HP plus attack.
+    ///
+    /// Used to gauge relative difficulty (`Game::difficulty_color`), to
+    /// price a kill's XP (`progression::kill_xp`'s denominator), and by
+    /// trade valuation and the unlock ratios. Summing a *percentage* into a
+    /// total the way the old `max_hp + atk + def` did is meaningless, so
+    /// mitigation is priced as the soak it actually buys:
+    /// `max_hp / (1 - mitigation/100)`.
+    ///
+    /// The clamp to `MAX_MITIGATION_PERCENT` is load-bearing — it is what
+    /// keeps the denominator away from zero on a value that a save, a mod
+    /// affix or a stacked buff could hand in past the cap.
     pub fn power(&self) -> i32 {
-        self.max_hp + self.atk + self.def
+        let mitigation = self
+            .mitigation
+            .clamp(0, crate::tuning::MAX_MITIGATION_PERCENT);
+        let soak = self.max_hp as f64 / (1.0 - mitigation as f64 / 100.0);
+        soak.round() as i32 + self.atk
     }
 }
 
@@ -1614,5 +1641,70 @@ mod inventory_tests {
             8,
             "Research Data is banked, not carried"
         );
+    }
+}
+
+#[cfg(test)]
+mod stats_tests {
+    use super::*;
+    use crate::tuning::MAX_MITIGATION_PERCENT;
+
+    #[test]
+    fn power_prices_mitigation_as_effective_hp() {
+        // 100 HP behind 50% mitigation is worth 200 HP of soak.
+        let soft = Stats {
+            hp: 100,
+            max_hp: 100,
+            atk: 10,
+            mitigation: 0,
+        };
+        let armoured = Stats {
+            mitigation: 50,
+            ..soft
+        };
+        assert_eq!(soft.power(), 110);
+        assert_eq!(armoured.power(), 210);
+    }
+
+    #[test]
+    fn power_cannot_divide_by_zero_at_the_mitigation_cap() {
+        // MAX_MITIGATION_PERCENT is capped strictly below 100, and that cap
+        // is load-bearing here as well as in the damage path.
+        let capped = Stats {
+            hp: 100,
+            max_hp: 100,
+            atk: 0,
+            mitigation: MAX_MITIGATION_PERCENT,
+        };
+        assert!(capped.power() > 0 && capped.power() < 100_000);
+    }
+
+    #[test]
+    fn power_clamps_a_mitigation_beyond_the_cap() {
+        // A save, a mod affix or a stacked buff can hand this a raw number
+        // past the cap; `power` must not go negative or infinite on one.
+        let overcapped = Stats {
+            hp: 100,
+            max_hp: 100,
+            atk: 0,
+            mitigation: 400,
+        };
+        let capped = Stats {
+            mitigation: MAX_MITIGATION_PERCENT,
+            ..overcapped
+        };
+        assert_eq!(overcapped.power(), capped.power());
+    }
+
+    #[test]
+    fn power_ignores_current_hp() {
+        let hurt = Stats {
+            hp: 1,
+            max_hp: 100,
+            atk: 10,
+            mitigation: 0,
+        };
+        let whole = Stats { hp: 100, ..hurt };
+        assert_eq!(hurt.power(), whole.power());
     }
 }

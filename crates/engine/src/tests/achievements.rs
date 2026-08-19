@@ -53,7 +53,7 @@ fn spawn_boss_on_player_tile(game: &mut Game, species_id: &str, hp: i32) -> Enti
                 hp,
                 max_hp: hp,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id()

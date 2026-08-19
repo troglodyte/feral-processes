@@ -59,7 +59,10 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
         hp: species.base_hp * mult,
         max_hp: species.base_hp * mult,
         atk: species.base_atk * mult,
-        def: species.base_def * mult,
+        // Never scaled by zone — the real spawner does not scale it either
+        // (`Game::spawn_wild_creature`), because mitigation is percentage
+        // points. See `components::Stats::mitigation`.
+        mitigation: species.base_def,
     }
 }
 
@@ -170,7 +173,7 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
             hp: best_roll(stats.hp),
             max_hp: best_roll(stats.max_hp),
             atk: best_roll(stats.atk),
-            def: best_roll(stats.def),
+            mitigation: best_roll(stats.mitigation),
         },
         count: 1,
         move_power: average_move_power(species),
@@ -204,6 +207,20 @@ pub struct GroupSim {
     pub ranged_move_power: Option<i32>,
 }
 
+/// `raw` after `mitigation` percentage points are shrugged off, capped at
+/// `MAX_MITIGATION_PERCENT`.
+///
+/// **The one place the sim and the game legitimately differ, and it is a
+/// rounding rule.** `Game::mitigate_incoming_damage` rounds once and floors
+/// a landed hit at 1, because it deals whole points of HP; the sim carries
+/// fractional HP throughout and so does neither. Rounding here would be a
+/// second copy of a rule the game already owns, and flooring at 1 would hide
+/// exactly the stalemate `TURN_CAP` exists to catch.
+fn after_mitigation(raw: f64, mitigation: i32) -> f64 {
+    let pct = mitigation.clamp(0, crate::tuning::MAX_MITIGATION_PERCENT) as f64;
+    raw * (1.0 - pct / 100.0)
+}
+
 /// One member of the player's side, tracked with fractional HP so incoming
 /// damage can be spread across the roster by aggro weight rather than
 /// sampled. See `simulate_roster_fight`.
@@ -212,7 +229,9 @@ struct Fighter {
     hp: f64,
     max_hp: f64,
     atk: i32,
-    def: i32,
+    /// Percentage points, the same unit `components::Stats::mitigation`
+    /// carries — not the subtractive absorption the old `def` was.
+    mitigation: i32,
     move_power: i32,
     /// Share of incoming fire, from the same `battle::slot_aggro_weight`
     /// `Game::roll_enemy_target` rolls against.
@@ -391,7 +410,7 @@ pub fn simulate_roster_fight(
             hp: stats.hp as f64,
             max_hp: stats.max_hp as f64,
             atk: stats.atk,
-            def: stats.def,
+            mitigation: stats.mitigation,
             move_power,
             aggro: crate::battle::slot_aggro_weight(slot, false) as f64,
         })
@@ -417,7 +436,11 @@ pub fn simulate_roster_fight(
             if fighter.hp <= 0.0 || groups.is_empty() {
                 continue;
             }
-            let dealt = compute_damage(fighter.atk, groups[0].0.stats.def, fighter.move_power);
+            let dealt = after_mitigation(
+                compute_damage(fighter.atk, 0, fighter.move_power) as f64,
+                groups[0].0.stats.mitigation,
+            )
+            .round() as i32;
             let (group, front_hp, remaining) = &mut groups[0];
             *front_hp -= dealt;
             if *front_hp <= 0 {
@@ -457,7 +480,10 @@ pub fn simulate_roster_fight(
             };
             for _ in 0..crate::battle::attackers_in_group(*remaining as usize) {
                 for fighter in roster.iter_mut().filter(|f| f.hp > 0.0) {
-                    let dealt = compute_damage(group.stats.atk, fighter.def, power) as f64;
+                    let dealt = after_mitigation(
+                        compute_damage(group.stats.atk, 0, power) as f64,
+                        fighter.mitigation,
+                    );
                     fighter.hp -= dealt * fighter.aggro / total_aggro;
                 }
             }
@@ -539,7 +565,7 @@ pub fn min_level_to_clear_zone(
             crate::tuning::BASELINE_GROWTH_MULTIPLIER,
         );
         player.atk += gear_atk;
-        player.def += gear_def;
+        player.mitigation += gear_def;
         let companion_level = companion_level_for_player_level(level);
         let companions: Vec<Stats> = (0..companion_count)
             .map(|_| companion_stats(party_species, zone, companion_level))

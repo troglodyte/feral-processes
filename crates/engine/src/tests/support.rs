@@ -280,7 +280,7 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
                         hp,
                         max_hp: hp,
                         atk: 0,
-                        def: 0,
+                        mitigation: 0,
                     },
                     StatusEffects::default(),
                 ))
@@ -1087,7 +1087,7 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
                 hp,
                 max_hp: hp,
                 atk,
-                def: 1,
+                mitigation: 1,
             },
             parts,
         ))
@@ -1140,7 +1140,7 @@ pub(super) fn spawn_wild_on_player_tile(game: &mut Game) -> Entity {
                 hp: 10,
                 max_hp: 10,
                 atk: 0,
-                def: 1,
+                mitigation: 1,
             },
             // The real spawner (`spawning.rs`) always gives a hostile one,
             // and `Game::arm_status` is a silent no-op without it — so a
@@ -1261,7 +1261,7 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
                 hp: 100,
                 max_hp: 100,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -1383,7 +1383,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
                 hp: 10,
                 max_hp: 10,
                 atk: 5,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             Experience::default(),
@@ -1446,7 +1446,7 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
                 hp: 10,
                 max_hp: 10,
                 atk: 5,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             Experience::default(),
@@ -1746,7 +1746,7 @@ pub(super) fn spawn_pursuing_guardian(
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id()

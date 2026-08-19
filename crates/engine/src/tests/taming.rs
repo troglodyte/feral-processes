@@ -34,7 +34,7 @@ fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() 
                 hp: 1,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -817,7 +817,7 @@ fn a_failed_decompile_at_the_cap_says_persistence_has_run_out() {
 fn set_power_at_full_integrity(game: &mut Game, entity: Entity, power: i32) {
     let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
     stats.atk = 1;
-    stats.def = 1;
+    stats.mitigation = 1;
     stats.max_hp = power - 2;
     stats.hp = stats.max_hp;
 }

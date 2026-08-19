@@ -542,7 +542,7 @@ fn wild_spawn_cap_is_not_exhausted_by_tamed_creatures() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             PowerReserve::default(),
@@ -621,7 +621,7 @@ fn a_full_wild_population_far_away_is_culled_so_spawns_near_the_player_still_hap
                         hp: 10,
                         max_hp: 10,
                         atk: 1,
-                        def: 1,
+                        mitigation: 1,
                     },
                     Hostile,
                 ))
@@ -712,7 +712,7 @@ fn nest_guardians_are_eligible_to_be_culled_for_spawn_room() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             Hostile,
             WanderAi::default(),
@@ -792,7 +792,7 @@ fn a_spawn_roll_culls_enough_room_for_the_whole_group_it_places() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             Hostile,
         ));
@@ -832,7 +832,7 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 hp: 100,
                 max_hp: 100,
                 atk: 10,
-                def: 10,
+                mitigation: 10,
             },
             Potential {
                 hp_roll: 1.0,
@@ -860,7 +860,7 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 hp: 100,
                 max_hp: 100,
                 atk: 10,
-                def: 10,
+                mitigation: 10,
             },
             Potential {
                 hp_roll: 1.0,
@@ -929,7 +929,7 @@ fn bumping_a_nest_damages_it_and_destroying_it_frees_its_guardians() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -984,7 +984,7 @@ fn bumping_a_nest_with_high_hp_damages_it_without_destroying_it() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -1044,7 +1044,7 @@ fn killing_a_guardian_respawns_a_replacement_after_exactly_the_respawn_delay() {
                 hp: 1,
                 max_hp: 10,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -1121,7 +1121,7 @@ fn taming_a_guardian_also_queues_a_respawn() {
                 hp: 1,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -1174,7 +1174,7 @@ fn killing_a_guardian_whose_nest_is_already_gone_queues_nothing() {
                 hp: 1,
                 max_hp: 10,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -1520,7 +1520,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             hp: 30,
             max_hp: 30,
             atk: 6,
-            def: 2,
+            mitigation: 2,
             power: 100.0,
             inventory: Vec::new(),
             level: 1,
@@ -1555,7 +1555,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             hp: 10,
             max_hp: 10,
             atk: 1,
-            def: 1,
+            mitigation: 1,
             tamed: false,
             power: crate::components::POWER_MAX,
             level: 1,
@@ -2074,8 +2074,8 @@ fn a_shiny_survives_a_save_round_trip() {
     // A load that re-applied `stat_mult` would hand back 1.8x of these and
     // compound again on the next reload — see `Rarity`'s doc.
     assert_eq!(
-        (after.hp, after.max_hp, after.atk, after.def),
-        (before.hp, before.max_hp, before.atk, before.def),
+        (after.hp, after.max_hp, after.atk, after.mitigation),
+        (before.hp, before.max_hp, before.atk, before.mitigation),
         "loading must restore recorded stats, not re-apply the tier"
     );
 }
@@ -2406,7 +2406,7 @@ fn the_cap_evicts_a_whole_chunk_and_forgets_it() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             Hostile,
         ));
@@ -2467,7 +2467,7 @@ fn the_cap_never_evicts_the_ground_under_the_player() {
                         hp: 10,
                         max_hp: 10,
                         atk: 1,
-                        def: 1,
+                        mitigation: 1,
                     },
                     Hostile,
                 ))
@@ -2876,4 +2876,24 @@ fn the_opening_ring_refuses_a_boss() {
             }
         }
     }
+}
+
+/// A zone tier scales HP and attack and leaves mitigation exactly where the
+/// species authored it. Delete the fix and this fails: the spawn would carry
+/// `base_mitigation * stat_multiplier`, which reaches the cap by zone 5 on
+/// half the roster.
+#[test]
+fn a_zone_tier_never_scales_mitigation() {
+    let mut game = Game::new(4021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 4);
+    let spawned = spawn_wild_without_routine(&mut game, "sentinel", 30, 30);
+    let stats = *game.world.get::<Stats>(spawned).unwrap();
+    let species = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("sentinel")
+        .unwrap()
+        .clone();
+    assert_eq!(stats.mitigation, species.base_def);
+    assert!(stats.max_hp > species.base_hp);
 }

@@ -36,7 +36,7 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
     hp: 90,
     max_hp: 90,
     atk: 6,
-    def: 2,
+    mitigation: 2,
 };
 
 /// Flat stat growth per level-up, before `growth_multiplier` scales it —
@@ -53,13 +53,17 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// is where it was and only its grain changed. A level-up is meant to be an
 /// event rather than a tick.
 ///
-/// ATK and DEF at 2 also buy back granularity that was silently missing:
-/// at 1, a `growth_multiplier` had to cross a rounding boundary (roughly
-/// +0.5) to move them at all, so `HP_PER_LEVEL` carried nearly all of a
-/// species' growth rate on its own — see `progression::scaled_growth`.
+/// ATK at 2 also buys back granularity that was silently missing: at 1, a
+/// `growth_multiplier` had to cross a rounding boundary (roughly +0.5) to
+/// move it at all, so `HP_PER_LEVEL` carried nearly all of a species' growth
+/// rate on its own — see `progression::scaled_growth`.
+///
+/// There is deliberately no mitigation-per-level constant. Mitigation is
+/// percentage points and a percentage that grows per level approaches
+/// immunity, so levelling buys HP, attack, accuracy and evasion and never
+/// mitigation — see `components::Stats::mitigation`.
 pub const HP_PER_LEVEL: i32 = 24;
 pub const ATK_PER_LEVEL: i32 = 2;
-pub const DEF_PER_LEVEL: i32 = 2;
 
 /// Growth-rate multiplier for anything with no species-specific rate of
 /// its own. The player (who has no species at all) always levels at this
@@ -222,7 +226,7 @@ pub const WORK_XP_LEVEL_CAP: u32 = 5;
 /// **Linear rather than geometric, and the distinction is the difference
 /// between a hard game and an unfinishable one.** It was a geometric base of
 /// 2. Everything on the player's side of the fight grows linearly —
-/// `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are 1, an item is worth a flat point
+/// `ATK_PER_LEVEL` is 1, an item is worth a flat point
 /// or four — so a doubling enemy curve is a geometric quantity racing a
 /// linear one, and the geometric side always wins in the end whatever the
 /// coefficients are. Under `battle::compute_damage`'s subtractive rule that
@@ -2230,7 +2234,7 @@ pub const WILD_ROUTINE_CHANCE: f64 = 0.06;
 /// `1.0 + level * this`.
 ///
 /// Deliberately gentle, because the curve it has to keep pace with is
-/// gentle: `ATK_PER_LEVEL` and `DEF_PER_LEVEL` are both 2. A +3 attack buff
+/// gentle: `ATK_PER_LEVEL` is 2. A +3 attack buff
 /// against a base ATK of 6 is already half again; scaling it on the HP curve
 /// below would turn the same routine into a tripling.
 ///

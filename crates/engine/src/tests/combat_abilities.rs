@@ -132,7 +132,7 @@ fn game_with_a_sweeper() -> (Game, Entity) {
                 hp: 30,
                 max_hp: 30,
                 atk: 10,
-                def: 2,
+                mitigation: 2,
             },
             Tamed { owner: player },
             Experience::default(),
@@ -206,7 +206,7 @@ fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() 
                         hp: 500,
                         max_hp: 500,
                         atk: 0,
-                        def: 0,
+                        mitigation: 0,
                     },
                     StatusEffects::default(),
                 ))
@@ -1260,7 +1260,7 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.atk = 16;
     }
-    game.world.get_mut::<Stats>(enemies[0]).unwrap().def = 9;
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().mitigation = 9;
     game.world.get_mut::<Experience>(player).unwrap().level = 5;
     for _ in 0..5 {
         game.world
@@ -1499,7 +1499,7 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
                 hp: 10,
                 max_hp: 10,
                 atk: 5,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             Experience::default(),
@@ -1569,7 +1569,7 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
                 hp: 10,
                 max_hp: 10,
                 atk: 5,
-                def: 1,
+                mitigation: 1,
             },
             Experience::default(),
         ))
@@ -1583,7 +1583,7 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
                 hp: 200,
                 max_hp: 200,
                 atk: 0,
-                def: 3,
+                mitigation: 3,
             },
         ))
         .id();
@@ -1646,7 +1646,7 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
                 hp: 50,
                 max_hp: 200,
                 atk: 5,
-                def: 1,
+                mitigation: 1,
             },
             Experience::default(),
         ))
@@ -1660,7 +1660,7 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
                 hp: 200,
                 max_hp: 200,
                 atk: 0,
-                def: 3,
+                mitigation: 3,
             },
         ))
         .id();

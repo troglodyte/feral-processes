@@ -39,7 +39,8 @@ fn a_player_level_up_lists_what_each_stat_grew_to() {
         vec![
             format!("  Max HP {} → {}", before.max_hp, after.max_hp),
             format!("  ATK {} → {}", before.atk, after.atk),
-            format!("  DEF {} → {}", before.def, after.def),
+            // No mitigation row: levelling never raises it, so there is
+            // nothing to draw — see `components::Stats::mitigation`.
             format!("  Perk Points 0 → {PERK_POINTS_PER_LEVEL}"),
             format!(
                 "  Decompiler {} → {}",
@@ -389,4 +390,28 @@ fn a_kernel_ring_survives_a_save_and_still_lifts_the_ceiling() {
         loaded.world.get::<Experience>(restored).unwrap().level,
         CREATURE_MAX_LEVEL + 2 * LEVELS_PER_RING
     );
+}
+
+/// A percentage that grows per level approaches immunity, so levelling buys
+/// HP, attack, accuracy and evasion — never mitigation. Delete the fix (put
+/// a per-level growth term back on the `mitigation` field) and this fails.
+#[test]
+fn levelling_never_raises_mitigation() {
+    use crate::components::Stats;
+    use crate::progression::stats_after_levels;
+    let base = Stats {
+        hp: 90,
+        max_hp: 90,
+        atk: 6,
+        mitigation: 12,
+    };
+    for levels in [1, 5, 20, 60] {
+        let grown = stats_after_levels(base, levels, 1.5);
+        assert_eq!(
+            grown.mitigation, base.mitigation,
+            "mitigation moved at {levels} levels"
+        );
+        assert!(grown.max_hp > base.max_hp);
+        assert!(grown.atk > base.atk);
+    }
 }

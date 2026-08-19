@@ -49,7 +49,7 @@ fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             ZonePortal(1),
         ))
@@ -66,7 +66,7 @@ fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
                 hp: 2,
                 max_hp: 2,
                 atk: 2,
-                def: 2,
+                mitigation: 2,
             },
             ZonePortal(2),
         ))
@@ -202,7 +202,7 @@ fn find_target_in_direction_finds_the_nearest_match_along_the_line() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -220,7 +220,7 @@ fn find_target_in_direction_finds_the_nearest_match_along_the_line() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -253,7 +253,7 @@ fn find_target_in_direction_respects_max_range() {
             hp: 1,
             max_hp: 1,
             atk: 1,
-            def: 1,
+            mitigation: 1,
         },
     ));
 
@@ -284,7 +284,7 @@ fn spawn_marker_creature(game: &mut Game, start: Position, dx: i32, dy: i32) -> 
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id()
@@ -646,7 +646,7 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
                 hp: boss.base_hp,
                 max_hp: boss.base_hp,
                 atk: boss.base_atk,
-                def: boss.base_def,
+                mitigation: boss.base_def,
             },
         ))
         .id();
@@ -667,7 +667,7 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
             hp: normal.base_hp,
             max_hp: normal.base_hp,
             atk: normal.base_atk,
-            def: normal.base_def,
+            mitigation: normal.base_def,
         },
     ));
 
@@ -701,7 +701,7 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
     let player = game.player_entity();
     let player_pos = *game.world.get::<Position>(player).unwrap();
     game.world.get_mut::<Stats>(player).unwrap().atk = 0;
-    game.world.get_mut::<Stats>(player).unwrap().def = 0;
+    game.world.get_mut::<Stats>(player).unwrap().mitigation = 0;
     game.world.get_mut::<Stats>(player).unwrap().max_hp = 100;
     game.world.get_mut::<Stats>(player).unwrap().hp = 100;
     // Player power is now 100. An easy hostile is well under that; a
@@ -725,7 +725,7 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
                 hp: 10,
                 max_hp: 10,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -748,7 +748,7 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
                 hp: 300,
                 max_hp: 300,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -1347,7 +1347,7 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
                     hp: 1,
                     max_hp: 1,
                     atk: 1,
-                    def: 1,
+                    mitigation: 1,
                 },
             ))
             .id()
@@ -1409,7 +1409,7 @@ fn game_with_structure_and_creature_east_of_player(seed: u32) -> (Game, Entity) 
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();

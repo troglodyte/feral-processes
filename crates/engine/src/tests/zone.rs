@@ -499,7 +499,7 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
                 hp: 5,
                 max_hp: 5,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -1151,7 +1151,7 @@ fn decompiling_a_pursuing_guardian_strips_the_marker() {
                 hp: 1,
                 max_hp: 10,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();

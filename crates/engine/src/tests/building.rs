@@ -656,7 +656,7 @@ fn cronjob_assignment_survives_save_and_load() {
             hp: 10,
             max_hp: 10,
             atk: 1,
-            def: 1,
+            mitigation: 1,
         },
         Tamed { owner: player },
         Experience::default(),

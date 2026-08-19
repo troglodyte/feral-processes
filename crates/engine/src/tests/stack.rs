@@ -1774,7 +1774,7 @@ fn outclass_the_guardian(game: &mut Game) {
     stats.max_hp = 100_000;
     stats.hp = 100_000;
     stats.atk = 100_000;
-    stats.def = 100_000;
+    stats.mitigation = 100_000;
 }
 
 /// Walks into the lair and puts the guardian down.

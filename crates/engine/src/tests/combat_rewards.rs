@@ -21,7 +21,7 @@ fn corpse_of(game: &mut Game, species: &str) -> Entity {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id()
@@ -127,7 +127,7 @@ fn award_loot_grants_the_species_work_resource() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -180,7 +180,7 @@ fn award_loot_grants_nothing_for_species_without_a_work_resource() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -593,7 +593,7 @@ fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp(
                     hp: 100,
                     max_hp: 100,
                     atk: 10,
-                    def: 10,
+                    mitigation: 10,
                 },
                 Tamed { owner: player },
                 PowerReserve::default(),
@@ -665,7 +665,7 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
                 hp: 1,
                 max_hp: 10,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -1083,7 +1083,7 @@ fn battle_with_a_dropping_pack(game: &mut Game, count: usize, hp: i32) -> (ItemI
                         hp,
                         max_hp: hp,
                         atk: 0,
-                        def: 0,
+                        mitigation: 0,
                     },
                     StatusEffects::default(),
                 ))
@@ -1345,7 +1345,7 @@ fn set_stats(game: &mut Game, entity: Entity, max_hp: i32, atk: i32, def: i32) {
     stats.max_hp = max_hp;
     stats.hp = max_hp;
     stats.atk = atk;
-    stats.def = def;
+    stats.mitigation = def;
 }
 
 /// The wiring, not the formula: `progression::kill_xp`'s own tests cover the

@@ -27,7 +27,7 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
                 hp: 100,
                 max_hp: 100,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -100,7 +100,7 @@ fn an_atk_buff_increases_damage_dealt_and_expires_after_its_duration() {
                 hp: 10_000,
                 max_hp: 10_000,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -147,7 +147,7 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
                 hp: 100,
                 max_hp: 100,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -196,7 +196,7 @@ fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
                 hp: 10,
                 max_hp: 10,
                 atk: 30,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             Experience::default(),

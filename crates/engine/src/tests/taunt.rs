@@ -44,7 +44,7 @@ fn battle_with_a_companion_of(game: &mut Game, species: &SpeciesId) {
                 hp: 20,
                 max_hp: 20,
                 atk: 3,
-                def: 1,
+                mitigation: 1,
             },
             Tamed { owner: player },
             Experience::default(),

@@ -39,7 +39,7 @@ fn gather_pack_pulls_in_nearby_hostiles_and_caps_the_pack_at_max_enemy_groups_wo
                     hp: 10,
                     max_hp: 10,
                     atk: 1,
-                    def: 0,
+                    mitigation: 0,
                 },
             ))
             .id()
@@ -250,7 +250,7 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -266,7 +266,7 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
                 hp: 500,
                 max_hp: 500,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -501,7 +501,7 @@ fn gather_radius_widens_with_the_local_group_size() {
                     hp: 10,
                     max_hp: 10,
                     atk: 1,
-                    def: 0,
+                    mitigation: 0,
                 },
             ))
             .id()
@@ -604,7 +604,7 @@ fn gather_pack_does_not_sweep_a_bystanding_boss_into_an_ordinary_fight() {
                     hp: 10,
                     max_hp: 10,
                     atk: 1,
-                    def: 0,
+                    mitigation: 0,
                 },
             ))
             .id()
@@ -646,7 +646,7 @@ fn bumping_the_boss_itself_still_starts_the_boss_fight() {
                 hp: 10,
                 max_hp: 10,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();

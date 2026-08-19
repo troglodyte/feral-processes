@@ -54,20 +54,26 @@ pub(crate) fn raised(old: i32, pct: f32) -> i32 {
 /// the program up with, so the two have to be one formula.
 fn refactored(stats: &Stats, upgrade: &CompanionUpgradeDef, tier: u32) -> Stats {
     let mut max_hp = stats.max_hp;
-    let (mut atk, mut def) = (stats.atk, stats.def);
+    let (mut atk, mut mitigation) = (stats.atk, stats.mitigation);
     if upgrade.zone_bump {
         max_hp = ZoneLevel::raised_a_tier(max_hp, tier);
         atk = ZoneLevel::raised_a_tier(atk, tier);
-        def = ZoneLevel::raised_a_tier(def, tier);
+        // Mitigation is deliberately absent. It is percentage points and is
+        // never scaled by level or zone — a tier step applied to a
+        // percentage walks it to `MAX_MITIGATION_PERCENT` and immunity. See
+        // `components::Stats::mitigation`.
     }
     max_hp = raised(max_hp, upgrade.hp_percent);
     atk = raised(atk, upgrade.atk_percent);
-    def = raised(def, upgrade.def_percent);
+    // `def_percent` keeps its authored name: it is `.ron` mod schema, and a
+    // rename would silently break every third-party upgrade file. What it
+    // raises is now percentage points, bounded by `MAX_MITIGATION_PERCENT`.
+    mitigation = raised(mitigation, upgrade.def_percent);
     Stats {
         hp: stats.hp + (max_hp - stats.max_hp),
         max_hp,
         atk,
-        def,
+        mitigation,
     }
 }
 
@@ -189,7 +195,7 @@ impl Game {
         let name = self.entity_label(target);
         self.log(format!(
             "{name} recompiled with {} — now {} HP, {} ATK, {} DEF.",
-            def.name, after.max_hp, after.atk, after.def
+            def.name, after.max_hp, after.atk, after.mitigation
         ));
         Ok(())
     }

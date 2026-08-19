@@ -401,7 +401,7 @@ impl Game {
                     hp: data.player.hp,
                     max_hp: data.player.max_hp,
                     atk: data.player.atk,
-                    def: data.player.def,
+                    mitigation: data.player.mitigation,
                 },
                 PowerReserve::new(data.player.power),
                 Experience {
@@ -580,7 +580,7 @@ impl Game {
                     hp: c.hp,
                     max_hp: c.max_hp,
                     atk: c.atk,
-                    def: c.def,
+                    mitigation: c.mitigation,
                 },
                 Potential {
                     hp_roll: c.hp_roll,
@@ -970,7 +970,7 @@ impl Game {
                 hp: stats.hp,
                 max_hp: stats.max_hp,
                 atk: stats.atk,
-                def: stats.def,
+                mitigation: stats.mitigation,
                 tamed: tamed.is_some(),
                 power: reserve.map(|r| r.get()).unwrap_or(POWER_MAX),
                 level: exp.map(|e| e.level).unwrap_or(1),
@@ -1087,7 +1087,7 @@ impl Game {
                 hp: stats.hp,
                 max_hp: stats.max_hp,
                 atk: stats.atk,
-                def: stats.def,
+                mitigation: stats.mitigation,
                 power: needs.get(),
                 inventory,
                 level: exp.level,
@@ -1296,7 +1296,9 @@ impl Game {
                     let n = n as i32;
                     match stat {
                         MainStat::Atk => self.world.get_mut::<Stats>(player).unwrap().atk += n,
-                        MainStat::Def => self.world.get_mut::<Stats>(player).unwrap().def += n,
+                        MainStat::Def => {
+                            self.world.get_mut::<Stats>(player).unwrap().mitigation += n
+                        }
                         MainStat::Integrity => {
                             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
                             stats.max_hp += n;

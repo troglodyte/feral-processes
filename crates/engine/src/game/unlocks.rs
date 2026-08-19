@@ -140,7 +140,7 @@ impl Game {
             }
             Perk::Defender => {
                 if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
-                    stats.def += DEFENDER_BONUS_PER_LEVEL;
+                    stats.mitigation += DEFENDER_BONUS_PER_LEVEL;
                 }
             }
             Perk::Buffer => {

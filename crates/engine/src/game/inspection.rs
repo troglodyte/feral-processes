@@ -807,7 +807,7 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
-            def: stats.def,
+            def: stats.mitigation,
             power: stats.power(),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),

@@ -140,14 +140,16 @@ fn a_sale_row_carries_the_programs_activity() {
 fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
     let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
-    // power = max_hp + atk + def = 60 + 8 + 2 = 70, so 70/10 = 7.
+    // `Stats::power` prices mitigation as the effective HP it buys rather
+    // than summing a percentage into a total: 60 / (1 - 0.02) = 61, + 8 atk
+    // = 69, so 69/10 = 6.
     let pet = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 2;
 
     let before = credits(&game);
     game.sell_companion(market, pet).unwrap();
 
-    assert_eq!(credits(&game), before + 7, "a tenth of 70 power");
+    assert_eq!(credits(&game), before + 6, "a tenth of 69 power");
     assert!(
         game.world.get::<Stats>(pet).is_none(),
         "the sold program has to be gone, not merely stood down"
@@ -193,7 +195,7 @@ fn a_program_too_weak_to_price_still_sells_for_one_credit() {
     let mut game = Game::new(121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 2, 1);
-    game.world.get_mut::<Stats>(pet).unwrap().def = 0;
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 0;
 
     let before = credits(&game);
     game.sell_companion(market, pet).unwrap();
@@ -292,13 +294,15 @@ fn program_sale_options_price_each_program_and_are_empty_for_a_non_buyer() {
     let mut game = Game::new(126, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 2;
 
     let options = game.program_sale_options(market);
     assert_eq!(options.len(), 1);
     assert_eq!(options[0].entity, pet);
-    assert_eq!(options[0].power, 70);
-    assert_eq!(options[0].payout, 7);
+    // See `selling_a_program_pays_a_tenth_of_its_power_and_despawns_it` for
+    // where 69 comes from — `Stats::power` prices mitigation as soak.
+    assert_eq!(options[0].power, 69);
+    assert_eq!(options[0].payout, 6);
 
     let kind = game
         .structure_defs()
@@ -1050,7 +1054,7 @@ fn buying_a_programs_zone_tiers_does_not_raise_what_a_trader_pays() {
     let mut game = Game::new(133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(pet).unwrap().def = 2;
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 2;
     game.world.entity_mut(pet).insert(ZonePortal(1));
     let unbumped = game.program_payout(market, pet).unwrap();
 
@@ -1068,10 +1072,14 @@ fn buying_a_programs_zone_tiers_does_not_raise_what_a_trader_pays() {
 
     assert_eq!(
         game.world.get::<Stats>(pet).unwrap().power(),
-        70 * 3,
+        208,
         "the program really is three times as strong — this is not a no-op. \
          Three rather than four because the zone curve is linear: tier 1 to \
-         3 is x2 then x3/2, where a doubling curve gave x2 then x2"
+         3 is x2 then x3/2, where a doubling curve gave x2 then x2. The \
+         figure is 208 rather than a clean 69 x 3 because `Stats::power` now \
+         prices mitigation as the effective HP it buys, and a kernel raises \
+         mitigation by its own percentage while the tier step deliberately \
+         does not touch it"
     );
     assert_eq!(
         game.program_payout(market, pet).unwrap(),
@@ -1089,18 +1097,24 @@ fn a_program_tamed_in_a_deep_zone_still_sells_for_what_it_is() {
     let market = spawn_market(&mut game);
 
     let shallow = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(shallow).unwrap().def = 2;
+    game.world.get_mut::<Stats>(shallow).unwrap().mitigation = 2;
     game.world.entity_mut(shallow).insert(ZonePortal(1));
 
     // Same species tamed three zones down: the spawner scaled it, nobody
     // bought it, and no `PurchasedTiers` records otherwise.
     let deep = spawn_tamed(&mut game, 240, 32);
-    game.world.get_mut::<Stats>(deep).unwrap().def = 8;
+    game.world.get_mut::<Stats>(deep).unwrap().mitigation = 8;
     game.world.entity_mut(deep).insert(ZonePortal(3));
 
+    // Not a clean x4 any more, and that is `Stats::power`'s redefinition
+    // rather than a rule bending: mitigation is priced as the effective HP
+    // it buys, so the deep program's 8% is worth more against its 240 HP
+    // than the shallow one's 2% is against 60. A payout is a *tenth* of
+    // power, so integer division widens the gap further.
+    assert_eq!(game.program_payout(market, shallow).unwrap(), 6);
     assert_eq!(
         game.program_payout(market, deep).unwrap(),
-        game.program_payout(market, shallow).unwrap() * 4,
+        29,
         "earned tiers are still worth every Credit they were"
     );
 }
@@ -1117,9 +1131,9 @@ fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
     give(&mut game, &weapon, 1);
 
     let geared = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(geared).unwrap().def = 2;
+    game.world.get_mut::<Stats>(geared).unwrap().mitigation = 2;
     let bare = spawn_tamed(&mut game, 60, 8);
-    game.world.get_mut::<Stats>(bare).unwrap().def = 2;
+    game.world.get_mut::<Stats>(bare).unwrap().mitigation = 2;
     game.equip(geared, &gear(&weapon, 0)).unwrap();
 
     let before = credits(&game);

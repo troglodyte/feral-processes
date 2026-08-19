@@ -18,7 +18,7 @@ fn wielding_a_program_raises_the_players_attack_and_defense() {
     let (atk_before, def_before) = (game.effective_atk(player), game.effective_def(player));
 
     let program = spawn_tamed(&mut game, 40, 60);
-    game.world.get_mut::<Stats>(program).unwrap().def = 30;
+    game.world.get_mut::<Stats>(program).unwrap().mitigation = 30;
     wield_directly(&mut game, program);
 
     assert_eq!(
@@ -37,7 +37,7 @@ fn wielding_a_program_raises_the_players_attack_and_defense() {
 fn the_wielded_bonus_floors_at_one_per_stat() {
     let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 10, 1);
-    game.world.get_mut::<Stats>(program).unwrap().def = 1;
+    game.world.get_mut::<Stats>(program).unwrap().mitigation = 1;
     wield_directly(&mut game, program);
 
     assert_eq!(
@@ -447,7 +447,10 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
     };
     let expected = battle::compute_damage(
         game.world.get::<Stats>(program).unwrap().atk,
-        game.world.get::<Stats>(front_enemy(&game)).unwrap().def,
+        game.world
+            .get::<Stats>(front_enemy(&game))
+            .unwrap()
+            .mitigation,
         abilities::scaled_hp_power(
             power,
             game.ability_user_level(program),

@@ -253,7 +253,14 @@ impl Game {
                     hp: scale(species.base_hp, potential.hp_roll),
                     max_hp: scale(species.base_hp, potential.hp_roll),
                     atk: scale(species.base_atk, potential.atk_roll),
-                    def: scale(species.base_def, potential.def_roll),
+                    // Unscaled, deliberately. Mitigation is percentage
+                    // points, so a zone tier multiplying it would reach
+                    // `MAX_MITIGATION_PERCENT` on half the roster by zone 5
+                    // and the cap would silently swallow the difference —
+                    // see `components::Stats::mitigation`. The individual
+                    // roll is dropped with it: rolling a percentage is the
+                    // same hazard in miniature.
+                    mitigation: species.base_def,
                 },
                 potential,
                 rarity,

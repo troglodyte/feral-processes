@@ -292,7 +292,7 @@ fn spawn_promotable(game: &mut Game, rarity: Rarity) -> Entity {
                 hp: 100,
                 max_hp: 100,
                 atk: 10,
-                def: 10,
+                mitigation: 10,
             },
             Hostile,
             rarity,
@@ -315,7 +315,7 @@ fn an_ordinary_nemesis_promotes_to_silver_at_the_full_multiplier() {
     let stats = *game.world.get::<Stats>(wild).unwrap();
     assert_eq!(stats.max_hp, 150, "100 * SILVER_STAT_MULT (1.5)");
     assert_eq!(stats.atk, 15, "10 * SILVER_STAT_MULT (1.5)");
-    assert_eq!(stats.def, 15, "10 * SILVER_STAT_MULT (1.5)");
+    assert_eq!(stats.mitigation, 15, "10 * SILVER_STAT_MULT (1.5)");
 }
 
 /// The trap this pins: a second promotion must multiply by the **ratio**
@@ -340,7 +340,7 @@ fn a_second_promotion_to_gold_multiplies_by_the_ratio_not_the_absolute_tier() {
         "150 * (GOLD 1.8 / SILVER 1.5) = 150 * 1.2"
     );
     assert_eq!(stats.atk, 18, "15 * 1.2");
-    assert_eq!(stats.def, 18, "15 * 1.2");
+    assert_eq!(stats.mitigation, 18, "15 * 1.2");
 }
 
 /// A Prismatic nemesis has nowhere left to climb, so the stat multiply is a
@@ -367,7 +367,7 @@ fn a_prismatic_nemesis_does_not_promote_but_still_heals_on_a_mark() {
     );
     let stats = *game.world.get::<Stats>(wild).unwrap();
     assert_eq!(stats.atk, 10, "a no-op multiplier leaves stats untouched");
-    assert_eq!(stats.def, 10);
+    assert_eq!(stats.mitigation, 10);
     assert_eq!(
         stats.hp, stats.max_hp,
         "the recharge must still run even when the promotion itself is a no-op"
@@ -550,7 +550,7 @@ fn a_promoted_nemesis_stats_are_byte_identical_across_a_save_load_round_trip() {
         "same trap as max_hp — atk would compound too"
     );
     assert_eq!(
-        after.def, before.def,
+        after.mitigation, before.mitigation,
         "same trap as max_hp — def would compound too"
     );
 }

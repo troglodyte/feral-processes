@@ -365,7 +365,7 @@ impl Game {
         };
         let (atk, def) = (
             self.effective_atk(entity),
-            self.world.get::<Stats>(front).unwrap().def,
+            self.world.get::<Stats>(front).unwrap().mitigation,
         );
         let dmg = battle::compute_damage(atk, def, move_power);
         self.apply_damage(front, dmg);
@@ -539,7 +539,7 @@ impl Game {
                     front_max_hp: stats.max_hp,
                     front_rarity: self.rarity_of(front),
                     atk: stats.atk,
-                    def: stats.def,
+                    def: stats.mitigation,
                     is_boss,
                     engaged: idx < ENGAGED_GROUPS,
                     status_effect: self.status_label(front),
@@ -1005,7 +1005,7 @@ impl Game {
                     let def = self
                         .world
                         .get::<Stats>(recipient)
-                        .map(|s| s.def)
+                        .map(|s| s.mitigation)
                         .unwrap_or(0);
                     let dmg = battle::compute_damage(
                         self.effective_atk(actor),
@@ -1025,7 +1025,7 @@ impl Game {
                     let def = self
                         .world
                         .get::<Stats>(recipient)
-                        .map(|s| s.def)
+                        .map(|s| s.mitigation)
                         .unwrap_or(0);
                     let dmg = battle::compute_damage(
                         self.effective_atk(actor),
@@ -1129,7 +1129,11 @@ impl Game {
     /// `DEFEND_DEF_BONUS`, and a field buff landing on that same power must
     /// not be mistaken for one.
     pub(crate) fn effective_def(&self, entity: Entity) -> i32 {
-        let base = self.world.get::<Stats>(entity).map(|s| s.def).unwrap_or(0);
+        let base = self
+            .world
+            .get::<Stats>(entity)
+            .map(|s| s.mitigation)
+            .unwrap_or(0);
         let bonus = self
             .world
             .get::<CombatBuff>(entity)
@@ -1184,7 +1188,7 @@ impl Game {
             .map(|s| {
                 (
                     (s.atk / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
-                    (s.def / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
+                    (s.mitigation / WIELDED_PROGRAM_STAT_DIVISOR).max(1),
                 )
             })
             .unwrap_or((0, 0))
@@ -1199,7 +1203,7 @@ impl Game {
             .fold((0, 0), |(atk, def), s| {
                 (
                     atk + (s.atk / PARTY_PASSIVE_STAT_DIVISOR).max(1),
-                    def + (s.def / PARTY_PASSIVE_STAT_DIVISOR).max(1),
+                    def + (s.mitigation / PARTY_PASSIVE_STAT_DIVISOR).max(1),
                 )
             })
     }

@@ -55,7 +55,7 @@ fn a_scrapper_levelling_to_its_unlock_gets_cascade_overflow_instead_of_a_stuck_f
                 hp: 50,
                 max_hp: 50,
                 atk: 5,
-                def: 2,
+                mitigation: 2,
             },
             Tamed { owner: player },
             Experience::default(),
@@ -500,7 +500,7 @@ fn install_and_uninstall_routine_are_refused_for_a_program_you_dont_own() {
                 hp: 10,
                 max_hp: 10,
                 atk: 0,
-                def: 1,
+                mitigation: 1,
             },
             Routines(vec![]),
         ))
@@ -785,7 +785,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
                 hp: 40,
                 max_hp: 40,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -804,7 +804,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
                 hp: 40,
                 max_hp: 40,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();

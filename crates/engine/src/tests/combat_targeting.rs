@@ -43,7 +43,7 @@ fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
                     hp: 1000,
                     max_hp: 1000,
                     atk: 5,
-                    def: 0,
+                    mitigation: 0,
                 },
             ))
             .id();
@@ -83,14 +83,14 @@ fn effective_def_excludes_the_players_party_bonus_when_a_companion_is_the_target
     // companion's own defense just because it's a party member too.
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 30);
-    game.world.get_mut::<Stats>(a).unwrap().def = 20;
+    game.world.get_mut::<Stats>(a).unwrap().mitigation = 20;
     game.add_companion(a).unwrap();
     // A second party member gives the *player's* bonus a nonzero,
     // easy-to-notice value if it ever leaked onto `a`.
     let b = spawn_tamed(&mut game, 10, 200);
     game.add_companion(b).unwrap();
 
-    let raw_def = game.world.get::<Stats>(a).unwrap().def;
+    let raw_def = game.world.get::<Stats>(a).unwrap().mitigation;
     assert_eq!(
         game.effective_def(a),
         raw_def,
@@ -237,7 +237,7 @@ fn a_companion_can_hold_the_buff_defend_grants() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
     game.add_companion(pet).unwrap();
-    let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+    let raw_def = game.world.get::<Stats>(pet).unwrap().mitigation;
 
     game.begin_defend(pet);
 
@@ -265,7 +265,7 @@ fn test_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
 fn a_field_buff_raises_the_effective_stat_it_names() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
-    let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+    let raw_def = game.world.get::<Stats>(pet).unwrap().mitigation;
     let raw_atk = game.world.get::<Stats>(pet).unwrap().atk;
 
     game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, 11));
@@ -284,7 +284,7 @@ fn a_field_buff_raises_the_effective_stat_it_names() {
 fn a_field_buff_stacks_with_a_combat_buff_of_the_same_kind() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
-    let raw_def = game.world.get::<Stats>(pet).unwrap().def;
+    let raw_def = game.world.get::<Stats>(pet).unwrap().mitigation;
 
     game.arm_buff(
         pet,

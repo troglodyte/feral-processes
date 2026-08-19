@@ -352,7 +352,11 @@ impl Game {
             return;
         };
 
-        let worker_def = self.world.get::<Stats>(worker).map(|s| s.def).unwrap_or(0);
+        let worker_def = self
+            .world
+            .get::<Stats>(worker)
+            .map(|s| s.mitigation)
+            .unwrap_or(0);
         // The Bastion base job. Every posted program mitigates by its
         // Defense — the defender above is found by `Task::target`, not by
         // `TaskKind::Guard` — so what the buff class brings is that the

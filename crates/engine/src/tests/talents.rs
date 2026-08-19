@@ -208,8 +208,8 @@ fn talents_survive_a_save_without_their_stats_being_applied_twice() {
     );
     let after = *loaded.world.get::<Stats>(restored).unwrap();
     assert_eq!(
-        (after.max_hp, after.atk, after.def),
-        (before.max_hp, before.atk, before.def),
+        (after.max_hp, after.atk, after.mitigation),
+        (before.max_hp, before.atk, before.mitigation),
         "and nothing may re-apply it — a saved program's stats already carry its talents"
     );
     assert_eq!(loaded.talent_points(restored).spent, 1);

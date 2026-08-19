@@ -35,7 +35,7 @@ fn set_zone(game: &mut Game, zone: u32) {
 /// carries no `PartialEq` — these tests want "nothing moved" in one line.
 fn stats(game: &Game, pet: Entity) -> (i32, i32, i32, i32) {
     let s = game.world.get::<Stats>(pet).unwrap();
-    (s.hp, s.max_hp, s.atk, s.def)
+    (s.hp, s.max_hp, s.atk, s.mitigation)
 }
 
 fn set_stats(game: &mut Game, pet: Entity, hp: i32, atk: i32, def: i32) {
@@ -43,7 +43,7 @@ fn set_stats(game: &mut Game, pet: Entity, hp: i32, atk: i32, def: i32) {
     s.hp = hp;
     s.max_hp = hp;
     s.atk = atk;
-    s.def = def;
+    s.mitigation = def;
 }
 
 #[test]
@@ -60,8 +60,12 @@ fn a_recompile_kernel_doubles_the_stat_block_and_raises_the_tier() {
     let (_, max_hp, atk, def) = stats(&game, pet);
     assert_eq!(
         (max_hp, atk, def),
-        (160, 18, 10),
-        "a bump moves the whole block up one zone tier — x2/1 from tier 1"
+        (160, 18, 5),
+        "a bump moves HP and attack up one zone tier — x2/1 from tier 1. \
+         Mitigation is untouched by the tier step: it is percentage points, \
+         and a tier applied to a percentage walks it to immunity. The \
+         kernel's own `def_percent` is what may move it, and 5% of 5 rounds \
+         to nothing"
     );
     assert_eq!(
         game.world.get::<ZonePortal>(pet).unwrap().0,
@@ -90,8 +94,10 @@ fn a_kernel_past_the_first_tier_applies_the_ratio_rather_than_truncating() {
     let (_, max_hp, atk, def) = stats(&game, pet);
     assert_eq!(
         (max_hp, atk, def),
-        (120, 13, 7),
-        "tier 2 to 3 is x3/2, not x1 and not x2"
+        (120, 13, 5),
+        "tier 2 to 3 is x3/2 on HP and attack, not x1 and not x2. Mitigation \
+         sits the tier step out — see \
+         `a_recompile_kernel_doubles_the_stat_block_and_raises_the_tier`"
     );
     assert_eq!(game.world.get::<ZonePortal>(pet).unwrap().0, 3);
 }
@@ -360,13 +366,14 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
         "a geared program must refactor to exactly what a bare one does"
     );
     let (_, max_hp, atk, def) = stats(&game, pet);
-    // 80/9/5 moved one zone tier from tier 1, which is x2/1. Spelled as
-    // numbers rather than as `raised_a_tier` so this is evidence about the
-    // curve rather than a restatement of it — the zone curve is linear, so
-    // the step is a ratio and only the *first* tier happens to be a clean x2.
+    // 80/9 moved one zone tier from tier 1, which is x2/1, and mitigation
+    // sat the step out. Spelled as numbers rather than as `raised_a_tier` so
+    // this is evidence about the curve rather than a restatement of it — the
+    // zone curve is linear, so the step is a ratio and only the *first* tier
+    // happens to be a clean x2.
     assert_eq!(
         (max_hp, atk, def),
-        (160, 18, 10),
+        (160, 18, 5),
         "and the multiplier lands on its own numbers, with no gear welded in"
     );
     assert_eq!(

@@ -702,7 +702,7 @@ fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
                 hp: 100,
                 max_hp: 100,
                 atk: 1,
-                def: 500,
+                mitigation: 500,
             },
             Position { x: 5, y: 5 },
             Task {
@@ -943,7 +943,7 @@ fn durability_lost_with_guard(species: &str, def: i32) -> u32 {
         "{species} should be in the shipped roster"
     );
     game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
-    game.world.get_mut::<Stats>(worker).unwrap().def = def;
+    game.world.get_mut::<Stats>(worker).unwrap().mitigation = def;
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::Guard,
         target: structure,
@@ -996,7 +996,7 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
             ))
             .id();
         let worker = spawn_tamed(&mut game, 50, 3);
-        game.world.get_mut::<Stats>(worker).unwrap().def = 100; // fully mitigates RAID_DAMAGE
+        game.world.get_mut::<Stats>(worker).unwrap().mitigation = 100; // fully mitigates RAID_DAMAGE
         game.world.entity_mut(worker).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,

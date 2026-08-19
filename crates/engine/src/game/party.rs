@@ -198,7 +198,7 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
-            def: stats.def,
+            def: stats.mitigation,
             power: stats.power(),
             status: self.status_label(entity),
             ability: self.ability_label(entity),
@@ -344,7 +344,7 @@ impl Game {
                     hp: stats.hp,
                     max_hp: stats.max_hp,
                     atk: stats.atk,
-                    def: stats.def,
+                    def: stats.mitigation,
                     power: stats.power(),
                     party_slot: slot_of(&entity).map(|s| s as u32),
                     activity: self.program_activity(entity),
@@ -822,7 +822,7 @@ impl Game {
         }
         let fused_hp = fuse_stat(stats_a.max_hp, stats_b.max_hp);
         let fused_atk = fuse_stat(stats_a.atk, stats_b.atk);
-        let fused_def = fuse_stat(stats_a.def, stats_b.def);
+        let fused_def = fuse_stat(stats_a.mitigation, stats_b.mitigation);
         let fused_potential = Potential::averaged(potential_a, potential_b);
         // The better of the two parents, the same shape `FusionCount` takes
         // (`max(a, b) + 1`) and for the same reason: fusing away an
@@ -882,7 +882,7 @@ impl Game {
                 hp: fused_hp,
                 max_hp: fused_hp,
                 atk: fused_atk,
-                def: fused_def,
+                mitigation: fused_def,
             },
             fused_potential,
             ZonePortal(fused_zone),

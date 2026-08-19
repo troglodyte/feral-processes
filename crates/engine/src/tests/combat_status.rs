@@ -28,7 +28,7 @@ fn stunned_player_loses_their_turn_but_wild_still_retaliates_and_stun_clears() {
                 hp: 50,
                 max_hp: 50,
                 atk: 3,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -83,7 +83,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
                 hp: 100,
                 max_hp: 100,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects {
                 active: Some(ActiveStatus {
@@ -159,7 +159,7 @@ fn status_effects_are_cleared_once_the_battle_ends() {
                 hp: 1,
                 max_hp: 1,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))
@@ -1077,7 +1077,7 @@ fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
                 hp: 100,
                 max_hp: 100,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             },
             StatusEffects::default(),
         ))

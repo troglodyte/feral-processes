@@ -308,7 +308,7 @@ mod tests {
             let game = build_player(&s, &test_assets_dir()).unwrap();
             let program = game.world.resource::<Party>().0[0];
             let stats = game.world.get::<Stats>(program).unwrap();
-            ((stats.atk, stats.def), game.gear_bonus(program))
+            ((stats.atk, stats.mitigation), game.gear_bonus(program))
         };
 
         let (bare, no_bonus) = member(Vec::new());

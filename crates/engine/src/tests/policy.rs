@@ -414,7 +414,7 @@ fn a_modded_species_with_one_move_scores() {
     // DEF 0 against ATK 0 is the other zero denominator, and the two have
     // to be exercised together: `0 / 0` is the only combination that
     // produces a NaN rather than an infinity the clamp absorbs.
-    game.world.get_mut::<Stats>(companion).unwrap().def = 0;
+    game.world.get_mut::<Stats>(companion).unwrap().mitigation = 0;
     let pos = *game.world.get::<Position>(player).unwrap();
     let wild = spawn_wild_without_routine(&mut game, "inert", pos.x, pos.y);
     game.world.get_mut::<Stats>(wild).unwrap().atk = 0;

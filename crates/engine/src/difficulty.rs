@@ -189,7 +189,7 @@ mod tests {
                     hp: 0,
                     max_hp: 10,
                     atk: 1,
-                    def: 1,
+                    mitigation: 1,
                 },
                 PowerReserve::new(0.0),
                 Experience {
@@ -249,7 +249,7 @@ mod tests {
                     hp: 0,
                     max_hp: 10,
                     atk: 1,
-                    def: 1,
+                    mitigation: 1,
                 },
                 PowerReserve::new(0.0),
                 Experience {
@@ -293,7 +293,7 @@ mod tests {
                     hp: 0,
                     max_hp: 10,
                     atk: 1,
-                    def: 1,
+                    mitigation: 1,
                 },
                 PowerReserve::new(0.0),
                 Experience {

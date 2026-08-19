@@ -18,7 +18,13 @@ pub struct PlayerSave {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// Percentage points — see `components::Stats::mitigation`. **Not**
+    /// `#[serde(default)]`: this was `def`, a subtractive absorption number,
+    /// and a v30 file's value would load into a percentage slot and mean
+    /// something else entirely. A changed meaning under a name it keeps is
+    /// exactly the case field-named RON does not cover, so the file is
+    /// refused by version instead.
+    pub mitigation: i32,
     pub power: f32,
     pub inventory: Vec<(ItemId, u32)>,
     pub level: u32,
@@ -97,7 +103,9 @@ pub struct CreatureSave {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// Percentage points — see `PlayerSave::mitigation` for why this earned
+    /// a version bump rather than a `#[serde(default)]`.
+    pub mitigation: i32,
     pub tamed: bool,
     /// What this program has left to spend on routine calls — see
     /// `components::PowerReserve`. Only a companion holds one; a wild
@@ -640,7 +648,15 @@ pub struct SaveData {
 /// which field-named RON does not save you from. Kept-and-ignored was the
 /// alternative and costs the same bump on the next property while leaving a
 /// lie in the struct.
-pub const SAVE_FORMAT_VERSION: u32 = 30;
+/// 30 → 31: `Stats::def` became `Stats::mitigation` and changed *unit* —
+/// subtractive absorption became percentage points. This is the second kind
+/// the entry above describes: not a field removed but one whose meaning
+/// changed, which field-named RON cannot rescue because the name is what it
+/// matches on. A v30 file would load `def: 6` into a percentage slot and
+/// read as 6% mitigation rather than 6 points of soak, so it is refused by
+/// version instead. `FieldBuffKind::Def` folding into `Mitigation` rides the
+/// same bump.
+pub const SAVE_FORMAT_VERSION: u32 = 31;
 
 /// `CreatureSave::power`'s serde default — see that field.
 fn full_reserve() -> f32 {
@@ -830,7 +846,7 @@ mod tests {
                 hp: 30,
                 max_hp: 30,
                 atk: 6,
-                def: 2,
+                mitigation: 2,
                 power: 100.0,
                 inventory: Vec::new(),
                 level: 1,
@@ -890,7 +906,7 @@ mod tests {
             hp: 10,
             max_hp: 10,
             atk: 3,
-            def: 1,
+            mitigation: 1,
             tamed: true,
             power: crate::components::POWER_MAX,
             level: 1,

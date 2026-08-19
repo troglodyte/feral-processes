@@ -1,11 +1,11 @@
 use crate::components::{Experience, Stats};
 use crate::tuning::{
-    ATK_PER_LEVEL, DEF_PER_LEVEL, DIFFICULTY_EASY_MAX, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION,
+    ATK_PER_LEVEL, DIFFICULTY_EASY_MAX, HP_PER_LEVEL, SETBACK_XP_PENALTY_FRACTION,
     XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR, XP_PER_LEVEL_STEP,
 };
 
 /// One stat's flat per-level growth, scaled by `growth_multiplier` and
-/// rounded to the nearest whole point. With `ATK_PER_LEVEL`/`DEF_PER_LEVEL`
+/// rounded to the nearest whole point. With `ATK_PER_LEVEL`
 /// both at 2, a multiplier has to cross a rounding boundary (roughly
 /// +0.25) to actually change those two — `HP_PER_LEVEL` (24) has much finer
 /// effective granularity.
@@ -26,7 +26,6 @@ pub struct LevelGain {
     pub levels: u32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
 }
 
 impl LevelGain {
@@ -41,18 +40,20 @@ impl LevelGain {
         self.levels += other.levels;
         self.max_hp += other.max_hp;
         self.atk += other.atk;
-        self.def += other.def;
     }
 
-    /// The three rows a level-up's stat block always has, measured against
+    /// The two rows a level-up's stat block always has, measured against
     /// `stats` as they stand *after* the `add_xp` call that produced this —
     /// so each row's "before" is recovered by subtracting the delta rather
     /// than by the caller having snapshotted anything.
-    pub fn stat_rows(&self, stats: &Stats) -> [StatRow; 3] {
+    ///
+    /// Two rather than three: levelling never raises mitigation — a
+    /// percentage that grows per level approaches immunity — so there is no
+    /// third row to draw. See `components::Stats::mitigation`.
+    pub fn stat_rows(&self, stats: &Stats) -> [StatRow; 2] {
         [
             StatRow::grown("Max HP", stats.max_hp, self.max_hp),
             StatRow::grown("ATK", stats.atk, self.atk),
-            StatRow::grown("DEF", stats.def, self.def),
         ]
     }
 }
@@ -87,9 +88,9 @@ impl StatRow {
 }
 
 /// The indented lines under a level-up announcement, one per stat that
-/// actually moved. A stat that didn't is dropped: `ATK_PER_LEVEL` and
-/// `DEF_PER_LEVEL` are both 2, so a low `growth_multiplier` rounds them away
-/// on a given level (see `scaled_growth`), and "ATK 14 → 14" is noise.
+/// actually moved. A stat that didn't is dropped: `ATK_PER_LEVEL` is 2, so a
+/// low `growth_multiplier` rounds it away on a given level (see
+/// `scaled_growth`), and "ATK 14 → 14" is noise.
 ///
 /// Lives here rather than in a frontend because all three sites that
 /// announce a level-up push these straight into `MessageLog` — the engine
@@ -152,7 +153,10 @@ pub fn stats_after_levels(base: Stats, levels_gained: u32, growth_multiplier: f3
         hp: max_hp,
         max_hp,
         atk: base.atk + scaled_growth(ATK_PER_LEVEL, growth_multiplier) * levels_gained,
-        def: base.def + scaled_growth(DEF_PER_LEVEL, growth_multiplier) * levels_gained,
+        // Carried through untouched. Mitigation is percentage points, and a
+        // percentage that grows per level approaches immunity — see
+        // `components::Stats::mitigation`.
+        mitigation: base.mitigation,
     }
 }
 
@@ -201,19 +205,16 @@ pub fn add_xp(
         exp.xp -= exp.xp_to_next;
         exp.level += 1;
         exp.xp_to_next = xp_for_level(exp.level);
-        let (hp, atk, def) = (
+        let (hp, atk) = (
             scaled_growth(HP_PER_LEVEL, growth_multiplier),
             scaled_growth(ATK_PER_LEVEL, growth_multiplier),
-            scaled_growth(DEF_PER_LEVEL, growth_multiplier),
         );
         stats.max_hp += hp;
         stats.hp = stats.max_hp;
         stats.atk += atk;
-        stats.def += def;
         gain.levels += 1;
         gain.max_hp += hp;
         gain.atk += atk;
-        gain.def += def;
     }
     gain
 }
@@ -305,7 +306,7 @@ mod tests {
             hp: 10,
             max_hp: 10,
             atk: 5,
-            def: 5,
+            mitigation: 5,
         }
     }
 
@@ -328,14 +329,13 @@ mod tests {
         assert_eq!(gain.levels, 2);
         assert_eq!(gain.max_hp, 2 * HP_PER_LEVEL);
         assert_eq!(gain.atk, 2 * ATK_PER_LEVEL);
-        assert_eq!(gain.def, 2 * DEF_PER_LEVEL);
     }
 
     #[test]
     fn a_growth_multiplier_that_rounds_a_stat_away_reports_no_gain_for_it() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // 1.1x leaves ATK/DEF_PER_LEVEL (2) rounding back to 2 — the case
+        // 1.1x leaves ATK_PER_LEVEL (2) rounding back to 2 — the case
         // `scaled_growth`'s doc warns about — while HP_PER_LEVEL (24) moves.
         // A stat that did move must still be reported, so this is not just
         // "everything is zero". The window is narrower than it was at 1 point
@@ -345,15 +345,13 @@ mod tests {
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.max_hp, 26);
         assert_eq!(gain.atk, ATK_PER_LEVEL, "1.1 * 2 rounds back to 2");
-        assert_eq!(gain.def, DEF_PER_LEVEL);
 
-        // 0.2x rounds ATK/DEF away entirely: 0.4 rounds to 0.
+        // 0.2x rounds ATK away entirely: 0.4 rounds to 0.
         let mut exp = Experience::default();
         let mut stats = base_stats();
         let gain = add_xp(&mut exp, &mut stats, xp_for_level(1), 0.2, None, 0);
         assert_eq!(gain.levels, 1);
         assert_eq!(gain.atk, 0, "0.2 * 2 rounds to no attack gain");
-        assert_eq!(gain.def, 0);
     }
 
     #[test]
@@ -364,7 +362,6 @@ mod tests {
         assert_eq!(gain.levels, 0);
         assert_eq!(gain.max_hp, 0);
         assert_eq!(gain.atk, 0);
-        assert_eq!(gain.def, 0);
     }
 
     #[test]
@@ -409,7 +406,6 @@ mod tests {
             vec![
                 format!("  Max HP 10 → {}", 10 + HP_PER_LEVEL),
                 format!("  ATK 5 → {}", 5 + ATK_PER_LEVEL),
-                format!("  DEF 5 → {}", 5 + DEF_PER_LEVEL),
             ]
         );
     }
@@ -443,7 +439,10 @@ mod tests {
         assert_eq!(stats.max_hp, 10 + HP_PER_LEVEL);
         assert_eq!(stats.hp, stats.max_hp, "level up should fully heal");
         assert_eq!(stats.atk, 5 + ATK_PER_LEVEL);
-        assert_eq!(stats.def, 5 + DEF_PER_LEVEL);
+        assert_eq!(
+            stats.mitigation, 5,
+            "levelling never raises mitigation — it is percentage points"
+        );
     }
 
     #[test]
@@ -470,9 +469,9 @@ mod tests {
     fn growth_multiplier_scales_stat_gains_per_level_up() {
         let mut exp = Experience::default();
         let mut stats = base_stats();
-        // 1.5x rounds HP_PER_LEVEL (24) to 36 and ATK/DEF_PER_LEVEL (2) to 3,
+        // 1.5x rounds HP_PER_LEVEL (24) to 36 and ATK_PER_LEVEL (2) to 3,
         // crossing the rounding boundary scaled_growth's doc comment warns
-        // about — a smaller multiplier like 1.1 wouldn't move ATK/DEF at all.
+        // about — a smaller multiplier like 1.1 wouldn't move ATK at all.
         let levels = add_xp(&mut exp, &mut stats, xp_for_level(1), 1.5, None, 0).levels;
         assert_eq!(levels, 1);
         assert_eq!(
@@ -486,9 +485,8 @@ mod tests {
             "1.5x should scale ATK growth up from 2 to 3"
         );
         assert_eq!(
-            stats.def,
-            5 + 3,
-            "1.5x should scale DEF growth up from 2 to 3"
+            stats.mitigation, 5,
+            "no growth multiplier reaches mitigation — it is percentage points"
         );
     }
 
@@ -503,7 +501,7 @@ mod tests {
         let projected = stats_after_levels(base_stats(), 3, 1.5);
         assert_eq!(stats.max_hp, projected.max_hp);
         assert_eq!(stats.atk, projected.atk);
-        assert_eq!(stats.def, projected.def);
+        assert_eq!(stats.mitigation, projected.mitigation);
     }
 
     #[test]

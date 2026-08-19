@@ -477,7 +477,7 @@ impl Game {
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
             stats.max_hp = (stats.max_hp as f32 * step).round() as i32;
             stats.atk = (stats.atk as f32 * step).round() as i32;
-            stats.def = (stats.def as f32 * step).round() as i32;
+            stats.mitigation = (stats.mitigation as f32 * step).round() as i32;
             stats.hp = stats.max_hp;
         }
         self.world.entity_mut(entity).insert(new);

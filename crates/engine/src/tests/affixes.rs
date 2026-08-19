@@ -253,7 +253,7 @@ fn wearing_and_removing_a_drawback_copy_leaves_no_dent() {
     let read = |game: &Game, who: Entity| {
         let stats = game.world.get::<Stats>(who).unwrap();
         let skill = game.world.get::<Decompiler>(who).map_or(0, |d| d.skill);
-        (stats.atk, stats.def, skill)
+        (stats.atk, stats.mitigation, skill)
     };
 
     let before = read(&game, player);

@@ -116,7 +116,7 @@ impl Game {
                 hp: 0,
                 max_hp: 0,
                 atk: 0,
-                def: 0,
+                mitigation: 0,
             });
             crate::telemetry::Record::EnemyChoice {
                 fight,
@@ -186,7 +186,7 @@ impl Game {
             hp: 1,
             max_hp: 1,
             atk: 0,
-            def: 0,
+            mitigation: 0,
         });
 
         // Relative to this species' own best move rather than to an absolute
@@ -226,7 +226,7 @@ impl Game {
             hp: 1,
             max_hp: 1,
             atk: 0,
-            def: 0,
+            mitigation: 0,
         });
         let target_hp_frac = target_stats.hp_fraction();
         f.set(Feature::TargetHpFrac, target_hp_frac);

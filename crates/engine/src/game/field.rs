@@ -142,7 +142,7 @@ impl Game {
         let (hp, max_hp, atk, def, power) = self
             .world
             .get::<Stats>(entity)
-            .map(|s| (s.hp, s.max_hp, s.atk, s.def, s.power()))
+            .map(|s| (s.hp, s.max_hp, s.atk, s.mitigation, s.power()))
             .unwrap_or_default();
         FieldCastTargetView {
             entity: holder.entity,

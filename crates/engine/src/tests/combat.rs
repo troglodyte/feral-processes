@@ -26,7 +26,7 @@ fn battle_flee_applies_the_same_mild_xp_setback_as_a_death() {
                 hp: 10,
                 max_hp: 10,
                 atk: 0,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -68,7 +68,7 @@ fn first_jack_out_against_an_overwhelming_pack(seed: u32) -> (Game, bool) {
                 hp: 100_000,
                 max_hp: 100_000,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
             StatusEffects::default(),
         ))

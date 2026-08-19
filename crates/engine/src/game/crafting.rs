@@ -230,7 +230,7 @@ impl Game {
     ) {
         if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
             stats.atk += sign * mods.atk;
-            stats.def += sign * mods.def;
+            stats.mitigation += sign * mods.def;
         }
         if mods.decompiler != 0
             && let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player)

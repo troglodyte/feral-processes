@@ -108,9 +108,14 @@ fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
         .min_by(|a, b| a.taming_difficulty.total_cmp(&b.taming_difficulty))
         .expect("at least one species");
     let even_match = (game.player_power() as f64 * DIFFICULTY_EVEN_MAX).ceil() as i32;
-    // Rounded up, so the total lands at or above the threshold rather than a
-    // stat's-worth under it and back inside the relief ramp.
-    let padding = ((even_match - max_hp + 1) / 2).max(1);
+    // All of the padding goes into `atk`, and none into mitigation. Under
+    // `Stats::power` mitigation is priced as the effective HP it buys rather
+    // than summed in, so it is the wrong knob for "make this thing's power
+    // reach N" — past `MAX_MITIGATION_PERCENT` it is clamped and the power
+    // saturates short of the threshold, leaving the target inside the relief
+    // ramp this fixture exists to clear. With mitigation at 0 the sum is
+    // exactly `max_hp + atk`.
+    let padding = (even_match - max_hp).max(1);
     game.world
         .spawn((
             Creature {
@@ -122,7 +127,7 @@ fn spawn_wild_at_hp(game: &mut Game, hp: i32, max_hp: i32) -> Entity {
                 hp,
                 max_hp,
                 atk: padding,
-                def: padding,
+                mitigation: 0,
             },
         ))
         .id()

@@ -227,7 +227,7 @@ fn unequipping_an_item_with_no_itemdb_entry_errors_instead_of_panicking() {
     let inventory_before = game.world.get::<Inventory>(player).unwrap().items.clone();
     let stats_before = {
         let stats = game.world.get::<Stats>(player).unwrap();
-        (stats.atk, stats.def)
+        (stats.atk, stats.mitigation)
     };
     let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
@@ -249,7 +249,7 @@ fn unequipping_an_item_with_no_itemdb_entry_errors_instead_of_panicking() {
     );
     let stats_after = game.world.get::<Stats>(player).unwrap();
     assert_eq!(
-        (stats_after.atk, stats_after.def),
+        (stats_after.atk, stats_after.mitigation),
         stats_before,
         "a refused unequip must not alter stats"
     );
@@ -279,7 +279,7 @@ fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_
     let inventory_before = game.world.get::<Inventory>(player).unwrap().items.clone();
     let stats_before = {
         let stats = game.world.get::<Stats>(player).unwrap();
-        (stats.atk, stats.def)
+        (stats.atk, stats.mitigation)
     };
     let decompiler_before = game.world.get::<Decompiler>(player).map(|d| d.skill);
 
@@ -304,7 +304,7 @@ fn equipping_over_a_slot_holding_an_item_with_no_itemdb_entry_errors_instead_of_
     );
     let stats_after = game.world.get::<Stats>(player).unwrap();
     assert_eq!(
-        (stats_after.atk, stats_after.def),
+        (stats_after.atk, stats_after.mitigation),
         stats_before,
         "a refused equip must not alter stats"
     );
@@ -981,7 +981,7 @@ fn a_decompiler_module_on_a_companion_changes_none_of_its_stats() {
 
     let after = stats_of(&game, companion);
     assert_eq!(after.atk, before.atk);
-    assert_eq!(after.def, before.def);
+    assert_eq!(after.mitigation, before.mitigation);
     assert_eq!(after.max_hp, before.max_hp);
     assert_eq!(
         game.world
@@ -1005,8 +1005,8 @@ fn stripping_a_program_wearing_nothing_is_a_no_op() {
 
     let after = stats_of(&game, companion);
     assert_eq!(
-        (after.atk, after.def, after.max_hp),
-        (before.atk, before.def, before.max_hp)
+        (after.atk, after.mitigation, after.max_hp),
+        (before.atk, before.mitigation, before.max_hp)
     );
     assert!(
         game.world.get::<Equipment>(companion).is_none(),
@@ -1108,7 +1108,10 @@ fn a_geared_companion_survives_save_and_load() {
     // that matters — a restored slot with unrestored stats reads as a working
     // save right up until the first unequip subtracts a bonus never added.
     let after = stats_of(&loaded, restored);
-    assert_eq!((after.def, after.atk), (geared.def, geared.atk));
+    assert_eq!(
+        (after.mitigation, after.atk),
+        (geared.mitigation, geared.atk)
+    );
 }
 
 #[test]
@@ -1215,8 +1218,8 @@ fn unequipping_a_rare_copy_leaves_no_bonus_behind() {
         game.unequip(player, EquipmentSlot::Weapon).unwrap();
         let after = *game.world.get::<Stats>(player).unwrap();
         assert_eq!(
-            (after.atk, after.def),
-            (base.atk, base.def),
+            (after.atk, after.mitigation),
+            (base.atk, base.mitigation),
             "{rarity:?} left a bonus welded into base stats after the unequip"
         );
         // And the copy came back as itself rather than laundering its tier.

@@ -114,7 +114,7 @@ fn set_companion_rejects_a_wild_creature() {
                 hp: 5,
                 max_hp: 5,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -464,7 +464,7 @@ fn fuse_companions_averages_the_parents_potential() {
                 hp: 20,
                 max_hp: 20,
                 atk: 10,
-                def: 4,
+                mitigation: 4,
             },
             Potential {
                 hp_roll: 0.8,
@@ -490,7 +490,7 @@ fn fuse_companions_averages_the_parents_potential() {
                 hp: 10,
                 max_hp: 10,
                 atk: 6,
-                def: 2,
+                mitigation: 2,
             },
             Potential {
                 hp_roll: 1.2,
@@ -537,7 +537,7 @@ fn a_creatures_potential_survives_save_and_load() {
             hp: 10,
             max_hp: 10,
             atk: 1,
-            def: 1,
+            mitigation: 1,
         },
         Potential {
             hp_roll: 1.15,
@@ -604,7 +604,7 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
                     hp: 1000,
                     max_hp: 1000,
                     atk: 50,
-                    def: 0,
+                    mitigation: 0,
                 },
             ))
             .id();
@@ -990,7 +990,7 @@ fn a_special_is_refused_for_a_program_not_in_the_party() {
                 hp: 100,
                 max_hp: 100,
                 atk: 1,
-                def: 0,
+                mitigation: 0,
             },
         ))
         .id();
@@ -1027,7 +1027,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
                 hp: 20,
                 max_hp: 20,
                 atk: 10,
-                def: 4,
+                mitigation: 4,
             },
             Tamed { owner: player },
             PowerReserve::default(),
@@ -1049,7 +1049,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
                 hp: 10,
                 max_hp: 10,
                 atk: 6,
-                def: 2,
+                mitigation: 2,
             },
             Tamed { owner: player },
             PowerReserve::default(),
@@ -1091,7 +1091,7 @@ fn fuse_companions_combines_stats_and_keeps_the_higher_level_species() {
         "fused HP should be higher + lower/2"
     );
     assert_eq!(stats.atk, 10 + 6 / 2);
-    assert_eq!(stats.def, 4 + 2 / 2);
+    assert_eq!(stats.mitigation, 4 + 2 / 2);
     assert_ne!(
         creature.species, species_b,
         "the lower-level input's species shouldn't win the tie"
@@ -1216,7 +1216,7 @@ fn fuse_companions_rejects_a_wild_creature() {
                 hp: 5,
                 max_hp: 5,
                 atk: 1,
-                def: 1,
+                mitigation: 1,
             },
         ))
         .id();
@@ -1658,8 +1658,8 @@ fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
         "gear on a fused-away parent comes back to cargo"
     );
     assert_eq!(
-        (actual.max_hp, actual.atk, actual.def),
-        (expected.max_hp, expected.atk, expected.def),
+        (actual.max_hp, actual.atk, actual.mitigation),
+        (expected.max_hp, expected.atk, expected.mitigation),
         "a worn weapon must not be fused into the child's base stats"
     );
 }

@@ -31,7 +31,7 @@ fn a_fight_that_survives_a_round() -> (Game, Entity) {
                 hp: 500,
                 max_hp: 500,
                 atk: 20,
-                def: 1,
+                mitigation: 1,
             },
             StatusEffects::default(),
         ))

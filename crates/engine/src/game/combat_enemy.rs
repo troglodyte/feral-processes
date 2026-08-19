@@ -135,7 +135,7 @@ impl Game {
         // is the uniform move roll and the aggro-weighted target roll this
         // used to make inline. `None` is "nothing it has reaches from where
         // it stands", which only a back group with no ranged move can be.
-        let Some((mut mv, target)) = self.choose_wild_action(wild, group, player) else {
+        let Some((mv, target)) = self.choose_wild_action(wild, group, player) else {
             let name = self.creature_label(wild);
             self.log(format!("{name} circles beyond reach, unable to strike."));
             return;
@@ -156,8 +156,11 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(WILD_ABILITY_CHANCE)
         };
+        // The rider is taken by value, so dropping it here is a decision
+        // about this swing and not an edit to the species' definition.
+        let (power, mut status) = mv.attack_parts();
         if !reaches_for_effect {
-            mv.effect = None;
+            status = None;
         }
 
         let targets_companion = target != player;
@@ -166,7 +169,7 @@ impl Game {
             let w = *self.world.get::<Stats>(wild).unwrap();
             (w.atk, self.effective_def(target))
         };
-        let dmg = battle::compute_damage(w_atk, t_def, mv.power);
+        let dmg = battle::compute_damage(w_atk, t_def, power);
         self.apply_damage(target, dmg);
 
         // A move that also inflicts a condition is the only thing an enemy has
@@ -178,7 +181,7 @@ impl Game {
         // move theoretically has one". Taken before the gate, a Crawler would
         // read as a special on every swing while the condition landed on
         // barely one in ten of them.
-        let kind = if mv.effect.is_some() {
+        let kind = if status.is_some() {
             MessageKind::EnemySpecial
         } else {
             MessageKind::EnemyAttack
@@ -200,7 +203,7 @@ impl Game {
                 // removing a member mid-battle shifts everyone behind it
                 // into the wrong slot. `slot_can_act` is what keeps the
                 // empty-handed slot from holding the round open until then.
-            } else if let Some(effect) = &mv.effect {
+            } else if let Some(effect) = &status {
                 self.apply_status_effect(target, effect, &name, kind);
             }
         } else {
@@ -209,7 +212,7 @@ impl Game {
                 format!("The rogue program executes {} for {} damage.", mv.name, dmg),
             );
             if self.creature_alive(target)
-                && let Some(effect) = &mv.effect
+                && let Some(effect) = &status
             {
                 self.apply_status_effect(target, effect, "You", kind);
             }

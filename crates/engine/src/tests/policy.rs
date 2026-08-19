@@ -534,7 +534,7 @@ fn a_trained_policy_rarely_picks_an_effect_carrying_move() {
             continue;
         };
         total += 1;
-        if mv.effect.is_some() {
+        if mv.attack_parts().1.is_some() {
             effect_moves += 1;
         }
     }

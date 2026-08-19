@@ -104,6 +104,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // ladder wearing a second name, and the player learns nothing from it.
     base_int: 12,
 
+    // A species' basic attacks: what it swings when it has no Special to
+    // cast. This is still the shape to author them in, and a mod's file
+    // needs no editing — but the engine converts each one into an ability
+    // at load (`species::basic_attack_ability`), so combat sees a single
+    // kind of thing. A converted attack is priced at nothing, has no
+    // cooldown, and is kept out of the pool a Routine Disk rolls from, so
+    // basic attacks stay enemy-only. The damage a basic attack deals is
+    // deliberately *not* computed the way a Special's is — see
+    // `docs/seams.md`.
     moves: [
         (name: "Move Name", power: 8),
         (name: "Other Move", power: 5),

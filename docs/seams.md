@@ -3127,3 +3127,48 @@ both kinds, each the way `buff_panel_width` measures it: advance for an item
 row (its two-space prefix has no ink), ink for a text row. Mutating the style
 back to `Inline` reproduces the original 360px overflow, which is what says
 the test is holding something.
+
+### A basic attack is an ability; the two are applied by different arithmetic on purpose
+
+A wild program's turn has always had two branches — cast a Special
+(`use_ability`) or swing a basic attack — and until now they carried two
+different *types*. `MoveDef` was name, power, an optional status rider and a
+reach flag, which is `AbilityEffect::Damage` plus one field; the effect's own
+doc comment had said so for as long as it has existed.
+
+`species::basic_attack_ability` is now the one conversion, and combat names
+`MoveDef` nowhere. `moves:` stays the authored shape, so no species file and
+no mod needed editing, and `SpeciesDef::basic_attacks()` is what the four
+readers take. A converted attack is `power_cost: 0`, `cooldown: 0` — a
+fallback that could be on cooldown leaves a hostile with no action at all —
+and `wild_weight: 0`, which keeps thirty-odd filler attacks out of the pool a
+Routine Disk rolls from. Its id is `{species}.basic.{index}`, derived from
+position rather than name: two species may ship an attack of the same name,
+and a name is player-facing text a modder may translate.
+
+**What was deliberately left alone, and why it is not an oversight.** The two
+arms compute different damage:
+
+| | basic attack | Special |
+|---|---|---|
+| attacker | raw `Stats::atk` | `effective_atk(actor)` |
+| power | flat, as authored | `scaled_hp_power(power, level, affinity)` |
+| target | `effective_def(target)` | raw `Stats::def` |
+
+Merging the application sites is therefore **not a refactor**: routing basic
+attacks through the Special arm makes every enemy swing scale with level and
+species affinity, which moves the difficulty curves `balance_sim` gates. That
+is a design change to argue for on its own evidence, not a tidy-up to slip
+into a type unification. The unification stopped at the point where the suite
+proves it changed nothing — 2640 tests including every seeded fight, with no
+seeded-test churn at all, which is what says the RNG stream and the damage
+arithmetic are untouched.
+
+**`ranged` lives on `AbilityDef` but is read by one path.** Honouring it in
+`use_ability` would silently stop back-row hostiles casting Specials they cast
+today, since every authored ability defaults to `ranged: false`.
+
+**`balance_sim` still reads `species.moves`**, the authored form, on purpose.
+It is the balance gate; reading the converted list could only ever produce
+the same numbers, and reading the authored one makes that obvious instead of
+requiring a proof.

@@ -359,7 +359,7 @@ impl Game {
             ("data strike".to_string(), PLAYER_STRIKE_POWER)
         } else {
             match self.roll_species_move(entity) {
-                Some(mv) => (mv.name.clone(), mv.power),
+                Some(mv) => (mv.name.clone(), mv.attack_parts().0),
                 None => ("a raw signal burst".to_string(), PLAYER_STRIKE_POWER),
             }
         };
@@ -449,15 +449,15 @@ impl Game {
         self.reap_dead_members(player)
     }
 
-    /// A uniformly-random move from `entity`'s species moveset, or `None`
-    /// if it has no `Creature` component or an empty moveset.
-    pub(crate) fn roll_species_move(&mut self, entity: Entity) -> Option<MoveDef> {
+    /// A uniformly-random basic attack from `entity`'s species, or `None`
+    /// if it has no `Creature` component or no attacks at all.
+    pub(crate) fn roll_species_move(&mut self, entity: Entity) -> Option<AbilityDef> {
         let species_id = self.world.get::<Creature>(entity)?.species.clone();
         let moves = self
             .world
             .resource::<SpeciesDb>()
             .get(&species_id)
-            .map(|s| s.moves.clone())?;
+            .map(|s| s.basic_attacks())?;
         if moves.is_empty() {
             return None;
         }

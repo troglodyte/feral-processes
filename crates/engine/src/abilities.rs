@@ -402,6 +402,19 @@ pub struct AbilityDef {
     /// `Game::extract_routine` are the three places that honour it.
     #[serde(default)]
     pub exclusive: bool,
+
+    /// Whether this attack reaches past the front line. Read by **the basic
+    /// attack path only** — `Game::basic_attacks_that_reach` — because that
+    /// is the only place reach has ever been decided: a group standing
+    /// behind `tuning::ENGAGED_GROUPS` can use only its ranged attacks and
+    /// idles if it has none. A Special has never been gated on reach and
+    /// still is not, so honouring this in `use_ability` would silently stop
+    /// back-row hostiles casting what they cast today.
+    ///
+    /// `#[serde(default)]` to false, matching `MoveDef::ranged`, so a
+    /// converted attack and an authored ability agree on melee-by-default.
+    #[serde(default)]
+    pub ranged: bool,
     /// Which species drop this routine's etched disk, each with its own
     /// 0.0-1.0 chance. Becomes the synthesised disk item's
     /// `ItemDef::droppable` (see `ItemDb::synthesise_etched_disks`), which
@@ -488,6 +501,23 @@ pub(crate) fn every_turn() -> u32 {
 }
 
 impl AbilityDef {
+    /// What an attack hits for and what it may leave behind — `(0, None)`
+    /// for any ability that is not direct damage.
+    ///
+    /// One accessor rather than a `power` and an `effect` field mirroring
+    /// `MoveDef`: the numbers live in `AbilityEffect::Damage` and reading
+    /// them out is the only thing the basic-attack path ever wanted from a
+    /// move. Returns the rider **by value** so a caller that rolls it away
+    /// for the turn — see `Game::wild_attack` — does so on its own copy
+    /// rather than mutating a definition shared by every program of the
+    /// species.
+    pub(crate) fn attack_parts(&self) -> (i32, Option<crate::species::MoveEffect>) {
+        match &self.effect {
+            AbilityEffect::Damage { power, status } => (*power, status.clone()),
+            _ => (0, None),
+        }
+    }
+
     /// Names the first field holding a NaN or infinity, if any. RON accepts
     /// bare `NaN`/`inf` literals and they survive every clamp downstream —
     /// cheaper to refuse the file at load than to defend every read. Same

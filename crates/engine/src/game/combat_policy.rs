@@ -27,7 +27,7 @@ impl Game {
         wild: Entity,
         group: usize,
         player: Entity,
-    ) -> Option<(MoveDef, Entity)> {
+    ) -> Option<(AbilityDef, Entity)> {
         self.choose_wild_action_at(wild, group, player, ENEMY_POLICY_TEMPERATURE)
     }
 
@@ -41,8 +41,8 @@ impl Game {
         group: usize,
         player: Entity,
         temperature: f32,
-    ) -> Option<(MoveDef, Entity)> {
-        let moves = self.moves_that_reach(wild, group);
+    ) -> Option<(AbilityDef, Entity)> {
+        let moves = self.basic_attacks_that_reach(wild, group);
         if moves.is_empty() {
             return None;
         }
@@ -108,7 +108,7 @@ impl Game {
     /// not be able to disagree about what a swing looks like in the file.
     /// The two `None` exits above deliberately do not call it — nothing
     /// reached, so no swing happened.
-    fn record_enemy_choice(&mut self, wild: Entity, group: usize, mv: &MoveDef, target: Entity) {
+    fn record_enemy_choice(&mut self, wild: Entity, group: usize, mv: &AbilityDef, target: Entity) {
         let fight = self.fight_id();
         let round = self.telemetry_round();
         self.record(|g| {
@@ -140,7 +140,7 @@ impl Game {
     /// The moves `wild` can actually bring to bear from `group`. Only the
     /// front `ENGAGED_GROUPS` are close enough to swing; anything further
     /// back has to shoot.
-    fn moves_that_reach(&self, wild: Entity, group: usize) -> Vec<MoveDef> {
+    fn basic_attacks_that_reach(&self, wild: Entity, group: usize) -> Vec<AbilityDef> {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return Vec::new();
         };
@@ -148,11 +148,10 @@ impl Game {
         self.world
             .resource::<SpeciesDb>()
             .get(&species_id)
-            .map(|def| def.moves.as_slice())
+            .map(|def| def.basic_attacks())
             .unwrap_or_default()
-            .iter()
-            .filter(|m| engaged || m.ranged)
-            .cloned()
+            .into_iter()
+            .filter(|a| engaged || a.ranged)
             .collect()
     }
 
@@ -178,7 +177,7 @@ impl Game {
     fn action_features(
         &self,
         wild: Entity,
-        mv: &MoveDef,
+        mv: &AbilityDef,
         target: Entity,
         group: usize,
     ) -> Features {
@@ -199,21 +198,28 @@ impl Game {
             .world
             .get::<Creature>(wild)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-            .map(|def| def.moves.iter().map(|m| m.power).max().unwrap_or(0))
+            .map(|def| {
+                def.basic_attacks()
+                    .iter()
+                    .map(|a| a.attack_parts().0)
+                    .max()
+                    .unwrap_or(0)
+            })
             .unwrap_or(0);
+        let (power, status) = mv.attack_parts();
         f.set(
             Feature::MovePowerRel,
-            mv.power as f32 / best_power.max(1) as f32,
+            power as f32 / best_power.max(1) as f32,
         );
         f.set(Feature::MoveRanged, mv.ranged as u8 as f32);
-        f.set(Feature::MoveHasEffect, mv.effect.is_some() as u8 as f32);
-        let stun_move = matches!(&mv.effect, Some(e) if e.kind == StatusKind::Stun);
-        let bleed_move = matches!(&mv.effect, Some(e) if e.kind == StatusKind::Bleed);
+        f.set(Feature::MoveHasEffect, status.is_some() as u8 as f32);
+        let stun_move = matches!(&status, Some(e) if e.kind == StatusKind::Stun);
+        let bleed_move = matches!(&status, Some(e) if e.kind == StatusKind::Bleed);
         f.set(Feature::MoveEffectStun, stun_move as u8 as f32);
         f.set(Feature::MoveEffectBleed, bleed_move as u8 as f32);
         f.set(
             Feature::MoveEffectChance,
-            mv.effect.as_ref().map(|e| e.chance).unwrap_or(0.0),
+            status.as_ref().map(|e| e.chance).unwrap_or(0.0),
         );
 
         let target_stats = self.world.get::<Stats>(target).copied().unwrap_or(Stats {
@@ -251,7 +257,7 @@ impl Game {
 
         // The real formula, called rather than restated — a copy here would
         // drift from the damage the swing then actually deals.
-        let dmg = battle::compute_damage(wild_stats.atk, def, mv.power);
+        let dmg = battle::compute_damage(wild_stats.atk, def, power);
         f.set(
             Feature::EstDamageFrac,
             (dmg as f32 / target_stats.hp.max(1) as f32).clamp(0.0, 1.0),

@@ -412,6 +412,21 @@ because a species is still perfectly playable without one of its abilities.
 Companions cap at level 12, so a `level` above that makes an ability
 permanently unreachable.
 
+## `ranged`
+
+`ranged: true` marks an attack that reaches past the front line. It is read
+by **one path only** — the basic-attack path a wild program falls back on
+when it has no Special to cast. A group standing behind
+`tuning::ENGAGED_GROUPS` may use only its ranged attacks, and idles if it
+has none.
+
+A Special has never been gated on reach and still is not, so setting this on
+an ordinary routine changes nothing today. Defaults to `false`, matching the
+`ranged` field on a species' `moves:`, which is where every shipped value of
+it comes from: a species' basic attacks are converted into abilities at
+load (`species::basic_attack_ability`), and this is the field that survives
+the conversion.
+
 ## The exclusive set
 
 `exclusive: true` marks a routine **nobody can learn**. It never enters

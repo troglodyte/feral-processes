@@ -74,7 +74,7 @@ pub use resources::{
     DifficultyMode, EffectKind, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource,
     SlotShift, VisualEffect, condense,
 };
-use species::{Affinities, MoveDef, SpeciesDb, SpeciesDef, SpeciesId};
+use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
 pub use views::*;
 use world::{Biome, Tile, WorldMap};

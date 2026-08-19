@@ -4,7 +4,7 @@ use std::path::Path;
 use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::abilities::AffinityKind;
+use crate::abilities::{AbilityDef, AbilityEffect, AbilityTarget, AffinityKind};
 use crate::components::{GlyphColor, StatusKind};
 use crate::items::ItemId;
 use crate::world::Biome;
@@ -59,6 +59,40 @@ pub struct MoveDef {
     /// as they behaved before it existed.
     #[serde(default)]
     pub ranged: bool,
+}
+
+/// One basic attack, expressed as the ability it has always been in all but
+/// type. A `MoveDef` is name, power, an optional status rider and a reach
+/// flag; `AbilityEffect::Damage` is the first three exactly — its own doc
+/// says so — and `ranged` is the only field the ability side was missing.
+///
+/// Priced at nothing and weighted out of the wild pool on purpose. A basic
+/// attack is what a program does when it has nothing better, so a cooldown
+/// or a Power charge would leave a hostile with no action at all, and
+/// `wild_weight: 0` keeps thirty-odd filler attacks out of the pool a
+/// Routine Disk rolls from.
+///
+/// The id is derived from the species and the attack's position rather than
+/// its name: two species may ship an attack of the same name, and a name is
+/// player-facing text a modder may translate.
+pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> AbilityDef {
+    AbilityDef {
+        id: format!("{species}.basic.{index}"),
+        name: mv.name.clone(),
+        description: String::new(),
+        target: AbilityTarget::OneEnemyGroupFront,
+        effect: AbilityEffect::Damage {
+            power: mv.power,
+            status: mv.effect.clone(),
+        },
+        cooldown: 0,
+        power_cost: 0.0,
+        wild_weight: 0,
+        exclusive: false,
+        boss_drop: None,
+        triggers: None,
+        ranged: mv.ranged,
+    }
 }
 
 fn default_affinity() -> f32 {
@@ -292,6 +326,17 @@ pub enum AffinityClass {
 }
 
 impl SpeciesDef {
+    /// This species' basic attacks as abilities — the one conversion, so
+    /// combat never sees a `MoveDef`. `moves` stays the authored shape: a
+    /// species file, including a mod's, parses exactly as it did.
+    pub fn basic_attacks(&self) -> Vec<AbilityDef> {
+        self.moves
+            .iter()
+            .enumerate()
+            .map(|(i, mv)| basic_attack_ability(&self.id, i, mv))
+            .collect()
+    }
+
     /// The class this species reads as, or `None` for one that raises no
     /// axis or more than one.
     ///
@@ -1015,6 +1060,49 @@ mod tests {
         )
         .unwrap()
         .0
+    }
+
+    /// A basic attack arrives in combat as an ability, carrying everything
+    /// the `MoveDef` it was authored as carried: the name a log line prints,
+    /// the power `compute_damage` takes, the status rider and the reach.
+    ///
+    /// Against the shipped Drone rather than a fixture, because the point is
+    /// that a real species file needs no editing — `moves:` is still the
+    /// authored shape and the conversion is what combat sees.
+    #[test]
+    fn a_species_basic_attack_arrives_as_an_ability() {
+        let (db, warnings) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities())
+            .expect("the species load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let drone = db.get("drone").expect("the Drone ships");
+
+        let attacks = drone.basic_attacks();
+        assert_eq!(
+            attacks.len(),
+            drone.moves.len(),
+            "one ability per authored attack, in order"
+        );
+
+        let buzz = &attacks[0];
+        assert_eq!(buzz.name, "Buzz");
+        assert!(!buzz.ranged, "Buzz is melee, as it was authored");
+        let AbilityEffect::Damage { power, status } = &buzz.effect else {
+            panic!("a basic attack is direct damage");
+        };
+        assert_eq!(*power, 4, "the authored power, unscaled");
+        assert!(status.is_none(), "and no rider");
+
+        let ping = &attacks[1];
+        assert!(ping.ranged, "Recon Ping reaches past the front line");
+
+        // Priced at nothing and out of the wild pool: a basic attack is what
+        // a program falls back on, and thirty-odd of them in the Routine Disk
+        // pool is not a content drop anyone asked for.
+        for a in &attacks {
+            assert_eq!(a.power_cost, 0.0, "{} costs Power", a.name);
+            assert_eq!(a.cooldown, 0, "{} has a cooldown", a.name);
+            assert_eq!(a.wild_weight, 0, "{} is in the wild pool", a.name);
+        }
     }
 
     /// The schedule the design is written against. Spelled out as a table

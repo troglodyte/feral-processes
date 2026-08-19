@@ -735,6 +735,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -774,6 +775,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -810,6 +812,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -850,6 +853,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -891,6 +895,7 @@ fn drain_logs_what_it_actually_restored() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -927,6 +932,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -974,6 +980,7 @@ fn a_negative_power_buff_saps_effective_attack() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1012,6 +1019,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1047,6 +1055,7 @@ fn a_heal_scales_with_the_users_level() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1080,6 +1089,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1118,6 +1128,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1160,6 +1171,7 @@ fn ability_damage_scales_with_the_users_level() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1203,6 +1215,7 @@ fn drain_scales_with_the_users_level() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1351,6 +1364,7 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };
@@ -1410,6 +1424,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        ranged: false,
         boss_drop: None,
         triggers: None,
     };

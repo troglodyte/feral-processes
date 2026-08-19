@@ -33,7 +33,7 @@ roster while looking like a cosmetic change.
     name: "Cold Storage",
     description: "Long-idle allocations, frost-locked and slow to answer.",
     shape: (
-        static_temperature: 1.15,
+        deadlock_temperature: 1.15,
     ),
     palette: (
         ground_hue: 200.0,
@@ -58,14 +58,14 @@ and moisture `m` — into six biomes at five thresholds, in this order:
 ```
 e < void_elevation                          -> Data Void      (a hole)
 e > black_ice_elevation                     -> Black Ice      (a hole)
-t < static_temperature                      -> Static Field
+t < deadlock_temperature                      -> Deadlock
 t > null_temperature && m < null_moisture   -> Null Sector
 m > mainframe_moisture                      -> Mainframe
 otherwise                                   -> Open Grid
 ```
 
 Neutral values are `void_elevation: -0.3`, `black_ice_elevation: 0.55`,
-`static_temperature: -0.3`, `null_temperature: 0.3`, `null_moisture: -0.1`,
+`deadlock_temperature: -0.3`, `null_temperature: 0.3`, `null_moisture: -0.1`,
 `mainframe_moisture: 0.15`.
 
 **Every field in `shape` is a delta added to the neutral value, not a
@@ -81,7 +81,7 @@ usually means moving `null_temperature` and `null_moisture` together (see
 `arid.ron`).
 
 Temperature is also latitude-dependent and sits near `1.0` around the origin,
-which is why `cold_storage.ron` has to raise the Static Field floor by more
+which is why `cold_storage.ron` has to raise the Deadlock floor by more
 than a whole unit to reach it.
 
 #### A sector must leave ground to stand on
@@ -130,6 +130,6 @@ would mean relearning the map on every breach.
 
 | File | What it does |
 | --- | --- |
-| `cold_storage.ron` | Static Field over most of the ground; holes unmoved. |
+| `cold_storage.ron` | Deadlock over most of the ground; holes unmoved. |
 | `fractured.ron` | Both elevation thresholds close in; about half the map is holes. |
 | `arid.ron` | Null Sector over most of the ground; as walkable as neutral. |

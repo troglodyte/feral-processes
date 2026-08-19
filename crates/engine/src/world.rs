@@ -24,7 +24,11 @@ pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Biome {
     DataVoid,
-    StaticField,
+    /// Renamed from `StaticField`; the alias is what keeps every save and
+    /// species mod written before the rename loading, and is why this cost
+    /// no `SAVE_FORMAT_VERSION` bump.
+    #[serde(alias = "StaticField")]
+    Deadlock,
     NullSector,
     Mainframe,
     OpenGrid,
@@ -104,8 +108,8 @@ pub struct SectorShape {
     pub void_elevation: f64,
     /// Elevation above which terrain is impassable ice: `e > this`.
     pub black_ice_elevation: f64,
-    /// Temperature below which ground is Static Field: `t < this`.
-    pub static_temperature: f64,
+    /// Temperature below which ground is Deadlock: `t < this`.
+    pub deadlock_temperature: f64,
     /// Temperature above which dry ground is Null Sector, paired with
     /// `null_moisture`: `t > this && m < null_moisture`.
     pub null_temperature: f64,
@@ -122,7 +126,7 @@ impl SectorShape {
     pub const NEUTRAL: SectorShape = SectorShape {
         void_elevation: -0.3,
         black_ice_elevation: 0.55,
-        static_temperature: -0.3,
+        deadlock_temperature: -0.3,
         null_temperature: 0.3,
         null_moisture: -0.1,
         mainframe_moisture: 0.15,
@@ -192,8 +196,8 @@ impl WorldMap {
             Biome::DataVoid
         } else if e > shape.black_ice_elevation {
             Biome::BlackIce
-        } else if t < shape.static_temperature {
-            Biome::StaticField
+        } else if t < shape.deadlock_temperature {
+            Biome::Deadlock
         } else if t > shape.null_temperature && m < shape.null_moisture {
             Biome::NullSector
         } else if m > shape.mainframe_moisture {
@@ -286,7 +290,7 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
                 out.push(match map.tile(x, y).biome {
                     Biome::DataVoid => 'v',
                     Biome::BlackIce => 'i',
-                    Biome::StaticField => 's',
+                    Biome::Deadlock => 's',
                     Biome::NullSector => 'n',
                     Biome::Mainframe => 'm',
                     Biome::OpenGrid => 'o',
@@ -319,27 +323,27 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
     }
 
     /// The one that proves the knob is connected rather than merely stored.
-    /// Static Field is the biome a cold sector is made of, and it is
+    /// Deadlock is the biome a cold sector is made of, and it is
     /// vanishingly rare near the origin — `classify`'s latitude falloff puts
     /// `t` near 1.0 there, so the neutral floor of -0.3 is never met. Raising
     /// that floor is what a cold sector does.
     #[test]
-    fn raising_the_static_field_floor_yields_more_static_field() {
+    fn raising_the_deadlock_floor_yields_more_deadlock() {
         let count = |shape| {
             let mut map = WorldMap::with_shape(4242, shape);
             (0..24)
                 .flat_map(|y| (0..48).map(move |x| (x, y)))
-                .filter(|&(x, y)| map.tile(x, y).biome == Biome::StaticField)
+                .filter(|&(x, y)| map.tile(x, y).biome == Biome::Deadlock)
                 .count()
         };
         let neutral = count(SectorShape::NEUTRAL);
         let cold = count(SectorShape {
-            static_temperature: 0.9,
+            deadlock_temperature: 0.9,
             ..SectorShape::NEUTRAL
         });
         assert!(
             cold > neutral,
-            "a raised Static Field floor produced {cold} tiles against neutral's {neutral} — \
+            "a raised Deadlock floor produced {cold} tiles against neutral's {neutral} — \
              the shape is not reaching `classify`"
         );
     }

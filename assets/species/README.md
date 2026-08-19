@@ -34,7 +34,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // can read every shipped one's.
     taming_difficulty: 0.4,       // 0.0 (trivial) .. 1.0 (very hard) to compile/tame
     habitats: [OpenGrid, Mainframe],
-    // Biome options: DataVoid, StaticField, NullSector, Mainframe, OpenGrid, BlackIce, Platform
+    // Biome options: DataVoid, Deadlock, NullSector, Mainframe, OpenGrid, BlackIce, Platform
     // (DataVoid and BlackIce are unwalkable barrier terrain — don't list them as a habitat)
     // Platform is the floor of a player's base. Nothing the world generates uses it — it
     // only exists where a Home has been deployed, and it travels with the base between

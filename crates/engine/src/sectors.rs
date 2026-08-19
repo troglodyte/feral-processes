@@ -95,8 +95,8 @@ pub struct ShapeDelta {
     pub void_elevation: f64,
     #[serde(default)]
     pub black_ice_elevation: f64,
-    #[serde(default)]
-    pub static_temperature: f64,
+    #[serde(default, alias = "static_temperature")]
+    pub deadlock_temperature: f64,
     #[serde(default)]
     pub null_temperature: f64,
     #[serde(default)]
@@ -149,7 +149,7 @@ impl SectorDef {
         SectorShape {
             void_elevation: n.void_elevation + d.void_elevation,
             black_ice_elevation: n.black_ice_elevation + d.black_ice_elevation,
-            static_temperature: n.static_temperature + d.static_temperature,
+            deadlock_temperature: n.deadlock_temperature + d.deadlock_temperature,
             null_temperature: n.null_temperature + d.null_temperature,
             null_moisture: n.null_moisture + d.null_moisture,
             mainframe_moisture: n.mainframe_moisture + d.mainframe_moisture,

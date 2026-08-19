@@ -6,19 +6,19 @@
 # when a species file moves, then rerun.
 S = [
  # id            name         glyph hp  atk def spd int tame  grow  biomes                                          yield           boss nest abilities                                      affinities
- ("wintermute",  "Wintermute", "W", 200, 19, 17, 13, 18, .95, 2.0,  ["OpenGrid","Mainframe","NullSector","StaticField"], None,            1, 0, ["broadcast_storm","null_route L4"],      None),
- ("overseer",    "Overseer",   "B", 180, 17, 15, 12, 16, .90, 2.0,  ["OpenGrid","Mainframe","NullSector","StaticField"], None,            1, 0, ["broadcast_storm","overclock_array L5"], None),
- ("sentinel",    "Sentinel",   "S", 136,  6, 12,  7,  8, .65, 1.5,  ["StaticField"],                                    None,            0, 0, ["overclock_array L2","bastion_shield_v3 L6"], "buff 1.3 / damage 0.85"),
+ ("wintermute",  "Wintermute", "W", 200, 19, 17, 13, 18, .95, 2.0,  ["OpenGrid","Mainframe","NullSector","Deadlock"], None,            1, 0, ["broadcast_storm","null_route L4"],      None),
+ ("overseer",    "Overseer",   "B", 180, 17, 15, 12, 16, .90, 2.0,  ["OpenGrid","Mainframe","NullSector","Deadlock"], None,            1, 0, ["broadcast_storm","overclock_array L5"], None),
+ ("sentinel",    "Sentinel",   "S", 136,  6, 12,  7,  8, .65, 1.5,  ["Deadlock"],                                    None,            0, 0, ["overclock_array L2","bastion_shield_v3 L6"], "buff 1.3 / damage 0.85"),
  ("construct",   "Construct",  "C",  49,  2,  4,  6,  5, .35, 1.0,  ["Mainframe"],                                      "core_fragment", 0, 0, ["overclock_array L2","sandbox L6"],           "buff 1.3 / damage 0.85"),
  ("rootkit",     "Rootkit",    "k", 132, 12,  3,  9, 13, .75, 1.5,  ["Mainframe","NullSector"],                         None,            0, 0, ["skim_group L2","skim_v3 L6"],                "drain 1.3 / buff 0.85"),
- ("cipher",      "Cipher",     "c", 113, 15,  5, 13, 14, .80, 1.5,  ["Mainframe","StaticField"],                        None,            0, 0, ["deadlock L2","bit_rot_v3 L6"],               "debuff 1.3 / heal 0.85"),
+ ("cipher",      "Cipher",     "c", 113, 15,  5, 13, 14, .80, 1.5,  ["Mainframe","Deadlock"],                        None,            0, 0, ["deadlock L2","bit_rot_v3 L6"],               "debuff 1.3 / heal 0.85"),
  ("virus",       "Virus",      "v", 122, 10,  8, 12, 12, .60, 1.5,  ["NullSector","Mainframe"],                         "core_fragment", 0, 0, ["redundancy_sync L2","rollback_v3 L6"],       "heal 1.3 / damage 0.85"),
- ("zero_day",      "ZeroDay",    "z",  106, 16,  4, 10, 12, .65, 1.5,  ["StaticField","NullSector"],                       None,            0, 0, ["cascade_overflow L2","segfault_v3 L6"],      "damage 1.3 / heal 0.85"),
+ ("zero_day",      "ZeroDay",    "z",  106, 16,  4, 10, 12, .65, 1.5,  ["Deadlock","NullSector"],                       None,            0, 0, ["cascade_overflow L2","segfault_v3 L6"],      "damage 1.3 / heal 0.85"),
  ("worm",        "Worm",       "m",  99,  9,  2,  9, 11, .40, 1.25, ["NullSector","OpenGrid"],                          "core_fragment", 0, 1, ["skim_group L2","skim_v2 L6"],                "drain 1.3 / buff 0.85"),
  ("scrapper",    "Scrapper",   "x",   80, 12,  3, 10,  7, .45, 1.25, ["OpenGrid","NullSector"],                          "core_fragment", 0, 1, ["cascade_overflow L2","segfault_v2 L6"],      "damage 1.3 / heal 0.85"),
  ("trojan",      "Trojan",     "t",   85, 11,  4, 13, 13, .50, 1.25, ["Mainframe","OpenGrid"],                           None,            0, 1, ["deadlock L2","bit_rot_v2 L6"],               "debuff 1.3 / heal 0.85"),
- ("proxy",       "Proxy",      "p",   92,  7,  6, 12, 13, .55, 1.25, ["Mainframe","StaticField"],                        None,            0, 0, ["redundancy_sync L2","rollback_v2 L6"],       "heal 1.3 / damage 0.85"),
- ("crawler",     "Crawler",    "r",  102,  5,  9,  7,  8, .50, 1.25, ["StaticField"],                                    None,            0, 1, ["overclock_array L2","bastion_shield_v2 L6"], "buff 1.3 / damage 0.85"),
+ ("proxy",       "Proxy",      "p",   92,  7,  6, 12, 13, .55, 1.25, ["Mainframe","Deadlock"],                        None,            0, 0, ["redundancy_sync L2","rollback_v2 L6"],       "heal 1.3 / damage 0.85"),
+ ("crawler",     "Crawler",    "r",  102,  5,  9,  7,  8, .50, 1.25, ["Deadlock"],                                    None,            0, 1, ["overclock_array L2","bastion_shield_v2 L6"], "buff 1.3 / damage 0.85"),
  ("sub_process", "SubProcess", "d",   43,  4,  3, 12, 15, .30, 1.0,  ["OpenGrid","NullSector"],                          "core_fragment", 0, 0, ["redundancy_sync L2","rollback_v1 L6"],       "heal 1.3 / damage 0.85"),
  ("sprite",      "Sprite",     "s",   41,  5,  2, 14, 11, .20, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, ["deadlock L2","memory_leak L6"],              "debuff 1.3 / heal 0.85"),
  ("drone",       "Drone",      "o",   48,  4,  1,  8,  7, .15, 1.0,  ["OpenGrid","Mainframe"],                           "core_fragment", 0, 0, ["skim_group L2","skim_v1 L6"],                "drain 1.3 / buff 0.85"),
@@ -94,7 +94,7 @@ def table(header, rows, align):
     body = "\n".join("| " + " | ".join(str(c) for c in r) + " |" for r in rows)
     return "| " + " | ".join(header) + " |\n" + sep + "\n" + body
 
-BIOMES = ["OpenGrid", "Mainframe", "NullSector", "StaticField"]
+BIOMES = ["OpenGrid", "Mainframe", "NullSector", "Deadlock"]
 
 doc = f"""# Roster stat sheet
 

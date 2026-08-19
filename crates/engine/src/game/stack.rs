@@ -281,7 +281,7 @@ impl Game {
     /// and a reloaded save's cannot end up looking like different things.
     ///
     /// `>` rather than anything more decorative because every other glyph on
-    /// the map is spoken for — `%` is both the Static Field biome and a
+    /// the map is spoken for — `%` is both the Deadlock biome and a
     /// species — and because it already reads as "the way down" to anyone
     /// who has played a roguelike. It is the same mark the Stack view puts
     /// on a link down.

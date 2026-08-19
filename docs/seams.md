@@ -964,7 +964,7 @@ is why `pick_habitat_species` sorts the union.
 The per-biome fallback is load-bearing rather than defensive. Where the
 window admits nothing a biome holds, `windowed_matches` falls back to the
 band **nearest** the window, ties resolving upward. That fires against the
-real assets at both ends: StaticField ships no band-0 species and OpenGrid
+real assets at both ends: Deadlock ships no band-0 species and OpenGrid
 no band-2. `every_biome_fields_something_at_every_danger_step` is the
 census, and the honest fix for either hole is a species file, not a wider
 window. Apex is never a fallback — a boss is a rare outcome the window

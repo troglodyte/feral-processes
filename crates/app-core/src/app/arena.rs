@@ -42,7 +42,7 @@ pub(crate) struct ArenaCatalog {
     /// Every biome a roll could actually field something on. Derived from
     /// the roster rather than listed, so the picker cannot offer a biome
     /// `arena::encounter::roll` would refuse — and so a mod adding the first
-    /// StaticField resident gets it offered for free.
+    /// Deadlock resident gets it offered for free.
     biomes: Vec<Biome>,
 }
 

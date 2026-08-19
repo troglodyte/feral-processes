@@ -145,7 +145,7 @@ impl Game {
     /// of how many rolls happened first, so leaving and coming back cannot
     /// reroll it into something easier.
     ///
-    /// Not every biome fields a boss — no shipped Static Field species does
+    /// Not every biome fields a boss — no shipped Deadlock species does
     /// — and there the lair falls back to the toughest ordinary program the
     /// biome has, which at the bottom of a deep stack is no small thing.
     pub(crate) fn rouse_lair(&mut self) {

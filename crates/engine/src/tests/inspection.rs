@@ -1970,7 +1970,7 @@ const ONLY_COLD: &str = r#"(
     id: "cold_storage",
     name: "Cold Storage",
     description: "Long-idle allocations, frost-locked and slow to answer.",
-    shape: (static_temperature: 1.15),
+    shape: (deadlock_temperature: 1.15),
     palette: (ground_hue: 205.0, hazard_hue: 12.0),
 )"#;
 

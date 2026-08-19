@@ -359,7 +359,7 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
         let def = db
             .get(&species)
             .expect("a spawned creature's species is in the db");
-        // No shipped StaticField species is a fair solo fight, so the rule
+        // No shipped Deadlock species is a fair solo fight, so the rule
         // the ring actually enforces is "beatable, or else the gentlest
         // this biome has" — asserted as an outcome rather than by
         // re-deriving the pool the spawn path built.
@@ -379,8 +379,8 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
 }
 
 /// The fallback half of the ring rule, on the biome that forces it: no
-/// shipped StaticField species is a fair solo fight for a level-1 player,
-/// so a StaticField tile in the ring fields the gentlest of them rather
+/// shipped Deadlock species is a fair solo fight for a level-1 player,
+/// so a Deadlock tile in the ring fields the gentlest of them rather
 /// than rolling freely across sentinels and ciphers. The biome is forced
 /// with a tile override rather than hunted for in generated terrain, so
 /// the case is covered whatever the seed lays down.
@@ -393,23 +393,23 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
         x,
         y,
         Tile {
-            biome: Biome::StaticField,
+            biome: Biome::Deadlock,
             walkable: true,
         },
     );
 
     let expected = {
         let db = game.world.resource::<SpeciesDb>();
-        let pool = db.habitat_matches(Biome::StaticField);
+        let pool = db.habitat_matches(Biome::Deadlock);
         assert!(
             pool.iter()
                 .all(|s| !crate::balance_sim::beatable_by_a_fresh_player(s)),
-            "this test's premise is that StaticField has nothing a fresh player \
+            "this test's premise is that Deadlock has nothing a fresh player \
              beats — if that changed, it is now testing the wrong branch"
         );
         pool.into_iter()
             .min_by_key(|s| s.base_hp + s.base_atk + s.base_def)
-            .expect("StaticField ships species")
+            .expect("Deadlock ships species")
             .id
             .clone()
     };
@@ -2738,7 +2738,7 @@ fn a_boss_pack_marks_the_boss_and_not_its_escort() {
 /// nothing else — the thing that reads wrong today, where a level-1 player
 /// can meet a band-2 species outside the seven-tile ring.
 ///
-/// StaticField is the exception and is asserted rather than excused: it
+/// Deadlock is the exception and is asserted rather than excused: it
 /// ships no band-0 species, so the fallback reaches band 1 there.
 #[test]
 fn zone_one_fields_only_the_easiest_band() {
@@ -2757,7 +2757,7 @@ fn zone_one_fields_only_the_easiest_band() {
                 continue;
             };
             let biome = game.world.resource_mut::<WorldMap>().tile(dx, dy).biome;
-            let expected = if biome == Biome::StaticField {
+            let expected = if biome == Biome::Deadlock {
                 DangerBand::Tier(1)
             } else {
                 DangerBand::Tier(0)

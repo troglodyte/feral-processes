@@ -954,7 +954,7 @@ impl Game {
         // beat — bosses emphatically included in what it turns away.
         //
         // Not every biome has something that qualifies (no shipped
-        // StaticField species does), and there the ring falls back to the
+        // Deadlock species does), and there the ring falls back to the
         // gentlest thing that biome has rather than to its whole roster:
         // still a hard opening, but never the worst one on offer. Ranked
         // by flat stat total, the same crude yardstick

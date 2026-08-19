@@ -254,10 +254,11 @@ pub struct CreatureSave {
     /// packs with no hand-editing at all. `PlayerSave`'s existing shape is
     /// what that migration matches, so it stays as it is.
     ///
-    /// `#[serde(default)]` does nothing for the bincode save, which is
-    /// positional — that is why this bumped `SAVE_FORMAT_VERSION`. It is
-    /// here for the field-named RON that `savetool dump`/`pack` round-trips
-    /// through, which is the migration path.
+    /// This bumped `SAVE_FORMAT_VERSION` when it landed, against the
+    /// positional bincode format of the time. The save is field-named RON
+    /// now (`save_to_file` writes text and `load_from_file` reads it back
+    /// as a string), so `#[serde(default)]` is what carries an additive
+    /// field today and the same change would cost no bump.
     #[serde(default)]
     pub equipment: Vec<(EquipmentSlot, EquippedItemSave)>,
     /// How many times this program has driven the party out of a fight —
@@ -622,10 +623,9 @@ fn full_reserve() -> f32 {
 
 /// Renders a save as editable RON, for the `savetool` binary.
 ///
-/// This is the one place the save is legible: the on-disk form is bincode,
-/// which is positional and carries no field names (see
-/// `SAVE_FORMAT_VERSION`), so there is nothing to hand-edit without going
-/// through here. Round-trip fidelity is what makes it safe to edit —
+/// The on-disk form is field-named RON too, so this is a pretty-printer
+/// rather than a decoder — what it buys is the `savetool` round trip and
+/// the guarantee that an edited dump packs back to the same save.
 /// `a_save_survives_a_round_trip_through_ron_unchanged` pins that.
 pub fn to_ron(data: &SaveData) -> io::Result<String> {
     ron::ser::to_string_pretty(data, ron::ser::PrettyConfig::default())
@@ -1014,6 +1014,47 @@ mod tests {
         };
         let _ = std::fs::remove_file(&path);
         assert!(loaded.creatures[0].equipment.is_empty());
+    }
+
+    /// The biome rename is not a save-format break, and this is what says
+    /// so: a save written before it holds `Deadlock` in its tile overlay
+    /// and must still load, while a save written now says `Deadlock`. The
+    /// `serde(alias)` is the whole mechanism, so removing it fails here
+    /// rather than in a player's next session.
+    #[test]
+    fn a_save_holding_the_old_cold_biome_name_still_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_biome_{}.bin",
+            std::process::id()
+        ));
+        let mut data = sample_data();
+        data.tile_overrides = vec![(
+            (4, -7),
+            Tile {
+                biome: crate::world::Biome::Deadlock,
+                walkable: true,
+            },
+        )];
+        save_to_file(&path, &data).unwrap();
+
+        // Derived from the real file rather than hand-written, so the
+        // fixture cannot drift from what the writer actually emits.
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("Deadlock"),
+            "a save written now must use the new name"
+        );
+        std::fs::write(&path, text.replace("Deadlock", "StaticField")).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("a save written before the rename must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            loaded.tile_overrides[0].1.biome,
+            crate::world::Biome::Deadlock
+        );
     }
 
     /// A save from a build that wrote bincode is not text at all, so the

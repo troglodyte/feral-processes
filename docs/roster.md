@@ -212,7 +212,7 @@ Four walkable biomes host spawns. `DataVoid` and `BlackIce` are barrier terrain
 and `Platform` is base floor — no shipped species lists any of the three, which
 is exactly what keeps a player's base free of wild spawns.
 
-|  | Species | OpenGrid | Mainframe | NullSector | StaticField | Yield |
+|  | Species | OpenGrid | Mainframe | NullSector | Deadlock | Yield |
 |:---|:---|:---|:---|:---|:---|:---|
 | `W` | Wintermute | # | # | # | # | - |
 | `B` | Overseer | # | # | # | # | - |

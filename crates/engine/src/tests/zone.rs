@@ -1955,13 +1955,13 @@ fn the_cache_lines_are_loot_kind() {
 // holding one sector or none rather than searching the shipped pool for a
 // seed.
 
-/// Every zone past the first is Cold Storage in this install: Static Field
+/// Every zone past the first is Cold Storage in this install: Deadlock
 /// over most of the ground, holes exactly where a neutral sector puts them.
 const ONLY_COLD: &str = r#"(
     id: "cold_storage",
     name: "Cold Storage",
     description: "Long-idle allocations, frost-locked and slow to answer.",
-    shape: (static_temperature: 1.15),
+    shape: (deadlock_temperature: 1.15),
     palette: (ground_hue: 200.0, hazard_hue: 12.0),
 )"#;
 
@@ -2001,7 +2001,7 @@ fn a_new_game_generates_zone_one_at_the_neutral_shape() {
 
 /// The wiring test: a breach into a Static-Field sector must put Static
 /// Field on the ground. It is a crisp assertion because the latitude falloff
-/// leaves a neutral sector with *no* Static Field at all near the origin, so
+/// leaves a neutral sector with *no* Deadlock at all near the origin, so
 /// this cannot pass on terrain that was already there.
 #[test]
 fn breaching_into_a_cold_sector_generates_its_biome() {
@@ -2010,10 +2010,10 @@ fn breaching_into_a_cold_sector_generates_its_biome() {
     assert_eq!(
         count_biome(
             game.world.resource_mut::<WorldMap>().as_mut(),
-            Biome::StaticField
+            Biome::Deadlock
         ),
         0,
-        "zone 1 is neutral, and a neutral sector generates no Static Field here"
+        "zone 1 is neutral, and a neutral sector generates no Deadlock here"
     );
 
     breach(&mut game);
@@ -2021,11 +2021,11 @@ fn breaching_into_a_cold_sector_generates_its_biome() {
 
     let cold = count_biome(
         game.world.resource_mut::<WorldMap>().as_mut(),
-        Biome::StaticField,
+        Biome::Deadlock,
     );
     assert!(
         cold > 500,
-        "zone 2 generated {cold} Static Field tiles of 4096 — the sector's shape \
+        "zone 2 generated {cold} Deadlock tiles of 4096 — the sector's shape \
          is not reaching `enter_next_zone`"
     );
 }
@@ -2039,7 +2039,7 @@ fn breaching_into_a_cold_sector_generates_its_biome() {
 /// against an absolute count, since what is claimed is a shift and not a
 /// number.
 #[test]
-fn a_cold_sectors_wild_population_leans_on_static_field_species() {
+fn a_cold_sectors_wild_population_leans_on_deadlock_species() {
     let count_cold_dwellers = |assets: &std::path::Path| {
         let mut game = Game::new(4242, DifficultyMode::Forgiving, assets).unwrap();
         breach(&mut game);
@@ -2053,7 +2053,7 @@ fn a_cold_sectors_wild_population_leans_on_static_field_species() {
             .filter(|s| {
                 db.iter()
                     .find(|d| &d.id == *s)
-                    .is_some_and(|d| d.habitats.contains(&Biome::StaticField))
+                    .is_some_and(|d| d.habitats.contains(&Biome::Deadlock))
             })
             .count()
     };
@@ -2065,7 +2065,7 @@ fn a_cold_sectors_wild_population_leans_on_static_field_species() {
 
     assert!(
         in_cold > in_neutral,
-        "a Static Field sector spawned {in_cold} Static-Field-dwelling programs \
+        "a Deadlock sector spawned {in_cold} Static-Field-dwelling programs \
          against a neutral sector's {in_neutral} — the biome mix is not reaching \
          `habitat_pools`"
     );

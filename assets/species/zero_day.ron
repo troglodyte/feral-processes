@@ -8,7 +8,7 @@
     base_def: 4,
     taming_difficulty: 0.65,
     growth_multiplier: 1.5,
-    habitats: [StaticField, NullSector],
+    habitats: [Deadlock, NullSector],
     base_speed: 10,
     base_int: 12,
     moves: [

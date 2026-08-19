@@ -946,7 +946,7 @@ fn a_stack_encounter_shows_a_depth_row_and_a_field_one_does_not() {
     assert_eq!(
         app.arena.as_ref().unwrap().scenario.encounter,
         Some(Encounter::Stack {
-            biome: Biome::Mainframe,
+            biome: Biome::Deadlock,
             depth: 1,
         }),
         "depth floors at 1, and the biome beside it is untouched"
@@ -970,7 +970,7 @@ fn a_lair_encounter_carries_its_biome_over_and_nudges_its_own_depth() {
     assert_eq!(
         app.arena.as_ref().unwrap().scenario.encounter,
         Some(Encounter::Lair {
-            biome: Biome::Mainframe,
+            biome: Biome::Deadlock,
             depth: 3,
         }),
         "the biome survives the step onto Lair and the depth dial moves"

@@ -24,12 +24,12 @@ fn sector_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
     dir
 }
 
-/// A well-formed sector: a cold one, raising the Static Field floor.
+/// A well-formed sector: a cold one, raising the Deadlock floor.
 const COLD: &str = r#"(
     id: "cold",
     name: "Cold Storage",
     description: "Frost across every surface.",
-    shape: (static_temperature: 1.15),
+    shape: (deadlock_temperature: 1.15),
     palette: (ground_hue: 205.0, hazard_hue: 12.0),
 )"#;
 
@@ -43,8 +43,8 @@ fn a_well_formed_sector_resolves_its_deltas_onto_neutral() {
     let shape = def.shape();
     let neutral = SectorShape::NEUTRAL;
     assert_eq!(
-        shape.static_temperature,
-        neutral.static_temperature + 1.15,
+        shape.deadlock_temperature,
+        neutral.deadlock_temperature + 1.15,
         "the delta must be applied on top of NEUTRAL, not replace it"
     );
     // Every threshold the file said nothing about stays neutral, which is
@@ -109,7 +109,7 @@ fn a_hazard_hue_outside_the_warm_band_is_refused() {
 #[test]
 fn a_sector_that_leaves_no_ground_to_stand_on_is_refused() {
     let drowned = COLD.replace(
-        "shape: (static_temperature: 1.15)",
+        "shape: (deadlock_temperature: 1.15)",
         "shape: (void_elevation: 1.0)",
     );
     let dir = sector_dir("sector_drowned", &[("cold.ron", &drowned)]);
@@ -286,4 +286,28 @@ fn an_empty_db_leaves_every_zone_neutral() {
     for zone in 1..=30u32 {
         assert!(for_zone(4242, zone, &db).is_none(), "zone {zone}");
     }
+}
+
+/// A sector authored before the biome was renamed names its threshold
+/// `deadlock_temperature`. The rename is a `serde(alias)` precisely so a
+/// third-party sector file does not silently lose its threshold and start
+/// generating neutral ground under a name that promises cold.
+#[test]
+fn a_sector_authored_with_the_old_threshold_key_still_applies_it() {
+    const OLD_KEY: &str = r#"(
+    id: "cold",
+    name: "Cold Storage",
+    description: "Frost across every surface.",
+    shape: (static_temperature: 1.15),
+)"#;
+    let dir = sector_dir("sector_old_key", &[("cold.ron", OLD_KEY)]);
+    let (db, warnings) = SectorDb::load_dir(&dir).unwrap();
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    let def = db.all().next().expect("the sector should have loaded");
+    assert_eq!(
+        def.shape().deadlock_temperature,
+        SectorShape::NEUTRAL.deadlock_temperature + 1.15,
+        "the old key must still reach the renamed threshold"
+    );
 }

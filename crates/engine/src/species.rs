@@ -988,7 +988,7 @@ impl SpeciesDb {
     /// Never empty for a biome that has any ordinary species at all. Where the
     /// window admits nothing the biome holds, this falls back to the band
     /// **nearest** the window, ties resolving upward. That fallback is
-    /// load-bearing rather than defensive: StaticField ships no band-0 species
+    /// load-bearing rather than defensive: Deadlock ships no band-0 species
     /// and OpenGrid no band-2 species, so it fires against the real assets at
     /// both ends. `every_biome_fields_something_at_every_danger_step` is the
     /// census; the honest fix for either hole is a species file, not a wider
@@ -1143,7 +1143,7 @@ mod tests {
         }
     }
 
-    /// StaticField ships no band-0 species and OpenGrid no band-2 species, so
+    /// Deadlock ships no band-0 species and OpenGrid no band-2 species, so
     /// the fallback is load-bearing against the real assets rather than
     /// defensive. Asserted as a census over every biome and every step a run
     /// can reach.
@@ -1154,7 +1154,7 @@ mod tests {
             Biome::Mainframe,
             Biome::OpenGrid,
             Biome::NullSector,
-            Biome::StaticField,
+            Biome::Deadlock,
         ] {
             for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
                 assert!(
@@ -1172,11 +1172,11 @@ mod tests {
     fn the_fallback_fires_where_the_roster_has_a_hole() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
 
-        // StaticField has no band-0 species: step 0 falls upward to band 1.
-        let early = db.windowed_matches(Biome::StaticField, 0);
+        // Deadlock has no band-0 species: step 0 falls upward to band 1.
+        let early = db.windowed_matches(Biome::Deadlock, 0);
         assert!(
             early.iter().all(|s| s.danger_band() == DangerBand::Tier(1)),
-            "StaticField at step 0 should fall back to band 1, got {:?}",
+            "Deadlock at step 0 should fall back to band 1, got {:?}",
             early.iter().map(|s| &s.id).collect::<Vec<_>>()
         );
 
@@ -1198,7 +1198,7 @@ mod tests {
             Biome::Mainframe,
             Biome::OpenGrid,
             Biome::NullSector,
-            Biome::StaticField,
+            Biome::Deadlock,
         ] {
             for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
                 assert!(
@@ -1355,7 +1355,7 @@ mod tests {
             Biome::OpenGrid,
             Biome::Mainframe,
             Biome::NullSector,
-            Biome::StaticField,
+            Biome::Deadlock,
         ] {
             let pool = ids(a.habitat_matches(biome));
             let mut sorted = pool.clone();
@@ -1377,6 +1377,31 @@ mod tests {
 
     /// `base_speed` must be `#[serde(default)]` — a mod author's existing
     /// species file predating the field has to keep loading untouched. That
+    /// Every species mod written before the rename lists `Deadlock` in
+    /// its `habitats`. The alias is what keeps those files loading — and
+    /// still reporting the habitat, rather than parsing to nothing and
+    /// quietly emptying the biome's spawn pool.
+    #[test]
+    fn a_species_file_naming_the_old_cold_biome_still_reports_that_habitat() {
+        let def: SpeciesDef = ron::from_str(
+            r#"(
+                id: "testmon",
+                name: "Testmon",
+                glyph: 't',
+                color: Green,
+                base_hp: 10,
+                base_atk: 1,
+                base_def: 1,
+                taming_difficulty: 0.5,
+                habitats: [StaticField],
+                moves: [(name: "Poke", power: 1)],
+                work_resource: None,
+            )"#,
+        )
+        .expect("a species file naming the old biome must still parse");
+        assert_eq!(def.habitats, vec![Biome::Deadlock]);
+    }
+
     /// is the modding contract, not a nicety.
     #[test]
     fn base_speed_defaults_when_a_species_file_omits_it() {
@@ -1556,7 +1581,7 @@ mod tests {
 
         for biome in [
             Biome::DataVoid,
-            Biome::StaticField,
+            Biome::Deadlock,
             Biome::NullSector,
             Biome::Mainframe,
             Biome::OpenGrid,

@@ -8,7 +8,7 @@
     base_def: 5,
     taming_difficulty: 0.8,
     growth_multiplier: 1.5,
-    habitats: [Mainframe, StaticField],
+    habitats: [Mainframe, Deadlock],
     base_speed: 13,
     base_int: 14,
     moves: [

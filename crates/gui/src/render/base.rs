@@ -213,7 +213,7 @@ fn biome_reference_tint(biome: Biome) -> Color {
         // on that screen is competing with it.
         Biome::Platform => Color::new(0.06, 0.11, 0.32, 1.0),
         Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
-        Biome::StaticField => Color::new(0.70, 0.92, 0.95, 1.0),
+        Biome::Deadlock => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),
         Biome::NullSector => Color::new(0.20, 0.50, 0.52, 1.0),
     }
@@ -284,7 +284,7 @@ fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32
         Biome::Mainframe => draw_traces(painter, r, ink, h),
         Biome::OpenGrid => draw_dot(painter, r, ink),
         Biome::NullSector => draw_broken_grid(painter, r, ink, h),
-        Biome::StaticField => draw_speckle(painter, r, ink, h),
+        Biome::Deadlock => draw_speckle(painter, r, ink, h),
         Biome::Platform => draw_slab(painter, r, ink),
         Biome::DataVoid => draw_depth(painter, r, ink),
         Biome::BlackIce => draw_shards(painter, r, ink, h),
@@ -332,7 +332,7 @@ fn draw_broken_grid(painter: &Painter, r: Rect, ink: Color, h: u32) {
     }
 }
 
-/// StaticField: three specks at hashed offsets. Noise, so it wants no
+/// Deadlock: three specks at hashed offsets. Noise, so it wants no
 /// structure at all — the only pattern in the set with nothing aligned to
 /// the tile's centre or edges.
 fn draw_speckle(painter: &Painter, r: Rect, ink: Color, h: u32) {
@@ -1220,7 +1220,7 @@ mod tests {
     /// this file by the compiler.
     const ALL_BIOMES: [Biome; 7] = [
         Biome::DataVoid,
-        Biome::StaticField,
+        Biome::Deadlock,
         Biome::NullSector,
         Biome::Mainframe,
         Biome::OpenGrid,
@@ -1325,7 +1325,7 @@ mod tests {
             (Biome::BlackIce, Color::new(0.95, 0.32, 0.18, 1.0)),
             (Biome::Platform, Color::new(0.06, 0.11, 0.32, 1.0)),
             (Biome::Mainframe, Color::new(0.25, 0.85, 0.85, 1.0)),
-            (Biome::StaticField, Color::new(0.70, 0.92, 0.95, 1.0)),
+            (Biome::Deadlock, Color::new(0.70, 0.92, 0.95, 1.0)),
             (Biome::OpenGrid, Color::new(0.35, 0.85, 0.60, 1.0)),
             (Biome::NullSector, Color::new(0.20, 0.50, 0.52, 1.0)),
         ];

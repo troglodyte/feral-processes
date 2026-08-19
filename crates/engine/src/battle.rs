@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use crate::items::ItemId;
 use crate::species::SpeciesId;
 use crate::tuning::{
-    ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT,
-    EVASION_PER_LEVEL, EVASION_PER_SPEED, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, HIT_CHANCE_MAX,
-    HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN,
-    LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+    ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, BACK_SLOT_AGGRO_WEIGHT, CRIT_CHANCE,
+    CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
+    FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE, FUMBLE_RECOIL_FRACTION,
+    FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE,
+    JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
+    LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
 };
 
 /// The band one attack rolls its damage from, inclusive at both ends.
@@ -100,6 +102,172 @@ pub fn accuracy_of(base_speed: i32, level: u32, gear_accuracy: i32) -> f64 {
 pub fn evasion_of(base_speed: i32, level: u32, gear_evasion: i32) -> f64 {
     (base_speed as f64 * EVASION_PER_SPEED + level as f64 * EVASION_PER_LEVEL + gear_evasion as f64)
         .max(0.0)
+}
+
+/// Everything one side brings to a single attack roll, resolved by the
+/// caller and handed in flat.
+///
+/// A struct rather than four parameters for the same reason
+/// `Game::copy_bonus` takes a whole `GearCopy`: a fifth axis added later is
+/// then not forgettable at a call site.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Combatant {
+    pub accuracy: f64,
+    pub evasion: f64,
+    /// Flat damage added to every landed roll. Never feeds the to-hit roll —
+    /// see `accuracy_of`.
+    pub atk: i32,
+    pub range: DamageRange,
+}
+
+/// How badly an attack went wrong. **Rungs replace rather than stack** — a
+/// cumulative top rung is a run-ender. Which rung comes from how deep into
+/// the fumble band the roll fell, so it needs no second draw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FumbleRung {
+    /// Evasion cut by `EXPOSED_EVASION_PERCENT` until the fumbler's next
+    /// turn.
+    Exposed,
+    /// `FUMBLE_RECOIL_FRACTION` of a fresh roll of the fumbler's own range,
+    /// dealt to the fumbler.
+    Recoil { dmg: i32 },
+    /// The target takes a free swing at the fumbler, for `dmg`. Zero when
+    /// the free swing missed.
+    Opening { dmg: i32 },
+    /// The fumbler loses their next action.
+    Crash,
+}
+
+/// What one attack did. The caller branches on this: a miss must skip a
+/// Drain's heal and a rider's status, which is why the branch cannot live
+/// inside `Game::apply_damage`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttackOutcome {
+    Fumble(FumbleRung),
+    Miss,
+    Hit { dmg: i32 },
+    Crit { dmg: i32 },
+}
+
+impl AttackOutcome {
+    /// Damage aimed at the *defender*. Zero for a miss and for every fumble
+    /// rung — a Recoil hurts the fumbler and an Opening's riposte lands on
+    /// the fumbler, so neither is defender-facing damage.
+    pub fn damage_to_defender(self) -> i32 {
+        match self {
+            AttackOutcome::Hit { dmg } | AttackOutcome::Crit { dmg } => dmg,
+            AttackOutcome::Miss | AttackOutcome::Fumble(_) => 0,
+        }
+    }
+}
+
+/// Resolves one creature-versus-creature attack.
+///
+/// **One draw, four bands.** A single `r ∈ [0, 1)` decides the outcome, in
+/// this order: crit (clamped to at most the hit chance), hit, fumble
+/// (clamped to at most `1 - hit chance`), miss. One draw rather than three
+/// bounds the RNG-stream shift and makes crit and fumble mutually exclusive
+/// *by construction* rather than by a check.
+///
+/// A structure has no speed and cannot dodge, so `Game::attack_nest` does
+/// not come through here — only creature-versus-creature attacks do.
+pub fn resolve_attack(
+    attacker: Combatant,
+    defender: Combatant,
+    rng: &mut impl rand::Rng,
+) -> AttackOutcome {
+    resolve_attack_inner(attacker, defender, rng, true)
+}
+
+/// `allow_fumble: false` is the Opening rung's non-recursion guard — see
+/// `fumble_rung`.
+fn resolve_attack_inner(
+    attacker: Combatant,
+    defender: Combatant,
+    rng: &mut impl rand::Rng,
+    allow_fumble: bool,
+) -> AttackOutcome {
+    let h = hit_chance(attacker.accuracy, defender.evasion);
+    let crit = CRIT_CHANCE.min(h);
+    let fumble = if allow_fumble {
+        FUMBLE_CHANCE.min(1.0 - h)
+    } else {
+        0.0
+    };
+    let r: f64 = rng.random();
+    if r < crit {
+        let rolled = attacker.range.roll(rng);
+        return AttackOutcome::Crit {
+            dmg: rolled * CRIT_ROLL_MULTIPLIER + attacker.atk,
+        };
+    }
+    if r < h {
+        let rolled = attacker.range.roll(rng);
+        return AttackOutcome::Hit {
+            dmg: rolled + attacker.atk,
+        };
+    }
+    if fumble > 0.0 && r >= 1.0 - fumble {
+        let depth = (r - (1.0 - fumble)) / fumble;
+        return AttackOutcome::Fumble(fumble_rung(depth, attacker, defender, rng));
+    }
+    AttackOutcome::Miss
+}
+
+/// Which rung a fumble at `depth` into the band lands on. `depth` is in
+/// `[0, 1)` and derived from the single band roll, so severity costs no
+/// second draw.
+fn fumble_rung(
+    depth: f64,
+    attacker: Combatant,
+    defender: Combatant,
+    rng: &mut impl rand::Rng,
+) -> FumbleRung {
+    let [exposed, recoil, opening] = FUMBLE_RUNG_THRESHOLDS;
+    if depth < exposed {
+        return FumbleRung::Exposed;
+    }
+    if depth < recoil {
+        let rolled = attacker.range.roll(rng);
+        return FumbleRung::Recoil {
+            dmg: ((rolled as f32) * FUMBLE_RECOIL_FRACTION).round().max(1.0) as i32,
+        };
+    }
+    if depth < opening {
+        // **The free swing must not itself fumble.** A fumbled riposte
+        // resolves as a plain miss. This is a hard rule, not a convention:
+        // without it one bad roll chains into an unbounded exchange, and the
+        // deepest rung stops being the run-ender the ladder is shaped to
+        // avoid. `the_opening_rung_does_not_recurse` pins it.
+        let riposte = resolve_attack_inner(defender, attacker, rng, false);
+        return FumbleRung::Opening {
+            dmg: riposte.damage_to_defender(),
+        };
+    }
+    FumbleRung::Crash
+}
+
+/// The mean of `resolve_attack`'s defender-facing damage, RNG-free.
+///
+/// **`balance_sim` calls this; it does not keep a copy.** `CLAUDE.md`
+/// records four occasions where a `balance_sim` doc comment promised it
+/// mirrored a real formula while being an independent copy that drifted —
+/// worst of all a mining-reliability curve that would have let the balance
+/// gate pass against a game that no longer existed. Follow
+/// `attackers_in_group` and `slot_aggro_weight`.
+///
+/// Deliberately excludes the fumble ladder: Recoil and Opening both land on
+/// the *attacker*, so neither is defender-facing damage, and the projection
+/// is therefore a mild overestimate of an attacker's net output. Named here
+/// rather than silently, in the same spirit as `TURN_CAP`'s note that Power
+/// decay is unmodelled.
+pub fn expected_damage(attacker: Combatant, defender: Combatant) -> f64 {
+    let h = hit_chance(attacker.accuracy, defender.evasion);
+    let crit = CRIT_CHANCE.min(h);
+    let plain = h - crit;
+    let mean = attacker.range.mean();
+    let atk = attacker.atk as f64;
+    plain * (mean + atk) + crit * (mean * CRIT_ROLL_MULTIPLIER as f64 + atk)
 }
 
 /// One species' worth of the wild pack in an active intrusion.
@@ -560,5 +728,296 @@ mod tests {
         // negative on an axis its item never had.
         assert!(accuracy_of(6, 1, -100) >= 0.0);
         assert!(evasion_of(6, 1, -100) >= 0.0);
+    }
+
+    fn combatant(accuracy: f64, evasion: f64, atk: i32, range: DamageRange) -> Combatant {
+        Combatant {
+            accuracy,
+            evasion,
+            atk,
+            range,
+        }
+    }
+
+    /// A `StdRng` seeded so its first `f64` draw lands in `band`. Scanned
+    /// rather than mocked: `resolve_attack` takes `impl Rng`, and a fake
+    /// that returns scripted values would stop measuring the thing the
+    /// draw-count tests exist for.
+    fn rng_whose_first_roll_is_in(band: std::ops::Range<f64>) -> rand::rngs::StdRng {
+        use rand::SeedableRng;
+        for seed in 0..100_000u64 {
+            let mut candidate = rand::rngs::StdRng::seed_from_u64(seed);
+            let r: f64 = candidate.random();
+            if band.contains(&r) {
+                return rand::rngs::StdRng::seed_from_u64(seed);
+            }
+        }
+        panic!("no seed produced a first roll inside {band:?}");
+    }
+
+    /// A `StdRng` that counts the primitive draws it is asked for.
+    ///
+    /// Counting primitives rather than comparing stream positions is the
+    /// only measure that works here: a `f64` draw takes a `u64` from the
+    /// stream and a `random_range` over a small integer band takes a `u32`,
+    /// so the stream never realigns on a single word size. It delegates to a
+    /// real `StdRng` rather than scripting values, because a fake would stop
+    /// measuring the thing these tests exist for.
+    struct CountingRng {
+        inner: rand::rngs::StdRng,
+        draws: usize,
+    }
+
+    impl CountingRng {
+        fn seeded(seed: u64) -> Self {
+            use rand::SeedableRng;
+            CountingRng {
+                inner: rand::rngs::StdRng::seed_from_u64(seed),
+                draws: 0,
+            }
+        }
+    }
+
+    // `rand_core` blanket-implements `Rng` for any infallible `TryRng`, so
+    // this is the only impl needed and every draw goes through it.
+    impl rand::TryRng for CountingRng {
+        type Error = std::convert::Infallible;
+
+        fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+            use rand::Rng;
+            self.draws += 1;
+            Ok(self.inner.next_u32())
+        }
+
+        fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+            use rand::Rng;
+            self.draws += 1;
+            Ok(self.inner.next_u64())
+        }
+
+        fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+            use rand::Rng;
+            self.draws += 1;
+            self.inner.fill_bytes(dst);
+            Ok(())
+        }
+    }
+
+    /// How many primitive draws `f` spends against a `StdRng` on `seed`.
+    fn draws_spent(seed: u64, f: impl Fn(&mut CountingRng)) -> usize {
+        let mut rng = CountingRng::seeded(seed);
+        f(&mut rng);
+        rng.draws
+    }
+
+    /// First seed whose `resolve_attack` satisfies `want`.
+    fn seed_producing(
+        attacker: Combatant,
+        defender: Combatant,
+        want: impl Fn(&AttackOutcome) -> bool,
+    ) -> u64 {
+        use rand::SeedableRng;
+        for seed in 0..500_000u64 {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let outcome = resolve_attack(attacker, defender, &mut rng);
+            if want(&outcome) {
+                return seed;
+            }
+        }
+        panic!("no seed produced the wanted outcome");
+    }
+
+    #[test]
+    fn a_roll_below_the_crit_chance_is_a_crit_that_doubles_only_the_rolled_part() {
+        let attacker = combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 });
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        let mut rng = rng_whose_first_roll_is_in(0.0..CRIT_CHANCE);
+        let outcome = resolve_attack(attacker, defender, &mut rng);
+        // 4 rolled, doubled to 8, plus a flat atk of 10 that is NOT doubled.
+        assert_eq!(outcome, AttackOutcome::Crit { dmg: 18 });
+    }
+
+    #[test]
+    fn a_roll_between_the_crit_chance_and_the_hit_chance_is_a_plain_hit() {
+        let attacker = combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 });
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        let mut rng = rng_whose_first_roll_is_in(CRIT_CHANCE..0.5);
+        let outcome = resolve_attack(attacker, defender, &mut rng);
+        assert_eq!(outcome, AttackOutcome::Hit { dmg: 14 });
+    }
+
+    #[test]
+    fn a_roll_between_the_hit_chance_and_the_fumble_band_is_a_plain_miss() {
+        let attacker = combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 });
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        let mut rng = rng_whose_first_roll_is_in(0.5..(1.0 - FUMBLE_CHANCE));
+        assert_eq!(
+            resolve_attack(attacker, defender, &mut rng),
+            AttackOutcome::Miss
+        );
+    }
+
+    #[test]
+    fn a_roll_at_the_top_of_the_range_is_a_fumble() {
+        let attacker = combatant(12.0, 12.0, 10, DamageRange { min: 4, max: 4 });
+        let defender = combatant(12.0, 12.0, 3, DamageRange { min: 2, max: 2 });
+        let mut rng = rng_whose_first_roll_is_in((1.0 - FUMBLE_CHANCE)..1.0);
+        assert!(matches!(
+            resolve_attack(attacker, defender, &mut rng),
+            AttackOutcome::Fumble(_)
+        ));
+    }
+
+    #[test]
+    fn crit_and_fumble_are_mutually_exclusive_by_construction() {
+        // Not sampled: the bands are read off one draw in a fixed order, so
+        // no value of `r` can satisfy both. Sweeping `r` across the whole
+        // unit interval is the exhaustive statement of that.
+        let attacker = combatant(12.0, 12.0, 0, DamageRange::default());
+        let defender = combatant(12.0, 12.0, 0, DamageRange::default());
+        let h = hit_chance(attacker.accuracy, defender.evasion);
+        let crit = CRIT_CHANCE.min(h);
+        let fumble = FUMBLE_CHANCE.min(1.0 - h);
+        for step in 0..10_000 {
+            let r = step as f64 / 10_000.0;
+            assert!(
+                !(r < crit && r >= 1.0 - fumble),
+                "r = {r} fell in both the crit and the fumble band"
+            );
+        }
+    }
+
+    #[test]
+    fn a_crit_can_never_exceed_the_hit_chance() {
+        // A hopeless matchup floors at HIT_CHANCE_MIN, which is above
+        // CRIT_CHANCE — so squeeze it the other way: a hit chance clamped
+        // low must still not let the crit band overhang it.
+        let h = HIT_CHANCE_MIN;
+        assert!(CRIT_CHANCE.min(h) <= h);
+    }
+
+    #[test]
+    fn the_opening_rung_does_not_recurse() {
+        // A free swing that itself fumbles resolves as a plain miss, which
+        // is what bounds an Opening's cost: the band roll, the riposte's own
+        // band roll, and at most one range roll if the riposte landed.
+        //
+        // The bound is what makes this test non-vacuous. The *type* already
+        // forbids a `Fumble` nested inside an `Opening`, so classifying the
+        // outcome proves nothing — flip `allow_fumble` back to `true` and
+        // the outer outcome is still `Opening`, only the draws it spent
+        // getting there are unbounded.
+        let attacker = combatant(12.0, 12.0, 4, DamageRange { min: 2, max: 6 });
+        let defender = combatant(12.0, 12.0, 4, DamageRange { min: 2, max: 6 });
+        let mut openings = 0;
+        for seed in 0..20_000u64 {
+            let mut rng = CountingRng::seeded(seed);
+            if let AttackOutcome::Fumble(FumbleRung::Opening { dmg }) =
+                resolve_attack(attacker, defender, &mut rng)
+            {
+                openings += 1;
+                assert!(dmg >= 0, "an Opening riposte cannot heal the fumbler");
+                assert!(
+                    rng.draws <= 3,
+                    "seed {seed} spent {} draws on one Opening — the riposte fumbled \
+                     into a nested exchange",
+                    rng.draws
+                );
+            }
+        }
+        assert!(openings > 0, "no seed reached the Opening rung");
+    }
+
+    #[test]
+    fn draw_counts_are_pinned_per_outcome() {
+        // Asserting the exact count is what stops crit or fumble silently
+        // becoming an extra draw and shifting every seeded run's stream.
+        let attacker = combatant(12.0, 12.0, 5, DamageRange { min: 2, max: 6 });
+        let defender = combatant(12.0, 12.0, 5, DamageRange { min: 2, max: 6 });
+
+        let miss_seed = seed_producing(attacker, defender, |o| *o == AttackOutcome::Miss);
+        assert_eq!(
+            draws_spent(miss_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            1,
+            "a miss costs one draw"
+        );
+
+        let hit_seed = seed_producing(attacker, defender, |o| {
+            matches!(o, AttackOutcome::Hit { .. })
+        });
+        assert_eq!(
+            draws_spent(hit_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            2,
+            "a hit costs the band roll plus one weapon roll"
+        );
+
+        let crit_seed = seed_producing(attacker, defender, |o| {
+            matches!(o, AttackOutcome::Crit { .. })
+        });
+        assert_eq!(
+            draws_spent(crit_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            2,
+            "a crit costs the same as a hit — the doubling is arithmetic"
+        );
+
+        let exposed_seed = seed_producing(attacker, defender, |o| {
+            *o == AttackOutcome::Fumble(FumbleRung::Exposed)
+        });
+        assert_eq!(
+            draws_spent(exposed_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            1,
+            "Exposed spends nothing beyond the band roll"
+        );
+
+        let recoil_seed = seed_producing(attacker, defender, |o| {
+            matches!(o, AttackOutcome::Fumble(FumbleRung::Recoil { .. }))
+        });
+        assert_eq!(
+            draws_spent(recoil_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            2,
+            "Recoil adds one fresh roll of the fumbler's own range"
+        );
+
+        let crash_seed = seed_producing(attacker, defender, |o| {
+            *o == AttackOutcome::Fumble(FumbleRung::Crash)
+        });
+        assert_eq!(
+            draws_spent(crash_seed, |rng| {
+                resolve_attack(attacker, defender, rng);
+            }),
+            1,
+            "Crash spends nothing beyond the band roll"
+        );
+    }
+
+    #[test]
+    fn expected_damage_is_the_mean_of_the_same_arithmetic() {
+        // The property that lets `balance_sim` *call* this rather than keep
+        // a copy: averaging a large sample of the real roll must converge on
+        // it. Seeded, so it is deterministic.
+        use rand::SeedableRng;
+        let attacker = combatant(12.0, 12.0, 5, DamageRange { min: 2, max: 6 });
+        let defender = combatant(12.0, 12.0, 5, DamageRange { min: 2, max: 6 });
+        let mut rng = rand::rngs::StdRng::seed_from_u64(4);
+        let n = 200_000;
+        let total: i64 = (0..n)
+            .map(|_| resolve_attack(attacker, defender, &mut rng).damage_to_defender() as i64)
+            .sum();
+        let sampled = total as f64 / n as f64;
+        let projected = expected_damage(attacker, defender);
+        assert!(
+            (sampled - projected).abs() < 0.1,
+            "sampled {sampled}, projected {projected}"
+        );
     }
 }

@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-19 — What the attack roll did to the shipped arenas](2026-08-19-combat-model-slice-1.md)
+  — the combat model's first slice measured across all fourteen `dev-arenas/`
+  scenarios. Every verdict holds: the same twelve wins, the same two losses,
+  and `stack-depth-5` still 0% over 50 runs — but it now takes 11.2 rounds to
+  lose where it took 7.4, which is the "levers that only cut incoming damage
+  lengthen the loss" prediction landing. Carries the finding that **nine of
+  fourteen scenarios are walkovers**, so the arena gates almost nothing about
+  difficulty, and the four knobs this slice set on judgement rather than
+  measurement.
+
 - [2026-08-19 — The Stack's depth curve, and where it stops being winnable](2026-08-19-stack-depth-curve.md)
   — depth 2 and 3 are 100% wins, depth 4 is 78% over 46 rounds losing 2.4 of 3
   companions, and depth 5 is **0%** for the strongest party the game can field

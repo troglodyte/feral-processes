@@ -27,6 +27,91 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.12.0
+
+**Saves written by 0.11.9 and earlier will not load.**
+`save::SAVE_FORMAT_VERSION` moves from 30 to 31. `Stats::def` became
+`Stats::mitigation` and changed *unit* — subtractive absorption became
+percentage points — and a field whose meaning changes under a name it keeps
+is the one case field-named RON cannot rescue: a v30 file would load `def: 6`
+into a percentage slot and read as 6% mitigation rather than 6 points of soak.
+It is refused by version instead. `FieldBuffKind::Def` folding into
+`Mitigation` rides the same bump.
+
+### Every attack rolls to hit
+
+An attack is now resolved against the defender's **Evasion** rather than
+landing automatically. Accuracy and Evasion are derived from a species'
+`base_speed` plus its level plus gear — never stored, so they cannot drift —
+and the odds are the scale-free ratio `accuracy / (accuracy + evasion)`,
+clamped between 25% and 95%. A zone that scales everything therefore changes
+no hit rate anywhere.
+
+One roll decides the outcome across four bands: a **critical hit** doubles the
+rolled portion of the damage (not the flat attack bonus, which would make
+crits scale with every attack source in the game), a plain hit, a **fumble**,
+or a miss.
+
+### A four-rung fumble ladder
+
+A fumbled swing lands on one of four rungs, chosen by how deep into the fumble
+band the roll fell. **Exposed** cuts your Evasion until your next turn.
+**Recoil** turns half your own damage back on you. **Opening** gives the
+target a free swing. **Crash** costs you your next action. Rungs replace one
+another rather than stacking — a cumulative top rung is a run-ender — and a
+free swing that itself fumbles resolves as a plain miss rather than chaining.
+
+`Exposed` is available to content immediately: any species move can inflict it
+from its `.ron`, so a debuffer species needs no engine change.
+
+### Weapons carry damage ranges
+
+Gear authors a `damage: (min, max)` band, and **a weapon overrides a natural
+attack rather than adding to it** — a companion still rolls a species move
+each turn for its name and its status rider, but the weapon supplies the
+numbers. Every shipped move and every damage ability gained a `spread` around
+its authored power, so damage varies rather than being a single number.
+Modded content needs no editing: an omitted `spread` is the deterministic
+value it always was.
+
+Weapons and armour now trade along two axes each. Shiv Routine, Kinetic Edge
+and Black Ice Pick take a narrow band plus **accuracy**; Monofilament Whip and
+Plasma Router take a wide band and none. Sandbox Liner, Scrap Ward and Static
+Mesh trade most of their mitigation for **evasion**.
+
+### Defense is now Mitigation, and it is a percentage
+
+`DEF` becomes `MIT` on every screen: percentage points of damage reduction,
+summed from your species, your gear and your buffs, and capped at 75% so
+nothing reaches immunity. It is the one stat **levelling never raises** — a
+percentage that grows per level approaches immunity, so a zone tier and a
+level-up both leave it exactly as authored, and levelling buys evasion
+instead. A Recompile Kernel no longer raises it by a zone tier either.
+
+### Every con colour and every kill's XP in the game has moved
+
+This is a consequence rather than a side effect, and it gets its own line.
+`Stats::power` — the "how strong is this" scalar behind the difficulty colour
+a program's glyph is drawn in, the price of a kill's XP, and what a trader
+pays for a program — now prices mitigation as the effective HP it buys
+(`max_hp / (1 - mitigation/100)`) instead of summing a percentage into a
+total, which was meaningless. Nothing about the world changed; what you are
+told about it did.
+
+### Also
+
+- A weapon's damage band shows wherever a gear stat already did — the
+  inventory tag, the equipped panel, the swap picker and a program's manifest
+  — through one formatter, so no two screens can disagree about it.
+- The gear-swap picker wraps a long row onto a continuation line instead of
+  running off the popup, the same way the inventory list already did.
+- Materialising inside solid substrate is lethal again. It goes through a
+  named `kill_outright` rather than a large damage figure, because mitigation
+  was leaving the player standing on a single point of Integrity.
+- A missed Drain restores nothing, and a missed swing lands no status rider.
+- Battle log lines report the damage that actually landed rather than the
+  damage that was rolled, which differ once mitigation is a percentage.
+
 ## 0.11.9
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

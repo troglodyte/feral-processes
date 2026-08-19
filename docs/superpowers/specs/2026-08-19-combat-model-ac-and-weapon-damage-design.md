@@ -1,6 +1,8 @@
 # Combat model: attack rolls, AC and weapon damage
 
-**Status:** approved, not implemented
+**Status:** slice 1 implemented, 2026-08-19. Slices 2-4 (multi-attack, reaching
+past `EnemyGroup::members[0]`, and the base-attribute layer) remain deferred and
+were deliberately not built.
 **Date:** 2026-08-19
 **Slice:** 1 of 4 (see *Decomposition* below)
 **Save format:** breaks — `SAVE_FORMAT_VERSION` bump required

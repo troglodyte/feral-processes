@@ -120,6 +120,7 @@ the policy", not which change shipped it.
 | `2026-08-12-exclusive-routines` | Disk-first routines and the exclusive pool | v0.8.7 |
 | `2026-08-17-nemesis` | Nemesis: a lost fight gets a name, a rising grudge and a mark on the map | v0.9.3 |
 | `2026-08-19-companion-progression-design` | Companion rings, levels past the cap, and per-class talent trees | v0.11.9 |
+| `2026-08-19-combat-model-ac-and-weapon-damage-design` | Attack rolls, percentage-point Mitigation, weapon damage ranges, crits and a fumble ladder — **slice 1 of four; slices 2-4 deferred** | v0.12.0 |
 
 ## Four rows that need a footnote
 

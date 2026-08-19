@@ -320,10 +320,31 @@ against `FrameMemory::opened`, nowhere else.
 ### `Game::apply_damage` (`game/combat_damage.rs`) is the only code path that lowers a creature's HP
 
 **`Game::apply_damage` (`game/combat_damage.rs`) is the only code path that
-lowers a creature's HP.** Every other write to `Stats::hp` is a heal, one
+*damages* a creature.** Every other write to `Stats::hp` is a heal, one
 of the two full-heals (`rest` in `game/turn.rs`, level-up in
 `game/unlocks.rs`), or `needs_tick_system`, which is `With<Player>`. Put a
-check that must see all damage here, not at the call sites.
+check that must see all damage here, not at the call sites. Every rung of the
+fumble ladder goes through it, which is exactly the kind of thing someone
+would otherwise write a direct `Stats::hp` write for.
+
+**There is one other thing that lowers HP, and its shape is the point.**
+`Game::kill_outright` exists because mitigation reaching the damage path made
+`apply_damage(player, hp)` non-lethal — the player's innate 2% leaves a point
+behind, after a line promising that materialising inside solid substrate is
+not survivable. It is spelled as its own verb rather than as a large `dmg`
+precisely so it cannot become a general mitigation bypass: there is no amount
+to pass, so nothing can reach for it to make an ordinary hit hurt more. Both
+it and `apply_damage` funnel through one private `lower_hp`, so "one place
+lowers HP" survives the second door and the death check cannot be missed by
+either.
+
+**`apply_damage` returns what actually landed.** Mitigation is applied inside
+it, so the figure differs from the one asked for against any defender with
+any at all — and callers use the return for their log line and, in `Drain`'s
+case, for the heal. This is the same trap `restore_hp` already closes from
+the other side: printing the requested number lets a heal claim twenty points
+on a target with three to spare, and lets a swing claim damage the target
+never took.
 
 ### The save is field-named RON, and that is what retired save migrations
 
@@ -438,19 +459,35 @@ cannot disagree, but it takes the zone on the surface and the depth in the
 Stack. A new difficulty knob keyed to where the party is standing
 reintroduces both bugs.
 
-### Every difficulty curve in the game is linear, and that is a correctness property rather than a tuning preference
+### Every difficulty curve in the game is linear
 
-**Every difficulty curve in the game is linear, and that is a correctness
-property rather than a tuning preference.** `ZONE_STAT_STEP`,
+> **Retired as a *correctness* property on 2026-08-19**, when the combat
+> model replaced the subtractive damage floor with a percentage cut capped
+> below immunity (`tuning::MAX_MITIGATION_PERCENT`). The argument below turned
+> on `compute_damage` flooring every swing at 1 once enemy DEF passed your
+> ATK, so that a compounding curve did not merely get hard, it stopped
+> responding to your stats at all. That failure mode no longer exists: a
+> percentage cut always leaves damage proportional to what you deal, and
+> `HIT_CHANCE_MIN` keeps expected damage strictly positive besides.
+>
+> **Do not restore the old reading, and do not delete the rule either.** What
+> survives is everything except the word "correctness": a geometric enemy
+> curve racing a linear player curve still outruns it wherever the
+> coefficients are put, the tier step is still a ratio, and `balance_sim`
+> still bounds per-zone *steps* rather than ratios for the reason given
+> below. The rest of this entry is kept as written because the measurements
+> in it are the record of why the curves were linearised at all.
+
+**Every difficulty curve in the game is linear.** `ZONE_STAT_STEP`,
 `STACK_DEPTH_STAT_STEP` and `GEAR_LEVEL_STEP` all *add* per level; they
 used to multiply (x2 per zone, x1.35 per frame, x2 per gear level). The
 player's side of the fight has only ever been linear — `ATK_PER_LEVEL` is
 1, an item is worth a flat point or four — so a geometric enemy curve is a
 geometric quantity racing a linear one, which has an end wherever the
-coefficients are put. Under `battle::compute_damage`'s subtractive
-`power + atk - def` floored at `MIN_DAMAGE`, past that end every swing
-lands on 1 and the fight stops responding to levels, gear or roster at
-all. Measured before the change: a zone-3 depth-5 lair guardian was
+coefficients are put. Under the subtractive `power + atk - def` rule of the
+time, floored at one point, past that end every swing landed on 1 and the
+fight stopped responding to levels, gear or roster at all — see the note
+above for why that half no longer applies. Measured before the change: a zone-3 depth-5 lair guardian was
 unbeatable at level 90 in the best gear the game ships, and the level a
 zone demanded ran 1, 15, 30, 63, 131 — doubling, so zone 6 wanted more
 than any reachable level. It now runs 1, 15, 24, 32, 47, 61, 76, 90, 106,
@@ -466,6 +503,112 @@ compounding curve with a small enough base passes. It now sweeps to zone
 10, which a geometric curve cannot reach inside `MAX_LEVEL_SEARCHED`, and
 asserts the per-zone *steps* stay flat, which is the property that tells a
 curve that ends from one that does not.
+
+### One draw, four bands: `battle::resolve_attack` is how every creature-versus-creature attack resolves
+
+**A single `r` in `[0, 1)` decides the whole outcome**, banded in a fixed
+order: crit (clamped to at most the hit chance), hit, fumble (clamped to at
+most `1 - hit chance`), miss. One draw rather than three is not a
+micro-optimisation. It bounds how far the RNG stream shifts per swing, which
+is what let 2000-odd seeded tests survive the change at all; and it makes
+crit and fumble mutually exclusive *by construction* rather than by a check
+somebody can drop. `crit_and_fumble_are_mutually_exclusive_by_construction`
+sweeps the unit interval to say so exhaustively rather than by sampling.
+
+**`hit_chance` is the ratio form `acc / (acc + eva)`, and a difference form
+must not replace it.** The ratio is scale-free: doubling both sides leaves it
+at 0.5, so a zone that multiplies everything by its tier multiplier changes
+no hit rate anywhere, and the geometric-versus-linear hazard that shaped
+every other curve in the game cannot reappear on this axis at all.
+`base + k * (acc - eva)` makes hit rate depend on absolute scale, so deep
+zones drift silently toward always-hit or always-miss. Two identical
+combatants get exactly 0.5 before the clamp, which is the baseline every
+constant in the section is read against; two combatants with *nothing* — a
+mod species authoring `base_speed: 0` at level 1 — get an even matchup rather
+than a divide by zero.
+
+**Accuracy and Evasion are derived, never stored.** No `Stats` field, no save
+field, so they cannot drift from their inputs: `base_speed` plus level plus
+gear, where gear `accuracy`/`evasion` are read live off `gear_bonus` because,
+unlike `atk` and `mitigation`, neither is baked into `Stats`. `atk` is
+deliberately absent from both — feeding it to-hit *and* damage compounds
+quadratically. Speed comes from `Game::combat_speed`, which is one rule for
+initiative and to-hit alike; they disagreed briefly, and the player came out
+acting first against an average opponent while hitting as though slower than
+one.
+
+**Draw counts are pinned per outcome** (`draw_counts_are_pinned_per_outcome`):
+a miss and the two status rungs cost one, a hit, a crit and a Recoil cost two.
+Pinning them is what stops crit or fumble silently becoming an extra draw and
+shifting every seeded run's stream. `DamageRange::roll` is written as an
+offset from `min` rather than `random_range(min..=max)` for the same reason —
+a degenerate band must still spend exactly one draw, or the stream would shift
+with the party's loadout.
+
+**The Opening rung's free swing must not itself fumble.** Without the
+`allow_fumble: false` guard one bad roll chains into an unbounded exchange and
+the deepest rung stops being the run-ender the ladder is shaped to avoid. The
+type already forbids a nested `Fumble`, so classifying the outcome proves
+nothing; `the_opening_rung_does_not_recurse` bounds the *draws* an Opening may
+spend, which is what actually catches it.
+
+**`Game::attack_nest` is deliberately outside all of this.** A structure has
+no speed and cannot dodge, so it keeps the deterministic path it always had —
+identical swings stay identical, or wearing a nest down becomes a slot
+machine. `combat_policy` is the other non-roller: it is *choosing* a swing,
+not making one, so it takes `expected_damage`'s mean and spends no draw.
+
+### Mitigation is percentage points, and `Game::effective_mitigation` is the one door
+
+**`Game::effective_mitigation` caps at `MAX_MITIGATION_PERCENT` itself**, so
+nothing downstream can see an uncapped percentage and no reader has to
+remember to clamp. It sums innate `Stats::mitigation`, an active
+`CombatBuff::Mitigation`, any running `FieldBuffKind::Mitigation`, and the
+player's party and wielded bonuses.
+
+**The trap is that `Stats::mitigation` already carries gear.**
+`Game::apply_equipment_delta` bakes an equipped item's `atk` and `mitigation`
+straight into `Stats`, so adding `gear_bonus` inside `effective_mitigation`
+would double-count every worn piece — the same trap "no stats operation may
+run while a gear bonus is sitting in `Stats`" names from the other direction.
+The other three gear axes (`damage`, `accuracy`, `evasion`) have no `Stats`
+field and are read live; `apply_equipment_delta` must not invent one for them.
+
+**It is never scaled by level or zone**, and that is the rule most likely to
+be "corrected" by someone restoring symmetry with the other stats. A
+percentage that grows per level approaches immunity, so
+`progression::stats_after_levels`, the wild spawner, `balance_sim`'s
+`wild_stats_at_zone` and `refactor::refactored`'s `zone_bump` all leave it
+exactly as authored. `DEF_PER_LEVEL` was deleted rather than left unused, and
+`LevelGain` lost its `def` field with it. **Levelling's defensive growth is
+evasion instead** — which is why the balance curves looked like lockouts for
+the seven commits between the rename landing and `balance_sim` learning to
+read evasion.
+
+Removing the tier step from `refactored` also fixed something else. Trade's
+`earned_power` divides a bought zone tier back out by the tier ratio, which
+only recovers the base while `power()` is homogeneous in that ratio; with
+mitigation sitting the step out, "bought tiers buy no Credits" is exact again
+instead of leaking a Credit.
+
+**`Stats::power` prices mitigation as the effective HP it buys**,
+`max_hp / (1 - mitigation/100)`, because summing a percentage into a total
+the way `max_hp + atk + def` did is meaningless. The cap is load-bearing here
+too, in a second way: it is what keeps that denominator away from zero. Every
+con colour, every kill's XP and every trade valuation in the game moved when
+this landed, since all of them read `power()`.
+
+**One unit, one name.** `FieldBuffKind::Def` was deleted and `BuffKind::Def`
+renamed to `Mitigation`: once `Stats::def` was percentage points there was no
+flat-defence axis left for a second name to describe, and two names on one
+axis is what makes both unreadable wherever they are summed. Two formulas
+outside combat took the percentage too — the raid defender's structure
+mitigation and the enemy policy's projected damage — and the policy one was
+*live* rather than latent: a braced target subtracting 20 looked untouchable,
+and `bracing_still_draws_more_fire_under_the_shipped_weights` caught it. The
+raid path clamps to 100 rather than to the combat cap, deliberately: a raid is
+not an attack on a creature, and "fends off a sweep without a scratch" is a
+shipped outcome the combat cap would have deleted silently.
 
 ### A kill's XP is priced by challenge, and the price shares its threshold with the colour the glyph is already drawn in
 
@@ -3327,23 +3470,30 @@ Routine Disk rolls from. Its id is `{species}.basic.{index}`, derived from
 position rather than name: two species may ship an attack of the same name,
 and a name is player-facing text a modder may translate.
 
-**What was deliberately left alone, and why it is not an oversight.** The two
-arms compute different damage:
+**The two arms used to compute damage by different arithmetic, and that gap
+closed on 2026-08-19.** Both now go through `battle::resolve_attack` — one
+attack roll, one band roll, the attacker's flat `atk` added, the defender's
+mitigation taken off as a percentage. The old table (raw `atk` against
+`effective_def` for a basic attack, `scaled_hp_power` off `effective_atk`
+against raw `def` for a Special) described a difference that no longer
+exists, and the warning attached to it — that merging the two would scale
+every enemy swing by level and affinity — was answered by the merge happening
+as part of a deliberate combat-model change with its own `balance_sim`
+re-baseline, rather than as a tidy-up.
+
+**What still differs is where the band comes from**, and that difference is
+load-bearing rather than residual:
 
 | | basic attack | Special |
 |---|---|---|
-| attacker | raw `Stats::atk` | `effective_atk(actor)` |
-| power | flat, as authored | `scaled_hp_power(power, level, affinity)` |
-| target | `effective_def(target)` | raw `Stats::def` |
+| band | the wielder's weapon, else the move's own (`Game::attack_range`) | the ability's own, through `abilities::scaled_range` |
 
-Merging the application sites is therefore **not a refactor**: routing basic
-attacks through the Special arm makes every enemy swing scale with level and
-species affinity, which moves the difficulty curves `balance_sim` gates. That
-is a design change to argue for on its own evidence, not a tidy-up to slip
-into a type unification. The unification stopped at the point where the suite
-proves it changed nothing — 2640 tests including every seeded fight, with no
-seeded-test churn at all, which is what says the RNG stream and the damage
-arithmetic are untouched.
+A weapon **overrides** a natural attack rather than adding to it, which is
+what makes which weapon you carry matter more than a flat bonus would; and it
+is keyed on the weapon carrying a band, not on the slot being occupied, so a
+modded weapon authoring none leaves its wielder swinging naturally rather
+than silently disarmed. A Special is the ability's own damage and takes no
+weapon band at all — a routine is not swung.
 
 **`ranged` lives on `AbilityDef` but is read by one path.** Honouring it in
 `use_ability` would silently stop back-row hostiles casting Specials they cast
@@ -3352,7 +3502,9 @@ today, since every authored ability defaults to `ranged: false`.
 **`balance_sim` still reads `species.moves`**, the authored form, on purpose.
 It is the balance gate; reading the converted list could only ever produce
 the same numbers, and reading the authored one makes that obvious instead of
-requiring a proof.
+requiring a proof. It reads `spread` alongside `power` now
+(`average_move_range`), so a species that swings wide is projected as
+swinging wide rather than as swinging for its average every time.
 
 ### The ground
 

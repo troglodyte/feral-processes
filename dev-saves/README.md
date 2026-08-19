@@ -12,6 +12,25 @@ cargo run -- --template extraction   # regenerate the world and play it
 cargo run --bin savetool -- template # what's available
 ```
 
+## The templates carry stale mitigation values
+
+**Migrated at v31, not re-captured.** `SAVE_FORMAT_VERSION` moved to 31 when
+`Stats::def` became percentage-point `Stats::mitigation`, and every template
+was hand-edited to rename the key — which is the fix this directory's editable
+format exists to allow, and what `dev_template`'s module doc names as the
+supported response to a format bump. What that edit could not do is convert
+the *values*: a template's programs still carry the old absorption numbers
+reinterpreted as percentages, so a player in `extraction` has 46% mitigation
+where a real run at that point would have single digits.
+
+They load, and they are fine for testing anything that is not about how much
+damage the party shrugs off. **Re-capture them from real play before trusting
+one for a combat-feel question**:
+
+```sh
+cargo run --bin savetool -- capture saves/save.bin <name>
+```
+
 ## Seeing the whole frame
 
 `FERAL_DEV_REVEAL=1` draws the entire Stack frame on both maps — the corner

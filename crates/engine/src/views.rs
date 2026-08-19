@@ -367,6 +367,12 @@ pub struct PetInfo {
     /// percentage buffs only; a zone bump spends none and shows up as the
     /// zone tag on `name` instead.
     pub refactors: u32,
+    /// How many Kernel Rings this program has open, 0 to
+    /// `tuning::KERNEL_RING_MAX` — see `components::KernelRing`. Absent means
+    /// 0, like `refactors` above. Each one raises this program's level
+    /// ceiling and pays a talent point per level earned above the base cap;
+    /// `Game::companion_level_cap` is what the ceiling itself reads off.
+    pub ring: u32,
     /// This program's rare-spawn tier — see `components::Rarity`. Already
     /// spelled into `name` as a prefix by `Game::creature_label`; carried
     /// separately so a menu can also colour the row without parsing it back

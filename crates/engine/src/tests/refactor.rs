@@ -374,3 +374,108 @@ fn refactoring_a_geared_program_scales_its_own_stats_and_not_the_gear() {
         "the pre-gear block this is measured from"
     );
 }
+
+const RING: &str = ids::PRIVILEGE_RING;
+
+#[test]
+fn opening_the_first_kernel_ring_costs_one_privilege_ring() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, 4);
+
+    game.open_kernel_ring(pet).unwrap();
+
+    assert_eq!(game.world.get::<KernelRing>(pet).map(|r| r.0), Some(1));
+    assert_eq!(
+        held(&game, RING),
+        4 - Game::ring_cost(0),
+        "exactly the quoted cost, and no more"
+    );
+}
+
+#[test]
+fn opening_a_ring_with_none_held_refuses_and_spends_nothing() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, Game::ring_cost(0) - 1);
+
+    assert!(game.open_kernel_ring(pet).is_err());
+    assert_eq!(
+        held(&game, RING),
+        Game::ring_cost(0) - 1,
+        "a refusal that has already spent the item is the bug worth catching"
+    );
+    assert_eq!(game.world.get::<KernelRing>(pet).map(|r| r.0), None);
+}
+
+#[test]
+fn the_second_ring_costs_more_than_the_first() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let budget = Game::ring_cost(0) + Game::ring_cost(1);
+    stock(&mut game, RING, budget);
+
+    game.open_kernel_ring(pet).unwrap();
+    game.open_kernel_ring(pet).unwrap();
+
+    assert!(
+        Game::ring_cost(1) > Game::ring_cost(0),
+        "the ladder has to steepen or the third ring is a formality"
+    );
+    assert_eq!(game.world.get::<KernelRing>(pet).map(|r| r.0), Some(2));
+    assert_eq!(held(&game, RING), 0);
+}
+
+#[test]
+fn a_program_with_every_ring_open_is_refused_by_name() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(KernelRing(crate::tuning::KERNEL_RING_MAX));
+    stock(&mut game, RING, 99);
+
+    let err = game.open_kernel_ring(pet).unwrap_err();
+
+    assert!(
+        err.contains(&crate::tuning::KERNEL_RING_MAX.to_string()),
+        "the refusal has to name the ceiling it hit, got: {err}"
+    );
+    assert_eq!(held(&game, RING), 99, "a refusal spends nothing");
+}
+
+/// A ring buys *room*, not power. A test that only checked the cap would pass
+/// against an implementation that also handed out a free level.
+#[test]
+fn opening_a_ring_changes_no_stat_level_or_xp() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, 4);
+    let before_stats = stats(&game, pet);
+    let before_exp = *game.world.get::<Experience>(pet).unwrap();
+
+    game.open_kernel_ring(pet).unwrap();
+
+    assert_eq!(stats(&game, pet), before_stats);
+    let after = game.world.get::<Experience>(pet).unwrap();
+    assert_eq!(
+        (after.level, after.xp, after.xp_to_next),
+        (before_exp.level, before_exp.xp, before_exp.xp_to_next)
+    );
+    assert_eq!(
+        game.companion_level_cap(pet),
+        crate::tuning::CREATURE_MAX_LEVEL + crate::tuning::LEVELS_PER_RING,
+        "what it bought is room to grow, and nothing else"
+    );
+}
+
+#[test]
+fn a_pet_rows_ring_count_is_what_it_has_opened() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, 4);
+
+    assert_eq!(game.owned_pets()[0].ring, 0, "absent means none");
+    game.open_kernel_ring(pet).unwrap();
+    assert_eq!(game.owned_pets()[0].ring, 1);
+}

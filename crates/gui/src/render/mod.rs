@@ -806,6 +806,7 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
         quality: None,
         fusions: 0,
         refactors: 0,
+        ring: 0,
         rarity: Rarity::Ordinary,
         wielded: false,
         gear: gear.to_string(),

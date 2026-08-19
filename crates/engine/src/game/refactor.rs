@@ -1,14 +1,23 @@
 //! Permanent, player-driven upgrades to a tamed program.
 //!
-//! Two tracks, one entry point. A **Recompile Kernel** raises a program one
-//! zone tier and is refused once it has caught up with the player, which is
-//! what bounds it. The **percentage buffs** raise one stat apiece and are
-//! bounded instead by `MAX_COMPANION_REFACTORS`, because they come off a
-//! chain rooted in a Mining Node that produces forever.
+//! Three tracks. Two of them share one entry point, `refactor_companion`: a
+//! **Recompile Kernel** raises a program one zone tier and is refused once it
+//! has caught up with the player, which is what bounds it, and the
+//! **percentage buffs** raise one stat apiece and are bounded instead by
+//! `MAX_COMPANION_REFACTORS`, because they come off a chain rooted in a
+//! Mining Node that produces forever.
+//!
+//! The third is a **Kernel Ring** (`open_kernel_ring`), which spends Privilege
+//! Rings to raise one program's level ceiling. It has its own entry point
+//! rather than an `upgrade:` field because it grants no stats at all — it buys
+//! room for levels the party still has to go and earn, so there is nothing for
+//! `refactored` to apply. It is bounded by `tuning::KERNEL_RING_MAX` and by
+//! the scarcity of its currency: a Privilege Ring drops from a lair guardian
+//! and from nothing else.
 
 use crate::items_db::CompanionUpgradeDef;
 use crate::resources::ZoneLevel;
-use crate::tuning::MAX_COMPANION_REFACTORS;
+use crate::tuning::{KERNEL_RING_MAX, MAX_COMPANION_REFACTORS};
 use crate::*;
 
 /// A stat raised by `pct` percent, rounded, never gaining less than a point.
@@ -181,6 +190,66 @@ impl Game {
         self.log(format!(
             "{name} recompiled with {} — now {} HP, {} ATK, {} DEF.",
             def.name, after.max_hp, after.atk, after.def
+        ));
+        Ok(())
+    }
+
+    /// What opening the ring *after* `ring` costs, in Privilege Rings: one for
+    /// the first, two for the second, three for the third. Takes the current
+    /// count rather than the target, so no caller has to add one itself.
+    pub fn ring_cost(ring: u32) -> u32 {
+        ring + 1
+    }
+
+    /// Spends `ring_cost(current)` Privilege Rings to open `target`'s next
+    /// Kernel Ring, raising its level ceiling by `tuning::LEVELS_PER_RING`.
+    ///
+    /// Every refusal comes before anything is spent, the ordering
+    /// `refactor_companion` above states and the structure upgrade path
+    /// repeats: the ceiling first, then the materials.
+    ///
+    /// It grants no stats, no level and no XP. That is the whole design — the
+    /// ring buys room and the fights buy the levels, so a Privilege Ring is
+    /// never a way around "progression is earned by fighting".
+    pub fn open_kernel_ring(&mut self, target: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self
+            .world
+            .get::<Tamed>(target)
+            .is_none_or(|t| t.owner != self.player_entity())
+        {
+            return Err("You don't control that program.".into());
+        }
+        let current = self.world.get::<KernelRing>(target).map_or(0, |r| r.0);
+        if current >= KERNEL_RING_MAX {
+            return Err(format!(
+                "{} has every kernel ring open ({KERNEL_RING_MAX} of {KERNEL_RING_MAX}).",
+                self.entity_label(target)
+            ));
+        }
+        let cost = Self::ring_cost(current);
+        let item = ItemId::from(crate::items::ids::PRIVILEGE_RING);
+        let player = self.player_entity();
+        let mut inventory = self.world.get_mut::<Inventory>(player).unwrap();
+        if inventory.count(&item) < cost {
+            return Err(format!(
+                "Opening ring {} takes {cost} Privilege Rings; you have {}.",
+                current + 1,
+                inventory.count(&item)
+            ));
+        }
+        inventory.take(item, cost);
+        self.world
+            .entity_mut(target)
+            .insert(KernelRing(current + 1));
+
+        let name = self.entity_label(target);
+        let cap = self.companion_level_cap(target);
+        self.log(format!(
+            "{name} opens kernel ring {} — it can now reach level {cap}.",
+            current + 1
         ));
         Ok(())
     }

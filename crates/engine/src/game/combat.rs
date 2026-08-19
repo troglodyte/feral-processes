@@ -554,6 +554,12 @@ impl Game {
     /// How many routines `entity` can hold right now. The player and a
     /// companion grow slots at different rates on purpose — see
     /// `tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL`.
+    ///
+    /// A companion's `talents::TalentNode::RoutineSlot` nodes are added here,
+    /// in the companion arm only: the player is not a companion and must not
+    /// read a companion tree. `abilities::companion_routine_slots` stays a
+    /// pure function of level, because several tests and `balance_sim` read it
+    /// as one.
     pub fn routine_slots(&self, entity: Entity) -> usize {
         let level = self
             .world
@@ -563,8 +569,26 @@ impl Game {
         if entity == self.player_entity() {
             abilities::player_routine_slots(level)
         } else {
-            abilities::companion_routine_slots(level)
+            abilities::companion_routine_slots(level) + self.talent_routine_slots(entity)
         }
+    }
+
+    /// How many extra routine slots `entity`'s talents have bought.
+    fn talent_routine_slots(&self, entity: Entity) -> usize {
+        let Some(taken) = self.world.get::<Talents>(entity) else {
+            return 0;
+        };
+        let Some(tree) = self.talent_tree(entity) else {
+            return 0;
+        };
+        tree.tiers
+            .iter()
+            .flat_map(|tier| tier.0.iter())
+            .filter(|choice| {
+                taken.0.contains(&choice.id)
+                    && matches!(choice.node, crate::talents::TalentNode::RoutineSlot)
+            })
+            .count()
     }
 
     /// Installs the kit `entity`'s species grants at its current level,

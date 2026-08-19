@@ -244,3 +244,43 @@ fn every_node_kind_carries_a_tag() {
         assert_eq!(node.tag(), tag);
     }
 }
+
+/// A `RoutineSlot` node. Its tier is the generic tree's third, so the fixture
+/// spends two points to get there.
+fn a_pet_with_a_slot_talent(game: &mut Game) -> Entity {
+    let pet = developed(game, CREATURE_MAX_LEVEL + 3);
+    game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
+    game.take_talent(pet, &TalentId::from("gen_interrupt"))
+        .unwrap();
+    game.take_talent(pet, &TalentId::from("gen_slot")).unwrap();
+    pet
+}
+
+#[test]
+fn a_routine_slot_talent_gives_a_companion_one_more_slot() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain = developed(&mut game, CREATURE_MAX_LEVEL + 3);
+    let baseline = game.routine_slots(plain);
+
+    let widened = a_pet_with_a_slot_talent(&mut game);
+
+    assert_eq!(
+        game.routine_slots(widened),
+        baseline + 1,
+        "the node buys exactly one slot over an identical companion without it"
+    );
+}
+
+/// The player is not a companion and must not read a companion tree — its
+/// slots come from `PLAYER_ROUTINE_SLOT_PER_LEVEL` and nothing else.
+#[test]
+fn a_slot_talent_on_the_player_changes_nothing() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before = game.routine_slots(player);
+    game.world
+        .entity_mut(player)
+        .insert(Talents(vec![TalentId::from("gen_slot")]));
+
+    assert_eq!(game.routine_slots(player), before);
+}

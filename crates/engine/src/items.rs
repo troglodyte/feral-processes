@@ -83,6 +83,13 @@ pub mod ids {
     pub const FIREWALL_PLATING: &str = "firewall_plating";
     pub const NEURAL_AMPLIFIER: &str = "neural_amplifier";
     pub const PORTAL_FRAGMENT: &str = "portal_fragment";
+
+    /// Dropped by a lair guardian and by nothing else — see
+    /// `Game::pay_stack_boss_privilege_ring`. Spent at the Develop screen to
+    /// open a companion's next Kernel Ring (`Game::open_kernel_ring`).
+    /// Deliberately not craftable: a bench recipe would make it renewable on
+    /// demand, which is the opposite of what it is for.
+    pub const PRIVILEGE_RING: &str = "privilege_ring";
     pub const RESEARCH_DATA: &str = "research_data";
     pub const MONOFILAMENT_WHIP: &str = "monofilament_whip";
     pub const ABLATIVE_PLATING: &str = "ablative_plating";

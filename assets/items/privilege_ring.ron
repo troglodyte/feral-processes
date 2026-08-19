@@ -1,0 +1,6 @@
+(
+    id: "privilege_ring",
+    name: "Privilege Ring",
+    description: "A ring of raised privilege, prised out of a lair guardian. Spend it on one program to give it room to grow past its own ceiling.",
+    value: Some(24),
+)

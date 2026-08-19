@@ -1446,3 +1446,49 @@ fn a_rolled_boss_pays_the_stack_boss_cache() {
          {STACK_BOSS_PORTAL_FRAGMENT_DROP:?}, got {qty}"
     );
 }
+
+#[test]
+fn a_lair_guardian_drops_a_privilege_ring() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let boss = a_boss(&game);
+    stand_in_the_stack(&mut game, 1);
+
+    let wild = corpse_of(&mut game, &boss.id);
+    game.award_loot(wild);
+
+    assert!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::PRIVILEGE_RING))
+            >= 1,
+        "the only source of a companion's level ceiling is a lair guardian"
+    );
+}
+
+/// The half that matters: the gate is `is_boss_creature` **and** underground,
+/// and a test of the first half alone passes against a drop wired into the
+/// wrong branch of `award_loot`.
+#[test]
+fn a_boss_defeated_on_the_surface_drops_no_privilege_ring() {
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let boss = a_boss(&game);
+    assert!(
+        !game.is_underground(),
+        "test premise: a fresh game starts on the surface"
+    );
+
+    let wild = corpse_of(&mut game, &boss.id);
+    game.award_loot(wild);
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::PRIVILEGE_RING)),
+        0,
+        "a developed companion is bought by descending, not by clearing the surface"
+    );
+}

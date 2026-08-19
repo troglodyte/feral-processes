@@ -448,7 +448,10 @@ impl Game {
                 .push(species_id.clone());
 
             match self.stack_pos() {
-                Some(pos) => self.pay_stack_boss_fragments(pos.depth),
+                Some(pos) => {
+                    self.pay_stack_boss_fragments(pos.depth);
+                    self.pay_stack_boss_privilege_ring();
+                }
                 None => self.pay_surface_boss_gear(),
             }
         }
@@ -465,6 +468,21 @@ impl Game {
         };
         let landed = self.grant_loot(self.craft_currency(), qty);
         self.record_drop(GearCopy::plain(self.craft_currency()), landed);
+    }
+
+    /// The one source of a companion's level ceiling
+    /// (`STACK_BOSS_PRIVILEGE_RING_DROP`), and the second thing a lair
+    /// guardian pays that a surface boss does not. It rides the same
+    /// `is_boss_creature`-and-underground gate as the fragments above rather
+    /// than opening a door of its own: what the party went down for is one
+    /// question with two answers.
+    ///
+    /// No `GameRng` draw at all, so adding it moved no seeded roll in the
+    /// game — see `STACK_BOSS_PRIVILEGE_RING_DROP` for why the count is flat.
+    fn pay_stack_boss_privilege_ring(&mut self) {
+        let ring = ItemId::from(crate::items::ids::PRIVILEGE_RING);
+        let landed = self.grant_loot(ring.clone(), crate::tuning::STACK_BOSS_PRIVILEGE_RING_DROP);
+        self.record_drop(GearCopy::plain(ring), landed);
     }
 
     /// What a boss killed on the surface pays instead: gear from

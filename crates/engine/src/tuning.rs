@@ -1431,6 +1431,22 @@ pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 /// worth about what the trip down to it was.
 pub const STACK_BOSS_PORTAL_FRAGMENT_DROP: std::ops::RangeInclusive<u32> = 4..=8;
 
+/// How many Privilege Rings one lair guardian pays — see
+/// `components::KernelRing` and `Game::ring_cost`.
+///
+/// Flat rather than a range, and deliberately not a chance: a ring is the
+/// unit the cost ladder is quoted in (1 + 2 + 3 = six guardians for one
+/// fully developed program), so a roll here would only add variance to a
+/// number the player is already counting. Depth does **not** multiply it the
+/// way it multiplies fragments — a deep lair is harder, but a ring is a
+/// permission slip rather than a payout, and doubling the supply at depth 3
+/// would make the whole ladder a single afternoon.
+///
+/// Slowly renewable by the same bound as the fragments beside it:
+/// `Game::collapse_stack` re-seeds a zone's lairs on a fresh tile, so another
+/// ring always costs another run.
+pub const STACK_BOSS_PRIVILEGE_RING_DROP: u32 = 1;
+
 /// Upper bound, per zone level, on the `ItemDef::value` of gear a defeated
 /// **surface** boss drops — see `Game::surface_boss_loot`. A surface boss
 /// pays in power rather than progression: the band walks up the shipped

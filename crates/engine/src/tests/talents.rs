@@ -370,6 +370,7 @@ fn an_affinity_talent_sharpens_the_category_it_names_and_no_other() {
     let plain = developed(&mut game, CREATURE_MAX_LEVEL + 4);
     let damage = AbilityEffect::Damage {
         power: 10,
+        spread: 0,
         status: None,
     };
     let heal = AbilityEffect::Heal { power: 10 };
@@ -424,6 +425,7 @@ fn an_affinity_talent_is_clamped_at_the_ceiling() {
             pet,
             &AbilityEffect::Damage {
                 power: 10,
+                spread: 0,
                 status: None,
             }
         ),
@@ -440,6 +442,7 @@ fn an_affinity_talent_on_the_player_changes_nothing() {
     let player = game.player_entity();
     let damage = AbilityEffect::Damage {
         power: 10,
+        spread: 0,
         status: None,
     };
     let before = game.ability_affinity(player, &damage);

@@ -201,15 +201,17 @@ impl Game {
             .map(|def| {
                 def.basic_attacks()
                     .iter()
-                    .map(|a| a.attack_parts().0)
-                    .max()
-                    .unwrap_or(0)
+                    .map(|a| a.attack_parts().0.mean())
+                    .fold(0.0f64, f64::max)
             })
-            .unwrap_or(0);
-        let (power, status) = mv.attack_parts();
+            .unwrap_or(0.0);
+        let (range, status) = mv.attack_parts();
+        // The band's mean, so a move is compared on what it averages rather
+        // than on either end — a wide weak move must not read as the
+        // hardest-hitting thing the species owns.
         f.set(
             Feature::MovePowerRel,
-            power as f32 / best_power.max(1) as f32,
+            (range.mean() / best_power.max(1.0)) as f32,
         );
         f.set(Feature::MoveRanged, mv.ranged as u8 as f32);
         f.set(Feature::MoveHasEffect, status.is_some() as u8 as f32);
@@ -264,7 +266,7 @@ impl Game {
         // as the subtractive term that parameter still expects: feeding a
         // percentage in there made a braced target look untouchable and the
         // policy stopped swinging at it.
-        let raw = battle::compute_damage(wild_stats.atk, 0, power);
+        let raw = battle::compute_damage(wild_stats.atk, 0, range.mean().round() as i32);
         let dmg = (raw as f32 * (1.0 - mitigation as f32 / 100.0)).round() as i32;
         f.set(
             Feature::EstDamageFrac,

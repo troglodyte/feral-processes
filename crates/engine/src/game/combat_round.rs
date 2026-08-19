@@ -356,14 +356,23 @@ impl Game {
         let Some(front) = self.front_of_group(live) else {
             return false;
         };
-        let (move_name, move_power) = if slot == 0 {
-            ("data strike".to_string(), PLAYER_STRIKE_POWER)
+        let (move_name, natural) = if slot == 0 {
+            (
+                "data strike".to_string(),
+                battle::DamageRange::centred(PLAYER_STRIKE_POWER, 0),
+            )
         } else {
             match self.roll_species_move(entity) {
                 Some(mv) => (mv.name.clone(), mv.attack_parts().0),
-                None => ("a raw signal burst".to_string(), PLAYER_STRIKE_POWER),
+                None => (
+                    "a raw signal burst".to_string(),
+                    battle::DamageRange::centred(PLAYER_STRIKE_POWER, 0),
+                ),
             }
         };
+        // Task 8 turns this into a roll through `attack_range`; the mean of a
+        // centred band is exactly the flat power this read before.
+        let move_power = natural.mean().round() as i32;
         // No mitigation term here: `apply_damage` owns that, as the
         // percentage cut it now is. Passing it to `compute_damage` as well
         // would subtract it once and then cut by it again.
@@ -1001,14 +1010,23 @@ impl Game {
                         StatusKind::Stun => self.log(format!("{name} locks up {on}!")),
                     }
                 }
-                AbilityEffect::Damage { power, status } => {
+                AbilityEffect::Damage {
+                    power,
+                    spread,
+                    status,
+                } => {
                     // Mitigation is `apply_damage`'s, not a term here — see
                     // `party_member_attacks` for why passing it to
                     // `compute_damage` too would count it twice.
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
                     let raw = battle::compute_damage(
                         self.effective_atk(actor),
                         0,
-                        abilities::scaled_hp_power(*power, level, affinity),
+                        band.mean().round() as i32,
                     );
                     let dmg = self.apply_damage(recipient, raw);
                     self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
@@ -1018,12 +1036,18 @@ impl Game {
                 }
                 AbilityEffect::Drain {
                     power,
+                    spread,
                     heal_fraction,
                 } => {
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
                     let raw = battle::compute_damage(
                         self.effective_atk(actor),
                         0,
-                        abilities::scaled_hp_power(*power, level, affinity),
+                        band.mean().round() as i32,
                     );
                     let dmg = self.apply_damage(recipient, raw);
                     // Off the damage actually dealt, not the authored power:

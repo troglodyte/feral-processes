@@ -102,6 +102,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         target: AbilityTarget::OneEnemyGroupFront,
         effect: AbilityEffect::Damage {
             power: mv.power,
+            spread: mv.spread,
             status: mv.effect.clone(),
         },
         cooldown: 0,
@@ -1133,10 +1134,19 @@ mod tests {
         let buzz = &attacks[0];
         assert_eq!(buzz.name, "Buzz");
         assert!(!buzz.ranged, "Buzz is melee, as it was authored");
-        let AbilityEffect::Damage { power, status } = &buzz.effect else {
+        let AbilityEffect::Damage {
+            power,
+            spread,
+            status,
+        } = &buzz.effect
+        else {
             panic!("a basic attack is direct damage");
         };
         assert_eq!(*power, 4, "the authored power, unscaled");
+        assert_eq!(
+            *spread, 1,
+            "and the authored spread, so the band survives the conversion"
+        );
         assert!(status.is_none(), "and no rider");
 
         let ping = &attacks[1];

@@ -77,11 +77,27 @@ way deleting the Currency item does.
 
     // What it does to each recipient. Exactly one of ten:
     //
-    //   Damage(power: 6)
-    //     Direct damage through the same formula a move uses
-    //     (`power + attacker ATK - target DEF`, minimum 1), so it scales
-    //     with the user's ATK. Optionally carries a status rider:
-    //       Damage(power: 6, status: Some((
+    //   Damage(power: 6, spread: 2)
+    //     Direct damage through the same resolution a move uses: an attack
+    //     roll against the target's Evasion, then a uniform roll from the
+    //     damage band, then the user's ATK added flat, then the target's
+    //     Mitigation taken off as a percentage. So it scales with the user's
+    //     ATK, and it can miss.
+    //
+    //     `power` is the *centre* of the band and `spread` its half-width,
+    //     so `power: 6, spread: 2` rolls 4..=8 inclusive. The low end is
+    //     floored at 0, so a wide spread on a weak ability cannot roll
+    //     negative. Both ends scale with the caster's level and affinity, so
+    //     the band widens as the numbers grow rather than collapsing to a
+    //     point.
+    //
+    //     `spread` is optional and defaults to 0 — a degenerate band, which
+    //     is exactly the single deterministic number every ability dealt
+    //     before ranges existed. No shipped file needed editing and a mod
+    //     that never mentions it behaves as it always did.
+    //
+    //     Optionally carries a status rider, which lands only on a hit:
+    //       Damage(power: 6, spread: 2, status: Some((
     //           kind: Bleed, chance: 0.5, duration: 2, power: 2,
     //       )))
     //     `chance` is 0.0-1.0. `kind` is `Bleed` or `Stun`; `power` is the
@@ -118,13 +134,14 @@ way deleting the Currency item does.
     //     charged to it — otherwise a stun would expire before a victim
     //     that had already acted ever felt it.
     //
-    //   Drain(power: 10, heal_fraction: 0.5)
-    //     Damage through the same formula as `Damage`, then the *user* is
-    //     healed for that fraction of the damage it actually dealt, capped
-    //     at its own maximum Integrity. Healing off the dealt figure rather
-    //     than the authored power means an armoured target returns less,
-    //     which is the intended shape. `heal_fraction` is clamped to
-    //     0.0-1.0 at load; a non-finite one disqualifies the file.
+    //   Drain(power: 10, spread: 3, heal_fraction: 0.5)
+    //     Damage through the same resolution as `Damage`, `spread` and all,
+    //     then the *user* is healed for that fraction of the damage it
+    //     actually dealt, capped at its own maximum Integrity. Healing off
+    //     the dealt figure rather than the authored power means an armoured
+    //     target returns less, and a miss returns nothing — which is the
+    //     intended shape. `heal_fraction` is clamped to 0.0-1.0 at load; a
+    //     non-finite one disqualifies the file.
     //
     //   Cleanse
     //     Clears each recipient's active status condition. No fields.

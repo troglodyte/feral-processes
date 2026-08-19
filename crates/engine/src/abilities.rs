@@ -90,6 +90,26 @@ pub fn scaled_hp_power(power: i32, level: u32, affinity: f32) -> i32 {
     (power as f32 * ability_hp_scale(level) * affinity).round() as i32
 }
 
+/// An authored damage range scaled for its caster, on the same curve
+/// `scaled_hp_power` puts the centre on.
+///
+/// **The spread scales proportionally rather than staying put**, or a
+/// high-level ability becomes deterministic — the band would collapse to a
+/// point exactly when the numbers get big enough for the variance to matter.
+/// Scaling both ends through the same function is what keeps it proportional
+/// without a second formula: `scaled_hp_power` is linear in its input, so the
+/// width scales by the same factor as the centre.
+pub fn scaled_range(
+    range: crate::battle::DamageRange,
+    level: u32,
+    affinity: f32,
+) -> crate::battle::DamageRange {
+    crate::battle::DamageRange {
+        min: scaled_hp_power(range.min, level, affinity),
+        max: scaled_hp_power(range.max, level, affinity),
+    }
+}
+
 /// The cooldown armed on a combatant right after it casts an ability whose
 /// authored value is `cooldown`, floored at `floor` rounds. Called from both
 /// `resolve_one_action` (party side, `floor = 0`, so the authored value is
@@ -210,11 +230,19 @@ impl AffinityKind {
 /// What an ability does to each of its recipients.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AbilityEffect {
-    /// Direct damage through `battle::compute_damage`, so it scales with the
+    /// Direct damage through `battle::resolve_attack`, so it scales with the
     /// user's ATK exactly as a `MoveDef` does, plus an optional status rider
     /// — the same shape a move already has.
     Damage {
+        /// The centre of the damage band — see `spread`.
         power: i32,
+        /// Half-width of the damage band around `power`. `#[serde(default)]`
+        /// at 0 is a degenerate band, which is exactly the single
+        /// deterministic number every ability dealt before ranges existed —
+        /// so none of the shipped ability files needed editing and a mod
+        /// gains damage ranges for free.
+        #[serde(default)]
+        spread: i32,
         #[serde(default)]
         status: Option<MoveEffect>,
     },
@@ -231,7 +259,7 @@ pub enum AbilityEffect {
         power: i32,
         duration: u32,
     },
-    /// Damage through `battle::compute_damage`, then the user is healed for
+    /// Damage through `battle::resolve_attack`, then the user is healed for
     /// `heal_fraction` of the damage it actually dealt, capped at its own
     /// maximum Integrity.
     ///
@@ -239,7 +267,11 @@ pub enum AbilityEffect {
     /// which already rides the user's ATK, so this scales with level without
     /// being scaled.
     Drain {
+        /// The centre of the damage band — see `Damage::spread`.
         power: i32,
+        /// Half-width of the damage band. See `Damage::spread`.
+        #[serde(default)]
+        spread: i32,
         /// Clamped to `0.0..=1.0` at load — see `AbilityDb::load_dir`. Bounded
         /// there rather than at use, so a `heal_fraction: 5.0` mod is a
         /// bounded ability instead of a bounded surprise inside a formula.
@@ -513,10 +545,22 @@ impl AbilityDef {
     /// for the turn — see `Game::wild_attack` — does so on its own copy
     /// rather than mutating a definition shared by every program of the
     /// species.
-    pub(crate) fn attack_parts(&self) -> (i32, Option<crate::species::MoveEffect>) {
+    pub(crate) fn attack_parts(
+        &self,
+    ) -> (
+        crate::battle::DamageRange,
+        Option<crate::species::MoveEffect>,
+    ) {
         match &self.effect {
-            AbilityEffect::Damage { power, status } => (*power, status.clone()),
-            _ => (0, None),
+            AbilityEffect::Damage {
+                power,
+                spread,
+                status,
+            } => (
+                crate::battle::DamageRange::centred(*power, *spread),
+                status.clone(),
+            ),
+            _ => (crate::battle::DamageRange::default(), None),
         }
     }
 
@@ -1321,6 +1365,7 @@ mod tests {
         assert_eq!(
             AbilityEffect::Damage {
                 power: 6,
+                spread: 0,
                 status: None
             }
             .affinity_kind(),
@@ -1347,6 +1392,7 @@ mod tests {
         assert_eq!(
             AbilityEffect::Drain {
                 power: 10,
+                spread: 0,
                 heal_fraction: 0.5
             }
             .affinity_kind(),

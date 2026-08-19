@@ -729,6 +729,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Drain {
             power: 10,
+            spread: 0,
             heal_fraction: 0.5,
         },
         cooldown: 1,
@@ -769,6 +770,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Drain {
             power: 10,
+            spread: 0,
             heal_fraction: 1.0,
         },
         cooldown: 1,
@@ -889,6 +891,7 @@ fn drain_logs_what_it_actually_restored() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Drain {
             power: 10,
+            spread: 0,
             heal_fraction: 1.0,
         },
         cooldown: 1,
@@ -1165,6 +1168,7 @@ fn ability_damage_scales_with_the_users_level() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Damage {
             power: 6,
+            spread: 0,
             status: None,
         },
         cooldown: 1,
@@ -1209,6 +1213,7 @@ fn drain_scales_with_the_users_level() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Drain {
             power: 10,
+            spread: 0,
             heal_fraction: 0.5,
         },
         cooldown: 1,
@@ -1423,6 +1428,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
         effect: crate::abilities::AbilityEffect::Drain {
             power: 10,
+            spread: 0,
             heal_fraction: 1.0,
         },
         cooldown: 1,
@@ -1740,6 +1746,7 @@ fn a_damage_affinity_perk_uses_the_flat_rate_not_the_level_scaled_one() {
     let player = game.player_entity();
     let effect = AbilityEffect::Damage {
         power: 10,
+        spread: 0,
         status: None,
     };
     let before = game.ability_affinity(player, &effect);
@@ -1778,6 +1785,7 @@ fn a_player_affinity_perk_is_clamped_at_affinity_max() {
             8u32,
             AbilityEffect::Damage {
                 power: 10,
+                spread: 0,
                 status: None,
             },
         ),
@@ -1875,6 +1883,7 @@ fn a_wild_carrier_gets_its_species_damage_affinity() {
     let biter = super::support::spawn_wild_without_routine(&mut game, "test_biter", 3, 3);
     let effect = AbilityEffect::Damage {
         power: 6,
+        spread: 0,
         status: None,
     };
     assert_eq!(game.ability_affinity(biter, &effect), 2.0);
@@ -2110,4 +2119,67 @@ fn a_hostile_with_no_reserve_casts_normally() {
         game.world.get::<Stats>(player).unwrap().hp < before,
         "a reserve-less hostile must still be able to act"
     );
+}
+
+/// A high-level ability must not become deterministic: the spread scales
+/// with the centre, proportionally. Delete the scaling of `spread` and this
+/// fails — the band collapses to a point as the caster levels.
+#[test]
+fn an_abilitys_spread_scales_with_its_centre() {
+    use crate::abilities::scaled_range;
+    use crate::battle::DamageRange;
+    let base = DamageRange::centred(10, 4);
+    let low = scaled_range(base, 1, 1.0);
+    let high = scaled_range(base, 40, 1.0);
+    let low_width = low.max - low.min;
+    let high_width = high.max - high.min;
+    assert!(high.mean() > low.mean(), "the centre must scale");
+    assert!(
+        high_width > low_width,
+        "the spread must scale with it, not stay put"
+    );
+}
+
+/// `species::basic_attack_ability` converts a move to an ability, and the
+/// centre-and-spread pair is what survives that losslessly — a `(min, max)`
+/// pair would round on an odd width. Nothing in combat names `MoveDef`, so
+/// this conversion is where a move's range has to arrive intact.
+#[test]
+fn converting_a_move_to_an_ability_keeps_its_range_exactly() {
+    use crate::species::{MoveDef, basic_attack_ability};
+    let mv = MoveDef {
+        name: "Fray".into(),
+        power: 9,
+        spread: 4,
+        effect: None,
+        ranged: false,
+    };
+    let ability = basic_attack_ability(&"scrapper".into(), 0, &mv);
+    assert_eq!(ability.attack_parts().0, mv.range());
+}
+
+/// A weapon **overrides** a natural attack rather than adding to it. A
+/// companion still rolls a species move each turn for its name and its
+/// status rider, but an equipped weapon supplies the damage range.
+#[test]
+fn an_equipped_weapon_replaces_the_natural_attack_range() {
+    let mut game = Game::new(4801, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 30, 5);
+    let natural = crate::battle::DamageRange { min: 6, max: 10 };
+    assert_eq!(game.attack_range(companion, natural), natural);
+
+    wear(&mut game, companion, "monofilament_whip");
+    let armed = game.attack_range(companion, natural);
+    assert_ne!(armed, natural, "the weapon must override, not be ignored");
+    assert!(armed.max > natural.max);
+}
+
+/// Unarmed, the move's own range applies — the override is not "a weapon
+/// slot exists", it is "a weapon with a range is worn".
+#[test]
+fn an_unarmed_companion_keeps_its_natural_range() {
+    let mut game = Game::new(4802, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 30, 5);
+    let natural = crate::battle::DamageRange { min: 6, max: 10 };
+    assert_eq!(game.attack_range(companion, natural), natural);
 }

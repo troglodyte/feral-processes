@@ -9,6 +9,31 @@ use crate::tuning::{
 use crate::*;
 
 impl Game {
+    /// The damage band `entity` actually swings for, given the `natural`
+    /// range its move or ability authored.
+    ///
+    /// **A weapon overrides a natural attack, it does not add to it.** A
+    /// companion still rolls a species move each turn for its *name* and its
+    /// status rider; an equipped weapon supplies the number. Unarmed, the
+    /// move's own range applies. The player has no species moves at all —
+    /// their `natural` is `tuning::PLAYER_UNARMED_DAMAGE`.
+    ///
+    /// The override is keyed on the weapon carrying a range, not on the slot
+    /// being occupied: a modded weapon authoring none leaves its wielder
+    /// swinging naturally rather than disarmed.
+    pub(crate) fn attack_range(
+        &self,
+        entity: Entity,
+        natural: battle::DamageRange,
+    ) -> battle::DamageRange {
+        let worn = self.gear_bonus(entity).damage;
+        if worn == battle::DamageRange::default() {
+            natural
+        } else {
+            worn
+        }
+    }
+
     /// How many members of one species group may fight — the ceiling a
     /// gathered cluster fights under, and the same value in `gather_pack`
     /// and `group_pack` because it depends only on the zone and the depth.

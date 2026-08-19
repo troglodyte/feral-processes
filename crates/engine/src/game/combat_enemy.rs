@@ -158,7 +158,7 @@ impl Game {
         };
         // The rider is taken by value, so dropping it here is a decision
         // about this swing and not an edit to the species' definition.
-        let (power, mut status) = mv.attack_parts();
+        let (range, mut status) = mv.attack_parts();
         if !reaches_for_effect {
             status = None;
         }
@@ -169,7 +169,9 @@ impl Game {
         // percentage cut it now is, and returns what actually landed — which
         // is the figure the log lines below have to print.
         let w_atk = self.world.get::<Stats>(wild).unwrap().atk;
-        let raw = battle::compute_damage(w_atk, 0, power);
+        // The band's mean, which for a centred range is exactly the `power`
+        // this read before ranges existed. Task 8 replaces it with a roll.
+        let raw = battle::compute_damage(w_atk, 0, range.mean().round() as i32);
         let dmg = self.apply_damage(target, raw);
 
         // A move that also inflicts a condition is the only thing an enemy has

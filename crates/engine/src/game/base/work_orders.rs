@@ -704,17 +704,28 @@ impl Game {
 
         // Step 5, deepest first — and standing jobs last, since they were
         // appended after the order's wants and the list is not re-sorted.
-        let from = self
-            .world
-            .get::<Position>(self.player_entity())
-            .copied()
-            .unwrap_or(Position { x: 0, y: 0 });
+        //
+        // **Every question here is asked from the body's own tile**, never
+        // from the player's. `park_idle_staff` above has just put each free
+        // program on a real tile inside the base, and a program the
+        // scheduler freed this tick is standing at the post it just left —
+        // so the walk starts where the body is, and whether it arrives is a
+        // question about the base rather than about where you happen to be
+        // stood. Measured from the player it did both jobs wrong at once: a
+        // loitering program teleported across the map onto you, and walking
+        // out of the walk field stopped the base filling a single machine.
         let blocked = self.structure_tiles();
         let build_radius = self.build_radius();
         for (post, kind) in remaining {
-            if idle.is_empty() {
+            // Peeked rather than popped, so a skipped post costs no body.
+            let Some(&worker) = idle.last() else {
                 break;
-            }
+            };
+            let from = self
+                .world
+                .get::<Position>(worker)
+                .copied()
+                .unwrap_or(Position { x: 0, y: 0 });
             if kind == TaskKind::GatherResource
                 && !self.can_walk_to_post(from, post, &blocked, build_radius)
             {
@@ -732,11 +743,9 @@ impl Game {
                 // goes to the next want instead.
                 continue;
             }
-            let Some(worker) = idle.pop() else {
-                break;
-            };
+            idle.pop();
             match kind {
-                TaskKind::GatherResource => self.post_worker(worker, post, from),
+                TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),
             }
         }
@@ -761,10 +770,11 @@ impl Game {
 
     /// Walks every staff member with no post to its parking tile.
     ///
-    /// Runs before the assignment rather than after it, so the tile a
-    /// program is standing on when it *gets* a post is a real one — a
-    /// posted program's `Position` is what `haul_step_system` walks from,
-    /// and `post_worker` overwrites it anyway.
+    /// Runs before the assignment rather than after it, and that ordering
+    /// is what makes a posting truthful: a posted program's `Position` is
+    /// what `haul_step_system` walks from and what `post_reach` is asked
+    /// about, and neither is overwritten any more, so the tile a program is
+    /// standing on when it *gets* a post has to already be a real one.
     ///
     /// The ring respects the same two rules a posted worker's field does:
     /// inside the build radius, and never a tile a `Structure` stands on. A

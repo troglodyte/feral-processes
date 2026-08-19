@@ -85,6 +85,31 @@ pub(crate) fn app_owning_distant_programs_of(seed: u32, species: &[&str]) -> App
     distant_programs(seed, |_| species.iter().map(|s| s.to_string()).collect())
 }
 
+/// The same program the cargo fixture gives, developed: `level` and `ring`
+/// written straight onto its save record and reloaded.
+///
+/// Through the save because nothing in the engine's public API can level a
+/// companion or open a ring for free — `award_party_xp` is `pub(crate)` and
+/// `open_kernel_ring` charges for it, which is the point of both. Three
+/// Privilege Rings ride along in cargo so the ring half of the screen has
+/// something to spend.
+pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app =
+        app_owning_a_program_and_a_compiler_with_cargo(seed, &[], &[("privilege_ring", 3)]);
+    let path = scratch_path("developed", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    for c in data.creatures.iter_mut().filter(|c| c.tamed) {
+        c.level = level;
+        c.ring = ring;
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
 /// The shared body: one program per name `pick` returns. It takes the
 /// `Game` because the count-based caller wants whichever species the roster
 /// happens to list first, and that is not knowable until one is loaded.

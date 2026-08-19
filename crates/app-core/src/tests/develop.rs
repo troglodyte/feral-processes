@@ -2,6 +2,8 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::Entity;
+use feral_processes_engine::tuning::CREATURE_MAX_LEVEL;
 
 /// A program to develop and three Privilege Rings to spend on it.
 fn app_ready_to_develop(seed: u32) -> App {
@@ -91,5 +93,89 @@ fn a_refused_ring_lands_in_the_status_line_and_the_page_holds() {
     assert!(
         status.contains("Privilege Ring"),
         "and it has to name what is missing, got: {status}"
+    );
+}
+
+/// A program two levels past the base cap, so it has two points to spend.
+fn app_ready_to_spend(seed: u32) -> App {
+    let mut app = app_owning_a_developed_program(seed, CREATURE_MAX_LEVEL + 2, 1);
+    open_via_menu(&mut app, 'p', "Develop a program");
+    app.handle_key(GameKey::Char('1'));
+    app
+}
+
+fn takeable(app: &mut App, target: Entity) -> Vec<String> {
+    app.game
+        .as_mut()
+        .unwrap()
+        .talent_options(target)
+        .into_iter()
+        .filter(|o| o.takeable)
+        .map(|o| o.id.to_string())
+        .collect()
+}
+
+#[test]
+fn picking_a_takeable_node_buys_it() {
+    let mut app = app_ready_to_spend(83);
+    let target = app.pending_develop_target.unwrap();
+    let offered = takeable(&mut app, target);
+    assert_eq!(offered.len(), 2, "tier 1 offers a decision");
+
+    app.handle_key(GameKey::Char('1'));
+
+    let game = app.game.as_mut().unwrap();
+    assert_eq!(
+        game.talent_options(target)
+            .into_iter()
+            .filter(|o| o.taken)
+            .map(|o| o.id.to_string())
+            .collect::<Vec<_>>(),
+        vec![offered[0].clone()],
+        "the row the player was looking at is the one bought"
+    );
+    assert_eq!(game.owned_pets()[0].talents, 1);
+}
+
+#[test]
+fn picking_a_node_with_no_points_lands_in_the_status_line_and_holds_the_page() {
+    let mut app = app_owning_a_developed_program(84, CREATURE_MAX_LEVEL, 1);
+    open_via_menu(&mut app, 'p', "Develop a program");
+    app.handle_key(GameKey::Char('1'));
+    let target = app.pending_develop_target.unwrap();
+    assert!(
+        takeable(&mut app, target).is_empty(),
+        "test premise: a capped program has earned nothing to spend"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::DevelopProgram, "the page holds");
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("talent point")),
+        "a player pressing a key on a greyed row has to be told why: {:?}",
+        app.status_line
+    );
+}
+
+/// Both verbs on one page. Opening a ring and spending the point it earns are
+/// the same decision loop, and a later refactor must not quietly split them.
+#[test]
+fn the_ring_and_the_ladder_are_reachable_from_the_same_page() {
+    let mut app = app_ready_to_spend(85);
+    let target = app.pending_develop_target.unwrap();
+
+    app.handle_key(GameKey::Char('r'));
+    assert_eq!(app.mode, Mode::DevelopProgram);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets()[0].ring, 2);
+
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::DevelopProgram);
+    assert_eq!(app.game.as_mut().unwrap().owned_pets()[0].talents, 1);
+    assert!(
+        !takeable(&mut app, target).is_empty(),
+        "one point left, so tier 2 is on offer without leaving the page"
     );
 }

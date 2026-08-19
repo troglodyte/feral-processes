@@ -335,6 +335,39 @@ impl App {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }
+            return;
+        }
+        // The ladder's numbered rows are the next untaken tier's choices —
+        // the same rows the screen draws — so the row the player is looking at
+        // and the row this buys cannot disagree. Whether they can *afford* one
+        // is deliberately not asked here: `take_talent` refuses and says where
+        // points come from, and a second copy of that sentence in app-core is
+        // the drift `ability_unavailable`'s row fragments already cost once.
+        let rows = self
+            .game
+            .as_mut()
+            .map(|g| g.talent_options(target))
+            .unwrap_or_default();
+        let next_tier = rows
+            .iter()
+            .map(|r| r.tier)
+            .find(|tier| !rows.iter().any(|r| r.tier == *tier && r.taken));
+        let offered: Vec<_> = rows
+            .into_iter()
+            .filter(|r| Some(r.tier) == next_tier)
+            .map(|r| r.id)
+            .collect();
+        if let Some(idx) = self.selected_index(key, offered.len()) {
+            let Some(game) = &mut self.game else { return };
+            match game.take_talent(target, &offered[idx]) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+            // The list the highlight was drawn against just moved on to the
+            // next tier, and the mode has not changed, so `handle_key`'s own
+            // reset never fires — the same trap `handle_refactor_item_key`
+            // clamps for, and a talent is just as permanent as an upgrade.
+            self.menu_selected = 0;
         }
     }
 

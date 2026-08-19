@@ -1330,7 +1330,10 @@ pub enum InspectTarget {
 
 pub enum ManifestSubject {
     Player(PlayerManifest),
-    Program(ProgramManifest),
+    /// Boxed because a program's sheet is three times the player's and the
+    /// enum would otherwise be sized by the larger arm everywhere it is
+    /// returned — the shape `clippy::large_enum_variant` names.
+    Program(Box<ProgramManifest>),
 }
 
 /// The player-only half of a manifest.
@@ -1405,6 +1408,19 @@ pub struct ProgramManifest {
     /// pair as `fusions`/`max_fusions` above and for the same reason.
     pub refactors: u32,
     pub max_refactors: u32,
+    /// Kernel rings open on this program and `tuning::KERNEL_RING_MAX`, the
+    /// same pair as `fusions`/`max_fusions` above — see
+    /// `components::KernelRing`.
+    pub ring: u32,
+    pub max_ring: u32,
+    /// The level this program can reach with the rings it has
+    /// (`Game::companion_level_cap`). Carried beside the ring count because
+    /// the count alone says nothing about what it bought.
+    pub level_cap: u32,
+    /// Talent points spent and earned — see `Game::talent_points`. Both
+    /// derived; neither is stored anywhere.
+    pub talents_spent: u32,
+    pub talents_earned: u32,
     /// The zone tier this program is scaled to (`components::ZonePortal`),
     /// beside the zone the player is currently standing in.
     ///

@@ -812,7 +812,7 @@ impl Game {
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
-            subject: ManifestSubject::Program(ProgramManifest {
+            subject: ManifestSubject::Program(Box::new(ProgramManifest {
                 species_name: custom
                     .is_some()
                     .then(|| self.zone_tagged_name(entity, species.name.clone())),
@@ -838,6 +838,11 @@ impl Game {
                 rarity: self.rarity_of(entity),
                 refactors: self.refactor_count(entity),
                 max_refactors: MAX_COMPANION_REFACTORS,
+                ring: self.world.get::<KernelRing>(entity).map_or(0, |r| r.0),
+                max_ring: crate::tuning::KERNEL_RING_MAX,
+                level_cap: self.companion_level_cap(entity),
+                talents_spent: self.talent_points(entity).spent,
+                talents_earned: self.talent_points(entity).earned,
                 zone_tier: self.zone_tier(entity),
                 player_zone: self.world.resource::<ZoneLevel>().0,
                 habitats: species.habitats.clone(),
@@ -855,7 +860,7 @@ impl Game {
                 base_int: species.base_int,
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
-            }),
+            })),
         })
     }
 

@@ -343,6 +343,9 @@ mod tests {
             // works, so four is the real worst case. A boss has neither and
             // sits at two.
             section("WORK", 4, false),
+            // Rings, ceiling and talents. Emitted only for a developed
+            // program, which is exactly what a worst case is.
+            section("DEVELOPMENT", 3, false),
             // One row per occupied `EquipmentSlot`, so `EquipmentSlot::ALL`
             // is the cap. Any program the player owns can wear gear as of
             // 0.8.0, so a fully kitted companion is the worst case here and

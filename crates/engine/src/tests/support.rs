@@ -1691,7 +1691,7 @@ pub(super) fn program_manifest(game: &Game, entity: Entity) -> ProgramManifest {
         .expect("entity should have a manifest")
         .subject
     {
-        ManifestSubject::Program(p) => p,
+        ManifestSubject::Program(p) => *p,
         ManifestSubject::Player(_) => panic!("expected a program, got the player"),
     }
 }

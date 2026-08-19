@@ -517,6 +517,25 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         full_width: false,
     });
 
+    // Only for a program that has been developed, the way the `fused` and
+    // `upgraded` header tags only show once they mean something: an
+    // undeveloped program's box would be three rows of zero on a page whose
+    // column budget is already the tightest thing in the renderer.
+    if p.ring > 0 || p.talents_earned > 0 {
+        sections.push(Section {
+            title: "DEVELOPMENT",
+            rows: section_rows(vec![
+                stat("Kernel rings", format!("{}/{}", p.ring, p.max_ring)),
+                stat("Level ceiling", p.level_cap.to_string()),
+                stat(
+                    "Talents",
+                    format!("{}/{} spent", p.talents_spent, p.talents_earned),
+                ),
+            ]),
+            full_width: false,
+        });
+    }
+
     if !p.moves.is_empty() {
         sections.push(Section {
             title: "MOVES",
@@ -674,6 +693,11 @@ mod tests {
             rarity: Rarity::Ordinary,
             refactors: 0,
             max_refactors: 3,
+            ring: 0,
+            max_ring: 3,
+            level_cap: 6,
+            talents_spent: 0,
+            talents_earned: 0,
             zone_tier: 1,
             player_zone: 1,
             habitats: vec![],
@@ -852,7 +876,7 @@ mod tests {
                 description: String::new(),
             }],
             equipment,
-            subject: ManifestSubject::Program(program),
+            subject: ManifestSubject::Program(Box::new(program)),
         }
     }
 
@@ -907,6 +931,12 @@ mod tests {
         // only for an unposted boss.
         program.base_job = Some(AffinityClass::Striker);
         program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
+        // Developed, because DEVELOPMENT is emitted only for a program that
+        // has been — and the worst case is what the layout fixture mirrors.
+        program.ring = 3;
+        program.level_cap = 12;
+        program.talents_earned = 6;
+        program.talents_spent = 6;
         let view = program_view(program, vec![worn("Weapon"), worn("Armor")]);
 
         let sections = sections_for(&game, &view);
@@ -921,6 +951,7 @@ mod tests {
                 ("COMBAT", 3, false),
                 ("SPECIES", 5, false),
                 ("WORK", 4, false),
+                ("DEVELOPMENT", 3, false),
                 ("MOVES", 1, true),
                 ("EQUIPMENT", 2, false),
                 ("ROUTINES", 1, false),

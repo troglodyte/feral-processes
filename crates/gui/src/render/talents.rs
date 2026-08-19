@@ -8,6 +8,7 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_engine::TalentOption;
 
 /// Page one: which program.
 pub(super) fn draw_develop(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
@@ -47,7 +48,7 @@ pub(super) fn draw_develop(game: &mut Game, selected: usize, painter: &Painter, 
 pub(super) fn draw_develop_program(
     game: &mut Game,
     target: Option<Entity>,
-    _selected: usize,
+    selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -59,6 +60,9 @@ pub(super) fn draw_develop_program(
     };
     let cap = game.companion_level_cap(target);
     let held = game.privilege_rings_held();
+
+    let points = game.talent_points(target);
+    let options = game.talent_options(target);
 
     let mut rows = vec![
         text_row(format!("Developing {}.", subject.name)),
@@ -79,7 +83,66 @@ pub(super) fn draw_develop_program(
             "Ring {} costs {cost} Privilege Rings; you hold {held}.",
             subject.ring + 1
         )));
-        rows.push(item_row("[R] Open the next kernel ring", true));
+        rows.push(item_row("[R] Open the next kernel ring", false));
+    }
+
+    rows.push(text_row(""));
+    rows.push(text_row(format!(
+        "Talent points: {} unspent of {} earned.",
+        points.unspent(),
+        points.earned
+    )));
+    if points.earned == 0 {
+        rows.push(text_row(
+            "Levels earned past the ceiling pay for talents — go and earn one.",
+        ));
+    }
+    // The ladder, tier by tier, so what has been bought and what is still out
+    // of reach read as one shape. The numbered rows are exactly the ones
+    // `handle_develop_program_key` offers.
+    let mut shortcut = 0;
+    let mut tier_shown = 0;
+    for option in &options {
+        if option.tier != tier_shown {
+            tier_shown = option.tier;
+            rows.push(text_row(format!("Tier {tier_shown}")));
+        }
+        if option.taken {
+            rows.push(text_row(format!(
+                "  * {} — {}",
+                option.name, option.description
+            )));
+        } else if tier_is_next(&options, option.tier) {
+            // Numbered even when the point is not there yet, because the row
+            // still resolves to a key and `take_talent` is what says no —
+            // greying it out silently would leave the player pressing a
+            // number and reading nothing.
+            let row = item_row(
+                format!(
+                    "  [{}] {} ({}) — {}",
+                    menu_shortcut(shortcut),
+                    option.name,
+                    option.tag,
+                    option.description
+                ),
+                shortcut == selected,
+            );
+            shortcut += 1;
+            rows.push(row);
+        } else {
+            rows.push(text_row(format!("  - {} ({})", option.name, option.tag)));
+        }
     }
     draw_popup("Develop", PopupSize::Large, &rows, painter, m);
+}
+
+/// Whether `tier` is the one a point would be spent in next — the first with
+/// nothing taken in it. The same rule `handle_develop_program_key` numbers its
+/// rows by, so the shortcut a row shows is the shortcut that buys it.
+fn tier_is_next(options: &[TalentOption], tier: u32) -> bool {
+    options
+        .iter()
+        .map(|o| o.tier)
+        .find(|t| !options.iter().any(|o| o.tier == *t && o.taken))
+        == Some(tier)
 }

@@ -449,3 +449,74 @@ fn an_affinity_talent_on_the_player_changes_nothing() {
 
     assert_eq!(game.ability_affinity(player, &damage), before);
 }
+
+/// `fuse_companions` is the roster door with no compiler barrier: it assembles
+/// its own component list, so nothing fails to build when a component is
+/// missing from it — and the symptom, a fused program that lost its
+/// development, reads as fusion being bad rather than as a dropped field.
+///
+/// The survivor is the parent whose species and level the child takes.
+#[test]
+fn a_fused_program_keeps_the_dominant_parents_ring_and_talents() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let developed_pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    game.take_talent(developed_pet, &TalentId::from(GEN_HP))
+        .unwrap();
+    let carried = *game.world.get::<Stats>(developed_pet).unwrap();
+    let plain = spawn_tamed(&mut game, 10, 3);
+
+    game.fuse_companions(developed_pet, plain, None).unwrap();
+
+    let child = game
+        .owned_pets()
+        .first()
+        .map(|p| p.entity)
+        .expect("the fusion produced a program");
+    assert_eq!(
+        game.world.get::<KernelRing>(child).map(|r| r.0),
+        Some(KERNEL_RING_MAX),
+        "the rings were bought with lair guardians and must not evaporate"
+    );
+    assert_eq!(
+        game.world.get::<Talents>(child).map(|t| t.0.clone()),
+        Some(vec![TalentId::from(GEN_HP)]),
+        "and so must the receipt for what they paid for"
+    );
+    assert!(
+        game.world.get::<Stats>(child).unwrap().max_hp >= carried.max_hp,
+        "the stats a Stat node baked in ride the parents' numbers into the child"
+    );
+    assert_eq!(
+        game.talent_points(child).spent,
+        1,
+        "and the child has spent what its parent spent — not a free point"
+    );
+}
+
+#[test]
+fn the_consumed_programs_ring_and_talents_do_not_transfer() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // The *lower* level parent is the developed one, so it is the one
+    // consumed: the child takes the dominant parent's species and level, and
+    // development follows the same parent.
+    let consumed = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(consumed)
+        .insert(KernelRing(KERNEL_RING_MAX));
+    set_level(&mut game, consumed, CREATURE_MAX_LEVEL);
+    game.world
+        .entity_mut(consumed)
+        .insert(Talents(vec![TalentId::from(GEN_HP)]));
+    let survivor = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    game.world.entity_mut(survivor).remove::<KernelRing>();
+
+    game.fuse_companions(survivor, consumed, None).unwrap();
+
+    let child = game.owned_pets()[0].entity;
+    assert_eq!(
+        game.world.get::<KernelRing>(child).map(|r| r.0),
+        None,
+        "fusing a developed program into another is not how you launder its rings"
+    );
+    assert!(game.world.get::<Talents>(child).is_none());
+}

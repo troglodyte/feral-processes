@@ -798,11 +798,18 @@ impl Game {
                 .copied()
                 .unwrap_or(Potential::NEUTRAL),
         );
-        let (species_id, level) = if exp_a.level >= exp_b.level {
-            (species_a, exp_a.level)
+        // The dominant parent — whose species and level the child takes — is
+        // also the one whose *development* it inherits. A ring cost a lair
+        // guardian and the talents cost the levels it bought, so neither may
+        // evaporate here; and taking only one parent's is what stops fusion
+        // being a way to launder two developed programs into one.
+        let (species_id, level, dominant) = if exp_a.level >= exp_b.level {
+            (species_a, exp_a.level, a)
         } else {
-            (species_b, exp_b.level)
+            (species_b, exp_b.level, b)
         };
+        let fused_ring = self.world.get::<KernelRing>(dominant).copied();
+        let fused_talents = self.world.get::<Talents>(dominant).cloned();
         let species = self
             .world
             .resource::<SpeciesDb>()
@@ -893,6 +900,16 @@ impl Game {
             xp: 0,
             xp_to_next: progression::xp_for_level(level),
         });
+        // Inserted only when present, the absent-means-none idiom
+        // `components::KernelRing` documents — and never re-applied: a `Stat`
+        // talent's effect is already in `fuse_stat`'s inputs, which were the
+        // parents' own numbers.
+        if let Some(ring) = fused_ring {
+            fused.insert(ring);
+        }
+        if let Some(talents) = fused_talents {
+            fused.insert(talents);
+        }
         let fused_entity = fused.id();
         if let Some(name) = &final_name {
             fused.insert(CustomName(name.clone()));

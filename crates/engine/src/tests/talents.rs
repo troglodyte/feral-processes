@@ -353,3 +353,99 @@ fn an_ability_talent_for_a_known_routine_does_not_duplicate_it() {
         "got: {held:?}"
     );
 }
+
+/// The generic tree's fourth tier is the Damage/Heal pair, so four points get
+/// there. Everything below it is bought with the cheapest node available.
+fn a_pet_with_an_affinity_talent(game: &mut Game, which: &str) -> Entity {
+    let pet = developed(game, CREATURE_MAX_LEVEL + 4);
+    for id in [GEN_HP, "gen_interrupt", "gen_slot", which] {
+        game.take_talent(pet, &TalentId::from(id)).unwrap();
+    }
+    pet
+}
+
+#[test]
+fn an_affinity_talent_sharpens_the_category_it_names_and_no_other() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain = developed(&mut game, CREATURE_MAX_LEVEL + 4);
+    let damage = AbilityEffect::Damage {
+        power: 10,
+        status: None,
+    };
+    let heal = AbilityEffect::Heal { power: 10 };
+    let base_damage = game.ability_affinity(plain, &damage);
+    let base_heal = game.ability_affinity(plain, &heal);
+
+    let sharpened = a_pet_with_an_affinity_talent(&mut game, "gen_damage");
+
+    assert!(
+        game.ability_affinity(sharpened, &damage) > base_damage,
+        "a Damage node has to make a Damage Special land harder"
+    );
+    assert_eq!(
+        game.ability_affinity(sharpened, &heal),
+        base_heal,
+        "and must not raise a category it does not name"
+    );
+
+    let mender = a_pet_with_an_affinity_talent(&mut game, "gen_heal");
+    assert!(game.ability_affinity(mender, &heal) > base_heal);
+    assert_eq!(game.ability_affinity(mender, &damage), base_damage);
+}
+
+/// Clamped the same way the player's perk arm is. Staged with a modded tree,
+/// because no combination of shipped nodes reaches the ceiling — which is the
+/// content rule working, not a gap.
+#[test]
+fn an_affinity_talent_is_clamped_at_the_ceiling() {
+    let tree = r#"(
+    class: None,
+    tiers: [
+        [
+            (id: "over_damage", name: "Over", description: "d", node: Affinity(kind: Damage, mult: 9.0)),
+            (id: "over_heal", name: "Over", description: "d", node: Affinity(kind: Heal, mult: 9.0)),
+        ],
+        [ (id: "f1a", name: "A", description: "d", node: RoutineSlot), (id: "f1b", name: "B", description: "d", node: RoutineSlot) ],
+        [ (id: "f2a", name: "A", description: "d", node: RoutineSlot), (id: "f2b", name: "B", description: "d", node: RoutineSlot) ],
+        [ (id: "f3a", name: "A", description: "d", node: RoutineSlot), (id: "f3b", name: "B", description: "d", node: RoutineSlot) ],
+        [ (id: "f4a", name: "A", description: "d", node: RoutineSlot), (id: "f4b", name: "B", description: "d", node: RoutineSlot) ],
+        [ (id: "f5a", name: "A", description: "d", node: RoutineSlot), (id: "f5b", name: "B", description: "d", node: RoutineSlot) ],
+    ],
+)"#;
+    let dir = assets_dir_with_talents("affinity_clamp", &[("generic.ron", tree)]);
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &dir).unwrap();
+    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 1);
+
+    game.take_talent(pet, &TalentId::from("over_damage"))
+        .unwrap();
+
+    assert_eq!(
+        game.ability_affinity(
+            pet,
+            &AbilityEffect::Damage {
+                power: 10,
+                status: None,
+            }
+        ),
+        crate::tuning::AFFINITY_MAX,
+        "a talent cannot take a companion past the bound tuning.rs reasons about"
+    );
+}
+
+/// Perks are the player's axis and a companion's affinity is its species'
+/// business — a party-wide version would multiply against the perk.
+#[test]
+fn an_affinity_talent_on_the_player_changes_nothing() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let damage = AbilityEffect::Damage {
+        power: 10,
+        status: None,
+    };
+    let before = game.ability_affinity(player, &damage);
+    game.world
+        .entity_mut(player)
+        .insert(Talents(vec![TalentId::from("gen_damage")]));
+
+    assert_eq!(game.ability_affinity(player, &damage), before);
+}

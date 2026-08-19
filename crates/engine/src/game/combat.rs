@@ -1,7 +1,7 @@
 //! Starting a battle and planning a round: pack gathering, initiative, and
 //! the action menus the renderer draws from.
 
-use crate::abilities::AbilityId;
+use crate::abilities::{AbilityId, AffinityKind};
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE,
     PLAYER_BASE_SPEED,
@@ -826,11 +826,40 @@ impl Game {
                 + kind.perk_bonus_per_level() * self.player_perk_level(kind.perk()) as f32;
             return affinity.min(AFFINITY_MAX);
         }
-        self.world
+        let species = self
+            .world
             .get::<Creature>(actor)
             .and_then(|c| self.species_affinities(&c.species))
             .map(|a| a.get(kind))
-            .unwrap_or(AFFINITY_NEUTRAL)
+            .unwrap_or(AFFINITY_NEUTRAL);
+        // Talents are the *companion's* axis, in the creature arm only: perks
+        // are the player's, and the two never stack. Clamped the same way the
+        // perk arm above is, and for the same reason — a mod's tree may author
+        // any magnitude it likes, and `tuning.rs` reasons about `AFFINITY_MAX`
+        // everywhere else.
+        (species * self.talent_affinity_mult(actor, kind)).min(AFFINITY_MAX)
+    }
+
+    /// The product of every `TalentNode::Affinity` `actor` has taken for
+    /// `kind` — `AFFINITY_NEUTRAL` when it has none, so the arm above is one
+    /// expression either way.
+    fn talent_affinity_mult(&self, actor: Entity, kind: AffinityKind) -> f32 {
+        let Some(taken) = self.world.get::<Talents>(actor) else {
+            return AFFINITY_NEUTRAL;
+        };
+        let Some(tree) = self.talent_tree(actor) else {
+            return AFFINITY_NEUTRAL;
+        };
+        tree.tiers
+            .iter()
+            .flat_map(|tier| tier.0.iter())
+            .filter(|choice| taken.0.contains(&choice.id))
+            .filter_map(|choice| match &choice.node {
+                crate::talents::TalentNode::Affinity { kind: k, mult } if *k == kind => Some(*mult),
+                _ => None,
+            })
+            .product::<f32>()
+            * AFFINITY_NEUTRAL
     }
 
     /// Every ability the combatant at `entity` can be commanded to use, in

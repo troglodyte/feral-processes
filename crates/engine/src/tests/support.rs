@@ -434,6 +434,22 @@ pub(super) fn modded_assets_dir(
     dir
 }
 
+/// A scratch install whose `talents/` directory holds the shipped trees plus
+/// `files` written on top — the way a mod overriding one class's ladder looks.
+///
+/// A tree with a magnitude no shipped one carries is the only way to test
+/// `Game::ability_affinity`'s clamp from the talent side: the shipped nodes are
+/// deliberately small enough that no combination of them reaches
+/// `AFFINITY_MAX`, which is the content rule working rather than an omission.
+pub(super) fn assets_dir_with_talents(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    for (name, body) in files {
+        std::fs::write(dir.join("talents").join(name), body).unwrap();
+    }
+    dir
+}
+
 /// Like `modded_assets_dir`, but for the one existing test that needs a
 /// modded *structure* — none of `modded_assets_dir`'s five callers-so-far
 /// have needed one, and widening its signature for a single caller isn't

@@ -194,6 +194,16 @@ impl Game {
         Ok(())
     }
 
+    /// How many Privilege Rings the player is carrying. One reader so the
+    /// Develop screen never reaches for the item id itself — the same argument
+    /// `Game::item_value` makes about a renderer working a price out.
+    pub fn privilege_rings_held(&self) -> u32 {
+        let item = ItemId::from(crate::items::ids::PRIVILEGE_RING);
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .map_or(0, |i| i.count(&item))
+    }
+
     /// What opening the ring *after* `ring` costs, in Privilege Rings: one for
     /// the first, two for the second, three for the third. Takes the current
     /// count rather than the target, so no caller has to add one itself.

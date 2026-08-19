@@ -14,7 +14,9 @@ use feral_processes_app_core::{
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId};
 use feral_processes_engine::structures::StructureCategory;
-use feral_processes_engine::tuning::{MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE};
+use feral_processes_engine::tuning::{
+    KERNEL_RING_MAX, MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE,
+};
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
@@ -43,6 +45,7 @@ mod routines;
 mod stack;
 mod stack_market;
 mod structure_manifest;
+mod talents;
 mod trade;
 
 use arena::{
@@ -83,6 +86,7 @@ use routines::{
     draw_routine_target, draw_routines,
 };
 use stack_market::draw_stack_market;
+use talents::{draw_develop, draw_develop_program};
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -718,6 +722,10 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),
         Mode::RoutineEtch => draw_routine_etch(game, selected, painter, m),
         Mode::Refactor => draw_refactor(game, selected, painter, m),
+        Mode::Develop => draw_develop(game, selected, painter, m),
+        Mode::DevelopProgram => {
+            draw_develop_program(game, app.pending_develop_target, selected, painter, m)
+        }
         Mode::RefactorItem => {
             draw_refactor_item(game, app.pending_refactor_target, selected, painter, m)
         }

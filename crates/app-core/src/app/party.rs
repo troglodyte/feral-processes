@@ -298,6 +298,46 @@ impl App {
         }
     }
 
+    /// Picks which program to develop, then goes on to the one page that
+    /// spends on it. Two pages for the same reason the refactor flow has two:
+    /// which program is a separate decision from what to do to it.
+    pub(crate) fn handle_develop_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let programs = game.owned_pets();
+        if let Some(idx) = self.selected_index(key, programs.len()) {
+            self.pending_develop_target = Some(programs[idx].entity);
+            self.mode = Mode::DevelopProgram;
+        }
+    }
+
+    /// Opens the next Kernel Ring on the chosen program and stays on this
+    /// page, the way `handle_refactor_item_key` does: a player opening two
+    /// rings in a row should not be sent back to pick the program again, and
+    /// the page is where the ceiling it bought is shown. A refusal lands in
+    /// the status line and the page holds.
+    pub(crate) fn handle_develop_program_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_develop_target = None;
+            self.mode = Mode::Develop;
+            return;
+        }
+        let Some(target) = self.pending_develop_target else {
+            self.mode = Mode::Develop;
+            return;
+        };
+        if matches!(key, GameKey::Char('r') | GameKey::Char('R')) {
+            let Some(game) = &mut self.game else { return };
+            match game.open_kernel_ring(target) {
+                Ok(()) => self.status_line = None,
+                Err(e) => self.status_line = Some(e),
+            }
+        }
+    }
+
     /// Picks which program to permanently upgrade, then goes on to what to
     /// spend on it. Two pages rather than one, mirroring the routine install
     /// flow: which program and which upgrade are separate decisions, and the

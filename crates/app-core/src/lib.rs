@@ -877,6 +877,18 @@ pub enum Mode {
     /// lists cargo only — so the one refusal a screen could prevent is
     /// prevented by there being no row for it.
     RefactorItem,
+    /// Picking which program to develop past its level ceiling. Reached from
+    /// the party group menu; `surface_only: false` for the same reason
+    /// `Mode::Refactor` is — the screen reaches no zone-map state through
+    /// `Position`, and a lair guardian's ring is spent underground.
+    Develop,
+    /// The one Develop page: what a program's rings and talents are, and both
+    /// verbs for changing them.
+    ///
+    /// One page rather than two because opening a ring and spending the
+    /// talent point it earns are the same decision loop — splitting them would
+    /// make the player back out to see what they just bought.
+    DevelopProgram,
     /// Picking which program to break down for a routine. Reached with `M`
     /// from `Mode::Playing`.
     Extract,
@@ -1058,6 +1070,8 @@ impl Mode {
             | Mode::FieldCastCell
             | Mode::Refactor
             | Mode::RefactorItem
+            | Mode::Develop
+            | Mode::DevelopProgram
             | Mode::Extract
             | Mode::ExtractPick
             | Mode::ExtractConfirm
@@ -1266,6 +1280,9 @@ pub struct App {
     /// The program picked in `Mode::Refactor`, awaiting an upgrade pick from
     /// `Mode::RefactorItem`.
     pub pending_refactor_target: Option<Entity>,
+    /// The program picked in `Mode::Develop`, whose rings and talents
+    /// `Mode::DevelopProgram` then spends on.
+    pub pending_develop_target: Option<Entity>,
     /// The program picked in `Mode::Extract`, awaiting a routine pick from
     /// `Mode::ExtractPick`.
     pub pending_extract_program: Option<Entity>,

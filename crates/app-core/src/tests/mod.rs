@@ -8,6 +8,7 @@ mod battle;
 mod building;
 mod contracts;
 mod dev_console;
+mod develop;
 mod field;
 mod fusion;
 mod group_menus;

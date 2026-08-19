@@ -219,6 +219,20 @@ const PARTY_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // One half, not two: a program is enough. Whether a ring can be
+        // opened depends on cargo, but the same page shows the talent ladder
+        // — a developed program with no rings left to buy still has points to
+        // spend. Not `surface_only`, like the refactor row above it.
+        label: "Develop a program",
+        target: Mode::Develop,
+        surface_only: false,
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| !g.owned_pets().is_empty())
+        },
+    },
+    GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
         surface_only: false,

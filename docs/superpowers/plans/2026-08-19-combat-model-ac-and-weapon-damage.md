@@ -32,7 +32,7 @@
 
 Three points the spec does not settle. Each is decided here rather than left to the executor, and each is flagged so the user can overrule it:
 
-1. **`FieldBuffKind::Def` is folded into `FieldBuffKind::Mitigation` and the variant deleted.** Once `Stats::def` is percentage points there is no flat-DEF axis left for it to name, and two names on one axis is exactly what the spec refuses when it says to reuse "Mitigation" rather than introduce "Armor". The two shipped abilities that author it (`assets/abilities/hardened_shell.ron`, `hardened_shell_party.ron`, both `power: 4`) are re-authored to `Mitigation` with percentage-point powers in Task 6. The save bump in Task 3 covers the enum change.
+1. **`FieldBuffKind::Def` is folded into `FieldBuffKind::Mitigation` and the variant deleted.** Once `Stats::def` is percentage points there is no flat-DEF axis left for it to name, and two names on one axis is exactly what the spec refuses when it says to reuse "Mitigation" rather than introduce "Armor". `BuffKind::Def` is renamed alongside it, and all ten shipped ability files that author `kind: Def` (eight `Buff`, two `FieldBuff`) are re-authored to `Mitigation` with percentage-point powers in Task 4. The save bump in Task 3 covers both enum changes.
 
 2. **Gear mitigation is already inside `Stats`, so `effective_mitigation` must not add it again.** `Game::apply_equipment_delta` (`crates/engine/src/game/crafting.rs:225`) writes an equipped item's `atk`/`def` straight into `Stats`. The spec's "innate + gear + field buffs" is therefore satisfied by reading `Stats::mitigation` once. Gear `accuracy`, `evasion` and `damage` have **no** `Stats` field and are read live through `Game::gear_bonus` — `apply_equipment_delta` must never try to bake them in.
 

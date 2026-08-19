@@ -24,6 +24,7 @@ mod contracts;
 mod crafting;
 mod descriptions;
 mod easter_eggs;
+mod environment;
 mod equipment;
 mod exclusive_routines;
 mod field;

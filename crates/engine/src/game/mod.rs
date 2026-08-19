@@ -19,6 +19,7 @@ pub(crate) mod combat_teardown;
 pub(crate) mod contracts;
 pub(crate) mod crafting;
 pub(crate) mod descriptions;
+pub(crate) mod environment;
 pub(crate) mod field;
 pub(crate) mod inspection;
 pub(crate) mod lifecycle;

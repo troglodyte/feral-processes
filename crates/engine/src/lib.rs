@@ -9,6 +9,7 @@ pub mod contracts;
 pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;
+pub mod environment;
 mod game;
 pub mod items;
 pub mod items_db;

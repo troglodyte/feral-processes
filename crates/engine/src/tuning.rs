@@ -2320,6 +2320,32 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 pub const MAX_NEMESES: usize = 10;
 
 // ---------------------------------------------------------------------------
+// Environment effects
+// ---------------------------------------------------------------------------
+
+/// Most of the player's maximum Integrity a single step onto ambient ground
+/// may cost, as a fraction (see `environment::EnvironmentEffect::Attrition`).
+///
+/// A playability bound rather than content, which is why it is here and not
+/// in the `.ron`. Terrain is not a fight: it cannot be fled, refused or
+/// out-levelled, and a step is the cheapest action in the game. An authored
+/// `0.5` is death in two steps with no decision in between, and the file
+/// that wrote it would look no different from one that meant it. Set so a
+/// sector of the worst legal ground is a supply problem rather than a
+/// countdown — crossing it wants planning, not luck.
+pub const MAX_ENVIRONMENT_ATTRITION: f32 = 0.05;
+
+/// Most extra ticks a single step onto ambient ground may cost, on top of
+/// the one every step already costs.
+///
+/// The bound is against a hang the player cannot tell from a crash: a tick
+/// runs the whole schedule, and an authored `10_000` would stop the game
+/// dead on one keypress with no way to tell what happened. Three is already
+/// a step that costs four, which is as slow as ground can be before walking
+/// stops being the way you get anywhere.
+pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
+
+// ---------------------------------------------------------------------------
 // Sector traits
 // ---------------------------------------------------------------------------
 

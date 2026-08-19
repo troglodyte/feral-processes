@@ -457,6 +457,24 @@ pub(super) fn assets_dir_with_sectors(tag: &str, files: &[(&str, &str)]) -> Scra
     dir
 }
 
+/// A scratch install whose `environment/` directory holds exactly `files`
+/// and nothing else.
+///
+/// `&[]` gives an install with **no** ambient effects, which is the
+/// pre-environment game and the only way to assert that absence is still
+/// supported. Cleanup is the `ScratchAssets` guard's, not the caller's.
+pub(super) fn assets_dir_with_environment(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let environment = dir.join("environment");
+    let _ = std::fs::remove_dir_all(&environment);
+    std::fs::create_dir_all(&environment).unwrap();
+    for (name, body) in files {
+        std::fs::write(environment.join(name), body).unwrap();
+    }
+    dir
+}
+
 pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);

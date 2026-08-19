@@ -73,6 +73,7 @@ impl Game {
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
+            environment: environment_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -102,6 +103,7 @@ impl Game {
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
+        world.insert_resource(environment_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -257,6 +259,7 @@ impl Game {
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
+            environment: environment_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -300,6 +303,7 @@ impl Game {
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
+        world.insert_resource(environment_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1339,6 +1343,7 @@ struct AssetDbs {
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
+    environment: crate::environment::EnvironmentDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
     structures: StructureDb,
@@ -1397,6 +1402,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (sectors, sector_warnings) =
         crate::sectors::SectorDb::load_dir(&assets_dir.join("sectors"))?;
     warnings.extend(sector_warnings);
+    // Same absent-is-silent rule again — see `EnvironmentDb`. Deleting the
+    // directory restores the pre-environment game exactly.
+    let (environment, environment_warnings) =
+        crate::environment::EnvironmentDb::load_dir(&assets_dir.join("environment"))?;
+    warnings.extend(environment_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.
@@ -1446,6 +1456,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         achievements,
         contracts,
         descriptions,
+        environment,
         nemesis,
         species,
         structures,

@@ -21,7 +21,7 @@ pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
     (1, 1),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Biome {
     DataVoid,
     /// Renamed from `StaticField`; the alias is what keeps every save and

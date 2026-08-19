@@ -125,11 +125,17 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
             node.name,
             node.cost
         );
-        // An unlocked node is kept on the list as a record of what's been
-        // bought, so it has to read as spent rather than as an option.
+        // Only an `Available` node is an option right now. An unlocked one
+        // is kept on the list as a record of what's been bought, and a
+        // locked one as a signpost to what the tree leads to — neither can
+        // be picked, so both are dimmed and the tag alone says which is
+        // which. Dimming by state rather than by *reason* is deliberate:
+        // a prerequisite and a breach are both things the row is waiting
+        // on, and colouring them apart would give the colour a second
+        // meaning the text already carries.
         rows.push(match node.state {
-            ResearchState::Unlocked => spent_item_row(label, i == selected),
-            _ => item_row(label, i == selected),
+            ResearchState::Available => item_row(label, i == selected),
+            _ => spent_item_row(label, i == selected),
         });
         rows.extend(description_rows(&node.description));
     }
@@ -187,6 +193,60 @@ mod tests {
     fn an_unlocked_row_reads_as_spent_and_an_available_one_says_nothing() {
         assert_eq!(state_tag(&ResearchState::Unlocked), " (researched)");
         assert_eq!(state_tag(&ResearchState::Available), "");
+    }
+
+    /// A node held up by a prerequisite cannot be bought, so it must not be
+    /// drawn in the same colour as the nodes that can. The tag says *why*,
+    /// but a player scanning the list picks the bright rows without reading
+    /// it — which is the whole reason state has to reach the colour and not
+    /// only the text.
+    #[test]
+    fn only_an_available_node_is_drawn_as_pickable() {
+        let node = |id: &str, state: ResearchState| ResearchStatus {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: String::new(),
+            cost: 10,
+            state,
+            affordable: true,
+        };
+        let nodes = [
+            node("open", ResearchState::Available),
+            node(
+                "blocked",
+                ResearchState::Locked {
+                    missing: vec!["Automation".to_string()],
+                    min_zone: None,
+                },
+            ),
+            node(
+                "gated",
+                ResearchState::Locked {
+                    missing: Vec::new(),
+                    min_zone: Some(3),
+                },
+            ),
+            node("bought", ResearchState::Unlocked),
+        ];
+        // Every node's description is empty, so each contributes exactly one
+        // row and the header's three `Row::Text`s are all that precede them.
+        let rows = research_menu_rows(999, &nodes, 0);
+        let colors: Vec<Color> = rows
+            .iter()
+            .filter_map(|row| match row {
+                Row::Item { color, .. } => Some(*color),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(colors.len(), nodes.len(), "one row per node");
+        assert_eq!(colors[0], TEXT, "an available node is the only option");
+        for (i, name) in ["blocked", "gated", "bought"].iter().enumerate() {
+            assert_eq!(
+                colors[i + 1],
+                TEXT_DIM,
+                "a {name} node cannot be picked and must not read as if it can"
+            );
+        }
     }
 
     /// `draw_row` clamps a row vertically and nothing clamps it

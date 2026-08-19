@@ -976,7 +976,7 @@ impl ZoneLevel {
     /// per level and a flat point or two per item, so a doubling enemy curve
     /// is a geometric quantity racing a linear one — a race the geometric
     /// side always eventually wins, whatever the coefficients. Damage is
-    /// `move_power + atk - def` floored at `MIN_DAMAGE`, so "eventually wins"
+    /// a positive expected value against any mitigation, so "eventually wins"
     /// means every swing lands on the floor and no amount of levelling, gear
     /// or roster moves it. Measured before the change: a zone-3 Stack
     /// guardian was unbeatable at level 90 in the best gear in the game.

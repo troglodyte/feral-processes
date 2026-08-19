@@ -88,8 +88,8 @@ fn a_won_fight_marks_nobody() {
 /// defeat path is ever what actually ends the fight, that assertion fails
 /// loudly instead of the test passing for the wrong reason.
 ///
-/// A failed attempt is not free of risk here — `battle::compute_damage`
-/// floors every landed hit at `tuning::MIN_DAMAGE`, so even this fixture's
+/// A failed attempt is not free of risk here — a landed hit
+/// leaves every landed hit worth at least a point, so even this fixture's
 /// zero-`atk` wild program (`spawn_wild_on_player_tile`) still deals 1
 /// damage per hit; "deals no damage" would be the wrong reason to trust
 /// this loop. What actually keeps 200 straight failures vanishingly

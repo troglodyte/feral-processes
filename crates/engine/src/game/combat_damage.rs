@@ -79,7 +79,7 @@ impl Game {
     ) -> battle::Combatant {
         let gear = self.gear_bonus(entity);
         let level = self.ability_user_level(entity);
-        let speed = self.species_base_speed(entity);
+        let speed = self.combat_speed(entity);
         let evasion = battle::evasion_of(speed, level, gear.evasion);
         // The Exposed rung's whole cost. Read here rather than folded into
         // `evasion_of` because it is entity state rather than a property of

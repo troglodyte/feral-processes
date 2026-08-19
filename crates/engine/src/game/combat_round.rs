@@ -1027,7 +1027,7 @@ impl Game {
                 } => {
                     // Mitigation is `apply_damage`'s, not a term here — see
                     // `party_member_attacks` for why passing it to
-                    // `compute_damage` too would count it twice.
+                    // the damage formula too would count it twice.
                     // **No `attack_range` here.** A Special is the
                     // ability's own damage, not the caster's weapon — the
                     // override is a property of a basic attack.

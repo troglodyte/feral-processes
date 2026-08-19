@@ -10,7 +10,7 @@ use crate::tuning::{
     FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE, FUMBLE_RECOIL_FRACTION,
     FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE,
     JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
-    LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+    LOW_POWER_MIN_ATTACK_MULTIPLIER,
 };
 
 /// The band one attack rolls its damage from, inclusive at both ends.
@@ -500,12 +500,6 @@ pub struct PartyCommand {
     pub needs_target: bool,
 }
 
-/// Damage always deals at least 1, so battles can't stall out on high-defense
-/// matchups.
-pub fn compute_damage(atk: i32, def: i32, move_power: i32) -> i32 {
-    (move_power + atk - def).max(MIN_DAMAGE)
-}
-
 /// Multiplier applied to the player's attack total once their Power drops
 /// below `LOW_POWER_ATTACK_THRESHOLD`: full strength at the threshold and
 /// above, falling off linearly to half strength at 0 power. A separate,
@@ -552,18 +546,6 @@ mod tests {
     // itself takes luck as a parameter, so they aren't imported at module
     // scope.
     use crate::tuning::{JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN};
-
-    #[test]
-    fn damage_scales_with_power_and_attack() {
-        let low = compute_damage(4, 2, 5);
-        let high = compute_damage(9, 2, 5);
-        assert!(high > low);
-    }
-
-    #[test]
-    fn damage_never_drops_below_one() {
-        assert_eq!(compute_damage(1, 50, 2), 1);
-    }
 
     #[test]
     fn power_attack_multiplier_is_full_strength_at_and_above_the_threshold() {

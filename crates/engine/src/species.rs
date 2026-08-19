@@ -1112,7 +1112,7 @@ mod tests {
 
     /// A basic attack arrives in combat as an ability, carrying everything
     /// the `MoveDef` it was authored as carried: the name a log line prints,
-    /// the power `compute_damage` takes, the status rider and the reach.
+    /// the damage band, the status rider and the reach.
     ///
     /// Against the shipped Drone rather than a fixture, because the point is
     /// that a real species file needs no editing — `moves:` is still the

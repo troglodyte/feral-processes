@@ -98,7 +98,7 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
     insert_battle(&mut game, player, vec![wild]);
 
     // **The strike's own damage is measured, not predicted.** It rolls from
-    // a band now, so the old `compute_damage(atk, 0, 5)` is no longer a
+    // a band now, so the flat `power + atk` it used to be is no longer a
     // number this test can know in advance. What it *can* pin is the
     // difference the bleed makes: an identical forced swing against a clean
     // target on the same stream, subtracted off. Seeding both the same way

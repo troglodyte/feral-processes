@@ -229,9 +229,11 @@ pub const WORK_XP_LEVEL_CAP: u32 = 5;
 /// `ATK_PER_LEVEL` is 1, an item is worth a flat point
 /// or four — so a doubling enemy curve is a geometric quantity racing a
 /// linear one, and the geometric side always wins in the end whatever the
-/// coefficients are. Under `battle::compute_damage`'s subtractive rule that
-/// does not read as "hard": once enemy DEF passes your ATK every swing lands
-/// on `MIN_DAMAGE` and the fight stops responding to your stats at all.
+/// coefficients are. Under the subtractive damage rule of the time that did
+/// not read as "hard": once enemy DEF passed your ATK every swing landed on
+/// the one-point floor and the fight stopped responding to your stats at all.
+/// That rule is gone — mitigation is a percentage cut capped below immunity
+/// — but the geometric-versus-linear race is why the curves stay linear.
 ///
 /// Measured on the real roster before the change: the level needed to keep
 /// pace with a Stack guardian ran ~50, ~105, ~215, ~440, ~880 for zones 1-5,
@@ -472,11 +474,6 @@ pub const DEFAULT_BASE_INT: i32 = 10;
 /// the roll sometimes — order should be a tendency, not a lookup table.
 pub const INITIATIVE_DIE: i32 = 10;
 
-/// Move power behind the player's own basic strike. The player has no
-/// `Creature` component and so no species moveset — this is their one move,
-/// with `Stats::atk` and equipment carrying the rest of the scaling.
-pub const PLAYER_STRIKE_POWER: i32 = 5;
-
 /// How often a wild program reaches for the status effect on the move it
 /// just used — see `Game::wild_retaliate`.
 ///
@@ -546,10 +543,6 @@ pub const ROUTINE_POWER_COST_MULTIPLIER: f32 = 1.0;
 /// threshold, the player's own attacks start losing effectiveness — see
 /// `battle::power_attack_multiplier`.
 pub const LOW_POWER_ATTACK_THRESHOLD: f32 = 50.0;
-
-/// Floor under a single attack's damage, so battles can't stall out on a
-/// high-defense matchup where `move_power + atk - def` goes non-positive.
-pub const MIN_DAMAGE: i32 = 1;
 
 /// The Integrity fraction a party member has to cross *downward* in one
 /// round to count as wounded — what fires `PassiveTrigger::AllyWounded`.
@@ -2255,7 +2248,7 @@ pub const ABILITY_STAT_SCALE_PER_LEVEL: f32 = 0.30;
 /// `HP_PER_LEVEL` (24) per level and doubles again per zone
 /// (`ZONE_STAT_GROWTH`).
 ///
-/// Ability damage used not to be level-scaled at all. `compute_damage` is
+/// Ability damage used not to be level-scaled at all. The damage formula is
 /// `power + ATK - DEF`, and ATK was held to carry the progression on its own
 /// — but ATK grows at 2 per level against Integrity's 24, so an authored
 /// power fell further behind its target every level. By the time a level-10
@@ -2326,7 +2319,7 @@ pub const AFFINITY_PERK_BONUS_PER_LEVEL: f32 = 0.05;
 ///
 /// At the shared 0.05 rate, Payload Tuning and Siphon Protocol were
 /// strictly worse value than the `Attacker` perk for every shipped
-/// Damage/Drain ability except `broadcast_storm`: `compute_damage` gives
+/// Damage/Drain ability except `broadcast_storm`: the damage formula gives
 /// Attacker `ATTACKER_BONUS_PER_LEVEL` flat damage per level for 2 Perk
 /// Points on *every* attack, while 0.05/level of authored `power` 10
 /// (`packet_shred`, `siphon_cycles`) is only +0.5 damage per level for the
@@ -2508,8 +2501,8 @@ pub const CRASH_DURATION_ROUNDS: u32 = 1;
 pub const MAX_MITIGATION_PERCENT: i32 = 75;
 
 /// The player's damage range with no weapon equipped. Replaces
-/// `PLAYER_STRIKE_POWER`, which was the flat move power behind the player's
-/// one basic strike; a weapon **overrides** this rather than adding to it.
+/// the flat `PLAYER_STRIKE_POWER` that used to be the player's one basic
+/// strike; a weapon **overrides** this rather than adding to it.
 pub const PLAYER_UNARMED_DAMAGE: crate::battle::DamageRange =
     crate::battle::DamageRange { min: 3, max: 7 };
 

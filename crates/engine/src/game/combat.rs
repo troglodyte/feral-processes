@@ -377,6 +377,23 @@ impl Game {
     /// `entity`'s species `base_speed`, or the roster default if it has no
     /// `Creature` component (the player, who rolls from
     /// `PLAYER_BASE_SPEED` instead).
+    /// The speed `entity` fights at — initiative, accuracy and evasion alike.
+    ///
+    /// **One rule, because the three must not disagree.** The player has no
+    /// `Creature` and so no species speed, and `PLAYER_BASE_SPEED` is a shade
+    /// above `DEFAULT_BASE_SPEED` deliberately. Initiative used to name that
+    /// constant at its own call site while `species_base_speed`'s fallback
+    /// handed everything else the default — which left the player acting
+    /// first against an average opponent and yet hitting and dodging as
+    /// though a shade slower than one.
+    pub(crate) fn combat_speed(&self, entity: Entity) -> i32 {
+        if entity == self.player_entity() {
+            PLAYER_BASE_SPEED
+        } else {
+            self.species_base_speed(entity)
+        }
+    }
+
     pub(crate) fn species_base_speed(&self, entity: Entity) -> i32 {
         self.world
             .get::<Creature>(entity)
@@ -420,10 +437,7 @@ impl Game {
             if !self.creature_alive(entity) {
                 continue;
             }
-            let base = match actor {
-                battle::Actor::Party(0) => PLAYER_BASE_SPEED,
-                _ => self.species_base_speed(entity),
-            };
+            let base = self.combat_speed(entity);
             let roll = {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(0..=INITIATIVE_DIE)

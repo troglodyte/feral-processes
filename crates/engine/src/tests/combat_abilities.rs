@@ -1186,7 +1186,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
     );
 }
 
-/// `compute_damage` is `power + ATK - DEF`, and ATK was once held to carry
+/// A landed hit is the band's roll plus ATK, and ATK was once held to carry
 /// the whole progression. It cannot: `ATK_PER_LEVEL` is 1 against
 /// `HP_PER_LEVEL`'s 12, so an unscaled authored power falls further behind
 /// its target's Integrity every single level. A damage magnitude is measured
@@ -1547,9 +1547,9 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
     let player = game.player_entity();
     // Only `Creature` (for species lookup) and `Experience` (for level)
     // matter here — cast directly via `use_ability` rather than through a
-    // full battle round, so a wild enemy's guaranteed `MIN_DAMAGE`-floored
-    // counterattack can't land on the player in the same round and make the
-    // net HP delta disagree with the heal actually applied.
+    // full battle round, so a wild enemy's counterattack can't land on the
+    // player in the same round and make the net HP delta disagree with the
+    // heal actually applied.
     let medic = game
         .world
         .spawn((
@@ -1591,7 +1591,7 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
 }
 
 /// A species with a damage affinity, for the `Damage` arm of `use_ability` —
-/// the one that feeds its scaled power into `battle::compute_damage`
+/// the one that feeds its scaled band into `battle::resolve_attack`
 /// rather than standing on that figure alone.
 const STRIKER_WITH_AFFINITY: &str = r#"(
     id: "test_striker",
@@ -1663,10 +1663,13 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
     // alone — mitigation is a percentage cut applied afterwards and has its
     // own tests.
     let scaled = crate::abilities::scaled_hp_power(16, 1, 1.5);
-    let expected = battle::compute_damage(game.effective_atk(striker), 0, scaled);
+    // A landed hit is the band's roll plus the attacker's flat ATK, and this
+    // ability's band is degenerate (`spread` defaults to 0), so the roll is
+    // exactly `scaled`.
+    let expected = scaled + game.effective_atk(striker);
     assert_eq!(
         taken, expected,
-        "damage affinity should scale the authored power fed to compute_damage"
+        "damage affinity should scale the authored power fed to the damage band"
     );
     assert!(
         scaled > crate::abilities::scaled_hp_power(16, 1, AFFINITY_NEUTRAL),
@@ -1745,10 +1748,12 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
     // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); level and
     // affinity scale the authored power, same as Damage.
     let scaled = crate::abilities::scaled_hp_power(10, 1, 1.5);
-    let expected_dmg = battle::compute_damage(game.effective_atk(drainer), 0, scaled);
+    // See the Damage twin above: a degenerate band rolls its centre exactly,
+    // and the attacker's flat ATK is added on top.
+    let expected_dmg = scaled + game.effective_atk(drainer);
     assert_eq!(
         taken, expected_dmg,
-        "drain affinity should scale the authored power fed to compute_damage"
+        "drain affinity should scale the authored power fed to the damage band"
     );
 
     let restored = game.world.get::<Stats>(drainer).unwrap().hp - 50;

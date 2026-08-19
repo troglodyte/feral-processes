@@ -452,15 +452,14 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
     // `mitigate_incoming_damage` rather than being restated as a subtractive
     // term here — a second copy of that formula in a test is exactly what
     // drifts, and the logged figure is what actually landed.
-    let raw = battle::compute_damage(
-        game.world.get::<Stats>(program).unwrap().atk,
-        0,
-        abilities::scaled_hp_power(
-            power,
-            game.ability_user_level(program),
-            game.ability_affinity(program, &ability.effect),
-        ),
-    );
+    // A landed hit is the band's roll plus the attacker's flat ATK.
+    // `kernel_panic` authors no `spread`, so the band is degenerate and rolls
+    // its scaled centre exactly — which is what makes this predictable at all.
+    let raw = abilities::scaled_hp_power(
+        power,
+        game.ability_user_level(program),
+        game.ability_affinity(program, &ability.effect),
+    ) + game.world.get::<Stats>(program).unwrap().atk;
     let expected = game.mitigate_incoming_damage(front_enemy(&game), raw);
 
     assert!(

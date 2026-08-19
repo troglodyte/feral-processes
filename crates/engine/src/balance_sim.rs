@@ -15,7 +15,7 @@
 //! `a_full_party_survives_a_full_group_at_each_zone` for the actual
 //! regression checks this module exists to support.
 
-use crate::battle::compute_damage;
+use crate::battle::{DamageRange, accuracy_of, evasion_of, expected_damage};
 use crate::components::Stats;
 use crate::items::EquipmentStats;
 use crate::progression::stats_after_levels;
@@ -24,8 +24,15 @@ use crate::species::{SpeciesDb, SpeciesDef};
 use crate::tuning::PLAYER_BASE_STATS;
 
 /// Rounds to let a simulated fight run before scoring it a loss. The cap
-/// exists to catch a genuine stalemate — defense permanently outpacing
-/// attack, short of `compute_damage`'s floor of 1 — and nothing else.
+/// exists to catch a genuine stalemate and nothing else.
+///
+/// It used to justify itself against `compute_damage`'s floor of 1, which is
+/// gone along with the subtractive rule. What keeps it stalemate detection
+/// rather than a fight-length cap now is `HIT_CHANCE_MIN` together with
+/// `MAX_MITIGATION_PERCENT`: no matchup falls below a quarter chance to land
+/// and none shrugs off more than three-quarters of what lands, so expected
+/// damage is strictly positive for every pairing and a timeout is a real
+/// stalemate rather than a slow win cut short.
 ///
 /// It was 300 back when a zone's whole pack was twelve programs. At swarm
 /// scale that stopped being "generously above any realistic fight length":
@@ -72,11 +79,51 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
 /// (the strongest shipped weapon/armor, resolved from `ItemDb` by the
 /// caller) and applies the real `scaled_for_level` scaling, so this tracks
 /// any future item rebalance. Modules are skipped: their bonus is
-/// `decompiler`, not combat ATK/DEF.
-fn best_case_gear_bonus(zone: u32, weapon: EquipmentStats, armor: EquipmentStats) -> (i32, i32) {
+/// `decompiler`, not combat.
+///
+/// Five axes now rather than two. The weapon's `damage` band replaces the
+/// player's unarmed one entirely — a weapon **overrides** a natural attack
+/// rather than adding to it, which is `Game::attack_range`'s rule — while
+/// `accuracy` and `evasion` are read live in the game rather than baked into
+/// `Stats`, so they come back separately here too.
+fn best_case_gear_bonus(
+    zone: u32,
+    weapon: EquipmentStats,
+    armor: EquipmentStats,
+) -> (i32, i32, i32, i32, DamageRange) {
     let weapon = weapon.scaled_for_level(zone);
     let armor = armor.scaled_for_level(zone);
-    (weapon.atk, armor.mitigation)
+    (
+        weapon.atk,
+        armor.mitigation,
+        weapon.accuracy + armor.accuracy,
+        weapon.evasion + armor.evasion,
+        weapon.damage,
+    )
+}
+
+/// The player's own attack profile at `level`, with `gear` on.
+///
+/// `PLAYER_BASE_SPEED`, matching `Game::combat_speed`'s player arm — the
+/// player has no species and so no `base_speed`, and the constant sits a
+/// shade above the roster default deliberately.
+fn player_profile(
+    level: u32,
+    gear_accuracy: i32,
+    gear_evasion: i32,
+    range: DamageRange,
+) -> AttackProfile {
+    AttackProfile {
+        accuracy: accuracy_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_accuracy),
+        evasion: evasion_of(crate::tuning::PLAYER_BASE_SPEED, level, gear_evasion),
+        range,
+    }
+}
+
+/// The player at `level` with nothing equipped — `PLAYER_UNARMED_DAMAGE`,
+/// which is what `Game::attack_range` falls back to.
+fn unarmed_player_profile(level: u32) -> AttackProfile {
+    player_profile(level, 0, 0, crate::tuning::PLAYER_UNARMED_DAMAGE)
 }
 
 /// A companion tamed from `species` while breached into `zone` — it starts
@@ -103,22 +150,29 @@ fn average_move_power(species: &SpeciesDef) -> i32 {
     (total as f64 / species.moves.len().max(1) as f64).round() as i32
 }
 
-/// The same mean, but over only the moves that reach past the front line —
-/// what a back-rank group actually gets to pick from (see
-/// `crate::tuning::ENGAGED_GROUPS`). `None` when the species has no ranged move at
-/// all, which is the case that leaves a back group inert.
-fn average_ranged_move_power(species: &SpeciesDef) -> Option<i32> {
-    let ranged: Vec<i32> = species
-        .moves
-        .iter()
-        .filter(|m| m.ranged)
-        .map(|m| m.power)
-        .collect();
+/// The mean of every move's *band* — the centre from `average_move_power`
+/// and the mean half-width, so a species that swings wide is modelled as
+/// swinging wide rather than as swinging for its average every time.
+fn average_move_range(species: &SpeciesDef) -> DamageRange {
+    let spread: i32 = species.moves.iter().map(|m| m.spread).sum();
+    let mean_spread = (spread as f64 / species.moves.len().max(1) as f64).round() as i32;
+    DamageRange::centred(average_move_power(species), mean_spread)
+}
+
+/// The same, over only the moves that reach past the front line. `None` when
+/// the species has none, which is what leaves a back group inert.
+fn average_ranged_move_range(species: &SpeciesDef) -> Option<DamageRange> {
+    let ranged: Vec<&crate::species::MoveDef> = species.moves.iter().filter(|m| m.ranged).collect();
     if ranged.is_empty() {
         return None;
     }
-    let total: i32 = ranged.iter().sum();
-    Some((total as f64 / ranged.len() as f64).round() as i32)
+    let power: i32 = ranged.iter().map(|m| m.power).sum();
+    let spread: i32 = ranged.iter().map(|m| m.spread).sum();
+    let n = ranged.len() as f64;
+    Some(DamageRange::centred(
+        (power as f64 / n).round() as i32,
+        (spread as f64 / n).round() as i32,
+    ))
 }
 
 /// The strongest non-boss species (by flat `base_hp+base_atk+base_mitigation`)
@@ -176,13 +230,17 @@ pub fn beatable_by_a_fresh_player(species: &SpeciesDef) -> bool {
             mitigation: best_roll(stats.mitigation),
         },
         count: 1,
-        move_power: average_move_power(species),
-        ranged_move_power: average_ranged_move_power(species),
+        profile: AttackProfile {
+            range: average_move_range(species),
+            ..AttackProfile::wild(species, 1)
+        },
+        ranged_range: average_ranged_move_range(species),
     };
     simulate_roster_fight(
         PLAYER_BASE_STATS,
+        unarmed_player_profile(1),
         &[],
-        crate::tuning::PLAYER_STRIKE_POWER,
+        AttackProfile::wild(species, 1),
         &[group],
     )
     .player_won
@@ -200,11 +258,51 @@ pub struct BattleOutcome {
 pub struct GroupSim {
     pub stats: Stats,
     pub count: u32,
-    /// Mean power of every move, used while this group is in melee range.
-    pub move_power: i32,
-    /// Mean power of its *ranged* moves — `None` for a melee-only species,
-    /// which can do nothing at all from the back rank.
-    pub ranged_move_power: Option<i32>,
+    /// What this group brings to an attack roll — accuracy, evasion, and the
+    /// band it swings for while in melee range.
+    pub profile: AttackProfile,
+    /// The band it swings for from the *back* rank — `None` for a melee-only
+    /// species, which can do nothing at all from back there.
+    pub ranged_range: Option<DamageRange>,
+}
+
+/// The three things `battle::Combatant` needs that `Stats` does not carry.
+///
+/// Accuracy and evasion are **derived, never stored**, in the game as here;
+/// `Stats` has no field for either and must not gain one. The sim resolves
+/// them once at fixture-build time from the same `battle::accuracy_of` and
+/// `battle::evasion_of` the real `Game::combatant_profile` calls.
+#[derive(Clone, Copy)]
+pub struct AttackProfile {
+    pub accuracy: f64,
+    pub evasion: f64,
+    pub range: DamageRange,
+}
+
+impl AttackProfile {
+    /// A wild `species` at `level`, unarmed — what a hostile brings.
+    fn wild(species: &SpeciesDef, level: u32) -> AttackProfile {
+        AttackProfile {
+            accuracy: accuracy_of(species.base_speed, level, 0),
+            evasion: evasion_of(species.base_speed, level, 0),
+            range: species
+                .moves
+                .first()
+                .map(|mv| mv.range())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// `stats` and this profile as the `battle::Combatant` the real
+    /// arithmetic takes.
+    fn combatant(self, atk: i32) -> crate::battle::Combatant {
+        crate::battle::Combatant {
+            accuracy: self.accuracy,
+            evasion: self.evasion,
+            atk,
+            range: self.range,
+        }
+    }
 }
 
 /// `raw` after `mitigation` percentage points are shrugged off, capped at
@@ -232,7 +330,7 @@ struct Fighter {
     /// Percentage points, the same unit `components::Stats::mitigation`
     /// carries — not the subtractive absorption the old `def` was.
     mitigation: i32,
-    move_power: i32,
+    profile: AttackProfile,
     /// Share of incoming fire, from the same `battle::slot_aggro_weight`
     /// `Game::roll_enemy_target` rolls against.
     aggro: f64,
@@ -312,7 +410,6 @@ impl std::fmt::Display for ReachRuleVerdict {
 pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
     let toughest = toughest_ordinary_species(db);
     let party = median_ordinary_species(db);
-    let companion_power = average_move_power(party);
 
     let with_reach = full_pack_at_zone(toughest, REACH_RULE_ZONE);
     // The same pack with every group in melee range — the fight this would
@@ -320,7 +417,7 @@ pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
     let all_engaged: Vec<GroupSim> = with_reach
         .iter()
         .map(|g| GroupSim {
-            ranged_move_power: Some(g.move_power),
+            ranged_range: Some(g.profile.range),
             ..*g
         })
         .collect();
@@ -341,7 +438,17 @@ pub fn reach_rule_verdict(db: &SpeciesDb) -> ReachRuleVerdict {
                     )
                 })
                 .collect();
-            simulate_roster_fight(player, &companions, companion_power, groups).player_won
+            simulate_roster_fight(
+                player,
+                unarmed_player_profile(level),
+                &companions,
+                AttackProfile {
+                    range: average_move_range(party),
+                    ..AttackProfile::wild(party, companion_level_for_player_level(level))
+                },
+                groups,
+            )
+            .player_won
         })
     };
 
@@ -360,8 +467,11 @@ fn full_group_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
     vec![GroupSim {
         stats: wild_stats_at_zone(species, zone),
         count: crate::game::spawning::zone_group_cap(zone),
-        move_power: average_move_power(species),
-        ranged_move_power: average_ranged_move_power(species),
+        profile: AttackProfile {
+            range: average_move_range(species),
+            ..AttackProfile::wild(species, zone)
+        },
+        ranged_range: average_ranged_move_range(species),
     }]
 }
 
@@ -372,8 +482,18 @@ fn full_group_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
 ///
 /// - **Everyone attacks.** Companions deal damage now rather than only
 ///   granting the player a buff, so the party's damage is the sum across
-///   the roster. The player uses the flat `PLAYER_STRIKE_POWER`; companions
-///   use their species' `average_move_power`.
+///   the roster. Every swing goes through `battle::expected_damage` — the
+///   RNG-free mean of exactly the arithmetic `resolve_attack` rolls, to-hit
+///   odds and crit rate included — *called* rather than restated, which is
+///   what stops this module drifting from the game the way its
+///   mining-reliability curve once did. The player swings for their weapon's
+///   band or `PLAYER_UNARMED_DAMAGE`; companions for their species'
+///   `average_move_range`.
+/// - **The fumble ladder is unmodelled.** Both of its damaging rungs land on
+///   the *attacker*, so neither is defender-facing damage and
+///   `expected_damage` excludes them. These projections therefore mildly
+///   overstate an attacker's net output — named here rather than silently,
+///   in the same spirit as `TURN_CAP`'s note about Power decay.
 /// - **The party focuses the front group,** which is what a player does and
 ///   what the reach rule rewards. Each fighter's hit lands on that group's
 ///   front member and any overkill is discarded — the real battle can only
@@ -399,19 +519,20 @@ fn full_group_at_zone(species: &SpeciesDef, zone: u32) -> Vec<GroupSim> {
 /// (Power would run out first).
 pub fn simulate_roster_fight(
     player: Stats,
+    player_profile: AttackProfile,
     companions: &[Stats],
-    companion_move_power: i32,
+    companion_profile: AttackProfile,
     groups: &[GroupSim],
 ) -> BattleOutcome {
-    let mut roster: Vec<Fighter> = std::iter::once((player, crate::tuning::PLAYER_STRIKE_POWER))
-        .chain(companions.iter().map(|c| (*c, companion_move_power)))
+    let mut roster: Vec<Fighter> = std::iter::once((player, player_profile))
+        .chain(companions.iter().map(|c| (*c, companion_profile)))
         .enumerate()
-        .map(|(slot, (stats, move_power))| Fighter {
+        .map(|(slot, (stats, profile))| Fighter {
             hp: stats.hp as f64,
             max_hp: stats.max_hp as f64,
             atk: stats.atk,
             mitigation: stats.mitigation,
-            move_power,
+            profile,
             aggro: crate::battle::slot_aggro_weight(slot, false) as f64,
         })
         .collect();
@@ -436,8 +557,16 @@ pub fn simulate_roster_fight(
             if fighter.hp <= 0.0 || groups.is_empty() {
                 continue;
             }
+            // `expected_damage` *called*, not restated: the mean of exactly
+            // the arithmetic `battle::resolve_attack` rolls, to-hit odds and
+            // crit rate included. It excludes the fumble ladder, whose two
+            // damaging rungs land on the attacker rather than the defender —
+            // so these projections mildly overstate an attacker's net output.
             let dealt = after_mitigation(
-                compute_damage(fighter.atk, 0, fighter.move_power) as f64,
+                expected_damage(
+                    fighter.profile.combatant(fighter.atk),
+                    groups[0].0.profile.combatant(groups[0].0.stats.atk),
+                ),
                 groups[0].0.stats.mitigation,
             )
             .round() as i32;
@@ -469,19 +598,26 @@ pub fn simulate_roster_fight(
             };
         }
         for (idx, (group, _, remaining)) in groups.iter().enumerate() {
-            let power = if idx < crate::tuning::ENGAGED_GROUPS {
-                group.move_power
+            let range = if idx < crate::tuning::ENGAGED_GROUPS {
+                group.profile.range
             } else {
-                match group.ranged_move_power {
-                    Some(power) => power,
+                match group.ranged_range {
+                    Some(range) => range,
                     // Melee-only and out of reach: this group does nothing.
                     None => continue,
                 }
             };
             for _ in 0..crate::battle::attackers_in_group(*remaining as usize) {
                 for fighter in roster.iter_mut().filter(|f| f.hp > 0.0) {
+                    let swing = AttackProfile {
+                        range,
+                        ..group.profile
+                    };
                     let dealt = after_mitigation(
-                        compute_damage(group.stats.atk, 0, power) as f64,
+                        expected_damage(
+                            swing.combatant(group.stats.atk),
+                            fighter.profile.combatant(fighter.atk),
+                        ),
                         fighter.mitigation,
                     );
                     fighter.hp -= dealt * fighter.aggro / total_aggro;
@@ -552,11 +688,17 @@ pub fn min_level_to_clear_zone(
     gear: (EquipmentStats, EquipmentStats),
 ) -> Option<(u32, BattleOutcome)> {
     let groups = full_group_at_zone(wild_species, zone);
-    let companion_move_power = average_move_power(party_species);
-    let (gear_atk, gear_def) = if with_gear {
+    let (gear_atk, gear_mitigation, gear_accuracy, gear_evasion, weapon_range) = if with_gear {
         best_case_gear_bonus(zone, gear.0, gear.1)
     } else {
-        (0, 0)
+        (0, 0, 0, 0, DamageRange::default())
+    };
+    // `Game::attack_range`'s rule: a weapon with a band supplies it outright,
+    // and unarmed the natural one applies.
+    let swing = if weapon_range == DamageRange::default() {
+        crate::tuning::PLAYER_UNARMED_DAMAGE
+    } else {
+        weapon_range
     };
     for level in 1..=max_level {
         let mut player = stats_after_levels(
@@ -565,12 +707,21 @@ pub fn min_level_to_clear_zone(
             crate::tuning::BASELINE_GROWTH_MULTIPLIER,
         );
         player.atk += gear_atk;
-        player.mitigation += gear_def;
+        player.mitigation += gear_mitigation;
         let companion_level = companion_level_for_player_level(level);
         let companions: Vec<Stats> = (0..companion_count)
             .map(|_| companion_stats(party_species, zone, companion_level))
             .collect();
-        let outcome = simulate_roster_fight(player, &companions, companion_move_power, &groups);
+        let outcome = simulate_roster_fight(
+            player,
+            player_profile(level, gear_accuracy, gear_evasion, swing),
+            &companions,
+            AttackProfile {
+                range: average_move_range(party_species),
+                ..AttackProfile::wild(party_species, companion_level)
+            },
+            &groups,
+        );
         if outcome.player_won {
             return Some((level, outcome));
         }
@@ -665,9 +816,11 @@ mod tests {
     /// and zone 6 alone wanted more than `MAX_LEVEL_SEARCHED`. That was
     /// written up as a cliff that was "real and expected". It was neither:
     /// it was a geometric quantity racing a linear one, which has an end
-    /// wherever you put the coefficients, and past that end
-    /// `battle::compute_damage`'s subtractive rule floors every swing at
-    /// `MIN_DAMAGE` so no amount of levelling helps at all.
+    /// wherever you put the coefficients, and past that end the subtractive
+    /// damage rule of the time floored every swing at a single point, so no
+    /// amount of levelling helped at all. That rule is gone — damage is a
+    /// percentage cut now, which cannot reach zero — but a compounding curve
+    /// still outruns a linear one, so the sweep below is still the gate.
     ///
     /// With `ZONE_STAT_STEP` linear the measured curve is 1, 8, 12, 16, 19,
     /// 25, 31, 37, 42, 49 for zones 1-10 — about 5 levels a zone,

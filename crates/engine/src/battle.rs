@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::items::ItemId;
 use crate::species::SpeciesId;
 use crate::tuning::{
-    BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS,
-    JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
-    LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
+    ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, BACK_SLOT_AGGRO_WEIGHT, DEFEND_AGGRO_WEIGHT,
+    EVASION_PER_LEVEL, EVASION_PER_SPEED, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, HIT_CHANCE_MAX,
+    HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN,
+    LOW_POWER_ATTACK_THRESHOLD, LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
 };
 
 /// The band one attack rolls its damage from, inclusive at both ends.
@@ -54,6 +55,51 @@ impl DamageRange {
         let width = (self.max - self.min).max(0);
         self.min + rng.random_range(0..=width)
     }
+}
+
+/// Odds one attack lands, from the attacker's Accuracy against the
+/// defender's Evasion.
+///
+/// **The ratio form is load-bearing and a difference form must not replace
+/// it.** The ratio is scale-free: doubling both sides leaves the result at
+/// 0.5, so a zone that scales everything by its tier multiplier changes
+/// nothing about hit rates and the "every difficulty curve must be linear"
+/// hazard cannot reappear on this axis at all. `base + k * (acc - eva)`
+/// makes hit rate depend on absolute scale, so deep zones drift silently
+/// toward always-hit or always-miss.
+///
+/// Two identical combatants get exactly 0.5 by construction, before the
+/// clamp — the baseline every constant in this section is read against.
+pub fn hit_chance(accuracy: f64, evasion: f64) -> f64 {
+    let acc = accuracy.max(0.0);
+    let eva = evasion.max(0.0);
+    let total = acc + eva;
+    // Two combatants with nothing at all is an even matchup, not an
+    // infinity. Reachable from a mod species authoring `base_speed: 0`.
+    if total <= 0.0 {
+        return 0.5f64.clamp(HIT_CHANCE_MIN, HIT_CHANCE_MAX);
+    }
+    (acc / total).clamp(HIT_CHANCE_MIN, HIT_CHANCE_MAX)
+}
+
+/// A combatant's Accuracy. **Derived, never stored** — not a `Stats` field,
+/// not a save field, so it cannot drift from its inputs.
+///
+/// `gear_accuracy` is `EquipmentStats::accuracy` summed over worn slots,
+/// which unlike `atk`/`mitigation` is *not* baked into `Stats` by
+/// `Game::apply_equipment_delta` and so must be passed in live.
+pub fn accuracy_of(base_speed: i32, level: u32, gear_accuracy: i32) -> f64 {
+    (base_speed as f64 * ACCURACY_PER_SPEED
+        + level as f64 * ACCURACY_PER_LEVEL
+        + gear_accuracy as f64)
+        .max(0.0)
+}
+
+/// A combatant's Evasion. Same derived-never-stored contract as
+/// `accuracy_of`; see its doc for `gear_evasion`.
+pub fn evasion_of(base_speed: i32, level: u32, gear_evasion: i32) -> f64 {
+    (base_speed as f64 * EVASION_PER_SPEED + level as f64 * EVASION_PER_LEVEL + gear_evasion as f64)
+        .max(0.0)
 }
 
 /// One species' worth of the wild pack in an active intrusion.
@@ -467,5 +513,52 @@ mod tests {
             let rolled = range.roll(&mut rng);
             assert!((4..=9).contains(&rolled), "rolled {rolled} outside 4..=9");
         }
+    }
+
+    #[test]
+    fn two_identical_combatants_hit_each_other_half_the_time() {
+        // The baseline every tuning number in this section is read against.
+        assert!((hit_chance(12.0, 12.0) - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hit_chance_is_scale_free() {
+        // The whole reason the ratio form is load-bearing: a zone that
+        // scales everything by its tier multiplier must change nothing
+        // about hit rates.
+        let base = hit_chance(14.0, 6.0);
+        assert!((hit_chance(28.0, 12.0) - base).abs() < 1e-12);
+        assert!((hit_chance(140.0, 60.0) - base).abs() < 1e-12);
+    }
+
+    #[test]
+    fn hit_chance_clamps_at_both_ends() {
+        assert_eq!(hit_chance(1000.0, 1.0), HIT_CHANCE_MAX);
+        assert_eq!(hit_chance(1.0, 1000.0), HIT_CHANCE_MIN);
+    }
+
+    #[test]
+    fn hit_chance_survives_two_combatants_with_nothing_at_all() {
+        // Reachable through a mod species authoring base_speed 0 at level 1
+        // with no gear. An even matchup, not a divide by zero.
+        assert!((hit_chance(0.0, 0.0) - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn accuracy_and_evasion_both_grow_with_speed_level_and_gear() {
+        assert!(accuracy_of(14, 1, 0) > accuracy_of(6, 1, 0));
+        assert!(accuracy_of(10, 8, 0) > accuracy_of(10, 1, 0));
+        assert!(accuracy_of(10, 1, 3) > accuracy_of(10, 1, 0));
+        assert!(evasion_of(14, 1, 0) > evasion_of(6, 1, 0));
+        assert!(evasion_of(10, 8, 0) > evasion_of(10, 1, 0));
+        assert!(evasion_of(10, 1, 3) > evasion_of(10, 1, 0));
+    }
+
+    #[test]
+    fn a_negative_gear_axis_cannot_push_the_pair_below_zero() {
+        // A drawback affix is folded into the base, so a copy can carry a
+        // negative on an axis its item never had.
+        assert!(accuracy_of(6, 1, -100) >= 0.0);
+        assert!(evasion_of(6, 1, -100) >= 0.0);
     }
 }

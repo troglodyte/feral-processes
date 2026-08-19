@@ -4,7 +4,7 @@
 (
     id: "shimmed",
     prefix: Some("Shimmed"),
-    stats: (def: 2),
+    stats: (mitigation: 6),
     slots: Some([Module]),
     weight: 10,
 )

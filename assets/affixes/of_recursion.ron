@@ -3,7 +3,7 @@
 (
     id: "of_recursion",
     suffix: Some("of Recursion"),
-    stats: (atk: 2, def: 1),
+    stats: (atk: 2, mitigation: 3),
     slots: Some([Weapon, Module]),
     weight: 5,
 )

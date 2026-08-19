@@ -4,7 +4,7 @@
 (
     id: "of_static",
     suffix: Some("of Static"),
-    stats: (atk: 1, def: 1),
+    stats: (atk: 1, mitigation: 3),
     // No `slots`, so every slot is eligible.
     weight: 10,
 )

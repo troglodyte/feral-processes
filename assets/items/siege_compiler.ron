@@ -3,7 +3,7 @@
     name: "Siege Compiler",
     description: "Premium weapon. Heavy enough to shield you while it swings.",
     value: Some(90),
-    equipment: Some((Weapon, (atk: 3, def: 2))),
+    equipment: Some((Weapon, (atk: 3, mitigation: 6, damage: (min: 5, max: 10)))),
     craftable: Some((cost: [("portal_fragment", 18)], requires_structure: Some("fabricator"))),
     droppable: Some([("construct", 0.07), ("sentinel", 0.06)]),
 )

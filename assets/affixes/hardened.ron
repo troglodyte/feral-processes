@@ -2,7 +2,7 @@
 (
     id: "hardened",
     prefix: Some("Hardened"),
-    stats: (def: 3),
+    stats: (mitigation: 9),
     slots: Some([Armor]),
     weight: 6,
 )

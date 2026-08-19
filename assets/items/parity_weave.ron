@@ -3,7 +3,7 @@
     name: "Parity Weave",
     description: "Scavenged armour. Redundant lines woven through the plating, re-checked at the top of every round.",
     value: Some(110),
-    equipment: Some((Armor, (def: 3))),
+    equipment: Some((Armor, (mitigation: 9))),
     grants: Some("parity_guard"),
     droppable: Some([("sentinel", 0.10), ("worm", 0.08)]),
     cache_drop: Some(0.04),

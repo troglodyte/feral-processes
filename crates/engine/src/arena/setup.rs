@@ -318,14 +318,14 @@ mod tests {
             rarity: Rarity::Ordinary,
             affix: None,
         }]);
-        assert_eq!((no_bonus.atk, no_bonus.def), (0, 0));
+        assert_eq!((no_bonus.atk, no_bonus.mitigation), (0, 0));
         // A zero-bonus item would make the deltas below trivially equal.
         assert!(
-            bonus.atk != 0 || bonus.def != 0,
+            bonus.atk != 0 || bonus.mitigation != 0,
             "picked an equippable worth nothing"
         );
         assert_eq!(geared.0 - bare.0, bonus.atk);
-        assert_eq!(geared.1 - bare.1, bonus.def);
+        assert_eq!(geared.1 - bare.1, bonus.mitigation);
     }
 
     #[test]

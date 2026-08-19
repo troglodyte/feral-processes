@@ -3,7 +3,7 @@
     name: "Packet Buffer",
     description: "Scavenged armor. Absorbs the first shock of an incoming packet.",
     value: Some(7),
-    equipment: Some((Armor, (def: 2))),
+    equipment: Some((Armor, (mitigation: 6))),
     craftable: Some((cost: [("core_fragment", 7)])),
     droppable: Some([("drone", 0.1), ("sub_process", 0.08)]),
 )

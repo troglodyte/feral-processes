@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use feral_processes_engine::achievements::{AchievementDb, Profile};
+use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
@@ -216,7 +217,7 @@ pub fn item_fusion_note(tier: u32) -> String {
 pub fn stat_summary(mods: EquipmentStats) -> String {
     [
         (mods.atk, "ATK"),
-        (mods.def, "DEF"),
+        (mods.mitigation, "MIT"),
         (mods.decompiler, "DECOMP"),
     ]
     .into_iter()
@@ -363,15 +364,33 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
     rows
 }
 
+/// How much better a candidate is than what is worn, as one signed number
+/// the swap picker sorts on.
+///
+/// The damage band's *mean* rather than either end, so a wider weapon of the
+/// same average does not read as an upgrade. Accuracy and evasion count as
+/// themselves: all three of the new axes are small integers on the same
+/// rough scale as `atk`, so a plain sum still ranks sensibly.
 fn delta_total(mods: EquipmentStats, worn: EquipmentStats) -> i32 {
-    (mods.atk - worn.atk) + (mods.def - worn.def) + (mods.decompiler - worn.decompiler)
+    (mods.atk - worn.atk)
+        + (mods.mitigation - worn.mitigation)
+        + (mods.decompiler - worn.decompiler)
+        + (mods.damage.mean() - worn.damage.mean()).round() as i32
+        + (mods.accuracy - worn.accuracy)
+        + (mods.evasion - worn.evasion)
 }
 
 fn swap_label(name: &str, stats: &str, mods: EquipmentStats, worn: EquipmentStats) -> String {
     let delta = stat_summary(EquipmentStats {
         atk: mods.atk - worn.atk,
-        def: mods.def - worn.def,
+        mitigation: mods.mitigation - worn.mitigation,
         decompiler: mods.decompiler - worn.decompiler,
+        damage: DamageRange {
+            min: mods.damage.min - worn.damage.min,
+            max: mods.damage.max - worn.damage.max,
+        },
+        accuracy: mods.accuracy - worn.accuracy,
+        evasion: mods.evasion - worn.evasion,
     });
     let delta = if delta.is_empty() {
         "no change".to_string()

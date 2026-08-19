@@ -4,7 +4,7 @@
 (
     id: "of_deep_cache",
     suffix: Some("of Deep Cache"),
-    stats: (def: 1, decompiler: 1),
+    stats: (mitigation: 3, decompiler: 1),
     slots: Some([Module, Armor]),
     weight: 7,
 )

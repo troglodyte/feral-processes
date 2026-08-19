@@ -43,7 +43,15 @@ property `assets/policies/enemy_battle.ron` has.
     // gear level, fusion tier and rare tier exactly as the item's own stats
     // do. Added afterwards it would dwindle across a run, which is the
     // opposite of what a rolled property is for.
-    stats: (atk: 1, def: 1),
+    //
+    // The same six fields `EquipmentStats` carries — `atk`, `mitigation`,
+    // `decompiler`, `damage`, `accuracy`, `evasion`. `mitigation` was `def`
+    // and is now percentage points rather than points of absorption, so an
+    // affix that used to add 1 point of armour should read as roughly 3
+    // points of percentage. A `damage` affix widens a weapon's band:
+    // `damage: (min: 1, max: 3)` shifts the low end up 1 and the high end
+    // up 3, so it is both a buff and a widening.
+    stats: (atk: 1, mitigation: 3),
 
     // Optional; omit for "any slot". One or more of `Weapon`, `Armor`,
     // `Module`. Worth setting when an affix reads oddly somewhere: DECOMP
@@ -85,38 +93,53 @@ gear. Crafting and buying never roll either — made gear is deliberately plain.
 
 ## Calibration
 
-The shipped set runs 1 to 3 points on one or two stats, weighted so the
-smallest is the commonest:
+The shipped set runs one or two stats, weighted so the smallest is the
+commonest. MIT is percentage points, so its numbers are three times the flat
+ones and mean the same thing:
 
 | Affix | Grants | Slots | Weight |
 |---|---|---|---|
-| `scavenged` | +1 DEF | any | 14 |
+| `scavenged` | +3 MIT | any | 14 |
 | `tempered` | +1 ATK | any | 13 |
-| `honed` / `reinforced` | +2 ATK / +2 DEF | Weapon / Armor | 12 |
+| `honed` / `reinforced` | +2 ATK +2 ACC / +6 MIT | Weapon / Armor | 12 |
 | `patched` | +1 DECOMP | Module, Armor | 11 |
-| `of_static` | +1 ATK +1 DEF | any | 10 |
-| `shimmed` | +2 DEF | Module | 10 |
+| `of_static` | +1 ATK +3 MIT | any | 10 |
+| `shimmed` | +6 MIT | Module | 10 |
 | `rigged` | +2 ATK | Module | 9 |
 | `of_the_ghost_protocol` | +2 DECOMP | Module, Armor | 8 |
-| `of_deep_cache` | +1 DEF +1 DECOMP | Module, Armor | 7 |
-| `overdriven` / `hardened` | +3 ATK / +3 DEF | Weapon / Armor | 6 |
+| `of_deep_cache` | +3 MIT +1 DECOMP | Module, Armor | 7 |
+| `overdriven` / `hardened` | +3 ATK +1–3 DMG / +9 MIT | Weapon / Armor | 6 |
 | `of_sidechannel` | +1 ATK +1 DECOMP | Module | 6 |
-| `volatile` | +2 ATK **-1 DEF** | Armor | 6 |
-| `of_deadlock` | +2 DEF **-1 ATK** | Weapon | 6 |
-| `of_recursion` | +2 ATK +1 DEF | Weapon, Module | 5 |
-| `of_cold_boot` | +1 ATK +2 DEF | Armor, Module | 5 |
-| `of_hot_swap` | +2 ATK +2 DEF **-1 DECOMP** | any | 4 |
+| `volatile` | +2 ATK **-3 MIT** | Armor | 6 |
+| `of_deadlock` | +6 MIT **-1 ATK** | Weapon | 6 |
+| `of_recursion` | +2 ATK +3 MIT | Weapon, Module | 5 |
+| `of_cold_boot` | +1 ATK +6 MIT | Armor, Module | 5 |
+| `of_hot_swap` | +2 ATK +6 MIT **-1 DECOMP** | any | 4 |
 
-For scale: shipped gear grants 1–4 points a stat, and `GEAR_LEVEL_STEP` adds
-100% of base per gear level. So +2 is about what one gear level is worth on a
-scavenged weapon — a real find early, a rounding error late. Author well past
-+4 and an affix stops being a bonus and starts being the item.
+For scale: shipped gear grants 1–4 points of ATK, 1–12 points of MIT, and
+`GEAR_LEVEL_STEP` adds 100% of base per gear level. So +2 ATK is about what
+one gear level is worth on a scavenged weapon — a real find early, a rounding
+error late. Author well past what the gear itself grants and an affix stops
+being a bonus and starts being the item.
 
-**No single stat passes +3**, and `every_shipped_affix_pays_and_none_pays_
-past_the_calibration` (`crates/engine/src/tests/affixes.rs`) is what holds
-that against a retune. The ceiling is on the *stat*, not on the affix: a
-drawback pays for a fourth point across two of them without reaching for a
-fifth on either.
+**Each axis has its own ceiling**, and
+`every_shipped_affix_pays_and_none_pays_past_the_calibration`
+(`crates/engine/src/tests/affixes.rs`) is what holds them against a retune:
+
+| Axis | Ceiling | Why |
+|---|---|---|
+| ATK | +3 | flat damage, and shipped weapons grant 1–4 |
+| MIT | +9 | percentage points, so three times ATK's for the same worth |
+| DECOMP | +3 | flat, and shipped modules grant 1–4 |
+| ACC | +3 | shipped weapons buy 2–3 |
+| EVA | +5 | shipped light armour buys 3–5 |
+| DMG | +3 | bounded on the band's high end |
+
+One ceiling across all six would be wrong now that they are not the same
+currency: the +3 that makes an attack affix generous is nearly nothing as a
+percentage. The ceiling is on the *axis*, not on the affix: a drawback pays
+for a fourth point across two of them without reaching for a fifth on
+either.
 
 Slots are the other half of the calibration and are easy to skew by
 accident. Every slot must have something to roll — an empty pool leaves that

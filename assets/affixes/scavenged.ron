@@ -4,7 +4,7 @@
 (
     id: "scavenged",
     prefix: Some("Scavenged"),
-    stats: (def: 1),
+    stats: (mitigation: 3),
     // No `slots`, so every slot is eligible.
     weight: 14,
 )

@@ -11,6 +11,6 @@
 (
     id: "of_hot_swap",
     suffix: Some("of Hot Swap"),
-    stats: (atk: 2, def: 2, decompiler: -1),
+    stats: (atk: 2, mitigation: 6, decompiler: -1),
     weight: 4,
 )

@@ -12,7 +12,7 @@
     // about the routine never entering `KnownRoutines`, and a grant is
     // derived off the worn item rather than learned.
     value: Some(180),
-    equipment: Some((Module, (def: 2))),
+    equipment: Some((Module, (mitigation: 6))),
     grants: Some("deadman"),
     droppable: Some([("wintermute", 0.12)]),
 )

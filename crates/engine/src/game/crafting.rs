@@ -228,9 +228,15 @@ impl Game {
         mods: items::EquipmentStats,
         sign: i32,
     ) {
+        // `atk` and `mitigation` only, and the other three axes are an
+        // omission rather than an oversight: `damage`, `accuracy` and
+        // `evasion` have no `Stats` field to bake into, and inventing one
+        // would give them a second home to drift from. They are read live
+        // off `Game::gear_bonus` at the two places that need them —
+        // `Game::attack_range` and `Game::combatant_profile`.
         if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
             stats.atk += sign * mods.atk;
-            stats.mitigation += sign * mods.def;
+            stats.mitigation += sign * mods.mitigation;
         }
         if mods.decompiler != 0
             && let Some(mut decompiler) = self.world.get_mut::<Decompiler>(player)
@@ -308,8 +314,14 @@ impl Game {
         let affixed = match self.affix_of(copy) {
             Some(affix) => items::EquipmentStats {
                 atk: base.atk + affix.stats.atk,
-                def: base.def + affix.stats.def,
+                mitigation: base.mitigation + affix.stats.mitigation,
                 decompiler: base.decompiler + affix.stats.decompiler,
+                damage: crate::battle::DamageRange {
+                    min: base.damage.min + affix.stats.damage.min,
+                    max: base.damage.max + affix.stats.damage.max,
+                },
+                accuracy: base.accuracy + affix.stats.accuracy,
+                evasion: base.evasion + affix.stats.evasion,
             },
             None => base,
         };
@@ -346,8 +358,19 @@ impl Game {
             .fold(items::EquipmentStats::default(), |acc, mods| {
                 items::EquipmentStats {
                     atk: acc.atk + mods.atk,
-                    def: acc.def + mods.def,
+                    mitigation: acc.mitigation + mods.mitigation,
                     decompiler: acc.decompiler + mods.decompiler,
+                    // Summed like everything else, but only one slot ever
+                    // carries a band: `every_weapon_authors_a_range_and_
+                    // nothing_else_does` holds the Weapon slot to being the
+                    // only source, so this is an override in practice
+                    // without needing a rule here to make it one.
+                    damage: crate::battle::DamageRange {
+                        min: acc.damage.min + mods.damage.min,
+                        max: acc.damage.max + mods.damage.max,
+                    },
+                    accuracy: acc.accuracy + mods.accuracy,
+                    evasion: acc.evasion + mods.evasion,
                 }
             })
     }

@@ -4,7 +4,7 @@
 (
     id: "of_cold_boot",
     suffix: Some("of Cold Boot"),
-    stats: (atk: 1, def: 2),
+    stats: (atk: 1, mitigation: 6),
     slots: Some([Armor, Module]),
     weight: 5,
 )

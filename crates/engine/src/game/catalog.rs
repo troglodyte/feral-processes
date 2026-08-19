@@ -383,8 +383,8 @@ impl Game {
             if stats.atk != 0 {
                 parts.push(format!("+{} atk", stats.atk));
             }
-            if stats.def != 0 {
-                parts.push(format!("+{} def", stats.def));
+            if stats.mitigation != 0 {
+                parts.push(format!("+{} def", stats.mitigation));
             }
             if stats.decompiler != 0 {
                 parts.push(format!("+{} decomp", stats.decompiler));

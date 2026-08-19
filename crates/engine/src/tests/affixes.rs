@@ -27,17 +27,30 @@ fn affix_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
     dir
 }
 
-/// The three stats in the order `stat_summary` prints them, so a test can
-/// speak about "the axis this affix charges on" without naming it.
-fn axes(stats: EquipmentStats) -> [i32; 3] {
-    [stats.atk, stats.def, stats.decompiler]
+/// Every axis an affix may charge on, each paired with the most it may be
+/// worth — so a test can speak about "the axis this affix charges on"
+/// without naming it, and a new axis cannot be added without a ceiling.
+///
+/// **One ceiling per axis, not one across all of them.** They are no longer
+/// the same currency: `mitigation` is percentage points where `atk` is flat
+/// damage, so the +3 that makes an attack affix generous is nearly nothing
+/// as a percentage. The ceilings are calibrated against what the shipped
+/// gear grants on each axis — see `assets/affixes/README.md`.
+///
+/// Not `tuning.rs` constants: these bound the *content*, are checked against
+/// the content, and an affix past one stops being a bonus on an item and
+/// starts being the item.
+fn axes(stats: EquipmentStats) -> [(&'static str, i32, i32); 6] {
+    [
+        ("ATK", stats.atk, 3),
+        ("MIT", stats.mitigation, 9),
+        ("DECOMP", stats.decompiler, 3),
+        ("ACC", stats.accuracy, 3),
+        ("EVA", stats.evasion, 5),
+        // A damage affix widens a band, and the high end is what bounds it.
+        ("DMG", stats.damage.max, 3),
+    ]
 }
-
-/// The most a single stat may be worth, from `assets/affixes/README.md`'s
-/// calibration section. Not a `tuning.rs` constant: it is a bound on the
-/// *content*, checked against the content, and an affix past it stops being
-/// a bonus on an item and starts being the item.
-const CALIBRATION_CEILING: i32 = 3;
 
 // ---------------------------------------------------------------------------
 // What a file has to say.
@@ -100,16 +113,18 @@ fn every_shipped_affix_pays_and_none_pays_past_the_calibration() {
     for affix in game.affix_defs() {
         let axes = axes(affix.stats);
         assert!(
-            axes.iter().any(|&v| v > 0),
+            axes.iter().any(|&(_, value, _)| value > 0),
             "{} grants no positive stat, so nothing weighs its cost",
             affix.id.as_str()
         );
-        assert!(
-            axes.iter().all(|&v| v <= CALIBRATION_CEILING),
-            "{} grants {axes:?}, past the calibration ceiling of +{CALIBRATION_CEILING} \
-             — see assets/affixes/README.md before widening this",
-            affix.id.as_str()
-        );
+        for (name, value, ceiling) in axes {
+            assert!(
+                value <= ceiling,
+                "{} grants {value} {name}, past that axis's calibration ceiling of \
+                 +{ceiling} — see assets/affixes/README.md before widening this",
+                affix.id.as_str()
+            );
+        }
     }
 }
 
@@ -142,7 +157,7 @@ fn the_shipped_set_offers_a_trade_off() {
     assert!(
         game.affix_defs()
             .iter()
-            .any(|d| axes(d.stats).iter().any(|&v| v < 0)),
+            .any(|d| axes(d.stats).iter().any(|&(_, value, _)| value < 0)),
         "no shipped affix carries a drawback"
     );
 }
@@ -159,11 +174,11 @@ fn a_trade_off(game: &Game) -> (crate::affixes::AffixDef, ItemId, usize) {
     defs.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     let affix = defs
         .into_iter()
-        .find(|d| axes(d.stats).iter().any(|&v| v < 0))
+        .find(|d| axes(d.stats).iter().any(|&(_, value, _)| value < 0))
         .expect("the_shipped_set_offers_a_trade_off says there is one");
     let charged = axes(affix.stats)
         .iter()
-        .position(|&v| v < 0)
+        .position(|&(_, value, _)| value < 0)
         .expect("it was found by having one");
 
     let mut items: Vec<ItemId> = game
@@ -197,7 +212,7 @@ fn a_drawback_is_a_trade_at_zone_one_and_a_bigger_one_later() {
     let (affix, item, charged) = a_trade_off(&game);
     let paid = axes(affix.stats)
         .iter()
-        .position(|&v| v > 0)
+        .position(|&(_, value, _)| value > 0)
         .expect("the census says every affix pays something");
 
     let plain = GearCopy::plain(item.clone());
@@ -207,7 +222,11 @@ fn a_drawback_is_a_trade_at_zone_one_and_a_bigger_one_later() {
         tier: 0,
         affix: Some(affix.id.clone()),
     };
-    let bonus = |copy: &GearCopy, zone: u32| axes(game.copy_bonus(copy, zone).unwrap());
+    // Just the values: the ceilings are the census's business, not this
+    // test's.
+    let bonus = |copy: &GearCopy, zone: u32| {
+        axes(game.copy_bonus(copy, zone).unwrap()).map(|(_, value, _)| value)
+    };
 
     let mut previous_cost = 0;
     for zone in [1, 5] {

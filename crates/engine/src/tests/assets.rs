@@ -1643,3 +1643,56 @@ fn every_shipped_move_authors_a_real_damage_range() {
         }
     }
 }
+
+/// The two defensive axes must be a real choice rather than one stat with a
+/// second name: some shipped armour has to buy evasion instead of
+/// mitigation, and some shipped weapons accuracy instead of damage. A field
+/// nothing authors is an unused feature flag.
+#[test]
+fn the_shipped_gear_actually_authors_both_defensive_and_both_offensive_axes() {
+    let game = Game::new(3313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let equipment: Vec<_> = game
+        .item_defs()
+        .into_iter()
+        .filter_map(|i| i.equipment)
+        .collect();
+    assert!(
+        equipment.iter().any(|(_, stats)| stats.evasion > 0),
+        "no shipped armour buys evasion"
+    );
+    assert!(
+        equipment.iter().any(|(_, stats)| stats.mitigation > 0),
+        "no shipped armour buys mitigation"
+    );
+    assert!(
+        equipment.iter().any(|(_, stats)| stats.accuracy > 0),
+        "no shipped weapon buys accuracy"
+    );
+    assert!(
+        equipment
+            .iter()
+            .any(|(_, stats)| stats.damage != crate::battle::DamageRange::default()),
+        "no shipped weapon authors a damage range"
+    );
+}
+
+/// Every shipped weapon carries a damage range, and nothing else does. A
+/// weapon **overrides** a natural attack rather than adding to it, so a
+/// weapon with no range would silently disarm whoever equipped it.
+#[test]
+fn every_weapon_authors_a_range_and_nothing_else_does() {
+    let game = Game::new(3314, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for item in game.item_defs() {
+        let Some((slot, stats)) = item.equipment.as_ref() else {
+            continue;
+        };
+        let has_range = stats.damage != crate::battle::DamageRange::default();
+        assert_eq!(
+            has_range,
+            *slot == EquipmentSlot::Weapon,
+            "{} is a {slot:?} and {} a damage range",
+            item.id,
+            if has_range { "has" } else { "lacks" }
+        );
+    }
+}

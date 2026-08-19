@@ -3,7 +3,7 @@
     name: "Kinetic Edge",
     description: "Scavenged weapon. A cleaner strike than anything else you'll find lying around.",
     value: Some(7),
-    equipment: Some((Weapon, (atk: 2))),
+    equipment: Some((Weapon, (atk: 2, damage: (min: 4, max: 7), accuracy: 2))),
     craftable: Some((cost: [("core_fragment", 7)])),
     droppable: Some([("sub_process", 0.1), ("glitch", 0.08)]),
 )

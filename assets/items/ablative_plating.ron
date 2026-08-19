@@ -3,6 +3,6 @@
     name: "Ablative Plating",
     description: "Researched armor. Sheds a layer per hit so you don't.",
     value: Some(25),
-    equipment: Some((Armor, (def: 4))),
+    equipment: Some((Armor, (mitigation: 12))),
     droppable: Some([("rootkit", 0.3)]),
 )

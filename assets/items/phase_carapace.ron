@@ -3,7 +3,7 @@
     name: "Phase Carapace",
     description: "Premium armor. Phases with you, so it strikes as well as it holds.",
     value: Some(90),
-    equipment: Some((Armor, (def: 3, atk: 2))),
+    equipment: Some((Armor, (mitigation: 9, atk: 2))),
     craftable: Some((cost: [("portal_fragment", 14), ("bytecode_block", 5), ("charge_coil", 1)], requires_structure: Some("armory"))),
     droppable: Some([("zero_day", 0.07), ("virus", 0.06)]),
 )

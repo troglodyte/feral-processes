@@ -3,7 +3,7 @@
     name: "Redundant Bank",
     description: "Scavenged module. Capacity held back and idle, for the moment the wearer needs it most.",
     value: Some(120),
-    equipment: Some((Module, (def: 1))),
+    equipment: Some((Module, (mitigation: 3))),
     grants: Some("hot_spare"),
     droppable: Some([("crawler", 0.10), ("sprite", 0.08)]),
     cache_drop: Some(0.04),

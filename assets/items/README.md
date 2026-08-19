@@ -114,12 +114,37 @@ any non-finite `taming_potency`, `consume.power`, or
     // Optional; can be left out entirely (defaults to not equippable). If
     // set, this item can be worn in the given slot — one of `Weapon`,
     // `Armor`, `Module` — granting the paired stat bonus while equipped.
-    // Stats are `atk`, `def`, `decompiler`, each optionally omitted (they
-    // default to 0), and scale up with the wearer's gear level, with the
-    // fusion tier of the *individual copy* worn, and with that copy's rare
-    // tier — see `EquipmentStats::scaled_for_level`/`fused_for_tier`/
-    // `for_rarity` and `components::GearCopies`. Only equippable items can
-    // be fused, and only they roll a rare tier.
+    // Stats are `atk`, `mitigation`, `decompiler`, `damage`, `accuracy` and
+    // `evasion`, each optionally omitted (they default to 0), and all six
+    // scale up with the wearer's gear level, with the fusion tier of the
+    // *individual copy* worn, and with that copy's rare tier — see
+    // `EquipmentStats::scaled_for_level`/`fused_for_tier`/`for_rarity` and
+    // `components::GearCopies`. Only equippable items can be fused, and only
+    // they roll a rare tier.
+    //
+    //   atk         flat damage added to every landed attack
+    //   mitigation  **percentage points** of damage reduction. This was
+    //               `def` and meant points of absorption; the name and the
+    //               unit changed together. Everything that reduces damage is
+    //               summed and then capped at 75, so a single piece near
+    //               that ceiling wastes most of itself.
+    //   damage      `(min: N, max: M)`, a weapon's damage band, rolled
+    //               uniformly and inclusive at both ends. It **overrides**
+    //               the wearer's natural attack rather than adding to it, so
+    //               a Weapon that omits it silently disarms whoever wears
+    //               it — the shipped censuses hold every Weapon to having
+    //               one and everything else to having none. `atk` is added
+    //               on top of whatever the band rolls.
+    //   accuracy    raises the odds an attack lands, against the defender's
+    //               evasion
+    //   evasion     lowers the odds an attack lands on the wearer
+    //
+    // The two defensive axes are meant to be a real choice: heavy armour
+    // buys `mitigation` and takes every hit smaller, light armour buys
+    // `evasion` and takes fewer hits at full size. Weapons trade the same
+    // way between a wide `damage` band and `accuracy`. Neither pairing is
+    // enforced — it is simply what the shipped roster does, and what makes
+    // the fields worth authoring.
     //
     // The wearer is the player *or* any program they own — one copy is
     // interchangeable, and every copy comes out of and returns to the
@@ -128,7 +153,7 @@ any non-finite `taming_potency`, `consume.power`, or
     // a program, since only the player ever attempts a capture. Such an
     // item is still worn, and still worth its `value`; it is simply inert
     // in that slot.
-    equipment: Some((Weapon, (atk: 4))),
+    equipment: Some((Weapon, (atk: 4, damage: (min: 7, max: 13)))),
 
     // Optional; can be left out entirely (defaults to not a catalyst). If
     // set, this item is a taming catalyst: a decompile attempt spends one

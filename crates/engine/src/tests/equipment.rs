@@ -183,7 +183,7 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
         &gear(&ItemId::from(ids::FIREWALL_PLATING), 0),
     )
     .unwrap();
-    assert_eq!(game.player_status().def, def_before + 3);
+    assert_eq!(game.player_status().def, def_before + 9);
 
     game.unequip(game.player_entity(), EquipmentSlot::Armor)
         .unwrap();
@@ -383,10 +383,16 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let mut game = Game::new(201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // Ablative Plating's base is +4 def. At this magnitude the percentage
-    // is the smaller of the two terms — 4 * 1.2 = 4.8 -> 5 against a floor
-    // of 4 + 2 — so what this pins is that the two combine by taking the
-    // better, not that the percentage alone is doing the work.
+    // Ablative Plating's base is +12 mitigation, and at that magnitude the
+    // *percentage* is now the larger of the two terms: 12 * 1.4 = 17 against
+    // a floor of 12 + 2 = 14. That is an inversion — the floor used to win
+    // here, when the piece granted 4 points of subtractive DEF — and it is a
+    // consequence of mitigation being percentage points, which tripled every
+    // armour number while `ITEM_FUSION_MIN_BONUS_PER_TIER` stayed at 1. The
+    // floor still does the work on the flat axes, where gear grants 1-4;
+    // `the_fusion_floor_beats_the_percentage_at_the_magnitudes_gear_ships_at`
+    // in `items.rs` is what holds that, since no shipped armour can show it
+    // any more.
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
@@ -396,7 +402,7 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap();
     assert_eq!(
         game.player_status().def,
-        def_before + 4,
+        def_before + 12,
         "unfused equip should grant the plain base bonus"
     );
     game.unequip(game.player_entity(), EquipmentSlot::Armor)
@@ -411,8 +417,8 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
     game.equip(game.player_entity(), &gear(&armor, 2)).unwrap();
     assert_eq!(
         game.player_status().def,
-        def_before + 6,
-        "tier 2: the +1/tier floor (4 + 2 = 6) beats the +20% (4.8 -> 5)"
+        def_before + 17,
+        "tier 2: the +20% (12 * 1.4 -> 17) beats the +1/tier floor (12 + 2)"
     );
 }
 
@@ -483,8 +489,8 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap();
     assert_eq!(
         game.player_status().def,
-        base_mitigation + 4,
-        "Ablative Plating's base is +4 def while worn, unfused"
+        base_mitigation + 12,
+        "Ablative Plating's base is +12 mitigation while worn, unfused"
     );
     assert_eq!(
         held_at(&game, &armor, 0),
@@ -514,7 +520,7 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     assert_eq!(held_at(&game, &armor, 1), 0);
     assert_eq!(
         game.player_status().def,
-        base_mitigation + 6,
+        base_mitigation + 17,
         "the worn copy picks up the new tier live, without a re-equip"
     );
 }
@@ -832,8 +838,9 @@ fn a_fusion_tier_is_worth_at_least_one_point_on_every_stat_it_touches() {
     // like it only destroyed items.
     let base = EquipmentStats {
         atk: 4,
-        def: 1,
+        mitigation: 1,
         decompiler: 0,
+        ..EquipmentStats::default()
     };
 
     let t1 = base.fused_for_tier(1);
@@ -841,7 +848,7 @@ fn a_fusion_tier_is_worth_at_least_one_point_on_every_stat_it_touches() {
         t1.atk, 5,
         "4 at tier 1 must gain a point, not round back to 4"
     );
-    assert_eq!(t1.def, 2, "the floor applies to every non-zero stat");
+    assert_eq!(t1.mitigation, 2, "the floor applies to every non-zero stat");
     assert_eq!(
         t1.decompiler, 0,
         "a stat the item does not have stays absent — a floor is not a grant"

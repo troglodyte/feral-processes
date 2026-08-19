@@ -3,7 +3,7 @@
     name: "Entropy Damper",
     description: "Standard module. Steadies you while you work an ICE wall open.",
     value: Some(15),
-    equipment: Some((Module, (decompiler: 2, def: 1))),
+    equipment: Some((Module, (decompiler: 2, mitigation: 3))),
     craftable: Some((cost: [("logic_wafer", 2), ("charge_coil", 3)], requires_structure: Some("fabricator"))),
     droppable: Some([("crawler", 0.08), ("proxy", 0.07)]),
 )

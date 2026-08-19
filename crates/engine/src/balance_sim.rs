@@ -76,7 +76,7 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
 fn best_case_gear_bonus(zone: u32, weapon: EquipmentStats, armor: EquipmentStats) -> (i32, i32) {
     let weapon = weapon.scaled_for_level(zone);
     let armor = armor.scaled_for_level(zone);
-    (weapon.atk, armor.def)
+    (weapon.atk, armor.mitigation)
 }
 
 /// A companion tamed from `species` while breached into `zone` — it starts

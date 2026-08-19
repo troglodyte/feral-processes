@@ -3,6 +3,6 @@
     name: "Firewall Plating",
     description: "Researched armor. Purpose-built to stop hostile traffic.",
     value: Some(20),
-    equipment: Some((Armor, (def: 3))),
+    equipment: Some((Armor, (mitigation: 9))),
     droppable: Some([("sentinel", 0.35), ("crawler", 0.2)]),
 )

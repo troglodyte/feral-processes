@@ -297,10 +297,30 @@ impl EquipmentSlot {
 pub struct EquipmentStats {
     #[serde(default)]
     pub atk: i32,
+    /// Percentage points, summed into `Stats::mitigation` by
+    /// `Game::apply_equipment_delta` and capped by
+    /// `Game::effective_mitigation`.
     #[serde(default)]
-    pub def: i32,
+    pub mitigation: i32,
     #[serde(default)]
     pub decompiler: i32,
+    /// A weapon's damage band, which **overrides** the wielder's natural
+    /// attack rather than adding to it — see `Game::attack_range`. Zero on
+    /// everything that is not a weapon, and it stays zero through all three
+    /// scaling axes: a tier sharpens what an item does and never hands it a
+    /// stat it never had.
+    #[serde(default)]
+    pub damage: crate::battle::DamageRange,
+    /// Read live off `Game::gear_bonus` by `battle::accuracy_of`. Unlike
+    /// `atk` and `mitigation` this is **not** baked into `Stats` — there is
+    /// no field for it there and `apply_equipment_delta` must not invent one.
+    #[serde(default)]
+    pub accuracy: i32,
+    /// See `accuracy`. Light armour buys this where heavy armour buys
+    /// `mitigation`, which is what makes the two defensive axes a real
+    /// choice.
+    #[serde(default)]
+    pub evasion: i32,
 }
 
 impl EquipmentStats {
@@ -311,8 +331,11 @@ impl EquipmentStats {
         let scale = |v: i32| (v as f64 * factor).round() as i32;
         EquipmentStats {
             atk: scale(self.atk),
-            def: scale(self.def),
+            mitigation: scale(self.mitigation),
             decompiler: scale(self.decompiler),
+            damage: scale_range(self.damage, scale),
+            accuracy: scale(self.accuracy),
+            evasion: scale(self.evasion),
         }
     }
 
@@ -346,8 +369,11 @@ impl EquipmentStats {
         };
         EquipmentStats {
             atk: scale(self.atk),
-            def: scale(self.def),
+            mitigation: scale(self.mitigation),
             decompiler: scale(self.decompiler),
+            damage: scale_range(self.damage, scale),
+            accuracy: scale(self.accuracy),
+            evasion: scale(self.evasion),
         }
     }
 
@@ -394,9 +420,30 @@ impl EquipmentStats {
         };
         EquipmentStats {
             atk: scale(self.atk),
-            def: scale(self.def),
+            mitigation: scale(self.mitigation),
             decompiler: scale(self.decompiler),
+            damage: scale_range(self.damage, scale),
+            accuracy: scale(self.accuracy),
+            evasion: scale(self.evasion),
         }
+    }
+}
+
+/// Applies an axis's own `scale` to **both ends** of a damage band,
+/// independently.
+///
+/// Two of the three axes carry a per-step floor, and a floor does not
+/// commute with a multiplier — scaling the midpoint and re-deriving the
+/// width would give a different answer at both ends. Every `scale` already
+/// leaves a zero at zero, which is what keeps armour's empty band empty
+/// through all three axes.
+fn scale_range(
+    range: crate::battle::DamageRange,
+    scale: impl Fn(i32) -> i32,
+) -> crate::battle::DamageRange {
+    crate::battle::DamageRange {
+        min: scale(range.min),
+        max: scale(range.max),
     }
 }
 
@@ -409,8 +456,9 @@ mod tests {
     fn scaled_for_level_adds_100_percent_of_base_per_level_above_1() {
         let base = EquipmentStats {
             atk: 4,
-            def: 0,
+            mitigation: 0,
             decompiler: 0,
+            ..EquipmentStats::default()
         };
         assert_eq!(
             base.scaled_for_level(1).atk,
@@ -444,8 +492,9 @@ mod tests {
     fn neither_fusion_nor_a_rare_tier_deepens_a_penalty() {
         let charged = EquipmentStats {
             atk: 4,
-            def: 0,
+            mitigation: 0,
             decompiler: -2,
+            ..EquipmentStats::default()
         };
         assert_eq!(
             charged.fused_for_tier(MAX_FUSIONS).decompiler,
@@ -463,11 +512,12 @@ mod tests {
     fn an_ordinary_tier_leaves_an_item_exactly_as_it_was() {
         let base = EquipmentStats {
             atk: 3,
-            def: 1,
+            mitigation: 1,
             decompiler: 2,
+            ..EquipmentStats::default()
         };
         let same = base.for_rarity(Rarity::Ordinary);
-        assert_eq!((same.atk, same.def, same.decompiler), (3, 1, 2));
+        assert_eq!((same.atk, same.mitigation, same.decompiler), (3, 1, 2));
     }
 
     /// Every rung has to move every stat the item actually has. The floor
@@ -507,7 +557,7 @@ mod tests {
         };
         for tier in Rarity::ALL {
             let scaled = weapon_only.for_rarity(tier);
-            assert_eq!(scaled.def, 0, "{tier:?} invented a DEF bonus");
+            assert_eq!(scaled.mitigation, 0, "{tier:?} invented a DEF bonus");
             assert_eq!(scaled.decompiler, 0, "{tier:?} invented a DECOMP bonus");
         }
     }
@@ -530,8 +580,9 @@ mod tests {
     fn the_gear_axes_do_not_commute_so_the_order_is_load_bearing() {
         let base = EquipmentStats {
             atk: 3,
-            def: 2,
+            mitigation: 2,
             decompiler: 0,
+            ..EquipmentStats::default()
         };
         let canonical = base
             .scaled_for_level(3)
@@ -542,8 +593,8 @@ mod tests {
             .scaled_for_level(3)
             .fused_for_tier(2);
         assert_ne!(
-            (canonical.atk, canonical.def),
-            (reordered.atk, reordered.def),
+            (canonical.atk, canonical.mitigation),
+            (reordered.atk, reordered.mitigation),
             "if these ever agree, this test has stopped protecting anything — \
              check whether a floor was removed from one of the three axes"
         );
@@ -552,9 +603,79 @@ mod tests {
     #[test]
     fn equipment_stats_round_trip_ron_with_omitted_zero_fields() {
         let full: EquipmentStats = ron::from_str("(atk: 3, def: 0, decompiler: 0)").unwrap();
-        assert_eq!((full.atk, full.def, full.decompiler), (3, 0, 0));
+        assert_eq!((full.atk, full.mitigation, full.decompiler), (3, 0, 0));
         // Zero fields may be omitted thanks to per-field serde defaults.
         let partial: EquipmentStats = ron::from_str("(atk: 4)").unwrap();
-        assert_eq!((partial.atk, partial.def, partial.decompiler), (4, 0, 0));
+        assert_eq!(
+            (partial.atk, partial.mitigation, partial.decompiler),
+            (4, 0, 0)
+        );
+    }
+
+    #[test]
+    fn both_ends_of_a_damage_range_carry_the_per_step_floor() {
+        // A floor does not commute with a multiplier, so the ends cannot be
+        // scaled by a shortcut that scales the midpoint and re-derives the
+        // width. Fusing a 4-9 weapon must lift both ends by at least
+        // ITEM_FUSION_MIN_BONUS_PER_TIER per tier.
+        let base = EquipmentStats {
+            damage: crate::battle::DamageRange { min: 4, max: 9 },
+            ..EquipmentStats::default()
+        };
+        let fused = base.fused_for_tier(2);
+        assert!(fused.damage.min >= base.damage.min + 2 * ITEM_FUSION_MIN_BONUS_PER_TIER);
+        assert!(fused.damage.max >= base.damage.max + 2 * ITEM_FUSION_MIN_BONUS_PER_TIER);
+        assert!(fused.damage.max >= fused.damage.min);
+    }
+
+    #[test]
+    fn a_zero_damage_range_stays_zero_through_every_axis() {
+        // Armour has no damage range and must never be handed one — the
+        // same rule the other axes already state.
+        let armour = EquipmentStats {
+            mitigation: 4,
+            ..EquipmentStats::default()
+        };
+        let scaled = armour
+            .scaled_for_level(6)
+            .fused_for_tier(3)
+            .for_rarity(Rarity::ALL[Rarity::ALL.len() - 1]);
+        assert_eq!(scaled.damage, crate::battle::DamageRange::default());
+    }
+
+    #[test]
+    fn accuracy_and_evasion_scale_on_the_same_three_axes_as_every_other_stat() {
+        let light = EquipmentStats {
+            evasion: 3,
+            accuracy: 2,
+            ..EquipmentStats::default()
+        };
+        let scaled = light.scaled_for_level(4);
+        assert!(scaled.evasion > light.evasion);
+        assert!(scaled.accuracy > light.accuracy);
+    }
+
+    /// The per-tier floor is what makes a fusion observable at the
+    /// magnitudes flat gear actually ships at — 1 to 4 points of `atk` or
+    /// `decompiler`, where 20% a tier rounds straight back to where it
+    /// started.
+    ///
+    /// It used to be demonstrable on armour too. It is not any more:
+    /// mitigation became percentage points and every armour number tripled,
+    /// so the percentage now wins there. This is the case that kept the
+    /// floor honest, moved to an axis that still shows it.
+    #[test]
+    fn the_fusion_floor_beats_the_percentage_at_the_magnitudes_gear_ships_at() {
+        let flat = EquipmentStats {
+            atk: 2,
+            ..EquipmentStats::default()
+        };
+        // 2 * 1.4 rounds to 3; the floor is 2 + 2 = 4 and has to win.
+        assert_eq!(flat.fused_for_tier(2).atk, 4);
+        assert_eq!(
+            (flat.atk as f64 * (1.0 + ITEM_FUSION_BONUS_PER_TIER * 2.0)).round() as i32,
+            3,
+            "the percentage alone would have paid less, which is the point"
+        );
     }
 }

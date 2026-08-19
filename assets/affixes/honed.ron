@@ -4,7 +4,7 @@
 (
     id: "honed",
     prefix: Some("Honed"),
-    stats: (atk: 2),
+    stats: (atk: 2, accuracy: 2),
     slots: Some([Weapon]),
     weight: 12,
 )

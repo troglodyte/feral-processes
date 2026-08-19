@@ -182,7 +182,7 @@ fn equip_preview_tag_leads_with_the_slot_the_item_would_take() {
     );
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::ABLATIVE_PLATING), 0), 1),
-        " (ARM +4 DEF)"
+        " (ARM +12 MIT)"
     );
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::CORTEX_HACK), 0), 1),

@@ -3,7 +3,7 @@
     name: "Bastion Lattice",
     description: "Premium armor. The best flat protection on the Grid.",
     value: Some(80),
-    equipment: Some((Armor, (def: 4))),
+    equipment: Some((Armor, (mitigation: 12))),
     craftable: Some((cost: [("portal_fragment", 12), ("bytecode_block", 4), ("charge_coil", 2)], requires_structure: Some("armory"))),
     droppable: Some([("sentinel", 0.08), ("rootkit", 0.06)]),
 )

@@ -781,7 +781,7 @@ impl Game {
             gear_level: worn.level,
             fusion_tier: worn.copy.tier,
             atk: mods.atk,
-            def: mods.def,
+            def: mods.mitigation,
             decompiler: mods.decompiler,
         })
     }

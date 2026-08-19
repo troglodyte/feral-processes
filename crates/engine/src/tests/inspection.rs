@@ -841,7 +841,7 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
         .fused_for_tier(slot.fusion_tier);
     assert_eq!(
         (slot.atk, slot.def, slot.decompiler),
-        (expected.atk, expected.def, expected.decompiler),
+        (expected.atk, expected.mitigation, expected.decompiler),
         "the listed bonus must be the one captured at equip time, not a fresh preview"
     );
 }
@@ -924,7 +924,7 @@ fn manifest_lists_a_companions_worn_gear() {
         .fused_for_tier(slot.fusion_tier);
     assert_eq!(
         (slot.atk, slot.def, slot.decompiler),
-        (expected.atk, expected.def, expected.decompiler),
+        (expected.atk, expected.mitigation, expected.decompiler),
         "a companion's row is measured the same way the player's is"
     );
 }

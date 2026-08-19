@@ -584,59 +584,63 @@ mod tests {
             .collect();
         assert_eq!(banked, ["research_data"], "only Research Data is banked");
 
-        // (id, slot, atk, def, decompiler) for every equippable that ships.
+        // (id, slot, atk, mitigation, decompiler) for every equippable that
+        // ships. Mitigation is percentage points; the damage band, accuracy
+        // and evasion have their own censuses in `tests/assets.rs`.
         let equipment = [
             // Research-gated tier.
             ("monofilament_whip", EquipmentSlot::Weapon, 4, 0, 0),
             ("overclock_core", EquipmentSlot::Weapon, 3, 0, 0),
-            ("firewall_plating", EquipmentSlot::Armor, 0, 3, 0),
-            ("ablative_plating", EquipmentSlot::Armor, 0, 4, 0),
+            ("firewall_plating", EquipmentSlot::Armor, 0, 9, 0),
+            ("ablative_plating", EquipmentSlot::Armor, 0, 12, 0),
             ("neural_amplifier", EquipmentSlot::Module, 0, 0, 2),
             ("cortex_hack", EquipmentSlot::Module, 0, 0, 3),
             // Scavenged tier — no bench.
             ("shiv_routine", EquipmentSlot::Weapon, 1, 0, 0),
             ("kinetic_edge", EquipmentSlot::Weapon, 2, 0, 0),
             ("scrap_ward", EquipmentSlot::Armor, 0, 1, 0),
-            ("packet_buffer", EquipmentSlot::Armor, 0, 2, 0),
+            ("packet_buffer", EquipmentSlot::Armor, 0, 6, 0),
             ("probe_service", EquipmentSlot::Module, 0, 0, 1),
             ("handshake_forge", EquipmentSlot::Module, 0, 0, 2),
             // Standard tier — bench, Core Fragments.
             ("arc_lance", EquipmentSlot::Weapon, 3, 0, 0),
-            ("recursion_blade", EquipmentSlot::Weapon, 2, 1, 0),
+            ("recursion_blade", EquipmentSlot::Weapon, 2, 3, 0),
             ("shim_blade", EquipmentSlot::Weapon, 2, 0, 1),
-            ("hardened_shell", EquipmentSlot::Armor, 0, 3, 0),
-            ("null_weave", EquipmentSlot::Armor, 1, 2, 0),
+            ("hardened_shell", EquipmentSlot::Armor, 0, 9, 0),
+            ("null_weave", EquipmentSlot::Armor, 1, 6, 0),
             ("static_mesh", EquipmentSlot::Armor, 0, 2, 1),
             ("trace_sniffer", EquipmentSlot::Module, 0, 0, 3),
             ("logic_probe", EquipmentSlot::Module, 1, 0, 2),
-            ("entropy_damper", EquipmentSlot::Module, 0, 1, 2),
-            ("sync_governor", EquipmentSlot::Module, 1, 1, 1),
+            ("entropy_damper", EquipmentSlot::Module, 0, 3, 2),
+            ("sync_governor", EquipmentSlot::Module, 1, 3, 1),
             // Premium tier — bench, Portal Fragments.
             ("plasma_router", EquipmentSlot::Weapon, 4, 0, 0),
             ("black_ice_pick", EquipmentSlot::Weapon, 3, 0, 2),
-            ("siege_compiler", EquipmentSlot::Weapon, 3, 2, 0),
-            ("bastion_lattice", EquipmentSlot::Armor, 0, 4, 0),
-            ("phase_carapace", EquipmentSlot::Armor, 2, 3, 0),
-            ("nullsteel_plate", EquipmentSlot::Armor, 0, 3, 2),
+            ("siege_compiler", EquipmentSlot::Weapon, 3, 6, 0),
+            ("bastion_lattice", EquipmentSlot::Armor, 0, 12, 0),
+            ("phase_carapace", EquipmentSlot::Armor, 2, 9, 0),
+            ("nullsteel_plate", EquipmentSlot::Armor, 0, 9, 2),
             ("kernel_key", EquipmentSlot::Module, 0, 0, 4),
             ("oracle_core", EquipmentSlot::Module, 2, 0, 3),
-            ("singularity_matrix", EquipmentSlot::Module, 3, 3, 3),
+            ("singularity_matrix", EquipmentSlot::Module, 3, 9, 3),
             // Grant-carrying tier — drop-only, and priced above the stat
             // line because the routine is the rest of what they are worth.
             ("interrupt_coil", EquipmentSlot::Weapon, 3, 0, 0),
-            ("parity_weave", EquipmentSlot::Armor, 0, 3, 0),
-            ("watchdog_tap", EquipmentSlot::Module, 0, 2, 0),
+            ("parity_weave", EquipmentSlot::Armor, 0, 9, 0),
+            ("watchdog_tap", EquipmentSlot::Module, 0, 6, 0),
             ("crash_handler", EquipmentSlot::Weapon, 2, 0, 0),
             ("ragged_edge", EquipmentSlot::Weapon, 2, 0, 0),
+            // Sandbox Liner is light armour: it trades most of its
+            // mitigation for evasion, which this row does not sample.
             ("sandbox_liner", EquipmentSlot::Armor, 0, 2, 0),
-            ("redundant_bank", EquipmentSlot::Module, 0, 1, 0),
-            ("deadman_relay", EquipmentSlot::Module, 0, 2, 0),
+            ("redundant_bank", EquipmentSlot::Module, 0, 3, 0),
+            ("deadman_relay", EquipmentSlot::Module, 0, 6, 0),
         ];
         for (id, want_slot, atk, def, decompiler) in equipment {
             let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
             assert_eq!(slot, want_slot, "{id} slot");
             assert_eq!(
-                (stats.atk, stats.def, stats.decompiler),
+                (stats.atk, stats.mitigation, stats.decompiler),
                 (atk, def, decompiler),
                 "{id} stats"
             );
@@ -691,7 +695,7 @@ mod tests {
             r#"(
                 id: "gear",
                 name: "Gear",
-                equipment: Some((Weapon, (atk: 2, def: 1))),
+                equipment: Some((Weapon, (atk: 2, mitigation: 1))),
                 craftable: Some((cost: [("core_fragment", 5)], requires_structure: Some("fabricator"))),
                 droppable: Some([("scrapper", 0.15), ("worm", 0.05)]),
             )"#,
@@ -711,7 +715,11 @@ mod tests {
             Some(&[("scrapper".to_string(), 0.15), ("worm".to_string(), 0.05)][..])
         );
         let (_, stats) = def.equipment.unwrap();
-        assert_eq!((stats.atk, stats.def), (2, 1), "hybrids stack two stats");
+        assert_eq!(
+            (stats.atk, stats.mitigation),
+            (2, 1),
+            "hybrids stack two stats"
+        );
     }
 
     /// The engine floors a percentage gain at `+1`, so a negative one would

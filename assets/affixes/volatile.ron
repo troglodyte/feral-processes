@@ -9,7 +9,7 @@
 (
     id: "volatile",
     prefix: Some("Volatile"),
-    stats: (atk: 2, def: -1),
+    stats: (atk: 2, mitigation: -3),
     slots: Some([Armor]),
     weight: 6,
 )

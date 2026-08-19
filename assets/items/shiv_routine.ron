@@ -3,7 +3,7 @@
     name: "Shiv Routine",
     description: "Scavenged weapon. Barely a blade, but it beats bare hands.",
     value: Some(4),
-    equipment: Some((Weapon, (atk: 1))),
+    equipment: Some((Weapon, (atk: 1, damage: (min: 3, max: 5), accuracy: 3))),
     craftable: Some((cost: [("core_fragment", 4)])),
     droppable: Some([("sprite", 0.1), ("drone", 0.08)]),
 )

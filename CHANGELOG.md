@@ -27,6 +27,26 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.6
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+Nothing here touches what a save holds — this is a renderer fix to how one
+screen lays its text out.
+
+### A research node's description no longer runs off the page
+
+The Research and Perks pickers each print a description under every entry,
+and each printed it as a single line. The prose the assets carry runs to
+about 240 characters; the popup those screens open in holds about 114. So
+most of most descriptions was drawn outside the box — and silently, because
+a popup row is clamped vertically and nothing clamps it horizontally.
+
+Descriptions now wrap, at the same width the Recipes screen already wraps a
+product's prose to, so the two screens cannot disagree about how wide the
+game's prose runs. A wrapped description stays attached to the entry it
+belongs to and scrolls with it rather than being torn off and pinned to the
+foot of the box.
+
 ## 0.11.5
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

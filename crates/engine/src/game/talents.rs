@@ -131,7 +131,12 @@ impl Game {
         let node = choice.node.clone();
         let name = choice.name.clone();
 
-        self.apply_talent_node(entity, &node);
+        // Recorded *before* the effect is applied, because two of the four
+        // node kinds are read back off this very list: `install_unlocked_
+        // routines` asks `talent_abilities` what this program's talents grant,
+        // and that has to include the one just bought. Every refusal is already
+        // behind us, so nothing here can leave a receipt for something that
+        // did not happen.
         let mut talents = self
             .world
             .get::<Talents>(entity)
@@ -139,6 +144,7 @@ impl Game {
             .unwrap_or_default();
         talents.0.push(id.clone());
         self.world.entity_mut(entity).insert(talents);
+        self.apply_talent_node(entity, &node);
 
         let label = self.entity_label(entity);
         self.log(format!("{label} takes {name}."));
@@ -153,11 +159,22 @@ impl Game {
         match node {
             TalentNode::Stat { stat, percent } => self.bake_talent_stat(entity, *stat, *percent),
             TalentNode::Affinity { .. } | TalentNode::RoutineSlot => {}
-            // Through the same install path a species-kit unlock uses, so a
-            // granted routine competes for slots exactly as an innate one
-            // does and a carried routine keeps its place — see
-            // `install_innate_routines`.
-            TalentNode::Ability { .. } => self.install_innate_routines(entity),
+            // Through `install_unlocked_routines` rather than
+            // `install_innate_routines`, with an empty level range so the
+            // species half offers nothing: a granted routine then competes for
+            // slots exactly as an innate *unlock* does, which includes
+            // displacing `FALLBACK_ABILITY_ID`. That is the placeholder doing
+            // its job — a companion whose species grants nothing holds it in
+            // its one slot, and without the eviction the first talent routine
+            // would be refused for want of room and lost.
+            TalentNode::Ability { .. } => {
+                let level = self
+                    .world
+                    .get::<Experience>(entity)
+                    .map(|e| e.level)
+                    .unwrap_or(1);
+                self.install_unlocked_routines(entity, level, level);
+            }
         }
     }
 

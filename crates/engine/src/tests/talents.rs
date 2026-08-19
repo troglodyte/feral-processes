@@ -284,3 +284,72 @@ fn a_slot_talent_on_the_player_changes_nothing() {
 
     assert_eq!(game.routine_slots(player), before);
 }
+
+/// Asserted through `Game::actor_abilities`, not by reading `Routines`: that is
+/// what the battle menu and resolution both go through, so it is what "the
+/// companion can be commanded to use it" actually means.
+#[test]
+fn an_ability_talent_installs_a_routine_the_companion_can_use() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
+
+    game.take_talent(pet, &TalentId::from("gen_interrupt"))
+        .unwrap();
+
+    assert!(
+        game.actor_abilities(pet)
+            .iter()
+            .any(|a| a.id == "interrupt_request"),
+        "a granted routine has to be commandable, got: {:?}",
+        game.actor_abilities(pet)
+            .iter()
+            .map(|a| a.id.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// A routine the program was *carrying* when it was decompiled is the prize the
+/// player decompiled it for. `install_innate_routines` documents that, and the
+/// talent path must not quietly evict it.
+#[test]
+fn an_ability_talent_does_not_evict_a_carried_routine() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["core_dump".to_string()]));
+    game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
+
+    game.take_talent(pet, &TalentId::from("gen_interrupt"))
+        .unwrap();
+
+    assert!(
+        game.world
+            .get::<Routines>(pet)
+            .unwrap()
+            .0
+            .contains(&"core_dump".to_string()),
+        "the carried routine keeps its slot"
+    );
+}
+
+#[test]
+fn an_ability_talent_for_a_known_routine_does_not_duplicate_it() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["interrupt_request".to_string()]));
+    game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
+
+    game.take_talent(pet, &TalentId::from("gen_interrupt"))
+        .unwrap();
+
+    let held = game.world.get::<Routines>(pet).unwrap().0.clone();
+    assert_eq!(
+        held.iter().filter(|id| *id == "interrupt_request").count(),
+        1,
+        "got: {held:?}"
+    );
+}

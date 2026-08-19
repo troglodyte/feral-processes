@@ -573,6 +573,31 @@ impl Game {
         }
     }
 
+    /// Every ability `entity`'s talents grant. Folded into the `declared` list
+    /// both install paths already build, rather than installed by a second path
+    /// beside them: a granted routine has to behave *exactly* like a
+    /// species-kit unlock — same slot competition, same treatment of what the
+    /// program was carrying when it was decompiled — and one list is the only
+    /// way to guarantee that.
+    fn talent_abilities(&self, entity: Entity) -> Vec<AbilityId> {
+        let Some(taken) = self.world.get::<Talents>(entity) else {
+            return Vec::new();
+        };
+        let Some(tree) = self.talent_tree(entity) else {
+            return Vec::new();
+        };
+        tree.tiers
+            .iter()
+            .flat_map(|tier| tier.0.iter())
+            .filter(|choice| taken.0.contains(&choice.id))
+            .filter_map(|choice| match &choice.node {
+                crate::talents::TalentNode::Ability { id } => Some(id.clone()),
+                _ => None,
+            })
+            .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
+            .collect()
+    }
+
     /// How many extra routine slots `entity`'s talents have bought.
     fn talent_routine_slots(&self, entity: Entity) -> usize {
         let Some(taken) = self.world.get::<Talents>(entity) else {
@@ -614,7 +639,7 @@ impl Game {
             .map(|e| e.level)
             .unwrap_or(1);
         let slots = self.routine_slots(entity);
-        let declared: Vec<AbilityId> = self
+        let mut declared: Vec<AbilityId> = self
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
@@ -625,6 +650,9 @@ impl Game {
             .map(|a| a.id)
             .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
             .collect();
+        // After the species kit, so a talent takes the slot the kit left over
+        // rather than one the kit needed.
+        declared.extend(self.talent_abilities(entity));
         // Whatever this program was already holding is what it was found
         // carrying in the field — see `Game::roll_wild_routine`. That is the
         // prize the player decompiled it for, so it keeps its place and the
@@ -687,7 +715,7 @@ impl Game {
         from_level: u32,
         to_level: u32,
     ) {
-        let reached: Vec<AbilityId> = self
+        let mut reached: Vec<AbilityId> = self
             .world
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
@@ -698,6 +726,10 @@ impl Game {
             .map(|a| a.id)
             .filter(|id| self.world.resource::<AbilityDb>().get(id).is_some())
             .collect();
+        // A talent's routines ride this list too, so a companion that gained a
+        // slot with the same level-up has somewhere to put one. Already-held
+        // ids are skipped below, so re-offering them costs nothing.
+        reached.extend(self.talent_abilities(entity));
         if reached.is_empty() {
             return;
         }

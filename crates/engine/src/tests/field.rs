@@ -365,7 +365,7 @@ fn an_ally_picker_row_carries_the_targets_stats() {
         .expect("the party member is offered");
 
     assert_eq!((row.hp, row.max_hp), (stats.hp, stats.max_hp));
-    assert_eq!((row.atk, row.def), (stats.atk, stats.mitigation));
+    assert_eq!((row.atk, row.mitigation), (stats.atk, stats.mitigation));
     assert_eq!(row.power, stats.power());
 }
 

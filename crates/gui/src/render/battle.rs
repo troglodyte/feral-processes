@@ -153,7 +153,7 @@ fn hostile_header() -> String {
         "GROUP",
         "HP",
         "ATK",
-        "DEF",
+        "MIT",
         "RANGE",
         &hostile_tail("STATUS", "DECOMP"),
     )
@@ -165,7 +165,7 @@ fn party_header() -> String {
         "NAME",
         "HP",
         "ATK",
-        "DEF",
+        "MIT",
         "POS",
         &party_tail("GEAR", "POWER", "ACTION"),
     )
@@ -291,7 +291,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 ),
                 &format!("{}/{}", g.front_hp, g.front_max_hp),
                 g.atk,
-                g.def,
+                g.mitigation,
                 if g.engaged { "ENGAGED" } else { "BACK" },
                 &hostile_tail(
                     // The engine owns the wording of a condition
@@ -422,7 +422,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
                 &p.name,
                 &format!("{}/{}", p.hp, p.max_hp),
                 p.atk,
-                p.def,
+                p.mitigation,
                 if p.front { "FRONT" } else { "BACK" },
                 // A member's own condition rides in the ACTION column
                 // rather than getting a fixed cell of its own that would be
@@ -736,7 +736,7 @@ mod tests {
         .join("\n");
         assert_eq!(
             block,
-            "   GROUP              HP        ATK DEF RANGE   STATUS        DECOMP\n\
+            "   GROUP              HP        ATK MIT RANGE   STATUS        DECOMP\n\
              A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%\n\
              B  Warden Process     44/44      14   9 BACK    OK               18%\n\
              C  Sentinel [BOSS]    120/120    22  15 BACK    OK                 —"
@@ -772,7 +772,7 @@ mod tests {
         .join("\n");
         assert_eq!(
             block,
-            "   NAME               HP        ATK DEF POS     GEAR    POWER ACTION\n\
+            "   NAME               HP        ATK MIT POS     GEAR    POWER ACTION\n\
              >1 You                21/30      11   6 FRONT   w|a|m  62/100 Attack A\n\
              \u{20}2 Sparkgrub          18/18       7   3 FRONT   w|.|.       — Defend"
         );

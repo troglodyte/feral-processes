@@ -297,8 +297,9 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
     let mut sections = vec![Section {
         title: "COMBAT",
         rows: section_rows(vec![
+            stat("Damage", view.damage.clone()),
             stat("Attack", view.atk.to_string()),
-            stat("Defense", view.def.to_string()),
+            stat("Mitigation", format!("{}%", view.mitigation)),
             stat("Power", view.power.to_string()),
         ]),
         full_width: false,
@@ -382,7 +383,10 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
                     .map(|c| {
                         stat(
                             c.name.clone(),
-                            format!("HP {}/{}  ATK {}  DEF {}", c.hp, c.max_hp, c.atk, c.def),
+                            format!(
+                                "HP {}/{}  ATK {}  MIT {}%",
+                                c.hp, c.max_hp, c.atk, c.mitigation
+                            ),
                         )
                     })
                     .collect(),
@@ -397,8 +401,8 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     if slot.atk != 0 {
         bonus.push(format!("+{} ATK", slot.atk));
     }
-    if slot.def != 0 {
-        bonus.push(format!("+{} DEF", slot.def));
+    if slot.mitigation != 0 {
+        bonus.push(format!("+{} DEF", slot.mitigation));
     }
     if slot.decompiler != 0 {
         bonus.push(format!("+{} DECOMP", slot.decompiler));
@@ -866,7 +870,8 @@ mod tests {
             hp: 10,
             max_hp: 10,
             atk: 5,
-            def: 5,
+            mitigation: 5,
+            damage: "3–7".to_string(),
             power: 15,
             status_effect: None,
             routines: vec![feral_processes_engine::RoutineSlotView {
@@ -887,7 +892,7 @@ mod tests {
             gear_level: 1,
             fusion_tier: 0,
             atk: 4,
-            def: 0,
+            mitigation: 0,
             decompiler: 0,
         }
     }
@@ -949,7 +954,7 @@ mod tests {
         assert_eq!(
             shape,
             vec![
-                ("COMBAT", 3, false),
+                ("COMBAT", 4, false),
                 ("SPECIES", 5, false),
                 ("WORK", 4, false),
                 ("DEVELOPMENT", 3, false),

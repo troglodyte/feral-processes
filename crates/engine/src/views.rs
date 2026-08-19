@@ -74,7 +74,8 @@ pub struct PlayerStatus {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     ///
     /// Named `strength` rather than `power` because this is the one struct
@@ -343,7 +344,8 @@ pub struct PetInfo {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
     /// This program's slot in the active party, or `None` if it isn't a
@@ -437,7 +439,8 @@ pub struct CompanionInfo {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
     /// The companion's current battle status condition, if any (see
@@ -769,7 +772,8 @@ pub struct EnemyGroupView {
     /// Scrapper 2" overflows; the renderer tags it outside that column.
     pub front_rarity: Rarity,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     pub is_boss: bool,
     /// Whether this group is in melee range. A group that isn't can only
     /// act through a ranged move, and renderers dim it to make that legible
@@ -795,7 +799,8 @@ pub struct PartySlotView {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     pub status_effect: Option<String>,
     /// What this member has left to spend on routines, or `None` for one
     /// holding no reserve at all. Every roster member carries one
@@ -1222,7 +1227,8 @@ pub struct FieldCastTargetView {
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
     /// The buff this cast would *overwrite*, if any — see
@@ -1300,7 +1306,16 @@ pub struct ManifestView {
     /// The player's is `Game::effective_atk` (equipment folded in); a
     /// program's is its raw `Stats`.
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
+    /// The damage band this combatant swings for, already formatted by
+    /// `Game::damage_range_label` — a worn weapon's if it has one, else its
+    /// first species move's, else the player's unarmed band.
+    ///
+    /// Formatted here rather than in a renderer for the reason `copy_name`
+    /// is: two screens printing a range two ways is how they come to
+    /// disagree with the damage the fight actually deals.
+    pub damage: String,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
     /// Active battle status condition, e.g. "Bleeding (2)" — see
@@ -1365,7 +1380,8 @@ pub struct ManifestEquipSlot {
     pub gear_level: u32,
     pub fusion_tier: u32,
     pub atk: i32,
-    pub def: i32,
+    /// **Percentage points** — see `components::Stats::mitigation`.
+    pub mitigation: i32,
     pub decompiler: i32,
 }
 

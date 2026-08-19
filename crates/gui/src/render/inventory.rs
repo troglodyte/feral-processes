@@ -55,7 +55,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         Row::TextColored(
             format!(
                 "Level {}   Attack {}   Defense {}   Power {}   Decompiler {}",
-                status.level, status.atk, status.def, status.power, status.decompiler
+                status.level, status.atk, status.mitigation, status.power, status.decompiler
             ),
             CYAN,
         ),
@@ -219,7 +219,7 @@ fn equipped_summary(
     format!(
         "{label}: {}{note} ({})",
         game.copy_name(&equipped.copy),
-        stat_summary(mods)
+        stat_summary(game, mods)
     )
 }
 
@@ -254,12 +254,17 @@ pub(super) fn draw_equip_swap(
         text_row(""),
     ];
     for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
-        rows.push(tier_row(
+        // Wrapped, not joined: six stat axes and their six deltas do not fit
+        // one popup line, so the delta sheds onto a continuation when it has
+        // to — the same treatment `inventory_row_lines` gives an equip tag.
+        // Both lines carry the row's selection and tier colour, so a wrapped
+        // entry still highlights as one thing.
+        for line in wrapped_row_lines(
             format!("[{}] {}", menu_shortcut(i), row.label),
-            i == selected,
-            row.fusion_tier,
-            row.rarity,
-        ));
+            &[format!(" {}", row.delta)],
+        ) {
+            rows.push(tier_row(line, i == selected, row.fusion_tier, row.rarity));
+        }
     }
     rows.push(text_row(""));
     rows.push(text_row(
@@ -369,6 +374,7 @@ pub(super) fn draw_inventory_item_action(
 mod tests {
     use super::{equipped_summary, inventory_row_lines};
     use crate::paint::with_painter;
+    use crate::render::popup::wrapped_row_lines;
     use crate::text::ui_metrics;
     use feral_processes_app_core::menu_shortcut;
     use feral_processes_engine::components::Rarity;
@@ -582,28 +588,45 @@ mod tests {
     fn the_widest_swap_row_still_fits_its_popup() {
         // The widest row this screen can build out of the shipped assets: the
         // longest tier word, the longest affix, the longest equippable name,
-        // a maxed fusion note and a three-stat delta.
-        let widest = format!(
-            "[a] {:<50} {:<20} {}",
+        // a maxed fusion note and a six-axis summary. The figures are the
+        // ones `no_shipped_gear_summary_outgrows_the_swap_stats_column`
+        // measures off the real items at the top gear level, fusion tier and
+        // rare tier — that census is what says this string is still the
+        // worst case.
+        //
+        // Measured **as wrapped**, because six axes printed twice do not fit
+        // one line and `draw_equip_swap` no longer asks them to. Every line
+        // the row produces has to fit, which is what this iterates.
+        let head = format!(
+            "[a] {:<50} {:<20}",
             format!(
                 "{} Singularity Matrix of Quiet Handshakes",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
-            "+12 ATK +9 DEF +9 DECOMP T3/3",
-            "-12 ATK -9 DEF -9 DECOMP"
+            "206–310 DMG +103 ATK +103 MIT +69 ACC +103 DECOMP T3/3",
+        );
+        let lines = wrapped_row_lines(
+            head,
+            &[" -206–-310 DMG -103 ATK -103 MIT -69 ACC -103 DECOMP".to_string()],
+        );
+        assert!(
+            lines.len() > 1,
+            "the worst case has to actually wrap, or this measures the easy case"
         );
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
-            assert!(
-                drawn <= room,
-                "the widest gear-swap row overflows by {:.0}px \
-                 ({drawn:.0} into {room:.0}):\n{widest}",
-                drawn - room
-            );
+            for line in &lines {
+                let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a gear-swap row line overflows by {:.0}px \
+                     ({drawn:.0} into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
         });
     }
 }

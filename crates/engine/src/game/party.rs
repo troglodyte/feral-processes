@@ -26,7 +26,7 @@ impl Game {
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player);
         let atk = self.effective_atk(player);
-        let def = self.effective_mitigation(player);
+        let mitigation = self.effective_mitigation(player);
         let db = self.world.resource::<ItemDb>();
         // Grouped here, in the view, and deliberately not in `Inventory`:
         // that component's order is persisted through `PlayerSave`, so
@@ -78,8 +78,15 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk,
-            def,
-            strength: stats.max_hp + atk + def,
+            mitigation,
+            // `Stats::power` over the player's *effective* numbers — the
+            // same scalar, not a second spelling of it.
+            strength: Stats {
+                atk,
+                mitigation,
+                ..*stats
+            }
+            .power(),
             decompiler,
             power: needs.get(),
             inventory,
@@ -198,7 +205,7 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
-            def: stats.mitigation,
+            mitigation: stats.mitigation,
             power: stats.power(),
             status: self.status_label(entity),
             ability: self.ability_label(entity),
@@ -344,7 +351,7 @@ impl Game {
                     hp: stats.hp,
                     max_hp: stats.max_hp,
                     atk: stats.atk,
-                    def: stats.mitigation,
+                    mitigation: stats.mitigation,
                     power: stats.power(),
                     party_slot: slot_of(&entity).map(|s| s as u32),
                     activity: self.program_activity(entity),

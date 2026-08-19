@@ -139,7 +139,7 @@ impl Game {
         kind: Option<FieldBuffKind>,
     ) -> FieldCastTargetView {
         let holder = self.routine_holder_view(entity, name);
-        let (hp, max_hp, atk, def, power) = self
+        let (hp, max_hp, atk, mitigation, power) = self
             .world
             .get::<Stats>(entity)
             .map(|s| (s.hp, s.max_hp, s.atk, s.mitigation, s.power()))
@@ -153,7 +153,7 @@ impl Game {
             hp,
             max_hp,
             atk,
-            def,
+            mitigation,
             power,
             running: kind.and_then(|kind| self.displaced_field_buff(entity, kind)),
         }

@@ -795,8 +795,8 @@ fn manifest_reports_the_player_with_equipment_folded_into_their_stats() {
     assert_eq!(view.hp, status.hp);
     assert_eq!(view.max_hp, status.max_hp);
     assert_eq!(
-        (view.atk, view.def, view.power),
-        (status.atk, status.def, status.strength),
+        (view.atk, view.mitigation, view.power),
+        (status.atk, status.mitigation, status.strength),
         "the manifest must quote the same effective stats the sidebar does"
     );
     assert_eq!(view.level, Some(status.level));
@@ -840,7 +840,7 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
         .scaled_for_level(slot.gear_level)
         .fused_for_tier(slot.fusion_tier);
     assert_eq!(
-        (slot.atk, slot.def, slot.decompiler),
+        (slot.atk, slot.mitigation, slot.decompiler),
         (expected.atk, expected.mitigation, expected.decompiler),
         "the listed bonus must be the one captured at equip time, not a fresh preview"
     );
@@ -923,7 +923,7 @@ fn manifest_lists_a_companions_worn_gear() {
         .scaled_for_level(slot.gear_level)
         .fused_for_tier(slot.fusion_tier);
     assert_eq!(
-        (slot.atk, slot.def, slot.decompiler),
+        (slot.atk, slot.mitigation, slot.decompiler),
         (expected.atk, expected.mitigation, expected.decompiler),
         "a companion's row is measured the same way the player's is"
     );

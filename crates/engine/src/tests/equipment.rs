@@ -76,8 +76,8 @@ fn an_equip_and_its_unequip_cancel_exactly_at_every_zone() {
             "zone {zone}: the equip did nothing, so the symmetry is vacuous"
         );
         assert_eq!(
-            (after.atk, after.def),
-            (before.atk, before.def),
+            (after.atk, after.mitigation),
+            (before.atk, before.mitigation),
             "zone {zone}: {} ATK welded into base stats by an equip/unequip \
              round trip",
             after.atk - before.atk
@@ -177,19 +177,22 @@ fn unequip_removes_bonus_and_returns_item_to_inventory() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::FIREWALL_PLATING), 1);
-    let def_before = game.player_status().def;
+    let def_before = game.player_status().mitigation;
     game.equip(
         game.player_entity(),
         &gear(&ItemId::from(ids::FIREWALL_PLATING), 0),
     )
     .unwrap();
-    assert_eq!(game.player_status().def, def_before + 9);
+    assert_eq!(game.player_status().mitigation, def_before + 9);
 
     game.unequip(game.player_entity(), EquipmentSlot::Armor)
         .unwrap();
 
     let status = game.player_status();
-    assert_eq!(status.def, def_before, "unequip should remove the bonus");
+    assert_eq!(
+        status.mitigation, def_before,
+        "unequip should remove the bonus"
+    );
     assert_eq!(status.armor, None);
     assert_eq!(
         status
@@ -398,10 +401,10 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
         .unwrap()
         .add(armor.clone(), 6);
 
-    let def_before = game.player_status().def;
+    let def_before = game.player_status().mitigation;
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap();
     assert_eq!(
-        game.player_status().def,
+        game.player_status().mitigation,
         def_before + 12,
         "unfused equip should grant the plain base bonus"
     );
@@ -416,7 +419,7 @@ fn fuse_item_bonus_scales_the_equipped_stat_bonus() {
 
     game.equip(game.player_entity(), &gear(&armor, 2)).unwrap();
     assert_eq!(
-        game.player_status().def,
+        game.player_status().mitigation,
         def_before + 17,
         "tier 2: the +20% (12 * 1.4 -> 17) beats the +1/tier floor (12 + 2)"
     );
@@ -484,11 +487,11 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(armor.clone(), 4);
-    let base_mitigation = game.player_status().def;
+    let base_mitigation = game.player_status().mitigation;
 
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap();
     assert_eq!(
-        game.player_status().def,
+        game.player_status().mitigation,
         base_mitigation + 12,
         "Ablative Plating's base is +12 mitigation while worn, unfused"
     );
@@ -519,7 +522,7 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     game.fuse_item(&gear(&armor, 1)).unwrap();
     assert_eq!(held_at(&game, &armor, 1), 0);
     assert_eq!(
-        game.player_status().def,
+        game.player_status().mitigation,
         base_mitigation + 17,
         "the worn copy picks up the new tier live, without a re-equip"
     );
@@ -681,7 +684,7 @@ fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
         .add(gear(&armor, legacy), 2);
     game.equip(game.player_entity(), &gear(&armor, legacy))
         .unwrap();
-    let def_before = game.player_status().def;
+    let def_before = game.player_status().mitigation;
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_legacy_fusion_test_{}.bin",
@@ -707,7 +710,7 @@ fn loading_a_legacy_over_ceiling_tier_clamps_the_ledger_not_the_worn_copy() {
         "the worn copy keeps the tier its bonus was actually applied at"
     );
     assert_eq!(
-        loaded.player_status().def,
+        loaded.player_status().mitigation,
         def_before,
         "clamping must not silently restate what is already in Stats"
     );

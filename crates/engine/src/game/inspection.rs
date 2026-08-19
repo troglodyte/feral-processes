@@ -702,7 +702,7 @@ impl Game {
         // The same calls `player_status` makes, so the sidebar and the sheet
         // cannot show different numbers for the same player.
         let atk = self.effective_atk(entity);
-        let def = self.effective_mitigation(entity);
+        let mitigation = self.effective_mitigation(entity);
         let perks = self.world.get::<Perks>(entity);
         Some(ManifestView {
             entity,
@@ -714,8 +714,16 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk,
-            def,
-            power: stats.max_hp + atk + def,
+            mitigation,
+            damage: self.damage_range_label(self.natural_range_of(entity)),
+            // The same scalar `Stats::power` computes, over the player's
+            // *effective* numbers rather than their raw ones.
+            power: Stats {
+                atk,
+                mitigation,
+                ..*stats
+            }
+            .power(),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
@@ -781,7 +789,7 @@ impl Game {
             gear_level: worn.level,
             fusion_tier: worn.copy.tier,
             atk: mods.atk,
-            def: mods.mitigation,
+            mitigation: mods.mitigation,
             decompiler: mods.decompiler,
         })
     }
@@ -807,7 +815,8 @@ impl Game {
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: stats.atk,
-            def: stats.mitigation,
+            mitigation: stats.mitigation,
+            damage: self.damage_range_label(self.natural_range_of(entity)),
             power: stats.power(),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),

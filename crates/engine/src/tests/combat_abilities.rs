@@ -2239,3 +2239,29 @@ fn an_unarmed_companion_keeps_its_natural_range() {
     let natural = crate::battle::DamageRange { min: 6, max: 10 };
     assert_eq!(game.attack_range(companion, natural), natural);
 }
+
+/// A natural attack has a displayable band too, so a companion's unarmed
+/// damage reads the same way a weapon's does — and a weapon replaces it on
+/// the page exactly as it replaces it in the fight.
+#[test]
+fn a_programs_manifest_shows_the_band_it_actually_swings_for() {
+    let mut game = Game::new(4803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Owned, because only the player and their own programs may wear gear.
+    let companion = spawn_tamed(&mut game, 30, 5);
+
+    let natural = game
+        .manifest(companion)
+        .expect("a program has a manifest")
+        .damage;
+    assert!(natural.contains('–'), "no range in {natural:?}");
+
+    wear(&mut game, companion, "monofilament_whip");
+    let armed = game
+        .manifest(companion)
+        .expect("a program has a manifest")
+        .damage;
+    assert_ne!(
+        armed, natural,
+        "the worn weapon has to reach the page, not just the fight"
+    );
+}

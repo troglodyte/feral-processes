@@ -333,8 +333,8 @@ fn field_cast_target_rows(num: char, t: &FieldCastTargetView) -> Vec<String> {
         )
     });
     std::iter::once(format!(
-        "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}",
-        t.name, t.level, t.hp, t.max_hp, t.atk, t.def, t.power
+        "[{num}] {} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}",
+        t.name, t.level, t.hp, t.max_hp, t.atk, t.mitigation, t.power
     ))
     .chain(continuation_lines(displaced.as_deref().unwrap_or_default()))
     .collect()
@@ -814,14 +814,14 @@ mod tests {
             hp: 22,
             max_hp: 28,
             atk: 8,
-            def: 5,
+            mitigation: 5,
             power: 19,
             running,
         }
     }
 
     /// Every `OneAlly` routine the game ships is about a stat — Regen about
-    /// HP, Overclock about ATK, the other two about DEF — so the numbers are
+    /// HP, Overclock about ATK, the other two about mitigation — so the numbers are
     /// what the pick is actually made on. Without them the only way to
     /// choose is to remember them.
     #[test]
@@ -832,7 +832,7 @@ mod tests {
         assert!(lines[0].contains("[a] Kestrel Lv6"), "{lines:?}");
         assert!(lines[0].contains("HP 22/28"), "{lines:?}");
         assert!(lines[0].contains("ATK 8"), "{lines:?}");
-        assert!(lines[0].contains("DEF 5"), "{lines:?}");
+        assert!(lines[0].contains("MIT 5%"), "{lines:?}");
         assert!(lines[0].contains("PWR 19"), "{lines:?}");
     }
 
@@ -899,7 +899,7 @@ mod tests {
                 hp: 9999,
                 max_hp: 9999,
                 atk: 9999,
-                def: 9999,
+                mitigation: 9999,
                 power: 9999,
                 level: 99,
                 running: Some(RunningBuffView {

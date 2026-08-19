@@ -333,6 +333,28 @@ impl Game {
         )
     }
 
+    /// A damage band as the string every screen prints — `"4–9"`, or `"6"`
+    /// for a degenerate one.
+    ///
+    /// **One function, the way `Game::copy_name` is the one place a copy's
+    /// name is built.** A displayed range that disagrees with the damage
+    /// actually rolled is the hand-rolled-chain bug in a new place: sharing
+    /// the *formatter* was never enough on `copy_bonus`, four screens rebuilt
+    /// the scaling chain themselves and all four dropped the affix at once.
+    /// The scaling is `copy_bonus`'s and is not repeated here — this takes a
+    /// band that has already been through all three axes.
+    ///
+    /// An en dash rather than a hyphen: the map's status column is measured
+    /// in DejaVu Sans Mono where both are one cell, and the en dash reads as
+    /// a range rather than as a minus sign in front of `max`.
+    pub fn damage_range_label(&self, range: battle::DamageRange) -> String {
+        if range.max <= range.min {
+            format!("{}", range.min)
+        } else {
+            format!("{}–{}", range.min, range.max)
+        }
+    }
+
     /// What one *worn* item is worth — `copy_bonus` at the level the copy
     /// remembers being equipped at, which is the only thing a worn item adds
     /// to a carried one.

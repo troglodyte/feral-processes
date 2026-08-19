@@ -139,7 +139,7 @@ pub fn equip_preview_tag(game: &Game, copy: &GearCopy, zone_level: u32) -> Strin
     };
     let mods = game.copy_bonus(copy, zone_level).unwrap_or_default();
     let mut parts = vec![slot.short_label().to_string()];
-    let summary = stat_summary(mods);
+    let summary = stat_summary(game, mods);
     if !summary.is_empty() {
         parts.push(summary);
     }
@@ -185,7 +185,7 @@ const QTY_COLUMN: usize = 3;
 /// constant cannot leave three literals disagreeing.
 ///
 /// Deliberately no "maxed" wording — `SWAP_STATS_COLUMN` is 20 monospace
-/// cells and `+2 ATK +1 DEF T3/3 maxed` is 24. The row colour carries that in
+/// cells and `+2 ATK +3 MIT T3/3 maxed` is 24. The row colour carries that in
 /// the two column sites; `equip_preview_tag` appends it. That used to be on
 /// the grounds that the inventory screen had the room, which measured false —
 /// the widest shipped copy ran 68px past the popup — so what makes it
@@ -214,17 +214,28 @@ pub fn item_fusion_note(tier: u32) -> String {
 /// until gear grew a fourth property, and then all four silently dropped the
 /// affix — see `Game::copy_bonus`. A shared formatter cannot hold the numbers
 /// it is handed in step; only a shared source of them can.
-pub fn stat_summary(mods: EquipmentStats) -> String {
-    [
+/// The damage band **leads**, because on a weapon it is the headline number
+/// — what the thing hits for is what two weapons are compared on, and ATK is
+/// the smaller flat term added on top of it. It is formatted through
+/// `Game::damage_range_label` rather than here, so a range printed on any
+/// screen cannot disagree with a range printed on another.
+pub fn stat_summary(game: &Game, mods: EquipmentStats) -> String {
+    let mut parts = Vec::new();
+    if mods.damage != DamageRange::default() {
+        parts.push(format!("{} DMG", game.damage_range_label(mods.damage)));
+    }
+    for (value, name) in [
         (mods.atk, "ATK"),
         (mods.mitigation, "MIT"),
+        (mods.accuracy, "ACC"),
+        (mods.evasion, "EVA"),
         (mods.decompiler, "DECOMP"),
-    ]
-    .into_iter()
-    .filter(|(value, _)| *value != 0)
-    .map(|(value, name)| format!("{value:+} {name}"))
-    .collect::<Vec<_>>()
-    .join(" ")
+    ] {
+        if value != 0 {
+            parts.push(format!("{value:+} {name}"));
+        }
+    }
+    parts.join(" ")
 }
 
 /// What one row of the `Mode::EquipSwap` picker does when chosen.
@@ -246,7 +257,18 @@ pub enum SwapChoice {
 /// on a different row from the one that fires.
 pub struct SwapRow {
     pub choice: SwapChoice,
+    /// The name and stat columns — what this copy *is*.
     pub label: String,
+    /// What swapping to it would change, as its own string.
+    ///
+    /// **Split from `label` so the renderer can wrap between them.** Six stat
+    /// axes printed twice on one line overflows the popup by a wide margin
+    /// (measured: 523px past a 1243px body), and the two halves answer
+    /// different questions — so the delta is what sheds onto a continuation
+    /// line when it will not fit, exactly as the inventory list already does
+    /// with its equip tag. Joining them here would put the layout decision in
+    /// the crate that cannot measure text.
+    pub delta: String,
     /// The copy's two permanent tiers, for the renderer's row colour — see
     /// `render/mod.rs::tier_color`, which resolves which of them wins.
     /// Carried rather than re-derived on the far side: this screen's rows
@@ -333,15 +355,16 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
             // what a copy is called.
             let name = game.copy_name(copy);
             let stats = match copy.tier {
-                0 => stat_summary(mods),
-                tier => format!("{} {}", stat_summary(mods), item_fusion_note(tier)),
+                0 => stat_summary(game, mods),
+                tier => format!("{} {}", stat_summary(game, mods), item_fusion_note(tier)),
             };
             (
                 delta_total(mods, worn_mods),
                 name.clone(),
                 SwapRow {
                     choice: SwapChoice::Equip(copy.clone()),
-                    label: swap_label(&name, &stats, mods, worn_mods),
+                    label: swap_columns(&name, &stats),
+                    delta: swap_delta(game, mods, worn_mods),
                     fusion_tier: copy.tier,
                     rarity: copy.rarity,
                 },
@@ -356,7 +379,8 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
     if worn.is_some() {
         rows.push(SwapRow {
             choice: SwapChoice::Unequip,
-            label: swap_label("(Unequip)", "", EquipmentStats::default(), worn_mods),
+            label: swap_columns("(Unequip)", ""),
+            delta: swap_delta(game, EquipmentStats::default(), worn_mods),
             fusion_tier: 0,
             rarity: Rarity::Ordinary,
         });
@@ -380,24 +404,33 @@ fn delta_total(mods: EquipmentStats, worn: EquipmentStats) -> i32 {
         + (mods.evasion - worn.evasion)
 }
 
-fn swap_label(name: &str, stats: &str, mods: EquipmentStats, worn: EquipmentStats) -> String {
-    let delta = stat_summary(EquipmentStats {
-        atk: mods.atk - worn.atk,
-        mitigation: mods.mitigation - worn.mitigation,
-        decompiler: mods.decompiler - worn.decompiler,
-        damage: DamageRange {
-            min: mods.damage.min - worn.damage.min,
-            max: mods.damage.max - worn.damage.max,
+/// What swapping to `mods` from `worn` changes, per axis — or "no change".
+fn swap_delta(game: &Game, mods: EquipmentStats, worn: EquipmentStats) -> String {
+    let delta = stat_summary(
+        game,
+        EquipmentStats {
+            atk: mods.atk - worn.atk,
+            mitigation: mods.mitigation - worn.mitigation,
+            decompiler: mods.decompiler - worn.decompiler,
+            damage: DamageRange {
+                min: mods.damage.min - worn.damage.min,
+                max: mods.damage.max - worn.damage.max,
+            },
+            accuracy: mods.accuracy - worn.accuracy,
+            evasion: mods.evasion - worn.evasion,
         },
-        accuracy: mods.accuracy - worn.accuracy,
-        evasion: mods.evasion - worn.evasion,
-    });
-    let delta = if delta.is_empty() {
+    );
+    if delta.is_empty() {
         "no change".to_string()
     } else {
         delta
-    };
-    format!("{name:<SWAP_NAME_COLUMN$} {stats:<SWAP_STATS_COLUMN$} {delta}")
+    }
+}
+
+/// The name and stat columns of one swap row, padded so the two line up
+/// down the list.
+fn swap_columns(name: &str, stats: &str) -> String {
+    format!("{name:<SWAP_NAME_COLUMN$} {stats:<SWAP_STATS_COLUMN$}")
 }
 
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —

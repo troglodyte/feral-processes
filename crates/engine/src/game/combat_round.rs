@@ -555,7 +555,7 @@ impl Game {
                     front_max_hp: stats.max_hp,
                     front_rarity: self.rarity_of(front),
                     atk: stats.atk,
-                    def: stats.mitigation,
+                    mitigation: stats.mitigation,
                     is_boss,
                     engaged: idx < ENGAGED_GROUPS,
                     status_effect: self.status_label(front),
@@ -583,7 +583,7 @@ impl Game {
                     hp: stats.hp,
                     max_hp: stats.max_hp,
                     atk: self.effective_atk(entity),
-                    def: self.effective_mitigation(entity),
+                    mitigation: self.effective_mitigation(entity),
                     status_effect: self.status_label(entity),
                     power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
                     planned: battle.planned[slot]

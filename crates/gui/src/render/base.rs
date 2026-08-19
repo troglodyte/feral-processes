@@ -1113,7 +1113,7 @@ fn draw_status_panel(
         format!("Position: ({}, {})", status.position.0, status.position.1),
         format!(
             "Attack {}  Defense {}  Strength {}",
-            status.atk, status.def, status.strength
+            status.atk, status.mitigation, status.strength
         ),
         format!("Decompiler {}", status.decompiler),
     ];
@@ -1488,7 +1488,7 @@ mod tests {
             hp: 22,
             max_hp: 30,
             atk: 8,
-            def: 5,
+            mitigation: 5,
             power: 41,
             status: None,
             ability: "Rally".to_string(),

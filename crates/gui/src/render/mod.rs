@@ -807,7 +807,7 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
         hp: 22,
         max_hp: 28,
         atk: 8,
-        def: 5,
+        mitigation: 5,
         power: 19,
         party_slot: Some(0),
         activity: "in party".to_string(),

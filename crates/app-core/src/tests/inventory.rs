@@ -178,7 +178,7 @@ fn equip_preview_tag_leads_with_the_slot_the_item_would_take() {
 
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 0), 1),
-        " (WEP +4 ATK)"
+        " (WEP 5–15 DMG +4 ATK)"
     );
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::ABLATIVE_PLATING), 0), 1),
@@ -243,7 +243,7 @@ fn equip_preview_tag_keeps_showing_level_scaling_and_fusion_beside_the_slot() {
     // tier adds ITEM_FUSION_BONUS_PER_TIER on top: 4 -> 8 -> 10.
     assert_eq!(
         equip_preview_tag(game, &gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 1), 2),
-        " (WEP +10 ATK fusion T1/3)"
+        " (WEP 12–36 DMG +10 ATK fusion T1/3)"
     );
 }
 
@@ -514,9 +514,9 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
         row.label
     );
     assert!(
-        row.label.contains("+6 ATK"),
+        row.delta.contains("+6 ATK"),
         "the delta should be the gain over the worn copy; got {:?}",
-        row.label
+        row.delta
     );
 }
 
@@ -783,9 +783,9 @@ fn the_unequip_row_prices_the_affix_on_your_back() {
         .find(|r| r.choice == SwapChoice::Unequip)
         .expect("something is worn, so the row is offered");
     assert!(
-        row.label.contains(&format!("-{worn_worth} ATK")),
+        row.delta.contains(&format!("-{worn_worth} ATK")),
         "taking it off costs {worn_worth} ATK, and the row says otherwise: {}",
-        row.label
+        row.delta
     );
 }
 
@@ -817,5 +817,116 @@ fn capital_u_in_the_inventory_fuses_every_matching_pair() {
             .is_some_and(|s| s.contains("fuse")),
         "the fusion changes nothing visible behind the popup, so it reports: {:?}",
         app.status_line
+    );
+}
+
+// ------------------------------------------------ the weapon's damage range
+
+/// A weapon's range is the most legible thing the combat model adds — "4–9"
+/// is what makes two weapons comparable at a glance. It is a stat bonus, not
+/// an effect, so it rides `equip_preview_tag` beside ATK/MIT/DECOMP rather
+/// than the `item_blurb`/`item_effects`/`item_grant` derivation.
+#[test]
+fn equip_preview_tag_shows_a_weapons_damage_range() {
+    let app = test_app(910);
+    let game = app.game.as_ref().expect("test_app builds a game");
+    let tag = equip_preview_tag(game, &gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 0), 1);
+    assert!(tag.contains('–'), "no range in {tag:?}");
+    assert!(tag.contains("DMG"), "the range is not labelled in {tag:?}");
+}
+
+/// Armour has no band and must not be given one — an empty range prints
+/// nothing at all rather than "0" or "0–0".
+#[test]
+fn armour_shows_no_damage_range_at_all() {
+    let app = test_app(911);
+    let game = app.game.as_ref().expect("test_app builds a game");
+    let tag = equip_preview_tag(game, &gear(&ItemId::from(ids::ABLATIVE_PLATING), 0), 1);
+    assert!(
+        !tag.contains("DMG"),
+        "armour claimed a damage band: {tag:?}"
+    );
+}
+
+/// The displayed range must be the range actually rolled — the same bug
+/// `copy_bonus` already exists to close, in a new place. A displayed range
+/// that skips an axis is the hand-rolled-chain failure again.
+#[test]
+fn the_displayed_range_scales_on_all_three_axes() {
+    let app = test_app(912);
+    let game = app.game.as_ref().expect("test_app builds a game");
+    let plain = gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 0);
+    let fused = gear(&ItemId::from(ids::MONOFILAMENT_WHIP), 2);
+
+    let at_level_1 = equip_preview_tag(game, &plain, 1);
+    let at_level_6 = equip_preview_tag(game, &plain, 6);
+    assert_ne!(at_level_1, at_level_6, "gear level must move the range");
+    assert_ne!(
+        at_level_1,
+        equip_preview_tag(game, &fused, 1),
+        "a fusion tier must move it too"
+    );
+}
+
+/// **The drift guard for the swap picker's stats column**, the twin of
+/// `no_shipped_copy_name_outgrows_the_swap_name_column` — and the column
+/// that had none until the combat model doubled how many axes a piece of
+/// gear can carry.
+///
+/// The bound is *not* `SWAP_STATS_COLUMN`. That constant pads with `{:<N$}`,
+/// which only ever pads, and the shipped worst case has run past it since
+/// long before this — a tier-3 prismatic module reaches three figures on
+/// three axes. What actually constrains the row is the popup, measured
+/// against the real font by the gui's `the_widest_swap_row_still_fits_its_
+/// popup`; this asks the shipped assets whether the string that test
+/// measures is still the worst case, which is the same division of labour
+/// the name-column pair already uses.
+const WIDEST_MEASURED_SWAP_STATS: usize = 54;
+#[test]
+fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
+    let mut app = test_app(932);
+    let game = app.game.as_mut().expect("test_app builds a game");
+
+    let equippables: Vec<ItemId> = game
+        .item_defs()
+        .into_iter()
+        .filter(|d| d.equipment.is_some())
+        .map(|d| d.id)
+        .collect();
+    let affixes: Vec<Option<AffixId>> = std::iter::once(None)
+        .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+        .collect();
+
+    let mut worst = (String::new(), 0usize);
+    for item in &equippables {
+        for affix in &affixes {
+            let copy = GearCopy {
+                item: item.clone(),
+                rarity: Rarity::ALL[Rarity::ALL.len() - 1],
+                tier: MAX_FUSIONS,
+                affix: affix.clone(),
+            };
+            let Some(mods) = game.copy_bonus(&copy, 10) else {
+                continue;
+            };
+            let stats = format!(
+                "{} {}",
+                stat_summary(game, mods),
+                item_fusion_note(copy.tier)
+            );
+            if stats.chars().count() > worst.1 {
+                worst = (stats.clone(), stats.chars().count());
+            }
+        }
+    }
+
+    assert!(
+        worst.1 <= WIDEST_MEASURED_SWAP_STATS,
+        "{:?} is {} cells and the gui measures a worst case of {} — update the \
+         string in `the_widest_swap_row_still_fits_its_popup` and this bound \
+         together, or drop an axis from the summary",
+        worst.0,
+        worst.1,
+        WIDEST_MEASURED_SWAP_STATS
     );
 }

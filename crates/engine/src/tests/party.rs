@@ -883,7 +883,7 @@ fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_l
  {
     let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let base_atk = game.player_status().atk;
-    let base_mitigation = game.player_status().def;
+    let base_mitigation = game.player_status().mitigation;
 
     // `spawn_tamed` fixes def at 1, so 10% of it floors to 0 and should
     // clamp up to the stated minimum of 1 rather than contributing 0.
@@ -892,7 +892,7 @@ fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_l
     let status = game.player_status();
     assert_eq!(status.atk, base_atk + 3, "10% of a's 30 ATK is 3");
     assert_eq!(
-        status.def,
+        status.mitigation,
         base_mitigation + 1,
         "10% of a's 1 DEF floors to 0, minimum 1 applies"
     );
@@ -906,7 +906,7 @@ fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_l
         base_atk + 3 + 5,
         "10% of b's 50 ATK is 5, stacked with a's"
     );
-    assert_eq!(status.def, base_mitigation + 1 + 1);
+    assert_eq!(status.mitigation, base_mitigation + 1 + 1);
 
     // The bonus is computed live from each companion's current Stats,
     // not baked in at add_companion time — a level-up (simulated here
@@ -927,7 +927,7 @@ fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_l
         status.atk, base_atk,
         "bonus should vanish once every companion leaves the party"
     );
-    assert_eq!(status.def, base_mitigation);
+    assert_eq!(status.mitigation, base_mitigation);
 }
 
 #[test]

@@ -8,7 +8,10 @@ use crate::*;
 fn player_status_power_matches_max_hp_plus_atk_plus_def() {
     let game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let status = game.player_status();
-    assert_eq!(status.strength, status.max_hp + status.atk + status.def);
+    assert_eq!(
+        status.strength,
+        status.max_hp + status.atk + status.mitigation
+    );
 }
 
 /// The map's Integrity gauge and the battle screen's "You" bar are two

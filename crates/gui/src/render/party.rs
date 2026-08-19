@@ -185,8 +185,8 @@ fn fuse_candidate_label(num: char, p: &PetInfo) -> String {
     let fused = fusion_tag(p.fusions);
     let activity = activity_tag(&p.activity);
     format!(
-        "[{num}] {} Lv{} - HP {}/{}  ATK {}  DEF {}  PWR {}{fused}{activity}",
-        p.name, p.level, p.hp, p.max_hp, p.atk, p.def, p.power
+        "[{num}] {} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}{fused}{activity}",
+        p.name, p.level, p.hp, p.max_hp, p.atk, p.mitigation, p.power
     )
 }
 

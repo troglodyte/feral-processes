@@ -334,7 +334,11 @@ mod tests {
     /// no longer produce.
     fn worst_case_program() -> Vec<Section> {
         vec![
-            section("COMBAT", 3, false),
+            // Damage, Attack, Mitigation, Power. The damage band joined this
+            // box with the combat model, and this fixture has to move with
+            // `sections_for` — drifting from what the renderer emits is a
+            // failure this project has already shipped once.
+            section("COMBAT", 4, false),
             section("POTENTIAL", 5, false),
             section("AFFINITIES", MAX_AFFINITY_ROWS, false),
             section("SPECIES", 5, false),
@@ -373,7 +377,7 @@ mod tests {
     /// longer hide an overflow the way it could under the old greedy.
     fn worst_case_player() -> Vec<Section> {
         vec![
-            section("COMBAT", 3, false),
+            section("COMBAT", 4, false),
             section("PROGRESSION", 4, false),
             section("PERKS", MAX_SECTION_ROWS, false),
             section("PARTY", 5, false),
@@ -504,13 +508,13 @@ mod tests {
     fn a_missing_section_closes_the_gap_rather_than_leaving_a_hole() {
         let m = ui_metrics(1080.0);
         let full = vec![
-            section("COMBAT", 3, false),
+            section("COMBAT", 4, false),
             section("POTENTIAL", 4, false),
             section("ROUTINES", 3, false),
             section("SPECIES", 5, false),
         ];
         let without_potential = vec![
-            section("COMBAT", 3, false),
+            section("COMBAT", 4, false),
             section("ROUTINES", 3, false),
             section("SPECIES", 5, false),
         ];

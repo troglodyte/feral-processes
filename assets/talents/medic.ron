@@ -1,0 +1,30 @@
+// The Medic ladder: keep the party up, and keep it up between fights too.
+(
+    class: Some(Medic),
+    tiers: [
+        [
+            (id: "medic_bedside", name: "Steady Hands", description: "Every repair routine mends 15% more.", node: Affinity(kind: Heal, mult: 1.15)),
+            (id: "medic_reserve", name: "Deep Reserve", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+        ],
+        [
+            (id: "medic_mirror", name: "Mirror Restore", description: "Learns Mirror Restore — a quick patch for an ally.", node: Ability(id: "mirror_restore")),
+            (id: "medic_flush", name: "Flush Cache", description: "Learns Flush Cache — clears a condition off an ally.", node: Ability(id: "flush_cache")),
+        ],
+        [
+            (id: "medic_slot", name: "Spare Register", description: "One more routine slot.", node: RoutineSlot),
+            (id: "medic_practice", name: "Practised Passes", description: "Every repair routine mends a further 15% more.", node: Affinity(kind: Heal, mult: 1.15)),
+        ],
+        [
+            (id: "medic_loop", name: "Hot Spare", description: "Learns Hot Spare — a second quick patch to run beside the first.", node: Ability(id: "hot_spare")),
+            (id: "medic_checksum", name: "Checksum Repair", description: "Learns Checksum Repair — a heavy single patch.", node: Ability(id: "checksum_repair")),
+        ],
+        [
+            (id: "medic_frame", name: "Braced Frame", description: "Raises Defense by 10%.", node: Stat(stat: Def, percent: 10.0)),
+            (id: "medic_sync", name: "Redundancy Sync", description: "Learns Redundancy Sync — a steady party patch.", node: Ability(id: "redundancy_sync")),
+        ],
+        [
+            (id: "medic_coldboot", name: "Cold Boot", description: "Learns Cold Boot — brings an ally back from almost nothing.", node: Ability(id: "cold_boot")),
+            (id: "medic_capstone_slot", name: "Second Console", description: "One more routine slot.", node: RoutineSlot),
+        ],
+    ],
+)

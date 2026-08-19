@@ -1,0 +1,30 @@
+// The Striker ladder: hit harder, hit more often, hit two things at once.
+(
+    class: Some(Striker),
+    tiers: [
+        [
+            (id: "striker_edge", name: "Honed Edge", description: "Raises Attack by 8%.", node: Stat(stat: Atk, percent: 8.0)),
+            (id: "striker_focus", name: "Narrow Focus", description: "Every damage routine lands 15% harder.", node: Affinity(kind: Damage, mult: 1.15)),
+        ],
+        [
+            (id: "striker_dump", name: "Core Dump", description: "Learns Core Dump — a heavy single strike.", node: Ability(id: "core_dump")),
+            (id: "striker_frame", name: "Reinforced Frame", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+        ],
+        [
+            (id: "striker_stall", name: "Pipeline Stall", description: "Learns Pipeline Stall — damage that often halts the target.", node: Ability(id: "pipeline_stall")),
+            (id: "striker_shred", name: "Packet Shred", description: "Learns Packet Shred — a reliable mid-weight strike.", node: Ability(id: "packet_shred")),
+        ],
+        [
+            (id: "striker_slot", name: "Wider Pipeline", description: "One more routine slot.", node: RoutineSlot),
+            (id: "striker_sharpen", name: "Sharpened Passes", description: "Every damage routine lands a further 15% harder.", node: Affinity(kind: Damage, mult: 1.15)),
+        ],
+        [
+            (id: "striker_smash", name: "Stack Smash", description: "Learns Stack Smash — damage that usually leaves the target bleeding.", node: Ability(id: "stack_smash")),
+            (id: "striker_hazard", name: "Branch Hazard", description: "Learns Branch Hazard — damage with a chance to halt.", node: Ability(id: "branch_hazard")),
+        ],
+        [
+            (id: "striker_panic", name: "Kernel Panic", description: "Learns Kernel Panic — the heaviest strike a program can carry.", node: Ability(id: "kernel_panic")),
+            (id: "striker_capstone_slot", name: "Parallel Passes", description: "One more routine slot.", node: RoutineSlot),
+        ],
+    ],
+)

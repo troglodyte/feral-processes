@@ -1,0 +1,32 @@
+// The tree for a program with no readable class: a boss, or a modded species
+// that raises two axes or none. Deliberately broad rather than weak — it has
+// no specialism to sharpen, so it buys slots, reach and a wider basic kit.
+(
+    class: None,
+    tiers: [
+        [
+            (id: "gen_frame", name: "Padded Frame", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+            (id: "gen_edge", name: "Filed Edge", description: "Raises Attack by 8%.", node: Stat(stat: Atk, percent: 8.0)),
+        ],
+        [
+            (id: "gen_interrupt", name: "Interrupt Request", description: "Learns Interrupt Request — a light, cheap strike.", node: Ability(id: "interrupt_request")),
+            (id: "gen_patch", name: "Hot Patch", description: "Learns Hot Patch — a light patch for an ally.", node: Ability(id: "hot_patch")),
+        ],
+        [
+            (id: "gen_slot", name: "Spare Register", description: "One more routine slot.", node: RoutineSlot),
+            (id: "gen_plate", name: "Layered Plate", description: "Raises Defense by 10%.", node: Stat(stat: Def, percent: 10.0)),
+        ],
+        [
+            (id: "gen_damage", name: "Blunt Force", description: "Every damage routine lands 15% harder.", node: Affinity(kind: Damage, mult: 1.15)),
+            (id: "gen_heal", name: "Field Dressing", description: "Every repair routine mends 15% more.", node: Affinity(kind: Heal, mult: 1.15)),
+        ],
+        [
+            (id: "gen_boost", name: "Priority Boost", description: "Learns Priority Boost — raises an ally's Attack.", node: Ability(id: "priority_boost")),
+            (id: "gen_quarantine", name: "Quarantine", description: "Learns Quarantine — clears a condition off an ally.", node: Ability(id: "quarantine")),
+        ],
+        [
+            (id: "gen_capstone_slot", name: "Second Register", description: "One more routine slot.", node: RoutineSlot),
+            (id: "gen_deadman", name: "Deadman Switch", description: "Learns Deadman Switch — a heavy strike held in reserve.", node: Ability(id: "deadman")),
+        ],
+    ],
+)

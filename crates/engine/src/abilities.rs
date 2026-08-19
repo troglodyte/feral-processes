@@ -154,7 +154,9 @@ pub enum AbilityTarget {
 /// one per `AbilityEffect` variant that *has* a magnitude. A caster's
 /// affinity for a category multiplies every magnitude in it (see
 /// `Game::ability_affinity`).
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The serde derives are for `talents::TalentNode::Affinity`, which names a
+/// category in a `.ron` file.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum AffinityKind {
     Damage,
     Heal,

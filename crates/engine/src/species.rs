@@ -316,7 +316,9 @@ pub struct SpeciesDef {
 /// the kit that axis implies. That is why there is no `role` field in the
 /// `.ron` schema — three things have to agree, and a field would let a
 /// species claim a role its numbers contradict.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// `Hash` and the serde derives are for `talents::TalentDb`, which keys its
+/// trees by class and reads the class out of a `.ron` file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AffinityClass {
     Striker,
     Bastion,
@@ -361,6 +363,18 @@ impl SpeciesDef {
 }
 
 impl AffinityClass {
+    /// Every class, for the censuses that must fail the day a sixth is added
+    /// rather than passing because they name five files by hand — see
+    /// `tests/assets.rs`'s talent-tree census. Append here when a variant is
+    /// appended above.
+    pub const ALL: [AffinityClass; 5] = [
+        AffinityClass::Striker,
+        AffinityClass::Bastion,
+        AffinityClass::Medic,
+        AffinityClass::Saboteur,
+        AffinityClass::Leech,
+    ];
+
     /// The class an affinity axis names. Public because the kit census asks
     /// it of an *ability's* category rather than of a species' affinities —
     /// "is this routine the kind of thing this class does" is the same

@@ -1,0 +1,30 @@
+// The Leech ladder: take what the other side is running on.
+(
+    class: Some(Leech),
+    tiers: [
+        [
+            (id: "leech_tap", name: "Clean Tap", description: "Every drain routine takes 15% more.", node: Affinity(kind: Drain, mult: 1.15)),
+            (id: "leech_frame", name: "Padded Frame", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+        ],
+        [
+            (id: "leech_harvest", name: "Cycle Harvest", description: "Learns Cycle Harvest — drains the target and mends with it.", node: Ability(id: "cycle_harvest")),
+            (id: "leech_skim1", name: "Skim", description: "Learns Skim — a fast, reliable tap.", node: Ability(id: "skim_v1")),
+        ],
+        [
+            (id: "leech_slot", name: "Spare Register", description: "One more routine slot.", node: RoutineSlot),
+            (id: "leech_deeper", name: "Deeper Tap", description: "Every drain routine takes a further 15% more.", node: Affinity(kind: Drain, mult: 1.15)),
+        ],
+        [
+            (id: "leech_array", name: "Leech Array", description: "Learns Leech Array — a wider, heavier tap.", node: Ability(id: "leech_array")),
+            (id: "leech_edge", name: "Filed Edge", description: "Raises Attack by 8%.", node: Stat(stat: Atk, percent: 8.0)),
+        ],
+        [
+            (id: "leech_siphon", name: "Siphon Cycles", description: "Learns Siphon Cycles — a heavy drain that mends half of what it takes.", node: Ability(id: "siphon_cycles")),
+            (id: "leech_skim3", name: "Deep Skim", description: "Learns Deep Skim — the fastest heavy tap there is.", node: Ability(id: "skim_v3")),
+        ],
+        [
+            (id: "leech_null", name: "Null Cache", description: "Learns Null Cache — mends every point it drains.", node: Ability(id: "null_cache")),
+            (id: "leech_capstone_slot", name: "Second Siphon", description: "One more routine slot.", node: RoutineSlot),
+        ],
+    ],
+)

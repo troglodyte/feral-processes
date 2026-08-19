@@ -80,6 +80,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            talents: talent_db,
             affixes: affix_db,
             sectors: sector_db,
             policy: enemy_policy,
@@ -99,6 +100,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
@@ -266,6 +268,7 @@ impl Game {
             research: research_db,
             items: item_db,
             perks: perk_db,
+            talents: talent_db,
             affixes: affix_db,
             sectors: sector_db,
             policy: enemy_policy,
@@ -299,6 +302,7 @@ impl Game {
         world.insert_resource(research_db);
         world.insert_resource(item_db);
         world.insert_resource(perk_db);
+        world.insert_resource(talent_db);
         world.insert_resource(affix_db);
         world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
@@ -1359,6 +1363,7 @@ struct AssetDbs {
     research: ResearchDb,
     items: ItemDb,
     perks: PerkDb,
+    talents: crate::talents::TalentDb,
     affixes: AffixDb,
     sectors: crate::sectors::SectorDb,
     policy: crate::resources::EnemyPolicy,
@@ -1401,6 +1406,13 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // Not absent-is-silent, unlike `AffixDb` and `SectorDb`: every level a
+    // Kernel Ring buys is spent in one of these trees, so a missing directory
+    // is an install fault rather than a supported state. The `?` surfaces it
+    // the way a missing abilities directory does.
+    let (talents, talent_warnings) =
+        crate::talents::TalentDb::load_dir(&assets_dir.join("talents"))?;
+    warnings.extend(talent_warnings);
     // An absent directory is silent and leaves the db empty, which is the
     // pre-affix game — see `AffixDb`.
     let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
@@ -1462,6 +1474,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        talents,
         achievements,
         contracts,
         descriptions,

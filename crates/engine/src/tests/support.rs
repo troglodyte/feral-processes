@@ -308,7 +308,7 @@ pub(super) fn battle_with_a_pack_of(game: &mut Game, count: usize, hp: i32) -> V
 /// function. Keep the binding alive only where the *path* is used again,
 /// which is what a second `Game::new` or a `Game::load` against the same
 /// install needs.
-pub(super) struct ScratchAssets(std::path::PathBuf);
+pub(crate) struct ScratchAssets(std::path::PathBuf);
 
 impl std::ops::Deref for ScratchAssets {
     type Target = std::path::Path;
@@ -344,7 +344,7 @@ impl Drop for ScratchAssets {
 /// The directory is deliberately not created: a caller that wants one calls
 /// `copy_shipped_assets` or `create_dir_all` itself, and a caller testing an
 /// absent file wants the path to stay absent.
-pub(super) fn scratch_assets_dir(tag: &str) -> ScratchAssets {
+pub(crate) fn scratch_assets_dir(tag: &str) -> ScratchAssets {
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
         "feral_processes_{tag}_{}_{}",
@@ -369,6 +369,9 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         "items",
         "abilities",
         "perks",
+        // Or a scratch install would have no talent trees at all, and
+        // `TalentDb::load_dir`'s `?` on the directory would fail the load.
+        "talents",
         "achievements",
         "descriptions",
         // The trained enemy policy comes along too, or a modded install

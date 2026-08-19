@@ -1466,3 +1466,142 @@ fn the_default_ground_stays_neutral() {
             .unwrap();
     assert!(db.for_biome(world::Biome::OpenGrid).is_none());
 }
+
+/// The talent-tree censuses, over the **real** `assets/talents/` rather than a
+/// fixture. Nothing in `TalentDb::load_dir` enforces any of this beyond the
+/// shape — a mod's tree is never refused for being thin — so these are what
+/// hold the shipped content to what the design says it is.
+mod talents {
+    use super::*;
+    use crate::species::AffinityClass;
+    use crate::talents::{CHOICES_PER_TIER, TalentDb, TalentNode, tiers_per_tree};
+    use crate::tuning::MAX_TALENT_STAT_PERCENT;
+
+    fn shipped() -> TalentDb {
+        let (db, warnings) = TalentDb::load_dir(&test_assets_dir().join("talents")).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "shipped trees must load clean: {warnings:?}"
+        );
+        db
+    }
+
+    /// Driven by the enum rather than by naming five files, so a sixth class
+    /// fails this test the day it is added rather than silently inheriting the
+    /// generic tree.
+    #[test]
+    fn every_class_has_a_tree_and_so_does_the_generic_fallback() {
+        let db = shipped();
+        for class in AffinityClass::ALL {
+            assert!(
+                db.get(Some(class)).is_some_and(|t| t.class == Some(class)),
+                "{class:?} has no tree of its own"
+            );
+        }
+        assert!(
+            db.get(None).is_some_and(|t| t.class.is_none()),
+            "a program with no readable class still spends its points somewhere"
+        );
+    }
+
+    #[test]
+    fn every_tree_is_the_full_depth_and_offers_two_choices_a_tier() {
+        let db = shipped();
+        for tree in db.trees() {
+            assert_eq!(
+                tree.tiers.len(),
+                tiers_per_tree(),
+                "{:?}'s tree is not one tier per level a ringed companion earns",
+                tree.class
+            );
+            for (i, tier) in tree.tiers.iter().enumerate() {
+                assert_eq!(
+                    tier.0.len(),
+                    CHOICES_PER_TIER,
+                    "{:?} tier {} is not a decision",
+                    tree.class,
+                    i + 1
+                );
+            }
+        }
+    }
+
+    /// Both halves: the id resolves, and it is a **battle** ability.
+    /// `AffinityKind` is blind to the distinction — a `FieldBuff(kind: Def)`
+    /// reports `Buff` like any other buff while never appearing in the Special
+    /// picker, which is the one place a granted routine is spent.
+    #[test]
+    fn every_ability_node_names_a_battle_routine_that_exists() {
+        let db = shipped();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+        for choice in db.all_nodes() {
+            let TalentNode::Ability { id } = &choice.node else {
+                continue;
+            };
+            let def = abilities
+                .get(id)
+                .unwrap_or_else(|| panic!("talent {} names no such ability {id:?}", choice.id));
+            assert!(
+                !def.effect.field_only(),
+                "talent {} grants {id:?}, which never appears in the Special picker",
+                choice.id
+            );
+        }
+    }
+
+    /// A developed companion already carries four multiplicative axes, and
+    /// options compound far less dangerously than numbers — so a `Stat` node's
+    /// percentage is bounded, and the trees are weighted away from them.
+    #[test]
+    fn no_stat_node_is_worth_more_than_its_ceiling() {
+        let db = shipped();
+        for choice in db.all_nodes() {
+            if let TalentNode::Stat { percent, .. } = choice.node {
+                assert!(
+                    percent > 0.0 && percent <= MAX_TALENT_STAT_PERCENT,
+                    "talent {} raises a stat by {percent}%, past MAX_TALENT_STAT_PERCENT",
+                    choice.id
+                );
+            }
+        }
+    }
+
+    /// `Game::take_talent` resolves a node by id against the whole tree, so two
+    /// nodes sharing one id would make which of them a player bought depend on
+    /// tier order.
+    #[test]
+    fn talent_ids_are_unique_across_every_tree() {
+        let db = shipped();
+        let mut seen = std::collections::HashSet::new();
+        for choice in db.all_nodes() {
+            assert!(
+                seen.insert(choice.id.clone()),
+                "{} appears in more than one tree",
+                choice.id
+            );
+        }
+    }
+
+    /// The weighting rule, asserted rather than left to authorial memory: a
+    /// tree of nothing but percentages is four more multiplicative axes on a
+    /// companion that already has four.
+    #[test]
+    fn every_tree_spends_most_of_itself_on_options_rather_than_numbers() {
+        let db = shipped();
+        for tree in db.trees() {
+            let nodes: Vec<_> = tree.tiers.iter().flat_map(|t| t.0.iter()).collect();
+            let stats = nodes
+                .iter()
+                .filter(|c| matches!(c.node, TalentNode::Stat { .. }))
+                .count();
+            assert!(
+                stats * 2 <= nodes.len(),
+                "{:?}'s tree is {stats} stat nodes of {} — options compound less \
+                 dangerously than numbers",
+                tree.class,
+                nodes.len()
+            );
+        }
+    }
+}

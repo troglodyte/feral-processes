@@ -25,6 +25,7 @@ pub mod species;
 pub mod stack;
 pub mod structures;
 pub mod systems;
+pub mod talents;
 pub mod taming;
 pub mod telemetry;
 pub mod tuning;

@@ -1,0 +1,31 @@
+// The Bastion ladder: stand in front, stay standing, and hold the line for
+// everyone behind it.
+(
+    class: Some(Bastion),
+    tiers: [
+        [
+            (id: "bastion_plate", name: "Layered Plate", description: "Raises Defense by 8%.", node: Stat(stat: Def, percent: 8.0)),
+            (id: "bastion_bracing", name: "Bracing Protocol", description: "Every buff routine holds 15% harder.", node: Affinity(kind: Buff, mult: 1.15)),
+        ],
+        [
+            (id: "bastion_parity", name: "Parity Guard", description: "Learns Parity Guard — raises an ally's Defense.", node: Ability(id: "parity_guard")),
+            (id: "bastion_mass", name: "Spare Capacity", description: "Raises Integrity by 12%.", node: Stat(stat: Hp, percent: 12.0)),
+        ],
+        [
+            (id: "bastion_shell", name: "Sandboxed Shell", description: "Learns Bastion — raises an ally's Defense for several rounds.", node: Ability(id: "bastion")),
+            (id: "bastion_slot", name: "Spare Register", description: "One more routine slot.", node: RoutineSlot),
+        ],
+        [
+            (id: "bastion_deepen", name: "Deep Bracing", description: "Every buff routine holds a further 15% harder.", node: Affinity(kind: Buff, mult: 1.15)),
+            (id: "bastion_hyper", name: "Hyperthread", description: "Learns Hyperthread — a heavy Attack buff.", node: Ability(id: "hyperthread")),
+        ],
+        [
+            (id: "bastion_watchdog", name: "Watchdog", description: "Learns Watchdog — clears a condition off an ally.", node: Ability(id: "watchdog")),
+            (id: "bastion_wall", name: "Load-Bearing Wall", description: "Raises Defense by a further 12%.", node: Stat(stat: Def, percent: 12.0)),
+        ],
+        [
+            (id: "bastion_shield3", name: "Bastion Shield", description: "Learns Bastion Shield — the strongest Defense buff there is.", node: Ability(id: "bastion_shield_v3")),
+            (id: "bastion_capstone_slot", name: "Redundant Registers", description: "One more routine slot.", node: RoutineSlot),
+        ],
+    ],
+)

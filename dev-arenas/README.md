@@ -299,3 +299,81 @@ These are meant to be kept and re-run after a `tuning.rs` edit, not to
 demonstrate syntax. Add one whenever you find a fight worth watching twice —
 by hand here, or with `[S]` from the arena screen, which writes the same
 format and overwrites a file of that name deliberately.
+
+The list above is short of the directory: `class-mirror`, `developed-companion`,
+`gear-passives`, `stack-depth-5` and the five `policy-*` files are also
+shipped and are described by their own comments.
+
+## Nine of the fourteen are walkovers, and only two of those are a problem
+
+Measured 2026-08-19 across every shipped scenario
+(`docs/measurements/2026-08-19-combat-model-slice-1.md`): nine finish at
+92–100% Integrity remaining. **That is correct for most of them and wrong for
+two**, and the difference is what a scenario is *for*.
+
+**A scenario that isolates a mechanism should be a walkover.** It measures a
+*delta* — does the passive fire, is a developed companion worth more than a
+plain one, do two classes differ — and it wants everything else out of the
+way. `gear-passives`, `developed-companion`, `class-mirror` and
+`geared-vs-boss` are all this, and their win rates carry no information.
+So do the five `policy-*` set-pieces, which are authored to be **lost**: they
+exist to watch the trained policy play, and a win there would be the surprise.
+`stack-depth-5` is the mirror image — 0% and left alone deliberately, see
+`docs/measurements/2026-08-19-stack-depth-curve.md`.
+
+**A scenario that gates difficulty should not be a walkover**, and two are:
+
+| | authors | measured | reads as |
+|---|---|---|---|
+| `opening-fight` | level 1, zone 1, no gear | 98%, 58% HP left | a real fight |
+| `full-group` | geared L20 + 3 L12, **4** rootkits | 100%, 98% HP left | no contest |
+| `lair-on-curve` | geared L24 + 3 L12, lair at **depth 2** | 100%, 3.2 rounds | no contest |
+
+`opening-fight` is the shape the other two should have.
+
+**This predates the combat model.** `lair-on-curve` measured 100% at 3.3
+rounds the day before that branch too, so the attack roll neither caused it
+nor fixed it. Do not read the walkovers as a regression from anything.
+
+### The levers, measured
+
+Both are the scenario's own numbers, not `tuning.rs` — moving a tuning
+constant to make one scenario bite would move the whole game.
+
+`lair-on-curve` is not carried by the party. Dropping the player from level 24
+to 13 (the level `balance_sim` now says clears zone 3 geared) changes 3.2
+rounds to 3.4; stripping the player's gear entirely gives 3.5; removing the
+whole party still wins 100% in 10.1. **The depth is the only lever that
+matters**, and it is steep:
+
+| depth | wins | rounds | companions lost |
+|---|---|---|---|
+| 2 (shipped) | 100% | 3.2 | 0.00 |
+| 3 | 100% | 8.2 | 0.00 |
+| 4 | 100% | 12.2 | 0.28 |
+| 5 | 42% | 39.6 | 2.46 |
+
+`full-group`'s lever is the count. Its README note above is the whole story —
+it fields 4, from `Game::max_group_size`, where `zone_group_cap` allows 19:
+
+| count | wins | rounds | companions lost |
+|---|---|---|---|
+| 4 (shipped) | 100% | 7.6 | 0.00 |
+| 8 | 100% | 14.8 | 0.18 |
+| 12 | 100% | 25.4 | 1.02 |
+| 19 | 98% | 60.6 | 2.68 |
+
+### What a retune has to decide first
+
+Neither table says what the target *is*, and that is the open question rather
+than an oversight. `opening-fight` sits at 98% and 58% HP left, which is the
+only shipped example of a fight that reads as one — but it is the game's first
+encounter, and a set-piece may want to be tighter than that. Pick the number
+before moving either scenario, or the retune is just taste applied twice.
+
+Two traps if you do move them. **Arena figures compare within one build only**
+— a changed formula reshuffles the `GameRng` stream as well as the model, so
+compare against a run of the same build, never against a report in a
+measurement file. And a scenario is content: re-running the batch after a
+`tuning.rs` edit is the point of the directory, so a retune that lands should
+be re-measured into `docs/measurements/`, not left in a commit message.

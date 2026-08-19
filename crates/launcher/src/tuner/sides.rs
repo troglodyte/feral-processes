@@ -5,7 +5,7 @@
 //! whether to get there by making the opponent weaker or the party weaker,
 //! and the search will take whichever is cheaper. The first real run took
 //! the second: it raised `rootkit`, the opponent in `full-group.ron`, *and*
-//! dropped `scrapper.base_def` from 5 to its bound floor of 0 — and three
+//! dropped `scrapper.base_mitigation` from 5 to its bound floor of 0 — and three
 //! Scrappers are the party in that same scenario. Both moves lower the win
 //! rate's error term. Only one of them is a balance change anybody wanted,
 //! because a stat lowered to satisfy one fight applies to that species
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn a_species_the_player_fields_is_frozen() {
         // The exact bug: `full-group.ron` fields three Scrappers and the
-        // first real run dropped `scrapper.base_def` to 0 to satisfy it.
+        // first real run dropped `scrapper.base_mitigation` to 0 to satisfy it.
         let frozen = player_fielded(&[target("dev-arenas/full-group.ron")]).unwrap();
         assert!(frozen.contains("scrapper"), "got {frozen:?}");
     }

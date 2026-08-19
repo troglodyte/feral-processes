@@ -478,12 +478,12 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(armor.clone(), 4);
-    let base_def = game.player_status().def;
+    let base_mitigation = game.player_status().def;
 
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap();
     assert_eq!(
         game.player_status().def,
-        base_def + 4,
+        base_mitigation + 4,
         "Ablative Plating's base is +4 def while worn, unfused"
     );
     assert_eq!(
@@ -514,7 +514,7 @@ fn fusing_a_worn_item_counts_it_and_upgrades_the_worn_copy_live() {
     assert_eq!(held_at(&game, &armor, 1), 0);
     assert_eq!(
         game.player_status().def,
-        base_def + 6,
+        base_mitigation + 6,
         "the worn copy picks up the new tier live, without a re-equip"
     );
 }

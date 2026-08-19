@@ -260,7 +260,7 @@ impl Game {
                     // see `components::Stats::mitigation`. The individual
                     // roll is dropped with it: rolling a percentage is the
                     // same hazard in miniature.
-                    mitigation: species.base_def,
+                    mitigation: species.base_mitigation,
                 },
                 potential,
                 rarity,
@@ -983,7 +983,7 @@ impl Game {
                     .iter()
                     .min_by_key(|id| {
                         db.get(id)
-                            .map(|s| s.base_hp + s.base_atk + s.base_def)
+                            .map(|s| s.base_hp + s.base_atk + s.base_mitigation)
                             .unwrap_or(i32::MAX)
                     })
                     .cloned()

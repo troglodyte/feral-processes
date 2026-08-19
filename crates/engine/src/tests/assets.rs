@@ -795,7 +795,7 @@ const AFFINITY_SPECIES: &str = r#"(
     color: Cyan,
     base_hp: 10,
     base_atk: 4,
-    base_def: 2,
+    base_mitigation: 2,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
     moves: [(name: "Poke", power: 3)],
@@ -1598,6 +1598,47 @@ mod talents {
                  dangerously than numbers",
                 tree.class,
                 nodes.len()
+            );
+        }
+    }
+}
+
+/// Every shipped species authors a mitigation percentage inside the band the
+/// cap allows. A species at or past `MAX_MITIGATION_PERCENT` is immune
+/// before gear or a buff is counted, which the cap would silently swallow.
+#[test]
+fn every_species_mitigation_leaves_room_under_the_cap() {
+    let game = Game::new(3311, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for species in game.species_defs() {
+        assert!(
+            (0..crate::tuning::MAX_MITIGATION_PERCENT).contains(&species.base_mitigation),
+            "{} authors base_mitigation {}, outside 0..{}",
+            species.id,
+            species.base_mitigation,
+            crate::tuning::MAX_MITIGATION_PERCENT
+        );
+    }
+}
+
+/// Every shipped move authors a range that can actually vary, and none can
+/// roll negative. A roster of degenerate ranges would ship the feature dark.
+#[test]
+fn every_shipped_move_authors_a_real_damage_range() {
+    let game = Game::new(3312, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for species in game.species_defs() {
+        for mv in &species.moves {
+            let range = mv.range();
+            assert!(
+                range.min >= 0,
+                "{} / {} can roll negative",
+                species.id,
+                mv.name
+            );
+            assert!(
+                range.max > range.min,
+                "{} / {} is a degenerate range — a shipped move must vary",
+                species.id,
+                mv.name
             );
         }
     }

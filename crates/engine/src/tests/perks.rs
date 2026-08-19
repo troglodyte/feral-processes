@@ -336,12 +336,12 @@ fn defender_perk_adds_permanent_def_per_level() {
     let mut game = Game::new(116, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world.get_mut::<Perks>(player).unwrap().points = 10;
-    let base_def = game.player_status().def;
+    let base_mitigation = game.player_status().def;
 
     game.unlock_perk(Perk::Defender).unwrap();
     assert_eq!(
         game.player_status().def,
-        base_def + DEFENDER_BONUS_PER_LEVEL
+        base_mitigation + DEFENDER_BONUS_PER_LEVEL
     );
 }
 

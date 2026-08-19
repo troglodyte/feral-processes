@@ -62,7 +62,7 @@ fn wild_stats_at_zone(species: &SpeciesDef, zone: u32) -> Stats {
         // Never scaled by zone — the real spawner does not scale it either
         // (`Game::spawn_wild_creature`), because mitigation is percentage
         // points. See `components::Stats::mitigation`.
-        mitigation: species.base_def,
+        mitigation: species.base_mitigation,
     }
 }
 
@@ -121,7 +121,7 @@ fn average_ranged_move_power(species: &SpeciesDef) -> Option<i32> {
     Some((total as f64 / ranged.len() as f64).round() as i32)
 }
 
-/// The strongest non-boss species (by flat `base_hp+base_atk+base_def`)
+/// The strongest non-boss species (by flat `base_hp+base_atk+base_mitigation`)
 /// across every habitat — the toughest *ordinary* encounter a player must
 /// be able to survive to keep progressing. Bosses are excluded: they're
 /// rare, hand-tuned per-file rather than zone-scaled (see
@@ -130,7 +130,7 @@ fn average_ranged_move_power(species: &SpeciesDef) -> Option<i32> {
 pub fn toughest_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
     db.all()
         .filter(|s| !s.is_boss)
-        .max_by_key(|s| s.base_hp + s.base_atk + s.base_def)
+        .max_by_key(|s| s.base_hp + s.base_atk + s.base_mitigation)
         .expect("species db should have at least one ordinary species")
 }
 
@@ -146,7 +146,7 @@ pub fn median_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
         !ordinary.is_empty(),
         "species db should have at least one ordinary species"
     );
-    ordinary.sort_by_key(|s| s.base_hp + s.base_atk + s.base_def);
+    ordinary.sort_by_key(|s| s.base_hp + s.base_atk + s.base_mitigation);
     ordinary[ordinary.len() / 2]
 }
 

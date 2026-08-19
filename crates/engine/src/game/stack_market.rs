@@ -134,7 +134,7 @@ impl Game {
                             "{} HP, {} ATK, {} DEF — compiled to your control",
                             at(def.base_hp),
                             at(def.base_atk),
-                            at(def.base_def)
+                            at(def.base_mitigation)
                         )
                     }
                     None => String::new(),
@@ -274,7 +274,7 @@ impl Game {
             .world
             .resource::<SpeciesDb>()
             .get(species)
-            .map(|def| (def.base_hp + def.base_atk + def.base_def).max(0) as u32)
+            .map(|def| (def.base_hp + def.base_atk + def.base_mitigation).max(0) as u32)
             .unwrap_or(0);
         let scaled = power as f32 * crate::stack::depth_stat_multiplier(self.stack_depth());
         (scaled.round() as u32 * STACK_MARKET_PROGRAM_PRICE_PER_POWER).max(1)

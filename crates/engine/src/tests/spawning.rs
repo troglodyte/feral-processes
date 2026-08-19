@@ -345,7 +345,7 @@ fn the_zone_one_opening_ring_only_rolls_species_a_fresh_player_can_beat() {
             .any(|(_, _, dist)| *dist <= OPENING_RING_TILES),
         "the sweep has to actually populate the ring, or this asserts nothing"
     );
-    let stat_total = |s: &SpeciesDef| s.base_hp + s.base_atk + s.base_def;
+    let stat_total = |s: &SpeciesDef| s.base_hp + s.base_atk + s.base_mitigation;
     for (species, pos, dist) in placed {
         if dist > OPENING_RING_TILES {
             continue;
@@ -408,7 +408,7 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
              beats — if that changed, it is now testing the wrong branch"
         );
         pool.into_iter()
-            .min_by_key(|s| s.base_hp + s.base_atk + s.base_def)
+            .min_by_key(|s| s.base_hp + s.base_atk + s.base_mitigation)
             .expect("Deadlock ships species")
             .id
             .clone()
@@ -2894,6 +2894,6 @@ fn a_zone_tier_never_scales_mitigation() {
         .get("sentinel")
         .unwrap()
         .clone();
-    assert_eq!(stats.mitigation, species.base_def);
+    assert_eq!(stats.mitigation, species.base_mitigation);
     assert!(stats.max_hp > species.base_hp);
 }

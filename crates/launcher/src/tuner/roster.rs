@@ -46,7 +46,7 @@ impl Field {
         match self {
             Field::BaseHp => "base_hp",
             Field::BaseAtk => "base_atk",
-            Field::BaseDef => "base_def",
+            Field::BaseDef => "base_mitigation",
             Field::BaseSpeed => "base_speed",
             Field::TamingDifficulty => "taming_difficulty",
             Field::GrowthMultiplier => "growth_multiplier",
@@ -223,7 +223,7 @@ mod tests {
     color: Gray,
     base_hp: 42,
     base_atk: 3,
-    base_def: 2,
+    base_mitigation: 2,
     taming_difficulty: 0.15,
     habitats: [OpenGrid, Mainframe],
     base_speed: 13,

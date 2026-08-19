@@ -923,6 +923,7 @@ mod tests {
         program.moves = vec![MoveDef {
             name: "Strike".to_string(),
             power: 5,
+            spread: 2,
             effect: None,
             ranged: false,
         }];

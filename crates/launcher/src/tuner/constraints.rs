@@ -137,7 +137,7 @@ mod tests {
         for def in &mut defs {
             def.base_hp = ((def.base_hp as f32) * factor).round().max(1.0) as i32;
             def.base_atk = ((def.base_atk as f32) * factor).round().max(1.0) as i32;
-            def.base_def = ((def.base_def as f32) * factor).round().max(0.0) as i32;
+            def.base_mitigation = ((def.base_mitigation as f32) * factor).round().max(0.0) as i32;
         }
         defs
     }
@@ -216,18 +216,19 @@ mod tests {
 
     #[test]
     fn a_stat_block_off_its_budget_is_rejected() {
-        // The real proposal: `rootkit.base_hp +19`, `base_def +3`, taking a
-        // Leech at growth 1.5 from the 147 points its band and class allow
-        // to 169.
+        // The real proposal: `rootkit.base_hp +19`, taking a Leech at growth
+        // 1.5 from the 144 points its band and class allow to 163. The
+        // proposal also moved `base_mitigation`, which no longer counts
+        // toward the budget — mitigation is percentage points and is not a
+        // share of a stat total — so the HP alone is what has to trip this.
         let defs = shipped_with("rootkit", |d| {
             d.base_hp += 19;
-            d.base_def += 3;
         });
         assert!(
             faults_for(&defs, "rootkit").contains(&ShapeFault::OffBudget {
-                spent: 169,
+                spent: 163,
                 budget: 140,
-                expected: 147,
+                expected: 144,
             }),
             "the budget rule did not fire"
         );

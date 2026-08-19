@@ -328,7 +328,7 @@ fn a_modded_species_with_more_moves_still_scores() {
     color: Magenta,
     base_hp: 90,
     base_atk: 11,
-    base_def: 4,
+    base_mitigation: 4,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
     moves: [
@@ -398,7 +398,7 @@ fn a_modded_species_with_one_move_scores() {
     color: White,
     base_hp: 40,
     base_atk: 0,
-    base_def: 0,
+    base_mitigation: 0,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
     moves: [

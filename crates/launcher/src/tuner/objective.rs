@@ -132,7 +132,7 @@ mod tests {
     const BOUNDS: &str = r#"
         Bound(field: "base_hp", min: 1.0, max: 400.0),
         Bound(field: "base_atk", min: 1.0, max: 80.0),
-        Bound(field: "base_def", min: 0.0, max: 60.0),
+        Bound(field: "base_mitigation", min: 0.0, max: 60.0),
         Bound(field: "base_speed", min: 1.0, max: 40.0),
         Bound(field: "taming_difficulty", min: 0.05, max: 0.95),
         Bound(field: "growth_multiplier", min: 0.5, max: 2.5),

@@ -45,7 +45,16 @@ pub struct MoveEffect {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MoveDef {
     pub name: String,
+    /// The centre of this move's damage range — see `spread`.
     pub power: i32,
+    /// Half-width of the damage range around `power`.
+    ///
+    /// `#[serde(default)]` at 0 is a degenerate range, which is exactly the
+    /// deterministic behaviour every move had before ranges existed — so no
+    /// shipped species file and no mod's needed editing, and mods gain
+    /// damage ranges for free.
+    #[serde(default)]
+    pub spread: i32,
     /// Optional status effect this move has a chance to inflict on the
     /// target when it lands, independent of its direct damage.
     /// `#[serde(default)]` so existing species files (including mods)
@@ -59,6 +68,16 @@ pub struct MoveDef {
     /// as they behaved before it existed.
     #[serde(default)]
     pub ranged: bool,
+}
+
+impl MoveDef {
+    /// This move's damage band. Centre-and-spread rather than `(min, max)`
+    /// because `basic_attack_ability` converts a move into an `AbilityDef`
+    /// and this pair survives that losslessly, where a `(min, max)` pair
+    /// would round on an odd width.
+    pub fn range(&self) -> crate::battle::DamageRange {
+        crate::battle::DamageRange::centred(self.power, self.spread)
+    }
 }
 
 /// One basic attack, expressed as the ability it has always been in all but
@@ -204,7 +223,12 @@ pub struct SpeciesDef {
     pub color: GlyphColor,
     pub base_hp: i32,
     pub base_atk: i32,
-    pub base_def: i32,
+    /// **Percentage points** of damage reduction — see
+    /// `components::Stats::mitigation`, whose never-scaled-by-level-or-zone
+    /// rule this feeds. The spawner copies it straight across without the
+    /// zone multiplier or the individual roll every other stat takes,
+    /// because a scaled percentage walks to immunity.
+    pub base_mitigation: i32,
     /// 0.0 (trivial) .. 1.0 (very hard) to tame.
     pub taming_difficulty: f32,
     pub habitats: Vec<Biome>,
@@ -251,7 +275,7 @@ pub struct SpeciesDef {
     /// `Game::try_spawn_habitat_creature`), and guaranteed a cache of
     /// Portal Fragments on defeat instead of the flat drop chance every
     /// other species rolls (see `Game::award_loot`). A boss's stats are
-    /// still whatever `base_hp`/`base_atk`/`base_def` are authored as —
+    /// still whatever `base_hp`/`base_atk`/`base_mitigation` are authored as —
     /// there's no separate engine-side multiplier, so make them tough in
     /// the `.ron` file itself. `#[serde(default)]` so existing species
     /// files (including mods) without this field keep parsing as ordinary,
@@ -412,18 +436,17 @@ pub struct ClassShape {
     pub weight: i32,
     pub hp_share: i32,
     pub atk_share: i32,
-    pub def_share: i32,
     pub slowest: i32,
     pub fastest: i32,
 }
 
 #[rustfmt::skip]
 const CLASS_SHAPES: [ClassShape; 5] = [
-    ClassShape { class: AffinityClass::Striker,  damps: AffinityKind::Heal,   weight:  90, hp_share: 84, atk_share: 13, def_share: 3, slowest: 10, fastest: 11 },
-    ClassShape { class: AffinityClass::Saboteur, damps: AffinityKind::Heal,   weight:  95, hp_share: 85, atk_share: 11, def_share: 4, slowest: 13, fastest: 14 },
-    ClassShape { class: AffinityClass::Medic,    damps: AffinityKind::Damage, weight: 100, hp_share: 87, atk_share:  7, def_share: 6, slowest: 12, fastest: 12 },
-    ClassShape { class: AffinityClass::Leech,    damps: AffinityKind::Buff,   weight: 105, hp_share: 90, atk_share:  8, def_share: 2, slowest:  8, fastest:  9 },
-    ClassShape { class: AffinityClass::Bastion,  damps: AffinityKind::Damage, weight: 110, hp_share: 88, atk_share:  4, def_share: 8, slowest:  6, fastest:  7 },
+    ClassShape { class: AffinityClass::Striker,  damps: AffinityKind::Heal,   weight:  87, hp_share: 87, atk_share: 13, slowest: 10, fastest: 11 },
+    ClassShape { class: AffinityClass::Saboteur, damps: AffinityKind::Heal,   weight:  91, hp_share: 89, atk_share: 11, slowest: 13, fastest: 14 },
+    ClassShape { class: AffinityClass::Medic,    damps: AffinityKind::Damage, weight:  94, hp_share: 93, atk_share:  7, slowest: 12, fastest: 12 },
+    ClassShape { class: AffinityClass::Leech,    damps: AffinityKind::Buff,   weight: 103, hp_share: 92, atk_share:  8, slowest:  8, fastest:  9 },
+    ClassShape { class: AffinityClass::Bastion,  damps: AffinityKind::Damage, weight: 102, hp_share: 96, atk_share:  4, slowest:  6, fastest:  7 },
 ];
 
 impl ClassShape {
@@ -438,18 +461,17 @@ impl ClassShape {
             .expect("every AffinityClass has a shape")
     }
 
-    /// Total HP+ATK+DEF a species of this class spends at `budget`.
+    /// Total HP+ATK a species of this class spends at `budget`.
     pub fn spend(&self, budget: i32) -> i32 {
         pct(budget, self.weight)
     }
 
     /// What each axis of a `total`-point block should hold, in HP/ATK/DEF
     /// order. Named alongside the value so a fault can say which axis moved.
-    pub fn axis_targets(&self, total: i32) -> [(&'static str, i32); 3] {
+    pub fn axis_targets(&self, total: i32) -> [(&'static str, i32); 2] {
         [
             ("HP", pct(total, self.hp_share)),
             ("ATK", pct(total, self.atk_share)),
-            ("DEF", pct(total, self.def_share)),
         ]
     }
 }
@@ -561,9 +583,15 @@ impl DangerBand {
     }
 }
 
-/// Total HP+ATK+DEF a species of each growth band is built from, before its
+/// Total HP+ATK a species of each growth band is built from, before its
 /// class weight. Taken from the bands' own means at the time the classes
 /// landed, so the ladder itself did not move.
+///
+/// Mitigation is deliberately not part of it. It is percentage points now,
+/// and a percentage is not a share of a stat budget — adding it to a total
+/// dominated by HP was summing two different units. Every class weight and
+/// HP/ATK share below was rebaselined against the shipped roster when that
+/// term left, so no species' authored numbers moved.
 pub fn tier_budget(growth: f32) -> i32 {
     match growth {
         g if g < 1.125 => 50,
@@ -722,10 +750,15 @@ pub fn stat_shape_faults(species: &SpeciesDef) -> Vec<ShapeFault> {
         });
     }
 
-    let total = species.base_hp + species.base_atk + species.base_def;
+    let total = species.base_hp + species.base_atk;
     let budget = tier_budget(species.growth_multiplier);
     let expected = shape.spend(budget);
-    if total != expected {
+    // Within a point, the same tolerance the axis shares below carry.
+    // Exact equality held while the total had a third term: mitigation was
+    // small and absorbed whatever the other two rounded away. With two terms
+    // the rounding has nowhere to go, and Striker and Saboteur miss by one
+    // at a single growth band each.
+    if (total - expected).abs() > 1 {
         faults.push(ShapeFault::OffBudget {
             spent: total,
             budget,
@@ -733,11 +766,11 @@ pub fn stat_shape_faults(species: &SpeciesDef) -> Vec<ShapeFault> {
         });
     }
 
-    for ((axis, target), actual) in shape.axis_targets(total).into_iter().zip([
-        species.base_hp,
-        species.base_atk,
-        species.base_def,
-    ]) {
+    for ((axis, target), actual) in shape
+        .axis_targets(total)
+        .into_iter()
+        .zip([species.base_hp, species.base_atk])
+    {
         if (actual - target).abs() > 1 {
             faults.push(ShapeFault::AxisOffShare {
                 axis,
@@ -1405,7 +1438,7 @@ mod tests {
                 color: Green,
                 base_hp: 10,
                 base_atk: 1,
-                base_def: 1,
+                base_mitigation: 1,
                 taming_difficulty: 0.5,
                 habitats: [StaticField],
                 moves: [(name: "Poke", power: 1)],
@@ -1427,7 +1460,7 @@ mod tests {
                 color: Green,
                 base_hp: 10,
                 base_atk: 1,
-                base_def: 1,
+                base_mitigation: 1,
                 taming_difficulty: 0.5,
                 habitats: [OpenGrid],
                 moves: [(name: "Poke", power: 1)],
@@ -1453,7 +1486,7 @@ mod tests {
                 color: Green,
                 base_hp: 10,
                 base_atk: 1,
-                base_def: 1,
+                base_mitigation: 1,
                 taming_difficulty: 0.5,
                 habitats: [OpenGrid],
                 moves: [(name: "Poke", power: 1)],
@@ -1471,7 +1504,7 @@ mod tests {
                 color: Green,
                 base_hp: 10,
                 base_atk: 1,
-                base_def: 1,
+                base_mitigation: 1,
                 taming_difficulty: 0.5,
                 habitats: [OpenGrid],
                 base_int: 14,
@@ -1932,5 +1965,24 @@ mod tests {
             db.all().all(|s| !(s.is_boss && s.can_nest)),
             "no boss species should have can_nest set"
         );
+    }
+
+    /// A move file that names only `power` keeps parsing and is the
+    /// degenerate range — exactly today's deterministic behaviour. This is
+    /// the modding promise: no shipped or third-party species file needs
+    /// editing to gain damage ranges.
+    #[test]
+    fn a_move_without_a_spread_is_a_degenerate_range() {
+        let mv: MoveDef = ron::from_str(r#"(name: "Fray", power: 8)"#)
+            .expect("a move with no spread must still parse");
+        assert_eq!(mv.spread, 0);
+        assert_eq!(mv.range(), crate::battle::DamageRange { min: 8, max: 8 });
+    }
+
+    #[test]
+    fn a_move_with_a_spread_widens_around_its_power() {
+        let mv: MoveDef = ron::from_str(r#"(name: "Fray", power: 8, spread: 3)"#)
+            .expect("a move with a spread must parse");
+        assert_eq!(mv.range(), crate::battle::DamageRange { min: 5, max: 11 });
     }
 }

@@ -24,14 +24,24 @@ is skipped with a warning logged in-game rather than crashing startup.
                                    // once it's compiled.
     base_hp: 60,
     base_atk: 6,
-    base_def: 3,
-    // The shipped roster authors these three as one number split three ways,
-    // and it is worth knowing the scheme before adding to it — see "The five
-    // classes" at the bottom of this file. A mod is not held to it: the
-    // census that enforces it runs over `assets/species/` only, so your file
-    // may spend whatever it likes. What you give up by ignoring it is that a
-    // player cannot read your species' role off its stat block the way they
-    // can read every shipped one's.
+    base_mitigation: 3,
+    // The shipped roster authors `base_hp` and `base_atk` as one number split
+    // two ways, and it is worth knowing the scheme before adding to it — see
+    // "The five classes" at the bottom of this file. A mod is not held to it:
+    // the census that enforces it runs over `assets/species/` only, so your
+    // file may spend whatever it likes. What you give up by ignoring it is
+    // that a player cannot read your species' role off its stat block the way
+    // they can read every shipped one's.
+    //
+    // `base_mitigation` is **percentage points of damage reduction**, not
+    // points of absorption, and it is not part of that split — a percentage
+    // is not a share of a stat budget. It is also the one stat the engine
+    // never scales: a zone tier and a level-up both leave it exactly as
+    // authored, because a percentage that grows per level walks to immunity.
+    // Everything that reduces damage is summed and then capped at
+    // `tuning::MAX_MITIGATION_PERCENT` (75), so a species authored at or
+    // above that is immune before gear or a buff is counted. The shipped
+    // roster spans 1 (Drone) to 17 (Wintermute).
     taming_difficulty: 0.4,       // 0.0 (trivial) .. 1.0 (very hard) to compile/tame
     habitats: [OpenGrid, Mainframe],
     // Biome options: DataVoid, Deadlock, NullSector, Mainframe, OpenGrid, BlackIce, Platform
@@ -114,8 +124,26 @@ is skipped with a warning logged in-game rather than crashing startup.
     // deliberately *not* computed the way a Special's is — see
     // `docs/seams.md`.
     moves: [
-        (name: "Move Name", power: 8),
-        (name: "Other Move", power: 5),
+        (name: "Move Name", power: 8, spread: 2),
+        (name: "Other Move", power: 5, spread: 1),
+
+        // `power` is the *centre* of the move's damage band and `spread` is
+        // its half-width, so `power: 8, spread: 2` rolls 6..=10 inclusive,
+        // uniformly. The low end is floored at 0, so a wide spread on a weak
+        // move cannot roll negative damage.
+        //
+        // `spread` is optional and defaults to 0, which is a degenerate band
+        // — exactly the single deterministic number every move dealt before
+        // ranges existed. No existing file had to be edited to keep working,
+        // and a mod that never mentions `spread` behaves precisely as it
+        // always did. Every shipped move authors one, roughly a quarter of
+        // its power, narrower for the heavy slow species and wider for the
+        // fast erratic ones.
+        //
+        // An equipped weapon **overrides** this band rather than adding to
+        // it: a companion still rolls a species move each turn for its name
+        // and its status rider, but the weapon supplies the numbers. Unarmed,
+        // the move's own band applies.
 
         // Optional per-move (defaults to false). A pack fights as species
         // groups, and only the front two are close enough to swing — a
@@ -176,7 +204,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // species is *apex*: always a boss, never scaled up by the engine, and
     // eligible only from `APEX_ENTRY_STEP` onwards — deep in a Stack or far
     // into the zones, never in a fresh run. Make
-    // `base_hp`/`base_atk`/`base_def` tough here directly; there's no
+    // `base_hp`/`base_atk`/`base_mitigation` tough here directly; there's no
     // engine-side multiplier on an apex species (its stats still rise per
     // zone level like any other species, on top of this).
     //
@@ -269,7 +297,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // member of it — 1.0 grows at the standard flat rate; a higher-tier
     // species can set e.g. 1.5 to out-grow an easy one level for level. Only
     // affects a *tamed* member's growth as it levels up — a wild spawn's
-    // stats (`base_hp`/`base_atk`/`base_def`, zone-scaled) are unaffected.
+    // stats (`base_hp`/`base_atk`, zone-scaled — `base_mitigation` never is)
+    // are unaffected.
     // The base roster uses roughly 1.0 for Easy species, 1.25 for Medium,
     // 1.5 for Hard, and 2.0 for bosses.
     growth_multiplier: 1.25,

@@ -646,7 +646,7 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
                 hp: boss.base_hp,
                 max_hp: boss.base_hp,
                 atk: boss.base_atk,
-                mitigation: boss.base_def,
+                mitigation: boss.base_mitigation,
             },
         ))
         .id();
@@ -667,7 +667,7 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
             hp: normal.base_hp,
             max_hp: normal.base_hp,
             atk: normal.base_atk,
-            mitigation: normal.base_def,
+            mitigation: normal.base_mitigation,
         },
     ));
 
@@ -1001,7 +1001,7 @@ fn the_manifest_lists_only_non_neutral_affinities() {
     color: Cyan,
     base_hp: 10,
     base_atk: 4,
-    base_def: 2,
+    base_mitigation: 2,
     taming_difficulty: 0.5,
     habitats: [OpenGrid],
     moves: [(name: "Poke", power: 3)],

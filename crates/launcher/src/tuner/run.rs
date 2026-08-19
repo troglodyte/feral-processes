@@ -413,7 +413,7 @@ mod tests {
         // The regression this whole module exists for. `full-group.ron`
         // fields three Scrappers against four rootkits, and the first real
         // tuner run satisfied its win-rate target partly by dropping
-        // `scrapper.base_def` from 5 to its bound floor of 0 — a nerf to a
+        // `scrapper.base_mitigation` from 5 to its bound floor of 0 — a nerf to a
         // companion the player tames and keeps, applied everywhere in the
         // game, to move one authored fight.
         let assets = repo("assets");

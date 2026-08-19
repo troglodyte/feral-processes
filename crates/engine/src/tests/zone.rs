@@ -1879,7 +1879,7 @@ fn destroying_a_nest_rolls_its_species_gear_table_repeatedly() {
                 color: Yellow,
                 base_hp: 50,
                 base_atk: 5,
-                base_def: 2,
+                base_mitigation: 2,
                 taming_difficulty: 0.5,
                 habitats: [],
                 moves: [],

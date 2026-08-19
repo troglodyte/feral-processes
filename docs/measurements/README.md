@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-19 — What an unoptimised dependency graph costs a frame](2026-08-19-debug-build-frame-cost.md)
+  — `cargo run` was under 20 fps because the workspace had no `[profile.dev]`
+  section, so bevy, wgpu and egui compiled unoptimised into the playable
+  build. The renderer's shape pass alone measured **51.4 ms** a frame in
+  debug against 2.0 ms in release, at an identical shape count; deps at
+  `opt-level = 3` bring it to 2.3 ms. Found from a play report that the map's
+  camera glide had gone jerky — the animation was intact, there were simply
+  two frames per step to draw it in. Also retires the standing claim that the
+  engine suite's ~24 s was an unavoidable debug artifact: it is 6.7 s.
+
 - [2026-08-19 — What removing the passive party bonus cost the player](2026-08-19-party-passive-bonus-removal.md)
   — companions no longer lend the player a tenth of their ATK/DEF on top of
   acting. Across four party-bearing scenarios at 200 reps, fights got 0.3-0.4

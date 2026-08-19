@@ -997,6 +997,13 @@ mod tests {
     /// The two progression pickers' real rows for `n` entries with row
     /// `selected` highlighted, built through the shipping row builders for
     /// `build_menu_rows_fixture`'s reason.
+    ///
+    /// The descriptions are as long as the shipped assets carry rather than
+    /// a token phrase, because `description_rows` wraps them: a short one
+    /// costs a single row here and the two tests below would then measure a
+    /// body half the height of the real one — which is exactly the case
+    /// `the_selected_progression_row_is_inside_the_visible_window` exists
+    /// to catch.
     fn progression_rows_fixtures(n: usize, selected: usize) -> Vec<(&'static str, Vec<Row>)> {
         use super::super::progression::{perks_menu_rows, research_menu_rows};
         use feral_processes_engine::ResearchStatus;
@@ -1013,7 +1020,12 @@ mod tests {
                             // levels, so one variant repeated is enough here.
                             id: Perk::Attacker,
                             name: format!("Perk {i}"),
-                            description: format!("What perk {i} does, at some length."),
+                            description: format!(
+                                "What perk {i} does, at the length the shipped \
+                                 perks run to: a sentence naming the fantasy, \
+                                 then another one naming the number it moves \
+                                 and roughly how far each level moves it."
+                            ),
                             cost: 1 + i as u32,
                         })
                         .collect::<Vec<_>>(),
@@ -1029,7 +1041,13 @@ mod tests {
                         .map(|i| ResearchStatus {
                             id: format!("node_{i}"),
                             name: format!("Node {i}"),
-                            description: format!("What node {i} unlocks, at some length."),
+                            description: format!(
+                                "What node {i} unlocks, at the length the \
+                                 shipped nodes run to: a sentence naming what \
+                                 it teaches, then another one naming the \
+                                 structures and recipes it hands over and what \
+                                 they cost to build once you have it."
+                            ),
                             cost: 10 + i as u32,
                             state: if i % 3 == 0 {
                                 ResearchState::Unlocked

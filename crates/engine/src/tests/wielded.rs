@@ -15,7 +15,10 @@ fn wield_directly(game: &mut Game, entity: Entity) {
 fn wielding_a_program_raises_the_players_attack_and_defense() {
     let mut game = Game::new(9100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let (atk_before, def_before) = (game.effective_atk(player), game.effective_def(player));
+    let (atk_before, def_before) = (
+        game.effective_atk(player),
+        game.effective_mitigation(player),
+    );
 
     let program = spawn_tamed(&mut game, 40, 60);
     game.world.get_mut::<Stats>(program).unwrap().mitigation = 30;
@@ -27,7 +30,7 @@ fn wielding_a_program_raises_the_players_attack_and_defense() {
         "the wielded program lends a share of its ATK"
     );
     assert_eq!(
-        game.effective_def(player) - def_before,
+        game.effective_mitigation(player) - def_before,
         30 / WIELDED_PROGRAM_STAT_DIVISOR,
         "and a share of its DEF"
     );
@@ -445,18 +448,20 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
     let AbilityEffect::Damage { power, .. } = ability.effect else {
         panic!("kernel_panic is a Damage ability");
     };
-    let expected = battle::compute_damage(
+    // The target's mitigation goes through the engine's own
+    // `mitigate_incoming_damage` rather than being restated as a subtractive
+    // term here — a second copy of that formula in a test is exactly what
+    // drifts, and the logged figure is what actually landed.
+    let raw = battle::compute_damage(
         game.world.get::<Stats>(program).unwrap().atk,
-        game.world
-            .get::<Stats>(front_enemy(&game))
-            .unwrap()
-            .mitigation,
+        0,
         abilities::scaled_hp_power(
             power,
             game.ability_user_level(program),
             game.ability_affinity(program, &ability.effect),
         ),
     );
+    let expected = game.mitigate_incoming_damage(front_enemy(&game), raw);
 
     assert!(
         game.world.get::<Experience>(program).unwrap().level

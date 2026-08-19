@@ -9,18 +9,58 @@
 use crate::*;
 
 impl Game {
-    /// Applies `dmg` to `target`, floored at 0.
+    /// Applies `dmg` to `target`, cut by `target`'s mitigation and floored
+    /// at 0.
     ///
-    /// Death is detected here rather than at the six call sites because this
-    /// is the only path that lowers a creature's HP — every other write to
-    /// `Stats::hp` is a heal, one of the two full-heals, or
-    /// `needs_tick_system`, which is `With<Player>`. A seventh caller added
-    /// later inherits the check for free; six separate checks would not.
+    /// This is the only path that *damages* a creature — every other write
+    /// to `Stats::hp` is a heal, one of the two full-heals, or
+    /// `needs_tick_system`, which is `With<Player>`. `kill_outright` is the
+    /// one other thing that lowers HP, and it shares this one's `lower_hp`
+    /// so the death check cannot be missed by either.
     ///
     /// Only party members are announced. A hostile reaching 0 is reported by
     /// `finish_member`, and the player by `difficulty::death_handling_system`.
-    pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) {
-        let dmg = self.mitigate_incoming_damage(target, dmg);
+    ///
+    /// Returns how much actually came off, which is not what was asked for
+    /// once mitigation is in play — the same reason `restore_hp` returns its
+    /// landed figure rather than its requested one. A log line printing the
+    /// requested number claims damage the target never took.
+    pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) -> i32 {
+        let dealt = self.mitigate_incoming_damage(target, dmg);
+        self.lower_hp(target, dealt);
+        dealt
+    }
+
+    /// Kills `target` outright, past any mitigation.
+    ///
+    /// **The one thing in the game that armour cannot answer**, and it is
+    /// deliberately spelled as its own verb rather than as a large `dmg`.
+    /// Materialising inside solid substrate (`Game::die_in_the_rock`) is not
+    /// an attack with a big number on it; there is no defence against it and
+    /// no amount of mitigation that should leave the player standing. Once
+    /// `Stats::mitigation` reached the damage path, `apply_damage(player,
+    /// hp)` stopped being lethal — even the player's innate 2% leaves a
+    /// point behind.
+    ///
+    /// It is a *kill*, not a damage source, which is what keeps it from
+    /// becoming a general mitigation bypass: there is no amount to pass, so
+    /// nothing can reach for it to make an ordinary hit hurt more.
+    pub(crate) fn kill_outright(&mut self, target: Entity) {
+        let hp = self
+            .world
+            .get::<Stats>(target)
+            .map(|s| s.hp)
+            .unwrap_or_default();
+        self.lower_hp(target, hp);
+    }
+
+    /// The single write that lowers a creature's HP. Both `apply_damage` and
+    /// `kill_outright` funnel through it, so "one place lowers HP" survives
+    /// the second door.
+    ///
+    /// Death is detected here rather than at the call sites for the reason
+    /// `apply_damage`'s doc gives.
+    fn lower_hp(&mut self, target: Entity, dmg: i32) {
         let killed = {
             let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
                 return;
@@ -50,10 +90,15 @@ impl Game {
         stats.hp - before
     }
 
-    /// Cuts `dmg` by `target`'s running `Mitigation` field buff power
-    /// (percentage points), read off `target` itself since the kind is
-    /// `FieldScope::Creature` — it protects whoever carries it, not the
-    /// whole party.
+    /// Cuts `dmg` by `target`'s total mitigation, in percentage points.
+    ///
+    /// **Everything comes through `effective_mitigation`**, which is the one
+    /// door onto that total: innate `Stats::mitigation` (gear already baked
+    /// in by `apply_equipment_delta`), an active `CombatBuff::Mitigation`, a
+    /// running `FieldBuffKind::Mitigation`, and the player's party bonus —
+    /// already summed and already capped. This used to read the field buff
+    /// alone, which meant a species' authored toughness and every worn piece
+    /// of armour were invisible here.
     ///
     /// Rounds once, in the same expression as the percentage cut, rather
     /// than rounding the reduction and then subtracting it — two roundings
@@ -61,13 +106,14 @@ impl Game {
     ///
     /// Floors at 1 so a landed hit stays a hit under heavy mitigation, but
     /// only when there was a hit to protect: `dmg <= 0` (already a miss, or
-    /// no buff at all) passes through untouched rather than being raised to 1.
-    fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
-        let power = self.field_buff_power(target, FieldBuffKind::Mitigation);
-        if power <= 0 || dmg <= 0 {
+    /// no mitigation at all) passes through untouched rather than being
+    /// raised to 1.
+    pub(crate) fn mitigate_incoming_damage(&self, target: Entity, dmg: i32) -> i32 {
+        let percent = self.effective_mitigation(target);
+        if percent <= 0 || dmg <= 0 {
             return dmg;
         }
-        let reduced = (dmg as f32 * (1.0 - power as f32 / 100.0)).round() as i32;
+        let reduced = (dmg as f32 * (1.0 - percent as f32 / 100.0)).round() as i32;
         reduced.max(1)
     }
 

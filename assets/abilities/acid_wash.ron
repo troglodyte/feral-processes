@@ -3,7 +3,7 @@
     name: "Etch Single",
     description: "-5 DEF to one target for 3 rounds",
     target: OneEnemyGroupFront,
-    effect: Buff(kind: Def, power: -5, duration: 3),
+    effect: Buff(kind: Mitigation, power: -15, duration: 3),
     cooldown: 2,
     power_cost: 8.0,
     wild_weight: 8,

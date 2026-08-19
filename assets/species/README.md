@@ -459,7 +459,7 @@ entry back is also what makes a fresh capture read as generic before it reads
 as a class.
 
 A kit entry must be a **battle** ability. `AffinityKind` is blind to the
-distinction: a `FieldBuff(kind: Def)` reports `Buff` like any other buff while
+distinction: a `FieldBuff(kind: Mitigation)` reports `Buff` like any other buff while
 never appearing in the Special picker, which is the one place a kit is spent.
 
 ### Base jobs

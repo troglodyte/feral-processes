@@ -11,5 +11,5 @@
     description: "+4 DEF to the whole party until you rest",
     target: WholeParty,
     power_cost: 32.0,
-    effect: FieldBuff(kind: Def, power: 4),
+    effect: FieldBuff(kind: Mitigation, power: 12),
 )

@@ -3,7 +3,7 @@
     name: "Etch Group",
     description: "-4 DEF to every member of one group for 3 rounds",
     target: WholeEnemyGroup,
-    effect: Buff(kind: Def, power: -4, duration: 3),
+    effect: Buff(kind: Mitigation, power: -12, duration: 3),
     cooldown: 3,
     power_cost: 10.0,
     wild_weight: 7,

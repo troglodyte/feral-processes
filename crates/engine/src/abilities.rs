@@ -858,7 +858,7 @@ mod tests {
         name: "Test Timed Shell",
         description: "d",
         target: OneAlly,
-        effect: FieldBuff(kind: Def, power: 4, duration: 90),
+        effect: FieldBuff(kind: Mitigation, power: 12, duration: 90),
     )"#,
             )],
         );

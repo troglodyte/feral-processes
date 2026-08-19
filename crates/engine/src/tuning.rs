@@ -514,8 +514,13 @@ pub const WILD_ABILITY_CHANCE: f64 = 0.2;
 /// weights there is nothing to sample and the baseline rolls run instead.
 pub const ENEMY_POLICY_TEMPERATURE: f32 = 1.0;
 
-/// DEF granted for the round by the Defend action.
-pub const DEFEND_DEF_BONUS: i32 = 6;
+/// Mitigation granted for the round by the Defend action, in **percentage
+/// points** — the unit `Stats::mitigation` carries. Re-authored from the flat
+/// 6 points of subtractive absorption a brace used to add: the value had to
+/// move with the unit, or a brace would have silently become a rounding
+/// error. Well under `MAX_MITIGATION_PERCENT` so a brace is a real cut
+/// without approaching immunity on its own.
+pub const DEFEND_MITIGATION_BONUS: i32 = 20;
 
 /// Scales every `AbilityDef::power_cost` in the game, applied wherever one is
 /// read — so `Game::ability_unavailable`'s refusal and `Game::spend_power`'s

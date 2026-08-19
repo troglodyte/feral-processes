@@ -654,7 +654,7 @@ pub struct SaveData {
 /// changed, which field-named RON cannot rescue because the name is what it
 /// matches on. A v30 file would load `def: 6` into a percentage slot and
 /// read as 6% mitigation rather than 6 points of soak, so it is refused by
-/// version instead. `FieldBuffKind::Def` folding into `Mitigation` rides the
+/// version instead. `FieldBuffKind::Mitigation` folding into `Mitigation` rides the
 /// same bump.
 pub const SAVE_FORMAT_VERSION: u32 = 31;
 

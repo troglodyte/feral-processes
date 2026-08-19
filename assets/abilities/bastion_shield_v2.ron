@@ -3,7 +3,7 @@
     name: "Bastion Single v2.0",
     description: "Raise one ally's Defense by 5 for 3 rounds",
     target: OneAlly,
-    effect: Buff(kind: Def, power: 5, duration: 3),
+    effect: Buff(kind: Mitigation, power: 15, duration: 3),
     cooldown: 2,
     power_cost: 7.0,
 )

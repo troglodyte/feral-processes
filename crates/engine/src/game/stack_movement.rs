@@ -183,12 +183,14 @@ impl Game {
     /// needs a new exception.
     pub(crate) fn die_in_the_rock(&mut self) {
         let player = self.player_entity();
-        let hp = self.world.get::<Stats>(player).map(|s| s.hp).unwrap_or(0);
         self.log_kind(
             MessageKind::Outcome,
             "You resolve inside solid substrate. Nothing about that is survivable.",
         );
-        self.apply_damage(player, hp);
+        // `kill_outright`, not `apply_damage`: mitigation would leave the
+        // player standing on a point of HP, and the line above has already
+        // promised otherwise.
+        self.kill_outright(player);
     }
 
     /// Puts the party on `cell` of the frame they are already in, and

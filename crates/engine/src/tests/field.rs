@@ -283,13 +283,13 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
         &[],
         &[],
         &[],
-        &[("test_field_def.ron", FIELD_ONLY_PARTY_ABILITY)],
+        &[("test_field_atk.ron", FIELD_ONLY_PARTY_ABILITY)],
     );
     let mut game = Game::new(9106, DifficultyMode::Forgiving, &dir).unwrap();
     let player = buff_affinity_maxed_player(&mut game);
     game.world
         .entity_mut(player)
-        .insert(Routines(vec!["test_field_def".to_string()]));
+        .insert(Routines(vec!["test_field_atk".to_string()]));
 
     game.cast_field_routine(0, FieldCastTarget::None)
         .expect("a WholeParty target needs no picked ally");
@@ -582,7 +582,7 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
         &[],
         &[],
         &[],
-        &[("test_field_def.ron", FIELD_ONLY_PARTY_ABILITY)],
+        &[("test_field_atk.ron", FIELD_ONLY_PARTY_ABILITY)],
     );
     let mut game = Game::new(9103, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
@@ -592,7 +592,7 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
     game.world.resource_mut::<Party>().0.extend([alive, dead]);
     game.world
         .entity_mut(player)
-        .insert(Routines(vec!["test_field_def".to_string()]));
+        .insert(Routines(vec!["test_field_atk".to_string()]));
 
     let routines = game.field_routines();
     let index = routines
@@ -645,12 +645,14 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
     game.cast_field_routine(index, FieldCastTarget::None)
         .expect("a WholeParty cast needs no target");
 
-    let expected = abilities::scaled_stat_power(4, 1, AFFINITY_NEUTRAL);
+    // Authored, not scaled: `hardened_shell_party` is a `Mitigation` buff
+    // now, and a percentage kind is delivered at exactly what the file says
+    // — see `FieldBuffKind::scales_with_caster`.
     for holder in [player, first, second] {
         let active = &game.world.get::<FieldBuff>(holder).unwrap().active;
         assert_eq!(active.len(), 1, "one buff per body");
-        assert_eq!(active[0].kind, FieldBuffKind::Def);
-        assert_eq!(active[0].power, expected);
+        assert_eq!(active[0].kind, FieldBuffKind::Mitigation);
+        assert_eq!(active[0].power, 12);
         assert!(
             active[0].runs_until_rest(),
             "an authored duration would give the wide cast a turn count"

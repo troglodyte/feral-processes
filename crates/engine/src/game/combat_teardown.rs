@@ -145,7 +145,7 @@ impl Game {
         }
         // Every hostile still in the fight, not only the one passed in.
         // Survivors of a jack-out stay on the map, and a mirrored buff left
-        // armed on one never ticks down — `effective_atk`/`effective_def`
+        // armed on one never ticks down — `effective_atk`/`effective_mitigation`
         // read `CombatBuff` unconditionally, so it would be a free stat
         // forever. `wild` is still taken because it may name a program that
         // has already left its group (a successful decompile).
@@ -169,7 +169,7 @@ impl Game {
             }
             // Companions hold `CombatBuff` too, now that a Rally or Shield
             // can be aimed at one. Left set, it never ticks down outside a
-            // battle and `effective_def`/`effective_atk` read it
+            // battle and `effective_mitigation`/`effective_atk` read it
             // unconditionally, so it would be a permanent free stat.
             if let Some(mut b) = self.world.get_mut::<CombatBuff>(companion) {
                 b.active = None;

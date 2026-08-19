@@ -925,7 +925,7 @@ fn guard_assignment_on_a_non_resource_structure_survives_save_and_load() {
 
 /// Durability lost to one forced sweep on a structure guarded by a program
 /// of `species` carrying `def` Defense.
-fn durability_lost_with_guard(species: &str, def: i32) -> u32 {
+fn durability_lost_with_guard(species: &str, mitigation: i32) -> u32 {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let structure = game
         .world
@@ -943,7 +943,7 @@ fn durability_lost_with_guard(species: &str, def: i32) -> u32 {
         "{species} should be in the shipped roster"
     );
     game.world.get_mut::<Creature>(worker).unwrap().species = species.to_string();
-    game.world.get_mut::<Stats>(worker).unwrap().mitigation = def;
+    game.world.get_mut::<Stats>(worker).unwrap().mitigation = mitigation;
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::Guard,
         target: structure,
@@ -968,16 +968,17 @@ fn durability_lost_with_guard(species: &str, def: i32) -> u32 {
 /// been doubled for everyone.
 #[test]
 fn a_bastion_stops_a_sweep_that_gets_past_another_class() {
-    let half = RAID_DAMAGE as i32 / 2;
+    // 50 percentage points, so a Striker halves the sweep and a Bastion's
+    // doubling takes it to 100 and deflects it outright.
     assert_eq!(
-        durability_lost_with_guard("glitch", half),
+        durability_lost_with_guard("glitch", 50),
         RAID_DAMAGE / 2,
-        "a Striker mitigates by its Defense once"
+        "a Striker mitigates by its Mitigation once"
     );
     assert_eq!(
-        durability_lost_with_guard("sentinel", half),
+        durability_lost_with_guard("sentinel", 50),
         0,
-        "a Bastion's Defense counts twice, which is the whole of its base job"
+        "a Bastion's Mitigation counts twice, which is the whole of its base job"
     );
 }
 
@@ -996,7 +997,12 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
             ))
             .id();
         let worker = spawn_tamed(&mut game, 50, 3);
-        game.world.get_mut::<Stats>(worker).unwrap().mitigation = 100; // fully mitigates RAID_DAMAGE
+        // 100 percentage points: the raid path clamps to 100 rather than to
+        // the combat cap, so this fully deflects the sweep off the structure.
+        // The worker's own `RAID_DEFENDER_DAMAGE` still goes through
+        // `apply_damage`, which *does* apply the combat cap — so the cost is
+        // cut by `MAX_MITIGATION_PERCENT`, not by 100.
+        game.world.get_mut::<Stats>(worker).unwrap().mitigation = 100;
         game.world.entity_mut(worker).insert(Task {
             kind: TaskKind::GatherResource,
             target: structure,
@@ -1017,7 +1023,13 @@ fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker
                     30,
                     "a worker with overwhelming Defense should fully mitigate the raid"
                 );
-                assert_eq!(worker_hp, 50 - RAID_DEFENDER_DAMAGE);
+                assert_eq!(
+                    worker_hp,
+                    50 - 2,
+                    "the defender's own cost goes through `apply_damage` and \
+                     so is cut by the combat cap, not by the 100 the raid \
+                     path allowed: {RAID_DEFENDER_DAMAGE} becomes 2"
+                );
                 return;
             }
         }

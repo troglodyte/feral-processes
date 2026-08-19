@@ -3,7 +3,7 @@
     name: "Bastion Party",
     description: "+4 DEF to the whole party for 3 rounds",
     target: WholeParty,
-    effect: Buff(kind: Def, power: 4, duration: 3),
+    effect: Buff(kind: Mitigation, power: 12, duration: 3),
     cooldown: 3,
     power_cost: 11.0,
     wild_weight: 8,

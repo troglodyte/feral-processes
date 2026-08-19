@@ -165,12 +165,12 @@ impl Game {
 
         let targets_companion = target != player;
 
-        let (w_atk, t_def) = {
-            let w = *self.world.get::<Stats>(wild).unwrap();
-            (w.atk, self.effective_def(target))
-        };
-        let dmg = battle::compute_damage(w_atk, t_def, power);
-        self.apply_damage(target, dmg);
+        // No mitigation term: `apply_damage` applies the target's, as the
+        // percentage cut it now is, and returns what actually landed — which
+        // is the figure the log lines below have to print.
+        let w_atk = self.world.get::<Stats>(wild).unwrap().atk;
+        let raw = battle::compute_damage(w_atk, 0, power);
+        let dmg = self.apply_damage(target, raw);
 
         // A move that also inflicts a condition is the only thing an enemy has
         // resembling the party's Special, so it is what earns the louder

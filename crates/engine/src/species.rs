@@ -1719,7 +1719,7 @@ mod tests {
     ///   holding it. Holding the first entry back to level 2 is also what
     ///   makes a fresh capture read as generic before it reads as a class.
     /// - **No field-only effect.** `AffinityKind` is blind to the
-    ///   distinction — a `FieldBuff(kind: Def)` reports `Buff` and would
+    ///   distinction — a `FieldBuff(kind: Mitigation)` reports `Buff` and would
     ///   pass the category check while never appearing in the battle
     ///   Special picker at all, which is the one place a kit is spent.
     /// - **The rungs rank by their authored power**, so a rung assigned to

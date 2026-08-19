@@ -702,7 +702,7 @@ impl Game {
         // The same calls `player_status` makes, so the sidebar and the sheet
         // cannot show different numbers for the same player.
         let atk = self.effective_atk(entity);
-        let def = self.effective_def(entity);
+        let def = self.effective_mitigation(entity);
         let perks = self.world.get::<Perks>(entity);
         Some(ManifestView {
             entity,

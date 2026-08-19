@@ -958,7 +958,7 @@ fn the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between() {
             matches!(
                 def.effect,
                 AbilityEffect::FieldBuff {
-                    kind: crate::components::FieldBuffKind::Def,
+                    kind: crate::components::FieldBuffKind::Mitigation,
                     duration: 0,
                     ..
                 }
@@ -998,7 +998,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
 
     let mut regen = false;
     let mut trickle = false;
-    let mut def_kind = false;
     let mut atk = false;
     let mut mitigation = false;
     let mut capture_boost = false;
@@ -1011,7 +1010,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
             match kind {
                 FieldBuffKind::Regen => regen = true,
                 FieldBuffKind::Trickle => trickle = true,
-                FieldBuffKind::Def => def_kind = true,
                 FieldBuffKind::Atk => atk = true,
                 FieldBuffKind::Mitigation => mitigation = true,
                 FieldBuffKind::CaptureBoost => capture_boost = true,
@@ -1024,7 +1022,6 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
 
     assert!(regen, "no shipped ability grants a Regen field buff");
     assert!(trickle, "no shipped ability grants a Trickle field buff");
-    assert!(def_kind, "no shipped ability grants a Def field buff");
     assert!(atk, "no shipped ability grants an Atk field buff");
     assert!(
         mitigation,
@@ -1527,7 +1524,7 @@ mod talents {
     }
 
     /// Both halves: the id resolves, and it is a **battle** ability.
-    /// `AffinityKind` is blind to the distinction — a `FieldBuff(kind: Def)`
+    /// `AffinityKind` is blind to the distinction — a `FieldBuff(kind: Mitigation)`
     /// reports `Buff` like any other buff while never appearing in the Special
     /// picker, which is the one place a granted routine is spent.
     #[test]

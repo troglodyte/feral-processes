@@ -784,7 +784,9 @@ pub struct StatusEffects {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BuffKind {
     Atk,
-    Def,
+    /// Percentage points, the unit `Stats::mitigation` carries — not the
+    /// subtractive absorption `Def` named before the combat model changed.
+    Mitigation,
 }
 
 /// One active combat buff, and how long it has left.
@@ -845,12 +847,17 @@ pub enum FieldScope {
 /// A variant *name* is the save format; the order is not. That is the RON
 /// encoding `SAVE_FORMAT_VERSION` 29 moved to — the claim these two enums
 /// carried about positional bincode had been stale since. Renaming a variant
-/// still breaks a save; reordering no longer does.
+/// still breaks a save; reordering no longer does. `Def` was removed under
+/// that rule at version 31, which is why it earned a bump.
+///
+/// There is deliberately no `Def` beside `Mitigation`. Once `Stats::def`
+/// became percentage points there was no flat-defence axis left for a second
+/// name to describe, and two names on one axis is what makes both unreadable
+/// wherever they are summed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldBuffKind {
     Regen,
     Trickle,
-    Def,
     Atk,
     Mitigation,
     CaptureBoost,
@@ -867,7 +874,7 @@ impl FieldBuffKind {
     pub fn scope(self) -> FieldScope {
         use FieldBuffKind::*;
         match self {
-            Regen | Def | Atk | Mitigation => FieldScope::Creature,
+            Regen | Atk | Mitigation => FieldScope::Creature,
             Trickle | CaptureBoost | XpBoost | EncounterDamp | DropBoost => FieldScope::Run,
         }
     }
@@ -883,14 +890,14 @@ impl FieldBuffKind {
         use FieldBuffKind::*;
         match self {
             Regen | Trickle => Some(AffinityKind::Heal),
-            Def | Atk | Mitigation => Some(AffinityKind::Buff),
+            Atk | Mitigation => Some(AffinityKind::Buff),
             CaptureBoost | XpBoost | EncounterDamp | DropBoost => None,
         }
     }
 
     /// Whether `Game::cast_field_routine` should run this kind's authored
     /// `power` through `abilities::scaled_stat_power` (level and affinity) or
-    /// deliver it unchanged. The three point-amount kinds scale; the rest do
+    /// deliver it unchanged. The two point-amount kinds scale; the rest do
     /// not, for the reason `AbilityEffect::Drain`'s `heal_fraction` is
     /// excluded from `scaled_hp_power` too: a value that already carries its
     /// own ceiling doesn't need a second one stacked on top. A percentage is
@@ -912,7 +919,7 @@ impl FieldBuffKind {
     pub fn scales_with_caster(self) -> bool {
         use FieldBuffKind::*;
         match self {
-            Regen | Def | Atk => true,
+            Regen | Atk => true,
             Trickle | Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => false,
         }
     }
@@ -939,7 +946,7 @@ impl FieldBuffKind {
         use FieldBuffKind::*;
         match self {
             Regen | Trickle => false,
-            Def | Atk | Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => true,
+            Atk | Mitigation | CaptureBoost | XpBoost | EncounterDamp | DropBoost => true,
         }
     }
 
@@ -965,7 +972,6 @@ impl FieldBuffKind {
         match self {
             FieldBuffKind::Regen => format!("HP+{power}/{every}t"),
             FieldBuffKind::Trickle => format!("PWR+{power}/{every}t"),
-            FieldBuffKind::Def => format!("DEF+{power}"),
             FieldBuffKind::Atk => format!("ATK+{power}"),
             FieldBuffKind::Mitigation => format!("DMG-{power}%"),
             FieldBuffKind::CaptureBoost => format!("TAME+{power}%"),

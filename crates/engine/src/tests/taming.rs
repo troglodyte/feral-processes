@@ -365,7 +365,7 @@ fn decompiling_a_program_mid_fight_clears_its_battle_scoped_state() {
     game.arm_buff(
         front_a,
         ActiveBuff {
-            kind: BuffKind::Def,
+            kind: BuffKind::Mitigation,
             remaining: 3,
             power: 9,
         },

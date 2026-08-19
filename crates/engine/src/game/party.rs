@@ -26,7 +26,7 @@ impl Game {
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player);
         let atk = self.effective_atk(player);
-        let def = self.effective_def(player);
+        let def = self.effective_mitigation(player);
         let db = self.world.resource::<ItemDb>();
         // Grouped here, in the view, and deliberately not in `Inventory`:
         // that component's order is persisted through `PlayerSave`, so

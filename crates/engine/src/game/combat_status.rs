@@ -5,7 +5,7 @@
 //! and battle teardown in `combat_teardown.rs`; this file is what those
 //! three read and write *through*.
 
-use crate::tuning::DEFEND_DEF_BONUS;
+use crate::tuning::DEFEND_MITIGATION_BONUS;
 use crate::*;
 
 impl Game {
@@ -14,7 +14,7 @@ impl Game {
         self.world
             .get::<CombatBuff>(entity)
             .and_then(|b| b.active)
-            .is_some_and(|a| a.kind == BuffKind::Def && a.power == DEFEND_DEF_BONUS)
+            .is_some_and(|a| a.kind == BuffKind::Mitigation && a.power == DEFEND_MITIGATION_BONUS)
     }
 
     /// Rolls `effect.chance`; on success, overwrites `target`'s active
@@ -161,7 +161,7 @@ impl Game {
         if remaining == 0 {
             let stat = match active.kind {
                 BuffKind::Atk => "attack",
-                BuffKind::Def => "defense",
+                BuffKind::Mitigation => "defense",
             };
             if entity == self.player_entity() {
                 self.log(format!("Your {stat} boost fades."));
@@ -376,8 +376,7 @@ impl Game {
                     needs.restore(power as f32);
                 }
             }
-            FieldBuffKind::Def
-            | FieldBuffKind::Atk
+            FieldBuffKind::Atk
             | FieldBuffKind::Mitigation
             | FieldBuffKind::CaptureBoost
             | FieldBuffKind::XpBoost
@@ -386,7 +385,7 @@ impl Game {
         }
     }
 
-    /// Braces `entity` for the round: a DEF bonus that expires in the same
+    /// Braces `entity` for the round: a mitigation bonus that expires in the same
     /// round's `tick_round_status_effects`. The buff slot is inserted on
     /// demand — only the player is spawned holding one, so without this a
     /// companion's Defend would log its message and change nothing.
@@ -394,9 +393,9 @@ impl Game {
         self.arm_buff(
             entity,
             ActiveBuff {
-                kind: BuffKind::Def,
+                kind: BuffKind::Mitigation,
                 remaining: 1,
-                power: DEFEND_DEF_BONUS,
+                power: DEFEND_MITIGATION_BONUS,
             },
         );
         let name = self.creature_label(entity);

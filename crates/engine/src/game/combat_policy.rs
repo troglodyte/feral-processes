@@ -7,7 +7,7 @@
 
 use crate::policy::{self, Feature, Features};
 use crate::resources::EnemyPolicy;
-use crate::tuning::{ENEMY_POLICY_TEMPERATURE, ENGAGED_GROUPS};
+use crate::tuning::{ENEMY_POLICY_TEMPERATURE, ENGAGED_GROUPS, MAX_MITIGATION_PERCENT};
 use crate::*;
 
 impl Game {
@@ -234,13 +234,16 @@ impl Game {
             Feature::TargetIsPlayer,
             (target == self.player_entity()) as u8 as f32,
         );
-        let def = self.effective_def(target);
-        // Squashed into [0, 1]: DEF at or past twice the attacker's ATK is
-        // simply "very hard to hurt" and the difference above that is not
-        // information the policy can act on.
+        let mitigation = self.effective_mitigation(target);
+        // Squashed into [0, 1] against the cap rather than against the
+        // attacker's ATK. Mitigation is a percentage now, so the attacker's
+        // attack is not the right yardstick for it — `MAX_MITIGATION_PERCENT`
+        // is what "as hard to hurt as anything gets" means. The feature is
+        // pinned to a coefficient of zero in the shipped weights, so this
+        // moves no behaviour; what it must still do is stay inside [0, 1].
         f.set(
             Feature::TargetDefRel,
-            (def as f32 / wild_stats.atk.max(1) as f32).clamp(0.0, 2.0) / 2.0,
+            (mitigation as f32 / MAX_MITIGATION_PERCENT as f32).clamp(0.0, 1.0),
         );
         let status = self
             .world
@@ -256,8 +259,13 @@ impl Game {
         );
 
         // The real formula, called rather than restated — a copy here would
-        // drift from the damage the swing then actually deals.
-        let dmg = battle::compute_damage(wild_stats.atk, def, power);
+        // drift from the damage the swing then actually deals. Mitigation is
+        // applied as the percentage it now is, not handed to `compute_damage`
+        // as the subtractive term that parameter still expects: feeding a
+        // percentage in there made a braced target look untouchable and the
+        // policy stopped swinging at it.
+        let raw = battle::compute_damage(wild_stats.atk, 0, power);
+        let dmg = (raw as f32 * (1.0 - mitigation as f32 / 100.0)).round() as i32;
         f.set(
             Feature::EstDamageFrac,
             (dmg as f32 / target_stats.hp.max(1) as f32).clamp(0.0, 1.0),

@@ -476,7 +476,7 @@ impl Game {
                 // than a second copy of it here.
                 let (name, kind) = match active.kind {
                     BuffKind::Atk => ("Attack", FieldBuffKind::Atk),
-                    BuffKind::Def => ("Defense", FieldBuffKind::Def),
+                    BuffKind::Mitigation => ("Defense", FieldBuffKind::Mitigation),
                 };
                 views.push(ActiveBuffView {
                     name: name.to_string(),

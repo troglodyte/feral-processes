@@ -841,7 +841,7 @@ fn resting_drops_a_companions_until_rest_buffs_too() {
     game.arm_field_buff(
         companion,
         ActiveFieldBuff {
-            kind: FieldBuffKind::Def,
+            kind: FieldBuffKind::Mitigation,
             name: "Hardened Shell Single".to_string(),
             power: 4,
             remaining: 0,

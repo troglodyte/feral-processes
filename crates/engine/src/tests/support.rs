@@ -1314,19 +1314,19 @@ pub(super) const FIELD_ONLY_RUN_ABILITY: &str = r#"(
 /// asserting a cast arms every living party member (and skips a dead one)
 /// rather than just the caster.
 pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
-    id: "test_field_def",
-    name: "Test Field Def",
+    id: "test_field_atk",
+    name: "Test Field Atk",
     description: "d",
     target: WholeParty,
     power_cost: 3.0,
-    effect: FieldBuff(kind: Def, power: 4),
+    effect: FieldBuff(kind: Atk, power: 4),
 )"#;
 
 /// A `Creature`-scoped, percentage-magnitude `FieldBuff` — `Mitigation` is
 /// the one percentage kind with a real `affinity_kind` (`Buff`, the same
-/// category `FIELD_ONLY_PARTY_ABILITY`'s `Def` uses), so casting the two off
+/// category `FIELD_ONLY_PARTY_ABILITY`'s `Atk` uses), so casting the two off
 /// the same high-level, high-affinity holder is what proves
-/// `FieldBuffKind::scales_with_caster` actually splits them: `Def` scales,
+/// `FieldBuffKind::scales_with_caster` actually splits them: `Atk` scales,
 /// `Mitigation` lands at exactly its authored value either way.
 pub(super) const FIELD_ONLY_MITIGATION_ABILITY: &str = r#"(
     id: "test_field_mitigation",

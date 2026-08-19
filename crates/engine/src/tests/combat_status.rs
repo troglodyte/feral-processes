@@ -895,7 +895,7 @@ fn a_second_consumable_field_buff_displaces_the_first_even_of_a_different_kind()
     let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
 
-    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, consumable(FieldBuffKind::Mitigation, 2));
     game.arm_field_buff(player, consumable(FieldBuffKind::Atk, 5));
 
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
@@ -913,9 +913,9 @@ fn a_second_routine_of_the_same_kind_displaces_only_that_kind() {
     let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
 
-    game.arm_field_buff(player, routine(FieldBuffKind::Def, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Mitigation, 2));
     game.arm_field_buff(player, routine(FieldBuffKind::Atk, 3));
-    game.arm_field_buff(player, routine(FieldBuffKind::Def, 9));
+    game.arm_field_buff(player, routine(FieldBuffKind::Mitigation, 9));
 
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(
@@ -923,7 +923,7 @@ fn a_second_routine_of_the_same_kind_displaces_only_that_kind() {
         2,
         "recasting one routine kind must not touch a different running routine"
     );
-    assert_eq!(game.field_buff_power(player, FieldBuffKind::Def), 9);
+    assert_eq!(game.field_buff_power(player, FieldBuffKind::Mitigation), 9);
     assert_eq!(game.field_buff_power(player, FieldBuffKind::Atk), 3);
 }
 
@@ -944,8 +944,8 @@ fn an_item_buff_and_a_routine_buff_coexist() {
     let mut game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
 
-    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
-    game.arm_field_buff(player, routine(FieldBuffKind::Def, 9));
+    game.arm_field_buff(player, consumable(FieldBuffKind::Mitigation, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Mitigation, 9));
 
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(
@@ -980,11 +980,11 @@ fn field_buff_power_sums_a_consumable_and_a_routine_of_the_same_kind() {
     let mut game = Game::new(9007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
 
-    game.arm_field_buff(player, consumable(FieldBuffKind::Def, 2));
-    game.arm_field_buff(player, routine(FieldBuffKind::Def, 5));
+    game.arm_field_buff(player, consumable(FieldBuffKind::Mitigation, 2));
+    game.arm_field_buff(player, routine(FieldBuffKind::Mitigation, 5));
 
     assert_eq!(
-        game.field_buff_power(player, FieldBuffKind::Def),
+        game.field_buff_power(player, FieldBuffKind::Mitigation),
         7,
         "a consumable and a routine of the same kind coexist (arm_field_buff's \
          whole reason for two separate displacement rules), so a reader summing \
@@ -1001,9 +1001,12 @@ fn arm_field_buff_inserts_the_component_on_demand_for_a_companion() {
         "only the player is spawned holding a FieldBuff"
     );
 
-    game.arm_field_buff(companion, routine(FieldBuffKind::Def, 3));
+    game.arm_field_buff(companion, routine(FieldBuffKind::Mitigation, 3));
 
-    assert_eq!(game.field_buff_power(companion, FieldBuffKind::Def), 3);
+    assert_eq!(
+        game.field_buff_power(companion, FieldBuffKind::Mitigation),
+        3
+    );
 }
 
 /// The round a condition lands in is not one of the rounds it lasts.
@@ -1114,4 +1117,92 @@ fn a_bleed_deals_its_damage_in_the_rounds_after_the_one_it_landed_in() {
             .is_none(),
         "and it clears once both of those rounds have passed"
     );
+}
+
+/// A local twin of `combat_targeting`'s helper — a routine-armed field buff
+/// with a long enough clock that nothing ticks it away mid-test.
+fn running_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
+    ActiveFieldBuff {
+        kind,
+        name: "Test Field Buff".to_string(),
+        power,
+        remaining: 5,
+        interval: 1,
+        source: BuffSource::Routine,
+    }
+}
+
+/// Innate mitigation, gear (already baked into `Stats` by
+/// `apply_equipment_delta`) and a running field buff all count, and the sum
+/// is capped. Delete the `.clamp(0, MAX_MITIGATION_PERCENT)` and this fails
+/// at a stacked total.
+#[test]
+fn mitigation_sums_its_sources_and_stops_at_the_cap() {
+    let mut game = Game::new(770, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 60;
+    game.arm_field_buff(pet, running_field_buff(FieldBuffKind::Mitigation, 40));
+    assert_eq!(
+        game.effective_mitigation(pet),
+        crate::tuning::MAX_MITIGATION_PERCENT,
+        "60 innate plus 40 buffed is 100, which the cap has to bring down"
+    );
+}
+
+/// The three sources really are summed, not shadowed — a total under the cap
+/// must be the arithmetic rather than whichever source happened to be
+/// largest.
+#[test]
+fn mitigation_below_the_cap_is_the_sum_of_its_sources() {
+    let mut game = Game::new(771, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = 9;
+    game.arm_field_buff(pet, running_field_buff(FieldBuffKind::Mitigation, 13));
+    assert_eq!(game.effective_mitigation(pet), 22);
+}
+
+/// A landed hit stays a hit under heavy mitigation, but a miss is not raised
+/// to 1. This is `mitigate_incoming_damage`'s existing behaviour and it must
+/// survive the rewrite onto `effective_mitigation`.
+#[test]
+fn heavy_mitigation_floors_a_landed_hit_at_one_and_leaves_a_miss_alone() {
+    let mut game = Game::new(772, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 30, 5);
+    game.world.get_mut::<Stats>(pet).unwrap().mitigation = crate::tuning::MAX_MITIGATION_PERCENT;
+
+    let before = game.world.get::<Stats>(pet).unwrap().hp;
+    game.apply_damage(pet, 2);
+    assert_eq!(
+        game.world.get::<Stats>(pet).unwrap().hp,
+        before - 1,
+        "a hit still lands"
+    );
+
+    let after_hit = game.world.get::<Stats>(pet).unwrap().hp;
+    game.apply_damage(pet, 0);
+    assert_eq!(
+        game.world.get::<Stats>(pet).unwrap().hp,
+        after_hit,
+        "a miss costs nothing"
+    );
+}
+
+/// Innate mitigation reaches the damage path at all. Before this task only a
+/// running field buff did, so a species' authored toughness and every worn
+/// piece of armour were invisible to `mitigate_incoming_damage`.
+#[test]
+fn innate_mitigation_cuts_incoming_damage() {
+    let mut game = Game::new(773, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let soft = spawn_tamed(&mut game, 200, 5);
+    let armoured = spawn_tamed(&mut game, 200, 5);
+    game.world.get_mut::<Stats>(soft).unwrap().mitigation = 0;
+    game.world.get_mut::<Stats>(armoured).unwrap().mitigation = 50;
+
+    game.apply_damage(soft, 40);
+    game.apply_damage(armoured, 40);
+
+    let soft_lost = 200 - game.world.get::<Stats>(soft).unwrap().hp;
+    let armoured_lost = 200 - game.world.get::<Stats>(armoured).unwrap().hp;
+    assert_eq!(soft_lost, 40);
+    assert_eq!(armoured_lost, 20, "half of it shrugged off");
 }

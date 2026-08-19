@@ -93,7 +93,11 @@ way deleting the Currency item does.
     //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is
-    //     `Atk` or `Def`.
+    //     `Atk` (flat attack points) or `Mitigation` (**percentage
+    //     points** of damage reduction, capped together with every other
+    //     source at `tuning::MAX_MITIGATION_PERCENT`). There is no `Def`:
+    //     defence is a percentage now, so `Mitigation` is the only name
+    //     for that axis.
     //     A *negative* power is how you write a sap: `Buff(kind: Atk,
     //     power: -4, duration: 3)` with `target: WholeEnemyGroup` weakens
     //     a group rather than strengthening it, because the buff bonus is
@@ -176,15 +180,14 @@ way deleting the Currency item does.
     //     first turn and every interval-th turn after, and one that doesn't
     //     simply starts its cadence later.
     //
-    //     `kind` is one of nine, split into two scopes that gate `target`:
+    //     `kind` is one of eight, split into two scopes that gate `target`:
     //
     //       Creature-scoped (`target: OneAlly` or `WholeParty` only —
     //       anything enemy-facing is refused at load, since there is no
     //       mechanic to aim a field buff at a hostile):
     //         Regen        heals HP each turn
-    //         Def          flat Defense bonus
     //         Atk          flat Attack bonus
-    //         Mitigation   percent damage reduction
+    //         Mitigation   percentage points of damage reduction
     //
     //       Run-scoped (`target: WholeParty` only — these always land on
     //       the player regardless of who casts them, so any other target is
@@ -196,9 +199,9 @@ way deleting the Currency item does.
     //         EncounterDamp percent reduction to wild encounter odds
     //         DropBoost     percent bonus to drop rates
     //
-    //     Three of the nine run `power` through the stat-point
+    //     Two of the eight run `power` through the stat-point
     //     level/affinity scaling (`abilities::scaled_stat_power` — see
-    //     "Magnitudes scale with level") before delivering it: Regen, Def,
+    //     "Magnitudes scale with level") before delivering it: Regen and
     //     Atk. The other six are delivered at exactly the authored `power`
     //     regardless of who casts them, because each already carries its own
     //     ceiling and scaling one the way a flat amount scales would let it

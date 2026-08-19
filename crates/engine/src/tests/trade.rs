@@ -168,7 +168,7 @@ fn selling_a_buffed_companion_leaves_no_orphaned_field_buff() {
     game.arm_field_buff(
         pet,
         ActiveFieldBuff {
-            kind: FieldBuffKind::Def,
+            kind: FieldBuffKind::Mitigation,
             name: "Shield Protocol".to_string(),
             power: 3,
             remaining: 4,

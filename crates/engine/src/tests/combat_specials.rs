@@ -298,7 +298,7 @@ fn a_buff_aimed_at_a_companion_actually_reaches_it() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5);
     start_battle_with_a_wild_program(&mut game);
-    let before = game.effective_def(medic);
+    let before = game.effective_mitigation(medic);
 
     // Slot 1 is the medic itself; index 1 is its Sandbox.
     companion_uses_special(&mut game, medic, 1, battle::SpecialTarget::Ally { slot: 1 });
@@ -307,14 +307,14 @@ fn a_buff_aimed_at_a_companion_actually_reaches_it() {
         matches!(
             game.world.get::<CombatBuff>(medic).and_then(|b| b.active),
             Some(ActiveBuff {
-                kind: BuffKind::Def,
+                kind: BuffKind::Mitigation,
                 ..
             })
         ),
         "a companion with no CombatBuff component must have one inserted, not be skipped"
     );
     assert!(
-        game.effective_def(medic) > before,
+        game.effective_mitigation(medic) > before,
         "the buff has to actually raise the companion's defense"
     );
 }
@@ -369,7 +369,7 @@ fn the_chosen_ability_index_decides_which_special_resolves() {
         matches!(
             game.world.get::<CombatBuff>(player).and_then(|b| b.active),
             Some(ActiveBuff {
-                kind: BuffKind::Def,
+                kind: BuffKind::Mitigation,
                 ..
             })
         ),

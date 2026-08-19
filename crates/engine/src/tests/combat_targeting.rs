@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind};
-use crate::tuning::{DEFEND_DEF_BONUS, FRONT_SLOTS};
+use crate::tuning::{DEFEND_MITIGATION_BONUS, FRONT_SLOTS};
 use crate::*;
 
 /// `wild_retaliate` rolls per-call whether a companion soaks the hit, so
@@ -75,8 +75,8 @@ fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
 }
 
 #[test]
-fn effective_def_excludes_the_players_party_bonus_when_a_companion_is_the_target() {
-    // `wild_retaliate` calls `effective_def` on whichever entity got
+fn effective_mitigation_excludes_the_players_party_bonus_when_a_companion_is_the_target() {
+    // `wild_retaliate` calls `effective_mitigation` on whichever entity got
     // hit — the player, or (per the test above) a companion. The
     // player's passive party bonus (see `party_stat_bonus`) must only
     // ever land on the player, never get double-applied to a
@@ -92,7 +92,7 @@ fn effective_def_excludes_the_players_party_bonus_when_a_companion_is_the_target
 
     let raw_def = game.world.get::<Stats>(a).unwrap().mitigation;
     assert_eq!(
-        game.effective_def(a),
+        game.effective_mitigation(a),
         raw_def,
         "a companion's effective DEF as a retaliation target must be its own raw Stats, \
          not inflated by the player's party bonus"
@@ -242,8 +242,8 @@ fn a_companion_can_hold_the_buff_defend_grants() {
     game.begin_defend(pet);
 
     assert_eq!(
-        game.effective_def(pet),
-        raw_def + DEFEND_DEF_BONUS,
+        game.effective_mitigation(pet),
+        raw_def + DEFEND_MITIGATION_BONUS,
         "a bracing companion must actually gain the DEF, not silently no-op"
     );
 }
@@ -268,8 +268,8 @@ fn a_field_buff_raises_the_effective_stat_it_names() {
     let raw_def = game.world.get::<Stats>(pet).unwrap().mitigation;
     let raw_atk = game.world.get::<Stats>(pet).unwrap().atk;
 
-    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, 11));
-    assert_eq!(game.effective_def(pet), raw_def + 11);
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Mitigation, 11));
+    assert_eq!(game.effective_mitigation(pet), raw_def + 11);
 
     game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Atk, 13));
     assert_eq!(game.effective_atk(pet), raw_atk + 13);
@@ -289,22 +289,22 @@ fn a_field_buff_stacks_with_a_combat_buff_of_the_same_kind() {
     game.arm_buff(
         pet,
         ActiveBuff {
-            kind: BuffKind::Def,
+            kind: BuffKind::Mitigation,
             remaining: 3,
             power: 17,
         },
     );
-    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, 23));
+    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Mitigation, 23));
 
     assert_eq!(
-        game.effective_def(pet),
+        game.effective_mitigation(pet),
         raw_def + 17 + 23,
         "the CombatBuff and FieldBuff Def bonuses must both apply, summed"
     );
 }
 
 /// The landmine this is guarding against: `is_defending` identifies a
-/// brace by sniffing `CombatBuff` for `Def` at exactly `DEFEND_DEF_BONUS`.
+/// brace by sniffing `CombatBuff` for `Def` at exactly `DEFEND_MITIGATION_BONUS`.
 /// A field `Def` buff that happens to land on that same power must not be
 /// mistaken for a brace — `FieldBuff` exists as a separate component from
 /// `CombatBuff` precisely so `is_defending` never has to look at it.
@@ -313,7 +313,10 @@ fn is_defending_ignores_a_field_def_buff_even_at_the_defend_power() {
     let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
 
-    game.arm_field_buff(pet, test_field_buff(FieldBuffKind::Def, DEFEND_DEF_BONUS));
+    game.arm_field_buff(
+        pet,
+        test_field_buff(FieldBuffKind::Mitigation, DEFEND_MITIGATION_BONUS),
+    );
 
     assert!(
         !game.is_defending(pet),

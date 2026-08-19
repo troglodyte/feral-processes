@@ -111,7 +111,7 @@ decompiled it keeps its slot. Taking a node for a routine the program already
 knows does nothing rather than duplicating it.
 
 The id must name a file in `assets/abilities/`, and it must be a **battle**
-ability. `AffinityKind` is blind to the distinction — a `FieldBuff(kind: Def)`
+ability. `AffinityKind` is blind to the distinction — a `FieldBuff(kind: Mitigation)`
 reports `Buff` like any other buff while never appearing in the Special
 picker, which is the one place a granted routine is spent. A census refuses
 both mistakes.

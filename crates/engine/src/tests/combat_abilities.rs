@@ -1011,7 +1011,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         description: "d".into(),
         target: crate::abilities::AbilityTarget::WholeEnemyGroup,
         effect: crate::abilities::AbilityEffect::Buff {
-            kind: BuffKind::Def,
+            kind: BuffKind::Mitigation,
             power: -4,
             duration: 3,
         },
@@ -1260,7 +1260,12 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
         stats.atk = 16;
     }
-    game.world.get_mut::<Stats>(enemies[0]).unwrap().mitigation = 9;
+    // 0 rather than the 9 points of subtractive absorption this used to
+    // author. Mitigation is a percentage cut applied after the routine's own
+    // arithmetic, so leaving it in would make this gate move whenever armour
+    // is retuned — and the band below staying put across that change is the
+    // evidence that ability magnitudes did *not* move with the combat model.
+    game.world.get_mut::<Stats>(enemies[0]).unwrap().mitigation = 0;
     game.world.get_mut::<Experience>(player).unwrap().level = 5;
     for _ in 0..5 {
         game.world
@@ -1583,7 +1588,11 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
                 hp: 200,
                 max_hp: 200,
                 atk: 0,
-                mitigation: 3,
+                // 0, not 3: mitigation is a percentage cut applied after the
+                // ability's own arithmetic, and this test is about that
+                // arithmetic. Leaving it in would fold two formulas into one
+                // expected value.
+                mitigation: 0,
             },
         ))
         .id();
@@ -1592,9 +1601,12 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
     game.use_ability(&kernel_panic, striker, "Test Striker", &[target]);
 
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
-    // kernel_panic is Damage(power: 16); the striker is level 1.
+    // kernel_panic is Damage(power: 16); the striker is level 1. The target
+    // is authored at 0 mitigation so this measures the affinity scaling
+    // alone — mitigation is a percentage cut applied afterwards and has its
+    // own tests.
     let scaled = crate::abilities::scaled_hp_power(16, 1, 1.5);
-    let expected = battle::compute_damage(game.effective_atk(striker), 3, scaled);
+    let expected = battle::compute_damage(game.effective_atk(striker), 0, scaled);
     assert_eq!(
         taken, expected,
         "damage affinity should scale the authored power fed to compute_damage"
@@ -1660,7 +1672,11 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
                 hp: 200,
                 max_hp: 200,
                 atk: 0,
-                mitigation: 3,
+                // 0, not 3: mitigation is a percentage cut applied after the
+                // ability's own arithmetic, and this test is about that
+                // arithmetic. Leaving it in would fold two formulas into one
+                // expected value.
+                mitigation: 0,
             },
         ))
         .id();
@@ -1672,7 +1688,7 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
     // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); level and
     // affinity scale the authored power, same as Damage.
     let scaled = crate::abilities::scaled_hp_power(10, 1, 1.5);
-    let expected_dmg = battle::compute_damage(game.effective_atk(drainer), 3, scaled);
+    let expected_dmg = battle::compute_damage(game.effective_atk(drainer), 0, scaled);
     assert_eq!(
         taken, expected_dmg,
         "drain affinity should scale the authored power fed to compute_damage"

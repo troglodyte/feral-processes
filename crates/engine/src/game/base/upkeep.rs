@@ -352,20 +352,32 @@ impl Game {
             return;
         };
 
-        let worker_def = self
+        let worker_mitigation = self
             .world
             .get::<Stats>(worker)
             .map(|s| s.mitigation)
             .unwrap_or(0);
         // The Bastion base job. Every posted program mitigates by its
-        // Defense — the defender above is found by `Task::target`, not by
+        // Mitigation — the defender above is found by `Task::target`, not by
         // `TaskKind::Guard` — so what the buff class brings is that the
         // number counts twice.
-        let worker_def = match self.creature_class(worker) {
-            Some(AffinityClass::Bastion) => worker_def * BASTION_DEF_MULTIPLIER,
-            _ => worker_def,
+        let worker_mitigation = match self.creature_class(worker) {
+            Some(AffinityClass::Bastion) => worker_mitigation * BASTION_DEF_MULTIPLIER,
+            _ => worker_mitigation,
         };
-        let mitigated = raid_damage.saturating_sub(worker_def.max(0) as u32);
+        // A percentage cut, since that is what `Stats::mitigation` now is —
+        // subtracting it from a durability figure would make a raid defender
+        // worth almost nothing.
+        //
+        // **Clamped to 100 rather than to `MAX_MITIGATION_PERCENT`, and that
+        // is deliberate.** The combat cap exists so no creature reaches
+        // immunity to attacks; a raid is not an attack on a creature, and
+        // "fends off a sweep without a scratch" is a shipped outcome with its
+        // own log line and `EffectKind::Deflected`. Capping at 75 here would
+        // delete that outcome silently, and with it the whole point of the
+        // Bastion's doubling.
+        let cut = worker_mitigation.clamp(0, 100) as f32 / 100.0;
+        let mitigated = (raid_damage as f32 * (1.0 - cut)).round() as u32;
         let worker_label = self.creature_label(worker);
         if mitigated > 0 {
             self.damage_structure(target, mitigated, &target_label);

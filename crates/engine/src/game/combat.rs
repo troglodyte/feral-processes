@@ -3,7 +3,7 @@
 
 use crate::abilities::{AbilityId, AffinityKind};
 use crate::tuning::{
-    AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_DEF_BONUS, INITIATIVE_DIE,
+    AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
     PLAYER_BASE_SPEED,
 };
 use crate::*;
@@ -1060,7 +1060,7 @@ impl Game {
                 kind: ActionKind::Defend,
                 key: 'd',
                 label: "[d]efend".to_string(),
-                detail: format!("+{DEFEND_DEF_BONUS} DEF this round, and draw fire"),
+                detail: format!("+{DEFEND_MITIGATION_BONUS}% mitigation this round, and draw fire"),
                 target: TargetSpec::None,
                 unavailable: None,
             },

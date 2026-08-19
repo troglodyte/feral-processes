@@ -735,7 +735,7 @@ fn a_round_that_kills_the_player_ends_the_battle() {
 
 /// A Rally or Shield aimed at a companion has to die with the battle.
 /// `CombatBuff` only ticks down inside one, and `effective_atk` /
-/// `effective_def` read it unconditionally, so a survivor carries a free
+/// `effective_mitigation` read it unconditionally, so a survivor carries a free
 /// stat bonus onto the overworld and into every fight after it.
 #[test]
 fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
@@ -745,11 +745,11 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     game.start_battle(vec![wild]);
 
-    let def_before = game.effective_def(pet);
+    let def_before = game.effective_mitigation(pet);
     let shield = ability(&game, "sandbox");
     game.use_ability(&shield, pet, "Test", &[pet]);
     assert!(
-        game.effective_def(pet) > def_before,
+        game.effective_mitigation(pet) > def_before,
         "the shield should be up while the fight runs"
     );
 
@@ -760,7 +760,7 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
     flee_until_clear(&mut game);
     assert!(!game.has_active_battle(), "the fight should be over");
     assert_eq!(
-        game.effective_def(pet),
+        game.effective_mitigation(pet),
         def_before,
         "the buff must not outlive the battle"
     );

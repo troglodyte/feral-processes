@@ -3,8 +3,9 @@
 
 use crate::abilities::PassiveTrigger;
 use crate::tuning::{
-    ENGAGED_GROUPS, FRONT_SLOTS, NEST_RESPAWN_TICKS, PARTY_PASSIVE_STAT_DIVISOR,
-    PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
+    ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR,
+    WIELDED_ROUTINE_PROC_CHANCE,
 };
 use crate::*;
 
@@ -363,12 +364,11 @@ impl Game {
                 None => ("a raw signal burst".to_string(), PLAYER_STRIKE_POWER),
             }
         };
-        let (atk, def) = (
-            self.effective_atk(entity),
-            self.world.get::<Stats>(front).unwrap().mitigation,
-        );
-        let dmg = battle::compute_damage(atk, def, move_power);
-        self.apply_damage(front, dmg);
+        // No mitigation term here: `apply_damage` owns that, as the
+        // percentage cut it now is. Passing it to `compute_damage` as well
+        // would subtract it once and then cut by it again.
+        let raw = battle::compute_damage(self.effective_atk(entity), 0, move_power);
+        let dmg = self.apply_damage(front, raw);
         if slot == 0 {
             self.log_kind(
                 MessageKind::PartyDamage,
@@ -567,7 +567,7 @@ impl Game {
                     hp: stats.hp,
                     max_hp: stats.max_hp,
                     atk: self.effective_atk(entity),
-                    def: self.effective_def(entity),
+                    def: self.effective_mitigation(entity),
                     status_effect: self.status_label(entity),
                     power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
                     planned: battle.planned[slot]
@@ -973,7 +973,7 @@ impl Game {
                     );
                     let stat = match kind {
                         BuffKind::Atk => "attack",
-                        BuffKind::Def => "defense",
+                        BuffKind::Mitigation => "defense",
                     };
                     self.log(format!(
                         "{name} runs {} on {on}, boosting {stat}!",
@@ -1002,17 +1002,15 @@ impl Game {
                     }
                 }
                 AbilityEffect::Damage { power, status } => {
-                    let def = self
-                        .world
-                        .get::<Stats>(recipient)
-                        .map(|s| s.mitigation)
-                        .unwrap_or(0);
-                    let dmg = battle::compute_damage(
+                    // Mitigation is `apply_damage`'s, not a term here — see
+                    // `party_member_attacks` for why passing it to
+                    // `compute_damage` too would count it twice.
+                    let raw = battle::compute_damage(
                         self.effective_atk(actor),
-                        def,
+                        0,
                         abilities::scaled_hp_power(*power, level, affinity),
                     );
-                    self.apply_damage(recipient, dmg);
+                    let dmg = self.apply_damage(recipient, raw);
                     self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
                     if let Some(effect) = status.clone() {
                         self.apply_status_effect(recipient, &effect, &on, hit_kind);
@@ -1022,21 +1020,16 @@ impl Game {
                     power,
                     heal_fraction,
                 } => {
-                    let def = self
-                        .world
-                        .get::<Stats>(recipient)
-                        .map(|s| s.mitigation)
-                        .unwrap_or(0);
-                    let dmg = battle::compute_damage(
+                    let raw = battle::compute_damage(
                         self.effective_atk(actor),
-                        def,
+                        0,
                         abilities::scaled_hp_power(*power, level, affinity),
                     );
-                    self.apply_damage(recipient, dmg);
+                    let dmg = self.apply_damage(recipient, raw);
                     // Off the damage actually dealt, not the authored power:
-                    // DEF has already eaten into it, and healing off the
-                    // pre-mitigation figure would make a drain better against
-                    // an armoured target than a soft one.
+                    // mitigation has already eaten into it, and healing off
+                    // the pre-mitigation figure would make a drain better
+                    // against an armoured target than a soft one.
                     let siphoned = (dmg as f32 * heal_fraction).round() as i32;
                     let restored = self.restore_hp(actor, siphoned);
                     // `heal_kind`, not `hit_kind`: the Integrity coming back
@@ -1091,7 +1084,7 @@ impl Game {
     /// `party_stat_bonus`) and applies the low-power attack penalty (see
     /// `battle::power_attack_multiplier`) — both are player-only effects.
     /// `entity` isn't always the player: `wild_retaliate` can call this
-    /// (via `effective_def`) with a companion that's eating the hit
+    /// (via `effective_mitigation`) with a companion that's eating the hit
     /// instead, and a companion has neither a `Party` bonus of its own nor
     /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
@@ -1117,18 +1110,30 @@ impl Game {
         ((total as f32) * battle::power_attack_multiplier(power)).round() as i32
     }
 
-    /// `entity`'s effective DEF against incoming damage: its real `Stats`
-    /// value, plus an active `CombatBuff::Def` bonus if any, plus any
-    /// running `FieldBuffKind::Def` power (see `field_buff_power`) — the
-    /// two sources are separate components and both apply, summed — plus
-    /// the standing party bonus (see `party_stat_bonus`) if `entity` is the
-    /// player. Same non-player-safe behavior as `effective_atk`.
+    /// `entity`'s total mitigation in percentage points, capped at
+    /// `MAX_MITIGATION_PERCENT` — the one door onto "how much of an incoming
+    /// hit does this creature shrug off".
+    ///
+    /// `Stats::mitigation` already carries **both** the innate value and
+    /// whatever gear is worn: `Game::apply_equipment_delta` bakes an
+    /// equipped item's bonus straight into `Stats`. Adding `gear_bonus`
+    /// again here would double-count every worn piece — the same trap "no
+    /// stats operation may run while a gear bonus is sitting in `Stats`"
+    /// already names from the other direction. On top of that sit an active
+    /// `CombatBuff::Mitigation`, any running `FieldBuffKind::Mitigation`
+    /// power (see `field_buff_power`) — separate components, both apply —
+    /// and the standing party bonus (see `party_stat_bonus`) if `entity` is
+    /// the player. Same non-player-safe behaviour as `effective_atk`.
+    ///
+    /// **The cap is applied here rather than at the readers**, so nothing
+    /// downstream can see an uncapped percentage and none of them needs to
+    /// remember to clamp.
     ///
     /// `is_defending` deliberately does not read `FieldBuff`: it identifies
-    /// a brace by sniffing `CombatBuff` for `Def` at exactly
-    /// `DEFEND_DEF_BONUS`, and a field buff landing on that same power must
-    /// not be mistaken for one.
-    pub(crate) fn effective_def(&self, entity: Entity) -> i32 {
+    /// a brace by sniffing `CombatBuff` for `Mitigation` at exactly
+    /// `DEFEND_MITIGATION_BONUS`, and a field buff landing on that same
+    /// power must not be mistaken for one.
+    pub(crate) fn effective_mitigation(&self, entity: Entity) -> i32 {
         let base = self
             .world
             .get::<Stats>(entity)
@@ -1138,14 +1143,16 @@ impl Game {
             .world
             .get::<CombatBuff>(entity)
             .and_then(|b| b.active)
-            .filter(|a| a.kind == BuffKind::Def)
+            .filter(|a| a.kind == BuffKind::Mitigation)
             .map(|a| a.power)
             .unwrap_or(0);
-        let field_bonus = self.field_buff_power(entity, FieldBuffKind::Def);
-        if entity != self.player_entity() {
-            return base + bonus + field_bonus;
-        }
-        base + bonus + field_bonus + self.party_stat_bonus().1 + self.wielded_stat_bonus().1
+        let field_bonus = self.field_buff_power(entity, FieldBuffKind::Mitigation);
+        let total = if entity != self.player_entity() {
+            base + bonus + field_bonus
+        } else {
+            base + bonus + field_bonus + self.party_stat_bonus().1 + self.wielded_stat_bonus().1
+        };
+        total.clamp(0, MAX_MITIGATION_PERCENT)
     }
 
     /// Standing `(atk, def)` bonus the player gets just for having programs

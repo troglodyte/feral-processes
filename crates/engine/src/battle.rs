@@ -1,4 +1,6 @@
 use bevy_ecs::prelude::Entity;
+use rand::RngExt;
+use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
 use crate::species::SpeciesId;
@@ -7,6 +9,52 @@ use crate::tuning::{
     JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
     LOW_POWER_MIN_ATTACK_MULTIPLIER, MIN_DAMAGE,
 };
+
+/// The band one attack rolls its damage from, inclusive at both ends.
+///
+/// **Two constructors on purpose.** Items author `(min, max)` directly and
+/// never convert to anything else; abilities and moves author a centre and a
+/// spread, because `species::basic_attack_ability` converts a `MoveDef` into
+/// an `AbilityDef` and a centre-and-spread pair survives that losslessly
+/// where a `(min, max)` pair would round on odd widths.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageRange {
+    pub min: i32,
+    pub max: i32,
+}
+
+impl DamageRange {
+    /// A range `spread` either side of `power`, floored at 0 on the low end.
+    /// A `spread` of 0 is a degenerate range — exactly the deterministic
+    /// behaviour every ability had before ranges existed, which is why
+    /// `AbilityEffect::Damage`'s new `spread` field defaults to it and none
+    /// of the shipped ability files needed editing.
+    pub fn centred(power: i32, spread: i32) -> Self {
+        let spread = spread.max(0);
+        DamageRange {
+            min: (power - spread).max(0),
+            max: (power + spread).max(0),
+        }
+    }
+
+    /// The mean of a uniform draw over this range. `expected_damage` — and
+    /// so `balance_sim` — is built on this rather than on a re-derived
+    /// midpoint.
+    pub fn mean(self) -> f64 {
+        (self.min as f64 + self.max as f64) / 2.0
+    }
+
+    /// One uniform draw from the range.
+    ///
+    /// Written as an offset from `min` rather than `random_range(min..=max)`
+    /// so a degenerate range still consumes exactly one draw. Draw counts
+    /// have to be a property of the outcome and not of the weapon, or every
+    /// seeded run's RNG stream would shift with the party's loadout.
+    pub fn roll(self, rng: &mut impl rand::Rng) -> i32 {
+        let width = (self.max - self.min).max(0);
+        self.min + rng.random_range(0..=width)
+    }
+}
 
 /// One species' worth of the wild pack in an active intrusion.
 /// `members[0]` is the front — the only member that takes hits and the only
@@ -366,5 +414,58 @@ mod tests {
         let chance = jack_out_chance(300, 0, 1.0);
         assert!(chance.is_finite());
         assert_eq!(chance, JACK_OUT_CHANCE_MAX);
+    }
+
+    #[test]
+    fn a_centred_range_of_zero_spread_is_the_power_exactly() {
+        let range = DamageRange::centred(8, 0);
+        assert_eq!(range.min, 8);
+        assert_eq!(range.max, 8);
+    }
+
+    #[test]
+    fn a_centred_range_widens_symmetrically_around_its_power() {
+        let range = DamageRange::centred(10, 3);
+        assert_eq!(range.min, 7);
+        assert_eq!(range.max, 13);
+        assert_eq!(range.mean(), 10.0);
+    }
+
+    #[test]
+    fn a_centred_range_never_reaches_below_zero() {
+        // A low-power ability with a wide spread must not roll negative
+        // damage into `apply_damage`, which would read as a heal.
+        let range = DamageRange::centred(2, 5);
+        assert_eq!(range.min, 0);
+        assert_eq!(range.max, 7);
+    }
+
+    #[test]
+    fn a_degenerate_range_still_spends_exactly_one_draw() {
+        // Draw counts must be a property of the *outcome*, not of which
+        // weapon swung: a spread-0 ability and a wide weapon have to cost
+        // the same, or the RNG stream shifts with the loadout.
+        use rand::SeedableRng;
+        let mut wide = rand::rngs::StdRng::seed_from_u64(7);
+        let mut narrow = rand::rngs::StdRng::seed_from_u64(7);
+        let _ = DamageRange { min: 4, max: 9 }.roll(&mut wide);
+        let _ = DamageRange { min: 6, max: 6 }.roll(&mut narrow);
+        let after_wide: u64 = wide.random();
+        let after_narrow: u64 = narrow.random();
+        assert_eq!(
+            after_wide, after_narrow,
+            "both ranges must leave the stream in the same place"
+        );
+    }
+
+    #[test]
+    fn a_roll_stays_inside_its_range() {
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(11);
+        let range = DamageRange { min: 4, max: 9 };
+        for _ in 0..500 {
+            let rolled = range.roll(&mut rng);
+            assert!((4..=9).contains(&rolled), "rolled {rolled} outside 4..=9");
+        }
     }
 }

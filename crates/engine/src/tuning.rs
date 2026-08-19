@@ -2430,6 +2430,70 @@ pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
 /// warning, like any other malformed file.
 pub const MIN_SECTOR_WALKABLE_FRACTION: f64 = 0.45;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Combat resolution: to-hit, crit, fumble, mitigation
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Accuracy and Evasion are **derived, never stored** — see
+/// `battle::accuracy_of`/`evasion_of`. Both come off `SpeciesDef::base_speed`
+/// (range 6..=14 across the shipped roster) plus entity level plus gear, so a
+/// fast program both hits and dodges well. `atk` is deliberately absent from
+/// both: feeding it to-hit *and* damage compounds quadratically and is the
+/// most likely thing to break `balance_sim`'s curves.
+pub const ACCURACY_PER_SPEED: f64 = 1.0;
+/// See `ACCURACY_PER_SPEED`. Levelling buys accuracy; it never buys mitigation.
+pub const ACCURACY_PER_LEVEL: f64 = 0.5;
+/// See `ACCURACY_PER_SPEED`.
+pub const EVASION_PER_SPEED: f64 = 1.0;
+/// See `ACCURACY_PER_LEVEL`.
+pub const EVASION_PER_LEVEL: f64 = 0.5;
+
+/// Bounds on `battle::hit_chance`. The floor is what keeps
+/// `balance_sim`'s `TURN_CAP` meaningful as stalemate detection rather than
+/// as a fight-length cap: expected damage stays strictly positive, so a
+/// timeout is a genuine stalemate.
+pub const HIT_CHANCE_MIN: f64 = 0.25;
+/// See `HIT_CHANCE_MIN`. Below 1.0 so no matchup is a guaranteed landing.
+pub const HIT_CHANCE_MAX: f64 = 0.95;
+
+/// Flat crit rate, symmetric between the player and hostiles. Clamped to at
+/// most the hit chance inside `battle::resolve_attack`, so a crit is always a
+/// hit. Gear crit is deferred — a `crit` field on `EquipmentStats` that
+/// nothing authors is an unused feature flag.
+pub const CRIT_CHANCE: f64 = 0.08;
+/// What a crit multiplies. The **rolled portion only** — doubling the total
+/// would scale crits with levelling and with every `atk` source in the game.
+pub const CRIT_ROLL_MULTIPLIER: i32 = 2;
+
+/// Flat fumble rate, symmetric between the player and hostiles, on its own
+/// constant so it can be split per side later without touching resolution.
+/// Clamped to at most `1 - hit_chance`, so a fumble is always a miss.
+pub const FUMBLE_CHANCE: f64 = 0.05;
+
+/// Where the four fumble rungs divide, against `d` — how deep into the
+/// fumble band the roll fell, in `[0, 1)`. Weighted so the deep rungs are
+/// rare: Exposed below the first, Recoil below the second, Opening below the
+/// third, Crash above it. Rungs **replace** rather than stack; a cumulative
+/// top rung is a run-ender.
+pub const FUMBLE_RUNG_THRESHOLDS: [f64; 3] = [0.55, 0.85, 0.97];
+/// Fraction of a fresh roll of the fumbler's own damage range that the
+/// Recoil rung deals to the fumbler.
+pub const FUMBLE_RECOIL_FRACTION: f32 = 0.5;
+/// Percentage points of evasion the Exposed rung strips from the fumbler
+/// until their next turn.
+pub const EXPOSED_EVASION_PERCENT: i32 = 50;
+
+/// Ceiling on total mitigation, strictly below 100. Load-bearing twice: it
+/// stops the damage path reaching immunity, and it is what keeps
+/// `Stats::power`'s effective-HP denominator away from zero.
+pub const MAX_MITIGATION_PERCENT: i32 = 75;
+
+/// The player's damage range with no weapon equipped. Replaces
+/// `PLAYER_STRIKE_POWER`, which was the flat move power behind the player's
+/// one basic strike; a weapon **overrides** this rather than adding to it.
+pub const PLAYER_UNARMED_DAMAGE: crate::battle::DamageRange =
+    crate::battle::DamageRange { min: 3, max: 7 };
+
 #[cfg(test)]
 mod tests {
     use super::*;

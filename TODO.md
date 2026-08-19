@@ -42,5 +42,7 @@
     mechanic that only exists underground.
 27. add visual indicator of entity in the stack
 28. companions also have perks, special unlocks and trees for entities, allow further level progression
+29. move playwer perks to .ron's so they can be modded
+30. introduce AC "armor class' type of metric, affects the chance of missing both from entity side and player & companion side. 
 
 # Bugs

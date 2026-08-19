@@ -18,7 +18,9 @@ use feral_processes_engine::arena::{
 };
 use feral_processes_engine::items_db::ItemDb;
 use feral_processes_engine::species::SpeciesDb;
-use feral_processes_engine::tuning::{CREATURE_MAX_LEVEL, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
+use feral_processes_engine::tuning::{
+    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, absolute_companion_level_cap,
+};
 use feral_processes_engine::world::Biome;
 
 use crate::*;
@@ -575,7 +577,11 @@ impl App {
             }
             ArenaRowKind::Party(i) => {
                 if let Some(c) = s.party.get_mut(i) {
-                    c.level = step(c.level, delta, 1, CREATURE_MAX_LEVEL);
+                    // The absolute cap, not `Game::companion_level_cap`: a
+                    // scenario's party is authored, not spawned, so there is
+                    // no `KernelRing` to read — and a developed companion is
+                    // exactly what the arena exists to stage.
+                    c.level = step(c.level, delta, 1, absolute_companion_level_cap());
                 }
             }
             ArenaRowKind::Opponent(i) => {

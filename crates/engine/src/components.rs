@@ -1303,6 +1303,17 @@ pub struct Refactors(pub u32);
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PurchasedTiers(pub u32);
 
+/// How many Kernel Rings have been opened on this program — see
+/// `Game::open_kernel_ring`. Absent means zero, like `Refactors` and
+/// `PurchasedTiers` above.
+///
+/// Each ring raises this companion's level ceiling by
+/// `tuning::LEVELS_PER_RING` and nothing else: it buys *room* to grow, never
+/// growth itself. `Game::companion_level_cap` is the one expression of what
+/// it is worth, so no call site adds the multiplication itself.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KernelRing(pub u32);
+
 /// A structure's remaining health against raids (see `Game::raid_check`).
 /// Every deployed structure gets one, sized from its
 /// `StructureDef::durability`; reaching 0 destroys the structure.

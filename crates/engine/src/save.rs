@@ -179,6 +179,18 @@ pub struct CreatureSave {
     /// above, so it cost no further bump.
     #[serde(default)]
     pub purchased_tiers: u32,
+    /// How many Kernel Rings are open on this program — see
+    /// `components::KernelRing`. Persisted because it is the whole of what a
+    /// Privilege Ring bought: a count that reset to 0 on load would drop a
+    /// developed companion's ceiling back to `CREATURE_MAX_LEVEL` while
+    /// leaving the levels it already earned in place, which reads as the
+    /// feature not working rather than as a lost field.
+    ///
+    /// Additive on a field-named RON struct, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump: an older file simply carries no key and
+    /// loads as an undeveloped program, which it was.
+    #[serde(default)]
+    pub ring: u32,
     /// The abilities installed in this program's routine slots, in menu
     /// order — see `components::Routines`. Persisted rather than re-derived
     /// from its species, because an innate routine can be popped out and a
@@ -882,6 +894,7 @@ mod tests {
             fusions: 0,
             refactors: 0,
             purchased_tiers: 0,
+            ring: 0,
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,

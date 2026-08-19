@@ -672,6 +672,7 @@ impl Game {
                 .get::<Experience>(companion)
                 .map(|e| e.level)
                 .unwrap_or(1);
+            let level_cap = self.companion_level_cap(companion);
             let gain = {
                 let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
                 let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
@@ -682,7 +683,7 @@ impl Game {
                     &mut stats,
                     amount,
                     growth_multiplier,
-                    Some(crate::tuning::CREATURE_MAX_LEVEL),
+                    Some(level_cap),
                     xp_boost_pct,
                 )
             };

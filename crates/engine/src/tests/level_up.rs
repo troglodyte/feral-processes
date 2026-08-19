@@ -7,7 +7,10 @@ use super::support::*;
 use crate::components::{Decompiler, Experience, Stats};
 use crate::progression::{StatRow, stat_block};
 use crate::resources::{CONDENSE_LOOKBACK, LogLine, MessageSource, condense};
-use crate::tuning::{DECOMPILER_SKILL_PER_LEVEL, PERK_POINTS_PER_LEVEL};
+use crate::tuning::{
+    CREATURE_MAX_LEVEL, DECOMPILER_SKILL_PER_LEVEL, KERNEL_RING_MAX, LEVELS_PER_RING,
+    PERK_POINTS_PER_LEVEL, absolute_companion_level_cap,
+};
 use crate::*;
 
 /// The indented stat lines out of a log, in order. Reaching for the two
@@ -238,5 +241,152 @@ fn a_saves_stale_xp_threshold_is_rederived_from_its_level_on_load() {
     assert_eq!(
         companion_threshold, expected,
         "and so does a companion's — both load paths, or one of them keeps the stale value"
+    );
+}
+
+/// Enough XP to blow through every level a companion could possibly reach,
+/// so a test asserting where it stopped is asserting about the *cap* rather
+/// than about how much it was fed.
+fn xp_past_every_cap() -> u32 {
+    (1..=absolute_companion_level_cap() + 4)
+        .map(crate::progression::xp_for_level)
+        .sum::<u32>()
+        * 2
+}
+
+fn a_party_member(game: &mut Game) -> Entity {
+    let companion = spawn_tamed(game, 10, 3);
+    game.world.resource_mut::<Party>().0.push(companion);
+    companion
+}
+
+#[test]
+fn a_companion_with_no_ring_still_stops_at_the_base_cap() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = a_party_member(&mut game);
+
+    game.award_party_xp(xp_past_every_cap());
+
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        CREATURE_MAX_LEVEL,
+        "a companion with no Kernel Ring must still stop where it always did"
+    );
+}
+
+#[test]
+fn one_kernel_ring_lifts_a_companions_ceiling_by_its_levels() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = a_party_member(&mut game);
+    game.world.entity_mut(companion).insert(KernelRing(1));
+
+    game.award_party_xp(xp_past_every_cap());
+
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        CREATURE_MAX_LEVEL + LEVELS_PER_RING,
+        "one ring buys exactly LEVELS_PER_RING levels, and no more"
+    );
+    assert_eq!(
+        game.companion_level_cap(companion),
+        CREATURE_MAX_LEVEL + LEVELS_PER_RING
+    );
+}
+
+#[test]
+fn every_ring_open_stops_at_the_absolute_cap() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = a_party_member(&mut game);
+    game.world
+        .entity_mut(companion)
+        .insert(KernelRing(KERNEL_RING_MAX));
+
+    game.award_party_xp(xp_past_every_cap());
+
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        absolute_companion_level_cap(),
+        "the last ring is still a ceiling"
+    );
+}
+
+/// The whole of how a ring stays inside "progression is earned by fighting":
+/// `systems.rs`'s cronjob payout keeps passing the base cap, and its own
+/// `WORK_XP_LEVEL_CAP` guard stops a posted worker well below even that. A
+/// developed program cannot be ground up at a Mining Node.
+#[test]
+fn a_ringed_cronjob_worker_still_stops_at_the_work_cap() {
+    let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(worker)
+        .insert(KernelRing(KERNEL_RING_MAX));
+    game.world.get_mut::<Experience>(worker).unwrap().level = crate::tuning::WORK_XP_LEVEL_CAP;
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                level: None,
+            },
+            work_node_parts(),
+        ))
+        .id();
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 0,
+        required: 1,
+    });
+
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    let exp = game.world.get::<Experience>(worker).unwrap();
+    assert_eq!(
+        exp.level,
+        crate::tuning::WORK_XP_LEVEL_CAP,
+        "a ring must not open the cronjob grind"
+    );
+    assert_eq!(exp.xp, 0, "a capped worker earns no work XP at all");
+}
+
+/// A **save → load → assert**, not a RON round trip: a round trip cannot tell
+/// a field that fails to travel from one that does, which is exactly what
+/// `#[serde(skip)]` looks like from its side. Both halves matter — the count
+/// survives, *and* the ceiling it bought is still lifted on the loaded game.
+#[test]
+fn a_kernel_ring_survives_a_save_and_still_lifts_the_ceiling() {
+    let dir = scratch_assets_dir("ring_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = a_party_member(&mut game);
+    game.world.entity_mut(companion).insert(KernelRing(2));
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let restored = loaded.world.resource::<Party>().0[0];
+    assert_eq!(
+        loaded.world.get::<KernelRing>(restored).map(|r| r.0),
+        Some(2),
+        "the ring count must travel"
+    );
+    assert_eq!(
+        loaded.companion_level_cap(restored),
+        CREATURE_MAX_LEVEL + 2 * LEVELS_PER_RING,
+        "and the ceiling it bought must still be lifted"
+    );
+
+    loaded.award_party_xp(xp_past_every_cap());
+    assert_eq!(
+        loaded.world.get::<Experience>(restored).unwrap().level,
+        CREATURE_MAX_LEVEL + 2 * LEVELS_PER_RING
     );
 }

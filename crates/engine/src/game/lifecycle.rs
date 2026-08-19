@@ -596,6 +596,12 @@ impl Game {
                 // the bonus on every reload. See `Rarity`'s doc.
                 c.rarity,
             ));
+            // Only when non-zero, the same idiom `Nemesis` and `Equipment`
+            // use below: absent must keep meaning "no ring open", since
+            // `Game::companion_level_cap` reads it as `map_or(0, ..)`.
+            if c.ring > 0 {
+                entity.insert(KernelRing(c.ring));
+            }
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
             }
@@ -882,6 +888,7 @@ impl Game {
                 Option<&Rarity>,
                 Option<&Refactors>,
                 Option<&PurchasedTiers>,
+                Option<&KernelRing>,
                 Option<&Equipment>,
                 Option<&Nemesis>,
                 Option<&PowerReserve>,
@@ -909,6 +916,7 @@ impl Game {
                 rarity,
                 refactors,
                 purchased_tiers,
+                ring,
                 equipment,
                 nemesis,
                 reserve,
@@ -967,6 +975,7 @@ impl Game {
                 fusions: fusions.map(|f| f.0).unwrap_or(0),
                 refactors: refactors.map(|r| r.0).unwrap_or(0),
                 purchased_tiers: purchased_tiers.map(|t| t.0).unwrap_or(0),
+                ring: ring.map(|r| r.0).unwrap_or(0),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,

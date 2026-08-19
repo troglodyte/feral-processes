@@ -90,6 +90,54 @@ pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
 /// subtraction with no record of what was added.
 pub const CREATURE_MAX_LEVEL: u32 = 6;
 
+// ---- Companion development: rings and talents -------------------------
+//
+// `CREATURE_MAX_LEVEL` above is where a companion stops *by default*. A
+// Privilege Ring, dropped only by an underground lair guardian, opens a
+// Kernel Ring on one program and lifts that program's ceiling alone. Every
+// level earned above the base cap pays one talent point into its class tree
+// (`assets/talents/`), so the levels a ring buys are what makes a program
+// individual rather than merely bigger.
+
+/// How many Kernel Rings a single program may have open — see
+/// `components::KernelRing`. Each one costs more Privilege Rings than the
+/// last (`Game::ring_cost`), so three is already a 1+2+3 = 6-guardian
+/// investment in one companion.
+///
+/// It bounds two things at once: the level ceiling, via
+/// `absolute_companion_level_cap`, and the depth of every talent tree, since
+/// `assets/talents/` ships `KERNEL_RING_MAX * LEVELS_PER_RING` tiers and a
+/// census refuses a tree that does not. Raising it means authoring a tier for
+/// every class, not just changing a number.
+pub const KERNEL_RING_MAX: u32 = 3;
+
+/// How much level ceiling one Kernel Ring buys — see
+/// `Game::companion_level_cap`. Carries `HP_PER_LEVEL`'s `K = 2` like every
+/// other per-level constant, so two levels here is the same *power* four
+/// would have been before the halving.
+///
+/// It is also the talent-point rate: one point per level above
+/// `CREATURE_MAX_LEVEL`, derived and never stored.
+pub const LEVELS_PER_RING: u32 = 2;
+
+/// Ceiling on a single `TalentNode::Stat` node's percentage — asserted over
+/// the real `assets/talents/` by a census in `tests/assets.rs`.
+///
+/// A developed companion already carries four multiplicative axes (bought
+/// Recompile Kernel tiers, five refactor slots at ~1.28x power, the levels a
+/// ring buys, and now talents). Options compound far less dangerously than
+/// numbers do, which is why the shipped trees weight toward `Ability`,
+/// `Affinity` and `RoutineSlot` and this bound sits low.
+pub const MAX_TALENT_STAT_PERCENT: f32 = 15.0;
+
+/// The highest level any companion can reach with every ring open. For the
+/// two arena sites, which author their own composition and have no entity to
+/// read a `KernelRing` from; everything with an entity calls
+/// `Game::companion_level_cap` instead.
+pub const fn absolute_companion_level_cap() -> u32 {
+    CREATURE_MAX_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING
+}
+
 /// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes

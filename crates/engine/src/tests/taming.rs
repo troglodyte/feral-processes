@@ -604,6 +604,9 @@ fn only_the_last_failed_decompile_reaches_the_battle_summary() {
     );
 
     game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
+    // Forced: the summary this test reads only exists once the fight ends,
+    // and the killing blow can miss now.
+    force_the_next_attack_to_land(&mut game);
     resolve_round_with(&mut game, BattleAction::Attack { group: 0 });
     assert!(
         game.world.get_resource::<BattleState>().is_none(),

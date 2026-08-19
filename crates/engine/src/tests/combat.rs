@@ -102,20 +102,31 @@ fn a_failed_jack_out_leaves_the_battle_running_and_costs_no_xp() {
 
 #[test]
 fn a_failed_jack_out_draws_a_parting_volley() {
+    // **Summed across every failed attempt rather than read off the first
+    // one.** The volley rolls to hit now, so any single pinned attempt can
+    // cost nothing; totalling the whole sweep is deterministic and still
+    // fails outright if being pinned draws no volley at all — which is the
+    // thing that would break. Picking whichever seed happened to land would
+    // pass against no volley being thrown.
+    let mut pinned = 0;
+    let mut total_lost = 0;
     for seed in 0..60 {
         let (game, escaped) = first_jack_out_against_an_overwhelming_pack(seed);
         if escaped {
             continue;
         }
-        let player = game.player_entity();
-        let stats = game.world.get::<Stats>(player).unwrap();
-        assert!(
-            stats.hp < stats.max_hp,
-            "being pinned should cost you a volley"
-        );
-        return;
+        pinned += 1;
+        let stats = game.world.get::<Stats>(game.player_entity()).unwrap();
+        total_lost += stats.max_hp - stats.hp;
     }
-    panic!("no seed in 0..60 produced a failed jack-out against a 100k-power enemy");
+    assert!(
+        pinned > 0,
+        "no seed in 0..60 produced a failed jack-out against a 100k-power enemy"
+    );
+    assert!(
+        total_lost > 0,
+        "{pinned} pinned attempts and not one of them cost a point of Integrity"
+    );
 }
 
 /// A successful jack-out now shakes the pack that caught you, rather than
@@ -532,6 +543,8 @@ fn a_slot_whose_member_was_knocked_out_stops_holding_the_round_open() {
     );
 
     let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+    // The swing has to land for the HP drop to be evidence the round ran.
+    force_the_next_attack_to_land(&mut game);
     game.battle_resolve_round();
     assert!(
         game.world.get::<Stats>(wild).unwrap().hp < hp_before,

@@ -389,6 +389,9 @@ fn a_back_group_with_a_ranged_move_still_connects() {
     let hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
     let glitch = game.front_of_group(2).unwrap();
+    // Forced: the point is that a back group with a ranged move gets to
+    // swing at all, not that its swing beats the player's evasion.
+    force_the_next_attack_to_land(&mut game);
     game.wild_retaliate(glitch, 2, player);
 
     assert!(

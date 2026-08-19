@@ -272,6 +272,8 @@ fn defeating_the_front_pack_member_continues_the_battle_against_the_next_one() {
         .id();
     insert_battle(&mut game, player, vec![front, second]);
 
+    // Forced: the strike has to land for there to be a promotion to observe.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     assert!(

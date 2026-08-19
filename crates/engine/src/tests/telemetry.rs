@@ -93,6 +93,9 @@ fn an_enemy_choice_records_the_targets_hp_before_the_hit() {
     game.enable_battle_telemetry();
 
     let before = game.world.get::<Stats>(player).unwrap().hp;
+    // Forced: the record is about what the swing saw, and a missed swing
+    // leaves nothing to read it against.
+    force_the_next_attack_to_land(&mut game);
     game.wild_retaliate(wild, 0, player);
 
     let records = game.take_battle_telemetry();
@@ -147,7 +150,11 @@ fn every_enemy_swing_produces_one_record() {
         .resource::<MessageLog>()
         .lines
         .iter()
-        .filter(|l| l.text.starts_with("The rogue program executes"))
+        // Every narration of an enemy swing, not just the landed ones: a
+        // miss, a crit and a fumble each get their own wording now, and all
+        // four lead with the subject. Counting only "executes" would compare
+        // the record count against the *hits*.
+        .filter(|l| l.text.starts_with("The rogue program"))
         .count();
     assert!(swings > 0, "the fixture produced no enemy swings at all");
     assert_eq!(

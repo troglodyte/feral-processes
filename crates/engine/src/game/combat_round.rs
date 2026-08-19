@@ -4,7 +4,7 @@
 use crate::abilities::PassiveTrigger;
 use crate::tuning::{
     ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS,
-    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_STRIKE_POWER, WIELDED_PROGRAM_STAT_DIVISOR,
+    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_UNARMED_DAMAGE, WIELDED_PROGRAM_STAT_DIVISOR,
     WIELDED_ROUTINE_PROC_CHANCE,
 };
 use crate::*;
@@ -357,39 +357,46 @@ impl Game {
             return false;
         };
         let (move_name, natural) = if slot == 0 {
-            (
-                "data strike".to_string(),
-                battle::DamageRange::centred(PLAYER_STRIKE_POWER, 0),
-            )
+            ("data strike".to_string(), PLAYER_UNARMED_DAMAGE)
         } else {
             match self.roll_species_move(entity) {
                 Some(mv) => (mv.name.clone(), mv.attack_parts().0),
-                None => (
-                    "a raw signal burst".to_string(),
-                    battle::DamageRange::centred(PLAYER_STRIKE_POWER, 0),
-                ),
+                None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
             }
         };
-        // Task 8 turns this into a roll through `attack_range`; the mean of a
-        // centred band is exactly the flat power this read before.
-        let move_power = natural.mean().round() as i32;
-        // No mitigation term here: `apply_damage` owns that, as the
-        // percentage cut it now is. Passing it to `compute_damage` as well
-        // would subtract it once and then cut by it again.
-        let raw = battle::compute_damage(self.effective_atk(entity), 0, move_power);
-        let dmg = self.apply_damage(front, raw);
-        if slot == 0 {
-            self.log_kind(
-                MessageKind::PartyDamage,
-                format!("You unleash a {move_name} for {dmg} damage."),
-            );
+        let range = self.attack_range(entity, natural);
+        let outcome = self.resolve_and_apply_attack(entity, front, range);
+        // A miss and a fumble are `PartyDamage` too — this is still the
+        // party's turn being narrated, and the kind is what paces the reveal.
+        let line = if slot == 0 {
+            match outcome {
+                battle::AttackOutcome::Crit { dmg } => {
+                    format!("You tear a {move_name} clean through for {dmg} damage!")
+                }
+                battle::AttackOutcome::Hit { dmg } => {
+                    format!("You unleash a {move_name} for {dmg} damage.")
+                }
+                battle::AttackOutcome::Miss => format!("Your {move_name} glances off."),
+                battle::AttackOutcome::Fumble(rung) => {
+                    self.fumble_line_for_player(&move_name, rung)
+                }
+            }
         } else {
             let name = self.creature_label(entity);
-            self.log_kind(
-                MessageKind::PartyDamage,
-                format!("{name} executes {move_name} for {dmg} damage."),
-            );
-        }
+            match outcome {
+                battle::AttackOutcome::Crit { dmg } => {
+                    format!("{name} tears a {move_name} clean through for {dmg} damage!")
+                }
+                battle::AttackOutcome::Hit { dmg } => {
+                    format!("{name} executes {move_name} for {dmg} damage.")
+                }
+                battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
+                battle::AttackOutcome::Fumble(rung) => {
+                    self.fumble_line_for_other(&name, &move_name, rung)
+                }
+            }
+        };
+        self.log_kind(MessageKind::PartyDamage, line);
 
         if !self.creature_alive(front) && self.finish_group_member(live, player) {
             return true;
@@ -1018,19 +1025,33 @@ impl Game {
                     // Mitigation is `apply_damage`'s, not a term here — see
                     // `party_member_attacks` for why passing it to
                     // `compute_damage` too would count it twice.
+                    // **No `attack_range` here.** A Special is the
+                    // ability's own damage, not the caster's weapon — the
+                    // override is a property of a basic attack.
                     let band = abilities::scaled_range(
                         battle::DamageRange::centred(*power, *spread),
                         level,
                         affinity,
                     );
-                    let raw = battle::compute_damage(
-                        self.effective_atk(actor),
-                        0,
-                        band.mean().round() as i32,
-                    );
-                    let dmg = self.apply_damage(recipient, raw);
-                    self.log_kind(hit_kind, format!("{name} hits {on} for {dmg} damage."));
-                    if let Some(effect) = status.clone() {
+                    let outcome = self.resolve_and_apply_attack(actor, recipient, band);
+                    let line = match outcome {
+                        battle::AttackOutcome::Crit { dmg } => {
+                            format!("{name} tears into {on} for {dmg} damage!")
+                        }
+                        battle::AttackOutcome::Hit { dmg } => {
+                            format!("{name} hits {on} for {dmg} damage.")
+                        }
+                        battle::AttackOutcome::Miss => format!("{name} goes wide of {on}."),
+                        battle::AttackOutcome::Fumble(rung) => {
+                            self.fumble_line_for_other(name, "cast", rung)
+                        }
+                    };
+                    self.log_kind(hit_kind, line);
+                    // The rider lands on a hit only. This branch cannot live
+                    // inside `apply_damage`, which has no notion of a miss.
+                    if outcome.damage_to_defender() > 0
+                        && let Some(effect) = status.clone()
+                    {
                         self.apply_status_effect(recipient, &effect, &on, hit_kind);
                     }
                 }
@@ -1044,12 +1065,23 @@ impl Game {
                         level,
                         affinity,
                     );
-                    let raw = battle::compute_damage(
-                        self.effective_atk(actor),
-                        0,
-                        band.mean().round() as i32,
-                    );
-                    let dmg = self.apply_damage(recipient, raw);
+                    let outcome = self.resolve_and_apply_attack(actor, recipient, band);
+                    let dmg = outcome.damage_to_defender();
+                    if dmg <= 0 {
+                        // **A missed drain restores nothing.** The heal
+                        // cannot live in `apply_damage`, which never learns
+                        // whether the swing landed.
+                        let line = match outcome {
+                            battle::AttackOutcome::Fumble(rung) => {
+                                self.fumble_line_for_other(name, "siphon", rung)
+                            }
+                            // Same verb form as the landed line below, so
+                            // the two read as one another's outcomes.
+                            _ => format!("{name} siphons nothing from {on}."),
+                        };
+                        self.log_kind(hit_kind, line);
+                        continue;
+                    }
                     // Off the damage actually dealt, not the authored power:
                     // mitigation has already eaten into it, and healing off
                     // the pre-mitigation figure would make a drain better

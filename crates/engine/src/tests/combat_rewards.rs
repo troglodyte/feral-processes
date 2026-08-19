@@ -675,6 +675,8 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
     // fail every time the XP curve is retuned.
     let paid = game.kill_xp(wild);
 
+    // Forced: there is no XP to share unless the strike lands the kill.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     assert_eq!(

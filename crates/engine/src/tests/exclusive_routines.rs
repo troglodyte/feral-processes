@@ -404,27 +404,44 @@ fn a_dropped_ally_sets_off_the_deadman_and_a_quiet_round_does_not() {
     // whole-party routine is the deterministic way to do it: for a hostile,
     // `AllEnemies` resolves to `living_party()`, so it certainly connects
     // rather than rolling `roll_enemy_target`.
-    let mut game = battle_with_a_passive_holder(9008, &passive);
-    let doomed = game.owned_pets()[0].entity;
-    game.world.get_mut::<Stats>(doomed).unwrap().hp = 1;
-    let enemy_hp_before = total_enemy_hp(&game);
-    resolve_a_planned_round(&mut game);
-    assert!(
-        !game.creature_alive(doomed),
-        "the fixture's hostile routine failed to drop the ally, so nothing triggered"
-    );
-    let killed_round = enemy_hp_before - total_enemy_hp(&game);
+    // **Summed over a fixed seed sweep**, because both the hostile swing that
+    // drops the ally and the passive's own answering shot roll to hit now. A
+    // single pair of rounds is a coin flip on both; the totals are
+    // deterministic and still collapse to equal if the passive never fires.
+    let mut killed_round = 0;
+    let mut quiet_round = 0;
+    let mut ally_actually_dropped = 0;
+    for seed in 0..24u64 {
+        let mut game = battle_with_a_passive_holder(9008, &passive);
+        let doomed = game.owned_pets()[0].entity;
+        game.world.get_mut::<Stats>(doomed).unwrap().hp = 1;
+        reseed_rng(&mut game, seed);
+        let enemy_hp_before = total_enemy_hp(&game);
+        resolve_a_planned_round(&mut game);
+        if game.creature_alive(doomed) {
+            // The hostile missed this seed, so this round is not one where
+            // the trigger could have fired — it belongs in neither total.
+            continue;
+        }
+        ally_actually_dropped += 1;
+        killed_round += enemy_hp_before - total_enemy_hp(&game);
 
-    // Identical round, but the ally survives the same hit.
-    let mut quiet = battle_with_a_passive_holder(9008, &passive);
-    let survivor = quiet.owned_pets()[0].entity;
-    let enemy_hp_before = total_enemy_hp(&quiet);
-    resolve_a_planned_round(&mut quiet);
+        // Identical round on the identical stream, but the ally survives.
+        let mut quiet = battle_with_a_passive_holder(9008, &passive);
+        let survivor = quiet.owned_pets()[0].entity;
+        reseed_rng(&mut quiet, seed);
+        let enemy_hp_before = total_enemy_hp(&quiet);
+        resolve_a_planned_round(&mut quiet);
+        assert!(
+            quiet.creature_alive(survivor),
+            "the control round lost its ally too, so it controls for nothing"
+        );
+        quiet_round += enemy_hp_before - total_enemy_hp(&quiet);
+    }
     assert!(
-        quiet.creature_alive(survivor),
-        "the control round lost its ally too, so it controls for nothing"
+        ally_actually_dropped > 0,
+        "the fixture's hostile routine never dropped the ally, so nothing triggered"
     );
-    let quiet_round = enemy_hp_before - total_enemy_hp(&quiet);
 
     assert!(
         killed_round > quiet_round,

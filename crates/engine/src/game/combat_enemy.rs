@@ -165,14 +165,16 @@ impl Game {
 
         let targets_companion = target != player;
 
-        // No mitigation term: `apply_damage` applies the target's, as the
-        // percentage cut it now is, and returns what actually landed — which
-        // is the figure the log lines below have to print.
-        let w_atk = self.world.get::<Stats>(wild).unwrap().atk;
-        // The band's mean, which for a centred range is exactly the `power`
-        // this read before ranges existed. Task 8 replaces it with a roll.
-        let raw = battle::compute_damage(w_atk, 0, range.mean().round() as i32);
-        let dmg = self.apply_damage(target, raw);
+        // A wild program can be wearing gear, so its swing goes through
+        // `attack_range` like anybody else's.
+        let band = self.attack_range(wild, range);
+        let outcome = self.resolve_and_apply_attack(wild, target, band);
+        let dmg = outcome.damage_to_defender();
+        // A missed swing lands no rider. The gate below already dropped it
+        // most turns; this drops it on every turn the attack did not land.
+        if dmg <= 0 {
+            status = None;
+        }
 
         // A move that also inflicts a condition is the only thing an enemy has
         // resembling the party's Special, so it is what earns the louder
@@ -191,13 +193,23 @@ impl Game {
 
         if targets_companion {
             let name = self.creature_label(target);
-            self.log_kind(
-                kind,
-                format!(
-                    "The rogue program executes {} on {} for {} damage.",
-                    mv.name, name, dmg
+            let line = match outcome {
+                battle::AttackOutcome::Crit { dmg } => format!(
+                    "The rogue program tears {} clean through {} for {dmg} damage!",
+                    mv.name, name
                 ),
-            );
+                battle::AttackOutcome::Hit { dmg } => format!(
+                    "The rogue program executes {} on {} for {dmg} damage.",
+                    mv.name, name
+                ),
+                battle::AttackOutcome::Miss => {
+                    format!("The rogue program's {} glances off {}.", mv.name, name)
+                }
+                battle::AttackOutcome::Fumble(rung) => {
+                    self.fumble_line_for_other("The rogue program", &mv.name, rung)
+                }
+            };
+            self.log_kind(kind, line);
             if !self.creature_alive(target) {
                 self.log(format!("{name} is knocked offline and stands down."));
                 // It leaves `Party` at the end of the battle, not here —
@@ -209,10 +221,22 @@ impl Game {
                 self.apply_status_effect(target, effect, &name, kind);
             }
         } else {
-            self.log_kind(
-                kind,
-                format!("The rogue program executes {} for {} damage.", mv.name, dmg),
-            );
+            let line = match outcome {
+                battle::AttackOutcome::Crit { dmg } => format!(
+                    "The rogue program tears {} clean through for {dmg} damage!",
+                    mv.name
+                ),
+                battle::AttackOutcome::Hit { dmg } => {
+                    format!("The rogue program executes {} for {dmg} damage.", mv.name)
+                }
+                battle::AttackOutcome::Miss => {
+                    format!("The rogue program's {} glances off you.", mv.name)
+                }
+                battle::AttackOutcome::Fumble(rung) => {
+                    self.fumble_line_for_other("The rogue program", &mv.name, rung)
+                }
+            };
+            self.log_kind(kind, line);
             if self.creature_alive(target)
                 && let Some(effect) = &status
             {

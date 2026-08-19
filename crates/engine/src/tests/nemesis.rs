@@ -27,6 +27,26 @@ fn spawn_overwhelming_wild(game: &mut Game) -> Entity {
     wild
 }
 
+/// Resolves rounds against an overwhelming hostile until the fight ends,
+/// which is the player going down.
+///
+/// **A loop rather than the single round these tests used to make.** Every
+/// attack rolls to hit now, so an overwhelming hostile still misses sometimes
+/// and "one round" stopped being a property of the fixture. Nothing here is
+/// about round counts — these tests are about who gets marked when the player
+/// loses — so waiting for the loss is faithful rather than weaker.
+fn lose_the_fight(game: &mut Game) {
+    for _ in 0..64 {
+        if !game.has_active_battle() {
+            return;
+        }
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .unwrap();
+        game.battle_resolve_round();
+    }
+    panic!("64 rounds against an overwhelming hostile and the player is still standing");
+}
+
 /// Every entity in `game` currently carrying `Nemesis` — the ledger the cap
 /// counts against, and what "marks nobody" means when there's no single
 /// surviving entity left to assert `None` on (a won fight despawns its only
@@ -45,6 +65,10 @@ fn a_won_fight_marks_nobody() {
     game.world.get_mut::<Stats>(wild).unwrap().hp = 1;
     game.start_battle(vec![wild]);
 
+    // The swing has to land for there to be a kill to read. Forced rather
+    // than left to the roll: every attack can miss now, and a test about what
+    // a *won* fight marks cannot be built on one that might not be won.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     assert!(!game.has_active_battle(), "the kill should end the fight");
@@ -148,9 +172,7 @@ fn a_pursuing_guardian_that_wins_by_default_is_no_longer_pursuing() {
         .insert((NestGuardian { nest }, Pursuing));
 
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
 
     assert!(
         game.world.get::<Nemesis>(wild).is_some(),
@@ -176,9 +198,7 @@ fn a_forgiving_defeat_marks_the_surviving_hostile_at_grudge_1() {
     let wild = spawn_overwhelming_wild(&mut game);
     game.start_battle(vec![wild]);
 
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
 
     assert!(
         !game.has_active_battle(),
@@ -197,15 +217,11 @@ fn a_second_loss_to_the_same_program_escalates_grudge_rather_than_re_marking() {
     let wild = spawn_overwhelming_wild(&mut game);
 
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
     assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(1));
 
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
 
     assert_eq!(
         game.world.get::<Nemesis>(wild).map(|n| n.0),
@@ -427,9 +443,7 @@ fn grudge_count_and_rarity_receipt_agree_past_the_promotion_ceiling() {
 
     for _ in 0..3 {
         game.start_battle(vec![wild]);
-        game.battle_set_action(0, BattleAction::Attack { group: 0 })
-            .unwrap();
-        game.battle_resolve_round();
+        lose_the_fight(&mut game);
     }
     assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(3));
     assert_eq!(
@@ -439,9 +453,7 @@ fn grudge_count_and_rarity_receipt_agree_past_the_promotion_ceiling() {
     );
 
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
     assert_eq!(game.world.get::<Nemesis>(wild).map(|n| n.0), Some(4));
     assert_eq!(
         game.world.get::<Rarity>(wild).copied(),
@@ -452,9 +464,7 @@ fn grudge_count_and_rarity_receipt_agree_past_the_promotion_ceiling() {
     // The 5th mark lands with old == new == Prismatic: nothing left to
     // promote, but the grudge still rises and the recharge still runs.
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
 
     assert_eq!(
         game.world.get::<Nemesis>(wild).map(|n| n.0),
@@ -683,9 +693,7 @@ fn a_second_grudge_does_not_rename() {
     let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_overwhelming_wild(&mut game);
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
     let first = game.world.get::<CustomName>(wild).map(|c| c.0.clone());
     assert!(
         first.is_some(),
@@ -721,9 +729,7 @@ fn a_second_grudge_does_not_rename() {
     game.world.entity_mut(wild).insert(perturbed);
 
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
 
     assert_eq!(
         game.world.get::<Nemesis>(wild).map(|n| n.0),
@@ -1013,9 +1019,7 @@ fn a_breach_clears_every_nemesis() {
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_overwhelming_wild(&mut game);
     game.start_battle(vec![wild]);
-    game.battle_set_action(0, BattleAction::Attack { group: 0 })
-        .unwrap();
-    game.battle_resolve_round();
+    lose_the_fight(&mut game);
     assert_eq!(
         game.world.get::<Nemesis>(wild).map(|n| n.0),
         Some(1),

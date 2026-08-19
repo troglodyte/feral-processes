@@ -107,6 +107,9 @@ fn an_atk_buff_increases_damage_dealt_and_expires_after_its_duration() {
         .id();
     insert_battle(&mut game, player, vec![wild]);
 
+    // Forced: the buff can only be read off a landed swing, and this test is
+    // about what the buff adds rather than about the to-hit roll.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     let wild_hp = game.world.get::<Stats>(wild).unwrap().hp;

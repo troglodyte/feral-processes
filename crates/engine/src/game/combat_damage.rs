@@ -9,6 +9,143 @@
 use crate::*;
 
 impl Game {
+    /// The player's own fumble, second person. One rung, one line.
+    ///
+    /// A rung is narrated even though most of them are also *applied*
+    /// elsewhere, because a fumble that changed something silently reads as
+    /// the attack simply not happening.
+    pub(crate) fn fumble_line_for_player(
+        &self,
+        move_name: &str,
+        rung: battle::FumbleRung,
+    ) -> String {
+        match rung {
+            battle::FumbleRung::Exposed => {
+                format!("Your {move_name} overreaches — you're wide open.")
+            }
+            battle::FumbleRung::Recoil { dmg } => {
+                format!("Your {move_name} backfires for {dmg} damage.")
+            }
+            battle::FumbleRung::Opening { dmg } => {
+                format!("Your {move_name} leaves you open, and it counters for {dmg}.")
+            }
+            battle::FumbleRung::Crash => {
+                format!("Your {move_name} hard-faults. You lose the next cycle.")
+            }
+        }
+    }
+
+    /// The third-person twin of `fumble_line_for_player`, for a companion, a
+    /// hostile, or an ability's caster.
+    ///
+    /// Deliberately never possessive. The caster label reaching this is
+    /// `actor_label`'s, which is `"Your process"` for the player, and
+    /// `"Your process's Fray"` reads badly where `"Your process overreaches
+    /// with Fray"` does not.
+    pub(crate) fn fumble_line_for_other(
+        &self,
+        name: &str,
+        move_name: &str,
+        rung: battle::FumbleRung,
+    ) -> String {
+        match rung {
+            battle::FumbleRung::Exposed => {
+                format!("{name} overreaches with {move_name}, and is left wide open.")
+            }
+            battle::FumbleRung::Recoil { dmg } => {
+                format!("{name} backfires {move_name}, taking {dmg} damage.")
+            }
+            battle::FumbleRung::Opening { dmg } => {
+                format!("{name} leaves an opening with {move_name}, and takes {dmg} for it.")
+            }
+            battle::FumbleRung::Crash => {
+                format!("{name} hard-faults on {move_name}, and loses the next cycle.")
+            }
+        }
+    }
+
+    /// `entity`'s side of an attack roll, with `range` as the band it swings
+    /// for.
+    ///
+    /// **The one place accuracy and evasion are resolved from the ECS**, so
+    /// the four creature-versus-creature call sites cannot each derive them
+    /// differently. `species_base_speed` already has a player arm; gear
+    /// accuracy and evasion are read live off `gear_bonus` because, unlike
+    /// `atk` and `mitigation`, neither is baked into `Stats`.
+    pub(crate) fn combatant_profile(
+        &self,
+        entity: Entity,
+        range: battle::DamageRange,
+    ) -> battle::Combatant {
+        let gear = self.gear_bonus(entity);
+        let level = self.ability_user_level(entity);
+        let speed = self.species_base_speed(entity);
+        battle::Combatant {
+            accuracy: battle::accuracy_of(speed, level, gear.accuracy),
+            evasion: battle::evasion_of(speed, level, gear.evasion),
+            atk: self.effective_atk(entity),
+            range,
+        }
+    }
+
+    /// Rolls one creature-versus-creature attack and applies whatever landed
+    /// on the defender, returning the outcome so the caller can log it and
+    /// branch on it.
+    ///
+    /// **The miss branch belongs at the call site, not here.** A missed
+    /// Drain must still skip its heal and a missed swing must still skip its
+    /// status rider, and `apply_damage` — which stays the only path that
+    /// damages a creature — has no way to know about either.
+    pub(crate) fn resolve_and_apply_attack(
+        &mut self,
+        attacker: Entity,
+        defender: Entity,
+        range: battle::DamageRange,
+    ) -> battle::AttackOutcome {
+        let attacker_profile = self.combatant_profile(attacker, range);
+        // The defender's own band, so an Opening rung's riposte — rolled
+        // inside `resolve_attack` — deals real damage rather than zero.
+        let defender_profile = self.combatant_profile(defender, self.natural_range_of(defender));
+        let outcome = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            battle::resolve_attack(attacker_profile, defender_profile, &mut rng.0)
+        };
+        let rolled = outcome.damage_to_defender();
+        if rolled <= 0 {
+            return outcome;
+        }
+        // **The returned outcome carries what *landed*, not what was
+        // rolled.** Mitigation is applied inside `apply_damage`, so the two
+        // differ for every defender with any at all — and callers use this
+        // figure for their log line and, in `Drain`'s case, for the heal.
+        // Reporting the pre-mitigation roll would claim damage the target
+        // never took, the same trap `restore_hp` returning its landed figure
+        // already closes from the other side.
+        let landed = self.apply_damage(defender, rolled);
+        match outcome {
+            battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit { dmg: landed },
+            battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit { dmg: landed },
+            other => other,
+        }
+    }
+
+    /// The band `entity` swings for when nobody has told us which move it is
+    /// using — its *first* species move through `attack_range`, falling back
+    /// to `PLAYER_UNARMED_DAMAGE`.
+    ///
+    /// Deliberately the first move rather than a rolled one: rolling here
+    /// would spend a `GameRng` draw before the band roll and break every
+    /// draw-count assertion `resolve_attack` carries.
+    pub(crate) fn natural_range_of(&self, entity: Entity) -> battle::DamageRange {
+        let natural = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .and_then(|def| def.moves.first().map(|mv| mv.range()))
+            .unwrap_or(crate::tuning::PLAYER_UNARMED_DAMAGE);
+        self.attack_range(entity, natural)
+    }
+
     /// Applies `dmg` to `target`, cut by `target`'s mitigation and floored
     /// at 0.
     ///

@@ -118,10 +118,12 @@ fn a_rewound_roster_never_heals_as_the_narration_advances() {
 #[test]
 fn a_group_keeps_its_dead_front_member_until_the_line_announcing_it() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // One HP apiece, so the player's strike is certain to kill the front
-    // member and promote the one behind it.
+    // One HP apiece, so a landed strike kills the front member and promotes
+    // the one behind it. Forced, because the strike can miss now and a
+    // fixture that killed nobody asserts nothing.
     battle_with_a_pack_of(&mut game, 3, 1);
 
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
     assert!(
         game.has_active_battle(),

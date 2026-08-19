@@ -96,15 +96,47 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
         ))
         .id();
     insert_battle(&mut game, player, vec![wild]);
-    let player_atk = game.world.get::<Stats>(player).unwrap().atk;
-    let expected_attack_dmg = battle::compute_damage(player_atk, 0, 5);
+
+    // **The strike's own damage is measured, not predicted.** It rolls from
+    // a band now, so the old `compute_damage(atk, 0, 5)` is no longer a
+    // number this test can know in advance. What it *can* pin is the
+    // difference the bleed makes: an identical forced swing against a clean
+    // target on the same stream, subtracted off. Seeding both the same way
+    // is what makes the two rolls identical, so the gap is the bleed alone.
+    let clean_strike = {
+        let mut control = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let control_player = control.player_entity();
+        let target = control
+            .world
+            .spawn((
+                Creature {
+                    species: species.id.clone(),
+                },
+                Hostile,
+                Position { x: 5, y: 5 },
+                Stats {
+                    hp: 100,
+                    max_hp: 100,
+                    atk: 0,
+                    mitigation: 0,
+                },
+                StatusEffects::default(),
+            ))
+            .id();
+        insert_battle(&mut control, control_player, vec![target]);
+        force_the_next_attack_to_land(&mut control);
+        player_attacks(&mut control);
+        100 - control.world.get::<Stats>(target).unwrap().hp
+    };
+    assert!(clean_strike > 0, "the control swing has to have landed");
 
     let hp_before = game.world.get::<Stats>(wild).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
     let hp_after = game.world.get::<Stats>(wild).unwrap().hp;
     assert_eq!(
         hp_before - hp_after,
-        expected_attack_dmg + 5,
+        clean_strike + 5,
         "wild should take its attack damage plus one round of bleed"
     );
     assert_eq!(
@@ -118,11 +150,12 @@ fn bleed_status_deals_extra_damage_each_round_and_expires_after_its_duration() {
     );
 
     let hp_before2 = game.world.get::<Stats>(wild).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
     let hp_after2 = game.world.get::<Stats>(wild).unwrap().hp;
     assert_eq!(
         hp_before2 - hp_after2,
-        expected_attack_dmg + 5,
+        clean_strike + 5,
         "the second bleed round should also tick"
     );
     assert!(

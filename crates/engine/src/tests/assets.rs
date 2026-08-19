@@ -1106,9 +1106,9 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
         .all()
         .filter(|def| def.effect.field_only())
         .filter(|def| {
-            !def.boss_drop
+            def.boss_drop
                 .as_ref()
-                .is_some_and(|sources| !sources.is_empty())
+                .is_none_or(|sources| sources.is_empty())
         })
         .map(|def| def.id.as_str())
         .filter(|id| !granted.contains(id))

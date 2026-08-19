@@ -260,14 +260,16 @@ impl Game {
             self.is_defending(target) as u8 as f32,
         );
 
-        // The real formula, called rather than restated — a copy here would
-        // drift from the damage the swing then actually deals. Mitigation is
-        // applied as the percentage it now is, not handed to `compute_damage`
-        // as the subtractive term that parameter still expects: feeding a
-        // percentage in there made a braced target look untouchable and the
-        // policy stopped swinging at it.
-        let raw = battle::compute_damage(wild_stats.atk, 0, range.mean().round() as i32);
-        let dmg = (raw as f32 * (1.0 - mitigation as f32 / 100.0)).round() as i32;
+        // The real arithmetic, *called* rather than restated — a copy here
+        // would drift from the damage the swing then actually deals. This is
+        // a projection, so it takes `expected_damage`'s mean rather than
+        // rolling: the policy is choosing a swing, not making one, and a
+        // draw here would shift every seeded run's stream by however many
+        // options it weighed.
+        let attacker = self.combatant_profile(wild, self.attack_range(wild, range));
+        let defender = self.combatant_profile(target, battle::DamageRange::default());
+        let projected = battle::expected_damage(attacker, defender);
+        let dmg = (projected * (1.0 - mitigation as f64 / 100.0)).round() as i32;
         f.set(
             Feature::EstDamageFrac,
             (dmg as f32 / target_stats.hp.max(1) as f32).clamp(0.0, 1.0),

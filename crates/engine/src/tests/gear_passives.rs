@@ -179,15 +179,11 @@ fn assets_with_a_round_start_passive(tag: &str) -> ScratchAssets {
 fn a_round_start_passive_fires_on_a_round_where_nothing_happens() {
     let dir = assets_with_a_round_start_passive("round_start");
 
-    let mut armed = battle_with_a_passive_holder_in(&dir, 9101, Some("test_round_start"));
-    let armed_before = total_enemy_hp(&armed);
-    resolve_a_planned_round(&mut armed);
-    let armed_damage = armed_before - total_enemy_hp(&armed);
-
-    let mut quiet = battle_with_a_passive_holder_in(&dir, 9101, None);
-    let quiet_before = total_enemy_hp(&quiet);
-    resolve_a_planned_round(&mut quiet);
-    let quiet_damage = quiet_before - total_enemy_hp(&quiet);
+    let armed_damage = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_in(&dir, 9101, Some("test_round_start"))
+    });
+    let quiet_damage =
+        damage_over_a_seed_sweep(|| battle_with_a_passive_holder_in(&dir, 9101, None));
 
     assert!(
         armed_damage > quiet_damage,
@@ -277,6 +273,28 @@ fn damage_in_one_defended_round(game: &mut Game) -> i32 {
     before - total_enemy_hp(game)
 }
 
+/// The same figure, summed across a fixed sweep of `GameRng` seeds.
+///
+/// **A sweep rather than a single round, because a proc rolls to hit now.**
+/// On any one seed the passive may simply miss, so a single-round comparison
+/// between two fixtures became a coin flip. Summing a fixed set of seeds is
+/// still deterministic — the same total every run, no flake — and still
+/// fails outright if the passive does nothing at all, which picking whichever
+/// seed happened to favour the armed side would not.
+///
+/// `build` is called fresh per seed rather than the game being reused: a
+/// resolved round has moved HP, cooldowns and status, and the next seed has
+/// to start from the same place as the last.
+fn damage_over_a_seed_sweep(mut build: impl FnMut() -> Game) -> i32 {
+    (0..16u64)
+        .map(|seed| {
+            let mut game = build();
+            reseed_rng(&mut game, seed);
+            damage_in_one_defended_round(&mut game)
+        })
+        .sum()
+}
+
 /// The feature, and its own control. The stripped half is what stops this
 /// passing with the `Equipment` source deleted: worn and unworn differ only
 /// in which module is on, so nothing but the grant can explain a gap.
@@ -284,18 +302,23 @@ fn damage_in_one_defended_round(game: &mut Game) -> i32 {
 fn a_worn_grant_fires_and_a_plain_item_in_the_same_slot_does_not() {
     let dir = assets_with_granting_gear("worn_or_not");
 
-    let mut worn = battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_grant_module");
+    let worn = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_grant_module");
+        })
     });
-    let mut bare = battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_plain_module");
+    let bare = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_prepared(&dir, 9201, None, |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_plain_module");
+        })
     });
 
     assert!(
-        damage_in_one_defended_round(&mut worn) > damage_in_one_defended_round(&mut bare),
-        "the grant is the only difference between these two battles"
+        worn > bare,
+        "the grant is the only difference between these two battles: \
+         {worn} against {bare}"
     );
 }
 
@@ -307,19 +330,26 @@ fn a_worn_grant_fires_and_a_plain_item_in_the_same_slot_does_not() {
 fn a_grant_and_an_installed_copy_both_fire_and_share_one_cooldown() {
     let dir = assets_with_granting_gear("two_sources");
 
+    let twice = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_prepared(&dir, 9202, Some("test_round_start"), |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_grant_module");
+        })
+    });
+    let once = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_in(&dir, 9202, Some("test_round_start"))
+    });
+    assert!(
+        twice > once,
+        "two sources should land twice: {twice} against {once}"
+    );
+
     let mut both =
         battle_with_a_passive_holder_prepared(&dir, 9202, Some("test_round_start"), |g| {
             let player = g.player_entity();
             wear(g, player, "test_grant_module");
         });
-    let mut installed_only = battle_with_a_passive_holder_in(&dir, 9202, Some("test_round_start"));
-
-    let twice = damage_in_one_defended_round(&mut both);
-    let once = damage_in_one_defended_round(&mut installed_only);
-    assert!(
-        twice > once,
-        "two sources should land twice: {twice} against {once}"
-    );
+    resolve_a_planned_round(&mut both);
 
     let player = both.player_entity();
     let cooling = both
@@ -361,18 +391,22 @@ fn two_slots_granting_one_routine_fire_it_once() {
 fn a_companions_worn_grant_fires() {
     let dir = assets_with_granting_gear("companion");
 
-    let mut armed = battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
-        let ally = g.world.resource::<Party>().0[0];
-        wear(g, ally, "test_grant_module");
+    let armed = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
+            let ally = g.world.resource::<Party>().0[0];
+            wear(g, ally, "test_grant_module");
+        })
     });
-    let mut bare = battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
-        let ally = g.world.resource::<Party>().0[0];
-        wear(g, ally, "test_plain_module");
+    let bare = damage_over_a_seed_sweep(|| {
+        battle_with_a_passive_holder_prepared(&dir, 9204, None, |g| {
+            let ally = g.world.resource::<Party>().0[0];
+            wear(g, ally, "test_plain_module");
+        })
     });
 
     assert!(
-        damage_in_one_defended_round(&mut armed) > damage_in_one_defended_round(&mut bare),
-        "a companion wearing the grant should fire it"
+        armed > bare,
+        "a companion wearing the grant should fire it: {armed} against {bare}"
     );
 }
 
@@ -410,18 +444,39 @@ fn a_grant_survives_a_save_and_load_with_no_field_of_its_own() {
         wear(g, player, "test_grant_module");
         g.save(&path).unwrap();
     });
-    let live = damage_in_one_defended_round(&mut game);
+    // **Both sides run the same stream.** The proc rolls to hit and rolls its
+    // damage now, so two rounds on two different streams would differ for
+    // reasons that have nothing to do with the save. Seeding both identically
+    // is what keeps `after == live` evidence about the grant rather than
+    // about the dice — and the sweep below is what stops a stream where the
+    // proc simply missed being read as "it fired for zero".
+    let mut live = 0;
+    let mut after = 0;
+    for seed in 0..32u64 {
+        let mut before_save = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_grant_module");
+        });
+        reseed_rng(&mut before_save, seed);
+        live = damage_in_one_defended_round(&mut before_save);
+        if live == 0 {
+            continue;
+        }
 
-    let mut loaded = Game::load(&path, &dir).unwrap();
-    let _ = std::fs::remove_file(&path);
-    let wild = spawn_wild_on_player_tile(&mut loaded);
-    {
-        let mut stats = loaded.world.get_mut::<Stats>(wild).unwrap();
-        stats.max_hp = 40_000;
-        stats.hp = 40_000;
+        let mut loaded = Game::load(&path, &dir).unwrap();
+        let wild = spawn_wild_on_player_tile(&mut loaded);
+        {
+            let mut stats = loaded.world.get_mut::<Stats>(wild).unwrap();
+            stats.max_hp = 40_000;
+            stats.hp = 40_000;
+        }
+        loaded.start_battle(vec![wild]);
+        reseed_rng(&mut loaded, seed);
+        after = damage_in_one_defended_round(&mut loaded);
+        break;
     }
-    loaded.start_battle(vec![wild]);
-    let after = damage_in_one_defended_round(&mut loaded);
+    let _ = std::fs::remove_file(&path);
+    let _ = &mut game;
 
     assert!(live > 0, "the fixture never fired before the save: {live}");
     assert_eq!(after, live, "the grant is read off the item, not the save");
@@ -596,22 +651,26 @@ fn a_rare_fused_affixed_copy_grants_the_same_routine() {
 fn an_affixed_copy_fires_its_grant_and_the_affix_reaches_the_damage() {
     let dir = assets_with_granting_gear("affixed");
 
-    let mut honed = battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
-        let player = g.player_entity();
-        let copy = crate::items::GearCopy {
-            affix: Some("honed".into()),
-            ..crate::items::GearCopy::plain(ItemId("test_grant_weapon".into()))
-        };
-        g.add_copies(&copy, 1);
-        g.equip(player, &copy).unwrap();
-    });
-    let mut plain = battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_grant_weapon");
-    });
+    let honed = || {
+        battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
+            let player = g.player_entity();
+            let copy = crate::items::GearCopy {
+                affix: Some("honed".into()),
+                ..crate::items::GearCopy::plain(ItemId("test_grant_weapon".into()))
+            };
+            g.add_copies(&copy, 1);
+            g.equip(player, &copy).unwrap();
+        })
+    };
+    let plain = || {
+        battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
+            let player = g.player_entity();
+            wear(g, player, "test_grant_weapon");
+        })
+    };
 
-    let with_affix = damage_in_one_defended_round(&mut honed);
-    let without = damage_in_one_defended_round(&mut plain);
+    let with_affix = damage_over_a_seed_sweep(honed);
+    let without = damage_over_a_seed_sweep(plain);
     assert!(without > 0, "the plain copy never fired: {without}");
     assert!(
         with_affix > without,

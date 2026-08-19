@@ -1050,6 +1050,8 @@ fn killing_a_guardian_respawns_a_replacement_after_exactly_the_respawn_delay() {
         .id();
     insert_battle(&mut game, player, vec![guardian]);
 
+    // Forced: there is no respawn to queue unless the guardian actually dies.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     // the round loop's own kill-resolution path (finish_group_member

@@ -2052,3 +2052,91 @@ pub(crate) fn wear(game: &mut Game, wearer: Entity, item: &str) {
     game.equip(wearer, &copy)
         .unwrap_or_else(|e| panic!("equipping {item}: {e}"));
 }
+
+/// Reseeds `resources::GameRng` so the next `battle::resolve_attack` lands a
+/// plain hit — not a crit, not a fumble — whoever is swinging at whom.
+///
+/// **Matchup-independent by construction, which is why it is reliable.**
+/// `resolve_attack` reads one `f64` and bands it: below `CRIT_CHANCE` is a
+/// crit, below the hit chance is a hit, at or above `1 - FUMBLE_CHANCE` is a
+/// fumble, and the rest is a miss. `hit_chance` is clamped to at least
+/// `HIT_CHANCE_MIN`, which sits above `CRIT_CHANCE`, so a first draw anywhere
+/// in `[CRIT_CHANCE, HIT_CHANCE_MIN)` is a plain hit against *every* pairing
+/// of combatants. No test using this has to know what it is fighting.
+///
+/// Only the next roll. A round that resolves several attacks gets one forced
+/// swing and then the stream as it falls — a test needing more than that
+/// wants `first_rng_seed_where`.
+///
+/// A test fixture rather than a production hook, deliberately: nothing in the
+/// engine may reach for a way to make a swing land.
+pub(crate) fn force_the_next_attack_to_land(game: &mut Game) {
+    seed_the_next_roll_into(
+        game,
+        crate::tuning::CRIT_CHANCE..crate::tuning::HIT_CHANCE_MIN,
+    );
+}
+
+/// The mirror of `force_the_next_attack_to_land`: the next attack fumbles,
+/// and so deals nothing to its target.
+///
+/// Aimed at the fumble band rather than the plain-miss one because that band
+/// is the one that cannot vanish. `fumble` is `min(FUMBLE_CHANCE, 1 - h)` and
+/// `h` is clamped to at most `HIT_CHANCE_MAX`, so `1 - h` is never below
+/// `FUMBLE_CHANCE` and a draw at or above `1 - FUMBLE_CHANCE` always fumbles.
+/// The plain-miss band `[h, 1 - FUMBLE_CHANCE)` is empty when `h` reaches its
+/// ceiling.
+#[allow(dead_code)]
+pub(crate) fn force_the_next_attack_to_miss(game: &mut Game) {
+    seed_the_next_roll_into(game, (1.0 - crate::tuning::FUMBLE_CHANCE)..1.0);
+}
+
+/// Scans for a `GameRng` seed whose first `f64` draw falls in `band` and
+/// installs it. Scanned rather than mocked: `resolve_attack` takes a real
+/// `Rng`, and a fake returning scripted values would stop measuring how much
+/// of the stream a swing actually spends.
+fn seed_the_next_roll_into(game: &mut Game, band: std::ops::Range<f64>) {
+    use rand::{RngExt, SeedableRng};
+    for seed in 0..100_000u64 {
+        let mut candidate = rand::rngs::StdRng::seed_from_u64(seed);
+        let roll: f64 = candidate.random();
+        if band.contains(&roll) {
+            game.world
+                .insert_resource(GameRng(rand::rngs::StdRng::seed_from_u64(seed)));
+            return;
+        }
+    }
+    panic!("no seed produced a first roll inside {band:?}");
+}
+
+/// Builds and runs a whole scenario once per `GameRng` seed, returning the
+/// first game where `found` holds.
+///
+/// For a fixture that needs *several* swings to land, which no single forced
+/// roll can arrange — every matchup has a miss chance by design, so a
+/// multi-round scenario cannot be made deterministic, only chosen. The world
+/// is rebuilt each time so the run is identical apart from the stream, and
+/// the same seed always wins, so this is deterministic rather than flaky.
+///
+/// Prefer it to pinning one magic seed: a pinned seed breaks silently the
+/// next time anything upstream changes how much `GameRng` gets consumed.
+#[allow(dead_code)]
+pub(crate) fn first_rng_seed_where(
+    mut build: impl FnMut(u64) -> Game,
+    mut found: impl FnMut(&Game) -> bool,
+) -> Game {
+    for seed in 0..512u64 {
+        let game = build(seed);
+        if found(&game) {
+            return game;
+        }
+    }
+    panic!("no seed in 0..512 produced the outcome under test");
+}
+
+/// Installs `seed` as the run's `GameRng`, so a scenario can be replayed
+/// against a chosen stream. Pairs with `first_rng_seed_where`.
+pub(crate) fn reseed_rng(game: &mut Game, seed: u64) {
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(seed)));
+}

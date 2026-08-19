@@ -866,7 +866,7 @@ fn a_fusion_tier_is_worth_at_least_one_point_on_every_stat_it_touches() {
 // --- Companion equipment -------------------------------------------------
 
 fn stats_of(game: &Game, entity: Entity) -> Stats {
-    game.world.get::<Stats>(entity).unwrap().clone()
+    *game.world.get::<Stats>(entity).unwrap()
 }
 
 #[test]
@@ -1042,6 +1042,9 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
     game.apply_damage(companion, 999);
     assert!(!game.creature_alive(companion));
 
+    // Forced: the reap runs at teardown, and the fight only ends if the
+    // strike lands on the 1-HP enemy.
+    force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
     assert!(

@@ -152,31 +152,47 @@ fn game_with_a_sweeper() -> (Game, Entity) {
 
 #[test]
 fn a_whole_group_ability_damages_every_member_not_just_the_front() {
-    let (mut game, sweeper) = game_with_a_sweeper();
-    let pack = battle_with_a_pack_of(&mut game, 3, 50);
+    // **A sweep, because each recipient now rolls its own attack.** One cast
+    // lands on three members and any of the three can miss, so a single cast
+    // cannot show that every rank is *reachable*. Summing a fixed set of
+    // `GameRng` seeds can, is deterministic, and still fails outright if a
+    // rank is never touched — which is the thing that would break.
+    let mut dealt = [0i32; 3];
+    for seed in 0..16u64 {
+        let (mut game, sweeper) = game_with_a_sweeper();
+        let pack = battle_with_a_pack_of(&mut game, 3, 50);
+        reseed_rng(&mut game, seed);
 
-    companion_uses_special(
-        &mut game,
-        sweeper,
-        0, // cascade_overflow
-        battle::SpecialTarget::EnemyGroup { group: 0 },
-    );
+        companion_uses_special(
+            &mut game,
+            sweeper,
+            0, // cascade_overflow
+            battle::SpecialTarget::EnemyGroup { group: 0 },
+        );
 
-    for (rank, member) in pack.iter().enumerate() {
-        let hp = game.world.get::<Stats>(*member).unwrap().hp;
+        for (rank, member) in pack.iter().enumerate() {
+            // A member reaped mid-sweep has no `Stats` left — the idiom for
+            // "this entity is gone" — and took the whole 50 to get there.
+            let hp = game.world.get::<Stats>(*member).map(|s| s.hp).unwrap_or(0);
+            dealt[rank] += 50 - hp;
+        }
+    }
+
+    for (rank, total) in dealt.iter().enumerate() {
         assert!(
-            hp < 50,
-            "the member at rank {rank} should have taken damage, still at {hp}"
+            *total > 0,
+            "the member at rank {rank} was never reached across the whole sweep"
         );
     }
 }
 
-#[test]
-fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() {
+/// A sweeper facing four distinct species, so `group_pack` yields four groups
+/// — more than `ENGAGED_GROUPS`, which is the point of the test below.
+///
+/// Extracted so the sweep can rebuild it per `GameRng` seed.
+fn a_sweeper_against_four_groups() -> (Game, Entity, Vec<Entity>) {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
-    // Four distinct species so `group_pack` yields four groups — more than
-    // ENGAGED_GROUPS, which is the point.
     let species: Vec<String> = game
         .species_defs()
         .into_iter()
@@ -215,19 +231,35 @@ fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() 
         .collect();
     insert_battle(&mut game, player, enemies.clone());
     assert_eq!(game.living_group_count(), 4, "four species, four groups");
+    (game, sweeper, enemies)
+}
 
-    companion_uses_special(
-        &mut game,
-        sweeper,
-        1, // broadcast_storm
-        battle::SpecialTarget::AllEnemies,
-    );
+#[test]
+fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() {
+    // A sweep, for the reason
+    // `a_whole_group_ability_damages_every_member_not_just_the_front` gives:
+    // each group's front rolls its own attack, so one cast cannot show that
+    // all four are *reachable*, only that they happened to be hit.
+    let mut dealt = [0i32; 4];
+    for seed in 0..16u64 {
+        let (mut game, sweeper, enemies) = a_sweeper_against_four_groups();
+        reseed_rng(&mut game, seed);
+        companion_uses_special(
+            &mut game,
+            sweeper,
+            1, // broadcast_storm
+            battle::SpecialTarget::AllEnemies,
+        );
+        for (group, enemy) in enemies.iter().enumerate() {
+            let hp = game.world.get::<Stats>(*enemy).map(|s| s.hp).unwrap_or(0);
+            dealt[group] += 500 - hp;
+        }
+    }
 
-    for (group, enemy) in enemies.iter().enumerate() {
-        let hp = game.world.get::<Stats>(*enemy).unwrap().hp;
+    for (group, total) in dealt.iter().enumerate() {
         assert!(
-            hp < 500,
-            "group {group} should have been hit, still at {hp}"
+            *total > 0,
+            "group {group} was never reached across the whole sweep"
         );
     }
 }
@@ -320,6 +352,9 @@ fn cooldowns_do_not_survive_the_battle_that_set_them() {
     let (mut game, sweeper) = game_with_a_sweeper();
     battle_with_a_pack_of(&mut game, 1, 1);
 
+    // The cast has to land for the kill that ends the fight — this test is
+    // about what teardown does to cooldowns, not about the to-hit roll.
+    force_the_next_attack_to_land(&mut game);
     companion_uses_special(
         &mut game,
         sweeper,
@@ -740,6 +775,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         boss_drop: None,
         triggers: None,
     };
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
     let dealt = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
@@ -902,6 +938,7 @@ fn drain_logs_what_it_actually_restored() {
         boss_drop: None,
         triggers: None,
     };
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
 
     assert!(
@@ -1180,13 +1217,19 @@ fn ability_damage_scales_with_the_users_level() {
         triggers: None,
     };
 
+    // Both casts are forced to land. These tests are about what levelling
+    // does to a hit's *size*; letting either one miss would make them about
+    // the to-hit roll instead, and a missed level-1 cast reads as infinite
+    // scaling rather than none.
     game.world.get_mut::<Experience>(player).unwrap().level = 1;
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
     let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
 
     game.world.get_mut::<Experience>(player).unwrap().level = 20;
     let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[1]]);
     let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
 
@@ -1225,13 +1268,19 @@ fn drain_scales_with_the_users_level() {
         triggers: None,
     };
 
+    // Both casts are forced to land. These tests are about what levelling
+    // does to a hit's *size*; letting either one miss would make them about
+    // the to-hit roll instead, and a missed level-1 cast reads as infinite
+    // scaling rather than none.
     game.world.get_mut::<Experience>(player).unwrap().level = 1;
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[0]]);
     let at_level_1 = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
 
     game.world.get_mut::<Experience>(player).unwrap().level = 20;
     let before = game.world.get::<Stats>(enemies[1]).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&ability, player, "You", &[enemies[1]]);
     let at_level_20 = before - game.world.get::<Stats>(enemies[1]).unwrap().hp;
 
@@ -1449,6 +1498,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
             .collect()
     };
 
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&siphon, player, "You", &[enemies[0]]);
     assert_eq!(
         kinds(&game),
@@ -1456,6 +1506,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         "the party's own drain restores Integrity and reads as good news"
     );
 
+    force_the_next_attack_to_land(&mut game);
     game.use_ability(&siphon, enemies[0], "Crawler", &[player]);
     assert_eq!(
         kinds(&game),

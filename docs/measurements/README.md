@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-19 — The Stack's depth curve, and where it stops being winnable](2026-08-19-stack-depth-curve.md)
+  — depth 2 and 3 are 100% wins, depth 4 is 78% over 46 rounds losing 2.4 of 3
+  companions, and depth 5 is **0%** for the strongest party the game can field
+  (and for the lair at that depth too). Three curves move per frame and
+  multiply: +0.35 stats, **x2 bodies** — the one geometric difficulty curve left
+  in the game — and a band of species. Carries the lever sweeps (stat step is
+  lethality, body count is duration, 8 bodies at 0.20 reaches 62% without
+  moving the depth-2 lair), the note that nothing automated gates any of it, and
+  the untested third axis.
+
 - [2026-08-19 — What a developed companion is worth](2026-08-19-developed-companion-worth.md)
   — the companion-progression branch measured before merge. Every Kernel Ring
   open roughly doubles a companion's power (177 → 345) and a fully spent

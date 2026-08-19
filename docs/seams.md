@@ -1706,9 +1706,36 @@ mutation-checked gate). `depot_holding` is deliberately narrower than
 `base_holding` — Depots only, never a machine's own output buffer, or a
 bench would count its feeder's output twice and skip staffing the very
 machine that made it.
-What this does **not** change is `chain_break`: a feeder must still stand
-beside the bench for an order to be queued at all, so a production line is
-still a line. The shelf changes who gets the scarce body, not the topology.
+That third source held for `can_progress` and the hauler and **not** for
+`chain_break`, and the drift cost a real base its work orders. A save from
+2026-08-19 stood a Compiler, a Lathe and a Mining Node in a row two tiles
+apart, with a Depot on the slab holding twelve Core Fragments: the hauler
+would have walked to the shelf and both benches would have run, but
+`break_at` demanded an orthogonal feeder, so `orderable_items` filtered
+both products out and `App::base_menu_rows` dropped the row entirely. The
+player got no picker and no sentence saying why — a fourth, narrower,
+hand-rolled copy of the reach rule, which is the exact failure mode
+`CLAUDE.md` records biting this repo four times.
+
+`work_orders::feeders_for` is now the one answer to "where can this
+ingredient come from": every orthogonal producer, or, when nothing beside
+it makes the ingredient and a Depot is standing, every deployed producer of
+it wherever it stands. `break_at` and `walk_feeders` both call it, so the
+picker and the scheduler cannot disagree about the topology again.
+
+It is **structural, never a live stock count**, and the split is the point.
+`chain_break` answers whether a line can *ever* move — keyed to what a
+shelf happens to hold, the picker would offer an item and stop offering it
+as the shelf drained. What varies with stock is `walk_feeders`' own
+shelf-before-bench skip above, which answers the different question of who
+to post *now*. Both survive together: with a batch on the shelf the
+upstream producer is left alone, and once the shelf runs thin the walk
+reaches it through the depot route rather than returning an empty want list
+and stalling the order forever
+(`the_producer_behind_a_depot_route_is_staffed_when_the_shelf_runs_thin`
+and `a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it` are
+the pair). A base with **no** Depot standing is unchanged: `feeders_for`
+returns nothing, and the refusal still names the missing link.
 
 ### `schedule_base_labour` decides the whole assignment by priority and then diffs it against what is posted, and both halves of that are load-bearing
 

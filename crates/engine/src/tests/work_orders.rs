@@ -1402,3 +1402,127 @@ fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
          its own: {walked:?}"
     );
 }
+
+// ---------------------------------------------------------------------
+// The depot route: a machine fed by haulage rather than by a neighbour
+// ---------------------------------------------------------------------
+
+/// The layout a real save turned up: three machines in a row, spaced two
+/// tiles apart so none of them touches, with a Depot on the slab.
+///
+/// Mining Node (2,0), Lathe (0,0), Depot (-2,0). Nothing is orthogonally
+/// adjacent to anything, which is the whole point — the only path from the
+/// fragments to the Lathe is a worker walking to the Depot, which is exactly
+/// the path `Errand::Collect` already takes and `batch_within_reach` already
+/// counts through `depot_holding`.
+fn lay_depot_route(game: &mut Game) -> (Entity, Entity, Entity) {
+    place_home(&mut *game, 0, 4);
+    let mine = spawn_machine_at(game, "mining_node", 2, 0);
+    let lathe = spawn_machine_at(game, "lathe", 0, 0);
+    let depot = spawn_machine_at(game, "depot", -2, 0);
+    (mine, lathe, depot)
+}
+
+fn stock_output(game: &mut Game, structure: Entity, item: &str, qty: u32) {
+    game.world
+        .get_mut::<Stock>(structure)
+        .unwrap()
+        .output
+        .insert(ItemId::from(item), qty);
+}
+
+/// The reproducer. `can_progress` already says the Lathe can run off the
+/// Depot's fragments, so a picker that hides the item is refusing an order
+/// the base would have filled.
+#[test]
+fn a_machine_fed_from_a_depot_is_orderable_without_a_neighbour() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_mine, lathe, depot) = lay_depot_route(&mut game);
+    stock_output(&mut game, depot, ids::CORE_FRAGMENT, 12);
+
+    assert!(
+        crate::game::base::work_orders::can_progress(&game, lathe),
+        "precondition: the runtime already reaches the depot's fragments"
+    );
+
+    game.queue_work_order(ItemId::from("blank_substrate"), 3)
+        .expect("a lathe a hauler can feed from the depot must be orderable");
+
+    assert!(
+        game.orderable_items()
+            .iter()
+            .any(|(id, _)| id.as_str() == "blank_substrate"),
+        "and the picker must list what the queue accepts"
+    );
+}
+
+/// The other half: the order has to keep moving once the Depot runs dry.
+/// `walk_feeders` skips a feeder while the shelf holds a batch — the shelf
+/// comes before the bench — so the case that stalls is a *thin* shelf with
+/// no neighbour to fall back on. The walk has to reach the producer behind
+/// the depot, or nobody is ever posted and the order sits forever.
+#[test]
+fn the_producer_behind_a_depot_route_is_staffed_when_the_shelf_runs_thin() {
+    let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, _lathe, _depot) = lay_depot_route(&mut game);
+
+    let wanted = crate::game::base::work_orders::wants(
+        &game,
+        &crate::game::base::work_orders::WorkOrder {
+            item: ItemId::from("blank_substrate"),
+            qty: 3,
+        },
+    );
+    let posts: Vec<Entity> = wanted.into_iter().map(|(e, _)| e).collect();
+
+    assert!(
+        posts.contains(&mine),
+        "an empty shelf must send a body to the mining node behind it: {posts:?}"
+    );
+}
+
+/// And the shelf-before-bench rule survives the new reach: with a batch
+/// already in store there is nothing for the upstream to make.
+#[test]
+fn a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mine, lathe, depot) = lay_depot_route(&mut game);
+    stock_output(&mut game, depot, ids::CORE_FRAGMENT, 12);
+
+    let wanted = crate::game::base::work_orders::wants(
+        &game,
+        &crate::game::base::work_orders::WorkOrder {
+            item: ItemId::from("blank_substrate"),
+            qty: 3,
+        },
+    );
+    let posts: Vec<Entity> = wanted.into_iter().map(|(e, _)| e).collect();
+
+    assert!(
+        posts.contains(&lathe),
+        "the lathe has fragments to work: {posts:?}"
+    );
+    assert!(
+        !posts.contains(&mine),
+        "but the shelf comes before the bench: {posts:?}"
+    );
+}
+
+/// The refusal that must survive: with no Depot standing there is no route
+/// at all, and the sentence still has to name the missing link.
+#[test]
+fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
+    let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game, 0, 4);
+    spawn_machine_at(&mut game, "mining_node", 2, 0);
+    spawn_machine_at(&mut game, "lathe", 0, 0);
+
+    let err = game
+        .queue_work_order(ItemId::from("blank_substrate"), 3)
+        .expect_err("no neighbour and no depot is no route");
+
+    assert!(
+        err.contains("Core Fragment"),
+        "the refusal must still name the missing link, got: {err}"
+    );
+}

@@ -157,6 +157,70 @@ pub(crate) fn structures_by_tile(game: &Game) -> std::collections::HashMap<(i32,
 /// `seen` is not an optimisation. Two machines that assemble each other's
 /// ingredients are unreachable in the shipped assets but expressible by a
 /// mod, and without it the walk would not terminate.
+/// Whether the base has anywhere a worker can be sent to fetch from — any
+/// deployed structure declaring `StructureDef::stores`.
+///
+/// Asked of the *base* rather than of a particular depot's distance,
+/// for `Game::broker_reach`'s reason: a depot is on the slab by
+/// construction, so which one it is says nothing the slab does not.
+fn shelf_is_standing(game: &Game) -> bool {
+    let db = game.world.resource::<StructureDb>();
+    game.world.iter_entities().any(|e| {
+        e.get::<Structure>()
+            .and_then(|s| db.get(&s.kind))
+            .is_some_and(|d| d.stores)
+    })
+}
+
+/// The one answer to "where can this machine's `ingredient` come from" —
+/// every orthogonal neighbour producing it, or, when nothing beside it
+/// does and a Depot is standing, every deployed producer of it wherever it
+/// stands.
+///
+/// **The second arm is not a widening; it is the walk catching up with the
+/// rule the runtime already uses.** `batch_within_reach` counts a Depot's
+/// shelf through `depot_holding`, `can_progress` staffs a machine on the
+/// strength of it and `hauling::Errand::Collect` walks a worker there. A
+/// chain walk that asked only about neighbours was a fourth, narrower copy
+/// of the reach rule, and it refused orders the base would have filled —
+/// three machines in a row spaced two tiles apart, with the fragments they
+/// all want sitting on the shelf between them.
+///
+/// **Structural, never a live stock count.** `chain_break` answers whether
+/// a line can *ever* move; keyed to what a shelf happens to hold, the
+/// picker would offer an item and then stop offering it as the shelf
+/// drained. What varies with stock is `walk_feeders`' own shelf-before-bench
+/// skip, which is a different question — who to post *now*.
+fn feeders_for(
+    game: &Game,
+    by_tile: &std::collections::HashMap<(i32, i32), Entity>,
+    pos: Position,
+    ingredient: &ItemId,
+) -> Vec<Entity> {
+    let db = game.world.resource::<StructureDb>();
+    let makes = |e: Entity| {
+        game.world
+            .get::<Structure>(e)
+            .and_then(|s| db.get(&s.kind))
+            .and_then(produced_item)
+            == Some(ingredient)
+    };
+    let beside: Vec<Entity> = ORTHOGONAL
+        .into_iter()
+        .filter_map(|(dx, dy)| by_tile.get(&(pos.x + dx, pos.y + dy)).copied())
+        .filter(|&e| makes(e))
+        .collect();
+    if !beside.is_empty() {
+        return beside;
+    }
+    if !shelf_is_standing(game) {
+        return Vec::new();
+    }
+    // Sorted by tile, so a base with two of the same producer resolves the
+    // same way on every run — the reason `producers_of` sorts at all.
+    producers_of(game, ingredient)
+}
+
 fn break_at(
     game: &Game,
     by_tile: &std::collections::HashMap<(i32, i32), Entity>,
@@ -178,23 +242,11 @@ fn break_at(
     };
     let recipe: Vec<ItemId> = recipe.iter().map(|(item, _)| item.clone()).collect();
     for ingredient in recipe {
-        let feeder = ORTHOGONAL.into_iter().find_map(|(dx, dy)| {
-            by_tile
-                .get(&(pos.x + dx, pos.y + dy))
-                .copied()
-                .filter(|&e| {
-                    game.world
-                        .get::<Structure>(e)
-                        .and_then(|s| db.get(&s.kind))
-                        .and_then(produced_item)
-                        == Some(&ingredient)
-                })
-        });
-        let Some(feeder) = feeder else {
+        let Some(&feeder) = feeders_for(game, by_tile, pos, &ingredient).first() else {
             let want = game.item_name(&ingredient);
             return Some(format!(
-                "Nothing beside the {} is making {want} — a machine can only take what a \
-                 neighbour has finished.",
+                "Nothing is making {want} within the {}'s reach — it can only take what a \
+                 neighbour has finished, or what a worker can fetch off a Depot shelf.",
                 def.name
             ));
         };
@@ -426,19 +478,8 @@ fn walk_feeders(
         if depot_holding(game, &ingredient) >= per_batch {
             continue;
         }
-        for (dx, dy) in ORTHOGONAL {
-            let Some(&feeder) = by_tile.get(&(pos.x + dx, pos.y + dy)) else {
-                continue;
-            };
-            let makes = game
-                .world
-                .get::<Structure>(feeder)
-                .and_then(|s| db.get(&s.kind))
-                .and_then(produced_item)
-                == Some(&ingredient);
-            if makes {
-                walk_wants(game, by_tile, feeder, depth + 1, deepest, seen);
-            }
+        for feeder in feeders_for(game, by_tile, pos, &ingredient) {
+            walk_wants(game, by_tile, feeder, depth + 1, deepest, seen);
         }
     }
 }

@@ -52,6 +52,24 @@ impl Biome {
     pub fn walkable(self) -> bool {
         !matches!(self, Biome::DataVoid | Biome::BlackIce)
     }
+
+    /// What the player calls this ground.
+    ///
+    /// An exhaustive match rather than data: mods extend species,
+    /// structures, items and environments, but the biome set is a fixed
+    /// enum that `classify` sorts noise into, and a name for a variant that
+    /// cannot exist is not a thing a file can usefully say.
+    pub fn name(self) -> &'static str {
+        match self {
+            Biome::DataVoid => "Data Void",
+            Biome::Deadlock => "Deadlock",
+            Biome::NullSector => "Null Sector",
+            Biome::Mainframe => "Mainframe",
+            Biome::OpenGrid => "Open Grid",
+            Biome::BlackIce => "Black Ice",
+            Biome::Platform => "Platform",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

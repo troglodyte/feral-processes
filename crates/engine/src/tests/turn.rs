@@ -1740,3 +1740,119 @@ fn walking_open_ground_can_be_ambushed() {
     }
     panic!("1000 walked steps never produced an ambush");
 }
+
+/// Stands the player on a tile of `from` with a tile of `to` one step east,
+/// both written through the override overlay. Deliberately not hunting the
+/// generated map for a boundary: `tile_overrides` is what the overlay
+/// exists for, and it keeps the test off world-seed luck.
+///
+/// Anything standing on the destination is despawned first — walking into a
+/// program, a nest or a structure is a fight or a door, not travel, and
+/// `move_player` returns before the step in every one of those branches.
+fn ground_step(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) -> (i32, i32) {
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    let squatters: Vec<Entity> = {
+        let mut q = game.world.query::<(Entity, &Position)>();
+        q.iter(&game.world)
+            .filter(|(e, p)| *e != player && p.x == nx && p.y == ny)
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for e in squatters {
+        game.world.despawn(e);
+    }
+    let mut map = game.world.resource_mut::<WorldMap>();
+    map.set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: from,
+            walkable: true,
+        },
+    );
+    map.set_override(
+        nx,
+        ny,
+        Tile {
+            biome: to,
+            walkable: to_walkable,
+        },
+    );
+    (nx, ny)
+}
+
+fn log_names(game: &Game, biome: Biome) -> usize {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|l| l.text.contains(biome.name()))
+        .count()
+}
+
+#[test]
+fn stepping_into_a_different_biome_names_the_ground_you_reached() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = ground_step(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+
+    game.move_player(1, 0);
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!((pos.x, pos.y), (nx, ny), "the fixture never took the step");
+    assert_eq!(
+        log_names(&game, Biome::Deadlock),
+        1,
+        "crossing a boundary is the first time the ground has ever been named"
+    );
+}
+
+#[test]
+fn stepping_within_one_biome_names_nothing() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    ground_step(&mut game, Biome::Deadlock, Biome::Deadlock, true);
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        log_names(&game, Biome::Deadlock),
+        0,
+        "the line belongs to the boundary, not to every step across a sector"
+    );
+}
+
+#[test]
+fn bouncing_off_an_unwalkable_tile_names_no_biome() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (nx, ny) = ground_step(&mut game, Biome::OpenGrid, Biome::BlackIce, false);
+
+    game.move_player(1, 0);
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_ne!(
+        (pos.x, pos.y),
+        (nx, ny),
+        "an unwalkable tile is not enterable"
+    );
+    assert_eq!(
+        log_names(&game, Biome::BlackIce),
+        0,
+        "shoving at a wall is not travel — the same rule `maybe_ambush` follows"
+    );
+}
+
+/// Zone 1 is neutral ground and takes no environment *effects*. The name is
+/// deliberately outside that gate: a player who has never left the first
+/// sector should still learn what they are walking on. This test is what
+/// stops the effect gate being wrapped around the log line later.
+#[test]
+fn the_ground_is_named_at_zone_one() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    ground_step(&mut game, Biome::OpenGrid, Biome::Mainframe, true);
+
+    game.move_player(1, 0);
+
+    assert_eq!(log_names(&game, Biome::Mainframe), 1);
+}

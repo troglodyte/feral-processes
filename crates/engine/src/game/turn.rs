@@ -386,11 +386,24 @@ impl Game {
         if self.find_blocking_structure_at(nx, ny).is_some() {
             return;
         }
-        let walkable = self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable;
+        let from = self
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome;
+        let to = self.world.resource_mut::<WorldMap>().tile(nx, ny);
+        let walkable = to.walkable;
         if walkable {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
             p.x = nx;
             p.y = ny;
+            // Only on a crossing, and only on a step that covered ground:
+            // both biomes are in hand here, so nothing is stored and no
+            // save field appears. Outside any zone gate on purpose — the
+            // ground's *name* is not one of its effects.
+            if to.biome != from {
+                self.log(format!("You cross into {}.", to.biome.name()));
+            }
             // Only a step that actually covered ground draws an ambush —
             // every branch above returned already, so walking into a
             // creature, a nest or a portal can't also be jumped, and

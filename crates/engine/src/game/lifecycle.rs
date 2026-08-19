@@ -130,6 +130,7 @@ impl Game {
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource(Platform::default());
+        world.insert_resource(crate::base_grid::BaseGrid::default());
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());

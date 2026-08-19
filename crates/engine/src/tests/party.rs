@@ -558,6 +558,12 @@ fn a_creatures_potential_survives_save_and_load() {
     let mut loaded = Game::load(&path, &assets).unwrap();
     let _ = std::fs::remove_file(&path);
 
+    // Re-fetched from `loaded`, not the entity captured before the round
+    // trip: `Entity` identity is private to the `World` that allocated it,
+    // and nothing promises the loaded world hands out the same index —
+    // `a_companions_reserve_survives_a_save_and_load` below re-fetches for
+    // the same reason.
+    let player = loaded.player_entity();
     let mut query = loaded.world.query::<(&Potential, &Tamed)>();
     let (potential, _) = query
         .iter(&loaded.world)

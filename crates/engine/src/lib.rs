@@ -3,6 +3,7 @@ pub mod achievements;
 pub mod affixes;
 pub mod arena;
 pub mod balance_sim;
+pub mod base_grid;
 pub mod battle;
 pub mod components;
 pub mod contracts;

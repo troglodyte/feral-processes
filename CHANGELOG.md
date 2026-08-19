@@ -27,6 +27,64 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.11.5
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+Everything added here is asset data keyed by string — a new item, two new
+structures, a research node — and a save stores those ids, not their
+definitions. A patch for that reason: while the project is `0.x`, "breaking"
+means a save that stops loading.
+
+### A breach unlocks a material, not just a bigger number
+
+Breaching used to change only the *rate* on the two raw materials: the Mining
+Node has produced Core Fragments and nothing else since it shipped, and a
+zone's contribution was a bonus per cycle. Cache Coherence, researchable once
+you have breached, unlocks the Cache Tap — and Cache Grain is what the second
+sector and everything past it is built out of.
+
+It layers rather than replaces. Core Fragments remain the everyday currency
+and stay extractable forever, because every recipe still denominated in them
+would otherwise strand. Unlike the currencies, Cache Grain survives a breach:
+a run arriving in a new sector holding none of it could not upgrade anything
+until it had re-tapped.
+
+Three things ask for it. The Line Driver is a new build that feeds the grid
+harder than a Heap Pillar and claims no ground doing it, which is what keeps
+a base growing once all five Pillars are standing. Every structure upgrade
+past the first tier now wants it — free in zone 1, where the tier ceiling
+already refuses every upgrade. And the six research nodes that hand over a
+gear recipe now denominate those recipes in it, so zone-gated gear is made of
+the zone's material.
+
+### A companion's buff no longer runs off the panel
+
+A routine running on a companion drew its holder's name on the same row as
+the routine, and that row ran 360px past the edge of the map's status column
+— silently, because rows there are clipped vertically and never
+horizontally. The column holds 38 characters and the widest routine row
+already spent all but four of them, so there was never room to shorten the
+tag into. The holder now draws on a dimmed line of its own beneath the
+routine, and the battle screen's copy of the panel is unchanged, since that
+one measures itself and can simply grow.
+
+A truncated list also counts routines again rather than lines: "+2 more" had
+been about to mean two hidden rows, which is one hidden routine.
+
+### One kind of attack
+
+A wild program's turn has always branched two ways — cast a Special, or swing
+a basic attack — and the two were different kinds of thing in the code for no
+reason anyone had written down. A basic attack is now an ability like any
+other, converted from the species file at load. Nothing about play changes:
+every seeded fight in the suite plays out move for move as it did, and no
+species file needed editing, mods included.
+
+What this does not do is change how a basic attack's damage is worked out. It
+stays flat authored power, where a Special scales with level and species
+affinity — merging those would make every enemy swing scale too, which is a
+difficulty change rather than a tidy-up, and one to argue on its own evidence.
+
 ## 0.11.4
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

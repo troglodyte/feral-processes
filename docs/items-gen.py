@@ -51,6 +51,7 @@ I = [
  ("plasma_router",       "Plasma Router",             80, "",         "Weapon", "atk+4",                 "16 portal_fragment",                                "fabricator",  "construct 8%;virus 6%",           0, 0),
  ("portal_fragment",     "Portal Fragment",            5, "CraftCurrency", "",       "",                      "",                                                  "",            "",                                0, 0),
  ("power_cell",          "Power Cell",                 1, "",         "",       "",                      "2 core_fragment",                                   "",            "",                                0.15, 0),
+ ("privilege_ring",     "Privilege Ring",            24, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("probe_service",       "Probe Service",              5, "",         "Module", "decompiler+1",          "5 core_fragment",                                   "",            "sprite 9%;glitch 7%",             0.12, 0),
  ("raw_trace",           "Raw Trace",                  1, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("recompile_kernel",    "Recompile Kernel",           8, "",         "",       "companion zone+1",      "3 annealed_core",                                   "refactor_bench", "",                             0, 0),
@@ -188,6 +189,13 @@ base **cannot** manufacture. That is why the printable end is worth 1-2 and
 the premium end is gated behind `portal_fragment`, which comes off exactly one
 thing in the game: the guardian in a Stack lair, at `4..=8` per frame of
 depth. Nothing on the surface pays it.
+
+The **Privilege Ring** comes off that same guardian and off nothing else, one
+per kill. It is the only item in the catalogue with no recipe and no drop
+table: `Game::pay_stack_boss_privilege_ring` grants it beside the fragments,
+and it buys a companion's next Kernel Ring rather than anything on this
+ladder. Its `value` is what a trader pays for a spare, not a price anyone can
+pay to get one.
 
 That makes the top of the ladder reachable two ways, and they are the two
 kinds of boss. Craft it, spending fragments carried up out of a stack — or

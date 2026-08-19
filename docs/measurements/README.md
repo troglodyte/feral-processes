@@ -54,6 +54,17 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-19 — What a developed companion is worth](2026-08-19-developed-companion-worth.md)
+  — the companion-progression branch measured before merge. Every Kernel Ring
+  open roughly doubles a companion's power (177 → 345) and a fully spent
+  generic tree adds 9% on top (345 → 376), so the ring is the power and the
+  talents are the shape — which is why the sale needs no `PurchasedTiers`-shaped
+  receipt. A fully ringed party clears a zone-3 group 18% faster and still loses
+  **every** rep at depth 5. Carries the two things the bin cannot see (no
+  Special ever fires, so three of four node kinds are unmeasured) and the note
+  that the arena's companion clamp moved, so five existing scenarios now field
+  the level-12 party they were authored for.
+
 - [2026-08-18 — What the eight granting items are worth](2026-08-18-gear-passive-worth.md)
   — the gear-passive branch measured before merge. Seven of eight items earn
   their slot on curve and `watchdog_tap` rescued one fight in a hundred;

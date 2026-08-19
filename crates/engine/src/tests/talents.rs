@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::talents::{TalentId, TalentNode};
-use crate::tuning::{CREATURE_MAX_LEVEL, KERNEL_RING_MAX};
+use crate::tuning::{CREATURE_MAX_LEVEL, KERNEL_RING_MAX, absolute_companion_level_cap};
 use crate::*;
 
 /// A companion at `level`, with the rings its level implies already open so
@@ -519,4 +519,52 @@ fn the_consumed_programs_ring_and_talents_do_not_transfer() {
         "fusing a developed program into another is not how you launder its rings"
     );
     assert!(game.world.get::<Talents>(child).is_none());
+}
+
+/// The second open question the spec leaves: does a developed program sell for
+/// too much? `Game::program_payout` pays a fraction of `Stats::power()`, and a
+/// `Stat` talent raises it — `components::PurchasedTiers` exists because
+/// buying Recompile Kernel tiers and selling the program printed Credits.
+///
+/// This is deliberately a **bound, not a receipt**. Rings are boss drops rather
+/// than a renewable material chain, so they are not the same press, and the
+/// refactor precedent is not to divide talents back out. What has to stay true
+/// is that the Stat half of a tree is a small fraction of what a program is
+/// worth: the numbers this pins are in `docs/measurements/`.
+#[test]
+fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
+    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let plain = developed(&mut game, absolute_companion_level_cap());
+    let baseline = game.world.get::<Stats>(plain).unwrap().power();
+
+    // Every `Stat` node the generic tree offers, taken as deep as its tiers
+    // allow — the most a tree can spend on numbers rather than options.
+    let stacked = developed(&mut game, absolute_companion_level_cap());
+    for id in [
+        "gen_frame",
+        "gen_interrupt",
+        "gen_plate",
+        "gen_damage",
+        "gen_boost",
+        "gen_deadman",
+    ] {
+        game.take_talent(stacked, &TalentId::from(id)).unwrap();
+    }
+    let developed_power = game.world.get::<Stats>(stacked).unwrap().power();
+
+    assert!(
+        developed_power <= baseline * 3 / 2,
+        "a fully spent tree is worth {developed_power} against {baseline} — past 1.5x, the \
+         sale is a Credit press and needs a PurchasedTiers-shaped receipt"
+    );
+    assert!(
+        developed_power > baseline,
+        "and it has to be worth something, or the Stat nodes do nothing ({developed_power} \
+         vs {baseline})"
+    );
+    let capped = developed(&mut game, CREATURE_MAX_LEVEL);
+    println!(
+        "power at cap {} / at ring cap {baseline} / ring cap + full stat tree {developed_power}",
+        game.world.get::<Stats>(capped).unwrap().power()
+    );
 }

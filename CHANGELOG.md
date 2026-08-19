@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.12.0
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
+Both new save fields are additive on a field-named RON struct, so a save
+written before this release loads as a program that has been developed
+neither way.
+
+### Companions can be developed past the level cap
+
+A **Privilege Ring** drops from a lair guardian in the Stack, and from
+nothing else. Spend it at the new **Develop a program** screen (party menu) to
+open a **Kernel Ring** on one companion, raising *that companion's* level
+ceiling by two — up to three rings, at one, two and three rings apiece, so a
+fully developed program is six guardians' worth of descents.
+
+A ring grants no stats, no level and no XP. It buys room; the fights still buy
+the levels. A posted worker's cronjob XP is deliberately untouched, so a
+developed program cannot be ground up at a Mining Node.
+
+### Every level past the cap pays a talent point
+
+Each level a companion earns above level 6 pays one point into its **class
+talent tree**, spent on one of two choices in the next tier — six tiers deep,
+one per level a fully ringed companion can earn. The four node kinds are a stat
+percentage, a sharpened affinity for one ability category, a routine granted
+outright, and one more routine slot. Points are derived from the level and the
+list, so nothing can desync.
+
+Fusing keeps the dominant parent's rings and talents — the parent whose species
+and level the child takes — and loses the other's.
+
+**The trees are moddable content.** `assets/talents/*.ron` ships one tree per
+class plus a generic tree for a program with no readable class; a sixth class's
+tree is a file, not a Rust change. See `assets/talents/README.md`.
+
+### For anyone measuring
+
+The arena's companion level clamp moved from `CREATURE_MAX_LEVEL` to the
+absolute ring cap, because a scenario authors its own party and has no ring to
+read. Five shipped `dev-arenas/` scenarios author `level: 12` and were silently
+getting level 6 since the cap was halved; they now field what they say, so old
+reports from them are not comparable to new ones.
+`dev-arenas/developed-companion.ron` is the new scenario, and
+`docs/measurements/2026-08-19-developed-companion-worth.md` is what it said.
+
 ## 0.11.8
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.

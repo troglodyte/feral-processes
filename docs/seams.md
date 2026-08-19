@@ -522,6 +522,117 @@ mod granting two routines on one rung (`CONTENDING_UNLOCK_SPECIES`).
 A fourth thing that is *not* in this currency and must not be swept into
 it: `PLAYER_BASE_STATS` is an offset, not a rate.
 
+### The ring buys room; the fights buy the points
+
+**The ring buys room; the fights buy the points.** A Privilege Ring — dropped
+by a lair guardian and by nothing else — is spent at the Develop screen to open
+a Kernel Ring on **one** companion, and `Game::companion_level_cap` is the one
+expression of what that is worth: `CREATURE_MAX_LEVEL + ring * LEVELS_PER_RING`.
+`open_kernel_ring` grants no stats, no level and no XP, which is what keeps the
+feature inside "progression is earned by fighting": the ceiling moves and the
+party still has to go and earn the levels under it.
+
+Two call sites deliberately do **not** go through it, and both look like bugs
+from the outside. `systems.rs`'s cronjob payout keeps passing
+`Some(CREATURE_MAX_LEVEL)`; its own `WORK_XP_LEVEL_CAP` guard already stops a
+posted worker at 5, so leaving it alone is the whole of how a developed program
+cannot be ground up at a Mining Node — pinned by
+`a_ringed_cronjob_worker_still_stops_at_the_work_cap`, which drives real
+`task_progress_system` cycles rather than calling `add_xp`, because the guard
+under test is in `systems.rs` and calling `add_xp` would test nothing. The two
+arena sites (`arena::set_level` and app-core's level stepper) take
+`tuning::absolute_companion_level_cap()` instead, because an arena scenario
+authors its own composition and has no `KernelRing` to read — and `Ability`,
+`Affinity` and `RoutineSlot` talents are invisible to `balance_sim`, so the
+arena is the only instrument that can see them and one clamped at 6 could not
+stage the fight the trees exist to change.
+
+That clamp move has a consequence worth knowing: five shipped `dev-arenas/`
+scenarios author `party: [(… level: 12 …)]` and were silently getting level 6
+after `HP_PER_LEVEL`'s `K = 2` halved the cap. They now field what they say.
+Old reports from them are not comparable to new ones — see
+`docs/measurements/2026-08-19-developed-companion-worth.md`, which also carries
+the figure that decided the sale question: every ring open is 1.95x a
+companion's power at the base cap, and a fully spent generic tree is 2.12x.
+
+### Talent points are derived, never stored
+
+**Talent points are derived, never stored.** `Game::talent_points` reads
+`earned` off the level (`level - CREATURE_MAX_LEVEL`) and `spent` off the
+length of `components::Talents`. There is no count on the component and none in
+the save, and that is not tidiness: a stored count can desync from the level
+*and* from the list, and both desyncs are invisible until a player finds they
+have a point that buys nothing or a node they never bought. Nothing that
+derives it can drift.
+
+The same argument makes the tier rule free. A tier costs exactly one point and
+tiers are taken in order, so "which tier is next" is `Talents::0.len()` — there
+is no cursor to keep in step. `take_talent` resolves an id against **that tier
+of that companion's own tree**, and splits its refusals: a node deeper in the
+same tree and a node from another class's tree leave the player different
+errands, and a test stages the second case with a node that really exists in a
+*different* tree, which is what a naive "is this id known anywhere" check gets
+wrong.
+
+One ordering inside `take_talent` is load-bearing in the opposite direction to
+the usual rule: the receipt is written **before** the effect is applied, because
+`install_unlocked_routines` asks `talent_abilities` what this program's talents
+grant and that has to include the node just bought. Every refusal is already
+behind that line, so nothing can leave a receipt for something that did not
+happen.
+
+### A `Stat` talent bakes into `Stats` at purchase, and load must not re-apply it
+
+**A `Stat` talent bakes into `Stats` at purchase, and load must not re-apply
+it.** `CreatureSave` already writes `hp`/`max_hp`/`atk`/`def`, so a saved
+program's numbers *are* its talents; re-applying the list on load would compound
+the bonus on every reload. `components::Talents` is a **receipt**, exactly as
+`Refactors` is and for the same reason `Rarity`'s tag is written without its
+multiplier. The test is a save → load → assert that the stat is *unchanged*, and
+a RON round trip cannot stand in for it: a field that fails to travel looks
+identical to one that does from the round trip's side.
+
+The purchase itself goes through `refactor::raised` rather than restating the
+arithmetic, which is what carries its never-less-than-a-whole-point floor — 8%
+of a Drone's 3 ATK rounds straight back to 3, so without the floor the node
+would do nothing to exactly the weak programs it exists to help. And gear is
+lifted and put back around the write (`gear_bonus` / `apply_equipment_delta`),
+because a bonus sitting in `Stats` during a multiplication is scaled while the
+later unequip subtracts only the unscaled amount — the `EquippedItem::fusion_tier`
+trap, welded in permanently.
+
+The other three node kinds are read on demand instead of baked, each at the one
+seam that already answers its question: `RoutineSlot` in `Game::routine_slots`'
+**companion arm only** (the player is not a companion and must not read a
+companion tree, and `abilities::companion_routine_slots` stays a pure function
+of level because `balance_sim` and several tests read it as one); `Affinity` in
+`Game::ability_affinity`'s **creature arm only**, clamped to `AFFINITY_MAX` the
+way the perk arm is, since a mod's tree may author any magnitude; and `Ability`
+folded into the `declared`/`reached` lists both install paths already build,
+rather than a second install path beside them — which is what guarantees a
+granted routine competes for slots exactly as a species-kit unlock does and
+leaves a *carried* routine, the prize the program was decompiled for, in place.
+
+### Fusion keeps the dominant parent's ring and talents
+
+**Fusion keeps the dominant parent's ring and talents.** `fuse_companions` is
+one of four doors into the roster and the one that assembles its **own**
+component list rather than going through `Game::roster_parts()`; it also does
+its own `retain`/`despawn` and skips the detachment logging
+`dissolve_tamed_program` performs. Nothing fails to compile when a component is
+missing from a hand-written tuple, and the symptom — a fused companion that lost
+its development — reads as "fusion is bad" rather than as a dropped field. That
+is the failure this entry exists to head off, and it is the same argument
+`Refactors`/`PurchasedTiers` already earned there.
+
+The dominant parent is the one whose species and level the child takes, and it
+is deliberately also the one whose development it inherits: taking both parents'
+would make fusion a way to launder two developed programs into one, and taking
+neither would burn a lair guardian's drop. Nothing re-applies a `Stat` node
+during the fusion — `fuse_stat`'s inputs are the parents' own numbers, which
+already carry it, and the strip-gear-before-the-snapshot rule above is why the
+order there cannot be relaxed either.
+
 ### `Experience::xp_to_next` is derived on load and never read back from the save
 
 **`Experience::xp_to_next` is derived on load and never read back from the

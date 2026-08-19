@@ -1,0 +1,43 @@
+// What a *developed* party is worth, against the same fight an undeveloped one
+// takes. The one instrument for the level half of companion progression: a
+// Kernel Ring raises a companion's ceiling from 6 to `absolute_companion_level_
+// cap()`, and `balance_sim` cannot see the difference because it never clamps a
+// companion to the live cap at all.
+//
+// **What this file cannot measure.** The bin plays the game's own All-Attack
+// every round, so no companion Special ever fires — which means `Ability`,
+// `Affinity` and `RoutineSlot` talents are invisible here, exactly as they are
+// invisible to `balance_sim`. Three of the four talent node kinds therefore
+// have only one instrument: playing this same scenario on the arena screen
+// (`FERAL_DEV_ARENA=1 cargo run`, then [R] Arena, [L] this file), where a
+// person presses the keys and the Specials land.
+//
+// **Read as a delta, never as an absolute.** Arena numbers compare within one
+// build only — a moved baseline is a reshuffled RNG stream, not a difficulty
+// change. The control is this file with the party at `level: 6`, run in the
+// same build; see `docs/measurements/` for what that pair said.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    // Every ring open, which is what six lair guardians buys one program.
+    // Same species and gear as `full-group.ron`'s party, so the two files
+    // differ in exactly one thing.
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [(species: "rootkit", count: 4)],
+    reps: 50,
+    seed: 7,
+)

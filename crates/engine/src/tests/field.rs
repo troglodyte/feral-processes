@@ -28,6 +28,10 @@ fn player_hunger(game: &Game) -> f32 {
         .get()
 }
 
+fn reserve_of(game: &Game, entity: Entity) -> f32 {
+    game.world.get::<PowerReserve>(entity).unwrap().get()
+}
+
 #[test]
 fn casting_arms_the_buff_and_deducts_power() {
     let mut game = game_with_field_ability();
@@ -820,4 +824,76 @@ fn active_buffs_includes_a_combat_buff_and_the_map_shows_none_without_one() {
     assert_eq!(buffs[0].name, "Defense");
     assert_eq!(buffs[0].remaining, "1t");
     assert_eq!(buffs[0].holder_label, None);
+}
+
+/// A routine is paid for by whoever runs it. The row already names its
+/// holder, and a companion's reserve is refilled by rest exactly as its
+/// battle Specials' is — so a companion's field routine draws on the
+/// companion, not on the player's bar.
+#[test]
+fn a_companions_field_routine_spends_the_companions_reserve() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.world
+        .entity_mut(companion)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+
+    let routines = game.field_routines();
+    assert_eq!(routines.len(), 1, "only the companion holds one");
+    assert_eq!(routines[0].holder, companion);
+
+    let player_before = player_hunger(&game);
+    let companion_before = reserve_of(&game, companion);
+    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+        .expect("the companion can afford its own routine");
+
+    assert_eq!(
+        reserve_of(&game, companion),
+        companion_before - 5.0,
+        "the caster pays"
+    );
+    assert_eq!(
+        player_hunger(&game),
+        player_before - crate::systems::power_drain_per_tick(1.0),
+        "the player pays only the turn's ordinary decay, never the routine's cost"
+    );
+}
+
+/// The gate reads the same reserve the charge takes from — a full player
+/// bar cannot run a drained companion's routine, and a drained player bar
+/// does not block a companion's.
+#[test]
+fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
+    let mut game = game_with_field_ability();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.world
+        .entity_mut(companion)
+        .insert(Routines(vec!["test_field_regen".to_string()]));
+
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(4.0);
+    assert_eq!(
+        game.field_routines()[0].unavailable.as_deref(),
+        Some("not enough PWR"),
+        "a full player bar must not make a drained companion's routine look runnable"
+    );
+    assert!(
+        game.cast_field_routine(0, FieldCastTarget::Ally(player))
+            .is_err(),
+        "and the cast must refuse it too"
+    );
+
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(1.0);
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(100.0);
+    assert_eq!(
+        game.field_routines()[0].unavailable,
+        None,
+        "a drained player must not block a companion's own routine"
+    );
+    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+        .expect("the companion has the Power for it");
 }

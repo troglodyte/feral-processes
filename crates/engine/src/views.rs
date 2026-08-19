@@ -751,9 +751,10 @@ pub struct PartySlotView {
     pub def: i32,
     pub status_effect: Option<String>,
     /// What this member has left to spend on routines, or `None` for one
-    /// holding no reserve at all. `PowerReserve` lives on the player alone for now,
-    /// so this is `Some` on slot 0 and nowhere else; a companion's own
-    /// reserve is what fills the rest of the column in.
+    /// holding no reserve at all. Every roster member carries one
+    /// (`Game::roster_parts`), and it is what that member's own Specials and
+    /// field routines are charged against — so this is `Some` for the whole
+    /// party, and `None` only for a body that was never taken onto it.
     pub power: Option<f32>,
     /// This round's chosen action rendered for the roster, or `None` if the
     /// slot is still awaiting one.

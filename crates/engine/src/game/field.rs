@@ -5,11 +5,13 @@
 //! running buff (see `components::FieldBuff` and `arm_field_buff`), and the
 //! two Stack movement routines `Phase` and `Jump`, which move the party
 //! through a frame (see `game/stack_movement.rs`). All three are priced in
-//! Power through `routine_power_cost`, and
+//! Power through `routine_power_cost` and charged to **the holder**, not to
+//! the player — the same rule the battle Special path holds to, so a
+//! companion's routine draws on the companion's own reserve at both ends.
 //! `AbilityEffect::field_only` is the predicate that says which reach here.
 
 use crate::abilities::routine_power_cost;
-use crate::components::FieldScope;
+use crate::components::{FieldScope, POWER_MIN};
 use crate::game::stack::StackPos;
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
 use crate::*;
@@ -27,15 +29,11 @@ impl Game {
     /// means, which is the trap `battle_special_options` fell into before it
     /// started resolving by stable index instead of filtered position. It is
     /// also the only place a row's cost is decided, which is what stops the
-    /// list quoting one price and the cast charging another.
+    /// list quoting one price and the cast charging another — and, since
+    /// each row is gated against **its own holder's** reserve, the only
+    /// place that can stop it quoting one bar and charging another.
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
         let holders = self.routine_holders();
-        let player = self.player_entity();
-        let reserve = self
-            .world
-            .get::<PowerReserve>(player)
-            .copied()
-            .unwrap_or_default();
         let underground = self.is_underground();
         let db = self.world.resource::<AbilityDb>();
         let mut rows = Vec::new();
@@ -43,6 +41,15 @@ impl Game {
             let Some(installed) = self.world.get::<Routines>(holder.entity) else {
                 continue;
             };
+            // The holder's own reserve, because the holder is who pays —
+            // the mirror of `ability_unavailable`, and of `spend_power`'s
+            // entity below. A missing reserve refuses, so a row can never
+            // be offered against a bar that cannot be charged.
+            let reserve = self
+                .world
+                .get::<PowerReserve>(holder.entity)
+                .copied()
+                .unwrap_or(PowerReserve::new(POWER_MIN));
             for id in &installed.0 {
                 let Some(def) = db.get(id) else { continue };
                 if !def.effect.field_only() || def.is_passive() {
@@ -189,6 +196,13 @@ impl Game {
     /// the entrance tile, so what they need is the presence of that locale,
     /// which is `Game::stack_pos` returning `None`.
     ///
+    /// The holder pays. Every row was gated against that holder's reserve in
+    /// `field_routines` above, so the charge and the refusal read the same
+    /// bar — a companion running a party-wide buff spends its own Power even
+    /// though a `Run`-scoped kind lands on the player regardless of who cast
+    /// it. Rest is what refills a companion's reserve, so the party's field
+    /// budget is base-bound exactly as its battle Specials are.
+    ///
     /// Every check runs before the first write (the need deduction), so a
     /// refused cast spends nothing and arms nothing: no buff with the cost
     /// unpaid, no cost paid with nothing to show for it, no party moved
@@ -228,8 +242,8 @@ impl Game {
             .expect("field_routines only lists abilities AbilityDb actually holds");
 
         match def.effect {
-            AbilityEffect::Phase => return self.cast_phase(&def, pick),
-            AbilityEffect::Jump => return self.cast_jump(&def, pick),
+            AbilityEffect::Phase => return self.cast_phase(holder, &def, pick),
+            AbilityEffect::Jump => return self.cast_jump(holder, &def, pick),
             _ => {}
         }
 
@@ -299,8 +313,7 @@ impl Game {
             power
         };
 
-        let player = self.player_entity();
-        self.spend_power(player, routine_power_cost(&def));
+        self.spend_power(holder, routine_power_cost(&def));
         for entity in recipients {
             self.arm_field_buff(
                 entity,
@@ -331,21 +344,25 @@ impl Game {
             .ok_or_else(|| format!("{name} only runs inside the Stack."))
     }
 
-    /// Spends `def`'s Power and steps the party through one wall.
+    /// Spends `def`'s Power off `caster` and steps the party through one wall.
     ///
     /// `phase_landing` has already applied every refusal by the time
     /// anything below runs, so the Power is spent on a move that is
     /// certain to happen. Trace is raised for the phase itself *before*
     /// `arrive`, so the crossing reads as the consequence of the routine
     /// rather than of whatever the party landed on top of.
-    fn cast_phase(&mut self, def: &AbilityDef, pick: FieldCastTarget) -> Result<(), String> {
+    fn cast_phase(
+        &mut self,
+        caster: Entity,
+        def: &AbilityDef,
+        pick: FieldCastTarget,
+    ) -> Result<(), String> {
         if pick != FieldCastTarget::None {
             return Err(format!("{} takes no target.", def.name));
         }
         let pos = self.movement_cast_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        let caster = self.player_entity();
         self.spend_power(caster, routine_power_cost(def));
         self.log_kind(
             MessageKind::Outcome,
@@ -358,7 +375,7 @@ impl Game {
         Ok(())
     }
 
-    /// Spends `def`'s Power and moves the party to the cell they pointed
+    /// Spends `def`'s Power off `caster` and moves the party to the cell they pointed
     /// at — or kills them, if that cell turns out to be solid.
     ///
     /// The Power comes off either way: the routine ran, and what it found
@@ -367,14 +384,18 @@ impl Game {
     /// inside rock has arrived nowhere, and `die_in_the_rock` deliberately
     /// never writes `Locale`, so there is no cell for the arrival tail to
     /// act on.
-    fn cast_jump(&mut self, def: &AbilityDef, pick: FieldCastTarget) -> Result<(), String> {
+    fn cast_jump(
+        &mut self,
+        caster: Entity,
+        def: &AbilityDef,
+        pick: FieldCastTarget,
+    ) -> Result<(), String> {
         let FieldCastTarget::Cell(x, y) = pick else {
             return Err(format!("Choose where to run {} to.", def.name));
         };
         let pos = self.movement_cast_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        let caster = self.player_entity();
         self.spend_power(caster, routine_power_cost(def));
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();

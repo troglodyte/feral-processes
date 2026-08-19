@@ -901,12 +901,23 @@ mod tests {
     /// cliff shows up in the 2 -> 3 step it feeds, which is still gated.
     const GROWTH_GUARD_FIRST_MEASURED_PAIR: usize = 1;
 
-    /// The party-size change compounds three ways: `party_stat_bonus`
-    /// feeds a share of every companion's ATK/DEF into the player's own
-    /// effective stats, so 3 -> 5 raises the player's *passive* stats as
-    /// well as adding two more attackers and two more bodies to absorb
-    /// hits. The group-size increase is the counterweight. This test is the
-    /// only evidence that ratio is survivable before anyone plays it — it
+    /// The party-size change compounds two ways: 3 -> 5 adds two more
+    /// attackers and two more bodies to absorb hits. The group-size increase
+    /// is the counterweight.
+    ///
+    /// It used to be three: a passive party bonus fed a share of every
+    /// companion's ATK/DEF into the player's own effective stats, and this
+    /// doc claimed that term as the third way it compounded. **The sim never
+    /// modelled it** — no divisor, no call, nothing in the player build — so
+    /// the claim was a copy of the game's behaviour rather than a reading of
+    /// this module's, exactly the drift CLAUDE.md warns about here. The term
+    /// was removed from the game on 2026-08-19 and not one curve in this file
+    /// moved, which is the proof it was never gated. Treat that as the
+    /// standing caveat: what this test bounds is the attacker-and-body ratio,
+    /// and any *passive* stat coupling between roster size and the player is
+    /// invisible to it.
+    ///
+    /// This test is the only evidence that ratio is survivable before anyone plays it — it
     /// fields `MAX_PARTY_SIZE` companions, unlike the progression sweeps
     /// below, which field `BASE_PET_CAPACITY`; the full-roster ratio is
     /// exactly what this test exists to check.

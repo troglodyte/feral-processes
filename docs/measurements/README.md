@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-19 — What removing the passive party bonus cost the player](2026-08-19-party-passive-bonus-removal.md)
+  — companions no longer lend the player a tenth of their ATK/DEF on top of
+  acting. Across four party-bearing scenarios at 200 reps, fights got 0.3-0.4
+  rounds longer and the player kept 1-3 points less Integrity; three were
+  already walkovers and stayed 100%, and the one marginal scenario moved
+  25.0% -> 21.0%, **within noise**. Carries the structural finding that
+  `balance_sim` never modelled the term despite a doc comment claiming it, so
+  the removal moved no curve at all — and the caveat that the deltas are two
+  different RNG streams, not the same fights refought.
+
 - [2026-08-19 — What the attack roll did to the shipped arenas](2026-08-19-combat-model-slice-1.md)
   — the combat model's first slice measured across all fourteen `dev-arenas/`
   scenarios. Every verdict holds: the same twelve wins, the same two losses,

@@ -460,3 +460,82 @@ fn zone_one_takes_no_bite_but_still_names_the_ground() {
         "the ground is named from the first step of a run"
     );
 }
+
+const SLOW: &str = r#"(
+    id: "slow",
+    name: "Thrashing",
+    description: "Every step here waits its turn behind something else.",
+    biomes: [NullSector],
+    effect: Drag(extra_ticks: 1),
+)"#;
+
+fn clock(game: &Game) -> u64 {
+    game.world.resource::<crate::resources::GameClock>().tick
+}
+
+#[test]
+fn a_step_onto_drag_ground_costs_the_extra_ticks() {
+    let mut plain = game_about_to_step("env_drag_plain", &[("slow.ron", SLOW)], Biome::OpenGrid);
+    let before = clock(&plain);
+    plain.move_player(1, 0);
+    let ordinary = clock(&plain) - before;
+    assert_eq!(ordinary, 1, "an ordinary step is one tick");
+
+    let mut game = game_about_to_step("env_drag", &[("slow.ron", SLOW)], Biome::NullSector);
+    let before = clock(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(clock(&game) - before, 2);
+}
+
+/// The second effect kind exists precisely so the vocabulary is not all
+/// damage. Read off `Stats` rather than a downstream consequence.
+#[test]
+fn drag_ground_takes_no_integrity() {
+    let mut game = game_about_to_step("env_drag_hp", &[("slow.ron", SLOW)], Biome::NullSector);
+    let before = player_hp(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), before);
+}
+
+/// A tick can start a fight — `nest_aggro_tick` is the precedent, and it is
+/// why `rest`'s tick loop needed a battle check. Anything that ticks in a
+/// loop inherits that obligation: the remaining ticks would resolve a world
+/// the player is no longer standing in, while a fight waits on the screen.
+#[test]
+fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
+    const SLOWEST: &str = r#"(
+    id: "slowest",
+    name: "Hard Thrash",
+    description: "A step that takes most of a shift.",
+    biomes: [NullSector],
+    effect: Drag(extra_ticks: 3),
+)"#;
+    let mut game = game_about_to_step(
+        "env_drag_fight",
+        &[("slow.ron", SLOWEST)],
+        Biome::NullSector,
+    );
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    // A provoked guardian already standing beside the destination reaches
+    // the player on the step's very first tick, which is the only
+    // deterministic way to open a fight from inside the loop.
+    let nest = game.spawn_nest("scrapper", pos.x + 2, pos.y);
+    game.provoke_nest(nest);
+    let before = clock(&game);
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.has_active_battle(),
+        "the fixture never started a fight"
+    );
+    assert_eq!(
+        clock(&game) - before,
+        1,
+        "the remaining drag ticks must not run behind a fight the player has not seen"
+    );
+}

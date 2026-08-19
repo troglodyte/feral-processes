@@ -394,6 +394,7 @@ impl Game {
             .biome;
         let to = self.world.resource_mut::<WorldMap>().tile(nx, ny);
         let walkable = to.walkable;
+        let mut drag_ticks = 0;
         if walkable {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
             p.x = nx;
@@ -408,14 +409,17 @@ impl Game {
             // that lowers a creature's HP, which is what makes mitigation
             // and every other incoming-damage rule apply for free.
             let effect = self.ground_effect(nx, ny).map(|d| d.effect);
-            if let Some(EnvironmentEffect::Attrition {
-                hp_percent,
-                min_damage,
-            }) = effect
-            {
-                let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
-                let bite = ((max_hp as f32 * hp_percent).round() as i32).max(min_damage);
-                self.apply_damage(player, bite);
+            match effect {
+                Some(EnvironmentEffect::Attrition {
+                    hp_percent,
+                    min_damage,
+                }) => {
+                    let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
+                    let bite = ((max_hp as f32 * hp_percent).round() as i32).max(min_damage);
+                    self.apply_damage(player, bite);
+                }
+                Some(EnvironmentEffect::Drag { extra_ticks }) => drag_ticks = extra_ticks,
+                None => {}
             }
             if to.biome != from {
                 self.log(format!("You cross into {}.", to.biome.name()));
@@ -429,6 +433,17 @@ impl Game {
             self.maybe_ambush();
         }
         self.tick();
+        // Slow ground is the one step that costs more than a turn. A tick
+        // can start a fight — `nest_aggro_tick` is the precedent — so the
+        // rest of them are dropped the moment one does, rather than
+        // resolving a world the player is no longer standing in while a
+        // battle waits on the screen.
+        for _ in 0..drag_ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
     }
 
     /// Rolls `RANDOM_ENCOUNTER_CHANCE` for an ambush: on a hit, a

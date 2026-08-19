@@ -1,6 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::environment::EnvironmentEffect;
 use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{
@@ -401,13 +402,30 @@ impl Game {
             // both biomes are in hand here, so nothing is stored and no
             // save field appears. Outside any zone gate on purpose — the
             // ground's *name* is not one of its effects.
+            // The ground's bite is a property of *arriving*, and lands
+            // ahead of the encounter roll — the same order `Game::arrive`
+            // keeps underground. Through `apply_damage`, the one code path
+            // that lowers a creature's HP, which is what makes mitigation
+            // and every other incoming-damage rule apply for free.
+            let effect = self.ground_effect(nx, ny).map(|d| d.effect);
+            if let Some(EnvironmentEffect::Attrition {
+                hp_percent,
+                min_damage,
+            }) = effect
+            {
+                let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
+                let bite = ((max_hp as f32 * hp_percent).round() as i32).max(min_damage);
+                self.apply_damage(player, bite);
+            }
             if to.biome != from {
                 self.log(format!("You cross into {}.", to.biome.name()));
             }
             // Only a step that actually covered ground draws an ambush —
             // every branch above returned already, so walking into a
             // creature, a nest or a portal can't also be jumped, and
-            // shoving at a wall isn't travel.
+            // shoving at a wall isn't travel. Already guarded against a
+            // player the ground just killed: `maybe_ambush` checks
+            // `is_game_over` itself.
             self.maybe_ambush();
         }
         self.tick();

@@ -33,6 +33,15 @@ const COLD: &str = r#"(
     effect: Attrition(hp_percent: 0.02, min_damage: 1),
 )"#;
 
+/// Attrition with room to mitigate and enough bite to be lethal from 1 HP.
+const HARSH: &str = r#"(
+    id: "harsh",
+    name: "Hard Frost",
+    description: "The floor takes what it can get.",
+    biomes: [Deadlock],
+    effect: Attrition(hp_percent: 0.05, min_damage: 4),
+)"#;
+
 #[test]
 fn a_well_formed_environment_file_loads_and_answers_for_its_biome() {
     let dir = env_dir("env_ok", &[("cold.ron", COLD)]);
@@ -254,4 +263,200 @@ fn ground_effect_is_empty_for_an_unclaimed_biome() {
     let (x, y) = player_tile(&game);
 
     assert!(game.ground_effect(x, y).is_none());
+}
+
+// ------------------------------------------------------------- the hook
+
+use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
+use crate::resources::{MessageLog, Party};
+
+/// Stands the player on `from` with `to` one step east, both written
+/// through the override overlay, and clears anything squatting on the
+/// destination — walking into a program, a nest or a structure is a fight
+/// or a door, not travel.
+fn step_from_onto(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) {
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    let squatters: Vec<crate::Entity> = {
+        let mut q = game.world.query::<(crate::Entity, &Position)>();
+        q.iter(&game.world)
+            .filter(|(e, p)| *e != player && p.x == nx && p.y == ny)
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for e in squatters {
+        game.world.despawn(e);
+    }
+    let mut map = game.world.resource_mut::<WorldMap>();
+    map.set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: from,
+            walkable: true,
+        },
+    );
+    map.set_override(
+        nx,
+        ny,
+        Tile {
+            biome: to,
+            walkable: to_walkable,
+        },
+    );
+}
+
+fn player_hp(game: &Game) -> i32 {
+    game.world.get::<Stats>(game.player_entity()).unwrap().hp
+}
+
+/// A game past zone 1 with `files` installed, standing on Open Grid with
+/// one step east onto `onto`.
+fn game_about_to_step(tag: &str, files: &[(&str, &str)], onto: Biome) -> Game {
+    let dir = assets_dir_with_environment(tag, files);
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, Biome::OpenGrid, onto, true);
+    game
+}
+
+#[test]
+fn a_step_onto_attrition_ground_costs_integrity() {
+    let mut game = game_about_to_step("env_bite", &[("cold.ron", COLD)], Biome::Deadlock);
+    let max_hp = game
+        .world
+        .get::<Stats>(game.player_entity())
+        .unwrap()
+        .max_hp;
+    let before = player_hp(&game);
+
+    game.move_player(1, 0);
+
+    let expected = ((max_hp as f32 * 0.02).round() as i32).max(1);
+    assert_eq!(before - player_hp(&game), expected);
+}
+
+#[test]
+fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
+    let dir = assets_dir_with_environment("env_bite_wall", &[("cold.ron", COLD)]);
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    // Unwalkable Deadlock is unreachable on a generated map, which is the
+    // point: what is under test is that the bite rides the *step*, and the
+    // only way to hold everything else steady is to make the tile refuse.
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, false);
+    let before = player_hp(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), before, "shoving at a wall is not travel");
+}
+
+/// The player alone takes environment damage. Corrupting the party would
+/// route program deaths — and, on Permadeath, the run-ending path — through
+/// something that is not a fight.
+#[test]
+fn attrition_never_touches_the_party() {
+    let mut game = game_about_to_step("env_party", &[("cold.ron", COLD)], Biome::Deadlock);
+    let member = crate::tests::support::spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+    let before = game.world.get::<Stats>(member).unwrap().hp;
+    assert!(game.world.resource::<Party>().0.contains(&member));
+
+    game.move_player(1, 0);
+
+    assert_eq!(game.world.get::<Stats>(member).unwrap().hp, before);
+}
+
+/// Free only because the bite goes through `Game::apply_damage`, the one
+/// code path that lowers a creature's HP. This test is what stops someone
+/// "simplifying" the hook into a direct write to `Stats::hp`.
+#[test]
+fn a_mitigation_buff_reduces_the_bite() {
+    let mut game = game_about_to_step("env_mitigated", &[("harsh.ron", HARSH)], Biome::Deadlock);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 400;
+        stats.hp = 400;
+    }
+    let unmitigated = {
+        let mut probe = game_about_to_step("env_probe", &[("harsh.ron", HARSH)], Biome::Deadlock);
+        let p = probe.player_entity();
+        {
+            let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
+            stats.max_hp = 400;
+            stats.hp = 400;
+        }
+        probe.move_player(1, 0);
+        400 - player_hp(&probe)
+    };
+    assert!(unmitigated > 1, "the fixture has to have room to mitigate");
+
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Ablative Layer".into(),
+            power: 50,
+            remaining: 100,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+    game.move_player(1, 0);
+
+    assert!(
+        400 - player_hp(&game) < unmitigated,
+        "mitigation must apply to the ground the same way it applies to a hit"
+    );
+}
+
+/// The one place in this phase where two systems meet at a lethal edge:
+/// ground that kills must not then roll an ambush onto the corpse.
+#[test]
+fn attrition_that_kills_does_not_then_start_an_ambush() {
+    // Permadeath, because a Forgiving death reboots the player to full
+    // Integrity inside the very tick this is asserting about — the corpse
+    // the test needs to look at would be gone before it could.
+    let dir = assets_dir_with_environment("env_lethal", &[("harsh.ron", HARSH)]);
+    let mut game = Game::new(16, DifficultyMode::Permadeath, &dir).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    {
+        let mut stats = game.world.get_mut::<Stats>(game.player_entity()).unwrap();
+        stats.hp = 1;
+    }
+
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), 0);
+    assert!(
+        !game.has_active_battle(),
+        "a fight started against a dead player is unwinnable and unloseable"
+    );
+}
+
+/// Both halves in one test on purpose: the effect half alone passes against
+/// a bare early return that also swallowed the name.
+#[test]
+fn zone_one_takes_no_bite_but_still_names_the_ground() {
+    let dir = assets_dir_with_environment("env_zone1_hook", &[("cold.ron", COLD)]);
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    let before = player_hp(&game);
+
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), before, "zone 1 is neutral ground");
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(Biome::Deadlock.name())),
+        "the ground is named from the first step of a run"
+    );
 }

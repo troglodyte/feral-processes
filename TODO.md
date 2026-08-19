@@ -44,5 +44,19 @@
 28. companions also have perks, special unlocks and trees for entities, allow further level progression
 29. move playwer perks to .ron's so they can be modded
 30. introduce AC "armor class' type of metric, affects the chance of missing both from entity side and player & companion side. 
+32. In game help page explaining things
+- companions have a level limit
+- what's needed to merge them
+- perks & explanation
+- base mechanics
+- zones and what they are
+- what items are need to survive
+- start here page explaining ICE & power
+- how to progress, what to do if your stuck
+- what you should have before reaching zone 2
+    - group wide attacks
+- what you need before zone 3
+    - all enemy wide attacks
+- explain out of combat buffs
 
 # Bugs

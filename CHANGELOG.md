@@ -27,7 +27,7 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## 0.12.0
+## 0.11.9
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 30.
 Both new save fields are additive on a field-named RON struct, so a save
@@ -61,6 +61,12 @@ and level the child takes — and loses the other's.
 **The trees are moddable content.** `assets/talents/*.ron` ships one tree per
 class plus a generic tree for a program with no readable class; a sixth class's
 tree is a file, not a Rust change. See `assets/talents/README.md`.
+
+### Also in this release
+
+A field routine cast from a companion is charged to that companion's own Power
+reserve rather than the player's — the fix that was sitting unreleased on the
+branch this landed from.
 
 ### For anyone measuring
 

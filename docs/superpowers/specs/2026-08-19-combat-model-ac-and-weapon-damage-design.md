@@ -164,6 +164,36 @@ to an `AbilityDef` by `species::basic_attack_ability`, and a
 centre-and-spread pair survives that conversion losslessly where a
 `(min, max)` pair would round on odd widths.
 
+### Showing the range
+
+A weapon's range is a headline number for the player — "Shiv, 4–9" is
+the reference point that makes two weapons comparable at a glance, and
+it is the most legible thing this whole slice adds. It is displayed
+everywhere a gear stat already is.
+
+A range is a **stat bonus, not an effect**, so it rides
+`equip_preview_tag` beside ATK/MIT/DECOMP rather than going through the
+`item_blurb` / `item_effects` / `item_grant` derivation, which is for
+`grants` entries. A natural attack has a displayable range too, via
+`DamageRange::centred`, so a companion's unarmed damage reads the same
+way as a weapon's.
+
+**The range must scale through `Game::copy_bonus`'s three axes** —
+`scaled_for_level`, `fused_for_tier`, `for_rarity`, in that order, over
+a base the affix has already been added to. Both `min` and `max` carry
+the per-step floor, and a floor does not commute with a multiplier, so
+the ends cannot be scaled by a shortcut that scales the midpoint and
+re-derives the width.
+
+This is the trap the existing seam already documents: sharing the
+*formatter* was not enough, and four screens each rebuilt the scaling
+chain by hand and all four silently dropped the affix. The three axis
+methods are `pub(crate)` precisely so a fifth hand-rolled chain fails to
+compile. A displayed range that disagrees with the damage actually
+rolled is the same bug in a new place, so **one function builds the
+range string**, the way `Game::copy_name` is the one place a copy's name
+is built.
+
 **A weapon overrides a natural attack, it does not add to it.** A
 companion still rolls a species move each turn for its *name* and its
 status rider, but an equipped weapon supplies the damage range. Unarmed,

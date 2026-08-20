@@ -1907,3 +1907,127 @@ fn the_laid_tile_is_named_a_vectorstasis_tile() {
         "and the stock it was pressed from keeps its own name"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Slice 2: entropy on the frontier
+// ---------------------------------------------------------------------------
+
+/// A base with `cut` carved out on the tick the fixture returns, and the
+/// party parked back on the exit cell so they are not standing in it.
+fn game_with_a_cut_cell(seed: u32, cut: (i32, i32)) -> Game {
+    let mut game = game_at_the_frontier(seed);
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(cut.0, cut.1, tick);
+    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+    game
+}
+
+/// Winds the clock to `ticks` past the moment `cut` was opened and runs one
+/// turn, which is what puts the schedule over it.
+fn wait_out(game: &mut Game, ticks: u64) {
+    game.world.resource_mut::<GameClock>().tick += ticks;
+    game.wait();
+}
+
+/// The wall re-knits whole: the cell leaves `BaseGrid` entirely rather than
+/// coming back as chipped rock, which is what makes an abandoned frontier
+/// cost the swings it cost the first time.
+#[test]
+fn an_unfloored_cell_reverts_after_the_entropy_window() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3230, cut);
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS + 1);
+
+    assert_eq!(
+        cell(&game, cut),
+        None,
+        "an abandoned cut cell must be absent from BaseGrid, not chipped rock"
+    );
+}
+
+/// What keeps "the party is standing inside rock" unreachable *by
+/// construction* rather than merely unlikely — the same argument
+/// `die_in_the_rock` makes for the Stack, one locale over.
+#[test]
+fn a_cell_the_party_is_standing_on_never_reverts() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3231, cut);
+    stand_in_base_at(&mut game, cut.0, cut.1);
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+
+    assert!(
+        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
+        "the cell under the party's feet closed over them"
+    );
+}
+
+#[test]
+fn a_cell_a_posted_program_is_standing_on_never_reverts() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3232, cut);
+    // Hand-spawned rather than posted through `work_structure`: what the
+    // system reads is a `Task` and a base-space `Position`, and a fixture
+    // that walked a real program out to the frontier would be asserting on
+    // the scheduler instead.
+    let node = spawn_mining_node(&mut game, 0, 1);
+    game.world.spawn((
+        Task {
+            kind: TaskKind::GatherResource,
+            target: node,
+            progress: 0,
+            required: 10,
+        },
+        Position { x: cut.0, y: cut.1 },
+    ));
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+
+    assert!(
+        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
+        "the cell under a posted program closed over it"
+    );
+}
+
+/// Entropy takes the frontier you dug and never floored, and nothing else:
+/// a laid tile is permanent, or a base could not be left alone.
+#[test]
+fn a_floored_cell_never_reverts() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3233, cut);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .lay_floor(cut.0, cut.1);
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 5);
+
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(cut.0, cut.1),
+        "laid floor is permanent — entropy takes the frontier, not the base"
+    );
+}
+
+/// Pins the comparison's direction. The window is how long a cut cell
+/// survives, so the tick it reaches it is the last one it is still open on.
+#[test]
+fn a_cell_reverts_only_after_the_window_not_on_the_tick_it_hits_it() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3234, cut);
+
+    // The clock advances at the *end* of a tick, so the turn this spends
+    // runs the schedule with the cell exactly `BASE_ENTROPY_REFILL_TICKS`
+    // old — the last tick it is still open on.
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS);
+    assert!(
+        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
+        "the cell must survive the tick the window is reached on"
+    );
+
+    game.wait();
+    assert_eq!(cell(&game, cut), None, "and go on the next one");
+}

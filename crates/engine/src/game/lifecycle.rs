@@ -280,6 +280,11 @@ impl Game {
             // because the two drain different `RunFeats` fields: each field
             // has exactly one drainer, so neither can eat the other's events.
             crate::game::contracts::contract_system,
+            // Unchained: it is the schedule's only writer of `BaseGrid`, so
+            // it shares no mutable state with anything above it, and what it
+            // reads — the clock, the locale, and where posted bodies stand —
+            // every one of those has finished writing for this tick.
+            crate::game::base::entropy::base_entropy_system,
         ));
         schedule
     }

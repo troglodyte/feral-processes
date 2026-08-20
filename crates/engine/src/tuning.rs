@@ -2076,6 +2076,22 @@ pub const BASE_ROCK_DURABILITY: u32 = 24;
 /// number written here.
 pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 
+/// How long a cut cell survives unfloored before base space takes it back —
+/// `game::base::entropy`, which reverts it to solid rock rather than to
+/// chipped rock, so re-opening it costs the swings it cost the first time.
+///
+/// The pressure the rest of slice 2 is drawn against: cutting is cheap and
+/// flooring is not, so without a clock on the frontier a player would open
+/// the pocket outward and floor it at leisure. It wants to be long enough
+/// that an ordinary dig-then-floor cycle never loses ground and short enough
+/// that over-digging is felt, and **it has never been measured** — the spec's
+/// own open question. Play it and record the answer under
+/// `docs/measurements/`.
+///
+/// A laid `BaseCell::Floor` is untouched by it at any age, and so is any
+/// cell with a body standing on it.
+pub const BASE_ENTROPY_REFILL_TICKS: u64 = 300;
+
 /// How often (in ticks) the base's repairers restore `Durability` to
 /// damaged structures — see `Game::structure_regen`.
 ///

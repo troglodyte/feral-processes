@@ -125,13 +125,18 @@ impl BaseGrid {
             .count()
     }
 
-    /// The map in key order. `#[cfg(test)]` the same way
-    /// `DescriptionDb::subjects` is: only `tests::base_grid` calls this,
-    /// checking the deterministic-iteration guarantee above, and nothing
-    /// in play walks base space cell by cell yet — `pub(crate)` alone
-    /// would leave a standing dead-code warning on an otherwise-clean lib
-    /// build rather than stating the truth.
-    #[cfg(test)]
+    /// Takes `(x, y)` back out of the map: solid rock again, and absent
+    /// rather than chipped, because absent is what this module means by
+    /// solid. `game::base::entropy` is the one caller — nothing else in the
+    /// game ever *shrinks* base space.
+    pub(crate) fn revert(&mut self, x: i32, y: i32) {
+        self.cells.remove(&(x, y));
+    }
+
+    /// The map in key order — the deterministic iteration this type exists
+    /// to guarantee. `base_entropy_system` is the one thing in play that
+    /// walks base space cell by cell; `tests::base_grid` walks it to check
+    /// the order itself.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&(i32, i32), &BaseCell)> {
         self.cells.iter()
     }

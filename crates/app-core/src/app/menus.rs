@@ -166,12 +166,20 @@ impl App {
         let Some(idx) = self.selected_index(key, report.len()) else {
             return;
         };
-        // `assign_cronjob` and `work_structure` are both behind
-        // `require_base`, so posting to a structure is legal in exactly one
-        // locale. The guard used to ask `is_underground()`, which was the
-        // same question when there were two locales and is not now: on the
-        // open grid the keypress was permitted and the engine refused it a
-        // moment later, which reads to the player as the key doing nothing.
+        // The picker this opens acts on the structure three ways, and
+        // `Game::work_structure` — the one that stands the player at its
+        // station tile — is behind `require_base`, so the screen is only
+        // fully usable in one locale. The guard used to ask
+        // `is_underground()`, which was the same question when there were
+        // two locales and is not now: on the open grid the keypress was
+        // permitted and the engine refused it a moment later, which reads to
+        // the player as the key doing nothing.
+        //
+        // The other two rows toggle a standing job, which the engine leaves
+        // unguarded — so this refuses slightly more than the engine would.
+        // Deliberate: every structure stands in base space, and a screen
+        // that opened out on the grid to offer two of its three rows would
+        // be harder to explain than one that says where the base is.
         //
         // Refused at the keypress like the demolish key, rather than opening
         // a picker whose every row is a dead end — the roster itself still

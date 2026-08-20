@@ -368,6 +368,20 @@ pub struct NestSave {
     pub pending_respawns: Vec<u32>,
 }
 
+/// A cell of base-space rock the player has started on — see
+/// `components::DigSite`, whose `Durability` and mark this carries.
+///
+/// `announced_stuck` is deliberately absent: it is a crew's "I already said
+/// so", true of a conversation rather than of the world, and a reload is
+/// exactly when the player should be told again.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct DigSiteSave {
+    /// **Base-space** coordinates, not a tile on the zone surface.
+    pub position: (i32, i32),
+    pub durability: u32,
+    pub marked: bool,
+}
+
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
 /// engine-internal enum doesn't need to derive `Serialize`/`Deserialize`.
 #[derive(Serialize, Deserialize, Default, Clone, Copy)]
@@ -465,6 +479,17 @@ pub struct SaveData {
     /// a swarm the player provoked, and a way to launder a nest destroyed
     /// most of the way to its cache.
     pub nests: Vec<NestSave>,
+    /// Every wall the player has started cutting or marked — see
+    /// `components::DigSite`. Without it a half-cut wall heals on reload and
+    /// a drawn plan is lost, both of which a player meets in their first
+    /// session with a base.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump and no `dev-saves/` recapture: a file
+    /// written before it existed loads with no dig sites, which is exactly
+    /// what that run had.
+    #[serde(default)]
+    pub dig_sites: Vec<DigSiteSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
     /// The base's pocket-dimension coordinate space — see
     /// `base_grid::BaseGrid`. Saved wholesale, the same way `stack_memory`
@@ -910,6 +935,7 @@ mod tests {
             creatures: Vec::new(),
             structures: Vec::new(),
             nests: Vec::new(),
+            dig_sites: Vec::new(),
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
             anchor: None,
@@ -1091,6 +1117,41 @@ mod tests {
         };
         let _ = std::fs::remove_file(&path);
         assert!(loaded.creatures[0].equipment.is_empty());
+    }
+
+    /// The same guarantee for slice 2's own added field, and the reason
+    /// `SAVE_FORMAT_VERSION` stayed at 32 for it: every `dev-saves/`
+    /// template predates `dig_sites` and must load with no dig sites, which
+    /// is exactly the base those runs had.
+    #[test]
+    fn a_save_written_before_dig_sites_existed_still_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_no_dig_{}.bin",
+            std::process::id()
+        ));
+        save_to_file(&path, &sample_data()).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let older: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("dig_sites: ["))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !older.contains("dig_sites:"),
+            "the key has to actually be gone for this to prove anything"
+        );
+        std::fs::write(&path, &older).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("a file written before dig sites must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            loaded.dig_sites.is_empty(),
+            "and comes back with no walls half-cut"
+        );
     }
 
     /// The biome rename is not a save-format break, and this is what says

@@ -2031,3 +2031,67 @@ fn a_cell_reverts_only_after_the_window_not_on_the_tick_it_hits_it() {
     game.wait();
     assert_eq!(cell(&game, cut), None, "and go on the next one");
 }
+
+// ---------------------------------------------------------------------------
+// Slice 2: what you dug and what you marked, saved
+// ---------------------------------------------------------------------------
+
+/// Through a real `save`/`load` and not only the RON round trip: a round
+/// trip cannot catch a `#[serde(skip)]`, and a half-cut wall healing on
+/// reload is a bug the first play session would hit.
+#[test]
+fn a_half_cut_wall_survives_a_save_round_trip() {
+    let mut game = game_at_the_frontier(3240);
+    game.move_player(1, 0);
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("one swing starts a dig site");
+    let chipped = game.world.get::<Durability>(site).unwrap().hp;
+    assert!(
+        chipped > 0 && chipped < crate::tuning::BASE_ROCK_DURABILITY,
+        "the fixture must leave the wall part-cut, not whole and not open"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_dig_site_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = loaded
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("the half-cut wall must come back as a dig site");
+    assert_eq!(
+        loaded.world.get::<Durability>(reloaded).unwrap().hp,
+        chipped,
+        "the wall healed over the reload"
+    );
+}
+
+/// The mark is written by a verb that does not exist until phase B, so this
+/// sets the field on the component directly — the field is what the save
+/// carries, and it has to carry it before anything can draw a plan worth
+/// losing.
+#[test]
+fn a_mark_survives_a_save_round_trip() {
+    let mut game = game_at_the_frontier(3241);
+    game.move_player(1, 0);
+    let site = game.dig_site_at(WALL.0, WALL.1).unwrap();
+    game.world.get_mut::<DigSite>(site).unwrap().marked = true;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_dig_mark_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = loaded.dig_site_at(WALL.0, WALL.1).unwrap();
+    assert!(
+        loaded.world.get::<DigSite>(reloaded).unwrap().marked,
+        "a plan the player drew must survive the reload that loses it"
+    );
+}

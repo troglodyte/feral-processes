@@ -605,6 +605,31 @@ impl Game {
             nest_positions.insert(n.position, nest);
         }
 
+        for d in data.dig_sites {
+            game.world.spawn((
+                DigSite {
+                    marked: d.marked,
+                    // Never saved: a crew's "I already said so" is true of a
+                    // conversation, not of the world, and a reload is
+                    // exactly when the player should be told again.
+                    announced_stuck: false,
+                },
+                Durability {
+                    // Clamped rather than trusted, the same way a nest's is
+                    // just above: `BASE_ROCK_DURABILITY` is a tuning
+                    // constant and not part of the save format, so lowering
+                    // it must not leave an existing save's wall loading with
+                    // more rock in it than a fresh one has.
+                    hp: d.durability.min(crate::tuning::BASE_ROCK_DURABILITY),
+                    max_hp: crate::tuning::BASE_ROCK_DURABILITY,
+                },
+                Position {
+                    x: d.position.0,
+                    y: d.position.1,
+                },
+            ));
+        }
+
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
         // Collected with their slot index and sorted below: creatures come
         // back in whatever order they were written, which is no longer the
@@ -1109,6 +1134,19 @@ impl Game {
             });
         }
 
+        let mut dig_sites = Vec::new();
+        let mut dig_query = self.world.query::<(&DigSite, &Position, &Durability)>();
+        for (site, pos, durability) in dig_query.iter(&self.world) {
+            dig_sites.push(save::DigSiteSave {
+                // Base-space coordinates: a `DigSite` is the one
+                // non-`Structure` entity besides a posted program that
+                // stands in the base's own space.
+                position: (pos.x, pos.y),
+                durability: durability.hp,
+                marked: site.marked,
+            });
+        }
+
         let tile_overrides = self
             .world
             .resource::<WorldMap>()
@@ -1175,6 +1213,7 @@ impl Game {
             creatures,
             structures,
             nests,
+            dig_sites,
             tile_overrides,
             base_grid,
             anchor: self.anchor_position(),

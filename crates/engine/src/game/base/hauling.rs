@@ -134,13 +134,23 @@ pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> Hash
     positions.map(|p| (p.x, p.y)).collect()
 }
 
-/// The tile a worker must stand on to work or deliver to `structure`: the
-/// walkable, unoccupied orthogonal neighbour nearest `from`, ties by
-/// `(x, y)`. `None` when the structure is walled in.
+/// Every tile a worker could stand on to work or deliver to `structure` —
+/// the walkable, unoccupied orthogonal neighbours — nearest `from` first,
+/// ties by `(x, y)`. Empty when the structure is walled in.
 ///
-/// A specific tile rather than "get within one step". Descending a cost
+/// Specific tiles rather than "get within one step". Descending a cost
 /// field until it reads 1 would let a worker park on a *diagonal* at cost 1,
 /// never satisfy `at_station`, and spin there for the rest of the run.
+///
+/// **All four rather than only the nearest**, because the four faces of a
+/// target are not always in the same part of the base. `post_field` tries
+/// them in this order and stops at the first that routes, so a post that
+/// resolved before resolves identically and through the same tile; what
+/// changes is that a nearer face walled off from the worker no longer
+/// stands for the whole answer. A machine's faces are rarely disconnected,
+/// but a dig site's routinely are — a marked cell on a rock spur has the
+/// corridor on one side and unbroken rock on the other, and the tie went to
+/// the lower `x` regardless of which was which.
 ///
 /// `blocked` is applied here and not only in the walk: an occupied neighbour
 /// nominated as a station is a tile the worker is being sent to stand *on*,
@@ -148,20 +158,22 @@ pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> Hash
 /// that all four of its neighbours hold buildings has no station at all —
 /// and the player could never have collected from it either, since
 /// `collect_adjacent` is orthogonal and they cannot stand on a building.
-pub(crate) fn station_tile(
+fn station_tiles(
     grid: &BaseGrid,
     structure: Position,
     from: Position,
     blocked: &HashSet<(i32, i32)>,
-) -> Option<Position> {
-    ORTHOGONAL
+) -> Vec<Position> {
+    let mut tiles: Vec<Position> = ORTHOGONAL
         .iter()
         .map(|(dx, dy)| Position {
             x: structure.x + dx,
             y: structure.y + dy,
         })
         .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
-        .min_by_key(|p| (chebyshev(*p, from), p.x, p.y))
+        .collect();
+    tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
+    tiles
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.
@@ -197,6 +209,11 @@ pub(crate) enum NoPost {
 /// filters successors, that worker would otherwise be absent from its own
 /// field and frozen for the rest of the run. You may step *off* an occupied
 /// tile, never onto one.
+///
+/// **The faces are tried in `station_tiles`' order and the first that routes
+/// wins**, so a post that already resolved resolves through the same tile at
+/// the same cost — the extra walks are paid only where the old code was
+/// about to answer `NoRoute`, and at most three of them.
 fn post_field(
     grid: &BaseGrid,
     from: Position,
@@ -204,14 +221,21 @@ fn post_field(
     blocked: &HashSet<(i32, i32)>,
     pocket_radius: i32,
 ) -> Result<PostRoute, NoPost> {
-    let station = station_tile(grid, structure, from, blocked).ok_or(NoPost::BoxedIn)?;
+    let stations = station_tiles(grid, structure, from, blocked);
+    if stations.is_empty() {
+        return Err(NoPost::BoxedIn);
+    }
     let start = (from.x, from.y);
     let reach = haul_walk_radius(pocket_radius);
-    let field = walk_field((station.x, station.y), reach, |p| {
-        grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
-    });
-    let here = *field.get(&start).ok_or(NoPost::NoRoute)?;
-    Ok((field, here))
+    for station in stations {
+        let field = walk_field((station.x, station.y), reach, |p| {
+            grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
+        });
+        if let Some(&here) = field.get(&start) {
+            return Ok((field, here));
+        }
+    }
+    Err(NoPost::NoRoute)
 }
 
 /// Whether a worker standing at `from` could ever reach a post at

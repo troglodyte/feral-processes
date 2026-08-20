@@ -2643,13 +2643,29 @@ The predicate takes **the coordinate as well as the tile**, because only
 one of the two rules is about terrain: a hauler must also refuse any tile
 a `Structure` stands on, which is entity state and unreadable from a
 `Tile`. That was added on 2026-08-11, when a hauler still walked straight
-over machines the player had to walk around. `station_tile` carries the
+over machines the player had to walk around. `station_tiles` carries the
 same filter — an occupied neighbour nominated as a station is a tile the
 worker is sent to stand *on* — but `post_field` admits the worker's own
 tile whatever occupies it, since `place_structure` never checks whether a
 program is standing there and a worker built over would otherwise be
 absent from its own field forever. You may step off an occupied tile,
 never onto one.
+
+**`station_tiles` yields all four faces, not the nearest one**, and
+`post_field` walks them in that order and stops at the first that routes.
+The four faces of a target are not always in the same part of the base, and
+picking one up front made the nearest face stand for the whole answer: a
+`(distance, x, y)` tie went to the lower `x` whether or not anything could
+be reached through it. That was survivable while every target was a machine
+the player had built somewhere they could stand. It stopped being
+survivable with dig sites, whose faces are disconnected *by construction* —
+a marked cell on a rock spur has the corridor on one side and unbroken rock
+on the other — and whose refusal latches `DigSite::announced_stuck`, so one
+tie broken the wrong way skipped the site for the rest of the run. A post
+that already resolved still resolves through the same tile at the same
+cost, because the old choice is still first in the order; the extra walks
+are paid only where the answer was about to be `NoRoute`, and there are at
+most three of them.
 
 ### `Carrying` is the only thing hauling stores, and the carry cap is what lets it be one `(item, qty)` pair
 

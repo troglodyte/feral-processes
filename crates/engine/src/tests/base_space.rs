@@ -2811,3 +2811,64 @@ fn an_unmarked_half_cut_wall_is_not_called_marked() {
         "an unmarked, half-cut wall is named as though it were in a plan: {label}"
     );
 }
+
+/// A post is reachable if *any* of its four faces is, not if the nearest one
+/// is. Dig sites are the first target whose faces routinely sit in different
+/// parts of the base — a marked cell on a rock spur has a corridor on one
+/// side and an unreached pocket on the other — and picking one face up front
+/// meant a tie broken the wrong way latched `announced_stuck` and skipped the
+/// site for the rest of the run.
+#[test]
+fn a_post_is_reachable_through_a_face_that_is_not_the_nearest() {
+    use crate::game::base::hauling::post_reach;
+
+    let mut grid = base_grid::BaseGrid::default();
+    // The target sits at the origin, solid. Its west face is an isolated
+    // pocket; its east face joins the corridor the worker is standing in.
+    // Both faces are the same Chebyshev distance from the worker, so
+    // `station_tile`'s `(distance, x, y)` order takes the western — the
+    // unreachable one — first.
+    for (x, y) in [(-1, 0), (1, 0), (1, 1), (0, 2)] {
+        grid.open(x, y, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: 0, y: 2 };
+    let blocked = std::collections::HashSet::new();
+
+    assert_eq!(
+        post_reach(&grid, from, target, &blocked, grid.radius()),
+        Ok(()),
+        "a post with one reachable face was reported unreachable"
+    );
+}
+
+/// The other half: a target with no standable face at all is still
+/// `BoxedIn`, and one whose every face is walled off from the worker is
+/// still `NoRoute`. Widening the search must not collapse the two answers,
+/// which leave the player different errands.
+#[test]
+fn a_post_with_no_reachable_face_is_still_refused() {
+    use crate::game::base::hauling::{NoPost, post_reach};
+
+    let mut grid = base_grid::BaseGrid::default();
+    for (x, y) in [(-1, 0), (1, 0), (0, 2)] {
+        grid.open(x, y, 0);
+    }
+    let target = Position { x: 0, y: 0 };
+    let from = Position { x: 0, y: 2 };
+    let blocked = std::collections::HashSet::new();
+
+    assert_eq!(
+        post_reach(&grid, from, target, &blocked, grid.radius()),
+        Err(NoPost::NoRoute),
+        "both faces are cut off from the worker, so this is a route problem"
+    );
+
+    let mut boxed = base_grid::BaseGrid::default();
+    boxed.open(from.x, from.y, 0);
+    assert_eq!(
+        post_reach(&boxed, from, target, &blocked, boxed.radius()),
+        Err(NoPost::BoxedIn),
+        "nothing can stand beside it at all, which is a digging problem"
+    );
+}

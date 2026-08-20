@@ -100,6 +100,12 @@ plan says nothing at all, because it opens itself as the shell comes down.
 - Clearing a mark off a cell the frontier had already reclaimed left an
   invisible record behind — drawn nowhere, wanted by nobody, and saved from
   then on.
+- A marked cell the crew could reach could still be reported cut off. The
+  base picked one face of a post up front — the nearest, ties to the lower
+  x — and gave up if that one had no route, which for a cell on a rock spur
+  is the side facing unbroken rock. It tries the other faces now, and
+  because a dig site announces being stuck only once, the old behaviour
+  skipped that cell for the rest of the run.
 - Committing a large plan no longer costs more the more of the base you
   have already dug. The box was looked up tile by tile against every dig
   site standing, which is a full scan per cell — a maximum box ran 625 of

@@ -107,9 +107,15 @@ fn c_reaches_the_collect_action() {
     );
 }
 
-/// `>` and `<` are the anchor's two doors on the map screen — the same pair
+/// `<` and `>` are the anchor's two doors on the map screen — the same pair
 /// the Stack already binds for its link, rather than a third set of keys for
 /// a third way of going somewhere.
+///
+/// **The sense is the opposite of the Stack's, and that is the assertion.**
+/// The pair reads as up and down before it reads as in and out, and base
+/// space is a platform the party steps *onto*: `<` rises into it, `>` drops
+/// back to the grid. Bound the other way round it told the player they were
+/// descending into a base that stands above the ground they left.
 ///
 /// Driven out and back in, because a fixture with a Home standing is the
 /// only one that can be entered at all: the anchor leads nowhere until one
@@ -123,16 +129,16 @@ fn the_link_keys_walk_out_of_the_base_and_back_in_through_the_anchor() {
         "the fixture must start inside the base"
     );
 
-    app.handle_key(GameKey::Char('<'));
-    assert!(
-        !app.game.as_ref().unwrap().in_base(),
-        "'<' must reach Game::leave_base"
-    );
-
     app.handle_key(GameKey::Char('>'));
     assert!(
+        !app.game.as_ref().unwrap().in_base(),
+        "'>' must reach Game::leave_base — down off the platform"
+    );
+
+    app.handle_key(GameKey::Char('<'));
+    assert!(
         app.game.as_ref().unwrap().in_base(),
-        "'>' must reach Game::enter_base"
+        "'<' must reach Game::enter_base — up onto the platform"
     );
 }
 
@@ -147,7 +153,7 @@ fn the_link_keys_walk_out_of_the_base_and_back_in_through_the_anchor() {
 fn a_refused_crossing_reports_the_engines_own_reason() {
     let mut app = test_app(216);
 
-    app.handle_key(GameKey::Char('>'));
+    app.handle_key(GameKey::Char('<'));
 
     assert!(!app.game.as_ref().unwrap().in_base());
     let said = app.status_line.clone().expect("a refused key says why");

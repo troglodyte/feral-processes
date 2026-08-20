@@ -1,10 +1,10 @@
 # Your base
 
 Your base is not on the map. It is its own space, entered through a permanent gray anchor that
-stands wherever your run began: walk onto that tile and press > to phase in, and walk back to the
-door cell inside and press < to come out. The anchor cannot be destroyed or moved, and it travels
-with you across a breach, so the base you built in zone 1 is the base you walk into in zone 6,
-exactly as you left it.
+stands wherever your run began: walk onto that tile and press < to phase up into it, and walk back
+to the door cell inside and press > to come back down. The anchor cannot be destroyed or moved,
+and it travels with you across a breach, so the base you built in zone 1 is the base you walk into
+in zone 6, exactly as you left it.
 
 Until you deploy a Home the anchor is dark and there is nothing on the other side. Deploying one is
 the single build allowed out on the open grid, and it clears a small pocket of floor around the

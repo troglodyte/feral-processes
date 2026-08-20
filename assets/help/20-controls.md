@@ -31,8 +31,8 @@ Acting on the world:
 - v — lay a VectorStasis Tile on the cell you are standing on
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and floored, and drawing a plan costs no time.
-- > — phase into the base, standing on the anchor
-- < — phase back out, at the exit
+- < — phase up into the base, standing on the anchor
+- > — phase back down to the grid, at the exit
 
 Reading and housekeeping:
 
@@ -53,7 +53,9 @@ In the Stack:
 
 - hjkl or the arrow keys — forward, back, turn left, turn right
 - > — descend
-- < — climb, or leave the link. The same pair the anchor uses on the surface and in the base.
+- < — climb, or leave the link. The same pair the anchor uses, and the same sense: < goes up, >
+  goes down. The base sits above the grid and the Stack below it, so the anchor's two keys are
+  the mirror of these.
 - o — adopt an orphaned process, which costs a catalyst
 - t — trade, if somebody is selling on this cell. They keep no buyback and the shelf does not
   refill.

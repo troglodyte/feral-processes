@@ -252,10 +252,18 @@ impl App {
                     game.rest();
                     true
                 }
-                // The same two keys the Stack binds, for the same two
-                // things: `>` goes in, `<` comes back out. Deliberately not
-                // a third pair — the anchor is a door like the link is, and
-                // a player who has learned one has learned the other.
+                // The same two keys the Stack binds, read the way the
+                // Stack reads them: the pair is *up and down*, not in and
+                // out. Base space is a platform you step onto, so `<` goes
+                // up into it and `>` comes back down to the grid — the
+                // opposite assignment to the Stack's, which is the point,
+                // since a link genuinely goes down and the anchor does not.
+                //
+                // It was `>` in and `<` out, on the reasoning that the
+                // anchor is a door like the link is and one pair should
+                // mean one thing. What that read as in play was backwards:
+                // the keys carry a direction before they carry a role, and
+                // `>` on the anchor said "descend" while the party rose.
                 //
                 // Both are bound in this one block rather than split across
                 // a locale check up here, because the engine already
@@ -263,14 +271,14 @@ impl App {
                 // `leave_base` asks `require_base`, so pressing either in
                 // the wrong place gets the engine's own words rather than a
                 // second opinion from app-core that could disagree with it.
-                GameKey::Char('>') => match game.enter_base() {
+                GameKey::Char('<') => match game.enter_base() {
                     Ok(()) => true,
                     Err(reason) => {
                         refusal = Some(reason);
                         false
                     }
                 },
-                GameKey::Char('<') => match game.leave_base() {
+                GameKey::Char('>') => match game.leave_base() {
                     Ok(()) => true,
                     Err(reason) => {
                         refusal = Some(reason);

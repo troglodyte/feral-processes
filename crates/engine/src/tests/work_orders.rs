@@ -13,60 +13,14 @@ fn save_path(tag: &str) -> std::path::PathBuf {
     ))
 }
 
+/// The staff pool is derived, so a round trip has nothing to restore — it
+/// rebuilds the party and the wield and the roles fall out. `CreatureSave`
+/// still *writes* a `staff` flag, the way `Experience::xp_to_next` is still
+/// written, which is why this asserts on the pool and not on the field.
 #[test]
-fn assigning_a_program_you_own_puts_it_on_the_base_staff() {
-    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
-    game.world.resource_mut::<resources::Party>().0.push(worker);
-
-    game.assign_base_staff(worker).unwrap();
-
-    assert!(
-        game.world.get::<components::BaseStaff>(worker).is_some(),
-        "the program must be marked as base staff"
-    );
-    assert!(
-        !game
-            .world
-            .resource::<resources::Party>()
-            .0
-            .contains(&worker),
-        "staff and party are disjoint sets"
-    );
-    assert_eq!(game.base_staff(), vec![worker]);
-}
-
-#[test]
-fn assigning_a_program_you_do_not_own_is_refused() {
-    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let wild = spawn_wild_on_player_tile(&mut game);
-
-    let err = game
-        .assign_base_staff(wild)
-        .expect_err("a wild program is nobody's to post");
-
-    assert!(!err.is_empty());
-    assert!(game.world.get::<components::BaseStaff>(wild).is_none());
-    assert!(game.base_staff().is_empty());
-}
-
-#[test]
-fn releasing_a_staff_member_clears_the_marker() {
-    let mut game = Game::new(3, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
-    game.assign_base_staff(worker).unwrap();
-
-    game.release_base_staff(worker).unwrap();
-
-    assert!(game.world.get::<components::BaseStaff>(worker).is_none());
-    assert!(game.base_staff().is_empty());
-}
-
-#[test]
-fn the_base_staff_marker_survives_a_save_round_trip() {
+fn the_base_staff_pool_survives_a_save_round_trip() {
     let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let worker = spawn_tamed(&mut game, 10, 3);
-    game.assign_base_staff(worker).unwrap();
+    spawn_tamed(&mut game, 10, 3);
 
     let path = save_path("roundtrip");
     game.save(&path).unwrap();
@@ -80,10 +34,31 @@ fn the_base_staff_marker_survives_a_save_round_trip() {
     );
 }
 
-/// The load-path absorption rule. A base built before work orders existed
-/// has its workers posted by hand and no `staff` flag on disk; standing
-/// them all down on the first load after the feature ships would empty a
-/// working base. Anything holding a `Task` comes back as staff.
+/// The other half of "derived, never stored": a party member is not staff
+/// after a round trip either, and that is decided by `Party` coming back
+/// rather than by any flag on the creature.
+#[test]
+fn a_party_member_does_not_come_back_as_base_staff() {
+    let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let member = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(member).unwrap();
+
+    let path = save_path("party_roundtrip");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.base_staff().is_empty(),
+        "a program that loaded back into the party must not also be staff"
+    );
+}
+
+/// A base built before work orders existed had its workers posted by hand
+/// and no `staff` flag on disk. `Game::load` used to rescue those off their
+/// `Task`; now nothing needs rescuing, because everything the player owns
+/// and is not fighting with is staff. The worker must still come back on
+/// its machine either way.
 #[test]
 fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -93,12 +68,6 @@ fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let worker = spawn_tamed(&mut game, 10, 3);
     stand_player_at_post(&mut game, node);
     game.assign_cronjob(worker, node).unwrap();
-    // The saved file predates the flag: a hand-posted worker was never
-    // staff, so the absorption has to work off the `Task` alone.
-    assert!(
-        game.world.get::<components::BaseStaff>(worker).is_none(),
-        "precondition: posting by hand does not itself mark staff"
-    );
 
     let path = save_path("absorb");
     game.save(&path).unwrap();
@@ -106,11 +75,7 @@ fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let _ = std::fs::remove_file(&path);
 
     let staff = loaded.base_staff();
-    assert_eq!(
-        staff.len(),
-        1,
-        "the posted worker must be absorbed as staff"
-    );
+    assert_eq!(staff.len(), 1, "the posted worker must come back as staff");
     assert!(
         loaded.world.get::<components::Task>(staff[0]).is_some(),
         "and must still be on its machine"
@@ -608,9 +573,9 @@ fn posted_at(game: &Game, worker: Entity) -> Option<Entity> {
 fn hire(game: &mut Game, n: usize) -> Vec<Entity> {
     let mut staff = Vec::new();
     for _ in 0..n {
-        let worker = spawn_tamed(game, 10, 3);
-        game.assign_base_staff(worker).unwrap();
-        staff.push(worker);
+        // Nothing assigns: `spawn_tamed` puts a program on the roster, and
+        // an owned program outside the party is staff by derivation.
+        staff.push(spawn_tamed(game, 10, 3));
     }
     staff.sort();
     staff
@@ -1081,7 +1046,6 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     // from `Glyph`, and a program without one is invisible for reasons that
     // have nothing to do with this rule.
     let idle = spawn_tamed_on_map(&mut game, 5, 5);
-    game.assign_base_staff(idle).unwrap();
     let companion = spawn_tamed_on_map(&mut game, 6, 5);
     game.add_companion(companion).unwrap();
     game.tick();

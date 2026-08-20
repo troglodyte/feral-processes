@@ -1145,8 +1145,8 @@ other than `in_base` — or skips the gate because the coordinates
 `Structure`.** The entry above is the rule this widens: `Structure` is the
 space tag, so a `With<Structure>` query answers a base-space question by
 construction and needs nothing to say so. That rule had exactly one prior
-exception — a posted program, which stands in the pocket carrying
-`Position` and `BaseStaff` and no `Structure` — and slice 2 adds the
+exception — a posted program, which stands in the pocket carrying a
+`Position` and a `Task` and no `Structure` — and slice 2 adds the
 second. A cell of rock the player has started cutting, or marked for a
 crew, is an entity with `DigSite`, `Durability` and a `Position` in the
 pocket's coordinates. It is spawned lazily, by the first swing or by the
@@ -1203,8 +1203,9 @@ state the Stack spent its own seam making unreachable.
 
 **And `With<Task>` alone does not mean "a body standing in base space" in
 the other direction either**, which is why the query is
-`Or<(With<Task>, With<BaseStaff>)>`. A `Task` is what a body is *doing*;
-occupancy is where it is *standing*. Staff between postings hold none, and
+`Or<(With<Task>, With<Tamed>)>` and then narrowed by `role_of`. A `Task` is
+what a body is *doing*; occupancy is where it is *standing*. Staff between
+postings hold none, and
 `park_idle_staff` cannot always walk one home — it declines a park tile
 that is occupied or unwalkable, and `schedule_base_labour` early-returns
 without parking anyone at all on a game over or during a battle, while
@@ -2340,6 +2341,60 @@ beside `maybe_spawn_wild_creature`, which is there for the same reason.
 three occasions where a shifted stream silently rewrote a seeded test in an
 unrelated file, and a milling draw taken every tick for every idle program
 would shift it harder than anything else in the game.
+
+### A program's role is derived, and there is no "owned but idle" state
+
+**`Game::program_role` is the one derivation of what a program you own is
+doing with itself**, and `ProgramRole`'s three variants — `Wielded`,
+`InParty`, `Staff` — are disjoint and exhaustive. A program you own that is
+not fighting beside you and not held as your weapon **is** base staff. The
+scheduler posts it; nothing assigns it.
+
+This replaced a stored `components::BaseStaff` marker toggled by hand from
+the Base Staff screen, and the marker's two verbs (`assign_base_staff`,
+`release_base_staff`) are gone with it. The reason to derive rather than to
+auto-insert is the one this file keeps making: a stored bit and the thing it
+is supposed to mirror are two sources of truth, and the one that drifts is
+whichever nobody looks at. The old marker needed upkeep at four sites —
+`add_companion` stripped it, `assign_base_staff` set it and popped the
+party, `wield_program` had to stand a member down, and the load path carried
+an *absorption rule* to rescue a base staffed before the feature shipped.
+None of those exist now, because `Party` and `WieldedProgram` are already
+authoritative and `Staff` is what is left over.
+
+**The precedence was already duplicated before this landed**, which is what
+made the enum worth its indirection over a derived boolean.
+`Game::program_activity` ordered wielded ahead of party in its own prose,
+and a boolean `base_staff()` would have restated the same exclusion from
+the other side as a chain of negations. One enum, one ordering, and a fourth
+role added here is one arm plus a compiler error at every reader — which is
+the shape to keep, because a fourth role is planned.
+
+**The rule itself is `party::role_of`, a free function over values**, for
+`stack::surfaced`'s reason: `base_entropy_system` is a bevy system with no
+`Game` to ask, and it must not carry a second copy of who counts as staff.
+Its query is deliberately *wider* than the rule — `Or<(With<Task>,
+With<Tamed>)>`, which catches party members too — and narrows with
+`role_of`, because the narrowing is the half that must not exist twice. A
+cell reverted under a body seals it in solid rock for the rest of the run,
+which is what a drifted copy would cost.
+
+**The save field stayed.** `CreatureSave::staff` is still written and is
+read nowhere, exactly as `Experience::xp_to_next` is: *removing* a field is
+what earns a `SAVE_FORMAT_VERSION` bump, and this change earns none. A save
+claiming `staff: true` for a program that loads back into the party cannot
+make the two disagree, because nothing consults it.
+
+**Two consequences worth knowing before touching this.** First, `Game::
+assign_cronjob` no longer pins a worker: the poster is in the pool now, so
+the scheduler owns the posting and will move it on the next tick. It has no
+call site outside engine tests — manual posting was deleted in 0.8.35 — but
+a fixture that hand-posts and then expects the body to stay put is testing
+something that stopped being true, and the symptom is a chain that quietly
+drains instead of clogging. Second, there is no longer any way to hold a
+program back from the base, so **base output scales with roster size** and
+`pet_capacity` is the only thing bounding it. That was accepted as a
+balance change, not smuggled in as a convenience.
 
 ### `accepts_a_program` is the one predicate for "a program can be posted here"
 

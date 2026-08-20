@@ -3,7 +3,7 @@
 use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
-use feral_processes_app_core::{BaseStaffRow, WorkOrderRow};
+use feral_processes_app_core::{BaseStaffRow, ProgramRole, WorkOrderRow};
 use feral_processes_engine::WorkProfile;
 
 /// One buildable structure as the build menu needs it: everything that
@@ -290,11 +290,13 @@ pub(super) fn draw_work_order_quantity(
     draw_popup("Order Quantity", PopupSize::Small, &rows, painter, m);
 }
 
-/// Putting programs on the base staff and standing them down. One key,
-/// because a row is on the staff or it isn't — but what it says is the wider
-/// question of what the program is *doing*, since standing one down leaves it
-/// idle rather than in your party (the Companions screen is where a party is
-/// picked), and the two used to read identically.
+/// The roster as the base sees it: every program the player owns, the role
+/// it is in, and what it is doing right now.
+///
+/// **Read-only.** Roles are derived — a program you own and are not fighting
+/// with is base staff — so there is nothing on this screen to toggle. The
+/// Companions screen is where a party is picked, and the base takes whatever
+/// that leaves.
 pub(super) fn draw_base_staff(
     game: &mut Game,
     staff_rows: &[BaseStaffRow],
@@ -349,7 +351,7 @@ pub(super) fn base_staff_menu_rows(
     selected: usize,
 ) -> Vec<Row> {
     let mut rows = vec![text_row(
-        "Enter puts a program to work in the base, or stands it down. Esc to close.",
+        "Every program you own works the base unless it is in your party. Esc to close.",
     )];
     if staff_rows.is_empty() {
         rows.push(text_row("(no compiled programs — beat one first)"));
@@ -371,7 +373,7 @@ pub(super) fn base_staff_menu_rows(
             row.program.glyph,
             glyph_color(row.program.color),
         ));
-        let side = if row.on_staff {
+        let side = if row.role == Some(ProgramRole::Staff) {
             format!("base, {}", row.doing)
         } else {
             row.doing.clone()
@@ -1063,7 +1065,7 @@ mod base_staff_tests {
         label: &str,
         work: Option<WorkProfile>,
         doing: &str,
-        on_staff: bool,
+        role: Option<ProgramRole>,
     ) -> BaseStaffRow {
         let mut program = super::tests::view(1, 1, 1);
         program.label = label.to_string();
@@ -1071,7 +1073,7 @@ mod base_staff_tests {
         program.is_tamed = true;
         BaseStaffRow {
             program,
-            on_staff,
+            role,
             doing: doing.to_string(),
             work,
         }
@@ -1090,7 +1092,7 @@ mod base_staff_tests {
                 class: Some(AffinityClass::Leech),
             }),
             "guarding the Contract Broker",
-            true,
+            Some(ProgramRole::Staff),
         )
     }
 
@@ -1109,7 +1111,14 @@ mod base_staff_tests {
         for n in 1..6 {
             for selected in [0, n - 1] {
                 let staff: Vec<BaseStaffRow> = (0..n)
-                    .map(|i| staff_row(&format!("Program {i}"), None, "idle", false))
+                    .map(|i| {
+                        staff_row(
+                            &format!("Program {i}"),
+                            None,
+                            "idle",
+                            Some(ProgramRole::Staff),
+                        )
+                    })
                     .collect();
                 let rows = base_staff_menu_rows(&staff, &[], selected);
                 let last_item = rows
@@ -1196,7 +1205,11 @@ mod base_staff_tests {
             "the class is the third fact that decides a posting: {head}"
         );
 
-        let unknown = base_staff_menu_rows(&[staff_row("Modded", None, "idle", false)], &[], 0);
+        let unknown = base_staff_menu_rows(
+            &[staff_row("Modded", None, "idle", Some(ProgramRole::Staff))],
+            &[],
+            0,
+        );
         let head = unknown
             .iter()
             .find_map(|r| match r {

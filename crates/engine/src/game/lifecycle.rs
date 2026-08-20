@@ -781,17 +781,16 @@ impl Game {
                     party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
                     pending_cronjobs.push((creature_id, cronjob));
-                    // The absorption rule, and it is deliberately keyed on
-                    // holding a job rather than on `c.staff`: a base staffed
-                    // by hand before work orders existed has no flag on disk
-                    // and would otherwise be stood down wholesale by the
-                    // first load after the feature shipped. This is a
-                    // load-path rule, not a migration — it costs no version
-                    // bump and no tool.
-                    entity.insert(BaseStaff);
-                } else if c.staff {
-                    entity.insert(BaseStaff);
                 }
+                // Nothing restores a staff marker, and `c.staff` is read
+                // nowhere: the role is derived from the party and the wield,
+                // both of which this load path already rebuilds. That also
+                // retires the absorption rule this branch used to carry —
+                // a save written before work orders existed came back with
+                // no flag on disk and had to be rescued by its `Task`, and
+                // now everything outside the party is staff regardless.
+                // `Experience::xp_to_next` is the same shape: still written,
+                // never read back, and so **no `SAVE_FORMAT_VERSION` bump**.
             } else {
                 entity.insert((Hostile, WanderAi::default()));
                 // A nest_position resolving to nothing (the nest's species

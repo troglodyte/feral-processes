@@ -16,6 +16,7 @@ pub use app::group_menu::GroupMenuRow;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
+pub use feral_processes_engine::ProgramRole;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 
@@ -782,13 +783,12 @@ pub enum Mode {
     WorkOrderPick,
     /// How many of it. Digits and Enter, like `Mode::CraftQuantity`.
     WorkOrderQuantity,
-    /// Moving programs into and out of the base staff pool — see
-    /// `components::BaseStaff`. Enter is a toggle on that one marker, but a
-    /// program you own is in **three** possible places rather than two: on
-    /// the staff, in your `Party`, or neither. Only `add_companion` pushes
-    /// into `Party` and `release_base_staff` does not, so "neither" is the
-    /// state a program is tamed into and the one it is stood down to. A row
-    /// says which, from `BaseStaffRow::doing`.
+    /// The roster as the base sees it: every program you own and the
+    /// `ProgramRole` it is in. **Read-only** — a program you own and are not
+    /// fighting with *is* base staff, derived rather than assigned, so there
+    /// is no marker here for a key to toggle and no limbo state to fall
+    /// into. What the player changes is the party. `BaseStaffRow::role` says
+    /// which role, `doing` says what it is doing inside it.
     BaseStaff,
     /// Picking a nearby structure for the *player* to work themselves rather
     /// than posting a program to it — see `Game::work_structure`. The player

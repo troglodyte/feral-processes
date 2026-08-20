@@ -166,7 +166,7 @@ impl Game {
             return true;
         }
         self.worker_away_from_post(entity)
-            || (self.world.get::<BaseStaff>(entity).is_some()
+            || (self.program_role(entity) == Some(ProgramRole::Staff)
                 && self.world.get::<Task>(entity).is_none())
     }
 

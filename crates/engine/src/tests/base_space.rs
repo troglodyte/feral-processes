@@ -2316,8 +2316,8 @@ fn base_with_a_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
     stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
     let mut staff = Vec::new();
     for _ in 0..n {
+        // No assign call: an owned program outside the party is staff.
         let worker = spawn_tamed(&mut game, 10, 3);
-        game.assign_base_staff(worker).unwrap();
         staff.push(worker);
     }
     staff.sort();
@@ -2656,15 +2656,23 @@ fn a_posted_digger_is_named_by_the_cell_it_is_cutting() {
 fn a_cell_an_idle_base_staffer_is_standing_on_never_reverts() {
     let cut = WALL;
     let mut game = game_with_a_cut_cell(3234, cut);
-    // No `Task`: `schedule_base_labour` early-returns on a game over or an
-    // active battle without parking anyone, and `park_idle_staff` declines
-    // a park tile that is occupied or unwalkable. Entropy still runs.
-    game.world.spawn((
-        crate::components::BaseStaff,
-        Position { x: cut.0, y: cut.1 },
-    ));
+    let staffer = spawn_tamed(&mut game, 10, 3);
+    *game.world.get_mut::<Position>(staffer).unwrap() = Position { x: cut.0, y: cut.1 };
+    assert_eq!(
+        game.base_staff(),
+        vec![staffer],
+        "precondition: an owned program outside the party is base staff"
+    );
 
-    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+    // The bevy schedule rather than a whole turn, because a whole turn runs
+    // `schedule_base_labour` first and `park_idle_staff` would walk the body
+    // off the cell before entropy could look at it. That gap is the case
+    // this test is about: the labour scheduler early-returns on a game over
+    // or an active battle, and declines a park tile that is occupied or
+    // unwalkable, while the schedule holding `base_entropy_system` keeps
+    // running regardless.
+    game.world.resource_mut::<GameClock>().tick += crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3;
+    game.schedule.run(&mut game.world);
 
     assert!(
         matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
@@ -2693,7 +2701,6 @@ fn a_digger_drops_a_post_whose_mark_was_cleared() {
 
     let digger = spawn_tamed(&mut game, 30, 3);
     game.world.entity_mut(digger).insert((
-        components::BaseStaff,
         Position {
             x: crate::tuning::STARTING_POCKET_RADIUS,
             y: 0,

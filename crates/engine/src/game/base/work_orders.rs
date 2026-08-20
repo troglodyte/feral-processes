@@ -635,14 +635,16 @@ impl Game {
         }
         self.park_idle_staff(&staff);
         // Posts already covered by somebody the scheduler may not move —
-        // the player's own `work_structure` task, or a program posted by
-        // hand outside the pool. A post with a body on it does not need a
-        // second, and this is the only body the scheduler treats as
-        // permanent.
+        // in practice the player's own `work_structure` task, since every
+        // program the player owns and is not fighting with is staff. A post
+        // with a body on it does not need a second, and this is the only
+        // body the scheduler treats as permanent. Tested against the `staff`
+        // list rather than a marker for the reason the list is sorted: it is
+        // the one answer to who the pool is, and asking twice invites two.
         let outsiders: Vec<(Entity, TaskKind)> = self
             .world
             .iter_entities()
-            .filter(|e| !e.contains::<BaseStaff>())
+            .filter(|e| !staff.contains(&e.id()))
             .filter_map(|e| e.get::<Task>())
             .map(|t| (t.target, t.kind))
             .collect();

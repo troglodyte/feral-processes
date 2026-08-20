@@ -309,18 +309,15 @@ pub struct CreatureSave {
     /// documents just above.
     #[serde(default)]
     pub nemesis_grudges: u32,
-    /// Whether this program has been given to the base rather than kept in
-    /// the party — see `components::BaseStaff`. Only meaningful when
-    /// `tamed` is true.
+    /// Whether this program was on the base staff — see `ProgramRole`. Only
+    /// meaningful when `tamed` is true.
     ///
-    /// Additive, named and defaulted, so a save written before work orders
-    /// existed loads with it false and cost **no `SAVE_FORMAT_VERSION`
-    /// bump** — the save has been field-named RON since v29, which is what
-    /// retired migrations for exactly this shape of change. Such a file
-    /// still comes back with a working base: `Game::load` marks anything
-    /// holding a `Task` as staff regardless of what this says, because a
-    /// base staffed by hand before the feature shipped must not be stood
-    /// down by loading it.
+    /// **Written and never read back.** The role is derived from the party
+    /// and the wield, both of which `Game::load` already rebuilds, so there
+    /// is nothing here to restore and a file claiming otherwise cannot make
+    /// the two disagree. `Experience::xp_to_next` is the same shape and for
+    /// the same reason: the field stays written because *removing* one is
+    /// what earns a `SAVE_FORMAT_VERSION` bump, and this change earns none.
     #[serde(default)]
     pub staff: bool,
 }

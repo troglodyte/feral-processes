@@ -431,20 +431,22 @@ pub struct WorkOrderRow {
     pub order: Option<WorkOrderReport>,
 }
 
-/// One row on `Mode::BaseStaff`: a program you own, and which side of the
-/// party/staff split it is currently on.
+/// One row on `Mode::BaseStaff`: a program you own and the role it is in.
 #[derive(Clone)]
 pub struct BaseStaffRow {
     pub program: EntityView,
-    pub on_staff: bool,
+    /// Which of `ProgramRole`'s roles this program is filling — the engine's
+    /// one derivation, not a re-decision. `None` only for an entity that is
+    /// not a program the player owns, which this screen never lists.
+    ///
+    /// Carried as the role rather than an on-staff flag because the roles are
+    /// what the screen is *about*, and a boolean cannot grow a fourth one.
+    pub role: Option<ProgramRole>,
     /// What it is doing right now — "working the Mining Node", "guarding the
     /// Shield", "in party", "idle".
     ///
-    /// Total rather than `Option`, because "not on the staff" is two states
-    /// and not one: only `add_companion` ever pushes into `Party`, so a
-    /// program that has just been tamed or just stood down from the base is
-    /// in neither set. This read `None` for both and the renderer named the
-    /// pair "party", which is the one of the two it is *least* likely to be.
+    /// Total rather than `Option`: it distinguishes the post a staffer is on
+    /// from a staffer waiting between postings, which the role alone does not.
     pub doing: String,
     /// What this program is worth at a post — see `views::WorkProfile`. The
     /// screen's whole decision, since the scheduler picks who stands where
@@ -576,11 +578,11 @@ impl App {
         let Some(game) = &self.game else {
             return Vec::new();
         };
-        let staff = game.base_staff();
         programs
             .into_iter()
             .map(|program| {
-                let on_staff = staff.contains(&program.entity);
+                let role = game.program_role(program.entity);
+                let on_staff = role == Some(ProgramRole::Staff);
                 // Off the staff, `Game::program_activity` is the engine's one
                 // answer to "what is this program doing" — it already tells
                 // the party, the wield and idleness apart, so this screen
@@ -593,39 +595,32 @@ impl App {
                         game.program_activity(program.entity)
                     },
                     work: game.work_profile(program.entity),
-                    on_staff,
+                    role,
                     program,
                 }
             })
             .collect()
     }
 
-    /// Enter puts the highlighted program on the staff, or takes it off.
+    /// Scrolling and closing, and deliberately nothing else.
     ///
-    /// One key rather than two rows, because the marker it toggles is one
-    /// bit and the roles either side of it are exclusive by construction —
-    /// `Game::assign_base_staff` drops a program out of `Party` and
-    /// `add_companion` clears its `BaseStaff`. What that does **not** mean
-    /// is that a row is on one of two sides: releasing leaves a program
-    /// idle rather than handing it back to the party, so the state a row
-    /// reports is wider than the state this key writes. See
-    /// `BaseStaffRow::doing`.
+    /// **This screen writes nothing.** A program you own and are not
+    /// fighting with *is* base staff — `ProgramRole` derives the roles from
+    /// the party and the wield, so there is no marker here to toggle and no
+    /// state for a key to put a row out of step with. What the player
+    /// changes is the party; the base takes whatever is left.
+    ///
+    /// Kept as its own handler rather than folded into a generic scroll,
+    /// because this is where a role the player *does* choose between would
+    /// be picked.
     pub(crate) fn handle_base_staff_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
-        let rows = self.base_staff_rows();
-        let Some(idx) = self.selected_index(key, rows.len()) else {
-            return;
-        };
-        let (entity, on_staff) = (rows[idx].program.entity, rows[idx].on_staff);
-        let Some(game) = &mut self.game else { return };
-        self.status_line = if on_staff {
-            game.release_base_staff(entity).err()
-        } else {
-            game.assign_base_staff(entity).err()
-        };
-        self.menu_selected = idx;
+        let rows = self.base_staff_rows().len();
+        if let Some(idx) = self.selected_index(key, rows) {
+            self.menu_selected = idx;
+        }
     }
 }

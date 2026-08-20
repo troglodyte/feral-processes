@@ -4,6 +4,57 @@
 use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
+/// Which of the three roles a program you own is filling.
+///
+/// The roles are **disjoint and exhaustive**: every program on the roster
+/// is in exactly one, and there is no fourth "owned but doing nothing"
+/// state — that is the whole of the auto-staffing rule. Derived through
+/// `Game::program_role` and never stored, so the party roster and the wield
+/// stay the only things that decide it.
+///
+/// Staff and `resources::Party` therefore remain disjoint sets drawing on
+/// one `pet_capacity` roster, which is the tension `tuning.rs` already
+/// states: every program working the base is one absent from the party.
+/// What changed is that nothing has to *maintain* that any more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgramRole {
+    /// Carried as the player's weapon — `resources::WieldedProgram`. Takes
+    /// precedence over the other two, and is why a wielded program is not
+    /// swept up by the auto-staffing rule despite being outside the party.
+    Wielded,
+    /// Fighting alongside the player — `resources::Party`.
+    InParty,
+    /// Everything else you own: the base's labour pool, posted and unposted
+    /// by `game::base::work_orders`'s scheduler and by nothing else.
+    Staff,
+}
+
+/// The role rule itself, over values rather than a `Game`.
+///
+/// A free function for `game::stack::surfaced`'s reason: `base_entropy_system`
+/// is a bevy system and has no `Game` to ask, but must not carry a second
+/// copy of who counts as staff — a cell reverting under a body seals it in
+/// solid rock for the rest of the run, and a drifted copy is how that comes
+/// back. `Game::program_role` is the other applier.
+pub(crate) fn role_of(
+    creature: Entity,
+    owner: Entity,
+    player: Entity,
+    party: &Party,
+    wielded: Option<Entity>,
+) -> Option<ProgramRole> {
+    if owner != player {
+        return None;
+    }
+    if wielded == Some(creature) {
+        return Some(ProgramRole::Wielded);
+    }
+    if party.0.contains(&creature) {
+        return Some(ProgramRole::InParty);
+    }
+    Some(ProgramRole::Staff)
+}
+
 impl Game {
     pub fn player_status(&self) -> PlayerStatus {
         let pet_count = self.pet_count();
@@ -424,82 +475,42 @@ impl Game {
             let name = self.creature_label(creature);
             self.log(format!("You lower {name} and it takes its own footing."));
         }
-        // Both halves of the party/staff exclusion, and the `Task` half is
-        // not enough on its own: a program left marked `BaseStaff` would be
-        // re-posted by `schedule_base_labour` on the very next tick, so the
-        // marker has to come off with the job it authorises.
-        self.world
-            .entity_mut(creature)
-            .remove::<Task>()
-            .remove::<BaseStaff>();
+        // The `Task` still has to be cleared by hand even though the role
+        // is derived: `ProgramRole::InParty` stops the scheduler *posting*
+        // this program again, but it does not undo a posting already made,
+        // and a party member left holding a `Task` is a body the base still
+        // counts as standing at a machine.
+        self.world.entity_mut(creature).remove::<Task>();
         self.world.resource_mut::<Party>().0.push(creature);
         let name = self.creature_label(creature);
         self.log(format!("{name} falls in alongside you."));
         Ok(())
     }
 
-    /// Gives `creature`, a tamed program you own, to the base — see
-    /// `components::BaseStaff`. From here the work order scheduler decides
-    /// where it stands; the player does not post it by hand.
+    /// What role `creature` is in, or `None` if it is not a program you
+    /// own. **The one derivation of that question**, and the one statement
+    /// of the precedence between the roles.
     ///
-    /// Staff and party are disjoint sets, so this stands the program down
-    /// as a companion exactly as `assign_cronjob` used to. Every refusal
-    /// runs before anything is written, the same ordering argument
-    /// `install_routine` makes about the disk.
-    pub fn assign_base_staff(&mut self, creature: Entity) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        let owner = self
-            .world
-            .get::<Tamed>(creature)
-            .ok_or_else(|| "That program isn't compiled under your control.".to_string())?
-            .owner;
-        if owner != self.player_entity() {
-            return Err("You don't control that program.".into());
-        }
-        if self.world.get::<BaseStaff>(creature).is_some() {
-            return Err("That program is already assigned to the base.".into());
-        }
-        // Same door `add_companion` closes from the other side: a wielded
-        // program is a weapon in your hands, not a body in the base.
-        if self.wielded_program() == Some(creature) {
-            self.world.insert_resource(WieldedProgram(None));
-            let name = self.creature_label(creature);
-            self.log(format!("You lower {name} and it takes its own footing."));
-        }
-        if self.world.resource::<Party>().0.contains(&creature) {
-            self.world
-                .resource_mut::<Party>()
-                .0
-                .retain(|&e| e != creature);
-            self.log_base("It stands down as your companion to work the base.");
-        }
-        self.world.entity_mut(creature).insert(BaseStaff);
-        let name = self.creature_label(creature);
-        self.log_base(format!("{name} reports to the base."));
-        Ok(())
-    }
-
-    /// Takes `creature` back off the base staff. Its posting goes with it —
-    /// a program off the pool is not one the scheduler may move, so leaving
-    /// the `Task` behind would strand a body on a machine nothing was
-    /// tracking.
-    pub fn release_base_staff(&mut self, creature: Entity) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        if self.world.get::<BaseStaff>(creature).is_none() {
-            return Err("That program isn't on the base staff.".into());
-        }
-        self.world
-            .entity_mut(creature)
-            .remove::<BaseStaff>()
-            .remove::<Task>()
-            .remove::<Carrying>();
-        let name = self.creature_label(creature);
-        self.log_base(format!("{name} stands down from the base."));
-        Ok(())
+    /// Roles are derived rather than stored, and they are disjoint by
+    /// construction rather than by upkeep: `Party` and `WieldedProgram` are
+    /// already authoritative about the two roles that are *chosen*, so
+    /// `Staff` is what is left over. There is deliberately no "owned but
+    /// idle" state — a program you are not fighting with and not holding is
+    /// working the base, which is why nothing assigns staff by hand.
+    ///
+    /// The precedence used to be stated twice: `program_activity` ordered
+    /// wielded ahead of party in its own prose, and `assign_base_staff`
+    /// restated the same exclusion from the other side. A fourth role added
+    /// to this enum is one arm here and a compiler error at every reader.
+    pub fn program_role(&self, creature: Entity) -> Option<ProgramRole> {
+        let owner = self.world.get::<Tamed>(creature)?.owner;
+        role_of(
+            creature,
+            owner,
+            self.player_entity(),
+            self.world.resource::<Party>(),
+            self.wielded_program(),
+        )
     }
 
     /// Every program on the base staff, in a **stable total order**.
@@ -513,8 +524,9 @@ impl Game {
         let mut staff: Vec<Entity> = self
             .world
             .iter_entities()
-            .filter(|e| e.contains::<BaseStaff>() && e.contains::<Tamed>())
+            .filter(|e| e.contains::<Tamed>())
             .map(|e| e.id())
+            .filter(|&e| self.program_role(e) == Some(ProgramRole::Staff))
             .collect();
         staff.sort();
         staff

@@ -319,18 +319,6 @@ pub struct Tamed {
     pub owner: Entity,
 }
 
-/// A tamed program the player has given to the base rather than kept in
-/// the party. `game::base::work_orders`'s scheduler posts and unposts
-/// these, and nothing else; a program without this marker is never moved
-/// by a work order however idle it looks.
-///
-/// Staff and `resources::Party` are **disjoint sets**, and both draw from
-/// the same `pet_capacity` roster — `tuning.rs` already states the tension
-/// this formalises, that every program at a machine is one absent from the
-/// party. `Game::assign_base_staff` is what keeps them disjoint.
-#[derive(Component, Clone, Copy, Debug)]
-pub struct BaseStaff;
-
 /// A standing instruction on a **structure**: keep this one worked, or
 /// keep it guarded, whether or not any work order asks for it.
 ///

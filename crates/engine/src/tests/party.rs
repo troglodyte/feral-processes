@@ -1781,3 +1781,71 @@ fn a_companions_reserve_survives_a_save_and_load() {
         "a drained companion must reload drained, found {reserves:?}"
     );
 }
+
+/// The auto-staffing rule, from the outside: nothing calls an assign verb,
+/// and the program is on the staff the moment it is owned.
+#[test]
+fn an_owned_program_outside_the_party_is_base_staff_without_being_assigned() {
+    let mut game = Game::new(4100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    assert_eq!(game.base_staff(), vec![program]);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+}
+
+/// The other half of the disjointness, and the direction the old
+/// `add_companion` held by stripping a marker: joining the party takes a
+/// program off the staff, and standing it down hands it straight back.
+#[test]
+fn joining_the_party_takes_a_program_off_the_staff_and_leaving_returns_it() {
+    let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.add_companion(program).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::InParty));
+    assert!(game.base_staff().is_empty());
+
+    game.remove_companion(program);
+    assert_eq!(game.program_role(program), Some(ProgramRole::Staff));
+    assert_eq!(game.base_staff(), vec![program]);
+}
+
+/// The third role. A weapon in your hands is not a body in the base, which
+/// is the exclusion `assign_base_staff` used to state by un-wielding.
+#[test]
+fn a_wielded_program_is_never_base_staff() {
+    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    game.wield_program(program).unwrap();
+    assert_eq!(game.program_role(program), Some(ProgramRole::Wielded));
+    assert!(game.base_staff().is_empty());
+}
+
+/// `None` has two reasons and this is the second one. A wild program is
+/// caught by having no `Tamed` at all; a program tamed to somebody else
+/// reaches the owner comparison, which is the same refusal `add_companion`
+/// makes and the only thing keeping "owned" in the rule rather than just
+/// "tamed".
+#[test]
+fn a_program_tamed_to_somebody_else_is_not_your_staff() {
+    let mut game = Game::new(4104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let stranger = game.world.spawn_empty().id();
+    game.world.get_mut::<Tamed>(program).unwrap().owner = stranger;
+
+    assert_eq!(game.program_role(program), None);
+    assert!(game.base_staff().is_empty());
+}
+
+/// The rule is keyed on ownership, not on being a creature: a wild program
+/// standing in the middle of the base is nobody's staff.
+#[test]
+fn a_wild_program_is_never_base_staff() {
+    let mut game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs().into_iter().next().unwrap();
+    let wild = game.spawn_wild_creature(&species.id, 5, 5).unwrap();
+
+    assert_eq!(game.program_role(wild), None);
+    assert!(game.base_staff().is_empty());
+}

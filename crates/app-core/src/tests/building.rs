@@ -542,22 +542,21 @@ fn the_roster_does_not_staff_anything_underground() {
     );
 }
 
-/// The Base Staff screen lists every program you own, and there are three
-/// places one can be: on the staff, in your party, and neither. `doing` was
-/// `None` for anything off the staff and the renderer read that single `None`
-/// as "party" — so a program you had just tamed, or one you had just stood
-/// down from the base, claimed to be fighting alongside you. Only
-/// `add_companion` ever pushes into `Party`, so "neither" is the state every
-/// program starts in and the screen was wrong about it by default.
+/// The Base Staff screen lists every program you own and says which role it
+/// is in. `doing` was `None` for anything off the staff and the renderer read
+/// that single `None` as "party" — so a program you had just tamed claimed to
+/// be fighting alongside you. There is no longer any such limbo: a program
+/// you own and are not fighting with is base staff, waiting for a post.
 #[test]
-fn the_staff_screen_tells_a_party_member_from_an_idle_program() {
+fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
     let mut app = app_owning_distant_programs(742, 2);
 
     let rows = app.base_staff_rows();
     assert_eq!(rows.len(), 2, "fixture hands the player two programs");
     assert!(
-        rows.iter().all(|r| !r.on_staff && r.doing == "idle"),
-        "a program that has been given no job is idle, not in the party: {:?}",
+        rows.iter()
+            .all(|r| r.role == Some(ProgramRole::Staff) && r.doing == "idle"),
+        "a program nobody assigned is staff between postings: {:?}",
         rows.iter().map(|r| r.doing.clone()).collect::<Vec<_>>()
     );
 
@@ -565,40 +564,39 @@ fn the_staff_screen_tells_a_party_member_from_an_idle_program() {
     app.game.as_mut().unwrap().add_companion(member).unwrap();
 
     let rows = app.base_staff_rows();
-    let doing = |e| {
-        rows.iter()
-            .find(|r| r.program.entity == e)
-            .map(|r| r.doing.clone())
-            .unwrap()
-    };
-    assert_ne!(
-        doing(member),
-        doing(other),
-        "the one that fell in beside you must not read the same as the one that didn't"
-    );
+    let row = |e| rows.iter().find(|r| r.program.entity == e).unwrap();
+    assert_eq!(row(member).role, Some(ProgramRole::InParty));
     assert!(
-        doing(member).contains("party"),
-        "and it is the party it is in, got {:?}",
-        doing(member)
+        row(member).doing.contains("party"),
+        "and it says so, got {:?}",
+        row(member).doing
     );
-    assert_eq!(doing(other), "idle");
+    assert_eq!(row(other).role, Some(ProgramRole::Staff));
+    assert_eq!(row(other).doing, "idle");
 }
 
-/// The third state: a program on the staff reads as what the base has it
-/// doing, and the row still carries the flag Enter acts on.
+/// The screen writes nothing. It used to toggle a stored marker with Enter;
+/// the roles are derived now, so the only thing a key here moves is the
+/// selection — and Esc still closes.
 #[test]
-fn a_staffed_program_reads_as_staff_rather_than_as_idle() {
-    let mut app = app_owning_distant_programs(743, 1);
-    let program = app.base_staff_rows()[0].program.entity;
+fn the_staff_screen_does_not_change_a_role() {
+    let mut app = app_owning_distant_programs(743, 2);
+    app.mode = Mode::BaseStaff;
+    app.menu_selected = 0;
+    let before: Vec<Option<ProgramRole>> = app.base_staff_rows().iter().map(|r| r.role).collect();
 
-    app.game
-        .as_mut()
-        .unwrap()
-        .assign_base_staff(program)
-        .unwrap();
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Enter);
 
-    let row = app.base_staff_rows().remove(0);
-    assert!(row.on_staff, "Enter must now release rather than assign");
+    assert_eq!(
+        app.base_staff_rows()
+            .iter()
+            .map(|r| r.role)
+            .collect::<Vec<_>>(),
+        before,
+        "no key on this screen may move a program between roles"
+    );
+    assert_eq!(app.menu_selected, 1, "but Down still moves the selection");
 }
 
 /// The roster sorts the Home first and the node after it, so one Down from

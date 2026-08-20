@@ -316,9 +316,7 @@ fn spawn_marker_structure(game: &mut Game, start: Position, dx: i32, dy: i32) ->
 fn spawn_marker_staffer(game: &mut Game, start: Position, dx: i32, dy: i32) -> Entity {
     let creature = spawn_marker_creature(game, start, dx, dy);
     let owner = game.player_entity();
-    game.world
-        .entity_mut(creature)
-        .insert((Tamed { owner }, BaseStaff));
+    game.world.entity_mut(creature).insert(Tamed { owner });
     creature
 }
 
@@ -1407,7 +1405,6 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
                     mitigation: 1,
                 },
                 Tamed { owner },
-                BaseStaff,
             ))
             .id()
     };
@@ -2170,14 +2167,12 @@ fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
         "a wild, untamed program on the zone surface must not be named from inside the base"
     );
 
-    // `BaseStaff` with no `Task` alongside `Tamed` is what
-    // `position_is_honest` reads as an idle base staffer — the only way to
-    // make `drawn_on_surface_map` say yes without also giving it a post to
-    // walk to or from.
+    // `Tamed` with no `Task` is what `position_is_honest` reads as an idle
+    // base staffer — an owned program outside the party is staff by
+    // derivation, and that is the only way to make `drawn_on_surface_map`
+    // say yes without also giving it a post to walk to or from.
     let owner = game.player_entity();
-    game.world
-        .entity_mut(wild)
-        .insert((Tamed { owner }, BaseStaff));
+    game.world.entity_mut(wild).insert(Tamed { owner });
     assert_eq!(
         game.find_target_in_direction(1, 0, 10),
         Some(InspectTarget::Creature(wild)),

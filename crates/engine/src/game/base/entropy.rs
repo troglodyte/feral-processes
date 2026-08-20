@@ -11,15 +11,25 @@
 use bevy_ecs::prelude::*;
 
 use crate::base_grid::{BaseCell, BaseGrid};
-use crate::components::{BaseStaff, Player, Position, Task};
-use crate::resources::{GameClock, Locale};
+use crate::components::{Player, Position, Tamed, Task};
+use crate::game::party::{ProgramRole, role_of};
+use crate::resources::{GameClock, Locale, Party, PlayerEntity, WieldedProgram};
 use crate::tuning::BASE_ENTROPY_REFILL_TICKS;
 
-/// "A body standing in base space", as the occupancy filter for
-/// `base_entropy_system`: a posted program (`Task`) or a base staffer
-/// between postings (`BaseStaff`), and never the player, whose `Position`
-/// is pinned to the anchor tile on the zone surface.
-type BaseOccupant = (Or<(With<Task>, With<BaseStaff>)>, Without<Player>);
+/// "A body that might be standing in base space", as the coarse filter for
+/// `base_entropy_system`: a posted program (`Task`) or any program on the
+/// roster (`Tamed`), and never the player, whose `Position` is pinned to
+/// the anchor tile on the zone surface.
+///
+/// Deliberately wider than the real rule — a party member is `Tamed` and is
+/// not in base space at all. `role_of` narrows it below, because the
+/// narrowing is the part that must not exist twice.
+type BaseOccupant = (Or<(With<Task>, With<Tamed>)>, Without<Player>);
+
+/// What `base_entropy_system` reads off each candidate: where it is, whether
+/// it is posted, and who owns it — the three `role_of` and the `Task` arm
+/// between them need.
+type Occupancy<'a> = (Entity, &'a Position, Option<&'a Task>, Option<&'a Tamed>);
 
 /// Reverts every unoccupied `Open` cell older than
 /// `tuning::BASE_ENTROPY_REFILL_TICKS` to solid rock — *absent* from
@@ -39,7 +49,7 @@ type BaseOccupant = (Or<(With<Task>, With<BaseStaff>)>, Without<Player>);
 /// space".
 ///
 /// **A `Task` is not what makes a body occupy a cell — standing there is**,
-/// which is why `BaseStaff` is the other arm. Staff between postings hold
+/// which is why staff are the other arm. Staff between postings hold
 /// no `Task`, and `park_idle_staff` cannot always move one home: it declines
 /// a park tile that is occupied or unwalkable, and `schedule_base_labour`
 /// early-returns without parking anyone at all on a game over or during a
@@ -51,8 +61,25 @@ pub(crate) fn base_entropy_system(
     mut grid: ResMut<BaseGrid>,
     clock: Res<GameClock>,
     locale: Res<Locale>,
-    occupants: Query<&Position, BaseOccupant>,
+    player: Res<PlayerEntity>,
+    roster: Res<Party>,
+    wielded: Res<WieldedProgram>,
+    occupants: Query<Occupancy, BaseOccupant>,
 ) {
+    // A body occupies a base cell if it is posted at one, or if it is staff
+    // waiting to be — the two arms the doc comment above argues for, with
+    // the staff half asked of `role_of` rather than restated.
+    let standing: Vec<&Position> = occupants
+        .iter()
+        .filter(|(entity, _, task, tamed)| {
+            task.is_some()
+                || tamed.is_some_and(|t| {
+                    role_of(*entity, t.owner, player.0, &roster, wielded.0)
+                        == Some(ProgramRole::Staff)
+                })
+        })
+        .map(|(_, pos, _, _)| pos)
+        .collect();
     let party = match *locale {
         Locale::Base { x, y } => Some((x, y)),
         _ => None,
@@ -70,7 +97,7 @@ pub(crate) fn base_entropy_system(
             _ => None,
         })
         .filter(|cell| Some(*cell) != party)
-        .filter(|(x, y)| !occupants.iter().any(|p| p.x == *x && p.y == *y))
+        .filter(|(x, y)| !standing.iter().any(|p| p.x == *x && p.y == *y))
         .collect();
     for (x, y) in doomed {
         grid.revert(x, y);

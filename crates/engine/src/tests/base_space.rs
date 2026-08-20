@@ -1581,6 +1581,128 @@ fn view_tiles_is_unchanged_on_the_surface() {
     }
 }
 
+// ---------------------------------------------------------------------
+// What the map draws is what is standing in the space the party is in
+// ---------------------------------------------------------------------
+
+/// The player's glyph follows the party around base space.
+///
+/// `Position` stays pinned to the anchor tile on the zone surface while the
+/// party is out of phase (see `resources::Locale`), and `view_entities` is
+/// where the map gets every glyph it draws — the player's included. Reading
+/// the pinned tile there draws `@` whereever the anchor's surface
+/// coordinates happen to alias into base space and leaves it there, however
+/// far the party walks.
+#[test]
+fn the_player_is_drawn_where_the_party_stands_in_base_space() {
+    let mut game = game(3210);
+    let pinned = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let standing = (pinned.x + 2, pinned.y + 1);
+    stand_in_base_at(&mut game, standing.0, standing.1);
+
+    let views = game.view_entities(10, 10);
+    let player = views
+        .iter()
+        .find(|v| v.is_player)
+        .expect("the player is drawn on the base map");
+
+    assert_eq!(
+        player.pos, standing,
+        "the player's glyph is drawn at the base-space cell the party is on, \
+         not at the surface tile Position is pinned to"
+    );
+}
+
+/// Nothing standing on the zone surface is drawn inside the base.
+///
+/// A `SurfaceLink` — the `>` of a Stack entrance — and the anchor itself
+/// both carry a `Position` and a `Glyph` and neither is a `Structure` or a
+/// `Creature`, so the two existing space gates in `view_entities` look
+/// straight past them and they draw at whatever base-space cell their
+/// surface coordinates alias onto.
+#[test]
+fn surface_fixtures_are_not_drawn_inside_the_base() {
+    let mut game = game(3211);
+    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let link = game
+        .world
+        .spawn((
+            SurfaceLink,
+            Position {
+                x: center.x + 2,
+                y: center.y,
+            },
+            Glyph {
+                ch: '>',
+                color: GlyphColor::Yellow,
+            },
+        ))
+        .id();
+    let anchor = game.world.resource::<AnchorEntity>().0;
+    stand_in_base(&mut game);
+
+    let views = game.view_entities(20, 20);
+
+    assert!(
+        !views.iter().any(|v| v.entity == link),
+        "a Stack entrance stands on the zone surface and must not be drawn in base space"
+    );
+    assert!(
+        !views.iter().any(|v| v.entity == anchor),
+        "the anchor stands on the zone surface too — from the inside it is the way out, \
+         not a tile of the base"
+    );
+}
+
+/// A program standing in the base is not drawn out on the zone surface.
+///
+/// Base staff are parked around the Home in base-space coordinates every
+/// tick by `schedule_base_labour`, which is exactly what makes their
+/// `Position` honest — and `drawn_on_surface_map` reads that honesty as
+/// "draw it". On the surface those coordinates mean a different tile
+/// entirely, so the base's roster shows up scattered across the open grid.
+#[test]
+fn a_program_standing_in_the_base_is_not_drawn_on_the_zone_surface() {
+    let mut game = game(3212);
+    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let staff = spawn_tamed_on_map(&mut game, center.x + 2, center.y + 1);
+    assert_eq!(
+        game.program_role(staff),
+        Some(ProgramRole::Staff),
+        "a program that is neither wielded nor in the party is base staff"
+    );
+    assert!(
+        game.position_is_honest(staff),
+        "idle staff carry a live base-space tile — that is the case this test is about"
+    );
+
+    let views = game.view_entities(20, 20);
+
+    assert!(
+        !views.iter().any(|v| v.entity == staff),
+        "an owned program stands in base space and must not be drawn on the zone surface"
+    );
+}
+
+/// The examine ray agrees with the map about that last one.
+///
+/// `views::drawn_on_surface_map` is the one rule for "Examine names only
+/// what the map draws", and a program the map no longer draws must stop
+/// being nameable from the open grid too.
+#[test]
+fn the_examine_ray_does_not_name_a_program_standing_in_the_base() {
+    let mut game = game(3213);
+    let center = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let staff = spawn_tamed_on_map(&mut game, center.x + 2, center.y);
+
+    let found = game.find_target_in_direction(1, 0, crate::tuning::EXAMINE_RANGE_TILES);
+
+    assert!(
+        !matches!(found, Some(InspectTarget::Creature(e)) if e == staff),
+        "examine may not name a program that is standing in the base"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Slice 2: rock you can hit
 // ---------------------------------------------------------------------------

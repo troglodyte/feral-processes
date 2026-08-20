@@ -170,6 +170,40 @@ impl Game {
                 && self.world.get::<Task>(entity).is_none())
     }
 
+    /// Whether `entity`'s `Position` is a cell of base space rather than a
+    /// tile of the zone surface — the space tag every map-facing view
+    /// filters on.
+    ///
+    /// **The party's own things stand in base space and everything else
+    /// stands on the surface.** A `Structure` only ever stands on the
+    /// base's floor, which is what makes it *the* space tag (see
+    /// `find_blocking_structure_at`, and `BaseAnchor`'s own doc for why the
+    /// anchor is deliberately not one). A `Tamed` program is posted at a
+    /// machine, hauling between two, or parked around the Home by
+    /// `schedule_base_labour`. Everything else with a `Glyph` — a wild
+    /// program, a nest, a Stack entrance, the anchor — is a fixture of the
+    /// zone map.
+    ///
+    /// The two answers are `Position`s in different coordinate systems that
+    /// freely alias onto each other, which is the whole reason this exists:
+    /// base space's origin and the zone spawn point are both usually
+    /// `(0, 0)`.
+    ///
+    /// A party companion and a posted guard are the two tamed programs
+    /// whose `Position` is never written again, so theirs is the tile they
+    /// were beaten on — out on the surface, or four frames down. Answering
+    /// "base space" for them is still the right answer to the question
+    /// actually being asked: a companion is standing beside you rather than
+    /// where it was caught, and `position_is_honest` is what says so.
+    /// Between them the two rules leave a stale tile drawn in neither space.
+    ///
+    /// The player is in both spaces at once and has no answer here — its
+    /// callers hold it out, and `scan_center` is where its base-space cell
+    /// comes from.
+    pub(crate) fn stands_in_base_space(&self, entity: Entity) -> bool {
+        self.world.get::<Structure>(entity).is_some() || self.world.get::<Tamed>(entity).is_some()
+    }
+
     /// The first creature or structure along the row or column the player is
     /// facing — the read-only "look in a direction" counterpart to
     /// `move_player`. `(dx, dy)` is one of the four cardinal unit vectors.
@@ -253,27 +287,23 @@ impl Game {
             (step >= 1 && step <= max_range && ddx == dx * step && ddy == dy * step).then_some(step)
         };
 
-        // `Structure` is the space tag (see `find_blocking_structure_at`):
-        // it only ever stands in base space, so the query below is gated on
-        // `in_base` the same way `view_entities` and `adjacent_structure`
-        // gate it. Without this, a player on the open surface aiming toward
-        // wherever a base structure's live position happens to numerically
-        // coincide — commonly near `(0, 0)`, since a base's own origin and
-        // the zone spawn point usually share it — could get named a
-        // structure drawn nowhere on their screen, the same
-        // "Examine names things that are not drawn" failure
-        // `drawn_on_surface_map` exists to prevent, reached here by a query
-        // that bypasses it entirely.
+        // Both queries below run over raw `Position`s, so both are gated on
+        // `Game::stands_in_base_space` agreeing with where the party is —
+        // the same one condition `view_entities` selects on, because the
+        // rule here is that examine names only what the map draws and two
+        // spellings of one rule is how that lapses. A ray aimed across the
+        // open grid could otherwise name a base structure, or a program
+        // parked beside the Home, at whatever surface tile their base-space
+        // cell aliased onto — commonly near `(0, 0)`, since base space's own
+        // origin and the zone spawn point usually share it — and a ray aimed
+        // from inside the base could name a wild program out on the actual
+        // zone surface, the "rays across the zone surface" bug named for
+        // this function.
         //
-        // An untamed creature gets the mirror gate, refused while `in_base`:
-        // base space has no wildlife, ever, so without this, standing inside
-        // the base and aiming at a wild program out on the actual zone
-        // surface that happens to numerically line up would name it — the
-        // "rays across the zone surface" bug named for this function. A
-        // `Tamed` creature gets no such gate: unlike a `Structure`, it does
-        // not always live in base space (a party companion's stale
-        // `Position` can be anywhere), and `drawn_on_surface_map` below is
-        // already the correct, locale-independent filter for it.
+        // `drawn_on_surface_map` is still asked of every creature that
+        // survives the space test, and neither subsumes the other: this one
+        // says which space a `Position` is a tile of, that one says whether
+        // it is a tile the sim keeps up to date.
         let mut candidates: Vec<(i32, u8, Entity)> = Vec::new();
         if in_base {
             let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
@@ -291,10 +321,10 @@ impl Game {
                 .collect()
         };
         candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
-            let tamed = self.world.get::<Tamed>(e).is_some();
-            if in_base && !tamed {
+            if self.stands_in_base_space(e) != in_base {
                 return None;
             }
+            let tamed = self.world.get::<Tamed>(e).is_some();
             drawn_on_surface_map(tamed, self.position_is_honest(e)).then_some((
                 step,
                 CREATURE_ON_TILE,
@@ -420,51 +450,52 @@ impl Game {
     /// space the party currently occupies.
     ///
     /// **Closes the cross-space read generally**, the same ruling
-    /// `find_blocking_structure_at` acts on: `Structure` is the space tag,
-    /// so a `Structure` is kept only while `in_base`, never on the surface
-    /// — before this, standing on the surface tile that numerically matched
-    /// a base-space Market's cell made `[S]ell` appear on the inventory
-    /// screen (`app_core::traders_in_range`), and the trade calls it led to
-    /// then refused via `require_base`.
+    /// `find_blocking_structure_at` acts on, and it is one condition rather
+    /// than a gate per kind: an entity is selected exactly when
+    /// `Game::stands_in_base_space` agrees with where the party is. That is
+    /// symmetric on purpose, because the aliasing is. Standing on the
+    /// surface tile that numerically matched a base-space Market's cell
+    /// made `[S]ell` appear on the inventory screen
+    /// (`app_core::traders_in_range`) and the trade calls it led to then
+    /// refused via `require_base`; base space has no wildlife, ever, so a
+    /// wild program's surface tile aliasing inward drew a monster nobody
+    /// was fighting; and in the other direction the base's own roster —
+    /// parked in base-space coordinates by `schedule_base_labour`, which is
+    /// exactly what makes `position_is_honest` true of it — drew scattered
+    /// across the open grid.
     ///
-    /// An untamed `Creature` is refused the same way while `in_base`, for
-    /// the mirror reason: base space has no wildlife, ever, so a wild
-    /// program's surface position aliasing into a base-space scan would
-    /// otherwise draw a monster nobody is fighting. **`Tamed` gets no such
-    /// gate**, deliberately — unlike a `Structure`, a tamed program does not
-    /// always live in base space: a party companion's `Position` is
-    /// whatever tile it was captured on, on the surface or four frames
-    /// down, and never written again. `views::drawn_on_surface_map` is
-    /// already the correct, locale-independent filter for whether a tamed
-    /// program's position means anything (`position_is_honest`), and every
-    /// entity with an honest one happens to be base-space today — so gating
-    /// on `Tamed` here would be both redundant with that filter and wrong
-    /// for the stale-position companions it doesn't cover.
+    /// **A kind-by-kind gate is what let that last one through**, since
+    /// `Tamed` is the one space tag that had no gate at all and
+    /// `views::drawn_on_surface_map` answers a different question: whether
+    /// a program's `Position` means anything, not which space it means it
+    /// in. Both filters are needed and neither subsumes the other.
+    ///
+    /// The player is held out of the space test — it is in both spaces at
+    /// once — and read through `scan_center` instead, which is the base's
+    /// half of that.
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
         let in_base = self.in_base();
         let center = self.scan_center();
+        let player = self.player_entity();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
         let hits: Vec<(Entity, Position, Glyph)> = query
             .iter(&self.world)
+            // The player is read through `scan_center` rather than off its
+            // own `Position`, which stays pinned to the anchor tile on the
+            // zone surface for as long as the party is out of phase (see
+            // `resources::Locale`). This is the map's only source of the
+            // `@` it draws, so reading the pinned tile drew the player at
+            // whatever base-space cell the anchor's surface coordinates
+            // aliased onto and left it there however far the party walked.
+            // A no-op on the surface, where `scan_center` *is* that tile.
+            .map(|(e, p, g)| (e, if e == player { center } else { *p }, *g))
             .filter(|(_, p, _)| {
                 (p.x - center.x).abs() <= half_w && (p.y - center.y).abs() <= half_h
             })
-            .map(|(e, p, g)| (e, *p, *g))
             .collect();
         let hits: Vec<(Entity, Position, Glyph)> = hits
             .into_iter()
-            .filter(|(e, _, _)| {
-                if self.world.get::<Structure>(*e).is_some() {
-                    return in_base;
-                }
-                if in_base
-                    && self.world.get::<Creature>(*e).is_some()
-                    && self.world.get::<Tamed>(*e).is_none()
-                {
-                    return false;
-                }
-                true
-            })
+            .filter(|(e, _, _)| *e == player || self.stands_in_base_space(*e) == in_base)
             .collect();
         self.build_views(hits)
     }

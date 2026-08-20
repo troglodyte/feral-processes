@@ -727,14 +727,20 @@ fn draw_surface_map(
     let entities: Vec<_> = game
         .view_entities(hw, hh)
         .into_iter()
-        // A tamed program is drawn only while it is out on an errand. At its
-        // post it sits under its machine's own glyph, so a base at rest
-        // reads as buildings and motion is the only thing that draws the
-        // eye — a worker appearing *is* the news that it has left to
-        // deliver. Everything else tamed stays hidden for a harder reason:
-        // nothing ever walks a guard, an idle program or a party member, so
-        // each keeps whatever tile it was standing on when it took the job
-        // and drawing it would claim it is somewhere it isn't.
+        // A tamed program is drawn while it is out on an errand and while it
+        // is loitering with no job at all. At its post it sits under its
+        // machine's own glyph, so a base at rest reads as buildings and
+        // motion is the only thing that draws the eye — a worker appearing
+        // *is* the news that it has left to deliver. A guard and a party
+        // member stay hidden for a harder reason: neither is ever walked,
+        // so each keeps whatever tile it was standing on when it took the
+        // job — out on the surface, or four frames down — and drawing it
+        // would claim it is somewhere it isn't.
+        //
+        // Which *space* a program stands in is a separate question and is
+        // already settled inside `view_entities`
+        // (`Game::stands_in_base_space`); this one is only ever asked about
+        // programs the party is in the same space as.
         //
         // Through the engine's predicate rather than spelled out here,
         // because `Game::find_target_in_direction` filters its ray with the

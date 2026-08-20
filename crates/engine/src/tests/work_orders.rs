@@ -1038,6 +1038,12 @@ fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
 
 /// The map and the inspector must stay the same set — that is the whole
 /// reason `drawn_on_surface_map` is one function called by both.
+///
+/// Asked from **inside the base**, which is where an owned program's tile
+/// is a tile: a `Tamed` `Position` is a base-space cell, so neither view
+/// answers for one from the open grid (`Game::stands_in_base_space`, and
+/// `a_program_standing_in_the_base_is_not_drawn_on_the_zone_surface` for
+/// the other half of that).
 #[test]
 fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1049,6 +1055,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     let companion = spawn_tamed_on_map(&mut game, 6, 5);
     game.add_companion(companion).unwrap();
     game.tick();
+    stand_in_base(&mut game);
 
     let drawn: Vec<Entity> = game
         .view_entities(40, 40)
@@ -1063,14 +1070,19 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
         "a party companion has no honest tile of its own, so it is not"
     );
 
-    // Line the idle program up east of the player and confirm `x` names it.
-    let player = game.player_entity();
-    let here = *game.world.get::<Position>(player).unwrap();
+    // Line the idle program up east of the party's own cell and confirm `x`
+    // names it. `place_home` stands the Home on base space's origin, which
+    // is where `stand_in_base` puts the party, so the ray leaves from the
+    // Home's tile and the first thing on it is the program.
+    let here = game.base_pos().expect("the party is in base space");
     let mut pos = game.world.get_mut::<Position>(idle).unwrap();
-    pos.x = here.x + 2;
-    pos.y = here.y;
+    pos.x = here.0 + 2;
+    pos.y = here.1;
     assert!(
-        game.find_target_in_direction(1, 0, 8).is_some(),
+        matches!(
+            game.find_target_in_direction(1, 0, 8),
+            Some(InspectTarget::Creature(e)) if e == idle
+        ),
         "what the map draws is what the inspector can name"
     );
 }

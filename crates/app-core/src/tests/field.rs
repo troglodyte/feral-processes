@@ -134,11 +134,15 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     );
     assert_eq!(offered[0].name, "You");
 
+    // Through the roster rather than `view_entities`, which is a window onto
+    // the map and refuses a `Tamed` program out here: an owned program
+    // stands in base space, and its `Position` on the open grid is the tile
+    // it was beaten on (see `Game::stands_in_base_space`).
     let owned = app
         .game
         .as_mut()
         .unwrap()
-        .view_entities(50, 50)
+        .owned_program_views()
         .into_iter()
         .find(|e| !e.is_player && e.is_tamed)
         .expect("the fixture placed one owned, non-party program");

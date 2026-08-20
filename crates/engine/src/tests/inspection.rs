@@ -800,7 +800,17 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
     let views = game.view_entities(5, 5);
     let easy_view = views.iter().find(|v| v.entity == easy).unwrap();
     let hard_view = views.iter().find(|v| v.entity == hard).unwrap();
-    let tamed_view = views.iter().find(|v| v.entity == tamed_worker).unwrap();
+    // The tamed program is asked for from inside the base, because that is
+    // the space its `Position` is a cell of and `view_entities` selects by
+    // space (`Game::stands_in_base_space`). The rule under test — only a
+    // hostile is difficulty-coloured — is the same on either side of the
+    // anchor.
+    stand_in_base_at(&mut game, player_pos.x, player_pos.y + 1);
+    let base_views = game.view_entities(5, 5);
+    let tamed_view = base_views
+        .iter()
+        .find(|v| v.entity == tamed_worker)
+        .unwrap();
 
     assert_eq!(
         easy_view.color,

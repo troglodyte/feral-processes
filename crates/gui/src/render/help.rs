@@ -61,7 +61,6 @@ pub(super) fn draw_help_page(app: &App, painter: &Painter, m: &Metrics) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::help::{self, HelpDb};

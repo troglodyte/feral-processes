@@ -30,4 +30,5 @@ on how large a group can get. Walking a long way from home does not make anythin
 only thing distance decides is the gentle ring around a fresh zone-1 landing, where nothing spawns
 that a bare level-1 player could not beat one-on-one.
 
-Read on: [getting stronger](getting-stronger), or back to [the basics](start-here).
+Read on: [what to have before you cross](before-you-breach), [the Stack](the-stack),
+[getting stronger](getting-stronger), or back to [the basics](start-here).

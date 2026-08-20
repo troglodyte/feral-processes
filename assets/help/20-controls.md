@@ -14,9 +14,10 @@ Moving and living:
 
 The three menus:
 
-- b — base menu: deploy, compile, cronjobs, work it yourself, guard, upgrade, demolish, roster,
-  research
-- p — party menu: companions, manifests, fuse, install and extract routines, perks
+- b — base menu: deploy, compile, work orders, base staff, work it yourself, upgrade, demolish,
+  structure roster, research, contracts, recipes
+- p — party menu: companions, manifests, fuse, install, etch and extract routines, refactor,
+  develop, perks
 - i — your pack
 
 Acting on the world:
@@ -70,4 +71,5 @@ In an intrusion:
 - Up/Down — scroll the narration, on the results page too
 
 This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
-screen. [Start here](start-here) if you have not read anything else.
+screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
+[intrusions](intrusions), [your base](your-base), and [the Stack](the-stack).

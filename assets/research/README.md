@@ -33,6 +33,14 @@ Core Fragments.
     // before this one can be taken.
     requires: ["automation"],
 
+    // Optional; defaults to false. Marks this node as somewhere an opening
+    // run should be heading: the research menu draws it green, and draws
+    // everything it requires green too, so the green row is always one that
+    // can actually be bought right now. Flag the destination only — the
+    // chain to it is derived, so inserting a node into the middle of a
+    // recommended path keeps the path intact.
+    recommended: true,
+
     // Optional; defaults to none. Structure ids this node makes buildable.
     // A structure named by NO research file is buildable from turn one.
     unlocks_structures: ["fabricator"],
@@ -62,6 +70,10 @@ Core Fragments.
 
 ## Rules
 
+- **A recommended node's whole prerequisite chain is recommended with it.**
+  So flagging a deep node marks the way there, and there is no need — and no
+  point — in flagging every step. A tree that flags nothing simply offers no
+  advice; the menu then draws every available node the same.
 - **A structure named by no research file is buildable by default.** That is
   how the Home, Mining Node, Research Node, Recharger Node and Zone Portal
   stay available from the start, and it means a structure mod that ships no

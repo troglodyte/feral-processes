@@ -203,6 +203,7 @@ impl Game {
             .get::<Inventory>(self.player_entity())
             .map(|inv| inv.count(&research_currency))
             .unwrap_or(0);
+        let recommended = self.world.resource::<ResearchDb>().recommended_ids();
         let mut nodes: Vec<ResearchStatus> = self
             .world
             .resource::<ResearchDb>()
@@ -226,6 +227,7 @@ impl Game {
                     cost: def.cost,
                     state,
                     affordable: held >= def.cost,
+                    recommended: recommended.contains(&def.id),
                     #[cfg(test)]
                     unlocks_abilities: def.unlocks_abilities.clone(),
                 }

@@ -1055,6 +1055,7 @@ mod tests {
                                 ResearchState::Available
                             },
                             affordable: true,
+                            recommended: i == 1,
                         })
                         .collect::<Vec<_>>(),
                     selected,

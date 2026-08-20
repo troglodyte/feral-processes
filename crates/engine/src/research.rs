@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use bevy_ecs::prelude::Resource;
@@ -41,6 +41,18 @@ pub struct ResearchDef {
     pub min_zone: u32,
     #[serde(default)]
     pub requires: Vec<ResearchId>,
+    /// Marks this node as somewhere a new run should be heading. The menu
+    /// draws it — and everything it is waiting on — as the row to pick, so
+    /// only the *goal* carries the flag and its prerequisites inherit it
+    /// through `ResearchDb::recommended_ids`. Flagging a whole chain by hand
+    /// would leave a node inserted into the middle of one reading as a
+    /// detour off the very path it is now part of.
+    ///
+    /// Which nodes a run should head for is a content decision, so it is a
+    /// field here rather than a list in Rust — a mod that replaces the tree
+    /// gets to say where its own opening leads.
+    #[serde(default)]
+    pub recommended: bool,
     #[serde(default)]
     pub unlocks_structures: Vec<StructureId>,
     #[serde(default)]
@@ -146,6 +158,36 @@ impl ResearchDb {
 
     pub fn get(&self, id: &str) -> Option<&ResearchDef> {
         self.nodes.get(id)
+    }
+
+    /// Every node on a recommended path: the ones flagged `recommended`, plus
+    /// the transitive closure of what they require. That closure is why the
+    /// flag is not simply read off `ResearchDef` at the call site — a goal is
+    /// only reachable through its prerequisites, so a path that named its
+    /// destination without naming the way there would leave the player's next
+    /// actual purchase unmarked.
+    ///
+    /// `seen` guards the walk rather than the queue, so a mod whose `requires`
+    /// form a cycle terminates instead of hanging. `load_dir` checks that a
+    /// prerequisite *exists*, never that the graph is acyclic, and a hang at
+    /// menu-open is a far worse failure than an unreachable node.
+    pub fn recommended_ids(&self) -> HashSet<ResearchId> {
+        let mut seen: HashSet<ResearchId> = HashSet::new();
+        let mut queue: Vec<&ResearchId> = self
+            .nodes
+            .values()
+            .filter(|def| def.recommended)
+            .map(|def| &def.id)
+            .collect();
+        while let Some(id) = queue.pop() {
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            if let Some(def) = self.nodes.get(id) {
+                queue.extend(def.requires.iter());
+            }
+        }
+        seen
     }
 
     /// Every loaded node, cheapest first and ties broken by `id`. `HashMap`
@@ -372,6 +414,92 @@ mod tests {
             db.get("cortex").map(|d| d.cost),
             Some(125),
             "cortex is a zone-3 node"
+        );
+    }
+
+    #[test]
+    fn a_recommended_node_pulls_everything_it_requires_onto_the_path() {
+        let goal = r#"(
+            id: "goal",
+            name: "Goal",
+            description: "d",
+            cost: 20,
+            recommended: true,
+            requires: ["middle"],
+        )"#;
+        let middle =
+            r#"(id: "middle", name: "Middle", description: "d", cost: 10, requires: ["root"])"#;
+        let root = r#"(id: "root", name: "Root", description: "d", cost: 5)"#;
+        let detour = r#"(id: "detour", name: "Detour", description: "d", cost: 5)"#;
+        let (db, _) = load(
+            "recommended",
+            &[
+                ("goal", goal),
+                ("middle", middle),
+                ("root", root),
+                ("detour", detour),
+            ],
+        );
+        let mut path: Vec<String> = db.recommended_ids().into_iter().collect();
+        path.sort();
+        assert_eq!(
+            path,
+            vec!["goal", "middle", "root"],
+            "a goal the player cannot reach yet is no recommendation at all —              the chain to it has to come with it, and nothing else does"
+        );
+    }
+
+    #[test]
+    fn nothing_is_recommended_when_no_node_asks_to_be() {
+        let (db, _) = load("no_recommendation", &[("automation", VALID)]);
+        assert!(
+            db.recommended_ids().is_empty(),
+            "the flag defaults to false, so a tree that says nothing about              where to go marks no rows"
+        );
+    }
+
+    /// `load_dir` checks that a prerequisite *exists*, never that the graph
+    /// is acyclic, so a mod can hand this walk a cycle. Terminating is the
+    /// whole assertion: before `seen` guarded the walk this hung the moment
+    /// the research menu was opened.
+    #[test]
+    fn a_cycle_in_requires_does_not_hang_the_walk() {
+        let a = r#"(id: "a", name: "A", description: "d", cost: 1, recommended: true, requires: ["b"])"#;
+        let b = r#"(id: "b", name: "B", description: "d", cost: 1, requires: ["a"])"#;
+        let (db, warnings) = load("cycle", &[("a", a), ("b", b)]);
+        assert!(
+            warnings.is_empty(),
+            "a cycle is not something load_dir rejects today: {warnings:?}"
+        );
+        let mut path: Vec<String> = db.recommended_ids().into_iter().collect();
+        path.sort();
+        assert_eq!(path, vec!["a", "b"]);
+    }
+
+    /// The recommendation is only worth drawing if it lands on a row a new
+    /// run can actually buy. Asserted over the real tree rather than a
+    /// fixture, because what it is protecting is the shipped opening: a
+    /// `recommended` flag moved onto a zone-gated goal whose whole chain is
+    /// also gated would paint the advice somewhere no fresh player can go.
+    #[test]
+    fn the_shipped_recommendation_starts_somewhere_a_fresh_run_can_reach() {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        let (db, _) =
+            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities).unwrap();
+        let path = db.recommended_ids();
+        assert!(
+            !path.is_empty(),
+            "the shipped tree should say where an opening run is heading"
+        );
+        assert!(
+            path.iter().any(|id| {
+                let def = db.get(id).expect("a recommended id is a loaded node");
+                def.requires.is_empty() && def.min_zone == 0
+            }),
+            "every recommended node sits behind a prerequisite or a breach,              so the advice never lands on a row a new run can buy"
         );
     }
 

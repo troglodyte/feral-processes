@@ -198,90 +198,10 @@ pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metr
     draw_popup("Quit", PopupSize::Large, &rows, painter, m);
 }
 
-/// Every row of the help screen, in order.
-///
-/// Split out from `draw_help` so the easter-egg census below can read what
-/// this screen actually says. `draw_help` is the *only* screen in the game
-/// that lists key bindings — everything else a player reads about battle
-/// keys comes from `Game::battle_action_options` and
-/// `Game::battle_party_commands`, which are engine data with their own
-/// guard.
-pub(super) const HELP_ROWS: &[&str] = &[
-    "hjkl/arrows move   . wait   e drain   r recharge",
-    "",
-    "b base menu       deploy, compile, cronjobs, work it yourself,",
-    "                  guard, upgrade, demolish, roster, research",
-    "p party menu      companions, manifests, fuse, install and",
-    "                  extract routines, perks",
-    "i pack            your inventory",
-    "",
-    "A menu lists only what you can actually do from where you",
-    "stand — a row you can't see leads to an empty screen.",
-    "Esc backs out one level; finishing a job returns to the map.",
-    "",
-    "c collect from adjacent structures   t trade   a routine",
-    "u symlink   x examine a direction   d demolish a direction",
-    "v lay a VectorStasis Tile on the cell you're standing on",
-    "m Excavation plan   space anchors a box, space again marks it,",
-    "                  Esc backs out. Marked rock is cut and floored;",
-    "                  drawing a plan costs no time.",
-    "> phase into the base, on the anchor   < phase back out, at the exit",
-    "L history   f filter the log (all/field/base)",
-    "s save   q main menu (confirms first)",
-    "+/- zoom   [/] volume   \\ visual effects",
-    "",
-    "Every numbered menu also takes Up/Down + Enter, on top of",
-    "typing a row's own number/letter directly.",
-    "",
-    "On the companions screen, < and > move the highlighted member",
-    "along the battle line — the front slot draws the most fire.",
-    "",
-    "Routines:         a slot takes an etched disk, never a routine you",
-    "                  merely know. On the install page, e burns a blank",
-    "                  with something you know to make one.",
-    "",
-    "Trading:          S sell one, B buy one from the highlighted row",
-    "                  (no quantity page). S works in your pack too.",
-    "",
-    "In the Stack:     hjkl/arrows  forward, back, turn left, turn right",
-    "                  > descend   < climb / leave the link — the same",
-    "                  pair the anchor uses, on the surface and the base",
-    "                  o adopt an orphaned process (costs a catalyst)",
-    "                  t trade, if somebody is selling on this cell —",
-    "                  they keep no buyback, and the shelf does not refill",
-    "                  g map — only what you have seen",
-    "                  +/- zoom the corner map, whole frame to close in",
-    "",
-    "In an intrusion:  a attack   d defend   s special",
-    "                  u use item   j jack out",
-    "                  A all attack   D all defend (shift = the whole party)",
-    "                  Up/Down scroll the narration, on the results page too",
-    "",
-    "Press any key to close",
-];
-
-pub(super) fn draw_help(painter: &Painter, m: &Metrics) {
-    let rows: Vec<Row> = HELP_ROWS.iter().map(|line| text_row(*line)).collect();
-    draw_popup("Help", PopupSize::Large, &rows, painter, m);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The easter-egg census, gui half. `draw_help` is the one screen in
-    /// the game that lists key bindings, so it is the one place a
-    /// well-meaning edit would give the hidden keys away — and the person
-    /// making that edit has no way to know they are breaking a feature.
-    /// `crates/engine/EASTER_EGGS.md` is the note that tells them; this is
-    /// what catches them if they never read it.
-    ///
-    /// Asserted on whitespace-delimited **tokens**, never on substrings.
-    /// `key name` is the binding idiom this screen uses (`s save`,
-    /// `L history`, `A all attack`), so a token match catches a real
-    /// documentation of a key while staying satisfiable: the rows are full
-    /// of these letters inside ordinary words, and of the lowercase `t`
-    /// that legitimately binds trade.
     #[test]
     fn the_main_menu_shows_arena_only_when_enabled() {
         let named = |opts: &[String]| opts.iter().any(|o| o.contains("Arena"));
@@ -294,32 +214,5 @@ mod tests {
         let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
         assert!(at("Achievements") < at("Arena"));
         assert!(at("Arena") < at("Quit"));
-    }
-
-    /// The Excavation plan is the one verb in the game with no engine-side
-    /// refusal to teach it: `m` opens a mode, and a mode nobody can find is
-    /// a feature nobody has. So the help screen is where it is learned.
-    #[test]
-    fn the_help_screen_names_the_excavation_plan_key() {
-        let says = |what: &str| HELP_ROWS.iter().any(|row| row.contains(what));
-        // The key and the verb in one substring, deliberately: `"m "` alone
-        // is already inside "collect from adjacent structures", so asserting
-        // on it separately passes with every Excavation row deleted.
-        assert!(
-            says("m Excavation plan"),
-            "the help screen never binds the m key to the Excavation plan"
-        );
-    }
-
-    #[test]
-    fn the_help_screen_never_names_a_hidden_key() {
-        for row in HELP_ROWS {
-            for token in row.split_whitespace() {
-                assert!(
-                    !matches!(token, "W" | "T" | "Z"),
-                    "the help screen names a hidden key: {row:?}"
-                );
-            }
-        }
     }
 }

@@ -34,6 +34,7 @@ mod crafting;
 mod field;
 mod frame_map;
 mod group_menu;
+mod help;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -66,14 +67,15 @@ use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
+use help::{draw_help_index, draw_help_page};
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
     draw_item_describe, effect_lines,
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
-    draw_achievements, draw_difficulty_pick, draw_game_over, draw_help, draw_load_game,
-    draw_main_menu, draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_difficulty_pick, draw_game_over, draw_load_game, draw_main_menu,
+    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{
     draw_companion_equip, draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu,
@@ -442,7 +444,11 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         }
         Mode::Help => {
             draw_playing_base(app, fx, painter, &m);
-            draw_help(painter, &m);
+            draw_help_index(app, painter, &m);
+        }
+        Mode::HelpPage => {
+            draw_playing_base(app, fx, painter, &m);
+            draw_help_page(app, painter, &m);
         }
         // Full-pane rather than a popup over the corridor: the whole point
         // is seeing the frame's shape at once, and a map you have to peer

@@ -1769,3 +1769,54 @@ fn no_shipped_help_page_carries_more_than_nine_links() {
 fn help_assets_dir() -> std::path::PathBuf {
     test_assets_dir().join("help")
 }
+
+/// The easter-egg census over the manual. It used to read `HELP_ROWS`, a
+/// const in `crates/gui/src/render/meta.rs`; the manual is authored content
+/// now, so it reads `assets/help/` and protects against the **user** editing
+/// a page as well as against a developer editing a const.
+///
+/// Asserted on whitespace-delimited **tokens**, never on substrings.
+/// `key name` is the binding idiom these pages use, so a token match catches
+/// a real documentation of a key while staying satisfiable: the prose is
+/// full of these letters inside ordinary words, and of the lowercase `t`
+/// that legitimately binds trade.
+///
+/// Over parsed pages rather than raw files, so the directory's own
+/// `README.md` — which names all three keys in the rule that forbids them —
+/// is not itself a violation.
+#[test]
+fn no_shipped_help_page_names_a_hidden_key() {
+    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    let mut rows = 0;
+    for page in db.pages() {
+        for row in help::page_rows(page, help::WRAP_COLUMNS) {
+            rows += 1;
+            for token in row.split_whitespace() {
+                assert!(
+                    !matches!(token, "W" | "T" | "Z"),
+                    "help page {} names a hidden key: {row:?} — see \
+                     crates/engine/EASTER_EGGS.md",
+                    page.id
+                );
+            }
+        }
+    }
+    assert!(rows > 0, "the census must actually walk the manual");
+}
+
+/// The Excavation plan is the one verb in the game with no engine-side
+/// refusal to teach it: `m` opens a mode, and a mode nobody can find is a
+/// feature nobody has. So the manual is where it is learned.
+#[test]
+fn the_manual_binds_the_excavation_plan_key() {
+    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    // The key and the verb in one substring, deliberately: `"m "` alone is
+    // already inside "collect from adjacent structures", so asserting on it
+    // separately passes with every Excavation row deleted.
+    let says = db.pages().iter().any(|page| {
+        help::page_rows(page, help::WRAP_COLUMNS)
+            .iter()
+            .any(|row| row.contains("m — Excavation plan"))
+    });
+    assert!(says, "no help page binds the m key to the Excavation plan");
+}

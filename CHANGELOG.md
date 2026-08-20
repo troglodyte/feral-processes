@@ -66,6 +66,23 @@ A malformed page is skipped with a warning rather than refusing to start, as
 every other asset directory does, and a link pointing at nothing is dropped
 from the list instead of drawing a row that refuses when you pick it.
 
+### A program you own and aren't fighting with is base staff
+
+Landed on `main` after `0.13.1` was tagged and ships here. Base staff used
+to be a marker you assigned by hand from the Base Staff screen. It is
+derived now: a program on your roster that is not in your party and not
+held as your weapon **is** base staff, with no verb to assign it and nothing
+to forget to assign. The screen keeps its rows, its activity and its work
+profiles, and loses only its write.
+
+Two things follow from that. Posting a worker no longer pins it — the
+poster is in the pool, so the scheduler may move it next tick — and your
+base's output now scales with the size of your roster, bounded only by how
+many programs you can hold.
+
+Existing saves are unaffected: the old marker is still written and simply
+read nowhere.
+
 ## 0.13.1
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

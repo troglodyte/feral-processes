@@ -365,12 +365,12 @@ impl Game {
     /// end of this function. Gear, supplies, fusion tiers and banked Research
     /// Data all do.
     pub(crate) fn enter_next_zone(&mut self) {
-        // Breaching does not despawn structures — the base travels — so
-        // anything zone-local has to be named here or it comes along at its
-        // old coordinates. A `SurfaceLink` is zone-local: it opens onto a
-        // frame generated for the sector it stands in, and left alive it
-        // would ride the breach and could land inside the newly stamped base
-        // platform.
+        // The base is out of phase, not on the zone surface, so a breach
+        // does not touch it — no despawn, no reposition, nothing. What
+        // still has to be swept is what actually is zone-local: a
+        // `SurfaceLink` opens onto a frame generated for the sector it
+        // stands in, and left alive it would ride the breach into a sector
+        // it was never generated for.
         let stale: Vec<Entity> = {
             let mut query = self
                 .world
@@ -380,44 +380,6 @@ impl Game {
         for e in stale {
             self.world.despawn(e);
         }
-
-        // Snapshot each structure's offset from the Home before the map is
-        // swapped, so the base can be rebuilt in the same layout around the
-        // new spawn point. No Home means there's no base to carry — every
-        // structure is left behind instead, the way all of them used to be,
-        // and any cronjob pointing at one is dropped rather than left
-        // dangling. Unreachable through the public API (a Portal can't be
-        // built without a Home, and demolishing a Home cascades to the
-        // Portal), but cheaper to handle than to prove impossible.
-        let home = self.home_position();
-        let offsets: Vec<(Entity, (i32, i32))> = match home {
-            Some(home) => {
-                let mut query = self
-                    .world
-                    .query_filtered::<(Entity, &Position), With<Structure>>();
-                query
-                    .iter(&self.world)
-                    .map(|(e, p)| (e, (p.x - home.x, p.y - home.y)))
-                    .collect()
-            }
-            None => {
-                let orphans: Vec<Entity> = {
-                    let mut query = self.world.query_filtered::<Entity, With<Structure>>();
-                    query.iter(&self.world).collect()
-                };
-                for e in orphans {
-                    self.world.despawn(e);
-                }
-                let dangling: Vec<Entity> = {
-                    let mut query = self.world.query_filtered::<Entity, With<Task>>();
-                    query.iter(&self.world).collect()
-                };
-                for e in dangling {
-                    self.world.entity_mut(e).remove::<Task>();
-                }
-                Vec::new()
-            }
-        };
 
         let new_level = {
             let mut zone = self.world.resource_mut::<ZoneLevel>();
@@ -440,22 +402,6 @@ impl Game {
             x: start.0,
             y: start.1,
         });
-
-        for (e, (dx, dy)) in offsets {
-            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
-                pos.x = start.0 + dx;
-                pos.y = start.1 + dy;
-            }
-        }
-        // `stamp_platform` used to run here, re-laying the slab under the
-        // relocated structures once the new `WorldMap` was in. It retired
-        // with `resources::Platform` this task, and nothing has replaced it
-        // yet — the base's floor is `BaseGrid`, not a `WorldMap` override,
-        // and this offset-based reposition above still writes `Position` as
-        // if the base lived on the zone surface. That rebuild belongs to
-        // whatever task next makes a breach correct for an out-of-phase
-        // base; this one only removed the call to a function that no longer
-        // exists.
 
         let travelers: Vec<Entity> = {
             let mut query = self
@@ -501,10 +447,11 @@ impl Game {
         // Credits surviving a breach no longer buys a way past content.
         // Every trader's shelf goes with it, for the same reason: a shelf
         // holding a zone's worth of salvage is precisely the stockpile that
-        // wipe exists to strand. Cleared explicitly rather than left to rot —
-        // the base travels, so a stale entry keyed on a tile nobody stands on
-        // any more would still be saved, and would spring back the day a
-        // trader was rebuilt on the matching tile.
+        // wipe exists to strand. Cleared explicitly rather than left to rot
+        // — a trader is base-space and permanent, so without this its
+        // ledger would otherwise just keep accumulating sale history across
+        // every zone the run ever passes through, rather than resetting
+        // with the rest of that zone's economy.
         self.world.insert_resource(BuybackLedger::default());
 
         // Same reason, and the same trap: a zone's links are gone, but their

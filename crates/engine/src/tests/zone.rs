@@ -308,38 +308,43 @@ fn warping_to_a_zone_that_is_not_ahead_is_refused() {
     );
 }
 
+/// Base space is a separate coordinate system from the zone surface — Home
+/// sits at `BASE_EXIT_CELL` and a fresh zone's spawn tile is found by the
+/// same `(0, 0)`-first scan, so their numbers coincide by construction and
+/// comparing them proves nothing about which space either belongs to (see
+/// `find_blocking_structure_at`'s doc comment for the same trap on a
+/// different call site). What actually matters, and what the old version of
+/// this test got backwards, is that the breach must leave Home exactly
+/// where it already was rather than relocating it to the new spawn tile —
+/// asserting equality to spawn was asserting the very relocation this task
+/// deletes. `breaching_leaves_every_structures_absolute_position_untouched`
+/// covers the case where Home and spawn are forced to visibly differ.
 #[test]
 fn breaching_carries_every_structure_and_its_offset_from_home() {
     let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (home, node) = build_a_base(&mut game);
-    let before = {
-        let h = *game.world.get::<Position>(home).unwrap();
-        let n = *game.world.get::<Position>(node).unwrap();
-        (n.x - h.x, n.y - h.y)
-    };
+    let home_before = *game.world.get::<Position>(home).unwrap();
+    let node_before = *game.world.get::<Position>(node).unwrap();
 
     game.enter_next_zone();
 
     assert!(
         game.world.get_entity(home).is_ok(),
-        "the Home travels through the breach"
+        "the Home is not zone-local — it survives the breach"
     );
     assert!(
         game.world.get_entity(node).is_ok(),
         "so does everything built around it"
     );
-    let h = *game.world.get::<Position>(home).unwrap();
-    let n = *game.world.get::<Position>(node).unwrap();
     assert_eq!(
-        (n.x - h.x, n.y - h.y),
-        before,
-        "the base's layout must be preserved exactly, not reshuffled"
+        *game.world.get::<Position>(home).unwrap(),
+        home_before,
+        "a breach must not move the Home at all, let alone onto the new spawn point"
     );
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
     assert_eq!(
-        (h.x, h.y),
-        (spawn.x, spawn.y),
-        "the Home lands at the new spawn point"
+        *game.world.get::<Position>(node).unwrap(),
+        node_before,
+        "and every structure keeps its own absolute base-space coordinate too"
     );
 }
 
@@ -426,7 +431,26 @@ fn breaching_preserves_structure_durability_and_node_stock() {
 #[test]
 fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
     let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (_home, node) = build_a_base(&mut game);
+    let (home, node) = build_a_base(&mut game);
+    // Both Home and the node are moved off `(0, 0)` for the same reason
+    // `breaching_leaves_every_structures_absolute_position_untouched` does:
+    // Home always founds at `BASE_EXIT_CELL`, itself `(0, 0)`, and
+    // `find_walkable_start` always resolves `(0, 0)` too — so the deleted
+    // block's `spawn + (node - home)` write reproduces the same absolute
+    // number whenever Home is left at its real founding position, even
+    // with the node displaced on its own. Displacing Home too breaks that
+    // coincidence and makes the check below load-bearing.
+    {
+        let mut pos = game.world.get_mut::<Position>(home).unwrap();
+        pos.x = 12;
+        pos.y = -7;
+    }
+    {
+        let mut pos = game.world.get_mut::<Position>(node).unwrap();
+        pos.x = 33;
+        pos.y = -9;
+    }
+    let node_before = *game.world.get::<Position>(node).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(worker).insert(Task {
         kind: TaskKind::GatherResource,
@@ -448,6 +472,12 @@ fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
     assert!(
         game.world.get_entity(task.target).is_ok(),
         "which is still alive"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(task.target).unwrap(),
+        node_before,
+        "and still stands exactly where the cronjob left it, not wherever a breach's \
+         reposition would have put it"
     );
 }
 
@@ -529,7 +559,15 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
     );
     assert!(
         game.world.get::<Structure>(home).is_some(),
-        "the base travels through the breach with the player"
+        "the base is not zone-local — it survives the breach"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(home).unwrap(),
+        Position {
+            x: ppos.x + 5,
+            y: ppos.y,
+        },
+        "and stays exactly where it was, not repositioned onto the new zone's spawn point"
     );
     let companion_pos = *game.world.get::<Position>(companion).unwrap();
     let player_pos = *game.world.get::<Position>(player).unwrap();
@@ -567,6 +605,40 @@ fn breaching_wipes_the_currency_and_craft_currency_stacks() {
         30,
         "Credits are the one liquid thing that crosses a breach — selling \
          a doomed stockpile before you go is the point of a trader"
+    );
+}
+
+/// Cache Grain is a `WorkResource`, not one of the two currency roles
+/// `enter_next_zone` wipes by name — so unlike Portal Fragment and Core
+/// Fragment in the zone-currency stacks test above, it must ride the breach
+/// through untouched, the same as any other banked material.
+#[test]
+fn breaching_carries_cache_grain_through_while_wiping_both_currencies() {
+    let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        inv.add(ItemId::from("cache_grain"), 17);
+        inv.add(ItemId::from(ids::PORTAL_FRAGMENT), 25);
+        inv.add(ItemId::from(ids::CORE_FRAGMENT), 40);
+    }
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        count_item(&game, "cache_grain"),
+        17,
+        "Cache Grain is a work resource, not a currency — it must cross the breach"
+    );
+    assert_eq!(
+        count_item(&game, ids::PORTAL_FRAGMENT),
+        0,
+        "while the build currency it's not is wiped, same as the other currency test"
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        0,
+        "and the craft currency alongside it"
     );
 }
 
@@ -2186,5 +2258,113 @@ fn breaching_into_a_neutral_sector_logs_only_the_level_line() {
         breach_lines.len(),
         1,
         "a neutral sector should add no second line: {breach_lines:?}"
+    );
+}
+
+/// The base is out of phase, not on the zone surface — a breach must not
+/// touch a `Structure`'s `Position` at all, in either direction.
+///
+/// `find_walkable_start` always resolves `(0, 0)` on every generated map
+/// (checked directly: every seed 0..30 breaches to spawn `(0, 0)`), and the
+/// Home is always founded at `BASE_EXIT_CELL`, itself `(0, 0)` — so under an
+/// ordinary breach a structure's absolute position and its offset from Home
+/// are the same number, and the old offset-rebuild block reproduced the
+/// right answer by coincidence. Comparing to Home, or trusting an
+/// unperturbed fixture, would silently pass with that block still in place.
+/// This test defeats both: the fixture is hand-moved onto coordinates that
+/// don't touch the origin, so the deleted block's `spawn + offset` write
+/// would land somewhere else entirely, and every assertion below reads an
+/// absolute coordinate, never a delta from Home.
+#[test]
+fn breaching_leaves_every_structures_absolute_position_untouched() {
+    let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, node) = build_a_base(&mut game);
+    game.world.get_mut::<Position>(home).unwrap().x = 12;
+    game.world.get_mut::<Position>(home).unwrap().y = -7;
+    game.world.get_mut::<Position>(node).unwrap().x = 20;
+    game.world.get_mut::<Position>(node).unwrap().y = 30;
+    let home_before = *game.world.get::<Position>(home).unwrap();
+    let node_before = *game.world.get::<Position>(node).unwrap();
+
+    game.enter_next_zone();
+
+    assert!(
+        game.world.get_entity(home).is_ok(),
+        "the Home is not zone-local — it must survive the breach"
+    );
+    assert!(
+        game.world.get_entity(node).is_ok(),
+        "so does everything built around it"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(home).unwrap(),
+        home_before,
+        "base space is untouched by a breach — the Home stays exactly where it was"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(node).unwrap(),
+        node_before,
+        "and so does every other structure, at its own absolute coordinate"
+    );
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    assert_ne!(
+        (home_before.x, home_before.y),
+        (spawn.x, spawn.y),
+        "the fixture must not coincide with the new spawn, or an unmoved Home \
+         and a relocated one would be indistinguishable"
+    );
+}
+
+/// `BaseGrid` is base-space's own ground and is not zone-local — the
+/// surrounding wipe-by-name block in `enter_next_zone` (`StackMemory`,
+/// `BuybackLedger`, `PopulatedChunks`) is the pattern every zone-local
+/// resource follows, and `BaseGrid` failing to appear in that list is the
+/// whole point of this task, not an oversight. Compared by value rather
+/// than by cell count, so a breach that rewrote every cell to the same
+/// count but different coordinates would still be caught.
+#[test]
+fn breaching_does_not_touch_the_base_grid() {
+    let mut game = Game::new(949, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    build_a_base(&mut game);
+    let before = game.world.resource::<crate::base_grid::BaseGrid>().clone();
+    assert_ne!(
+        before,
+        crate::base_grid::BaseGrid::default(),
+        "the fixture must have actually laid a pocket, or this proves nothing"
+    );
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        game.world.resource::<crate::base_grid::BaseGrid>(),
+        &before,
+        "a breach must not touch base space at all"
+    );
+}
+
+/// The anchor is on the zone surface, not in base space — unlike a
+/// `Structure`, it really does have to move to the new zone's spawn point
+/// on every breach (Task 4 wired the write; this confirms it fires). The
+/// anchor is hand-displaced first because `find_walkable_start` always
+/// resolves `(0, 0)`, so an untouched fixture starting at `(0, 0)` could
+/// not tell "moved to the new spawn" apart from "never moved at all".
+#[test]
+fn breaching_moves_the_anchor_to_the_new_spawn_point() {
+    let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let anchor = game.world.resource::<AnchorEntity>().0;
+    {
+        let mut pos = game.world.get_mut::<Position>(anchor).unwrap();
+        pos.x = 40;
+        pos.y = -15;
+    }
+
+    game.enter_next_zone();
+
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let after = *game.world.get::<Position>(anchor).unwrap();
+    assert_eq!(
+        (after.x, after.y),
+        (spawn.x, spawn.y),
+        "the anchor must land on the new zone's spawn point, not stay where it was displaced to"
     );
 }

@@ -752,11 +752,10 @@ fn a_breach_clears_every_shelf() {
 
     game.enter_next_zone();
 
-    // Asserting the ledger, not just `buyback_options`: the breach moves the
-    // base to a new spawn point, so every trader's tile key changes and the
-    // old entry stops matching whether or not anything cleared it. Left
-    // behind it would still be saved, and would spring back the moment a
-    // trader happened to be rebuilt on the matching tile.
+    // Asserting the ledger, not just `buyback_options`: the market is
+    // base-space and permanent, so its tile key never changes and
+    // `buyback_options` alone couldn't tell "the ledger was wiped" apart
+    // from "the ledger still matches the same trader at the same spot".
     assert!(
         game.world
             .resource::<resources::BuybackLedger>()

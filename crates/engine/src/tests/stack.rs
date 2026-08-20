@@ -2575,9 +2575,11 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
     assert_eq!(bearing(0, 0), "here");
 }
 
-/// Breaching does not despawn structures — the base travels — so anything
-/// zone-local has to be wiped by name in `enter_next_zone`. Entrances are
-/// zone-local: each opens onto a frame generated for its own sector.
+/// Breaching does not touch a `Structure` at all — the base is out of
+/// phase, not on the zone surface — but anything that actually is
+/// zone-local still has to be wiped or swept in `enter_next_zone`.
+/// Entrances are zone-local: each opens onto a frame generated for its own
+/// sector.
 #[test]
 fn a_breach_leaves_the_previous_sectors_entrances_behind() {
     let mut game = game();

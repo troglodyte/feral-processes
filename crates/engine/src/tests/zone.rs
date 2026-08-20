@@ -313,16 +313,29 @@ fn warping_to_a_zone_that_is_not_ahead_is_refused() {
 /// same `(0, 0)`-first scan, so their numbers coincide by construction and
 /// comparing them proves nothing about which space either belongs to (see
 /// `find_blocking_structure_at`'s doc comment for the same trap on a
-/// different call site). What actually matters, and what the old version of
-/// this test got backwards, is that the breach must leave Home exactly
-/// where it already was rather than relocating it to the new spawn tile —
-/// asserting equality to spawn was asserting the very relocation this task
-/// deletes. `breaching_leaves_every_structures_absolute_position_untouched`
-/// covers the case where Home and spawn are forced to visibly differ.
+/// different call site). Home and the node are hand-displaced off the
+/// origin before the breach for exactly that reason: left at their real
+/// founding coordinates, both would sit at `(0, 0)` before and after
+/// regardless of whether the deleted reposition block were still here, so
+/// the check would pass either way. What actually matters, and what the old
+/// version of this test got backwards, is that the breach must leave Home
+/// exactly where it already was rather than relocating it to the new spawn
+/// tile — asserting equality to spawn was asserting the very relocation
+/// this task deletes.
 #[test]
 fn breaching_carries_every_structure_and_its_offset_from_home() {
     let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (home, node) = build_a_base(&mut game);
+    {
+        let mut pos = game.world.get_mut::<Position>(home).unwrap();
+        pos.x = 17;
+        pos.y = 4;
+    }
+    {
+        let mut pos = game.world.get_mut::<Position>(node).unwrap();
+        pos.x = 25;
+        pos.y = 41;
+    }
     let home_before = *game.world.get::<Position>(home).unwrap();
     let node_before = *game.world.get::<Position>(node).unwrap();
 

@@ -355,11 +355,11 @@ impl Game {
     /// generated from a new seed, and wild programs there spawn with stats
     /// scaled by the new zone's `ZoneLevel::stat_multiplier`.
     ///
-    /// The player's base travels with them. Every structure is repositioned
-    /// around the new spawn point at its existing offset from the Home, and
-    /// the platform slab is re-stamped beneath it, so the base arrives in
-    /// exactly the layout it left in. The Portal itself is consumed by
-    /// `move_player` before this runs, so it never makes the trip.
+    /// The player's base is out of phase, not on the zone surface, so a
+    /// breach does not touch it at all: every `Structure` keeps its own
+    /// `base_grid::BaseGrid` coordinate, untouched, and so does the grid
+    /// itself. The Portal itself is consumed by `move_player` before this
+    /// runs, so it never makes the trip.
     ///
     /// Spendable currency doesn't make the trip either — see the wipe at the
     /// end of this function. Gear, supplies, fusion tiers and banked Research

@@ -695,9 +695,9 @@ impl Game {
     /// Deliberately unbounded where `view_entities` takes a radius: the base
     /// sits within `MAX_BUILD_DISTANCE_FROM_HOME` of its Home, but the player
     /// wanders, and a roster that thinned out as they walked away would be
-    /// worse than none. It is still zone-local — structures do not travel
-    /// between zones, they are repositioned around the new spawn point (see
-    /// `enter_next_zone`).
+    /// worse than none. There is no zone-local trimming to worry about
+    /// either way — a `Structure` is base-space, not zone surface, and a
+    /// breach leaves it exactly where it was (see `enter_next_zone`).
     ///
     /// Ordered Home first, then grouped by def id, then nearest first inside
     /// a group. Sorting here rather than in the frontend keeps one order for

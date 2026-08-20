@@ -78,6 +78,13 @@ impl HelpDb {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or_default();
+            // The schema reference lives in the directory it documents and,
+            // uniquely among the asset dirs, shares an extension with the
+            // content. Skipped by name and in silence — warning about it
+            // every load would train everyone to ignore the warnings.
+            if stem == "README" {
+                continue;
+            }
             // A file without the `NN-` prefix is skipped rather than
             // defaulted to order 0: ordering is the whole of what the
             // filename is for, and a silent default makes it ambiguous.
@@ -382,6 +389,22 @@ mod tests {
         let (db, warnings) = HelpDb::load_dir(&dir).unwrap();
         assert!(db.pages().is_empty());
         assert_eq!(warnings.len(), 1, "{warnings:#?}");
+    }
+
+    /// The directory's own schema reference is a `.md` file too, which no
+    /// other asset directory has to contend with.
+    #[test]
+    fn the_directorys_readme_is_not_a_page_and_does_not_warn() {
+        let dir = help_dir(
+            "help_readme",
+            &[
+                ("README.md", "# Help pages\n\nthe schema reference\n"),
+                ("10-real.md", "# Real\n\nbody\n"),
+            ],
+        );
+        let (db, warnings) = HelpDb::load_dir(&dir).unwrap();
+        assert_eq!(db.pages().len(), 1);
+        assert!(warnings.is_empty(), "{warnings:#?}");
     }
 
     #[test]

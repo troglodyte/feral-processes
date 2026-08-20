@@ -1731,3 +1731,41 @@ fn every_weapon_authors_a_range_and_nothing_else_does() {
         );
     }
 }
+
+/// The shipped manual, `assets/help/`. Every page parses and every link
+/// resolves — `HelpDb::load_dir` skips a malformed page with a warning
+/// rather than refusing to start, which is right for a modder's directory
+/// and would otherwise let a shipped page go missing in silence.
+#[test]
+fn every_shipped_help_page_parses_and_every_link_resolves() {
+    let (db, warnings) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    assert!(warnings.is_empty(), "{warnings:#?}");
+    assert!(
+        db.pages().len() >= 4,
+        "the census must actually walk assets/help, or it passes vacuously"
+    );
+    assert!(
+        db.pages().iter().any(|p| !p.links.is_empty()),
+        "no shipped page cross-links another, so the further-reading list is \
+         exercised by nothing but fixtures"
+    );
+}
+
+/// A further-reading row is followed by typing its label's shortcut, and
+/// `App::menu_shortcut` runs out of digits at nine.
+#[test]
+fn no_shipped_help_page_carries_more_than_nine_links() {
+    let (db, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    for page in db.pages() {
+        assert!(
+            page.links.len() <= 9,
+            "{} carries {} links; a tenth has no shortcut to type",
+            page.id,
+            page.links.len()
+        );
+    }
+}
+
+fn help_assets_dir() -> std::path::PathBuf {
+    test_assets_dir().join("help")
+}

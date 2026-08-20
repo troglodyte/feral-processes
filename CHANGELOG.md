@@ -27,7 +27,7 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.13.0
 
 **Saves written by 0.12.0 and earlier will not load.**
 `save::SAVE_FORMAT_VERSION` moves from 31 to 32. The base's own coordinate

@@ -757,17 +757,7 @@ fn breaching_with_a_base_never_opens_a_link_inside_the_platform() {
     // The Home stands out of phase; the rest of this test is about walking
     // the surface into a portal.
     place_home(&mut game);
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
     let tiles = entrance_tiles(&mut game);
@@ -2582,17 +2572,7 @@ fn arriving_in_a_zone_scans_for_links_and_says_where_the_nearest_is() {
 #[test]
 fn breaching_a_zone_scans_the_new_sector_too() {
     let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
     assert!(
         game.message_log(50)
@@ -2633,17 +2613,7 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
 fn a_breach_leaves_the_previous_sectors_entrances_behind() {
     let mut game = game();
     let before = entrance_tiles(&mut game);
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
     let after = entrance_tiles(&mut game);
@@ -4279,12 +4249,23 @@ fn an_orphan_does_not_recur_when_the_party_steps_off_and_back_on() {
 fn a_forgiving_death_underground_surfaces_the_party_at_their_base() {
     let mut game = game();
     place_home(&mut game);
-    let home = *game
-        .world
-        .iter_entities()
-        .find(|e| e.contains::<Structure>())
-        .and_then(|e| e.get::<Position>())
+    let home = game
+        .home_position()
         .expect("place_home should have deployed one");
+    // The anchor is moved clear of base space's origin first. Without that
+    // this assertion is vacuous: the zone spawn point is usually `(0, 0)`,
+    // base space's origin is `(0, 0)` by definition, and the Home stands on
+    // it — so "landed on the anchor" and "landed on the Home's Position"
+    // are the same tile and the test cannot tell a cross-space write from a
+    // correct one.
+    let anchor_entity = game.world.resource::<crate::resources::AnchorEntity>().0;
+    let anchor = Position { x: 9, y: -6 };
+    *game.world.get_mut::<Position>(anchor_entity).unwrap() = anchor;
+    assert_ne!(
+        (home.x, home.y),
+        (anchor.x, anchor.y),
+        "the fixture must separate the two, or this proves nothing"
+    );
     descend(&mut game);
     game.raise_trace(4);
 
@@ -4298,8 +4279,9 @@ fn a_forgiving_death_underground_surfaces_the_party_at_their_base() {
     );
     assert_eq!(
         *game.world.get::<Position>(player).unwrap(),
-        home,
-        "and it lands on the construction it rebooted at"
+        anchor,
+        "and it lands on the anchor — a `Structure`'s `Position` is base-space \
+         and would put the party on an arbitrary zone tile"
     );
     assert!(
         game.world.resource::<CurrentStack>().0.is_none(),

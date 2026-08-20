@@ -15,20 +15,8 @@ use crate::*;
 fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.player_status().zone, 1);
-    let player = game.player_entity();
-    let ppos = *game.world.get::<Position>(player).unwrap();
 
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
 
     assert_eq!(
         game.player_status().zone,
@@ -236,7 +224,8 @@ fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
-    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
+    stand_in_base(&mut game);
+    game.place_structure("portal", 1, 0).unwrap();
 
     game.move_player(1, 0);
 
@@ -517,17 +506,7 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
         ))
         .id();
 
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
 
     assert_eq!(game.player_status().zone, 2);
     assert!(
@@ -751,7 +730,8 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
-    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
+    stand_in_base(&mut game);
+    game.place_structure("portal", 1, 0).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -773,14 +753,15 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 14);
     assert!(
-        from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).is_err(),
+        game.place_structure("portal", 1, 0).is_err(),
         "14 fragments shouldn't be enough for a zone-2 portal"
     );
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 1);
-    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
+    stand_in_base(&mut game);
+    game.place_structure("portal", 1, 0).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -795,18 +776,7 @@ fn portal_build_cost_ramps_with_current_zone_level() {
 fn zone_level_survives_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(43, DifficultyMode::Forgiving, &assets).unwrap();
-    let player = game.player_entity();
-    let ppos = *game.world.get::<Position>(player).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
     let path = std::env::temp_dir().join(format!(
@@ -856,16 +826,7 @@ fn zone_transition_reliably_populates_the_new_zone_regardless_of_seed() {
         for e in blockers {
             game.world.despawn(e);
         }
-        game.world.spawn((
-            Structure {
-                kind: "portal".to_string(),
-            },
-            Position {
-                x: ppos.x + 1,
-                y: ppos.y,
-            },
-        ));
-        game.move_player(1, 0);
+        breach_through_a_portal(&mut game);
         assert_eq!(
             game.player_status().zone,
             2,
@@ -1967,17 +1928,7 @@ const ONLY_COLD: &str = r#"(
 
 /// Walks the player onto a zone portal, which is what a breach is.
 fn breach(game: &mut Game) {
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(game);
 }
 
 /// How many tiles of `biome` a map has around its origin.

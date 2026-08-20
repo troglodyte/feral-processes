@@ -1,7 +1,0 @@
-(
-    id: "page_allocation",
-    name: "Page Allocation",
-    description: "Cut one page of address space to size and lay it where you want it. Unlocks the Heap Block, which grows the platform a tile at a time. Cheap to learn; the plate it needs still has to come off a Lathe.",
-    cost: 8,
-    unlocks_structures: ["heap_block"],
-)

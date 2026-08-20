@@ -410,19 +410,20 @@ impl Game {
             self.tick();
             return;
         }
-        if let Some(portal) = self.find_zone_portal_at(nx, ny) {
-            // Consumed before enter_next_zone snapshots the base, so it
-            // isn't carried forward. Load-bearing now that structures
-            // survive a breach: a portal that travelled would make every
-            // breach after the first free, bypassing its per-zone cost.
-            self.world.despawn(portal);
-            self.enter_next_zone();
-            self.tick();
-            return;
-        }
-        if self.find_blocking_structure_at(nx, ny).is_some() {
-            return;
-        }
+        // **No structure is consulted here.** Every `Structure` stands in
+        // base space — `Structure` is the space tag, and there is exactly
+        // one spawn site — so its `Position` is in a different coordinate
+        // space from the tile being stepped onto. Asking a base-space query
+        // about a surface tile answers by numeric coincidence, and the
+        // coincidence is the common case: `find_walkable_start` returns
+        // `(0, 0)` whenever it can, so the anchor, the zone spawn point and
+        // base space's origin all carry the same numbers, and the pocket
+        // covers the player's own starting tile. Left in, the base's own
+        // Home made the anchor unwalkable, its machines were invisible
+        // walls, and a Portal deployed inside fired a breach from out here.
+        //
+        // Walking onto a Portal breaches from **inside** the base, where the
+        // Portal actually stands — see `Game::move_in_base`.
         let from = self
             .world
             .resource_mut::<WorldMap>()

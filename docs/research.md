@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 23 of them.
+`assets/research/`. 22 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
@@ -14,13 +14,13 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 23 |
+| nodes | 22 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1408 |
+| total Research Data | 1378 |
 | cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (10), zone 2 (6), zone 3 (7) |
-| unlocks | 14 structures, 15 routines, 6 gear recipes |
+| zone bands | from turn one (9), zone 2 (6), zone 3 (7) |
+| unlocks | 13 structures, 15 routines, 6 gear recipes |
 
 ## What the zone gates
 
@@ -32,7 +32,7 @@ ever opening a portal.
 
 | Available | Nodes | Research Data | Which |
 |:---|---:|---:|:---|
-| from turn one | 10 | 188 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication, Heap Allocation |
+| from turn one | 9 | 158 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication |
 | zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
 | zone 3 | 7 | 870 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
 
@@ -79,15 +79,14 @@ Automation (8)
 Isometric Commerce (14)
 
 Power Grid (10)
-|-- Fortification (18)
-`-- Heap Allocation (30)
+`-- Fortification (18)
 ```
 
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at 8, so the opening move is barely a
-decision. **Power Grid** is a three-node stub: the two things that
-keep a base standing, and the one that lets it grow.
+decision. **Power Grid** is a two-node stub: the current a base runs on,
+and the pair of buildings that keep it standing.
 **Isometric Commerce** is a leaf — 14 Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.
@@ -106,7 +105,6 @@ there is no node you can reach two ways.
 | Isometric Commerce | - | 14 | - | `market` |
 | Power Grid | - | 10 | - | `power_conduit` |
 | Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
-| Heap Allocation | - | 30 | `power_grid` | `heap_pillar` |
 | Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench` |
 | Reactive Armor | - | 24 | `automation` | `armory` |
 | Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
@@ -145,7 +143,6 @@ Fortification          28  ###.....................................
 Reactive Armor         32  ####....................................
 Weapon Fabrication     32  ####....................................
 Routine Fabrication    34  ####....................................
-Heap Allocation        40  #####...................................
 Self-Execution         48  ######..................................
 Field Operations       68  ########................................
 Firewall Plating       77  #########...............................

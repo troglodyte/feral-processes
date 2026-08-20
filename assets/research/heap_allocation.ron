@@ -1,8 +1,0 @@
-(
-    id: "heap_allocation",
-    name: "Heap Allocation",
-    description: "Claim address space beyond your initial allocation. Unlocks the Heap Pillar, which grows the base platform a whole ring at a time and feeds the grid while it stands.",
-    cost: 30,
-    requires: ["power_grid", "page_allocation"],
-    unlocks_structures: ["heap_pillar"],
-)

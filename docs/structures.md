@@ -1,25 +1,25 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 25 of them.
+`assets/structures/`. 24 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/structures/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Everything below must be deployed on the base slab — within 4 tiles of a Home,
-minus the chamfer taken off each of the slab's four corners — and demolishing
-the Home cascades to the rest. Each Heap Pillar pushes that radius out by one,
-and five is all a grid will hold, so a base tops out at 19x19. A structure named by no research file is
-buildable from turn one; the [research tree](research.md) gates the machines
-that automate a base, not the base itself.
+Everything below must be deployed on laid floor inside the base's own pocket
+dimension — the run opens one 4 cells across, minus the chamfer taken off each
+of its four corners — and demolishing the Home cascades to the rest. A
+structure named by no research file is buildable from turn one; the
+[research tree](research.md) gates the machines that automate a base, not the
+base itself.
 
 | | |
 |---|---|
-| structures | 25 |
+| structures | 24 |
 | producers (make something from nothing, on a timer) | 4 |
 | assemblers (consume a neighbour's output) | 11 |
-| utility | 10 |
+| utility | 9 |
 | upgradeable | 5, all to Mk5 |
 | built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
 
@@ -50,7 +50,6 @@ that automate a base, not the base itself.
 | `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
-| `I` | Heap Pillar | 14 `core_fragment` | - | - | - | +1 tile of base radius, max 5 |
 | `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node

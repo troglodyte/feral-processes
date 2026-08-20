@@ -156,11 +156,17 @@ impl Game {
     /// One step through base space, reached from `Game::move_player` — the
     /// same four keys, dispatched on locale.
     ///
-    /// Reads `BaseGrid::walkable` and nothing else. `WorldMap` is a
-    /// different coordinate space entirely and has no say here, and solid
-    /// rock is simply not walkable — there is no way to end up standing
-    /// inside it, so base space needs no analogue of the Stack's
+    /// Reads `BaseGrid::walkable` for whether the step lands, and then the
+    /// one thing a step can do besides land: walk onto a Portal and breach.
+    /// `WorldMap` is a different coordinate space entirely and has no say
+    /// here, and solid rock is simply not walkable — there is no way to end
+    /// up standing inside it, so base space needs no analogue of the Stack's
     /// `die_in_the_rock`.
+    ///
+    /// Nothing *blocks*. A structure standing on a cell is walked over, not
+    /// bumped into, unlike the zone surface — and it has to be, because the
+    /// Home stands on `BASE_EXIT_CELL` and a blocked exit cell is a base
+    /// with no way out of it.
     ///
     /// **A refused step costs no turn**, unlike shoving at a wall on the zone
     /// surface or in the Stack, which both charge one. Base space is walls
@@ -183,6 +189,22 @@ impl Game {
         self.break_off_job();
         let (nx, ny) = (x + dx, y + dy);
         if !self.world.resource::<BaseGrid>().walkable(nx, ny) {
+            return;
+        }
+        // The one structure a step in here does anything with. A Portal is a
+        // `Structure` and so stands in base space with the rest of them, and
+        // walking onto it is how a run breaches — the surface branch of
+        // `move_player` used to hold this check, back when the base was on
+        // the surface, and asking it out there now answers about a tile in
+        // another coordinate space entirely.
+        //
+        // Consumed before `enter_next_zone` runs, exactly as it was: a
+        // portal that travelled would make every breach after the first
+        // free, bypassing its per-zone cost.
+        if let Some(portal) = self.find_zone_portal_at(nx, ny) {
+            self.world.despawn(portal);
+            self.enter_next_zone();
+            self.tick();
             return;
         }
         self.world.insert_resource(Locale::Base { x: nx, y: ny });

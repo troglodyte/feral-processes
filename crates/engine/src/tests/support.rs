@@ -827,6 +827,30 @@ pub(super) fn stand_player_at_post(game: &mut Game, structure: Entity) {
     stand_in_base_at(game, target.x + 1, target.y);
 }
 
+/// Stands a Portal one cell east of base space's exit cell and walks the
+/// party onto it, which is the whole of how a breach happens now.
+///
+/// A Portal is a `Structure`, so it stands in base space with the rest of
+/// the base, and `Game::move_in_base` is what consumes it — the surface
+/// branch of `move_player` reads no structure at all. A fixture that spawned
+/// one at the player's surface tile and stepped onto it used to work only by
+/// the coordinate collision at `(0, 0)`.
+///
+/// The pocket is laid because a step in base space is refused by solid rock,
+/// and spawned rather than deployed because a Portal costs Portal Fragments
+/// this is never trying to measure.
+pub(super) fn breach_through_a_portal(game: &mut Game) {
+    game.lay_starting_pocket();
+    game.world.spawn((
+        Structure {
+            kind: "portal".to_string(),
+        },
+        Position { x: 1, y: 0 },
+    ));
+    stand_in_base_at(game, 0, 0);
+    game.move_player(1, 0);
+}
+
 /// Puts the party in base space on `(x, y)` — `stand_in_base`, at a chosen
 /// cell rather than at the exit.
 pub(crate) fn stand_in_base_at(game: &mut Game, x: i32, y: i32) {

@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::components::{
-    Experience, FieldBuff, Player, Position, PowerReserve, Stats, Structure, drop_until_rest_buffs,
+    BaseAnchor, Experience, FieldBuff, Player, Position, PowerReserve, Stats, drop_until_rest_buffs,
 };
 use crate::game::stack::StackLocale;
 use crate::progression;
@@ -71,15 +71,25 @@ impl DeathReport<'_> {
 /// Gates what happens when the player's HP hits zero. Permadeath ends the
 /// run (the caller is responsible for writing the history log once);
 /// Forgiving mode is a soft respawn with a penalty, warping the player to
-/// the nearest built structure if one exists (in place otherwise). Either
-/// way, a mild XP setback applies too (see `progression::apply_setback_xp_penalty`).
+/// the base's anchor if one exists (in place otherwise). Either way, a mild
+/// XP setback applies too (see `progression::apply_setback_xp_penalty`).
+///
+/// **The anchor, and not the nearest structure.** This used to warp to the
+/// nearest `Structure`'s `Position`, which was the right answer while the
+/// base stood on the zone surface. Every structure is in base space now, so
+/// that position is in a different coordinate space from the player's, and
+/// writing one straight into the other drops the party on whatever surface
+/// tile happens to carry the same numbers — with no walkability check. It is
+/// the same cross-space write `Game::use_symlink` had, and it gets the same
+/// answer: the anchor is the base's one presence on the zone surface, so a
+/// reboot at your base means a reboot at its door.
 ///
 /// A reboot underground surfaces the party first (see `stack::surfaced`).
-/// The warp target is a *surface* structure and `Position` is pinned to the
-/// entrance tile while `Locale::Stack` is live, so writing one without the
-/// other left the party in the maze with their way out overwritten. This is
-/// the one reset that doesn't go through `Game::clear_stack`, because a
-/// system has no `Game` — it shares that function's implementation instead.
+/// `Position` is pinned to the entrance tile while `Locale::Stack` is live,
+/// so writing one without the other left the party in the maze with their
+/// way out overwritten. This is the one reset that doesn't go through
+/// `Game::clear_stack`, because a system has no `Game` — it shares that
+/// function's implementation instead.
 pub(crate) fn death_handling_system(
     mut player_query: Query<
         (
@@ -91,7 +101,7 @@ pub(crate) fn death_handling_system(
         ),
         With<Player>,
     >,
-    structure_query: Query<&Position, (With<Structure>, Without<Player>)>,
+    anchor_query: Query<&Position, (With<BaseAnchor>, Without<Player>)>,
     mut field_buffs: PartyFieldBuffs,
     difficulty: Res<DifficultyMode>,
     mut report: DeathReport,
@@ -118,13 +128,10 @@ pub(crate) fn death_handling_system(
                     stack_locale.surface();
                     report.push("The Stack ejects your process. You come to on open grid.");
                 }
-                let nearest = structure_query
-                    .iter()
-                    .min_by_key(|s_pos| (s_pos.x - pos.x).abs() + (s_pos.y - pos.y).abs());
-                if let Some(nearest) = nearest {
-                    *pos = *nearest;
+                if let Some(anchor) = anchor_query.iter().next() {
+                    *pos = *anchor;
                     report.push(
-                        "Your connection is forcibly cut. You reboot at the nearest construction, battered but online.",
+                        "Your connection is forcibly cut. You reboot at your anchor, battered but online.",
                     );
                 } else {
                     report
@@ -153,6 +160,7 @@ pub(crate) fn death_handling_system(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::Structure;
     use crate::resources::{CurrentStack, Locale, Trace};
     use crate::structures::StructureId;
 
@@ -174,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn forgiving_death_warps_player_to_nearest_structure() {
+    fn forgiving_death_warps_player_to_the_anchor() {
         let mut world = World::new();
         world.insert_resource(DifficultyMode::Forgiving);
         world.insert_resource(GameClock::default());
@@ -199,26 +207,26 @@ mod tests {
                 },
             ))
             .id();
-        world.spawn((
-            Structure {
-                kind: StructureId::from("recharger_node"),
-            },
-            Position { x: 5, y: 5 },
-        ));
+        // Structures stand in *base space*, so their `Position` is not a
+        // tile the player can be put on — the anchor is. Both are spawned so
+        // the assertion below distinguishes the two answers: a warp that
+        // still read the nearest structure would land on (1, 1).
         world.spawn((
             Structure {
                 kind: StructureId::from("data_cache"),
             },
             Position { x: 1, y: 1 },
         ));
+        world.spawn((BaseAnchor, Position { x: 5, y: 5 }));
 
         run_death_handling(&mut world);
 
         let pos = *world.get::<Position>(player).unwrap();
         assert_eq!(
             pos,
-            Position { x: 1, y: 1 },
-            "should warp to the nearest structure, not the farther one"
+            Position { x: 5, y: 5 },
+            "a reboot lands on the anchor — a structure's Position is in another \
+             coordinate space and would put the party on an arbitrary surface tile"
         );
         let stats = world.get::<Stats>(player).unwrap();
         assert_eq!(stats.hp, 5, "forgiving death should still halve HP");
@@ -234,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn forgiving_death_stays_in_place_when_no_structures_exist() {
+    fn forgiving_death_stays_in_place_when_no_anchor_exists() {
         let mut world = World::new();
         world.insert_resource(DifficultyMode::Forgiving);
         world.insert_resource(GameClock::default());

@@ -1693,6 +1693,7 @@ fn no_ambush_fires_while_walking_the_base() {
     despawn_every_hostile(&mut game);
     stand_in_base(&mut game);
 
+    let before = game.current_tick();
     for step in 0..2000 {
         let (dx, dy) = if step % 2 == 0 { (1, 0) } else { (-1, 0) };
         game.move_player(dx, dy);
@@ -1701,10 +1702,15 @@ fn no_ambush_fires_while_walking_the_base() {
             "walking your own base must never be ambushed"
         );
     }
+    // The clock, not the position. A sweep that ended back where it started
+    // proves nothing on its own — that is equally true of one whose every
+    // step was *refused*, which is exactly the failure this guard is for. A
+    // step in base space costs a turn and a refused one costs nothing, so
+    // the tick count is what says the party actually walked.
     assert_eq!(
-        game.base_pos(),
-        Some((0, 0)),
-        "the sweep must really have been walking, or it proves nothing"
+        game.current_tick() - before,
+        2000,
+        "every step has to have landed, or the sweep never walked at all"
     );
 }
 

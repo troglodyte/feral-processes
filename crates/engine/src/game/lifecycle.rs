@@ -860,25 +860,18 @@ impl Game {
             }
         }
 
-        // The slab's tiles come back through SaveData::tile_overrides; only
-        // its center and width need rediscovering, and the restored
-        // structures are both — the Home's position for one, and every
-        // `build_radius_bonus` among them for the other. Structures are
-        // already back by this point, so `build_radius` is correct here.
+        // `resources::Platform` is deliberately **not** restored here.
         //
-        // `claimed` is deliberately left at `Platform::default`'s empty set:
-        // `SAVE_FORMAT_VERSION` 32 dropped `claimed_tiles` (see that
-        // constant's docs), and `resources::Platform` itself retires later
-        // in this slice in favour of `base_grid::BaseGrid`. Until then, a
-        // claim bought this session does not survive a reload — a known,
-        // temporary gap on the way to the pocket dimension rather than an
-        // oversight here.
-        if let Some(home) = game.home_position() {
-            let radius = game.build_radius();
-            let mut platform = game.world.resource_mut::<Platform>();
-            platform.center = Some((home.x, home.y));
-            platform.radius = radius;
-        }
+        // This used to set `center` from `Game::home_position`, which was the
+        // right answer while the Home stood on the zone surface. It is a
+        // base-space coordinate now, and resurrecting the slab around it made
+        // a loaded run behave differently from the same run before the
+        // reload: `distance_from_danger_origin` and `frames_at` both branched
+        // on `center` being `Some`, and `clear_platform` swept a 401x401 box
+        // of `WorldMap` overrides centred on wherever base space's origin
+        // numerically landed. Both readers take their radius off `BaseGrid`
+        // now, so nothing left needs a restored `Platform` — and the resource
+        // itself retires with the rest of the slab.
 
         // Reconnect each restored cronjob to its target structure now that
         // both sides exist. A structure is matched by position (entity ids

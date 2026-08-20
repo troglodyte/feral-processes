@@ -146,7 +146,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Stacks additively across every in-range structure that sets it, and
     // clamps at full Power. This is how the Recharger Node works:
     // `power_regen: Some((per_tick: 1.0, radius: 10))`, a radius chosen to
-    // cover a base grown to its full size — see `build_radius_bonus` below.
+    // cover the whole of a base rather than a corner of it.
     power_regen: Some((
         per_tick: 1.0,
         radius: 10,
@@ -292,60 +292,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // own two more tamed programs (across party, cronjobs, and idle pets).
     pet_slot_bonus: 2,
 
-    // Optional; can be left out entirely (defaults to 0). How many tiles
-    // this structure widens the base platform by while it's deployed. The
-    // base's radius is `4 + the sum of this across every deployed
-    // structure`, capped at 100, so several of them stack and each lays one
-    // more ring of platform floor. This is how the Heap Pillar works:
-    // `build_radius_bonus: 1` with no `work` recipe.
-    //
-    // Two engine rules come with it, and neither is configurable. Deploying
-    // one is refused outright if a Stack link stands in the ground the new
-    // ring would claim — the stamp obliterates what it covers, and a link is
-    // the way down to the Stack. And a structure setting this cannot be
-    // demolished except in a Home's cascade: growth is one-way, so there is
-    // never a shrinking slab with structures left standing outside it. A mod
-    // setting `raidable: true` on one is on its own here; the shipped Pillar
-    // sets it false, so no Durability and no sweep can take it down.
-    build_radius_bonus: 1,
-
     // Optional; can be left out entirely (defaults to 0, meaning no limit).
     // How many of this structure may stand at once — the build is refused
     // past it, before anything is spent. This is where a structure whose
-    // *effect accumulates* is bounded, and the Heap Pillar is what it exists
-    // for: `max_deployed: 5`, so a base grows five rings and no further.
-    // Bounding growth by the engine's backstop radius instead would put the
-    // limit ninety-six purchases away, which is no limit a player will ever
-    // meet. The Line Driver is bounded for the same reason at 3, and every
-    // other shipped structure leaves this at 0.
-    max_deployed: 5,
-
-    // Optional; can be left out entirely (defaults to false). Whether
-    // deploying this CLAIMS the tile it is aimed at instead of standing a
-    // structure on it. No entity is spawned: the ground becomes base floor
-    // and stays empty, which is the whole point — a building on the tile
-    // would make the tile useless. This is how the Heap Block works:
-    // `claims_ground: true` with a one-item `build_cost` and nothing else.
-    //
-    // It is the other half of how a base grows, and deliberately a different
-    // shape from `build_radius_bonus` above. A Pillar adds a ring to the
-    // circle, in every direction at once; a claim bolts one tile onto the
-    // footprint in the one direction you chose. Neither affects the other: a
-    // Pillar grown after a corridor of claims still adds exactly one ring to
-    // the circle.
-    //
-    // Four engine rules come with it, none configurable. A claim must touch
-    // ground the base already covers, so the base stays one connected blob
-    // and paving out prices itself a tile at a time. It is refused on ground
-    // the base already reaches, on terrain that is not walkable, and on a
-    // tile with a Stack link, a nest or a hostile standing on it — a single
-    // tile is trivially re-sited, so it refuses rather than obliterating the
-    // way a Pillar's ring does. And it is permanent: there is no entity to
-    // demolish, and claimed ground goes away only when the Home does.
-    //
-    // `max_deployed` and `build_radius_bonus` say nothing on a def that sets
-    // this. Both are counted over deployed entities, and a claim leaves none.
-    claims_ground: true,
+    // *effect accumulates* is bounded, and the Line Driver is what it exists
+    // for: `max_deployed: 3`, so a base's Grid supply grows three steps and
+    // no further. Bounding it by whatever downstream constant the effect
+    // happens to clamp against instead would put the limit somewhere no
+    // player ever meets. Every other shipped structure leaves this at 0.
+    max_deployed: 3,
 
     // Optional; can be left out entirely (defaults to no rest capability).
     // If set, `Game::rest` (recharge/overnight rest) is only allowed while
@@ -357,8 +312,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // grants rest rather than as a single global rate, so a modded
     // alternate rest structure can charge differently, or nothing. This is
     // how Home works: `enables_rest: Some((radius: 10, cost: [("outlet", 1)]))`
-    // — a radius covering a base grown to its full size (see
-    // `build_radius_bonus`), priced at one Power Outlet.
+    // — a radius covering the whole of a base rather than a corner of it,
+    // priced at one Power Outlet.
     enables_rest: Some((radius: 10, cost: [("outlet", 1)])),
 
     // Optional; can be left out entirely (defaults to a permanent

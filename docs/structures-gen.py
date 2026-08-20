@@ -36,7 +36,6 @@ S = [
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None,            0,   0),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12,              0,   0),
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
- ("heap_pillar",    "Heap Pillar",    "I", "Cyan",   [("core_fragment", 14)],                   "utility",  "+1 tile of base radius, max 5",   None, None, None,          None,            0,   0),
  ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),
 ]
 K = "id name glyph color cost kind does ticks cap feeder upgrade draw supply".split()
@@ -117,12 +116,12 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/*.ron` on 2026-08-17 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
-Everything below must be deployed on the base slab — within 4 tiles of a Home,
-minus the chamfer taken off each of the slab's four corners — and demolishing
-the Home cascades to the rest. Each Heap Pillar pushes that radius out by one,
-and five is all a grid will hold, so a base tops out at 19x19. A structure named by no research file is
-buildable from turn one; the [research tree](research.md) gates the machines
-that automate a base, not the base itself.
+Everything below must be deployed on laid floor inside the base's own pocket
+dimension — the run opens one 4 cells across, minus the chamfer taken off each
+of its four corners — and demolishing the Home cascades to the rest. A
+structure named by no research file is buildable from turn one; the
+[research tree](research.md) gates the machines that automate a base, not the
+base itself.
 
 | | |
 |---|---|

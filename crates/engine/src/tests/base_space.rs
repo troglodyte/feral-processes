@@ -1118,3 +1118,289 @@ fn no_broker_standing_is_not_the_same_as_being_off_the_base() {
         "a base with no trader in it has no desk to be near"
     );
 }
+
+// ---------------------------------------------------------------------
+// The base is out of phase, and the zone surface must not feel it
+// ---------------------------------------------------------------------
+
+/// Paints open ground over a box around the player and clears everything
+/// alive off it, so a walk below is testing the rule under test rather than
+/// the seed's terrain or whatever wandered in. A wild program on the route
+/// would open a battle, and `move_player` refuses every step after that —
+/// which reads exactly like the wall this is looking for.
+fn clear_ground_around_the_player(game: &mut Game, half: i32) {
+    let at = *game.world.get::<Position>(game.player_entity()).unwrap();
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dy in -half..=half {
+            for dx in -half..=half {
+                map.set_override(
+                    at.x + dx,
+                    at.y + dy,
+                    Tile {
+                        biome: Biome::OpenGrid,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
+    clear_the_route(game);
+}
+
+/// Everything on the zone surface that answers a step with something other
+/// than a step. Called before *each* one below rather than once: every step
+/// ticks the world, and `maybe_spawn_wild_creature` can put a program on the
+/// route between two of them.
+fn clear_the_route(game: &mut Game) {
+    let alive: Vec<Entity> = {
+        let mut query = game
+            .world
+            .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>>();
+        query.iter(&game.world).collect()
+    };
+    for entity in alive {
+        game.world.despawn(entity);
+    }
+    // And any fight one of them opened. A step draws an ambush *after* it
+    // lands (`Game::maybe_ambush`), so the fight refuses the step after this
+    // one — which is the same shape as the wall under test and would read as
+    // it on an unlucky seed.
+    game.world.remove_resource::<BattleState>();
+}
+
+/// **A base standing must not wall the open grid.**
+///
+/// Every `Structure` is in base space, so a surface reader asking a
+/// base-space query about a zone tile answers by numeric coincidence — and
+/// the coincidence is the common case, because `find_walkable_start` returns
+/// `(0, 0)` whenever it can and the pocket is laid around base space's own
+/// origin. Left in, the founding Home made the **anchor tile itself**
+/// unwalkable: step off it and the step back was refused silently, with no
+/// message and no turn, and the only way home was a symlink.
+///
+/// A full circuit rather than one step, and every step asserted, because the
+/// tiles a base occupies are a patch and not a line — a fix that only
+/// stopped the Home blocking would leave every machine an invisible wall.
+#[test]
+fn a_base_standing_does_not_wall_the_zone_surface() {
+    let mut game = game(3140);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
+    game.place_structure("home", 1, 0).unwrap();
+    game.enter_base().unwrap();
+    // Machines all around the exit cell, so the surface tiles they would
+    // shadow are the ones the circuit walks over.
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        game.place_structure("mining_node", dx, dy)
+            .unwrap_or_else(|e| panic!("({dx}, {dy}) is pocket floor: {e}"));
+    }
+    game.leave_base().unwrap();
+    clear_ground_around_the_player(&mut game, 3);
+
+    let anchor = game.anchor_position().expect("a fresh game has an anchor");
+    let start = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!(
+        (start.x, start.y),
+        anchor,
+        "the party leaves the base standing on the anchor"
+    );
+
+    // Once round the anchor and back onto it. The last step is the one the
+    // Home used to refuse.
+    let circuit = [
+        (1, 0),
+        (0, 1),
+        (-1, 0),
+        (-1, 0),
+        (0, -1),
+        (0, -1),
+        (1, 0),
+        (1, 0),
+        (0, 1),
+        (-1, 0),
+    ];
+    let mut expected = start;
+    for (dx, dy) in circuit {
+        clear_the_route(&mut game);
+        expected = Position {
+            x: expected.x + dx,
+            y: expected.y + dy,
+        };
+        game.move_player(dx, dy);
+        assert_eq!(
+            *game.world.get::<Position>(game.player_entity()).unwrap(),
+            expected,
+            "a step onto ({}, {}) was refused — a base-space structure is \
+             shadowing the zone surface",
+            expected.x,
+            expected.y
+        );
+    }
+    assert_eq!(
+        (expected.x, expected.y),
+        anchor,
+        "the circuit has to end back on the anchor, or it never tested the \
+         tile the Home stands on"
+    );
+}
+
+/// The other half of the same rule: a Portal stands in base space, so it is
+/// walked onto **there**. Firing a breach from the surface tile that happens
+/// to carry its base-space numbers is the same misread pointed the other way,
+/// and this one costs a zone.
+#[test]
+fn a_portal_in_the_base_does_not_breach_from_the_zone_surface() {
+    let mut game = game(3141);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    give(&mut game, &ItemId::from(ids::PORTAL_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    game.enter_base().unwrap();
+    game.place_structure("portal", 1, 0)
+        .expect("a Portal is a structure like any other and stands on floor");
+    game.leave_base().unwrap();
+    clear_ground_around_the_player(&mut game, 3);
+    let zone_before = game.player_status().zone;
+
+    // The surface tile one east of the anchor, which is where the Portal's
+    // base-space coordinates land when the two spaces share an origin.
+    game.move_player(1, 0);
+
+    assert_eq!(
+        game.player_status().zone,
+        zone_before,
+        "walking the open grid must not fire a Portal standing out of phase"
+    );
+    assert!(
+        find_structure_by_kind(&mut game, "portal").is_some(),
+        "and the Portal must still be standing, not consumed by a step \
+         taken in another coordinate space"
+    );
+
+    // And it does breach, from where it actually stands. Back onto the
+    // anchor first — the door is a tile, not a key.
+    game.move_player(-1, 0);
+    game.enter_base().unwrap();
+    game.move_player(1, 0);
+    assert_eq!(
+        game.player_status().zone,
+        zone_before + 1,
+        "walking onto it inside the base is what breaches"
+    );
+}
+
+// ---------------------------------------------------------------------
+// `resources::Platform` is not resurrected, and the two readers that
+// branched on it take their radius off the grid instead
+// ---------------------------------------------------------------------
+
+/// The load path used to rebuild `Platform::center` from
+/// `Game::home_position`, which is a **base-space** coordinate now. That made
+/// a loaded run behave differently from the same run before the reload, and
+/// it put `Game::clear_platform`'s 401x401 override sweep back in reach of a
+/// Home demolition.
+#[test]
+fn a_reload_does_not_resurrect_the_slab() {
+    let mut game = game(3142);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    assert!(
+        game.home_position().is_some(),
+        "the fixture must have a Home, or the load path has nothing to rebuild from"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_no_slab_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.world.resource::<Platform>().center.is_none(),
+        "a base standing in base space is not a slab on the zone surface"
+    );
+    assert_eq!(
+        loaded.world.resource::<base_grid::BaseGrid>().floor_count(),
+        pocket_cells(),
+        "and the pocket itself came back, so this is not passing on an empty base"
+    );
+}
+
+/// `distance_from_danger_origin` widened the opening ring by the base's reach
+/// once a Home was deployed, and it has to keep doing that by the same
+/// number — before *and after* a reload.
+///
+/// It read `Platform::center`/`radius`, which nothing sets on a fresh run any
+/// more, so the ring silently **shrank** by four tiles when a Home went down
+/// and grew back on the next load. The two halves are asserted together
+/// because either alone passes against a reader stuck on one answer.
+#[test]
+fn deploying_a_home_widens_the_opening_ring_and_a_reload_keeps_it() {
+    let mut game = game(3143);
+    let spawn = game.zone_spawn_point();
+    // Just outside the bare ring, so only the base's reach can bring it in.
+    let probe = (spawn.0 + crate::tuning::OPENING_RING_TILES + 2, spawn.1);
+    assert!(
+        !game.in_opening_ring(probe.0, probe.1),
+        "the probe must start outside the ring, or this tests nothing"
+    );
+
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    assert!(
+        game.in_opening_ring(probe.0, probe.1),
+        "a base's own reach is what widens the opening ring"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_opening_ring_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.in_opening_ring(probe.0, probe.1),
+        "and the same run reloaded must answer the same — a ring that moves \
+         across a save is a run that plays two different ways"
+    );
+}
+
+/// The same fault on the other reader: `frames_at` subtracts the base's reach
+/// before charging a link its distance, so a link near the base ran deeper
+/// than it should on a fresh run and shallower again after a reload.
+#[test]
+fn a_links_depth_near_the_base_is_the_same_before_and_after_a_reload() {
+    let bare = game(3144);
+    let mut game = game(3144);
+    let spawn = game.zone_spawn_point();
+    let link = (spawn.0 + crate::tuning::STARTING_POCKET_RADIUS + 6, spawn.1);
+
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    let before = game.frames_at(link);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_frames_at_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.frames_at(link),
+        before,
+        "how deep a link runs must not depend on whether the run has been reloaded"
+    );
+    // And the base's reach really is being subtracted, or the two halves
+    // above would agree on a number that ignores the base entirely.
+    let unbased = bare.frames_at(link);
+    assert!(
+        unbased >= before,
+        "a run with no base charges a link the whole distance, so the base \
+         can only ever make it shallower: bare={unbased} based={before}"
+    );
+}

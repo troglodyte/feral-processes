@@ -412,17 +412,20 @@ impl Game {
     /// `frames_for`, which this feeds the zone's arrival point and the width
     /// of the safe ground around it.
     ///
-    /// The radius is the platform's or nothing, the same branch
-    /// `distance_from_danger_origin` takes: with no Home deployed there is no
-    /// safe territory to measure from and the walk is the whole distance.
+    /// The radius is the base's own reach, exactly as
+    /// `distance_from_danger_origin` reads it and for the same reason: with
+    /// nothing carved out of base space there is no safe territory to
+    /// measure from and the walk is the whole distance. `BaseGrid::radius`
+    /// answers 0 in that case, so the branch this used to take is folded
+    /// into the number.
+    ///
+    /// It read `Platform::radius` until the base went out of phase, and that
+    /// value is set by a breach and nothing else now — so every link near a
+    /// fresh run's base ran *deeper* than it should, and shallower again
+    /// after a save and load.
     pub(crate) fn frames_at(&self, tile: (i32, i32)) -> u32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
-        let platform = self.world.resource::<Platform>();
-        let radius = if platform.center.is_some() {
-            platform.radius
-        } else {
-            0
-        };
+        let radius = self.world.resource::<crate::base_grid::BaseGrid>().radius();
         frames_for(tile, (spawn.x, spawn.y), radius)
     }
 

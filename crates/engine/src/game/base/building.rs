@@ -2,10 +2,9 @@
 //! to work them.
 
 use crate::base_grid::BaseGrid;
-use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
-use crate::tuning::{MAX_BUILD_RADIUS_TILES, STRUCTURE_REMOVAL_REFUND_PERCENT};
+use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
 impl Game {
@@ -59,19 +58,16 @@ impl Game {
             (px + dx, py + dy)
         };
 
-        // Where a build may go is the one question the two kinds of build
-        // answer differently, and they are opposites: an ordinary structure
-        // must be on laid floor, while a claim exists precisely to put
-        // ground where the floor is not. The founding Home skips both — the
-        // pocket it lays does not exist to be measured against yet.
-        if !founding {
-            if def.claims_ground {
-                self.check_claim_site(x, y)?;
-            } else if !self.world.resource::<BaseGrid>().is_floor(x, y) {
-                return Err(
-                    "There's no floor there — a structure has to stand on laid ground.".into(),
-                );
-            }
+        // Where a build may go, and it is one rule now rather than two: a
+        // structure stands on laid floor. There used to be a second, opposite
+        // one for a `claims_ground` build, which existed precisely to put
+        // ground where the slab was not — the slab is gone, and laying floor
+        // is slice 2's own action rather than a side effect of a deploy.
+        //
+        // The founding Home skips the check: the pocket it lays does not
+        // exist to be measured against yet.
+        if !founding && !self.world.resource::<BaseGrid>().is_floor(x, y) {
+            return Err("There's no floor there — a structure has to stand on laid ground.".into());
         }
 
         if self.find_blocking_structure_at(x, y).is_some() {
@@ -133,22 +129,6 @@ impl Game {
             }
         }
 
-        // The other half of the dispatch above: a claim buys ground and
-        // stands nothing on it, so there is no entity, no `Stock`, no
-        // durability and nothing to demolish. It is deliberately irreversible
-        // for the reason a Heap Pillar is — growth that could be handed back
-        // raises the question of what happens to whatever is standing on the
-        // ground being taken away.
-        if def.claims_ground {
-            self.claim_ground(x, y);
-            self.log_base(format!(
-                "You lay down a {} — the base reaches one tile further.",
-                def.name
-            ));
-            self.tick();
-            return Ok(());
-        }
-
         let mut entity = self.world.spawn((
             Structure {
                 kind: def.id.clone(),
@@ -194,82 +174,6 @@ impl Game {
         self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
         Ok(())
-    }
-
-    /// Whether the ground at `(x, y)` may be claimed — the reach rule for a
-    /// `claims_ground` build, standing in for the build-radius refusal that
-    /// would otherwise make a claim impossible by definition.
-    ///
-    /// Adjacency rather than a radius of its own, so the base stays one
-    /// connected blob and distance prices itself: paving twenty tiles out
-    /// costs twenty claims. The far ceiling is `MAX_BUILD_RADIUS_TILES` for
-    /// a reason that is not balance — `clear_platform` sweeps exactly that
-    /// box when the Home comes down, and floor outside it would be left
-    /// behind forever.
-    ///
-    /// A tile with something alive on it is refused rather than swept the
-    /// way `stamp_platform` sweeps a Pillar's ring. A ring lands on whatever
-    /// it lands on; a single tile is trivially re-sited, and a nest left
-    /// inside the slab would breed guardians in the one place nothing is
-    /// meant to stand.
-    fn check_claim_site(&mut self, x: i32, y: i32) -> Result<(), String> {
-        let platform = self.world.resource::<Platform>().clone();
-        let Some((cx, cy)) = platform.center else {
-            return Err("There's no base here to grow.".into());
-        };
-        let (dx, dy) = (x - cx, y - cy);
-        if platform.covers(dx, dy) {
-            return Err("The base already reaches there.".into());
-        }
-        if dx.abs().max(dy.abs()) > MAX_BUILD_RADIUS_TILES {
-            return Err("That's past the far edge of anything a base can hold.".into());
-        }
-        if !ORTHOGONAL
-            .iter()
-            .any(|(ax, ay)| platform.covers(dx + ax, dy + ay))
-        {
-            return Err(
-                "Claimed ground has to touch the base — work outward from the edge.".into(),
-            );
-        }
-        if self.something_alive_at(x, y) {
-            return Err("Something's standing there — clear it first.".into());
-        }
-        Ok(())
-    }
-
-    /// Whether a hostile program or a nest occupies `(x, y)`.
-    fn something_alive_at(&mut self, x: i32, y: i32) -> bool {
-        let mut query = self
-            .world
-            .query_filtered::<&Position, Or<(With<Hostile>, With<Nest>)>>();
-        query.iter(&self.world).any(|p| p.x == x && p.y == y)
-    }
-
-    /// Turns one tile into base floor with nothing standing on it.
-    ///
-    /// Stored as an offset from the platform's center, so a claim travels
-    /// with the base on a breach exactly as every structure's position does,
-    /// and `stamp_platform` can lay its floor again in the new sector. The
-    /// tile itself is written the same way the circle's floor is, which is
-    /// what earns the claim every property of base ground — safe from
-    /// spawns, closed to hostiles, walkable — with no code of its own.
-    pub(crate) fn claim_ground(&mut self, x: i32, y: i32) {
-        let Some((cx, cy)) = self.world.resource::<Platform>().center else {
-            return;
-        };
-        self.world
-            .resource_mut::<Platform>()
-            .claimed
-            .insert((x - cx, y - cy));
-        self.world.resource_mut::<WorldMap>().set_override(
-            x,
-            y,
-            Tile {
-                biome: Biome::Platform,
-                walkable: true,
-            },
-        );
     }
 
     /// How many of `kind` are deployed right now.
@@ -411,23 +315,6 @@ impl Game {
             .kind
             .clone();
         let is_home = kind == HOME_STRUCTURE_ID;
-        // Growth is one-way, and that is what removes the shrink question
-        // entirely: there is no state where structures stand outside the
-        // slab, no partial `clear_platform`, and nothing the build rules say
-        // is impossible. The Home cascade below is the one exception,
-        // because there the whole base is coming down and the radius resets
-        // to nothing anyway.
-        if !is_home
-            && self
-                .world
-                .resource::<StructureDb>()
-                .get(&kind)
-                .is_some_and(|d| d.build_radius_bonus > 0)
-        {
-            return Err(
-                "That's holding the base's address space open — it can't be taken down.".into(),
-            );
-        }
         let removed_name = self
             .world
             .resource::<StructureDb>()

@@ -1,7 +1,7 @@
 (
     id: "line_driver",
     name: "Line Driver",
-    description: "Drives the base's grid harder than a mapping alone can. Supplies more current than a Heap Pillar and claims no ground doing it, which is what keeps a base growing once all five Pillars are standing.",
+    description: "Drives the base's grid harder than a mapping alone can. Pure supply and nothing else — no ground claimed, no floor laid, no worker to post — which is what keeps a base's machines running once its Grid is stretched.",
     glyph: 'E',
     color: Yellow,
     build_cost: [("core_fragment", 30), ("cache_grain", 6)],

@@ -2007,17 +2007,7 @@ fn zone_one_reports_the_neutral_hues() {
 fn a_sectors_own_hues_are_reported_after_a_breach() {
     let assets = assets_dir_with_sectors("hues_breached", &[("cold.ron", ONLY_COLD)]);
     let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
     assert_eq!(game.sector_hues(), (205.0, 12.0));
@@ -2030,17 +2020,7 @@ fn a_sectors_own_hues_are_reported_after_a_breach() {
 fn with_no_sectors_installed_the_hues_stay_neutral() {
     let assets = assets_dir_with_sectors("hues_absent", &[]);
     let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
 
     assert_eq!(
         game.sector_hues(),

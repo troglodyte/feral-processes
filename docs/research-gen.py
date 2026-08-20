@@ -21,7 +21,6 @@ N = [
  ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
  ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"])),
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
- ("heap_allocation",     "Heap Allocation",      0,  30, ["power_grid"],      ("structures", ["heap_pillar"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
  ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
@@ -206,8 +205,8 @@ rules are asserted against the loaded tree in the engine's test suite.
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at {BY["automation"]["cost"]}, so the opening move is barely a
-decision. **Power Grid** is a three-node stub: the two things that
-keep a base standing, and the one that lets it grow.
+decision. **Power Grid** is a two-node stub: the current a base runs on,
+and the pair of buildings that keep it standing.
 **Isometric Commerce** is a leaf — {BY["commerce"]["cost"]} Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.

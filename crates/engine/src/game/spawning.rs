@@ -413,10 +413,19 @@ impl Game {
     /// Stat multiplier for a wild spawn at `(x, y)`, from how far it is
     /// (Chebyshev distance — matching 8-directional movement, so it's
     /// Chebyshev distance from `(x, y)` to the edge of safe territory: the
-    /// platform's edge once a Home exists, the bare `ZoneSpawnPoint` before
+    /// base's own reach once one exists, the bare `ZoneSpawnPoint` before
     /// then. Measured from there rather than straight from the spawn point,
     /// so the whole base counts as distance zero instead of sitting
     /// part-way out of the ring.
+    ///
+    /// The reach is `BaseGrid::radius`, which answers 0 while base space is
+    /// still solid everywhere — so the two branches this used to take are
+    /// one expression, and it gives the same numbers it always did: nothing
+    /// subtracted before a Home is deployed, `STARTING_POCKET_RADIUS`
+    /// subtracted after. It read `Platform::center`/`radius` until the base
+    /// went out of phase, and that pair is now set by a breach and nothing
+    /// else — so a fresh run silently *shrank* its opening ring by four
+    /// tiles and grew it back on the next save and load.
     ///
     /// `Game::in_opening_ring` is the only consumer. Distance decides
     /// nothing else: it used to scale stats and group size, and a program's
@@ -424,12 +433,8 @@ impl Game {
     pub(crate) fn distance_from_danger_origin(&self, x: i32, y: i32) -> i32 {
         let spawn = self.world.resource::<ZoneSpawnPoint>();
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
-        let platform = self.world.resource::<Platform>();
-        if platform.center.is_some() {
-            (dist - platform.radius).max(0)
-        } else {
-            dist
-        }
+        let reach = self.world.resource::<crate::base_grid::BaseGrid>().radius();
+        (dist - reach).max(0)
     }
 
     /// Rolls a fresh `Potential` for a newly created creature — see
@@ -604,7 +609,7 @@ impl Game {
     /// "what a bare level-1 player beats solo" would be filtering the
     /// wrong fight — a deep zone's home ring is meant to be quiet, not
     /// toothless.
-    fn in_opening_ring(&self, x: i32, y: i32) -> bool {
+    pub(crate) fn in_opening_ring(&self, x: i32, y: i32) -> bool {
         self.world.resource::<ZoneLevel>().0 == 1
             && self.distance_from_danger_origin(x, y) <= OPENING_RING_TILES
     }

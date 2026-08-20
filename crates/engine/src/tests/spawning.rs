@@ -31,19 +31,7 @@ fn entering_a_zone_portal_despawns_nests_left_behind_in_the_old_zone() {
         ))
         .id();
 
-    let player = game.player_entity();
-    let ppos = *game.world.get::<Position>(player).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "portal".to_string(),
-        },
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-    ));
-
-    game.move_player(1, 0);
+    breach_through_a_portal(&mut game);
 
     // Note: `enter_next_zone` spawns fresh initial creatures for the new
     // zone, which can legitimately include brand-new nests — so this

@@ -758,7 +758,12 @@ fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
     let mut game = Game::new(403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
-    spawn_recharger_node(&mut game, 0, 0);
+    // `stand_in_base` + `spawn_structure_at`, not `spawn_recharger_node`:
+    // `power_regen_system` reads `Locale::Base`'s own cell, never the
+    // player's `Position`, so a fixture placing the Recharger at an offset
+    // from `Position` would be testing the wrong coordinate space.
+    stand_in_base(&mut game);
+    spawn_structure_at(&mut game, "recharger_node", 0, 0);
 
     game.wait();
 
@@ -775,7 +780,8 @@ fn a_recharger_node_past_the_base_footprint_does_not_reach_the_player() {
     let player = game.player_entity();
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(50.0);
     let reach = recharger_reach(&game);
-    spawn_recharger_node(&mut game, reach + 1, 0);
+    stand_in_base(&mut game);
+    spawn_structure_at(&mut game, "recharger_node", reach + 1, 0);
 
     game.wait();
 
@@ -792,7 +798,8 @@ fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
     let player = game.player_entity();
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(0.1);
     let before = *game.world.get::<Stats>(player).unwrap();
-    spawn_recharger_node(&mut game, 0, 0);
+    stand_in_base(&mut game);
+    spawn_structure_at(&mut game, "recharger_node", 0, 0);
 
     game.wait();
 

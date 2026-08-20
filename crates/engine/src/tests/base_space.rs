@@ -441,6 +441,49 @@ fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
     );
 }
 
+/// The surface arm of the same guard, and not a no-op the way comparing the
+/// raw `Position` there might look. `BASE_EXIT_CELL` puts a base's Home at
+/// base-space `(0, 0)` on *every* run, and `scan_center`'s own doc names why
+/// that matters: a surface tile reads as the same numbers as a base-space
+/// one exactly when the anchor sits near base space's origin — which the
+/// zone spawn point usually does, but "usually" is not "always", so
+/// `stand_player_at` forces the coincidence here rather than trusting the
+/// fixture's seed to land on it.
+#[test]
+fn a_recharger_does_not_reach_the_party_genuinely_on_the_surface() {
+    let mut game = game(3117);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    game.enter_base().unwrap();
+    game.place_structure("recharger_node", 1, 0)
+        .expect("floor beside the origin is inside the starting pocket");
+    game.leave_base().unwrap();
+    assert!(!game.in_base(), "back on the open grid");
+
+    // Forced onto numbers a base-space Recharger's radius-10 reach would
+    // have matched under the old, buggy compare: the Recharger sits at
+    // base-space (1, 0).
+    stand_player_at(&mut game, 0, 0);
+
+    let player = game.player_entity();
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(5.0);
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    game.tick();
+
+    let after = game.world.get::<PowerReserve>(player).unwrap().get();
+    let expected_from_decay_alone = before - crate::tuning::HUNGER_DECAY_PER_TICK;
+    assert!(
+        (after - expected_from_decay_alone).abs() < 1e-4,
+        "a Recharger standing in base space must not reach a party genuinely \
+         on the open surface, however close the raw numbers land: expected \
+         decay only ({before} -> {expected_from_decay_alone}), got {after}"
+    );
+}
+
 /// The same trap on the other reader of the pinned `Position`: a guardian
 /// standing beside the anchor tile would otherwise open a battle on a party
 /// that is not there.

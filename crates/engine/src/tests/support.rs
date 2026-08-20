@@ -1538,22 +1538,6 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
     (game, crowded)
 }
 
-/// Deploys a Recharger Node `dx`/`dy` tiles from the player, bypassing
-/// `place_structure`'s Home and cost requirements — this is about the
-/// regen system, not the build rules.
-pub(super) fn spawn_recharger_node(game: &mut Game, dx: i32, dy: i32) {
-    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    game.world.spawn((
-        Structure {
-            kind: "recharger_node".to_string(),
-        },
-        Position {
-            x: player_pos.x + dx,
-            y: player_pos.y + dy,
-        },
-    ));
-}
-
 /// Fuses `game`'s two freshest tamed programs together repeatedly to
 /// build up a lineage `depth` fusions deep, returning that program.
 pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {

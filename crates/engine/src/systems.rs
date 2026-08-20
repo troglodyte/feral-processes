@@ -1067,48 +1067,55 @@ pub fn assembler_system(
 /// and shown the "power reserves are critical!" warning on the very tick
 /// the structure was about to cover them.
 ///
-/// Refused only in the Stack. The player's `Position` is pinned to the
-/// surface entrance tile for the whole of a Stack run, so comparing it
-/// against a Recharger's radius would top the party up four frames down —
-/// and the Stack's whole Power budget is that there is no supply
-/// underground. Same trap `nest_aggro_tick` carries: a reader of the
-/// player's `Position` that never went through a locale guard but still
-/// claims something about where the party is standing.
+/// Permitted only in base space. This measures the space `Structure`
+/// actually lives in — the same dispatch `Game::scan_center` makes, though
+/// this is a bare system with no `Game` to call it on — and there is no
+/// space but base space to measure it against, because there is no space
+/// but base space a `Structure` can stand in
+/// (`Game::place_structure` requires `require_base` for everything but the
+/// founding Home).
 ///
-/// Everywhere else, this measures the space `Structure` actually lives in
-/// rather than the player's `Position` — the same dispatch
-/// `Game::scan_center` makes, though this is a bare system with no `Game`
-/// to call it on. In base space that is `Locale::Base`'s own cell, not the
-/// pinned `Position`: a `Structure` is base-space, full stop, so on the
-/// surface (where no `Structure` really is) the raw `Position` is compared
-/// as a harmless no-op and in base space it would have missed every real
-/// Recharger entirely.
+/// Refusing the surface outright, rather than falling back to comparing the
+/// raw `Position` there as a supposedly-harmless no-op, is load-bearing: it
+/// is not a no-op. `scan_center`'s own doc names the reason — a base-space
+/// coordinate and a surface coordinate read as the same numbers exactly
+/// when the anchor happens to sit near base space's origin, which is where
+/// `BASE_EXIT_CELL` puts a base's Home on *every* run, and the zone spawn
+/// point (where the anchor stands) usually does too. `view_entities`
+/// already hit this for real — a surface tile that numerically matched a
+/// base-space Market's cell made `[S]ell` appear on the inventory screen —
+/// and its fix was to drop `Structure` entirely off the surface, not to
+/// leave the compare in. A Recharger's `power_regen.radius` is typically
+/// double digits, so a base founded near spawn (the common case) and a
+/// Recharger built near its Home left a player wandering the open grid
+/// topped up by a machine that is not there. Refused underground for the
+/// same reason `nest_aggro_tick` is: a reader of the player's `Position`
+/// that never went through a locale guard but still claims something about
+/// where the party is standing.
 ///
-/// **Reaching the party in base space is a deliberate reversal, not an
-/// oversight carried forward.** The old guard matched `Locale::Surface`
+/// **Reaching the party in base space at all is a deliberate reversal, not
+/// an oversight carried forward.** The old guard matched `Locale::Surface`
 /// positively and refused base space outright, on the theory that a
 /// Recharger near the anchor would otherwise top the party up while they
-/// were out of phase for free. That reasoning no longer holds: every
-/// `Structure` — Recharger included — can only ever be deployed *in* base
-/// space now (`Game::place_structure` requires `require_base` for
-/// everything but the founding Home), so refusing base space left the
-/// Recharger's whole purpose, `recharger_node.ron`'s own "while you stand
-/// anywhere on your base", unreachable in any real play session. The Stack
-/// stays refused; base space does not. Held by
-/// `tests::base_space::a_recharger_regens_the_party_through_the_real_path_into_base_space`.
+/// were out of phase for free. That reasoning no longer holds — see the
+/// previous paragraph for what refusing base space actually bought instead
+/// — so refusing it left the Recharger's whole purpose,
+/// `recharger_node.ron`'s own "while you stand anywhere on your base",
+/// unreachable in any real play session. Held by
+/// `tests::base_space::a_recharger_regens_the_party_through_the_real_path_into_base_space`
+/// and, for the surface arm, by
+/// `tests::base_space::a_recharger_does_not_reach_the_party_genuinely_on_the_surface`.
 pub fn power_regen_system(
-    mut player: Query<(&Position, &mut PowerReserve), With<Player>>,
+    mut player: Query<&mut PowerReserve, With<Player>>,
     structures: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
     locale: Res<Locale>,
 ) {
-    let base_cell = match *locale {
-        Locale::Stack { .. } => return,
-        Locale::Base { x, y } => Some(Position { x, y }),
-        Locale::Surface => None,
+    let Locale::Base { x, y } = *locale else {
+        return;
     };
-    for (player_pos, mut needs) in &mut player {
-        let scan_pos = base_cell.unwrap_or(*player_pos);
+    let scan_pos = Position { x, y };
+    for mut needs in &mut player {
         for (structure, pos) in &structures {
             let Some(regen) = structure_db
                 .get(&structure.kind)
@@ -1336,7 +1343,15 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(db);
         world.insert_resource(MessageLog::default());
-        world.insert_resource(Locale::default());
+        // Base space, not `Locale::default()` (`Surface`): every `Structure`
+        // this file's fixtures spawn only ever exists in base space now, so
+        // a world left on the surface has no structure in it to find,
+        // whatever `structure_positions` says. `(0, 0)` matches the
+        // player's own `Position` below purely so every existing
+        // `structure_positions` offset in this module keeps meaning the
+        // same thing it always did — the player's `Position` itself is not
+        // what `power_regen_system` reads any more.
+        world.insert_resource(Locale::Base { x: 0, y: 0 });
         let player = world
             .spawn((
                 Player,
@@ -1366,18 +1381,25 @@ mod tests {
         world.get::<PowerReserve>(player).unwrap().get()
     }
 
-    /// `power_regen_system` reads the player's `Position`, and that `Position`
-    /// is pinned to the surface entrance tile for the whole of a Stack run. A
-    /// link sited inside a Recharger's radius would therefore top the party up
-    /// every tick, four frames down — the same trap `nest_aggro_tick` carries,
-    /// and the one that makes an underground Power budget decorative.
+    /// `power_regen_system` reads `Locale::Base`'s own cell, never the
+    /// player's `Position` — a `Structure` can now only ever stand in base
+    /// space (`Game::place_structure` requires `require_base`), so
+    /// comparing the pinned `Position` on either of the other two locales
+    /// tops the party up on numbers that mean nothing where they actually
+    /// are: the same trap `nest_aggro_tick` carries underground, and, on
+    /// the surface, the exact bug `view_entities`'s own doc records already
+    /// shipped once (a surface tile that numerically matched a base-space
+    /// Market's cell made `[S]ell` appear on the inventory screen).
     ///
-    /// Both halves live in one test on purpose: the underground half alone
-    /// passes against a bare `return` at the top of the system.
+    /// All three locales live in one test on purpose: any one pair passes
+    /// against a system that is simply broken in a different way — Base
+    /// alone passes against "always regen", and Surface-or-Stack alone
+    /// passes against "never regen".
     #[test]
-    fn power_regen_stops_underground_and_resumes_on_the_surface() {
-        let mut power = [0.0f32; 2];
+    fn power_regen_reaches_only_base_space() {
+        let mut power = [0.0f32; 3];
         for (i, locale) in [
+            Locale::Base { x: 0, y: 0 },
             Locale::Surface,
             Locale::Stack {
                 depth: 1,
@@ -1401,11 +1423,15 @@ mod tests {
         }
         assert_eq!(
             power[0], 52.0,
-            "the same fixture on the surface must still regenerate"
+            "the same fixture in base space must regenerate"
         );
         assert_eq!(
             power[1], 50.0,
-            "a Recharger on the entrance tile must not reach the party underground"
+            "a Recharger at base-space (0, 0) must not reach a party genuinely on the surface"
+        );
+        assert_eq!(
+            power[2], 50.0,
+            "and must not reach a party underground either"
         );
     }
 

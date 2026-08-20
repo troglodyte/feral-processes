@@ -21,7 +21,7 @@ use bevy_ecs::prelude::*;
 use super::support::{
     ScratchAssets, copy_shipped_assets, find_structure_by_kind, node_output, park_at_post,
     scratch_assets_dir, spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base,
-    stand_player_at, stand_player_at_post,
+    stand_in_base_at, stand_player_at_post,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -578,10 +578,14 @@ fn power_regen_still_refills_the_party_on_a_dark_base() {
     // player's `PowerReserve` from a Recharger's `power_regen`, which is a
     // different resource from the base grid entirely, and a base short of
     // grid capacity must not stop it.
+    //
+    // `stand_in_base_at`, not `stand_player_at`: `power_regen_system` reads
+    // `Locale::Base`'s own cell, never the player's `Position`, now that a
+    // `Structure` can only ever stand in base space.
     let mut game = game_on_a_short_grid("power_regen_dark", 4005);
     let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
     spawn_structure_at(&mut game, "recharger_node", 3, 6);
-    stand_player_at(&mut game, 4, 6);
+    stand_in_base_at(&mut game, 4, 6);
     let player = game.player_entity();
     game.world
         .get_mut::<PowerReserve>(player)

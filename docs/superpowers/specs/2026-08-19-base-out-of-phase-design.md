@@ -1,8 +1,9 @@
 # The base, out of phase
 
-**Status:** approved 2026-08-19, unimplemented. (Spec `**Status:**` headers
-in this repo go stale — answer from `CHANGELOG.md` and `rg`, never from this
-line.)
+**Status:** slice 1 shipped in 0.13.0. Slice 2 redesigned and re-approved
+2026-08-20, unimplemented; slice 3 largely absorbed by slice 1. (Spec
+`**Status:**` headers in this repo go stale — answer from `CHANGELOG.md` and
+`rg`, never from this line.)
 
 TODO #36. The base stops being a slab stamped onto the zone surface and
 becomes a pocket dimension entered through a permanent door. Blackness by
@@ -144,16 +145,20 @@ party is".
 
 ### The loop
 
+**Superseded 2026-08-20 by "Slice 2 in detail" below**, which is the
+authoritative statement of the loop. Kept here as the shape slice 1 was built
+against, and as the record of what was reconsidered:
+
 - **Mine** — a directional action from the player's tile; adjacent Solid
   becomes Open. Costs a turn, yields nothing.
 - **Tile** — Open becomes Floor, for `blank_substrate` ×1.
 - **Build** — `place_structure`'s slab check becomes `BaseGrid::is_floor`.
   Nothing else about deployment changes.
 
-One knob (`BASE_ENTROPY_REFILL_TICKS`) and one price. Mining is free but
-slow, tiling is the money, and entropy punishes digging further ahead than
-the economy can floor. Per CLAUDE.md, the knob belongs in `tuning.rs` and the
-price belongs in the asset that charges it.
+Only the third survives unchanged, and it shipped in slice 1. Mining became a
+thing you *hit*, with a trickle of Core Fragments and a crew you can post to
+it; tiling stayed the money. One knob became three. Per CLAUDE.md, the knobs
+belong in `tuning.rs` and the price belongs in the asset that charges it.
 
 ### Rendering
 
@@ -214,8 +219,10 @@ pocket the size of today's slab. Deliberately *feels identical to play* — it
 is a pure relocation, which is what makes it verifiable: anything that plays
 differently after slice 1 is a bug in it.
 
-**2. Mining, tiling, entropy.** Two actions, one system, one price, one
-timer.
+**2. Growing the base.** Rock you hit, tiles you lay, a crew that digs what
+you mark, and entropy on the frontier. **Redesigned 2026-08-20** — see
+"Slice 2 in detail" below, which supersedes this line and records what it
+replaced.
 
 Heap Pillar and Heap Block retire in slice **1**, not here — corrected
 2026-08-19 during planning. Their entire mechanism is `build_radius_bonus`
@@ -227,9 +234,153 @@ and do nothing.
 and the `tuning.rs` doc comments that describe a slab. Kept separate so slice
 1 can land without touching the Stack's on-ramp.
 
-Held back as their own specs: **portals to older zones** (only becomes
-possible once the hub exists), and **postable mining**, which is #34/#35
-groundwork rather than part of this.
+Held back as its own spec: **portals to older zones**, which only becomes
+possible once the hub exists. **Postable mining** was held back here too, on
+the grounds that it was #34/#35 groundwork rather than part of this; it moved
+into slice 2 on 2026-08-20, because a base meant to become elaborate cannot
+be dug a keypress at a time.
+
+## Slice 2 in detail: growing the base
+
+**Redesigned 2026-08-20.** Everything in this section supersedes the
+one-line sketch above. What it replaces, recorded so the old shape is not
+reintroduced by someone reading a stale summary: mining was a directional
+action costing one turn a cell and yielding *nothing*, tiling was a second
+action, and entropy was the only pressure.
+
+### Why it was reopened
+
+A frontier that is pure cost under a punishment clock collapses mining and
+tiling into a single action with bookkeeping between them — you dig exactly
+what you can floor this minute, because digging further is confiscated and
+digging costs turns you get nothing for. And a dark room you pay by the tile
+to enlarge is still a footprint you extend, which is the thing this spec's
+own **Why** section says the base should stop being.
+
+### Settled decisions
+
+1. **Rock is hit, not walked through.** Stepping into a solid cell strikes
+   it, in the same branch position `move_player` holds its nest branch. No
+   new key and no direction prompt: the wall is a thing you attack, a couple
+   of swings bring it down, and it reads exactly like wearing a nest down
+   because it *is* that code path's shape. Damage is the weapon band's mean
+   plus `effective_atk`, floored at 1, and **deterministic** for the reason
+   `attack_nest` gives: identical swings have to stay identical, or wearing a
+   wall down becomes a slot machine.
+2. **Rock durability is never scaled by zone, depth or level.** The rock is
+   the same rock all run, so the thing that changes is you. A wall that took
+   three swings at level 1 takes one late, and that is the reward rather than
+   a curve to tune.
+3. **There is one representation of rock-in-progress: the `DigSite`
+   entity.** It carries `Durability` and whether it is marked, and it is
+   spawned lazily — by your first swing at a wall, or by marking one. This is
+   why `BaseCell` gains **no** `Rock` variant: absent from `BaseGrid` still
+   means solid and untouched, and the module's stated invariant survives
+   whole. The alternative considered and rejected was a `Rock { chipped }`
+   cell variant, which would have needed a second, parallel representation
+   the moment a crew had to be posted to one — `schedule_base_labour` works
+   in `(Entity, TaskKind)` pairs and cannot address a coordinate.
+4. **A mark is one verb, and what it means is derived from the cell under
+   it.** Marked solid means cut it; marked `Open` means floor it. So a
+   marked wall runs the whole way through — the crew cuts it, the mark
+   survives the cut, the same crew floors it, and the mark clears — and
+   "mark walls to be mined out and tiled" is the default path rather than a
+   combination the player has to assemble. There is no second designation
+   kind and no separate erase verb: a box whose **anchor cell** is already
+   marked clears instead of marking.
+5. **Digging pays a trickle and can never be income.** A cut cell rolls
+   `BASE_MINE_FRAGMENT_CHANCE` for one Core Fragment. A floor tile costs a
+   Blank Substrate, itself four Core Fragments at a Lathe, so a dug cell
+   returns a fraction of what flooring it costs *by construction*. Raising
+   the chance past that ratio turns the wall into a fragment tap that
+   undercuts the Mining Node, which is the change to refuse.
+6. **A crew complains only when the errand is the player's.** A marked cell
+   with every neighbour still solid is the normal interior of any block you
+   mark and resolves itself as the shell comes down — skipped **silently**.
+   A marked cell with a standable neighbour and no route to it is stuck until
+   you do something, and **says so once**. This is `hauling::post_reach`'s
+   existing `BoxedIn`/`NoRoute` split, kept for the reason CLAUDE.md already
+   gives for it: the two leave the player different errands. The
+   announcement follows `set_machine_status` — one writer, logging **only on
+   transition**, because entering a state is news and staying in it is not.
+7. **Dig jobs are the lowest priority in `schedule_base_labour`**, below
+   work orders and below standing jobs. A spare body digs; a needed one does
+   not. Digging must never starve production, and the base must not stop
+   running because you marked a corridor.
+8. **Tiling costs one Blank Substrate**, unchanged from the original sketch,
+   which is what preserves the existing material sink exactly and keeps the
+   Lathe its customer. The laid form is a **VectorStasis Tile** — the
+   substrate is raw stock in the store, the tile is what it becomes
+   underfoot. `BaseCell::Floor` keeps its code name; this is the player's
+   word for it, the same way "GC Entropy Sweep" is the player's word for a
+   raid.
+9. **Base space still has no bound.** Open question 3 stays open on purpose:
+   a bound before #35 designs floor-space capacity is a guess about a
+   mechanic that does not exist. The player-facing intent is that a base
+   becomes elaborate, and the knobs below are what make its pace tunable.
+
+### Build mode
+
+`m` opens **Excavation plan**: a mode, not an action, so entering it and
+moving the cursor cost no turns and no tick. The cursor starts on the
+player's cell and moves on `hjkl`/arrows. `space` drops an anchor, moving
+previews a rectangle, `space` again commits it; a single cell is a 1x1 box.
+Whether the box marks or clears is decided by the anchor cell, per decision
+4. `esc` leaves.
+
+app-core owns the mode and the cursor position; gui draws the cursor, the
+box preview and a tint on marked cells. **No new `Painter` operation** — this
+is tint and glyph over the grid `render/base.rs` already draws, and the
+fourteen-operation seam is exactly what should not need widening for it.
+
+### The pieces
+
+| Piece | Where |
+| --- | --- |
+| `DigSite` — `Durability` plus marked state, spawned lazily | engine, base space |
+| `strike_rock` — the bump branch, damage mirroring `attack_nest` | `game/base_space.rs` |
+| Break: cell becomes `Open { mined_at }`, roll for one Core Fragment | same |
+| Lay a VectorStasis Tile: stand on `Open`, spend one Blank Substrate | `game/base/building.rs` |
+| Dig jobs as `(Entity, TaskKind)` posts at the lowest priority | `schedule_base_labour` |
+| A crew flooring a marked `Open` cell, paid from the store builds pay from | same |
+| `base_entropy_system` — unoccupied `Open` past the knob reverts to solid | new system |
+| Marks and chip progress, additive and `#[serde(default)]` | `save.rs` |
+
+Rendering needs nothing new for the three cell states: `Game::view_tiles`
+already maps `Floor`, `Open` and absent onto `Biome::Platform`,
+`Biome::Excavated` and `Biome::Entropy`, and the existing surface renderer
+draws them. Only the mark tint and the cursor are new.
+
+### The seam this widens
+
+`DigSite` is a **non-`Structure` entity carrying a base-space `Position`**.
+That widens the rule this spec states above — "`Structure` is already the
+space tag" — whose only prior exception was posted programs. It needs its own
+entry in `docs/seams.md`, because a `Position` read in the wrong coordinate
+space is silent, and 0.13.0 shipped fixes for exactly that bug class
+(`power_regen_system` and the structure roster's "Work it yourself" row).
+
+### Tuning, all of it unmeasured
+
+Starting values to play and then record under `docs/measurements/`, none of
+them derived from anything:
+
+- `BASE_ROCK_DURABILITY = 24` — a level-1 player swings for about 11
+  (`PLAYER_UNARMED_DAMAGE` mean 5 plus `PLAYER_BASE_STATS::atk` 6), so about
+  three hits early and one late.
+- `BASE_MINE_FRAGMENT_CHANCE = 0.25`, bounded above by decision 5.
+- `BASE_ENTROPY_REFILL_TICKS = 300`, the spec's original open question 1,
+  still unmeasured and now measurable.
+
+`balance_sim` has no base term and gates none of this. A session is the
+instrument.
+
+### Saves
+
+Additive only: a saved `DigSite` list and nothing whose meaning changes.
+`SAVE_FORMAT_VERSION` **stays at 32** — an additive change behind
+`#[serde(default)]` costs no bump. A save-to-load test is still required and
+not only the RON round trip, which cannot catch a `#[serde(skip)]`.
 
 ## Testing
 
@@ -244,7 +395,14 @@ Per slice, in the engine crate:
 - **Slice 2** — an Open cell reverts after `BASE_ENTROPY_REFILL_TICKS`; an
   occupied Open cell does not; a Floor cell never does; tiling refuses
   without substrate and spends exactly one on success; `place_structure`
-  refuses a non-Floor cell.
+  refuses a non-Floor cell. Added 2026-08-20: a wall takes the swings
+  `BASE_ROCK_DURABILITY` implies and opens on the last one; a marked wall is
+  cut and *then* floored by a crew, with the mark surviving the cut and
+  clearing on the floor; a marked cell whose neighbours are all solid is
+  skipped **silently** while one with a standable neighbour and no route
+  complains **once** and not again while it stays stuck; a dig job never
+  displaces a body from a work order; a `DigSite` and its chip progress
+  survive a save-to-load round trip.
 - **Slice 3** — link placement no longer consults a slab, and a zone still
   yields its three links.
 
@@ -255,14 +413,15 @@ afterwards.
 
 ## Open questions
 
-1. **`BASE_ENTROPY_REFILL_TICKS` has no measured value.** It wants to be long
-   enough that a normal dig-then-floor cycle never loses ground and short
-   enough that over-digging is felt. Unmeasurable before slice 2 exists;
-   pick a plausible value, play it, and record the result under
-   `docs/measurements/`.
-2. **How big is the starting pocket, exactly?** "Today's slab" is a circle of
-   radius `MAX_BUILD_DISTANCE_FROM_HOME` = 4. Whether the pocket is that
-   circle or a rectangle of similar area is a feel question for slice 1.
+1. **`BASE_ENTROPY_REFILL_TICKS` has no measured value**, and neither do
+   `BASE_ROCK_DURABILITY` or `BASE_MINE_FRAGMENT_CHANCE`. The first wants to
+   be long enough that a normal dig-then-floor cycle never loses ground and
+   short enough that over-digging is felt. All three are unmeasurable before
+   slice 2 is playable; the starting values are in "Tuning" above, and what
+   they measure to belongs under `docs/measurements/`.
+2. ~~**How big is the starting pocket, exactly?**~~ Closed by slice 1: it is
+   the slab's own chamfered box at `STARTING_POCKET_RADIUS` = 4, 69 cells,
+   `PLATFORM_CORNER_CUT` and all, so the opening plays as it did.
 3. **Does base space need a bound?** Nothing here stops a player mining
    outward forever, and `HashMap` growth is the only cost. A bound may be
    wanted once #35 ties capacity to floor space — but adding one before that

@@ -1558,3 +1558,88 @@ fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
         "the refusal must still name the missing link, got: {err}"
     );
 }
+
+/// **A posting does not move the body that takes it.** A program already
+/// standing in the base was teleported onto the player's tile the instant
+/// the scheduler gave it a job, and walked in from wherever the player
+/// happened to be. Idle staff loiter on a real tile now, so the walk starts
+/// from that tile.
+///
+/// The bound is two tiles rather than zero because a tick does two things
+/// to an idle body before this can be read: `park_idle_staff` may step it
+/// one along its ring, and `haul_step_system` takes the first step of the
+/// walk in the same tick.
+///
+/// `stand_player_at` is a decoy here, not a distance: the base is its own
+/// coordinate space now, so the player's tile has nothing to do with where
+/// a worker's walk field is. It exists to give a regression that reads the
+/// player's `Position` instead of the worker's own something to be caught
+/// jumping to — a value nowhere near the ring `park_idle_staff` parks
+/// bodies on around Home.
+#[test]
+fn a_posted_staff_member_sets_off_from_its_own_tile_and_not_the_player_s() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, _, _) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    // Nothing to do for a few ticks, so the program is standing on a
+    // parking tile of its own rather than wherever it was spawned.
+    for _ in 0..3 {
+        game.tick();
+    }
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+    // The decoy the doc comment above explains.
+    stand_player_at(&mut game, 5, 5);
+    let before = *game.world.get::<Position>(staff[0]).unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "precondition: the body took the posting"
+    );
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert!(
+        (pos.x - before.x).abs().max((pos.y - before.y).abs()) <= 2,
+        "a posting moves a body one step, not across the map: {before:?} -> {pos:?}"
+    );
+}
+
+/// The other half of the same root cause: `post_reach` was asked from the
+/// player's tile too, so walking away from your own base stopped the
+/// scheduler filling a single machine — the pool stood idle beside the
+/// order it was hired to work.
+///
+/// "Far from the base" no longer fits inside one coordinate space to be
+/// measured in tiles — the honest analogue is the party not being in base
+/// space at all: back on the surface, wherever the anchor happens to sit,
+/// while the base keeps running unattended. `stand_player_at` still sets a
+/// decoy well outside where the base's own tiles live, so a regression that
+/// reads the player's `Position` as a body's walk origin fails this the
+/// same way it would fail the sibling test above.
+#[test]
+fn the_scheduler_still_posts_staff_while_the_player_is_far_from_the_base() {
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, _, _) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    for _ in 0..3 {
+        game.tick();
+    }
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+    // Not just far within the base — out of base space entirely, back on
+    // the surface at the decoy tile the sibling test above explains.
+    game.world.insert_resource(Locale::Surface);
+    stand_player_at(&mut game, 40, 40);
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "the base runs itself whether or not you are stood in it"
+    );
+}

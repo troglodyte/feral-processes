@@ -2135,30 +2135,57 @@ keeps `assign_cronjob` as a fixture built out of these same primitives,
 never a copy of the removed body: fifty tests need a program on a machine
 and have nothing to say about how it got there.
 
-### A posted program sets off from the player's tile, and that is what makes its `Position` mean anything at all
+### A posted program sets off from its own tile, and the player's tile is read nowhere in the scheduler
 
-**A posted program sets off from the player's tile, and that is what makes
-its `Position` mean anything at all.** A tamed program's `Position` is
-written at capture and never again — `views.rs`'s `worker_away_from_post`
-doc says so, and `render/base.rs` refuses to draw a companion because
-"drawing it would claim it is somewhere it isn't". Nothing syncs it as the
-player walks; `enter_next_zone` is the one event that re-collects the
-roster onto one tile. So the stale value is the tile the program was
-beaten on, which can be anywhere the player has ever fought, and anything
-measuring a distance from it is measuring noise: that is how a worker got
-posted to a machine two tiles from home while standing 23 tiles north,
-outside `HAUL_WALK_RADIUS` of its own station tile, never stepping and
-never producing while the cronjob read as scheduled. `post_worker` (which
-`schedule_base_labour` drives, and which was `assign_cronjob`'s body until
-work orders took the menu away)
-writes the tile from the player's, because posting is the moment it starts
-being walked (`haul_step_system`) and the truthful value is where you were
-standing when you handed the program over. The consequence is a design
-decision, not an oversight: **the walk to a post is bought by posting from
-a distance**, and posting while stood at the machine starts the program at
-its station. The three tests pinning the walk-in put that distance on the
-player for this reason, and `park_at_post` is only meaningful *after* an
-assignment now — `stand_player_at_post` is the before.
+**A posted program sets off from its own tile, and the player's tile is read
+nowhere in the scheduler.** `Game::post_worker` writes no `Position` at all —
+the same omission `post_guard` already made, for the same reason — and
+`schedule_base_labour` asks `can_walk_to_post` from the tile of the body it is
+about to send rather than from the player's.
+
+This inverts what the seam used to say, and the argument it used to make is
+worth keeping because it was *correct at the time*. A tamed program's
+`Position` was written at capture and never again — `views.rs`'s
+`worker_away_from_post` doc says so, and `render/base.rs` refuses to draw a
+companion because "drawing it would claim it is somewhere it isn't". Nothing
+synced it as the player walked, `enter_next_zone` being the one event that
+re-collected the roster onto a tile. So the stored value was the tile the
+program was beaten on, which can be anywhere the player has ever fought, and
+anything measuring a distance from it was measuring noise: that is how a
+worker got posted to a machine two tiles from home while standing 23 tiles
+north, outside `HAUL_WALK_RADIUS` of its own station tile, never stepping and
+never producing while the cronjob read as scheduled. Overwriting it from the
+player's tile at posting time was the fix, and the consequence was written
+down as a design decision — *the walk to a post is bought by posting from a
+distance* — because posting was a player action.
+
+Both halves of that premise are gone. Manual posting went with work orders,
+so no player is stood anywhere in particular when a body gets a job; and
+`park_idle_staff` (0.11.x) writes every free staff member's `Position` every
+tick, so the value is live rather than stale. What was left was one seam
+failing in two directions at once, both reported from play: a program
+loitering by Home **teleported onto the player** the instant the scheduler
+gave it a job and walked in from there, and — sharper, because it stops the
+base rather than looking wrong — `post_reach` measured from the player meant
+**walking out of the walk field stopped the scheduler filling a single
+machine**, leaving the pool stood idle beside the order it was hired to work.
+A base that only runs while you stand in it is not a base.
+
+Three things hold the new rule. `park_idle_staff` runs **before** the
+assignment, which is now load-bearing rather than incidental: it is what
+guarantees the tile a program is standing on when it *gets* a post is a real
+one. The step-5 loop **peeks** the idle pool (`idle.last()`) and only pops
+once the reach check has passed, so a machine skipped for want of a route
+still costs no body — the ordering the old code got for free by checking
+before it popped. And `post_worker` keeps no `from` parameter at all, so
+there is no seam for a second caller to pass the wrong tile through; the
+`assign_cronjob` test fixture writes the `Position` itself, which is what
+keeps fifty tests measuring what they always measured.
+
+`park_at_post` is still only meaningful *after* an assignment, and
+`stand_player_at_post` is still the before — but only inside that fixture.
+Nothing in the shipped game reads the player's tile to decide where a
+program starts walking.
 
 ### `task_progress_system` and `assembler_system` both write `Task::progress`, for disjoint targets, and are `.chain()`ed anyway
 

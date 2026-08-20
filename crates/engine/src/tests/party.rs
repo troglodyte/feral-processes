@@ -887,58 +887,6 @@ fn removing_one_party_member_leaves_the_others_active() {
 }
 
 #[test]
-fn party_members_grant_a_passive_ten_percent_atk_def_bonus_that_stacks_updates_live_and_disappears_on_removal()
- {
-    let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let base_atk = game.player_status().atk;
-    let base_mitigation = game.player_status().mitigation;
-
-    // `spawn_tamed` fixes def at 1, so 10% of it floors to 0 and should
-    // clamp up to the stated minimum of 1 rather than contributing 0.
-    let a = spawn_tamed(&mut game, 10, 30);
-    game.add_companion(a).unwrap();
-    let status = game.player_status();
-    assert_eq!(status.atk, base_atk + 3, "10% of a's 30 ATK is 3");
-    assert_eq!(
-        status.mitigation,
-        base_mitigation + 1,
-        "10% of a's 1 DEF floors to 0, minimum 1 applies"
-    );
-
-    // A second party member's bonus stacks on top of the first's.
-    let b = spawn_tamed(&mut game, 10, 50);
-    game.add_companion(b).unwrap();
-    let status = game.player_status();
-    assert_eq!(
-        status.atk,
-        base_atk + 3 + 5,
-        "10% of b's 50 ATK is 5, stacked with a's"
-    );
-    assert_eq!(status.mitigation, base_mitigation + 1 + 1);
-
-    // The bonus is computed live from each companion's current Stats,
-    // not baked in at add_companion time — a level-up (simulated here
-    // by mutating Stats directly, same as `progression::add_xp` would)
-    // should be reflected immediately with no extra bookkeeping.
-    game.world.get_mut::<Stats>(a).unwrap().atk = 60;
-    let status = game.player_status();
-    assert_eq!(
-        status.atk,
-        base_atk + 6 + 5,
-        "a's stronger ATK should raise its contribution"
-    );
-
-    game.remove_companion(a);
-    game.remove_companion(b);
-    let status = game.player_status();
-    assert_eq!(
-        status.atk, base_atk,
-        "bonus should vanish once every companion leaves the party"
-    );
-    assert_eq!(status.mitigation, base_mitigation);
-}
-
-#[test]
 fn dropping_below_half_power_weakens_the_players_attack() {
     let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();

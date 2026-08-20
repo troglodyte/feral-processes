@@ -3,9 +3,8 @@
 
 use crate::abilities::PassiveTrigger;
 use crate::tuning::{
-    ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS,
-    PARTY_PASSIVE_STAT_DIVISOR, PLAYER_UNARMED_DAMAGE, WIELDED_PROGRAM_STAT_DIVISOR,
-    WIELDED_ROUTINE_PROC_CHANCE,
+    ENGAGED_GROUPS, FRONT_SLOTS, MAX_MITIGATION_PERCENT, NEST_RESPAWN_TICKS, PLAYER_UNARMED_DAMAGE,
+    WIELDED_PROGRAM_STAT_DIVISOR, WIELDED_ROUTINE_PROC_CHANCE,
 };
 use crate::*;
 
@@ -1139,12 +1138,12 @@ impl Game {
     /// value, plus an active `CombatBuff::Atk` bonus if any, plus any
     /// running `FieldBuffKind::Atk` power (see `field_buff_power`) — the
     /// two sources are separate components and both apply, summed. If
-    /// `entity` is the player, this also adds the standing party bonus (see
-    /// `party_stat_bonus`) and applies the low-power attack penalty (see
-    /// `battle::power_attack_multiplier`) — both are player-only effects.
+    /// `entity` is the player, this also adds the wielded program's bonus
+    /// (see `wielded_stat_bonus`) and applies the low-power attack penalty
+    /// (see `battle::power_attack_multiplier`) — both are player-only.
     /// `entity` isn't always the player: `wild_retaliate` can call this
     /// (via `effective_mitigation`) with a companion that's eating the hit
-    /// instead, and a companion has neither a `Party` bonus of its own nor
+    /// instead, and a companion has neither a wield of its own nor a
     /// `PowerReserve` to run low on.
     pub(crate) fn effective_atk(&self, entity: Entity) -> i32 {
         let base = self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0);
@@ -1159,8 +1158,7 @@ impl Game {
         if entity != self.player_entity() {
             return base + bonus + field_bonus;
         }
-        let total =
-            base + bonus + field_bonus + self.party_stat_bonus().0 + self.wielded_stat_bonus().0;
+        let total = base + bonus + field_bonus + self.wielded_stat_bonus().0;
         let power = self
             .world
             .get::<PowerReserve>(entity)
@@ -1181,8 +1179,9 @@ impl Game {
     /// already names from the other direction. On top of that sit an active
     /// `CombatBuff::Mitigation`, any running `FieldBuffKind::Mitigation`
     /// power (see `field_buff_power`) — separate components, both apply —
-    /// and the standing party bonus (see `party_stat_bonus`) if `entity` is
-    /// the player. Same non-player-safe behaviour as `effective_atk`.
+    /// and the wielded program's bonus (see `wielded_stat_bonus`) if
+    /// `entity` is the player. Same non-player-safe behaviour as
+    /// `effective_atk`.
     ///
     /// **The cap is applied here rather than at the readers**, so nothing
     /// downstream can see an uncapped percentage and none of them needs to
@@ -1209,7 +1208,7 @@ impl Game {
         let total = if entity != self.player_entity() {
             base + bonus + field_bonus
         } else {
-            base + bonus + field_bonus + self.party_stat_bonus().1 + self.wielded_stat_bonus().1
+            base + bonus + field_bonus + self.wielded_stat_bonus().1
         };
         total.clamp(0, MAX_MITIGATION_PERCENT)
     }
@@ -1243,11 +1242,17 @@ impl Game {
     /// or `(0, 0)` when none is wielded. A share of the program's own
     /// current ATK and DEF, floored at 1 each.
     ///
-    /// A second, independent knob from `party_stat_bonus` rather than a call
-    /// into it: the party buff is a candidate for removal, and this must
-    /// survive that. Computed live from the program's current `Stats` for
-    /// the reason that function's doc gives — it stays correct as the
-    /// program levels, is fused, or dies, with no bookkeeping to sync.
+    /// **The last standing stat bonus a companion lends the player**, and it
+    /// survived the removal of the party one (2026-08-19) on the strength of
+    /// the difference: `wield_program` calls `remove_companion`, so a wielded
+    /// program is *out* of the party and takes no turn of its own. The party
+    /// buff paid twice for one body — a turn and a share of its stats — which
+    /// is exactly what this does not do. Keeping it a separate knob rather
+    /// than a call into that function is what let it outlive it.
+    ///
+    /// Computed live from the program's current `Stats`, so it stays correct
+    /// as the program levels, is fused, or dies, with no bookkeeping to sync
+    /// — which is also how destroying the program ends the wield by omission.
     pub(crate) fn wielded_stat_bonus(&self) -> (i32, i32) {
         self.wielded_program()
             .and_then(|e| self.world.get::<Stats>(e))
@@ -1258,19 +1263,5 @@ impl Game {
                 )
             })
             .unwrap_or((0, 0))
-    }
-
-    pub(crate) fn party_stat_bonus(&self) -> (i32, i32) {
-        self.world
-            .resource::<Party>()
-            .0
-            .iter()
-            .filter_map(|&e| self.world.get::<Stats>(e))
-            .fold((0, 0), |(atk, def), s| {
-                (
-                    atk + (s.atk / PARTY_PASSIVE_STAT_DIVISOR).max(1),
-                    def + (s.mitigation / PARTY_PASSIVE_STAT_DIVISOR).max(1),
-                )
-            })
     }
 }

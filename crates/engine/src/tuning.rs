@@ -560,19 +560,13 @@ pub const WOUNDED_INTEGRITY_FRACTION: f32 = 0.33;
 /// this up to full strength — see `battle::power_attack_multiplier`.
 pub const LOW_POWER_MIN_ATTACK_MULTIPLIER: f32 = 0.5;
 
-/// Divisor on each party member's ATK and DEF when totalling the passive
-/// bonus they lend the player outside their own actions (see
-/// `Game::party_stat_bonus`), floored at 1 per member so every companion
-/// contributes something. Companions already act in their own right; this
-/// is the smaller standing bonus on top.
-pub const PARTY_PASSIVE_STAT_DIVISOR: i32 = 10;
-
 /// Divisor on the wielded program's ATK and DEF when totalling the bonus it
 /// lends the player (see `Game::wielded_stat_bonus`), floored at 1 per stat.
 ///
-/// Deliberately independent of `PARTY_PASSIVE_STAT_DIVISOR` and starting
-/// equal to it. Do not re-express this in terms of that constant: the party
-/// buff is a candidate for removal and this must not move with it.
+/// Was deliberately kept independent of the party's own passive divisor
+/// rather than expressed in terms of it, on the grounds that the party buff
+/// was a candidate for removal. It was removed on 2026-08-19 and this
+/// survived unchanged, which is the whole of what that independence bought.
 pub const WIELDED_PROGRAM_STAT_DIVISOR: i32 = 10;
 
 /// Chance that a player strike also fires one of the wielded program's

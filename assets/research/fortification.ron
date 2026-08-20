@@ -3,6 +3,7 @@
     name: "Fortification",
     description: "Automated perimeter defense and self-repair. Unlocks the Shield and the Patch Node.",
     cost: 18,
+    recommended: true,
     requires: ["power_grid"],
     unlocks_structures: ["shield", "patch_node"],
 )

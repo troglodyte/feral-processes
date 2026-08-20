@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind};
-use crate::tuning::{DEFEND_MITIGATION_BONUS, FRONT_SLOTS};
+use crate::tuning::{DEFEND_MITIGATION_BONUS, FRONT_SLOTS, MAX_PARTY_SIZE};
 use crate::*;
 
 /// `wild_retaliate` rolls per-call whether a companion soaks the hit, so
@@ -74,29 +74,62 @@ fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
     );
 }
 
+/// Companions act in their own right — they take a turn, they swing, they
+/// soak hits. They used to *also* lend the player a passive tenth of their
+/// ATK and DEF on top of that, which double-counted the same body: recruiting
+/// paid twice, once in actions and once in the player's own stat line.
+/// Removed 2026-08-19. What the player's sheet says is now what the player
+/// has, whatever the roster looks like.
+///
+/// Both stats and both ends of the roster in one test: the ATK half alone
+/// passes against a change that only dropped the mitigation term.
 #[test]
-fn effective_mitigation_excludes_the_players_party_bonus_when_a_companion_is_the_target() {
-    // `wild_retaliate` calls `effective_mitigation` on whichever entity got
-    // hit — the player, or (per the test above) a companion. The
-    // player's passive party bonus (see `party_stat_bonus`) must only
-    // ever land on the player, never get double-applied to a
-    // companion's own defense just because it's a party member too.
+fn a_roster_no_longer_inflates_the_players_own_attack_or_defense() {
+    let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let alone = (
+        game.effective_atk(player),
+        game.effective_mitigation(player),
+    );
+
+    // Deliberately beefy: under the old tenth-share these were worth a
+    // visible double-digit bump, so a lingering term cannot hide in rounding.
+    for _ in 0..MAX_PARTY_SIZE {
+        let mate = spawn_tamed(&mut game, 10, 200);
+        game.world.get_mut::<Stats>(mate).unwrap().mitigation = 40;
+        game.add_companion(mate).unwrap();
+    }
+
+    assert_eq!(
+        game.world.resource::<Party>().0.len(),
+        MAX_PARTY_SIZE,
+        "the fixture has to actually fill the roster, or it asserts nothing"
+    );
+    assert_eq!(
+        (
+            game.effective_atk(player),
+            game.effective_mitigation(player)
+        ),
+        alone,
+        "a full roster must leave the player's own effective stats exactly where \
+         an empty one does"
+    );
+}
+
+/// The companion side of the same rule, kept from when the party bonus
+/// existed: `wild_retaliate` calls `effective_mitigation` on whichever entity
+/// got hit, so a companion's own defense is its raw `Stats` and nothing else.
+#[test]
+fn a_companions_effective_defense_as_a_retaliation_target_is_its_own_raw_stats() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 30);
     game.world.get_mut::<Stats>(a).unwrap().mitigation = 20;
     game.add_companion(a).unwrap();
-    // A second party member gives the *player's* bonus a nonzero,
-    // easy-to-notice value if it ever leaked onto `a`.
     let b = spawn_tamed(&mut game, 10, 200);
     game.add_companion(b).unwrap();
 
     let raw_def = game.world.get::<Stats>(a).unwrap().mitigation;
-    assert_eq!(
-        game.effective_mitigation(a),
-        raw_def,
-        "a companion's effective DEF as a retaliation target must be its own raw Stats, \
-         not inflated by the player's party bonus"
-    );
+    assert_eq!(game.effective_mitigation(a), raw_def);
 }
 
 /// Soft ranks, not hard ones: a back-slot member is hit *less*, never

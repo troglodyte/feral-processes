@@ -1965,7 +1965,15 @@ impl Game {
                     }
                 })?;
         }
-        self.post_worker(worker, structure, from);
+        // The removed player action started the program from the player's
+        // tile; `post_worker` no longer writes a `Position` at all, so the
+        // fixture does it here rather than changing what fifty tests
+        // measure. `stand_player_at_post` before this call is still what
+        // puts a program straight onto its machine.
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = from;
+        }
+        self.post_worker(worker, structure);
         // The live scheduler runs inside `tick_inner` and cannot tick again;
         // the removed player action did, and the tests written against it
         // count ticks from that point. Keeping it is what makes this a

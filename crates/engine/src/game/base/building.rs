@@ -568,15 +568,14 @@ impl Game {
     /// postings survive and keeps the walk-in, the depot errand and the
     /// `Stranded` marker working without being reasoned about again.
     ///
-    /// `from` is where the program sets off, and both callers pass the
-    /// player's tile. A tamed program's `Position` is the tile it was
-    /// beaten on and is never written again (`views.rs` says so), so
-    /// posting is the moment it starts meaning something and therefore the
-    /// moment to make it true.
-    pub(crate) fn post_worker(&mut self, worker: Entity, structure: Entity, from: Position) {
-        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
-            *pos = from;
-        }
+    /// **No `Position` write**, the same omission `post_guard` makes and
+    /// for the same reason: a program sets off from the tile it is standing
+    /// on. This used to overwrite it with the player's, because a tamed
+    /// program's `Position` was the tile it was beaten on and was never
+    /// written again — posting was the only moment it could be made true.
+    /// `park_idle_staff` writes it every tick now, so the value is already
+    /// live and overwriting it teleported a loitering body onto the player.
+    pub(crate) fn post_worker(&mut self, worker: Entity, structure: Entity) {
         let speed = self.species_base_speed(worker);
         let ticks = self.work_ticks_for(structure, speed);
         if self.world.resource::<Party>().0.contains(&worker) {

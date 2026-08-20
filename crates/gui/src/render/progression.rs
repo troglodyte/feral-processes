@@ -87,6 +87,19 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
     draw_popup("Perks", PopupSize::Large, &rows, painter, m);
 }
 
+/// The two colours a locked research row can take, dimmed well below `TEXT`
+/// so the rows a player *can* pick stay the loudest thing on the screen —
+/// full-strength `ORANGE` and `BLUE` would make the unbuyable rows the ones
+/// that catch the eye, which is the inversion this screen started with.
+///
+/// Hue rather than brightness carries which wall a row is behind, because
+/// two dim neutrals a shade apart are indistinguishable in a line of text:
+/// amber is a wall you clear inside the tree, blue one you clear by
+/// breaching. Both stay clear of the dim grey an already-researched row
+/// takes, so the three unpickable states never read as each other.
+const LOCKED_BY_PREREQ: Color = Color::new(0.72, 0.50, 0.22, 1.0);
+const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
+
 /// What a research row says about itself after its name and price. This is
 /// the only place a locked node is labelled, so a node held up by both a
 /// prerequisite and a breach has to read as held up by both — the engine
@@ -109,6 +122,32 @@ fn state_tag(state: &ResearchState) -> String {
     }
 }
 
+/// What colour a research row is drawn in — the whole of what a player
+/// scanning the list learns before reading a single tag.
+///
+/// Five states on one axis. The two a player can act on are the loudest —
+/// green for a node the tree recommends taking next, plain `TEXT` for any
+/// other available one — and the three they cannot are quieter, told apart
+/// by hue rather than by shade. `recommended` is deliberately read **only** on the
+/// `Available` arm — a recommended node still behind a prerequisite is not
+/// somewhere the player can go, and painting it green would send them at a
+/// row that refuses them. Its prerequisite is green instead, which is what
+/// `ResearchDb::recommended_ids`'s closure exists to guarantee: the green
+/// row is always one you can actually buy.
+///
+/// A locked node names both of its reasons in `state_tag` but has only one
+/// colour, so the harder wall wins: a breach is something the whole run has
+/// to do, a prerequisite something this screen can do next.
+fn row_color(node: &ResearchStatus) -> Color {
+    match &node.state {
+        ResearchState::Unlocked => TEXT_DIM,
+        ResearchState::Available if node.recommended => GREEN,
+        ResearchState::Available => TEXT,
+        ResearchState::Locked { min_zone, .. } if min_zone.is_some() => LOCKED_BY_ZONE,
+        ResearchState::Locked { .. } => LOCKED_BY_PREREQ,
+    }
+}
+
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
 pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
@@ -125,12 +164,7 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
             node.name,
             node.cost
         );
-        // An unlocked node is kept on the list as a record of what's been
-        // bought, so it has to read as spent rather than as an option.
-        rows.push(match node.state {
-            ResearchState::Unlocked => spent_item_row(label, i == selected),
-            _ => item_row(label, i == selected),
-        });
+        rows.push(colored_item_row(label, i == selected, row_color(node)));
         rows.extend(description_rows(&node.description));
     }
     rows
@@ -187,6 +221,115 @@ mod tests {
     fn an_unlocked_row_reads_as_spent_and_an_available_one_says_nothing() {
         assert_eq!(state_tag(&ResearchState::Unlocked), " (researched)");
         assert_eq!(state_tag(&ResearchState::Available), "");
+    }
+
+    /// The five states have to reach the *colour* and not only the tag: a
+    /// player scanning the list picks a bright row without reading it. What
+    /// this pins is the ordering of attention — green is takeable now, white
+    /// is takeable, the two walls are quieter than both, and spent is
+    /// quietest — plus the one case a colour has to arbitrate, a node held
+    /// by a prerequisite and a breach at once.
+    #[test]
+    fn every_research_state_is_drawn_in_its_own_colour() {
+        let node = |state: ResearchState, recommended: bool| ResearchStatus {
+            id: "n".to_string(),
+            name: "N".to_string(),
+            description: String::new(),
+            cost: 10,
+            state,
+            affordable: true,
+            recommended,
+        };
+        let prereq = |missing: &str| ResearchState::Locked {
+            missing: vec![missing.to_string()],
+            min_zone: None,
+        };
+
+        assert_eq!(
+            row_color(&node(ResearchState::Available, true)),
+            GREEN,
+            "the row a run should take next is the one thing on the screen              that has to be findable without reading"
+        );
+        assert_eq!(row_color(&node(ResearchState::Available, false)), TEXT);
+        assert_eq!(
+            row_color(&node(prereq("Automation"), false)),
+            LOCKED_BY_PREREQ
+        );
+        assert_eq!(
+            row_color(&node(
+                ResearchState::Locked {
+                    missing: Vec::new(),
+                    min_zone: Some(3),
+                },
+                false,
+            )),
+            LOCKED_BY_ZONE,
+        );
+        assert_eq!(row_color(&node(ResearchState::Unlocked, false)), TEXT_DIM);
+
+        assert_eq!(
+            row_color(&node(
+                ResearchState::Locked {
+                    missing: vec!["Automation".to_string()],
+                    min_zone: Some(3),
+                },
+                false,
+            )),
+            LOCKED_BY_ZONE,
+            "held by both walls, the breach wins — it is the one the whole              run has to clear, and `state_tag` still names both"
+        );
+
+        assert_eq!(
+            row_color(&node(prereq("Power Grid"), true)),
+            LOCKED_BY_PREREQ,
+            "a recommended node still owing a prerequisite is not somewhere              the player can go; green would send them at a row that refuses              them, and its prerequisite is the green one instead"
+        );
+    }
+
+    /// The five row colours are only worth having if they survive being read
+    /// as text on the popup's dark panel. Distances rather than literals, so
+    /// a palette retune is free to move any of them — the same bar
+    /// `the_tier_colours_are_separable_from_their_neighbours` holds the
+    /// rarity bars to.
+    #[test]
+    fn the_research_row_colours_are_separable_from_one_another() {
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let palette = [
+            ("GREEN", GREEN),
+            ("TEXT", TEXT),
+            ("LOCKED_BY_PREREQ", LOCKED_BY_PREREQ),
+            ("LOCKED_BY_ZONE", LOCKED_BY_ZONE),
+            ("TEXT_DIM", TEXT_DIM),
+        ];
+        for (i, (name, color)) in palette.iter().enumerate() {
+            for (other_name, other) in palette.iter().skip(i + 1) {
+                assert!(
+                    dist(*color, *other) > 0.25,
+                    "{name} is only {:.2} from {other_name} — two research                      rows a player has to tell apart would read the same",
+                    dist(*color, *other)
+                );
+            }
+        }
+        // A locked row must also be visibly quieter than the two rows that
+        // can be picked, or the unbuyable half of the tree is what draws the
+        // eye. Perceptual luminance rather than a channel sum: the eye is
+        // roughly ten times more sensitive to green than to blue, so a plain
+        // `r + g + b` calls this blue brighter than `GREEN` and would have
+        // waved a genuinely too-loud colour through in the other direction.
+        //
+        // Nothing is claimed about a locked row against a *spent* one. Those
+        // are separated by hue against neutral, which no single scalar
+        // orders, and the tag says which is which regardless.
+        let luminance = |c: Color| 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+        for (name, color) in [
+            ("LOCKED_BY_PREREQ", LOCKED_BY_PREREQ),
+            ("LOCKED_BY_ZONE", LOCKED_BY_ZONE),
+        ] {
+            assert!(
+                luminance(color) < luminance(TEXT) && luminance(color) < luminance(GREEN),
+                "{name} outshines a row the player can actually take"
+            );
+        }
     }
 
     /// `draw_row` clamps a row vertically and nothing clamps it

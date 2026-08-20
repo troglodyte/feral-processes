@@ -8,7 +8,7 @@ members = ["crates/engine", "crates/app-core", "crates/gui", "crates/launcher"]
 # "Breaking" for this project means a save-format bump above all — see
 # `save::SAVE_FORMAT_VERSION` and the CHANGELOG.
 [workspace.package]
-version = "0.12.0"
+version = "0.12.1"
 edition = "2024"
 
 # Internal crates are declared once here so a version bump is a single edit.
@@ -16,3 +16,20 @@ edition = "2024"
 feral-processes-engine = { version = "0.12.0", path = "crates/engine" }
 feral-processes-app-core = { version = "0.12.0", path = "crates/app-core" }
 feral-processes-gui = { version = "0.12.0", path = "crates/gui" }
+
+# A debug build of this game is a *playable* build — `cargo run` is how the
+# game is started, in CLAUDE.md and in practice. Unoptimised, the renderer's
+# own shape-building pass alone measured 51 ms a frame on the `chains`
+# template (2 ms in release), which is under 20 fps before bevy, wgpu or
+# egui's tessellator have done anything — the map's camera glide ran at two
+# frames a step and read as jerky.
+#
+# Dependencies at 3 and our own crates at 1: bevy's own recommendation, and
+# it splits the cost the right way. The 557-crate graph is compiled once and
+# then cached, while the four crates actually being edited stay quick to
+# rebuild.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -27,6 +27,11 @@ pub struct ResearchStatus {
     /// a node can be `Available` but unaffordable, or affordable but
     /// `Locked`.
     pub affordable: bool,
+    /// Whether this node sits on a path the tree recommends — see
+    /// `ResearchDb::recommended_ids`. Independent of `state` for the same
+    /// reason `affordable` is: a recommended node is still locked until its
+    /// prerequisites are paid for, and the menu says both things at once.
+    pub recommended: bool,
     /// Abilities this node hands over as routine items when researched.
     /// `cfg(test)`: read only by engine tests today, neither the renderer
     /// nor app-core touches it, and a `pub(crate)` field that's merely

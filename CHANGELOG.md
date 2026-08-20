@@ -77,6 +77,87 @@ balance change.
   when you're really beside a machine in there — both were measuring the
   player's surface tile against a base-space structure's coordinates and
   came up wrong for the whole of the base.
+## 0.12.1
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 31.
+
+One release covering six changes, rather than the per-change releases the
+preamble asks for. All six had already landed on `main` unversioned; this
+section is written to match what the tag actually holds rather than to
+pretend the rule was followed.
+
+### Companions act instead of inflating your sheet
+
+A companion used to feed a tenth of its ATK and mitigation into the player's
+own stats, floored at one point each, *on top of* taking its own turn,
+swinging and soaking hits. Recruiting was paying twice for one body. The
+passive half is gone; the roster acts in its own right.
+
+A **wielded** program keeps its bonus, and the difference is the argument for
+it: wielding takes the program out of the party, so it never takes a turn and
+its share of stats is the only thing it contributes.
+
+### The map glides again
+
+Reported from play: walking the map had gone jerky. The camera code was never
+the problem — there were no frames to draw the glide in. The root
+`Cargo.toml` carried no `[profile.dev]`, so bevy, wgpu and egui compiled
+entirely unoptimised into the build `cargo run` produces, which is the build
+the game is played from. The renderer's shape-building pass alone measured
+**51.4 ms a frame** against release's 2.0 ms at an identical shape count —
+under 20 fps before the tessellator had done anything.
+
+Dependencies now build at `opt-level = 3` and the four workspace crates at
+`1`. The debug draw pass lands at 2.3 ms. The price is one cold rebuild of
+the 557-crate graph.
+
+### A posted program walks from where it was standing
+
+The base scheduler read *your* tile twice, and both readings went wrong once
+idle staff started loitering. A program milling by Home teleported onto you
+the instant it got a job and walked in from wherever you were; and walking
+away from the base stopped it filling a single machine, so the pool stood
+idle beside the order it was hired to work. A base that only runs while you
+are stood in it is not a base.
+
+Posting now writes no position at all, and every question is asked of the
+body being sent.
+
+### The research screen says what each row is waiting on
+
+Every row in the research menu (`T`) is now coloured by what stands between
+you and it. Green is a node on a recommended path you can buy right now,
+plain white any other available one. The three you cannot take are quieter
+and told apart by hue: amber for a node waiting on another node, blue for one
+waiting on a breach, grey for what is already researched. A node held by both
+walls draws blue, and the tag after its name still names both reasons.
+
+Which nodes are recommended is **data**, not Rust: a research file sets
+`recommended: true` on a destination and the whole chain leading to it
+inherits the colour, so the green row is always one that can actually be
+bought. The shipped tree points a new run at the Compiler and at
+Fortification. See `assets/research/README.md`.
+
+### Also in this release
+
+The **Power Outlet** costs 5 Core Fragments again. A stray asset edit had
+dropped it to 2 while leaving its value at 5 — an item worth more than its
+recipe is an infinite Credit loop, and the price census caught it.
+
+### For anyone measuring
+
+The removed party stat bonus was never modelled by `balance_sim`, so no curve
+in the suite moved — a doc comment there claiming it as one of three ways
+party size compounds was a copy of the game's behaviour rather than a reading
+of the module's, and now says two. Measured in the arena instead, 200 reps
+across four party-bearing scenarios: fights run 0.3-0.4 rounds longer and the
+player keeps 1-3 points less Integrity.
+
+The debug profile also cuts the engine suite from 38.6 s to 6.7 s and
+app-core's from 10.2 s to 1.7 s; CLAUDE.md's build section is rewritten
+around the new figures, and its claim that the old ~24 s was an unavoidable
+RON artifact is retired. Full numbers and blind spots for both are in
+`docs/measurements/`.
 
 ## 0.12.0
 

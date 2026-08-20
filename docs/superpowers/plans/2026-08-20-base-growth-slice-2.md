@@ -173,6 +173,12 @@ pays every build cost from (`building.rs:127-132`) — one store, not two.
   - `laying_a_tile_on_the_surface_refuses` — `require_base`, not
     `require_surface`. The test for whether a reader needs a guard is whether
     it *claims something about where the party is*, and this one does.
+  - `the_laid_tile_is_named_a_vectorstasis_tile` — the success log names it,
+    and the substrate is still called Blank Substrate in the inventory. This
+    is settled decision 8, and it is the only thing pinning the player's word
+    for the laid form: "VectorStasis Tile" is what you lay, `BaseCell::Floor`
+    stays the code's name for it, exactly as "GC Entropy Sweep" is the
+    player's word for a raid. Nothing in `assets/` changes — no new item.
   - app-core: `t_lays_a_tile_in_base_space_and_does_nothing_on_the_surface`
     — the key reaches `Game::lay_tile` and nothing else.
 - [ ] **Step 2: Run them; confirm they fail.**
@@ -364,8 +370,11 @@ subtlety:**
 **Files:**
 - Modify: `crates/engine/src/save.rs` — `DigSiteSave`, `SaveData::dig_sites`,
   both the write and the restore path
-- Test: `crates/engine/src/tests/` (wherever save round trips live) and
-  `crates/engine/src/save.rs`'s own test module
+- Test: `crates/engine/src/save.rs`'s own `#[cfg(test)] mod tests` (where
+  `a_save_file_written_before_a_defaulted_field_existed_still_loads` already
+  lives, ~line 1060) for the encoding half, and
+  `crates/engine/src/tests/base_space.rs` for the game-level round trip.
+  There is no `tests/save.rs`; don't create one.
 
 **Interfaces produced:**
 
@@ -402,7 +411,8 @@ and do not recapture templates.
 - Modify: `crates/app-core/src/app/playing.rs` — `m` enters, base only
 - Create: `crates/app-core/src/app/excavate.rs` — the mode's key handling
 - Modify: `crates/gui/src/render/base.rs` — mark tint, cursor, box preview
-- Modify: wherever the help/keys screen is built — the new key
+- Modify: `crates/gui/src/render/meta.rs:209` — `HELP_ROWS`, the one help
+  table, read back by the test at ~line 297
 - Test: `crates/app-core/src/tests/` (new file), plus the existing gui help
   text test
 

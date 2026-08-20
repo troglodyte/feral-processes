@@ -117,6 +117,7 @@ fn collecting_leaves_a_neighbours_input_untouched() {
 #[test]
 fn collecting_with_nothing_adjacent_takes_nothing_and_costs_no_turn() {
     let mut game = Game::new(943, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let before = game.world.resource::<GameClock>().tick;
 
     assert!(game.collect_adjacent().is_empty());
@@ -132,6 +133,7 @@ fn collecting_with_nothing_adjacent_takes_nothing_and_costs_no_turn() {
 #[test]
 fn collecting_from_an_empty_neighbour_costs_no_turn() {
     let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let p = player_tile(&game);
     stocked_structure(&mut game, "mining_node", p.x + 1, p.y, &[]);
     let before = game.world.resource::<GameClock>().tick;

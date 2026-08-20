@@ -17,6 +17,9 @@ impl App {
         // asset db has. `Game::new` reports the per-file warnings itself.
         let (achievement_db, _) =
             AchievementDb::load_dir(&assets_dir.join("achievements")).unwrap_or_default();
+        // Same contract: a missing directory leaves an empty index rather
+        // than a failed start.
+        let (help_db, _) = HelpDb::load_dir(&assets_dir.join("help")).unwrap_or_default();
         Self {
             mode: Mode::MainMenu,
             game: None,
@@ -31,6 +34,8 @@ impl App {
             profile_path,
             profile,
             achievement_db,
+            help_db,
+            help_stack: Vec::new(),
             quit: false,
             pending_structure: None,
             pending_post_structure: None,

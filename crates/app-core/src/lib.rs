@@ -30,6 +30,7 @@ use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
 use feral_processes_engine::components::Rarity;
+use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
@@ -248,6 +249,27 @@ pub enum SwapChoice {
     Equip(GearCopy),
     /// Empty the slot. Offered only when something is actually worn.
     Unequip,
+}
+
+/// One row of the manual's index.
+pub struct HelpIndexRow {
+    pub title: String,
+}
+
+/// One further-reading row on a page, followed by typing its `shortcut`.
+pub struct HelpLinkRow {
+    pub shortcut: char,
+    pub label: String,
+}
+
+/// A page of the manual as the renderer draws it. The prose is already
+/// wrapped, because a read-only screen's row count is owned here and a
+/// per-row transform in the renderer opens the screen on rows that are not
+/// drawn.
+pub struct HelpPageView {
+    pub title: String,
+    pub prose: Vec<String>,
+    pub links: Vec<HelpLinkRow>,
 }
 
 /// One row of the gear-swap picker: what it does, and how it draws.
@@ -1028,6 +1050,13 @@ pub enum Mode {
     /// it belongs beside New Game rather than inside one.
     Achievements,
     Help,
+    /// One page of the manual. A **document**, not a menu: Up/Down scroll the
+    /// prose and Enter does nothing, because selection-driven scrolling keeps
+    /// the *selected* row visible — so a menu-idiom page with its further
+    /// reading at the bottom would open scrolled to the end of the text, and
+    /// one with the links at the top would put long prose out of reach.
+    /// Links are followed by typing their label's shortcut instead.
+    HelpPage,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
     /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
@@ -1149,6 +1178,7 @@ impl Mode {
             | Mode::StructureAssign
             | Mode::Recipes
             | Mode::Help
+            | Mode::HelpPage
             | Mode::FrameMap
             | Mode::GameOver
             | Mode::QuitRunConfirm
@@ -1275,6 +1305,15 @@ pub struct App {
     /// including the unearned ones, and with no run in progress the `Game`'s
     /// copy of this db does not exist.
     achievement_db: AchievementDb,
+    /// The manual. Held on `App` rather than on `Game` so it reads with no
+    /// run in progress — nothing here puts it on the main menu, but a
+    /// `Game`-owned db would make that a rewrite rather than a menu row.
+    help_db: HelpDb,
+    /// The reading trail through the manual, page ids, top of the stack
+    /// being what is on screen. Esc pops one level; an empty stack is back
+    /// at the index. This is what makes "read three links deep and come
+    /// back" work.
+    pub help_stack: Vec<String>,
     pub quit: bool,
     /// Which structure *kind* `Mode::BuildDirection` is about to place. Public
     /// because that screen names it: the build menu's row is off screen by

@@ -346,3 +346,106 @@ fn uppercase_letters_pick_no_row() {
         );
     }
 }
+
+/// The manual's index is an ordinary menu and a page is a document — the
+/// split the whole screen is built on, so these walk it end to end.
+#[test]
+fn the_manual_opens_on_an_index_of_the_shipped_pages() {
+    let mut app = test_app(930);
+    app.handle_key(GameKey::Char('?'));
+    assert_eq!(app.mode, Mode::Help);
+    let rows = app.help_index_rows();
+    assert!(
+        rows.len() >= 4,
+        "the shipped manual is missing: {rows:?}",
+        rows = rows.len()
+    );
+    assert!(app.help_stack.is_empty(), "nothing is being read yet");
+}
+
+#[test]
+fn picking_a_topic_opens_that_page() {
+    let mut app = test_app(931);
+    app.handle_key(GameKey::Char('?'));
+    let first = app.help_index_rows()[0].title.clone();
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::HelpPage);
+    assert_eq!(app.help_stack.len(), 1);
+    let view = app.help_page_view().expect("a page is open");
+    assert_eq!(view.title, first);
+    assert!(!view.prose.is_empty());
+}
+
+/// The reading trail. Following a link leaves the page you came from
+/// underneath it, which is the whole of what makes "three links deep and
+/// back" work.
+#[test]
+fn a_typed_link_pushes_the_trail_and_esc_pops_it_one_level_at_a_time() {
+    let mut app = test_app(932);
+    app.handle_key(GameKey::Char('?'));
+    app.handle_key(GameKey::Char('1'));
+    let first = app.help_stack[0].clone();
+    let link = app.help_page_view().unwrap().links;
+    assert!(
+        !link.is_empty(),
+        "the fixture page carries no links, so this proves nothing"
+    );
+
+    app.handle_key(GameKey::Char(link[0].shortcut));
+    assert_eq!(
+        app.mode,
+        Mode::HelpPage,
+        "a link opens another page, not another screen"
+    );
+    assert_eq!(app.help_stack.len(), 2);
+    assert_eq!(app.help_stack[0], first, "the page beneath is still there");
+    assert_ne!(app.help_stack[1], first);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::HelpPage,
+        "one level back, not out of the manual"
+    );
+    assert_eq!(app.help_stack, vec![first]);
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Help, "the last level lands on the index");
+    assert!(app.help_stack.is_empty());
+}
+
+#[test]
+fn esc_on_the_index_closes_the_manual_and_clears_the_trail() {
+    let mut app = test_app(933);
+    app.handle_key(GameKey::Char('?'));
+    app.handle_key(GameKey::Char('1'));
+    app.mode = Mode::Help;
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.help_stack.is_empty());
+}
+
+/// A page scrolls; it does not select. Enter is inert on one, and Down
+/// moves the scroll without changing which page is open.
+#[test]
+fn up_and_down_scroll_a_page_without_changing_which_page_is_open() {
+    let mut app = test_app(934);
+    app.handle_key(GameKey::Char('?'));
+    // The controls page is the long one, so there is something to scroll.
+    let idx = app
+        .help_index_rows()
+        .iter()
+        .position(|r| r.title == "Controls")
+        .expect("the controls page ships");
+    app.handle_key(GameKey::Char(menu_shortcut(idx)));
+    let open = app.help_stack.clone();
+    assert!(app.help_page_view().unwrap().prose.len() > 1);
+
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+    assert_eq!(app.help_stack, open, "scrolling is not navigation");
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.help_stack, open, "Enter does nothing on a document");
+    assert_eq!(app.mode, Mode::HelpPage);
+}

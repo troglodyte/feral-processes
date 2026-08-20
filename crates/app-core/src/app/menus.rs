@@ -116,8 +116,97 @@ impl App {
         }
     }
 
-    pub(crate) fn handle_help_key(&mut self) {
-        self.mode = Mode::Playing;
+    /// The manual's index — an ordinary numbered menu, so more than nine
+    /// topics is already solved by `menu_shortcut`. Esc closes back to
+    /// wherever `?` was pressed.
+    ///
+    /// `?` no longer closes on any key. The screen is navigable now, and a
+    /// screen you walk through must not vanish under the keys you walk it
+    /// with — the same rule `handle_history_key` follows.
+    pub(crate) fn handle_help_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.help_stack.clear();
+            self.close_screen();
+            return;
+        }
+        let rows = self.help_index_rows();
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let Some(page) = self.help_db.pages().get(idx) else {
+            return;
+        };
+        self.help_stack.push(page.id.clone());
+        self.mode = Mode::HelpPage;
+    }
+
+    /// One page — a document, not a menu. Up/Down scroll it and Enter does
+    /// nothing; a further-reading row is followed by typing its shortcut,
+    /// and Esc pops one level of the reading trail.
+    pub(crate) fn handle_help_page_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.help_stack.pop();
+            if self.help_stack.is_empty() {
+                self.mode = Mode::Help;
+            }
+            // The scroll *is* `menu_selected` here, and moving between two
+            // pages is not a mode change, so nothing else would reset it.
+            self.menu_selected = 0;
+            return;
+        }
+        let Some(view) = self.help_page_view() else {
+            return;
+        };
+        // A link row is addressed by position, not by its label: the label
+        // is prose an author wrote in the middle of a sentence, and only the
+        // page's own `links` list knows what it points at.
+        if let GameKey::Char(c) = key
+            && let Some(idx) = view.links.iter().position(|l| l.shortcut == c)
+        {
+            let target = self
+                .current_help_page()
+                .and_then(|p| p.links.get(idx))
+                .map(|l| l.target.clone());
+            if let Some(target) = target {
+                self.help_stack.push(target);
+                self.menu_selected = 0;
+            }
+            return;
+        }
+        self.scroll(key, view.prose.len());
+    }
+
+    /// The index's rows, in the db's own `(order, id)` order.
+    pub fn help_index_rows(&self) -> Vec<HelpIndexRow> {
+        self.help_db
+            .pages()
+            .iter()
+            .map(|p| HelpIndexRow {
+                title: p.title.clone(),
+            })
+            .collect()
+    }
+
+    /// The page on top of the reading trail, wrapped and ready to draw.
+    pub fn help_page_view(&self) -> Option<HelpPageView> {
+        let page = self.current_help_page()?;
+        Some(HelpPageView {
+            title: page.title.clone(),
+            prose: help::page_rows(page, help::WRAP_COLUMNS),
+            links: page
+                .links
+                .iter()
+                .enumerate()
+                .map(|(i, link)| HelpLinkRow {
+                    shortcut: menu_shortcut(i),
+                    label: link.label.clone(),
+                })
+                .collect(),
+        })
+    }
+
+    fn current_help_page(&self) -> Option<&HelpPage> {
+        self.help_db.page(self.help_stack.last()?)
     }
 
     /// The message log in full. Nothing here is selectable, so the only keys

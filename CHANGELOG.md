@@ -27,6 +27,52 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**Saves written by 0.12.0 and earlier will not load.**
+`save::SAVE_FORMAT_VERSION` moves from 31 to 32. The base's own coordinate
+space and everything standing in it are new save state, and there is no
+sensible way to derive a pocket dimension's floor plan or a structure's
+place in it from a v31 save that never recorded either.
+
+### The base is out of phase
+
+The base has left the zone surface for its own pocket-dimension coordinate
+space, entered through a permanent, indestructible anchor (`#`, gray) that
+now stands wherever your run starts, on the zone surface, alongside you.
+Step onto it to phase in; step onto the same cell from inside to phase back
+out. The anchor travels with you across a breach, appearing at the new
+zone's spawn point, and cannot be destroyed or moved.
+
+Deploying your first Home lays a pre-cleared, 69-cell pocket of floor around
+the anchor's door rather than stamping platform tiles into the world you're
+standing in — the base is *there*, not *here*, and every machine, trader and
+posted program you build stands in that space from then on. Breaching no
+longer touches the base at all: nothing despawns, nothing repositions,
+nothing resets. It is exactly where you left it the next time you step
+through the anchor, on any zone.
+
+The Heap Pillar and Heap Block, the two structures that used to widen the
+base's footprint on the surface, are retired along with the surface
+footprint they widened. Growing the base is out of scope for this release.
+
+### Two things that follow from being out of phase, and are not bugs
+
+**A rest can no longer be interrupted.** Nothing on the surface can reach a
+party that is off in its own coordinate space, so the mid-rest battle check
+that used to be able to cut a rest short never fires there.
+
+**The base is now completely safe from surface threats.** A wild program, a
+raid, anything that hunts on the zone surface has no way to reach a base
+that isn't on it. Both are the direct consequence of the relocation, not a
+balance change.
+
+### Also
+
+- Two biomes were added for the new space, `Entropy` and `Excavated`, drawn
+  through the existing surface renderer — nothing new to build for them on
+  the graphics side.
+
 ## 0.12.0
 
 **Saves written by 0.11.9 and earlier will not load.**

@@ -999,172 +999,128 @@ one; raising the density made "adjacent to the edge, one step from the
 inside" the common case and the existing spawn-side test caught it by
 accident. A fifth mover goes through the predicate, not beside it.
 
-### The base's radius is derived, never stored, and is written at exactly three sites
+### `BaseGrid` is the one base resource that is not zone-local
 
-**The base's radius is derived, never stored, and is written at exactly
-three sites.** `Game::build_radius` is
-`MAX_BUILD_DISTANCE_FROM_HOME` plus every deployed structure's
-`build_radius_bonus`, clamped to `MAX_BUILD_RADIUS_TILES` — the same shape
-`pet_capacity` has over `pet_slot_bonus`. It is *cached* on
-`resources::Platform` for the reason that resource exists at all: the
-footprint has to be readable from `&self` while the derivation needs
-`&mut self` to query. The three writers are `stamp_platform`,
-`clear_platform` and the load path in `game/lifecycle.rs`, which are
-exactly the three that write `center`; a fourth lets the cache disagree
-with the structures it comes from.
-Derived-not-stored buys three things for free, and each would otherwise be
-work. **No `SAVE_FORMAT_VERSION` bump** — the slab's tiles come back
-through `tile_overrides` and the width comes back off the saved
-structures. **It survives a breach** — `enter_next_zone` repositions the
-base and re-stamps, and breaching despawns nothing, so the Pillars travel.
-**The no-Home fallback stays correct** — no Home means no slab means no
-Pillars, and the next Home stamps at the starting radius.
-**The floor under all of it is that the slab always covers every structure
-standing on it**, and that rule is why halving the starting radius did not
-break every existing save. It is inert for a base built under the current
-rules — `place_structure` refuses anything outside the footprint, so the
-outermost structure is never further out than the radius already is, which
-is also what stops an ordinary structure built at the very edge ratcheting
-the base outward. What it is for is a base built under *older* rules: the
-`chains` template measured 225 tiles of stamped floor against a buildable
-69, so 156 tiles looked exactly like base and refused to be built on, with
-the player standing on one of them. It belongs in `build_radius` and not
-in the load path, because `enter_next_zone` re-stamps from the derivation
-— a load-path fix hands the base back and takes it away again at the next
-breach. Known cost, accepted: on a base that arrived wider than the
-starting radius, a Pillar is absorbed until the bonuses catch up with the
-width it came in at. Only a pre-halving save can be in that position.
-**What actually bounds growth is `StructureDef::max_deployed`**, a count
-of how many of a structure may stand at once — 5 on the Heap Pillar, 0
-(unlimited) everywhere else, and the field a mod sets to bound a structure
-whose effect accumulates. It is a def field rather than a `tuning.rs`
-constant because it is a property of the structure, and the refusal sits
-with the other refusals in `place_structure`, above the materials check.
-**`MAX_BUILD_RADIUS_TILES` is a backstop, not a target.** It is 100, so
-the Pillar's price is what paces growth and nothing downstream has to
-reason about an unbounded footprint; `clear_platform` needs a bound for
-its sweep, which is the other reason it exists. Two costs scale with the
-square of the radius and were measured in a debug build at 1 walking
-worker per tick: 8 ms at radius 10, 28 ms at 20, 65 ms at 30, 764 ms at
-100, with the save running 137 KB to 3.5 MB across the same span. The tick
-cost is why `haul_walk_radius` carries `HAUL_WALK_MAX_TILES` — capping the
-reach keeps `post_reach` and `haul_step_system` in agreement because both
-read that one function, so a base too wide to cross refuses the post
-rather than accepting one that never arrives. The save cost is untouched
-and would be removed by not writing slab tiles at all, since the slab is
-derivable from centre and radius; nobody has needed that yet.
-`MAX_BUILD_DISTANCE_FROM_HOME` is therefore the radius a base *starts* at,
-and reading it where the question is about a base that exists is the
-mistake to watch for: four readers were converted on 2026-08-13
-(`place_structure`, `distance_from_danger_origin`,
-`spawn_initial_creatures` — since deleted, along with the whole
-player-relative seeding it belonged to — and `HAUL_WALK_RADIUS`, which
-stopped being a constant at all — a fully grown base would otherwise refuse postings
-across its own width, and `post_reach` is the single predicate the cronjob
-menu and the assignment share). `clear_platform` is the one deliberate
-holdout: it sweeps `MAX_BUILD_RADIUS_TILES`, not the live radius, because
-it has to cover the largest slab that could ever have existed — halving
-the start put every pre-existing save in exactly the position a
-pre-corner-cut save was already in.
-**A growing base buries what stands in the ring it claims, including a
-Stack link, and the one it may not take is the last.** That is the
-playtested correction to a spec decision: refusing any link at all read as
-a permanent, unexplained cap on base size set by world generation — a
-measured save had a link eight tiles out, so the base could never pass
-radius 7 from any tile, and a link cannot be removed because walking onto
-one descends. It was also stricter than the Home, which has always
-despawned links under the slab it stamps (`stamp_platform`). The surviving
-rule is the one the refusal was actually for: `award_loot` underground is
-the game's only source of Portal Fragments, so a zone with no link left is
-a run that can never breach.
-**Growth is one-way, and that is what removes the shrink question rather
-than answering it.** `remove_structure` refuses anything with a bonus
-outside a Home cascade, so there is no reachable state with structures
-standing outside the slab, no partial `clear_platform`, and nothing the
-build rules call impossible.
-**The Heap Block is the one part of the footprint this does not cover**,
-and the entry below is where that argument lives. The radius is still
-derived and still written at those same three sites; what the claimed set
-adds is a fourth *field* written at the same three, not a fourth writer.
+**`BaseGrid` is the one base resource that is not zone-local, and
+`Game::enter_next_zone` says so by omission.** Four resources are
+zone-scoped and wiped by name on every breach, all inside that one
+function: `resources::BuybackLedger` and `resources::PopulatedChunks` are
+replaced outright with `insert_resource(::default())`, `resources::StackMemory`
+the same, and the two currencies (`Game::currency`, `Game::craft_currency`)
+are drained from the player's `Inventory` item by item. `BaseGrid` never
+appears in `enter_next_zone` at all — not reset, not migrated, not even
+read. That silence is deliberate: the base is out of phase, not on the
+zone surface, so a breach has nothing to say about it. Every `Structure`'s
+`Position` is a `BaseGrid` coordinate (see the entry below), untouched by
+the sweep that despawns `Hostile`, `Nest` and `SurfaceLink`, and the grid
+the base is carved out of carries forward whole, the same way the
+structures standing on it do. `breaching_does_not_touch_the_base_grid`
+(`tests/zone.rs`) pins exactly this: it builds a base, breaches, and
+asserts the `BaseGrid` compares equal by value — not by cell count, so a
+breach that rewrote every cell to the same count at different coordinates
+would still fail it.
+`BaseGrid`'s own module doc says it is saved wholesale in `SaveData`
+"the same way `resources::StackMemory`/`PopulatedChunks` are" — that
+sentence is about the *encoding*, a plain embedded field rather than a
+mirrored save-shaped type, and does not extend to the *lifecycle*. Those
+two are re-created every breach and `BaseGrid` is not, which is what makes
+the four neighbours a pattern rather than a rule: zone-local state gets
+wiped by name at breach, and `BaseGrid` is the deliberate exception to it,
+not a fifth entry that was left out. **The next base resource has to ask
+which of the two it is before reaching for either.** Something a zone's
+own geometry could invalidate — the way a Stack link's map or a chunk's
+population mark would be — is a wipe-by-name candidate like its four
+neighbours. Something that lives in base space, the way `BaseGrid` and
+every `Structure` on it do, needs the omission instead, and nothing
+enforces that choice: there is no test that fails if a future resource is
+wired into the sweep by habit, or forgotten out of it when it should have
+been. The call has to be made deliberately, against what space the
+resource actually lives in, not against which pattern is already sitting
+in `enter_next_zone` to copy.
 
-### The base grows on two independent axes, and only one of them is derivable
+### The base's footprint is `BaseGrid::is_floor` and nothing else
 
-**The base grows on two independent axes, and only one of them is
-derivable.** A Heap Pillar adds a ring to the circle, in every direction
-at once, and is counted back off the structures standing in the base. A
-Heap Block claims a single tile in the one direction the player chose, and
-leaves nothing behind to count — it *cannot*, because the whole point of
-the tile is that it stays empty and buildable. So
-`resources::Platform::claimed` is stored where `radius` is derived, as
-offsets from `center`. **Stale as of `SAVE_FORMAT_VERSION` 32** (TODO #36,
-"the base, out of phase"): the `#[serde(default)]` field this paragraph
-describes, `SaveData::claimed_tiles`, is gone rather than superseded, so a
-claim bought this session no longer survives a reload — `resources::Platform`
-itself retires later in the same slice, replaced by `base_grid::BaseGrid`.
-Until that migration lands, everything below about *live*, in-session
-behaviour (offsets from `center`, `covers`, the growth-axis argument, the
-refusal rules) is still accurate; only persistence changed. Offsets rather
-than absolute tiles is what makes the claims travel with the base on a
-breach within a session, the same way every structure's position does —
-paid-for ground is part of the base, and the base travels whole.
-`Platform::covers` stays the one statement of the footprint (circle *or*
-claim), so `broker_reach`, `place_structure`'s reach check and
-`stamp_platform`'s obliteration sweep pick up claimed ground with no code
-of their own, and `open_to_hostiles` gets it free off the stamped biome.
-`in_shape` is the circle alone, split out because `stamp_platform` needs
-to ask which claims the circle has since grown over — those are dropped,
-so the saved set stays the ground actually bought.
-**The trap this closes is `build_radius`'s covering term.** "The slab
-always covers every structure standing on it" was inert while
-`place_structure` refused everything outside the footprint; claimed ground
-makes it reachable, and one machine on a paved tile twenty out would grow
-the circle to radius 20 *in every direction* — a slab over the sector, and
-a Pillar's ring then added to that. So the term skips structures standing
-on a claimed tile. That is also what makes "a Pillar adds one ring to the
-circle, never an extension of the paving" true rather than incidental, and
-`a_machine_on_claimed_ground_does_not_grow_the_slab` is the test that
-fails if either half is undone.
-**A claim refuses rather than obliterates**, which is the deliberate
-difference from the Pillar's ring. A ring lands on whatever it lands on
-and the last-link rule is what bounds the damage; a single tile is
-trivially re-sited, so a link, a nest or a hostile standing there is a
-refusal — and a nest left inside the slab would breed guardians in the one
-place nothing is meant to stand. It must also *touch* the base, which
-keeps the footprint one connected blob and prices distance in tiles rather
-than in a second radius: paving twenty out costs twenty claims. The far
-ceiling is `MAX_BUILD_RADIUS_TILES` for a reason that is not balance —
-`clear_platform` sweeps exactly that box, and floor outside it would be
-left behind forever.
-**Both growth tools now run off the same chain.** A Block costs one Blank
-Substrate and a Pillar six alongside its fragments, so the Lathe a base
-already needs for Routine Disks is what feeds its expansion too — and the
-Pillar supplies grid energy while it stands, which is the one thing that
-makes growth pay for something other than area.
+**The base's footprint is `BaseGrid::is_floor` and nothing else.**
+`resources::Platform` — the cached, derived circle-or-claim shape the base
+used to have on the zone surface, `build_radius`, `Platform::covers`, the
+Heap Pillar's ring and the Heap Block's claimed tiles among them — is gone
+outright, along with every structure and tuning constant that fed it.
+Deploying the first Home now calls `Game::lay_starting_pocket`, which
+lays `BaseCell::Floor` over a `STARTING_POCKET_RADIUS` chamfered box of
+`base_grid::BaseGrid` at base space's own origin — one shape, laid once,
+never grown or re-stamped by anything this slice ships. Its own doc
+comment states the point directly: "It writes no `WorldMap` tile. That is
+the point of the whole relocation: `Biome::Platform` stops being stamped
+into the zone surface, and the base's footprint becomes
+`BaseGrid::is_floor` and nothing else." Every reader that used to ask
+`Platform::covers` "is this part of the base" now asks `is_floor`
+instead: `place_structure` refuses a build off laid floor, and
+`Game::broker_reach` (`game/contracts.rs`) answers `AtBroker` only when
+the player's base-space tile is `is_floor`, both a straight `is_floor(x, y)`
+call with no derivation in between. `BaseGrid::walkable` is a related but
+wider question — `Open` cells count too, the mined-but-unfloored state
+slice 2's tiling will produce — so `move_in_base`'s step check and
+`hauling`'s walk both read `walkable`, not `is_floor`; a caller asking
+whether ground is *buildable* wants the narrower predicate, and one asking
+whether a program may merely *stand there* wants the wider one. Conflating
+them would let a build land on carved-but-unfloored rock, or refuse a
+hauler a path across ground nobody has floored yet.
+There is no growth axis left to derive, and no cached value to keep in
+step with one: mining floor in (slice 2) or reclaiming it to entropy
+(slice 3) will change what `is_floor` answers by writing `BaseGrid`
+directly, the same way `lay_starting_pocket` does, rather than by feeding
+a formula that used to sit between the structures and the shape.
 
-### A slab wide enough eats the Stack on-ramp's draw box, and the failure is the whole zone rather than one link
+### `Structure` is the space tag
 
-**A slab wide enough eats the Stack on-ramp's draw box, and the failure is
-the whole zone rather than one link.** `spawn_surface_links` widens `reach`
-to `STACK_LINK_SCATTER_TILES` only once `placed > 0`, against an attempt
-budget of `count * 40` **shared across all three links** — so an on-ramp
-that can never land spends every attempt at `placed == 0` and the zone gets
-*zero* links. No links means no Stack, and `award_loot` underground is the
-game's only source of Portal Fragments, so the run cannot breach again; it
-reads to the player as a bad seed. Measured before the fix: zero at
-`MAX_BUILD_RADIUS_TILES`, since `Platform::covers` claims every tile of a
-box whose largest `|dx| + |dy|` is `2 * STACK_NEAREST_LINK_TILES` once
-that stops exceeding `2 * radius - PLATFORM_CORNER_CUT`. The on-ramp now
-draws from the Chebyshev ring band just *outside* the slab, walked
-directly rather than rejection-sampled because every attempt has to yield
-a candidate. Two consequences. `STACK_NEAREST_LINK_TILES` no longer means
-"on screen" — at the ceiling the slab is wider than the pane is tall — so
-`announce_surface_links` is what keeps the layer discoverable, and the
-test that pinned the viewport now pins the doorstep and the scan. And
-`frames_for` takes the build radius and subtracts it, the same correction
-`distance_from_danger_origin` makes, or pushing the on-ramp out would
-deepen every stack in the sector as the base grew — a difficulty change
-caused entirely by a cosmetic one, against the depth curve that is already
-the live concern.
+**`Structure` is the space tag.** Every `Structure` entity is spawned in
+exactly one place, `Game::place_structure` (`game/base/building.rs`), and
+every coordinate it can compute for a new structure's `Position` is a
+base-space one — either `base_space::BASE_EXIT_CELL` for the founding
+Home, or `base_pos()` plus the player's chosen offset for everything
+after. That single spawn site is the whole guarantee: nothing else in the
+game ever inserts a `Structure` component, so a `With<Structure>` query
+answers a base-space question by construction and needs no separate
+locale field or marker component to say so — the component's mere
+presence already says it. A second spawn site computing a *surface*
+`Position` for a `Structure` would silently break the guarantee, because
+nothing checks it; every reader below trusts the invariant rather than
+re-verifying it.
+That is why six separate readers gate on `Game::in_base` rather than on
+`is_underground` or on the numbers they are handed: `find_blocking_structure_at`
+and `find_zone_portal_at` (`game/zone.rs`) both return `None` outright
+off base, `Game::adjacent_structure` and `Game::find_target_in_direction`
+(`game/inspection.rs`) do the same for a keypress and a ray, `view_entities`
+keeps a hit only `if self.world.get::<Structure>(*e).is_some() { return
+in_base; }`, and app-core's `traders_in_range` inherits the gate for free
+because it is built on `view_entities`. Before each was re-read this
+slice, a `Structure`'s live `Position` and a numerically identical surface
+tile — commonly true near `(0, 0)`, since a base's own origin and the
+zone spawn point usually share it — resolved as the same tile to a query
+that never asked which space it meant. Five of those six sites were live
+bugs found and fixed during this slice, not defended against on
+suspicion. `find_blocking_structure_at` and `find_zone_portal_at` gained
+the `if !self.in_base() { return None; }` guard in the same commit
+(verified not to regress the founding Home's call, which is always
+vacuously `None` there anyway — no Home means no other structure to find,
+since removal cascades). `adjacent_structure`'s guard was too narrow
+before this slice — `is_underground()` alone, which is Stack-only and
+does not distinguish base space from the surface — and was widened to
+`!self.in_base()`. `find_target_in_direction`'s `Structure` query was
+*deliberately* left ungated at first, on the argument that fixing it broke
+five ray-mechanics fixtures that built locale-naive `Structure`
+fixtures; review overturned that call as a real, reachable bug rather than
+an accepted tradeoff — "build a Home, walk back near the spawn tile, press
+`x`" — and it was gated to match the other four in a follow-up commit,
+with a new test reproducing that exact scenario
+(`find_target_in_direction_refuses_a_base_structure_seen_from_the_surface`).
+`view_entities` is the general fix rather than a sixth individual one: a
+`Structure` is kept only while `in_base`, an untamed `Creature` only while
+not — and `traders_in_range` needed no change of its own once that
+landed, because it is built entirely on `view_entities` and inherited the
+closure for free. **A caller that gates a `Structure` query on anything
+other than `in_base` — or skips the gate because the coordinates
+"obviously" already agree — is reopening one of these.**
 
 ### `Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a wild program's swing is decided
 

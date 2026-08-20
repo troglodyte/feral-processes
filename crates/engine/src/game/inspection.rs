@@ -367,6 +367,15 @@ impl Game {
             "The Anchor".to_string()
         } else if self.world.get::<SurfaceLink>(entity).is_some() {
             "Stack Entrance".to_string()
+        } else if self.world.get::<DigSite>(entity).is_some() {
+            // A dig site is named by its tile, because it has nothing else:
+            // no def, no species, and no glyph. Without this arm it falls
+            // through to `"You"` below, and a posted digger's manifest row
+            // reads as the player standing at their own post.
+            match self.world.get::<Position>(entity) {
+                Some(p) => format!("Marked Cell ({}, {})", p.x, p.y),
+                None => "Marked Cell".to_string(),
+            }
         } else {
             "You".to_string()
         }
@@ -494,6 +503,11 @@ impl Game {
                     // drawn, which makes "at its post" the only useful
                     // answer for it.
                     TaskKind::Guard => true,
+                    // A dig site carries no `Glyph`, so nothing ever selects
+                    // one into `hits` and no view asks this set about it.
+                    // The set is structures with somebody standing at them,
+                    // and an excavation is not one.
+                    TaskKind::Excavate => false,
                     TaskKind::GatherResource => {
                         match (
                             self.world.get::<Position>(holder),

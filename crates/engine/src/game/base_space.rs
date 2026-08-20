@@ -182,9 +182,17 @@ impl Game {
     /// Opening the cell despawns the site **unless it is marked**: a mark
     /// outlives the cut, because marked solid means cut it and marked `Open`
     /// means floor it (slice 2, phase B).
-    pub(crate) fn strike_rock(&mut self, x: i32, y: i32) {
-        let player = self.player_entity();
-        let dmg = self.swing_damage(player);
+    ///
+    /// **`swinger` is whoever is hitting it**, and the same function serves
+    /// the player's bump and a posted digger's cycle (`Game::run_dig_crew`)
+    /// — one place where rock takes damage, one place where a cell opens,
+    /// one fragment roll. What the swinger decides is the damage, through
+    /// its own `Game::swing_damage`, and the voice: a crew's swings are
+    /// silent and only the break is base news, because a line per swing per
+    /// digger is the log for the rest of the run.
+    pub(crate) fn strike_rock(&mut self, swinger: Entity, x: i32, y: i32) {
+        let by_player = swinger == self.player_entity();
+        let dmg = self.swing_damage(swinger);
         let site = self.dig_site_at(x, y).unwrap_or_else(|| {
             self.world
                 .spawn((
@@ -200,9 +208,20 @@ impl Game {
         let Some(mut durability) = self.world.get_mut::<Durability>(site) else {
             return;
         };
+        // A site standing on solid rock with nothing left to cut is a cell
+        // entropy took back: it was opened, never floored, and the wall
+        // re-knit under a mark that outlived it. The wall is whole again, so
+        // it costs the swings a whole wall costs — without this the next
+        // swing lands on a spent `Durability` and opens it for free, which
+        // is the promise `BASE_ENTROPY_REFILL_TICKS` makes read backwards.
+        if durability.hp == 0 {
+            durability.hp = durability.max_hp;
+        }
         durability.hp = durability.hp.saturating_sub(dmg);
         if durability.hp > 0 {
-            self.log(format!("You cut into the entropy for {dmg} damage."));
+            if by_player {
+                self.log(format!("You cut into the entropy for {dmg} damage."));
+            }
             return;
         }
 
@@ -215,7 +234,11 @@ impl Game {
         if !marked {
             self.world.despawn(site);
         }
-        self.log("The entropy gives way, and the cell opens.");
+        if by_player {
+            self.log("The entropy gives way, and the cell opens.");
+        } else {
+            self.log_base("Your crew cuts through, and the cell opens.");
+        }
 
         // A live action, not world generation, so `GameRng` is the right
         // stream to draw from: nothing here has to be reproduced by a
@@ -229,10 +252,12 @@ impl Game {
             let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
             let landed = self.grant_loot(item.clone(), 1);
             if landed > 0 {
-                self.log_kind(
-                    MessageKind::Loot,
-                    format!("A {} shakes loose from the cut.", self.item_name(&item)),
-                );
+                let line = format!("A {} shakes loose from the cut.", self.item_name(&item));
+                if by_player {
+                    self.log_kind(MessageKind::Loot, line);
+                } else {
+                    self.log_base_kind(MessageKind::Loot, line);
+                }
             }
         }
     }
@@ -346,6 +371,143 @@ impl Game {
         }
     }
 
+    /// One tick of the dig crew: every program posted to a `DigSite` walks
+    /// to it, cuts it, and floors what the cut opened.
+    ///
+    /// **A `&mut Game` method called from `tick_inner`, not a bevy system**,
+    /// and for a stronger version of the reason `schedule_base_labour` is
+    /// one: a cycle here ends in `Game::strike_rock` or `Game::floor_cell`,
+    /// which are *the* place rock takes damage and *the* place a base cell
+    /// becomes floor. A system could reach neither, and would have had to
+    /// keep a second copy of the swing damage, the fragment roll, the
+    /// substrate spend and the cell write — four formulas with one door
+    /// each, which is exactly the drift `balance_sim` has already been
+    /// bitten by four times. It runs immediately after
+    /// `schedule_base_labour`, so a body posted this tick digs this tick.
+    ///
+    /// The walk is `hauling::step_to_post` — the same walk a posted worker
+    /// takes to a machine, not a second one — because `haul_step_system`
+    /// cannot move a digger: it resolves every destination through a
+    /// `Structure` query, and a dig site is the one `Task` target that is
+    /// not a structure.
+    ///
+    /// **A digger that loses its route drops the job** rather than standing
+    /// in the dark forever. That is what keeps the stall announcement
+    /// honest: `schedule_base_labour` is the only thing that announces one,
+    /// and it only ever looks at sites nobody is posted to.
+    pub(crate) fn run_dig_crew(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        // Sorted by tile for the reason `assembler_system` sorts its
+        // machines: bevy's iteration order is not stable, and two diggers
+        // whose swings land in a different order between runs would make the
+        // same base save differently.
+        let mut diggers: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &Task, &Position)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, task, _)| task.kind == TaskKind::Excavate)
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect()
+        };
+        diggers.sort_unstable();
+        let blocked = self.structure_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        for (.., worker) in diggers {
+            let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {
+                continue;
+            };
+            // The site is gone — cut and floored by somebody else, or its
+            // mark cleared while this body was walking. There is nothing
+            // left to dig, and the scheduler will find it something else.
+            let Some(target) = self.world.get::<Position>(site).copied() else {
+                self.world.entity_mut(worker).remove::<Task>();
+                continue;
+            };
+            let from = self
+                .world
+                .get::<Position>(worker)
+                .copied()
+                .unwrap_or(Position { x: 0, y: 0 });
+            if !crate::game::base::hauling::at_station(from, target) {
+                let step = {
+                    let grid = self.world.resource::<BaseGrid>();
+                    crate::game::base::hauling::step_to_post(
+                        grid,
+                        from,
+                        target,
+                        &blocked,
+                        pocket_radius,
+                    )
+                };
+                match step {
+                    Ok(Some(next)) => {
+                        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+                            *pos = next;
+                        }
+                    }
+                    // Nowhere better to stand: the field admits the tile the
+                    // worker is already on and nothing closer. It waits.
+                    Ok(None) => {}
+                    Err(_) => {
+                        self.world.entity_mut(worker).remove::<Task>();
+                    }
+                }
+                continue;
+            }
+            let Some(mut task) = self.world.get_mut::<Task>(worker) else {
+                continue;
+            };
+            task.progress += 1;
+            if task.progress < task.required {
+                continue;
+            }
+            task.progress = 0;
+            // Which of the two halves of the one verb this is, decided by the
+            // cell rather than by anything stored on the job: marked solid
+            // means cut it, marked `Open` means floor it. A cut cell is still
+            // this body's job on the next cycle, because the mark outlives
+            // the cut.
+            if self
+                .world
+                .resource::<BaseGrid>()
+                .is_solid(target.x, target.y)
+            {
+                self.strike_rock(worker, target.x, target.y);
+            } else {
+                self.crew_lays_tile(target.x, target.y);
+            }
+        }
+    }
+
+    /// The crew's half of `Game::lay_tile`: one Blank Substrate out of the
+    /// same store every build is paid from, and the cell is floor.
+    ///
+    /// **Silent when the store is empty.** The mark stays, the body stays
+    /// posted, and the tile goes down the moment a substrate exists — the
+    /// only thing missing is stock, which the player is already being told
+    /// about by every other thing that wants it. The route stall is
+    /// announced because nothing else in the base reports it.
+    fn crew_lays_tile(&mut self, x: i32, y: i32) {
+        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+        let player = self.player_entity();
+        let held = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&substrate))
+            .unwrap_or(0);
+        if held == 0 {
+            return;
+        }
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(substrate, 1);
+        self.floor_cell(x, y);
+        self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
+    }
+
     /// One step through base space, reached from `Game::move_player` — the
     /// same four keys, dispatched on locale.
     ///
@@ -386,7 +548,8 @@ impl Game {
         // wall is a thing you attack, and a swing costs the turn a step
         // would have. There is no new key and no direction prompt.
         if self.world.resource::<BaseGrid>().is_solid(nx, ny) {
-            self.strike_rock(nx, ny);
+            let player = self.player_entity();
+            self.strike_rock(player, nx, ny);
             self.tick();
             return;
         }

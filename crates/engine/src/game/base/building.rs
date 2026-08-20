@@ -668,6 +668,30 @@ impl Game {
     ///
     /// No `work_ticks_for` and no `Position` write — guarding produces
     /// nothing, so there is no cycle to rate and no station to walk to.
+    /// `post_worker`'s counterpart for a dig site: the crew job, posted by
+    /// `schedule_base_labour` and worked by `Game::run_dig_crew`.
+    ///
+    /// The rate is `tuning::BASE_DIG_TICKS_PER_SWING` rather than
+    /// `work_ticks_for`, because a dig site is not a structure and has no
+    /// def to read one off — what the *worker* brings is the damage each
+    /// swing lands, through its own `Game::swing_damage`.
+    pub(crate) fn post_digger(&mut self, worker: Entity, site: Entity) {
+        if self.world.resource::<Party>().0.contains(&worker) {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|&e| e != worker);
+            self.log_base("It stands down as your companion to work the excavation.");
+        }
+        self.displace_task_holder(site, TaskKind::Excavate);
+        self.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        });
+    }
+
     pub(crate) fn post_guard(&mut self, worker: Entity, structure: Entity) {
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world

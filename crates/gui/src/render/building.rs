@@ -757,6 +757,11 @@ fn assignee_line(a: &Assignee) -> String {
     match a.kind {
         TaskKind::GatherResource => format!("{who} — cronjob {}/{}", a.progress, a.required),
         TaskKind::Guard => format!("{who} — guarding"),
+        // A dig site is not a structure, so nothing on this screen can be
+        // holding an `Excavate` post — the row exists because the match is
+        // exhaustive, and it reads like the cronjob one for the day
+        // something does.
+        TaskKind::Excavate => format!("{who} — cutting {}/{}", a.progress, a.required),
     }
 }
 

@@ -129,6 +129,11 @@ impl Game {
         // Beside `maybe_spawn_wild_creature` for the same reason that one is
         // here: both are `&mut Game` work a bevy system cannot express.
         self.schedule_base_labour();
+        // Immediately after the scheduler and before the schedule, for both
+        // of that call's reasons: a digger posted this tick swings this
+        // tick, and a cycle that ends in `strike_rock` or `floor_cell` is
+        // `&mut Game` work no bevy system can express.
+        self.run_dig_crew();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an

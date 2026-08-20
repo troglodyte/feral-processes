@@ -583,6 +583,9 @@ fn post_label(kind: TaskKind) -> &'static str {
     match kind {
         TaskKind::GatherResource => "Posted to",
         TaskKind::Guard => "Guarding",
+        // The value beside it is the cell, from `entity_label` — "Cutting
+        // Marked Cell (6, 0)" reads as the sentence the other two do.
+        TaskKind::Excavate => "Cutting",
     }
 }
 

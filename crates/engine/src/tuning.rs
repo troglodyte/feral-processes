@@ -2092,6 +2092,21 @@ pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 /// cell with a body standing on it.
 pub const BASE_ENTROPY_REFILL_TICKS: u64 = 300;
 
+/// How many ticks a posted digger spends per swing at a marked cell — one
+/// cycle of `TaskKind::Excavate`, the crew's counterpart to a cronjob's
+/// `work_ticks_for`.
+///
+/// The **damage** a swing lands is not here: it is the worker's own
+/// `Game::swing_damage`, exactly as it is for the player, so a stronger
+/// program digs a wall out in fewer swings rather than faster ones. This is
+/// only the rate a crew works at against a player who swings once per
+/// keypress, which is what keeps a marked wing something you leave running
+/// rather than something faster than doing it yourself.
+///
+/// Unmeasured, like every other knob in this slice. Play it and record what
+/// it said under `docs/measurements/`.
+pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
+
 /// How often (in ticks) the base's repairers restore `Durability` to
 /// damaged structures — see `Game::structure_regen`.
 ///

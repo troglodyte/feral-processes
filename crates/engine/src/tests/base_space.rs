@@ -1669,8 +1669,9 @@ fn identical_swings_at_rock_do_identical_damage() {
     let east = WALL;
     let north = (0, crate::tuning::STARTING_POCKET_RADIUS + 1);
 
-    game.strike_rock(east.0, east.1);
-    game.strike_rock(north.0, north.1);
+    let player = game.player_entity();
+    game.strike_rock(player, east.0, east.1);
+    game.strike_rock(player, north.0, north.1);
 
     let left = |game: &mut Game, (x, y): (i32, i32)| {
         let site = game
@@ -2277,4 +2278,351 @@ fn marked_cells_is_sorted() {
     sorted.sort_unstable();
     assert_eq!(cells, sorted, "marked_cells came back in query order");
     assert_eq!(cells.len(), 9, "a 3x3 box of solid rock is nine marks");
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2: the crew
+// ---------------------------------------------------------------------------
+
+/// A base with `n` programs on its staff and the party parked back on the
+/// exit cell.
+///
+/// The party's cell matters: everything below is about work that happens
+/// while nobody is standing over it, and a fixture that left the player at
+/// the frontier could credit the crew with a wall the player's own bumps
+/// brought down.
+fn base_with_a_crew(seed: u32, n: usize) -> (Game, Vec<Entity>) {
+    let mut game = game_at_the_frontier(seed);
+    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+    let mut staff = Vec::new();
+    for _ in 0..n {
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.assign_base_staff(worker).unwrap();
+        staff.push(worker);
+    }
+    staff.sort();
+    (game, staff)
+}
+
+fn mark(game: &mut Game, cell: (i32, i32)) {
+    game.toggle_mark_box(cell, cell);
+}
+
+fn pass(game: &mut Game, ticks: usize) {
+    for _ in 0..ticks {
+        game.tick();
+    }
+}
+
+fn posted_at(game: &Game, worker: Entity) -> Option<Entity> {
+    game.world.get::<Task>(worker).map(|t| t.target)
+}
+
+/// Long enough for a crew to walk out to the frontier and cut `WALL` down,
+/// derived from the constants rather than written out: retuning the swing
+/// rate or the rock's durability retunes the wait with it.
+fn ticks_to_cut(game: &Game, worker: Entity) -> usize {
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(worker));
+    (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE
+}
+
+/// Slack for the walk from the parking ring out to the wall, which is a
+/// handful of tiles at one tile a tick.
+const WALK_ALLOWANCE: usize = 20;
+
+/// Raw log lines, deliberately **not** `Game::message_history`: that folds
+/// repeats through `resources::condense`, so a line pushed every tick would
+/// count as one and "it says so exactly once" would pass against no fix at
+/// all.
+fn lines_saying(game: &Game, needle: &str) -> usize {
+    game.message_log(500)
+        .iter()
+        .filter(|line| line.text.contains(needle))
+        .count()
+}
+
+/// The fragment of the stall announcement every test below counts on. Not
+/// `"is cut off"`, which `MachineStatus::Stranded` also says: two different
+/// stalls sharing a needle would let either one satisfy the other's test.
+const CUT_OFF: &str = "marked cell at";
+
+/// The whole claim of the feature: the base grows while you are somewhere
+/// else.
+#[test]
+fn a_crew_cuts_a_marked_wall_without_the_player() {
+    let (mut game, staff) = base_with_a_crew(3260, 1);
+    mark(&mut game, WALL);
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(WALL.0, WALL.1),
+        "precondition: the marked cell starts solid"
+    );
+
+    let wait = ticks_to_cut(&game, staff[0]);
+    pass(&mut game, wait);
+
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the crew never cut the wall the player marked"
+    );
+}
+
+/// Settled decision 4's second half, worked by somebody else: the mark
+/// survives the cut, so the same body floors what it just opened — and pays
+/// the same one Blank Substrate the player's own tile costs.
+#[test]
+fn a_crew_floors_a_marked_cell_after_cutting_it() {
+    let (mut game, staff) = base_with_a_crew(3261, 1);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 3);
+    mark(&mut game, WALL);
+
+    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
+    pass(&mut game, wait);
+
+    assert_eq!(
+        cell(&game, WALL),
+        Some(base_grid::BaseCell::Floor),
+        "the crew cut the cell and left it bare"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        2,
+        "a laid tile costs exactly one Blank Substrate, whoever lays it"
+    );
+    assert!(
+        game.dig_site_at(WALL.0, WALL.1).is_none(),
+        "a finished cell keeps no dig site"
+    );
+}
+
+/// Settled decision 7, and the reason digging cannot starve production: dig
+/// wants are appended last, so `truncate(staff.len())` cuts them first.
+#[test]
+fn a_dig_job_never_takes_a_body_off_a_work_order() {
+    let (mut game, staff) = base_with_a_crew(3262, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+    mark(&mut game, WALL);
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "the base's one body must work the order, not the excavation"
+    );
+}
+
+#[test]
+fn a_dig_job_is_taken_when_there_is_a_spare_body() {
+    let (mut game, staff) = base_with_a_crew(3263, 2);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+        .unwrap();
+    mark(&mut game, WALL);
+
+    game.tick();
+
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("marking a wall spawns its dig site");
+    let posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    assert!(
+        posts.contains(&mine),
+        "the order still comes first, got {posts:?}"
+    );
+    assert!(
+        posts.contains(&site),
+        "the spare body has nothing else to do and must dig, got {posts:?}"
+    );
+}
+
+/// The tile a stranded station stands on, and the cell marked beside it.
+/// Open ground far enough out that nothing walkable touches it, so a station
+/// exists and no route to it does — `NoPost::NoRoute`, the half of the split
+/// that is the player's errand.
+const STRANDED_STATION: (i32, i32) = (20, 0);
+const STRANDED_CELL: (i32, i32) = (21, 0);
+
+fn game_with_an_unroutable_mark(seed: u32) -> (Game, Vec<Entity>) {
+    let (mut game, staff) = base_with_a_crew(seed, 1);
+    let tick = game.current_tick();
+    game.world.resource_mut::<base_grid::BaseGrid>().open(
+        STRANDED_STATION.0,
+        STRANDED_STATION.1,
+        tick,
+    );
+    mark(&mut game, STRANDED_CELL);
+    (game, staff)
+}
+
+/// `set_machine_status`' rule, one subsystem over: entering a state is news
+/// and staying in it is not.
+#[test]
+fn an_unreachable_dig_site_complains_exactly_once() {
+    let (mut game, _) = game_with_an_unroutable_mark(3264);
+
+    pass(&mut game, 20);
+
+    assert_eq!(
+        lines_saying(&game, CUT_OFF),
+        1,
+        "a stall the player has to fix is announced once, not every tick"
+    );
+}
+
+/// Settled decision 6's silent half. The interior of any block you mark has
+/// no face to stand at and resolves itself as the shell comes down, so
+/// saying so would fire for every buried cell of every plan ever drawn.
+#[test]
+fn a_dig_site_with_no_exposed_face_never_complains() {
+    let (mut game, _) = base_with_a_crew(3265, 1);
+    let buried = (20, 20);
+    mark(&mut game, buried);
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        assert!(
+            game.world
+                .resource::<base_grid::BaseGrid>()
+                .is_solid(buried.0 + dx, buried.1 + dy),
+            "precondition: the marked cell must have no face to stand at"
+        );
+    }
+
+    pass(&mut game, 20);
+
+    assert_eq!(
+        lines_saying(&game, CUT_OFF),
+        0,
+        "a buried cell is the normal interior of a plan and must stay silent"
+    );
+}
+
+/// The flag has to clear, or the second stall is silent forever.
+#[test]
+fn a_site_that_becomes_reachable_again_can_complain_again() {
+    let (mut game, staff) = game_with_an_unroutable_mark(3266);
+    pass(&mut game, 5);
+    assert_eq!(lines_saying(&game, CUT_OFF), 1, "precondition");
+
+    // A corridor from the pocket out to the stranded station. The station
+    // itself is not part of it — reverting the corridor below has to leave
+    // a tile to stand on, or the site would come back as `BoxedIn` and be
+    // silent for a different reason than the one under test.
+    let corridor = (crate::tuning::STARTING_POCKET_RADIUS + 1)..STRANDED_STATION.0;
+    let tick = game.current_tick();
+    for x in corridor.clone() {
+        game.world
+            .resource_mut::<base_grid::BaseGrid>()
+            .open(x, 0, tick);
+    }
+    game.tick();
+    let site = game
+        .dig_site_at(STRANDED_CELL.0, STRANDED_CELL.1)
+        .expect("the mark is still standing");
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(site),
+        "precondition: a route means a posting"
+    );
+
+    for x in corridor {
+        game.world
+            .resource_mut::<base_grid::BaseGrid>()
+            .revert(x, 0);
+    }
+    pass(&mut game, 5);
+
+    assert_eq!(
+        lines_saying(&game, CUT_OFF),
+        2,
+        "a route lost after the posting is news again"
+    );
+}
+
+/// A cell the crew cut and never floored is taken back by entropy — and
+/// taking it back has to mean the wall is whole again.
+///
+/// A mark outlives the cut, so the `DigSite` outlives it too, holding a
+/// `Durability` that is already spent. Without the re-knit clause the next
+/// swing lands on nothing and opens the cell for free, which reads as
+/// `BASE_ENTROPY_REFILL_TICKS` doing nothing at all.
+#[test]
+fn a_marked_cell_entropy_took_back_costs_the_whole_wall_again() {
+    let mut game = game_at_the_frontier(3267);
+    let player = game.player_entity();
+    assert!(
+        crate::tuning::BASE_ROCK_DURABILITY > game.swing_damage(player),
+        "a wall that opens on one swing makes this test vacuous"
+    );
+    mark(&mut game, WALL);
+    while game
+        .world
+        .resource::<base_grid::BaseGrid>()
+        .is_solid(WALL.0, WALL.1)
+    {
+        game.strike_rock(player, WALL.0, WALL.1);
+    }
+    stand_in_base_at(&mut game, BASE_EXIT_CELL.0, BASE_EXIT_CELL.1);
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS + 1);
+    assert_eq!(
+        cell(&game, WALL),
+        None,
+        "precondition: the abandoned cut cell must have re-knit"
+    );
+
+    game.strike_rock(player, WALL.0, WALL.1);
+
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(WALL.0, WALL.1),
+        "one swing at a re-knit wall opened it for free"
+    );
+}
+
+/// The middle rung of settled decision 7. Dig jobs sit below work orders
+/// *and* below standing jobs, and the order test alone cannot see the
+/// difference: an order's wants are built before standing jobs either way,
+/// so a plan that only outranked orders would still pass it.
+#[test]
+fn a_dig_job_never_takes_a_body_off_a_standing_job() {
+    let (mut game, staff) = base_with_a_crew(3268, 1);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    game.set_standing_job(mine, true, false).unwrap();
+    mark(&mut game, WALL);
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "a standing job is the player saying keep this running, and outranks a plan"
+    );
+}
+
+/// `entity_label`'s fall-through is `"You"`, so a dig site with no arm of
+/// its own makes every screen that names a post report a digger as the
+/// player standing at their own.
+#[test]
+fn a_posted_digger_is_named_by_the_cell_it_is_cutting() {
+    let (mut game, staff) = base_with_a_crew(3269, 1);
+    mark(&mut game, WALL);
+    game.tick();
+    assert!(
+        posted_at(&game, staff[0]).is_some(),
+        "precondition: the body must have taken the dig job"
+    );
+
+    let activity = game.program_activity(staff[0]);
+
+    assert!(
+        activity.contains("Marked Cell"),
+        "a digger's post must name the cell, got: {activity}"
+    );
+    assert!(
+        !activity.contains("You"),
+        "and must not fall through to the player, got: {activity}"
+    );
 }

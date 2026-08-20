@@ -617,6 +617,15 @@ impl Game {
             }
             wanted.push((structure, kind));
         }
+        // Dig jobs, appended after the standing jobs and therefore last of
+        // all — **the priority is the position in this list**, since
+        // `truncate(staff.len())` below cuts from the end. A spare body
+        // digs; a needed one does not, and a plan drawn across the base can
+        // never stop it running. Anything inserted above these silently
+        // starves production.
+        for (site, kind) in self.dig_wants() {
+            wanted.push((site, kind));
+        }
         let staff = self.base_staff();
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
@@ -727,6 +736,14 @@ impl Game {
                 .get::<Position>(worker)
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
+            if kind == TaskKind::Excavate
+                && !self.can_walk_to_dig(from, post, &blocked, pocket_radius)
+            {
+                // Both refusals are silent *here*: `can_walk_to_dig` owns
+                // the announcement, because only it can tell the interior of
+                // a marked block from a cell the player has walled off.
+                continue;
+            }
             if kind == TaskKind::GatherResource
                 && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
@@ -748,6 +765,7 @@ impl Game {
             match kind {
                 TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),
+                TaskKind::Excavate => self.post_digger(worker, post),
             }
         }
     }
@@ -762,11 +780,110 @@ impl Game {
         blocked: &std::collections::HashSet<(i32, i32)>,
         pocket_radius: i32,
     ) -> bool {
-        let Some(target) = self.world.get::<Position>(machine).copied() else {
-            return false;
+        self.post_route(from, machine, blocked, pocket_radius)
+            .is_ok()
+    }
+
+    /// `can_walk_to_post`'s answer with its reason kept, which is what a dig
+    /// site needs and a machine does not.
+    ///
+    /// A target with no `Position` reads as `BoxedIn`: nothing can stand
+    /// beside a post that is not anywhere, and the caller skips it in
+    /// silence either way.
+    fn post_route(
+        &mut self,
+        from: Position,
+        target: Entity,
+        blocked: &std::collections::HashSet<(i32, i32)>,
+        pocket_radius: i32,
+    ) -> Result<(), hauling::NoPost> {
+        let Some(to) = self.world.get::<Position>(target).copied() else {
+            return Err(hauling::NoPost::BoxedIn);
         };
         let grid = self.world.resource::<BaseGrid>();
-        hauling::post_reach(grid, from, target, blocked, pocket_radius).is_ok()
+        hauling::post_reach(grid, from, to, blocked, pocket_radius)
+    }
+
+    /// Whether a body at `from` can be sent to `site`, and **the one place a
+    /// stalled excavation is announced**.
+    ///
+    /// The two ways a dig site can refuse a body are not symmetrical, and
+    /// that asymmetry is the whole of this function:
+    ///
+    /// - `BoxedIn` — nothing can stand beside the cell at all. That is the
+    ///   ordinary *interior* of any block the player marked, and it resolves
+    ///   itself as the shell comes down. **Silent**, or a nine-cell plan
+    ///   would complain about its own middle every tick until it was dug.
+    /// - `NoRoute` — a face exists and no body can reach it. Only the player
+    ///   can fix that, so it **says so once** and then stops, which is
+    ///   `systems::set_machine_status`' rule one subsystem over: entering a
+    ///   state is news, staying in it is not. `DigSite::announced_stuck` is
+    ///   the latch, and it clears the moment a route exists again — without
+    ///   that the second stall would be silent forever.
+    fn can_walk_to_dig(
+        &mut self,
+        from: Position,
+        site: Entity,
+        blocked: &std::collections::HashSet<(i32, i32)>,
+        pocket_radius: i32,
+    ) -> bool {
+        let route = self.post_route(from, site, blocked, pocket_radius);
+        let announced = self
+            .world
+            .get::<DigSite>(site)
+            .is_some_and(|d| d.announced_stuck);
+        match route {
+            Ok(()) => {
+                if announced && let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                    dig.announced_stuck = false;
+                }
+                true
+            }
+            Err(hauling::NoPost::BoxedIn) => false,
+            Err(hauling::NoPost::NoRoute) => {
+                if !announced {
+                    if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                        dig.announced_stuck = true;
+                    }
+                    let at = self.world.get::<Position>(site).copied();
+                    if let Some(at) = at {
+                        self.log_base(format!(
+                            "The marked cell at {}, {} is cut off — no program can find a way to it.",
+                            at.x, at.y
+                        ));
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    /// Every marked dig site, in a stable tile order — the lowest-priority
+    /// wants the base has.
+    ///
+    /// Structural, like `feeders_for` and unlike a stock count: what makes a
+    /// site a want is that the player marked it, not whether the base can
+    /// pay for the tile that finishes it. A want that flickered as the
+    /// substrate shelf drained would walk bodies on and off the frontier for
+    /// the rest of the run.
+    ///
+    /// One want per site whichever half of the verb it is on: a marked solid
+    /// cell wants cutting, a marked `Open` one wants flooring, and the same
+    /// body does both because the mark outlives the cut.
+    fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+        let mut sites: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &DigSite, &Position)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, dig, _)| dig.marked)
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect()
+        };
+        sites.sort_unstable();
+        sites
+            .into_iter()
+            .map(|(_, _, e)| (e, TaskKind::Excavate))
+            .collect()
     }
 
     /// Walks every staff member with no post to its parking tile.
@@ -867,6 +984,13 @@ impl Game {
         match task.kind {
             TaskKind::GatherResource => format!("working the {name}"),
             TaskKind::Guard => format!("guarding the {name}"),
+            // No `name`: a dig site is not a structure and has none. What it
+            // has is a tile, and that is what tells one dig job from another.
+            TaskKind::Excavate => self
+                .world
+                .get::<Position>(task.target)
+                .map(|p| format!("cutting the entropy at {}, {}", p.x, p.y))
+                .unwrap_or_else(|| "cutting the entropy".to_string()),
         }
     }
 

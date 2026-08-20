@@ -234,6 +234,36 @@ pub(crate) fn post_reach(
     post_field(grid, from, structure, blocked, pocket_radius).map(|_| ())
 }
 
+/// The one step a worker at `from` takes toward a post at `target` this
+/// tick, or `Err` when no route to it exists at all.
+///
+/// `Ok(None)` means the field admits nowhere better than the tile the worker
+/// is already standing on — it waits rather than moving.
+///
+/// Split out of `haul_step_system`'s tail so `Game::run_dig_crew` walks the
+/// *same* walk to a dig site rather than keeping a second copy of it. The
+/// crew cannot ride `haul_step_system` itself: that resolves every
+/// destination through its `Structure` query, and a `DigSite` is the one
+/// `Task` target that is not a structure. `post_reach` is already the shared
+/// question "does this posting arrive"; this is the shared answer to "which
+/// way".
+pub(crate) fn step_to_post(
+    grid: &BaseGrid,
+    from: Position,
+    target: Position,
+    blocked: &HashSet<(i32, i32)>,
+    pocket_radius: i32,
+) -> Result<Option<Position>, NoPost> {
+    let (field, here) = post_field(grid, from, target, blocked, pocket_radius)?;
+    Ok(NEIGHBOURS
+        .iter()
+        .map(|(dx, dy)| (from.x + dx, from.y + dy))
+        .filter_map(|n| field.get(&n).map(|&cost| (cost, n.0, n.1)))
+        .min()
+        .filter(|&(cost, ..)| cost < here)
+        .map(|(_, x, y)| Position { x, y }))
+}
+
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
 /// much landed. Never past `capacity` — an over-capacity write would make
 /// that field a suggestion, and a full depot is a decided failure mode
@@ -692,23 +722,15 @@ pub(crate) fn haul_step_system(
         // wall of new buildings, a depot demolished behind one, or ground
         // that changed. The worker stands still, and the marker is what turns
         // its machine's status from `Unstaffed` into `Stranded`.
-        let Ok((field, here)) = post_field(&grid, worker_pos, dest_pos, &blocked, pocket_radius)
-        else {
+        let Ok(step) = step_to_post(&grid, worker_pos, dest_pos, &blocked, pocket_radius) else {
             commands.entity(worker).insert(Stranded);
             continue;
         };
         commands.entity(worker).remove::<Stranded>();
-        let step = NEIGHBOURS
-            .iter()
-            .map(|(dx, dy)| (worker_pos.x + dx, worker_pos.y + dy))
-            .filter_map(|n| field.get(&n).map(|&cost| (cost, n.0, n.1)))
-            .min();
-        if let Some((cost, x, y)) = step
-            && cost < here
+        if let Some(next) = step
             && let Ok((_, mut pos, _, _)) = workers.get_mut(worker)
         {
-            pos.x = x;
-            pos.y = y;
+            *pos = next;
         }
     }
 }

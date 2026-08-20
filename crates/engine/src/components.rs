@@ -719,6 +719,17 @@ pub enum TaskKind {
     /// a guard doesn't produce anything even if its target happens to have
     /// a `ResourceNode`.
     Guard,
+    /// Posted to a marked `DigSite` in base space: cut the wall, then floor
+    /// what the cut opened — see `Game::run_dig_crew`.
+    ///
+    /// **The one task kind whose `target` is not a `Structure`**, which is
+    /// why neither `task_progress_system` nor `haul_step_system` touches it:
+    /// both resolve their target through a structure query, and a dig site
+    /// answers neither. Its whole cycle is `&mut Game` work instead, for the
+    /// reason `schedule_base_labour` is — it cuts through `Game::strike_rock`
+    /// and floors through `Game::floor_cell` rather than keeping a second
+    /// copy of either.
+    Excavate,
 }
 
 /// A generic ongoing job: `worker` progresses `target` over multiple ticks.

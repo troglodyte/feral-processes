@@ -367,6 +367,7 @@ impl Game {
         match self.program_post(creature) {
             Some((TaskKind::GatherResource, target)) => target,
             Some((TaskKind::Guard, target)) => format!("guarding {target}"),
+            Some((TaskKind::Excavate, target)) => format!("cutting {target}"),
             None => "idle".to_string(),
         }
     }
@@ -402,6 +403,7 @@ impl Game {
             out.push(match task.kind {
                 TaskKind::GatherResource => format!("stops working {target}"),
                 TaskKind::Guard => format!("stops guarding {target}"),
+                TaskKind::Excavate => format!("stops cutting {target}"),
             });
         }
         out

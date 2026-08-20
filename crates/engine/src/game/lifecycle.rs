@@ -1019,7 +1019,13 @@ impl Game {
         ) in creature_query.iter(&self.world)
         {
             let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
-            let cronjob = task.and_then(|t| {
+            // A dig job is deliberately not saved: `CronjobSave` resolves
+            // its target by position against the *structures* restored
+            // beside it, and a `DigSite` is not one. Nothing is lost by it —
+            // the mark is what the save carries, and `schedule_base_labour`
+            // posts a body back onto it on the first tick after the load.
+            // The most a reload can cost is one part-finished swing.
+            let cronjob = task.filter(|t| t.kind != TaskKind::Excavate).and_then(|t| {
                 self.world
                     .get::<Position>(t.target)
                     .map(|target_pos| save::CronjobSave {
@@ -1029,6 +1035,7 @@ impl Game {
                         kind: match t.kind {
                             TaskKind::GatherResource => save::CronjobKind::GatherResource,
                             TaskKind::Guard => save::CronjobKind::Guard,
+                            TaskKind::Excavate => unreachable!("filtered out above"),
                         },
                     })
             });

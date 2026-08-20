@@ -103,6 +103,56 @@ impl Game {
         Ok(())
     }
 
+    /// Whether the run has a base at all — a Home standing.
+    ///
+    /// The one thing a frontend has to be able to ask about the base without
+    /// being in it, and it exists because of what the answer gates: the
+    /// anchor refuses entry without a Home, and deploying one is the single
+    /// build permitted from the open grid (`Game::place_structure`). A build
+    /// menu that hid its Deploy row off the base would hide the only way
+    /// onto it, so the row asks this.
+    ///
+    /// `Game::in_base` is where the party is; this is whether there is a
+    /// base for them to be in. The two are independent — you can stand in
+    /// base space having just demolished the Home out from under yourself.
+    pub fn has_home(&self) -> bool {
+        self.has_structure(HOME_STRUCTURE_ID)
+    }
+
+    /// Lays the pocket the run opens with: `BaseCell::Floor` over the
+    /// chamfered box of `STARTING_POCKET_RADIUS` around base space's own
+    /// origin.
+    ///
+    /// Called from the one site `Game::stamp_platform` used to be called
+    /// from — deploying the first Home — and it is a one-for-one
+    /// replacement for it, which is what keeps the opening playing as it
+    /// did. The shape is the slab's, `PLATFORM_CORNER_CUT` and all, so the
+    /// base still reads as rounded rather than as a stamped square and the
+    /// buildable cell count is unchanged.
+    ///
+    /// **It writes no `WorldMap` tile.** That is the point of the whole
+    /// relocation: `Biome::Platform` stops being stamped into the zone
+    /// surface, and the base's footprint becomes `BaseGrid::is_floor` and
+    /// nothing else.
+    ///
+    /// Idempotent, because `lay_floor` overwrites: a second call re-floors
+    /// cells that are already floored and takes nothing away. Nothing calls
+    /// it twice today — the first Home is the only caller and there is only
+    /// ever one — but a pocket that could be *shrunk* by re-laying it would
+    /// be a much worse thing to have to reason about later.
+    pub(crate) fn lay_starting_pocket(&mut self) {
+        let r = crate::tuning::STARTING_POCKET_RADIUS;
+        let cut = crate::tuning::PLATFORM_CORNER_CUT;
+        let mut grid = self.world.resource_mut::<BaseGrid>();
+        for dy in -r..=r {
+            for dx in -r..=r {
+                if dx.abs() + dy.abs() <= 2 * r - cut {
+                    grid.lay_floor(dx, dy);
+                }
+            }
+        }
+    }
+
     /// One step through base space, reached from `Game::move_player` — the
     /// same four keys, dispatched on locale.
     ///

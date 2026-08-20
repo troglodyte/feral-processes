@@ -1,68 +1,38 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, haul_walk_radius};
+use crate::tuning::{
+    MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, STARTING_POCKET_RADIUS, haul_walk_radius,
+};
 use crate::*;
 
+/// The pocket is a chamfered box, not the square it would be without
+/// `PLATFORM_CORNER_CUT`: that many diagonal steps come off each of the four
+/// corners, so the corner cell and the two beside it are unmined rock.
+/// Checked at all four corners because the shape is written in absolute
+/// values and a sign error would round three of them and leave one square.
 #[test]
-fn placing_a_home_stamps_a_walkable_platform_across_the_build_radius() {
-    let mut game = Game::new(920, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    place_home(&mut game, 0, 1);
-    let (hx, hy) = (ppos.x, ppos.y + 1);
-
-    let mut map = game.world.resource_mut::<WorldMap>();
-    for (dx, dy) in [
-        (0, 0),
-        (MAX_BUILD_DISTANCE_FROM_HOME, 0),
-        (0, -MAX_BUILD_DISTANCE_FROM_HOME),
-    ] {
-        let tile = map.tile(hx + dx, hy + dy);
-        assert_eq!(
-            tile.biome,
-            Biome::Platform,
-            "({dx}, {dy}) from Home should be platform floor"
-        );
-        assert!(tile.walkable, "platform floor must always be walkable");
-    }
-    assert_ne!(
-        map.tile(hx + MAX_BUILD_DISTANCE_FROM_HOME + 1, hy).biome,
-        Biome::Platform,
-        "one tile past the build radius should still be natural terrain"
-    );
-}
-
-/// The slab is a chamfered box, not the square it was until the corners were
-/// cut: `PLATFORM_CORNER_CUT` diagonal steps come off each of the four, so
-/// the corner tile and the two beside it are natural terrain. Checked at all
-/// four corners because `Platform::covers` works in absolute values and a
-/// sign error would round three of them and leave one square.
-#[test]
-fn the_base_slab_has_its_corners_cut() {
+fn the_starting_pocket_has_its_corners_cut() {
     let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    place_home(&mut game, 0, 1);
-    let (hx, hy) = (ppos.x, ppos.y + 1);
-    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+    place_home(&mut game);
+    let r = STARTING_POCKET_RADIUS;
 
-    let mut map = game.world.resource_mut::<WorldMap>();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
     for (sx, sy) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
         for (dx, dy) in [(r, r), (r - 1, r), (r, r - 1)] {
             let (dx, dy) = (dx * sx, dy * sy);
-            assert_ne!(
-                map.tile(hx + dx, hy + dy).biome,
-                Biome::Platform,
-                "({dx}, {dy}) is inside the cut corner and should be natural terrain"
+            assert!(
+                grid.is_solid(dx, dy),
+                "({dx}, {dy}) is inside the cut corner and should still be rock"
             );
         }
-        // The tiles the cut stops at, so a deeper chamfer can't pass by
+        // The cells the cut stops at, so a deeper chamfer can't pass by
         // asserting only on what was removed.
         for (dx, dy) in [(r - 2, r), (r - 1, r - 1), (r, r - 2)] {
             let (dx, dy) = (dx * sx, dy * sy);
-            assert_eq!(
-                map.tile(hx + dx, hy + dy).biome,
-                Biome::Platform,
-                "({dx}, {dy}) is the first tile past the cut and should be platform floor"
+            assert!(
+                grid.is_floor(dx, dy),
+                "({dx}, {dy}) is the first cell past the cut and should be laid floor"
             );
         }
     }
@@ -80,7 +50,7 @@ fn the_base_slab_has_its_corners_cut() {
 #[test]
 fn breaching_recuts_the_corners_of_a_legacy_square_slab() {
     let mut game = Game::new(927, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     let home = game.home_position().expect("the Home was just placed");
     let r = MAX_BUILD_DISTANCE_FROM_HOME;
     let corners = |cx: i32, cy: i32| {
@@ -144,9 +114,9 @@ fn breaching_recuts_the_corners_of_a_legacy_square_slab() {
 }
 
 /// The cut is footprint, not paint: `place_structure` measures against the
-/// same `Platform::covers`, so a tile with no floor under it has nothing
-/// standing on it either. Without this the build box stays square and a
-/// machine can hang off the rounded corner onto wild ground.
+/// same `BaseGrid::is_floor` the pocket was laid into, so a cell with no
+/// floor under it has nothing standing on it either. Without this the build
+/// box stays square and a machine can hang off the rounded corner into rock.
 #[test]
 fn a_cut_corner_is_not_buildable() {
     let mut game = Game::new(926, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -157,78 +127,28 @@ fn a_cut_corner_is_not_buildable() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 40);
-    place_home(&mut game, 0, 0);
-    let r = MAX_BUILD_DISTANCE_FROM_HOME;
+    place_home(&mut game);
+    let r = STARTING_POCKET_RADIUS;
 
     let err = game
         .place_structure("armory", r, r)
-        .expect_err("the corner tile is off the slab and shouldn't be buildable");
-    assert!(err.contains("Too far from Home"), "unexpected error: {err}");
+        .expect_err("the corner cell is off the floor and shouldn't be buildable");
+    assert!(err.contains("no floor there"), "unexpected error: {err}");
 
-    // Diagonally in by one, which is the first tile the chamfer leaves —
+    // Diagonally in by one, which is the first cell the chamfer leaves —
     // and the assertion that stops the cut being fixed by shrinking the
     // whole build box.
     game.place_structure("armory", r - 1, r - 1)
-        .expect("the tile just inside the cut is slab and should be buildable");
+        .expect("the cell just inside the cut is floor and should be buildable");
 }
 
+/// A guardian can be standing anywhere when its nest goes, so
+/// `Game::despawn_nest` untethers the whole brood rather than leaving one
+/// pointing at a despawned entity. Driven through `despawn_nest` itself —
+/// deploying a Home used to be what obliterated a nest, and does not touch
+/// the zone surface any more.
 #[test]
-fn placing_a_home_obliterates_hostiles_and_nests_inside_the_radius_only() {
-    let mut game = Game::new(921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-
-    let inside = game
-        .world
-        .spawn((
-            Hostile,
-            Position {
-                x: ppos.x + 3,
-                y: ppos.y + 3,
-            },
-        ))
-        .id();
-    let outside = game
-        .world
-        .spawn((
-            Hostile,
-            Position {
-                x: ppos.x + MAX_BUILD_DISTANCE_FROM_HOME + 2,
-                y: ppos.y,
-            },
-        ))
-        .id();
-    let nest_inside = game
-        .world
-        .spawn((
-            Nest {
-                species: "sprite".to_string(),
-                pending_respawns: Vec::new(),
-            },
-            Position {
-                x: ppos.x - 2,
-                y: ppos.y + 1,
-            },
-        ))
-        .id();
-
-    place_home(&mut game, 0, 0);
-
-    assert!(
-        game.world.get_entity(inside).is_err(),
-        "a hostile inside the radius is obliterated"
-    );
-    assert!(
-        game.world.get_entity(nest_inside).is_err(),
-        "a nest inside the radius is obliterated"
-    );
-    assert!(
-        game.world.get_entity(outside).is_ok(),
-        "a hostile outside the radius survives"
-    );
-}
-
-#[test]
-fn obliterating_a_nest_untethers_a_guardian_standing_outside_the_radius() {
+fn obliterating_a_nest_untethers_a_guardian_standing_far_from_it() {
     let mut game = Game::new(922, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
 
@@ -250,42 +170,18 @@ fn obliterating_a_nest_untethers_a_guardian_standing_outside_the_radius() {
         .spawn((
             NestGuardian { nest },
             Position {
-                x: ppos.x + MAX_BUILD_DISTANCE_FROM_HOME + 3,
+                x: ppos.x + 20,
                 y: ppos.y,
             },
         ))
         .id();
 
-    place_home(&mut game, 0, 0);
+    game.despawn_nest(nest);
 
     assert!(
         game.world.get::<NestGuardian>(guardian).is_none(),
-        "a guardian outside the slab must lose its tether when its nest is obliterated, \
+        "a guardian away from its nest must lose its tether when the nest is obliterated, \
          not keep pointing at a despawned entity"
-    );
-}
-
-#[test]
-fn demolishing_the_home_clears_the_platform_back_to_natural_terrain() {
-    let mut game = Game::new(923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    place_home(&mut game, 0, 1);
-
-    let home = find_structure_by_kind(&mut game, "home").expect("the Home should be deployed");
-    game.remove_structure(home).unwrap();
-
-    assert_ne!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(ppos.x, ppos.y + 1)
-            .biome,
-        Biome::Platform,
-        "demolishing the Home should leave no orphan sanctuary behind"
-    );
-    assert!(
-        game.world.resource::<Platform>().center.is_none(),
-        "the platform resource should forget its center once the Home is gone"
     );
 }
 
@@ -293,7 +189,7 @@ fn demolishing_the_home_clears_the_platform_back_to_natural_terrain() {
 fn no_wild_creature_ever_spawns_on_platform_floor() {
     let mut game = Game::new(924, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
 
     for _ in 0..400 {
         game.try_spawn_habitat_creature(ppos.x + 2, ppos.y + 2);
@@ -342,7 +238,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
         "the rejected placement shouldn't have spawned anything"
     );
 
-    game.place_structure("home", -1, 0).unwrap();
+    place_home(&mut game);
     game.place_structure("armory", 1, 0).unwrap();
     assert_eq!(
         game.view_entities(10, 10)
@@ -358,7 +254,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
 fn place_structure_rejects_a_second_home() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
 
     let err = game
         .place_structure("home", 1, 0)
@@ -366,8 +262,10 @@ fn place_structure_rejects_a_second_home() {
     assert!(err.contains("already deployed"), "unexpected error: {err}");
 }
 
+/// The footprint is the laid floor and nothing else — walking out to the
+/// pocket's edge and pointing further takes the build off it.
 #[test]
-fn place_structure_rejects_building_beyond_max_distance_from_home() {
+fn place_structure_rejects_building_off_the_pockets_floor() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
@@ -376,20 +274,18 @@ fn place_structure_rejects_building_beyond_max_distance_from_home() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
 
-    // Walk far enough away that the next placement lands outside the
-    // build radius from Home.
-    game.world.get_mut::<Position>(player).unwrap().x += 20;
+    // The pocket's east edge, so the next placement lands one cell into rock.
+    stand_in_base_at(&mut game, STARTING_POCKET_RADIUS, 0);
     let err = game
         .place_structure("armory", 1, 0)
-        .expect_err("structures beyond MAX_BUILD_DISTANCE_FROM_HOME shouldn't be buildable");
-    assert!(err.contains("Too far from Home"), "unexpected error: {err}");
+        .expect_err("a cell with no floor under it shouldn't be buildable");
+    assert!(err.contains("no floor there"), "unexpected error: {err}");
 
-    // Walking back within range should make it buildable again.
-    game.world.get_mut::<Position>(player).unwrap().x -= 20;
-    game.place_structure("armory", 1, 0)
-        .expect("building back within range of Home should succeed");
+    // Pointing back into the pocket makes it buildable again.
+    game.place_structure("armory", -1, 0)
+        .expect("building back onto laid floor should succeed");
 }
 
 /// A refusal for want of materials is the one build refusal the player has to
@@ -403,7 +299,7 @@ fn deploying_without_the_materials_logs_the_shortfall() {
     let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
 
     let held = count_item(&game, ids::CORE_FRAGMENT);
     let err = game
@@ -436,7 +332,7 @@ fn the_nearby_scan_lists_entities_by_name_then_position() {
     let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -474,7 +370,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.place_structure("armory", 1, 0).unwrap();
     let armory = game
         .view_entities(10, 10)
@@ -526,7 +422,7 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 31);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.place_structure("armory", 1, 0).unwrap();
     game.place_structure("fabricator", 0, 1).unwrap();
     let home = game
@@ -590,7 +486,7 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         "Firewall Plating shouldn't be craftable before an Armory is built"
     );
 
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1155,7 +1051,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
 fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
     let mut game = Game::new(973, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let home = find_structure_by_kind(&mut game, "home").unwrap();
     let err = game
         .upgrade_structure(home)
@@ -1412,9 +1308,7 @@ fn working_a_node_you_are_not_standing_beside_is_refused() {
     let node = deploy_upgradeable_node(&mut game);
     let player = game.player_entity();
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    let mut pos = game.world.get_mut::<Position>(player).unwrap();
-    pos.x = node_pos.x + 6;
-    pos.y = node_pos.y;
+    stand_in_base_at(&mut game, node_pos.x + 6, node_pos.y);
 
     let err = game
         .work_structure(node)
@@ -1438,21 +1332,13 @@ fn a_diagonal_neighbour_is_not_close_enough_to_work() {
     let player = game.player_entity();
     let node_pos = *game.world.get::<Position>(node).unwrap();
 
-    {
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x = node_pos.x + 1;
-        pos.y = node_pos.y + 1;
-    }
+    stand_in_base_at(&mut game, node_pos.x + 1, node_pos.y + 1);
     assert!(
         game.work_structure(node).is_err(),
         "a diagonal is not a tile the node can be collected from"
     );
 
-    {
-        let mut pos = game.world.get_mut::<Position>(player).unwrap();
-        pos.x = node_pos.x + 1;
-        pos.y = node_pos.y;
-    }
+    stand_in_base_at(&mut game, node_pos.x + 1, node_pos.y);
     game.work_structure(node)
         .expect("standing on one of the node's four station tiles works it");
     assert!(
@@ -1461,8 +1347,15 @@ fn a_diagonal_neighbour_is_not_close_enough_to_work() {
     );
 }
 
-/// Spawns a workable structure with a full node, away from anything else.
+/// Spawns a workable structure with a full node into the base's starting
+/// pocket, away from anything else.
+///
+/// The pocket is laid here rather than by each caller because it is what
+/// makes the cell the machine stands on a real one: posting to it and
+/// working it both walk `BaseGrid`, and a machine standing in unmined rock
+/// is refused as walled in whatever else the test set up.
 fn workable_structure(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.lay_starting_pocket();
     let def = game
         .structure_defs()
         .into_iter()
@@ -1496,7 +1389,7 @@ fn holders(game: &mut Game, structure: Entity, kind: TaskKind) -> Vec<Entity> {
 fn a_second_cronjob_on_one_structure_displaces_the_first() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
+    let structure = workable_structure(&mut game, 2, 0);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
     stand_player_at_post(&mut game, structure);
@@ -1520,7 +1413,7 @@ fn a_second_cronjob_on_one_structure_displaces_the_first() {
 fn a_guard_and_a_cronjob_can_share_a_structure() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
+    let structure = workable_structure(&mut game, 2, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
     let guard = spawn_tamed(&mut game, 10, 3);
 
@@ -1539,7 +1432,7 @@ fn a_guard_and_a_cronjob_can_share_a_structure() {
 fn a_second_guard_on_one_structure_displaces_the_first() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
+    let structure = workable_structure(&mut game, 2, 0);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
 
@@ -1564,18 +1457,15 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 fn a_posted_program_starts_from_the_player() {
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
+    let structure = workable_structure(&mut game, 2, 0);
     // Where the player is standing when they post it: at the machine's east
-    // station tile, so the assignment turns on nothing but the two positions.
-    let player_pos = Position { x: 4, y: 4 };
-    *game
-        .world
-        .get_mut::<Position>(game.player_entity())
-        .unwrap() = player_pos;
+    // station cell, so the assignment turns on nothing but the two positions.
+    let player_pos = Position { x: 3, y: 0 };
+    stand_in_base_at(&mut game, player_pos.x, player_pos.y);
     // Tamed far enough out that the old rule would have refused it outright,
     // and far enough that it could never have walked in.
-    let reach = haul_walk_radius(game.build_radius());
-    let worker = spawn_tamed_on_map(&mut game, 3, 4 + reach + 5);
+    let reach = haul_walk_radius(STARTING_POCKET_RADIUS);
+    let worker = spawn_tamed_on_map(&mut game, 2, reach + 5);
 
     game.assign_cronjob(worker, structure)
         .expect("a program you are carrying can be posted wherever you are standing");
@@ -1594,16 +1484,10 @@ fn a_posted_program_starts_from_the_player() {
 fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
-    let worker = spawn_tamed_on_map(&mut game, 3, 3);
-    let reach = haul_walk_radius(game.build_radius());
-    *game
-        .world
-        .get_mut::<Position>(game.player_entity())
-        .unwrap() = Position {
-        x: 3,
-        y: 4 + reach + 5,
-    };
+    let structure = workable_structure(&mut game, 2, 0);
+    let worker = spawn_tamed_on_map(&mut game, 2, 1);
+    let reach = haul_walk_radius(STARTING_POCKET_RADIUS);
+    stand_in_base_at(&mut game, 2, reach + 5);
 
     let err = game
         .assign_cronjob(worker, structure)
@@ -1622,7 +1506,7 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
 fn the_players_own_work_holds_the_cronjob_slot() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let structure = workable_structure(&mut game, 3, 4);
+    let structure = workable_structure(&mut game, 2, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
 
     stand_player_at_post(&mut game, structure);
@@ -1661,7 +1545,7 @@ fn tamed_of(game: &mut Game, species: &str) -> Entity {
 fn a_quicker_program_is_posted_on_a_shorter_cycle() {
     let mut game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    let node = workable_structure(&mut game, 3, 4);
+    let node = workable_structure(&mut game, 2, 0);
     stand_player_at_post(&mut game, node);
 
     let sprite = tamed_of(&mut game, "sprite");
@@ -2006,7 +1890,7 @@ fn a_worker_still_earns_xp_from_a_completed_cycle() {
 #[test]
 fn a_wild_program_will_not_wander_onto_the_base_slab() {
     let mut game = Game::new(925, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
 
     // Just outside the slab, so every tick offers it a step onto platform
     // floor and nothing else is needed to tempt it in.
@@ -2049,20 +1933,6 @@ const WIDENING_PILLAR: &str = r#"(
     work: None,
     raidable: false,
     build_radius_bonus: 1,
-)"#;
-
-/// A bonus that lands a base on `GROWN_RADIUS` in one structure, so a
-/// fixture wanting a grown base does not have to count out six Pillars.
-const GROWN_PILLAR: &str = r#"(
-    id: "test_grown_pillar",
-    name: "Test Grown Pillar",
-    description: "Widens the base to a realistic grown size.",
-    glyph: 'I',
-    color: Cyan,
-    build_cost: [("core_fragment", 1)],
-    work: None,
-    raidable: false,
-    build_radius_bonus: 6,
 )"#;
 
 /// The same, with a bonus far past the ceiling — the clamp is what is under
@@ -2144,7 +2014,7 @@ fn a_widened_footprint_survives_a_save_and_load() {
     let dir =
         assets_dir_with_extra_structure("build_radius_save", "test_pillar.ron", WIDENING_PILLAR);
     let mut game = Game::new(701, DifficultyMode::Forgiving, &dir).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     spawn_structure_of(&mut game, "test_pillar", 1, 0);
     let home = game.home_position().expect("the fixture just placed one");
     game.stamp_platform(home.x, home.y);
@@ -2186,50 +2056,51 @@ fn recharger_reach(game: &Game) -> i32 {
 /// that, which measures the pathological case and costs the suite minutes.
 const GROWN_RADIUS: i32 = 10;
 
-/// A base grown to `GROWN_RADIUS`, with the Pillar's bonus taken in one
-/// structure rather than counted out one at a time.
-fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
-    let dir = assets_dir_with_extra_structure(tag, "test_pillar.ron", GROWN_PILLAR);
-    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
-    place_home(&mut game, 0, 0);
+/// A base mined out to `GROWN_RADIUS`: the floor laid by hand, since slice
+/// 2 is what sells the player a way to lay it. `GROWN_PILLAR` used to widen
+/// a slab here; the footprint is `BaseGrid` now, so the fixture writes to it.
+fn fully_grown_base(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    spawn_structure_of(&mut game, "test_grown_pillar", 1, 0);
-    let home = game.home_position().expect("the fixture just placed one");
-    game.stamp_platform(home.x, home.y);
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for y in -GROWN_RADIUS..=GROWN_RADIUS {
+            for x in -GROWN_RADIUS..=GROWN_RADIUS {
+                grid.lay_floor(x, y);
+            }
+        }
+    }
     assert_eq!(
-        game.world.resource::<Platform>().radius,
+        game.world.resource::<crate::base_grid::BaseGrid>().radius(),
         GROWN_RADIUS,
-        "precondition: the base is grown well past its start"
+        "precondition: the base reaches well past the pocket it started with"
     );
-    // Standing in the base rather than out on the zone surface: deploying,
-    // upgrading, demolishing and working a machine by hand are all
-    // `Game::require_base` now that the base is out of phase.
     stand_in_base(&mut game);
-    (game, dir)
+    game
 }
 
 /// A posting the cronjob menu accepts has to be a posting that arrives, and
-/// the walk that delivers it is bounded by a radius. Left on the old
-/// constant, a fully grown base refuses postings across its own width — a
-/// machine you can see from your Home and cannot staff.
+/// the walk that delivers it is bounded by a radius. Bounded by the size the
+/// pocket *started* at, a base mined out past it refuses postings across its
+/// own width — a machine you can see from your Home and cannot staff.
 #[test]
 fn a_program_walks_across_a_fully_grown_base_to_its_post() {
-    let (mut game, dir) = fully_grown_base("grown_base_walk", 702);
+    let mut game = fully_grown_base(702);
     let r = GROWN_RADIUS;
     game.place_structure("mining_node", r, 0).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = game
-        .find_blocking_structure_at(ppos.x + r, ppos.y)
+        .find_blocking_structure_at(r, 0)
         .expect("the node was just deployed");
     let node_pos = *game.world.get::<Position>(node).unwrap();
     let worker = spawn_tamed(&mut game, 500, 3);
 
-    // Posted from the opposite edge of the slab: the whole width of the base
-    // separates the program from its machine.
-    stand_player_at(&mut game, ppos.x - r, ppos.y);
+    // Posted from the opposite edge of the base: its whole width separates
+    // the program from its machine.
+    stand_in_base_at(&mut game, -r, 0);
     game.assign_cronjob(worker, node).unwrap();
 
     for _ in 0..200 {
@@ -2242,55 +2113,12 @@ fn a_program_walks_across_a_fully_grown_base_to_its_post() {
         game::base::hauling::at_station(*game.world.get::<Position>(worker).unwrap(), node_pos),
         "a worker posted from one edge of a full-size base must reach the other"
     );
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// Halving the starting radius put every existing save in the position a
-/// pre-corner-cut save was already in: a slab in `tile_overrides` wider than
-/// anything the current shape claims. Demolishing the Home has to take all
-/// of it, or the run keeps a ring of orphan floor around nothing forever.
-#[test]
-fn demolishing_a_home_clears_floor_wider_than_the_current_radius() {
-    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
-    let home = game.home_position().expect("the fixture just placed one");
-    // The slab a save written before the halving carries, laid straight
-    // into the map because `stamp_platform` derives its own radius and can
-    // no longer produce one this wide.
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-            for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-                map.set_override(
-                    home.x + dx,
-                    home.y + dy,
-                    Tile {
-                        biome: Biome::Platform,
-                        walkable: true,
-                    },
-                );
-            }
-        }
-    }
-
-    game.clear_platform();
-
-    let mut map = game.world.resource_mut::<WorldMap>();
-    for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-        for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-            assert_ne!(
-                map.tile(home.x + dx, home.y + dy).biome,
-                Biome::Platform,
-                "orphan floor left at ({dx}, {dy})"
-            );
-        }
-    }
 }
 
 /// A base with the Heap Pillar researched and the fragments to buy a few.
 fn base_ready_for_pillars(seed: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     // A Pillar is part of the same chain the Heap Block is — plate turned
     // at a Lathe — so a fixture buying one has to hold the plate too.
@@ -2304,124 +2132,6 @@ fn base_ready_for_pillars(seed: u32) -> Game {
     // `Game::require_base` now that the base is out of phase.
     stand_in_base(&mut game);
     game
-}
-
-#[test]
-fn a_heap_pillar_lays_floor_one_tile_past_the_old_edge() {
-    let mut game = base_ready_for_pillars(710);
-    let home = game.home_position().expect("the fixture just placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    assert_ne!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + edge + 1, home.y)
-            .biome,
-        Biome::Platform,
-        "precondition: the ring beyond the edge is still wild ground"
-    );
-
-    game.place_structure("heap_pillar", 1, 0).unwrap();
-
-    assert_eq!(
-        game.world.resource::<Platform>().radius,
-        edge + 1,
-        "a Pillar widens the live footprint"
-    );
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + edge + 1, home.y)
-            .biome,
-        Biome::Platform,
-        "and the new ring gets floor, so it can be built on"
-    );
-}
-
-#[test]
-fn the_new_ring_is_buildable_and_the_one_past_it_is_not() {
-    let mut game = base_ready_for_pillars(711);
-    game.place_structure("heap_pillar", 1, 0).unwrap();
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
-
-    game.place_structure("mining_node", edge, 0)
-        .expect("the ring a Pillar just laid is base ground like any other");
-    let err = game
-        .place_structure("mining_node", edge + 1, 0)
-        .expect_err("one tile past the new edge is still outside the base");
-    assert!(
-        err.contains("Too far from Home"),
-        "unexpected refusal: {err}"
-    );
-}
-
-/// Growth may swallow a link, the same way deploying a Home over one always
-/// has — `stamp_platform` despawns any link inside the slab it lays. What it
-/// may not do is swallow the *last* one, which is what the refusal is
-/// actually for: `award_loot` underground is the only source of Portal
-/// Fragments, so a zone with no link left is a run that can never breach.
-#[test]
-fn a_pillar_may_bury_a_link_while_the_zone_has_another() {
-    let mut game = base_ready_for_pillars(712);
-    let home = game.home_position().expect("the fixture just placed one");
-    let doomed = (home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1, home.y);
-    for link in {
-        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
-        q.iter(&game.world).collect::<Vec<Entity>>()
-    } {
-        game.world.despawn(link);
-    }
-    for (x, y) in [doomed, (home.x + 200, home.y)] {
-        game.world.spawn((SurfaceLink, Position { x, y }));
-    }
-
-    game.place_structure("heap_pillar", 1, 0)
-        .expect("a link is not worth stopping the base growing while another remains");
-
-    assert!(
-        game.find_surface_link_at(doomed.0, doomed.1).is_none(),
-        "the ground the base claimed took the link with it"
-    );
-}
-
-/// The last link is the one that cannot go, and the refusal has to come
-/// before anything is spent — the same ordering `install_routine` keeps
-/// between checking knowledge and taking the disk. Asserting the refusal
-/// alone would pass against a build that charged for it, which is the half
-/// that matters.
-#[test]
-fn a_pillar_over_a_zones_last_link_is_refused_and_costs_nothing() {
-    let mut game = base_ready_for_pillars(712);
-    let home = game.home_position().expect("the fixture just placed one");
-    for link in {
-        let mut q = game.world.query_filtered::<Entity, With<SurfaceLink>>();
-        q.iter(&game.world).collect::<Vec<Entity>>()
-    } {
-        game.world.despawn(link);
-    }
-    game.world.spawn((
-        SurfaceLink,
-        Position {
-            x: home.x + MAX_BUILD_DISTANCE_FROM_HOME + 1,
-            y: home.y,
-        },
-    ));
-    let before = count_item(&game, ids::CORE_FRAGMENT);
-
-    let err = game
-        .place_structure("heap_pillar", 1, 0)
-        .expect_err("burying the only way down would end the run's breaches");
-
-    assert!(err.contains("link"), "unexpected refusal: {err}");
-    assert_eq!(
-        count_item(&game, ids::CORE_FRAGMENT),
-        before,
-        "a refused build must not have spent anything"
-    );
-    assert_eq!(
-        game.world.resource::<Platform>().radius,
-        MAX_BUILD_DISTANCE_FROM_HOME,
-        "and must not have widened the base either"
-    );
 }
 
 /// Growth is irreversible, which is what removes the whole shrink question:
@@ -2458,58 +2168,6 @@ fn a_pillar_cannot_be_demolished_except_with_its_home() {
         MAX_BUILD_DISTANCE_FROM_HOME,
         "no Home means no slab, so the radius resets"
     );
-}
-
-/// Breaching despawns no structures — the base travels, repositioned around
-/// the new spawn point — so the Pillars travel with it and `enter_next_zone`
-/// re-stamps at the right size with no code of its own. This asserts the
-/// consequence rather than the mechanism, which is what would catch a later
-/// change that starts rebuilding the slab from the constant.
-#[test]
-fn a_widened_base_breaches_at_the_size_it_had() {
-    let mut game = base_ready_for_pillars(714);
-    game.place_structure("heap_pillar", 1, 0).unwrap();
-    game.place_structure("heap_pillar", 2, 0).unwrap();
-    let grown = MAX_BUILD_DISTANCE_FROM_HOME + 2;
-    assert_eq!(game.world.resource::<Platform>().radius, grown);
-
-    game.enter_next_zone();
-
-    assert_eq!(
-        game.world.resource::<Platform>().radius,
-        grown,
-        "the base arrived in the next sector smaller than it left"
-    );
-    let home = game
-        .home_position()
-        .expect("the base travels rather than being rebuilt");
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + grown, home.y)
-            .biome,
-        Biome::Platform,
-        "and the new zone's slab was stamped at the grown size"
-    );
-}
-
-/// A shipped Pillar's radius through the real save path, where the modded
-/// fixture above proves the derivation and this proves the asset.
-#[test]
-fn a_shipped_pillars_width_survives_a_save_and_load() {
-    let mut game = base_ready_for_pillars(715);
-    game.place_structure("heap_pillar", 1, 0).unwrap();
-    let before = game.world.resource::<Platform>().radius;
-
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_heap_pillar_{}.bin",
-        std::process::id()
-    ));
-    game.save(&path).unwrap();
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
-    let _ = std::fs::remove_file(&path);
-
-    assert_eq!(loaded.world.resource::<Platform>().radius, before);
 }
 
 /// The slab always covers every structure standing on it.
@@ -2712,255 +2370,6 @@ fn a_structure_that_declares_no_limit_is_unlimited() {
     );
 }
 
-/// A structure that claims the ground it is aimed at instead of standing on
-/// it — the shape the Heap Block ships in, written here as a mod so the
-/// mechanism is under test independently of the shipped asset's cost and
-/// research gate.
-const CLAIMING_TILE: &str = r#"(
-    id: "test_tile",
-    name: "Test Tile",
-    description: "Claims one tile of ground.",
-    glyph: '.',
-    color: Cyan,
-    build_cost: [("core_fragment", 1)],
-    work: None,
-    raidable: false,
-    claims_ground: true,
-)"#;
-
-/// A base with a Home down, a claiming structure available, and enough
-/// salvage that no test below is measuring the materials check.
-fn base_ready_for_claims(tag: &str, seed: u32) -> Game {
-    let dir = assets_dir_with_extra_structure(tag, "test_tile.ron", CLAIMING_TILE);
-    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
-    place_home(&mut game, 0, 0);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
-    let _ = std::fs::remove_dir_all(&dir);
-    // Standing in the base rather than out on the zone surface: deploying,
-    // upgrading, demolishing and working a machine by hand are all
-    // `Game::require_base` now that the base is out of phase.
-    stand_in_base(&mut game);
-    game
-}
-
-/// Stands the player on the slab's edge in whichever cardinal direction has
-/// claimable ground one tile past it, and returns that direction. A fixture
-/// that picks a fixed compass point is at the mercy of the seed: the tile
-/// east of the base can be a hole in the map, a Stack link, or have a nest
-/// standing on it, and all three are refusals this is not trying to test.
-fn stand_at_a_claimable_edge(game: &mut Game) -> (i32, i32) {
-    let home = game.home_position().expect("a Home is deployed");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-        let (tx, ty) = (home.x + dx * (edge + 1), home.y + dy * (edge + 1));
-        if !game.world.resource_mut::<WorldMap>().tile(tx, ty).walkable {
-            continue;
-        }
-        if game.find_surface_link_at(tx, ty).is_some() {
-            continue;
-        }
-        let occupied = {
-            let mut query = game
-                .world
-                .query_filtered::<&Position, Or<(With<Hostile>, With<Nest>)>>();
-            query.iter(&game.world).any(|p| p.x == tx && p.y == ty)
-        };
-        if occupied {
-            continue;
-        }
-        stand_player_at(game, home.x + dx * edge, home.y + dy * edge);
-        return (dx, dy);
-    }
-    panic!("no cardinal direction off this base offered claimable ground");
-}
-
-/// The whole point of the feature: ground claimed one tile at a time is
-/// buildable ground. Asserted as the refusal disappearing rather than as a
-/// set gaining an entry, so it fails if claiming stops widening the
-/// footprint `place_structure` measures against.
-#[test]
-fn claimed_ground_becomes_buildable() {
-    let mut game = base_ready_for_claims("claim_buildable", 730);
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-
-    assert!(
-        game.place_structure("mining_node", dx, dy).is_err(),
-        "precondition: one tile past the edge is off the slab"
-    );
-
-    game.place_structure("test_tile", dx, dy)
-        .expect("a tile touching the slab may be claimed");
-
-    game.place_structure("mining_node", dx, dy)
-        .expect("claimed ground is buildable ground");
-}
-
-/// Claimed ground is base, so it is safe ground: nothing may stand on it
-/// and nothing spawns there. That comes from the stamped biome rather than
-/// from any new code, which is exactly what this pins.
-#[test]
-fn claimed_ground_is_stamped_as_base_floor() {
-    let mut game = base_ready_for_claims("claim_floor", 731);
-    let home = game.home_position().expect("the fixture just placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-    game.place_structure("test_tile", dx, dy).unwrap();
-
-    let tile = game
-        .world
-        .resource_mut::<WorldMap>()
-        .tile(home.x + dx * (edge + 1), home.y + dy * (edge + 1));
-    assert_eq!(tile.biome, Biome::Platform);
-    assert!(
-        !tile.open_to_hostiles(),
-        "a claimed tile is the base's safe ground like any other"
-    );
-}
-
-/// The base stays one connected blob: a claim has to touch floor that is
-/// already base.
-#[test]
-fn a_claim_must_touch_the_base() {
-    let mut game = base_ready_for_claims("claim_adjacent", 732);
-    let home = game.home_position().expect("the fixture just placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    stand_player_at(&mut game, home.x + edge + 4, home.y);
-
-    let refusal = game
-        .place_structure("test_tile", 1, 0)
-        .expect_err("a tile out in the wild does not touch the base");
-    assert!(
-        refusal.contains("touch"),
-        "the refusal should say what is wrong with the site: {refusal}"
-    );
-}
-
-/// Claiming ground the base already covers is a refusal rather than a
-/// silent no-op, because the materials are spent either way.
-#[test]
-fn a_claim_inside_the_base_is_refused() {
-    let mut game = base_ready_for_claims("claim_inside", 733);
-    let home = game.home_position().expect("the fixture just placed one");
-    stand_player_at(&mut game, home.x + 1, home.y);
-    let held = count_item(&game, ids::CORE_FRAGMENT);
-
-    assert!(
-        game.place_structure("test_tile", 1, 0).is_err(),
-        "the base already reaches there"
-    );
-    assert_eq!(
-        count_item(&game, ids::CORE_FRAGMENT),
-        held,
-        "and a refused claim costs nothing"
-    );
-}
-
-/// The trap the feature would otherwise ship. `build_radius`'s covering
-/// term grows the slab to cover every structure standing on it, which was
-/// inert while `place_structure` refused everything outside the footprint.
-/// Claimed ground makes it reachable: one machine on a paved tile would
-/// stamp a slab out to it in every direction, and a Pillar would then add
-/// its ring to *that*.
-#[test]
-fn a_machine_on_claimed_ground_does_not_grow_the_slab() {
-    let mut game = base_ready_for_claims("claim_no_growth", 734);
-    let home = game.home_position().expect("the fixture just placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-    game.place_structure("test_tile", dx, dy).unwrap();
-    game.place_structure("mining_node", dx, dy).unwrap();
-
-    assert_eq!(
-        game.build_radius(),
-        MAX_BUILD_DISTANCE_FROM_HOME,
-        "paving out to a machine must not widen the circle the Pillar grows"
-    );
-    game.stamp_platform(home.x, home.y);
-    assert_ne!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + edge + 1, home.y + edge + 1)
-            .biome,
-        Biome::Platform,
-        "and re-stamping must not lay floor the claim never bought"
-    );
-}
-
-/// Claimed ground no longer survives a save and load. It used to: this test
-/// asserted the opposite until `SAVE_FORMAT_VERSION` 32 dropped
-/// `save::SaveData::claimed_tiles` (see that constant's docs), which was the
-/// field carrying it. `resources::Platform` — the whole slab-and-claims
-/// system, `claimed` included — retires later in this same slice, replaced
-/// by `base_grid::BaseGrid`; until that migration lands, a claim bought this
-/// session is real for the session and gone on reload, rather than silently
-/// wrong.
-#[test]
-fn claimed_ground_does_not_survive_a_save_and_load() {
-    let dir = assets_dir_with_extra_structure("claim_save", "test_tile.ron", CLAIMING_TILE);
-    let mut game = Game::new(735, DifficultyMode::Forgiving, &dir).unwrap();
-    stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
-    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
-    let home = game.home_position().expect("the fixture just placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-    game.place_structure("test_tile", dx, dy).unwrap();
-
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_claimed_{}.bin",
-        std::process::id()
-    ));
-    game.save(&path).unwrap();
-    let mut loaded = Game::load(&path, &dir).unwrap();
-    let _ = std::fs::remove_file(&path);
-    let _ = std::fs::remove_dir_all(&dir);
-
-    stand_player_at(&mut loaded, home.x + dx * edge, home.y + dy * edge);
-    assert!(
-        loaded.place_structure("mining_node", dx, dy).is_err(),
-        "the claim must not survive a reload now that claimed_tiles is gone"
-    );
-}
-
-/// The base travels whole — structures keep their offsets from the Home —
-/// and paid-for ground is part of the base, so it travels too. Storing the
-/// claims as offsets from the center is what makes that free.
-#[test]
-fn claimed_ground_travels_with_the_base_on_a_breach() {
-    let mut game = base_ready_for_claims("claim_breach", 736);
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME;
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-    game.place_structure("test_tile", dx, dy).unwrap();
-
-    game.enter_next_zone();
-
-    let home = game.home_position().expect("the base travels");
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + dx * (edge + 1), home.y + dy * (edge + 1))
-            .biome,
-        Biome::Platform,
-        "the claimed tile arrived in the next sector"
-    );
-}
-
-/// The Home is what the slab is defined against, so demolishing it takes
-/// the claims with the rest of the floor.
-#[test]
-fn demolishing_the_home_takes_the_claims_with_it() {
-    let mut game = base_ready_for_claims("claim_clear", 737);
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-    game.place_structure("test_tile", dx, dy).unwrap();
-
-    game.clear_platform();
-
-    assert!(
-        game.world.resource::<Platform>().claimed.is_empty(),
-        "no Home, no slab, and no claims either"
-    );
-}
-
 /// A Pillar claims address space and wires it in: growing the base is now
 /// also how the base is powered. Asserted as the supply rising rather than
 /// as the authored number, which belongs to the asset.
@@ -2978,44 +2387,6 @@ fn a_heap_pillar_supplies_grid_energy() {
     );
 }
 
-/// The shipped Heap Block through the real research gate and the real
-/// chain, where the modded fixture above proves the mechanism and this
-/// proves the asset: the id, the `claims_ground` flag, and a build cost
-/// denominated in a plate that has to come off a Lathe.
-#[test]
-fn a_shipped_heap_block_claims_ground() {
-    let mut game = Game::new(738, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
-    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 4);
-    let (dx, dy) = stand_at_a_claimable_edge(&mut game);
-
-    let locked = game
-        .place_structure("heap_block", dx, dy)
-        .expect_err("the Block waits on Page Allocation");
-    assert!(locked.contains("researched"), "{locked}");
-
-    unlock_research_chain(&mut game, "page_allocation");
-    game.place_structure("heap_block", dx, dy)
-        .expect("a researched Block lays a tile of base");
-
-    assert_eq!(
-        count_item(&game, "blank_substrate"),
-        3,
-        "and it spends one plate to do it"
-    );
-    let home = game.home_position().expect("the fixture placed one");
-    let edge = MAX_BUILD_DISTANCE_FROM_HOME + 1;
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(home.x + dx * edge, home.y + dy * edge)
-            .biome,
-        Biome::Platform,
-        "and the tile it was aimed at is base floor now"
-    );
-}
-
 /// The zone-2 material is gated twice, and both gates already existed: the
 /// research entry's `min_zone` and the research itself. Asserted through the
 /// shipped assets rather than a fixture, because the whole feature is
@@ -3025,7 +2396,7 @@ fn a_shipped_heap_block_claims_ground() {
 fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     let mut game = Game::new(801, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
     grant_research_data(&mut game, 1000);
@@ -3059,7 +2430,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
 fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
     let mut game = Game::new(802, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 120);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
     unlock_research_chain(&mut game, "cache_coherence");
@@ -3098,7 +2469,7 @@ fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
 fn a_line_driver_is_refused_without_the_zone_two_material() {
     let mut game = Game::new(803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
     unlock_research_chain(&mut game, "cache_coherence");

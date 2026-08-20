@@ -40,7 +40,7 @@ fn program_activity_names_the_structure_a_worker_is_on() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 4, 4);
+    let node = spawn_mining_node(&mut game, 2, 0);
 
     game.assign_cronjob(worker, node).unwrap();
     let label = game.program_activity(worker);
@@ -93,7 +93,7 @@ fn program_post_names_the_structure_and_which_job_it_is() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 4, 4);
+    let node = spawn_mining_node(&mut game, 2, 0);
     game.assign_cronjob(worker, node).unwrap();
 
     assert_eq!(
@@ -109,7 +109,7 @@ fn a_manifest_names_the_structure_a_program_is_posted_to() {
     let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
-    let node = spawn_mining_node(&mut game, 4, 4);
+    let node = spawn_mining_node(&mut game, 2, 0);
     game.assign_cronjob(worker, node).unwrap();
 
     let view = game
@@ -868,7 +868,7 @@ fn losing_an_empty_trader_is_silent_about_the_shelf() {
 fn demolishing_a_trader_that_holds_stock_says_so_too() {
     let mut game = Game::new(156, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);

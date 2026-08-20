@@ -507,12 +507,17 @@ fn shoving_at_a_wall_still_passes_time() {
 /// grid is the assertion — a message about open grid here would mean the
 /// site had been left on the surface guard, which permits nothing a player
 /// can reach.
+///
+/// A machine and not a Home, because founding the run's first Home is the
+/// one deploy made from the open grid and carries the *surface* guard.
 #[test]
 fn deploying_a_structure_is_refused_underground() {
     let mut game = game();
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     descend(&mut game);
-    let Err(reason) = game.place_structure("home", 1, 0) else {
-        panic!("a Home should not go up inside the Stack");
+    let Err(reason) = game.place_structure("mining_node", 1, 0) else {
+        panic!("a machine should not go up inside the Stack");
     };
     assert!(
         reason.contains("back at the base"),
@@ -520,18 +525,14 @@ fn deploying_a_structure_is_refused_underground() {
     );
 }
 
-/// Deploys a Home one tile east, puts the party underground through a link
-/// on their own tile, and returns the Home and where it stands.
+/// Deploys a Home, puts the party underground through a link on their own
+/// tile, and returns the Home and the anchor tile a symlink home lands on.
 fn home_then_descend(game: &mut Game) -> (Entity, Position) {
-    from_inside_the_base(game, |g| g.place_structure("home", 1, 0)).unwrap();
-    let home = game
-        .view_entities(5, 5)
-        .into_iter()
-        .find(|e| e.is_home)
-        .expect("the Home just deployed");
-    let at = *game.world.get::<Position>(home.entity).unwrap();
+    place_home(game);
+    let home = find_structure_by_kind(game, "home").expect("the Home just deployed");
+    let (ax, ay) = game.anchor_position().expect("a fresh game has an anchor");
     descend(game);
-    (home.entity, at)
+    (home, Position { x: ax, y: ay })
 }
 
 fn stock_for_symlink(game: &mut Game, target: Entity) {
@@ -629,7 +630,7 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
 #[test]
 fn resting_is_refused_underground() {
     let mut game = game();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     descend(&mut game);
     let player = game.player_entity();
     let outlets_before = game
@@ -753,10 +754,9 @@ fn no_entrance_opens_onto_unwalkable_ground() {
 #[test]
 fn breaching_with_a_base_never_opens_a_link_inside_the_platform() {
     let mut game = game();
-    // Home to the south so it doesn't share the portal's tile. Deployed from
-    // inside the base and then back out, since the rest of this test is about
-    // walking the surface into a portal.
-    from_inside_the_base(&mut game, |g| g.place_structure("home", 0, 1)).unwrap();
+    // The Home stands out of phase; the rest of this test is about walking
+    // the surface into a portal.
+    place_home(&mut game);
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.world.spawn((
         Structure {
@@ -823,87 +823,6 @@ fn no_entrance_opens_on_top_of_a_nest() {
         "a link opened at {victim:?}, on top of a nest — walking onto it \
          attacks the nest instead of descending, forever"
     );
-}
-
-/// Not a rare collision: `STACK_NEAREST_LINK_TILES` puts a zone's first link
-/// 5-8 tiles from where the player arrives and `MAX_BUILD_DISTANCE_FROM_HOME`
-/// is 7, so a Home built near the arrival point swallows it on a large
-/// fraction of seeds. A link under the base platform is unreachable anyway —
-/// nothing can spawn on platform floor and the slab is the base's footprint —
-/// so it goes the way of the hostiles and nests standing there.
-#[test]
-fn deploying_a_home_obliterates_a_link_under_the_platform() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let entrances: Vec<Entity> = {
-        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
-        query.iter(&game.world).collect()
-    };
-    for entrance in entrances {
-        game.world.despawn(entrance);
-    }
-    let swallowed = game
-        .world
-        .spawn((
-            SurfaceLink,
-            Position {
-                x: ppos.x + 3,
-                y: ppos.y,
-            },
-            Glyph {
-                ch: '>',
-                color: GlyphColor::Magenta,
-            },
-        ))
-        .id();
-    let spared = game
-        .world
-        .spawn((
-            SurfaceLink,
-            Position {
-                x: ppos.x + 20,
-                y: ppos.y,
-            },
-            Glyph {
-                ch: '>',
-                color: GlyphColor::Magenta,
-            },
-        ))
-        .id();
-
-    from_inside_the_base(&mut game, |g| g.place_structure("home", 1, 0))
-        .expect("a fresh game can afford its first Home");
-
-    assert!(
-        game.world.get::<Position>(swallowed).is_none(),
-        "a link 2 tiles from the Home is under the slab and must be gone"
-    );
-    assert!(
-        game.world.get::<Position>(spared).is_some(),
-        "a link 19 tiles out is nowhere near the base and must survive"
-    );
-}
-
-#[test]
-fn a_structure_cannot_be_deployed_on_top_of_a_link() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    // Clear the way, then put a link right where the Home would go.
-    game.world.spawn((
-        SurfaceLink,
-        Position {
-            x: ppos.x + 1,
-            y: ppos.y,
-        },
-        Glyph {
-            ch: '>',
-            color: GlyphColor::Magenta,
-        },
-    ));
-    let Err(reason) = from_inside_the_base(&mut game, |g| g.place_structure("home", 1, 0)) else {
-        panic!("a structure sharing a tile with a link makes the tile ambiguous to walk onto");
-    };
-    assert!(reason.contains("link"), "got: {reason}");
 }
 
 #[test]
@@ -4359,7 +4278,7 @@ fn an_orphan_does_not_recur_when_the_party_steps_off_and_back_on() {
 #[test]
 fn a_forgiving_death_underground_surfaces_the_party_at_their_base() {
     let mut game = game();
-    place_home(&mut game, 3, 0);
+    place_home(&mut game);
     let home = *game
         .world
         .iter_entities()

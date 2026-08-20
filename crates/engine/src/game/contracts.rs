@@ -18,7 +18,7 @@ use rand::prelude::*;
 
 use crate::Game;
 use crate::components::Inventory;
-use crate::components::{Position, Structure};
+use crate::components::Structure;
 use crate::contracts::{ContractId, Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
@@ -188,11 +188,11 @@ pub enum BrokerReach {
     /// Nothing standing that `issues_contracts`, so there is no board to
     /// read and nothing to be away from.
     NoBroker,
-    /// A Broker exists, but the player is not on the base — off the slab, or
+    /// A Broker exists, but the player is not in the base — out on the grid, or
     /// underground. The board is readable; nothing on it can be acted on.
     OffBase,
-    /// On the base, on the surface, with a Broker standing. Everything is
-    /// available.
+    /// In base space, standing on laid floor, with a Broker standing.
+    /// Everything is available.
     AtBroker,
 }
 
@@ -319,19 +319,16 @@ impl Game {
 
     /// What this sector can supply a rolled contract with.
     ///
-    /// The species half is read from the Chebyshev ring **just outside the
-    /// base slab**, not from the Home tile itself: `stamp_platform` lays
-    /// `Biome::Platform` across the whole footprint and no shipped species
-    /// lists it as a habitat — that is the entire mechanism behind a base
-    /// being a safe haven, so the anchor tile's own pool is empty by
-    /// construction. The band just outside the slab is where
-    /// `spawn_surface_links` draws its on-ramp from, for the same reason and
-    /// through the same `stack::ring_offset`.
+    /// The species half is read from the Chebyshev ring **around the base's
+    /// anchor**, at the band the base's own footprint used to end at. It is a
+    /// reading of what lives on the run's doorstep, and the door is the one
+    /// thing the base still has on the zone surface. `spawn_surface_links`
+    /// draws its on-ramp from the same kind of band, through the same
+    /// `stack::ring_offset`.
     ///
     /// Sampled at `CONTRACT_HABITAT_SAMPLES` evenly-spaced points rather than
     /// walked whole, because `contract_board` sits on a per-frame path — both
-    /// the contracts screen and the base menu's row test call it — and the ring
-    /// grows with a base that can reach `MAX_BUILD_RADIUS_TILES`.
+    /// the contracts screen and the base menu's row test call it.
     pub(crate) fn template_pools(&mut self) -> crate::contracts::TemplatePools {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut pools = crate::contracts::TemplatePools {
@@ -340,12 +337,15 @@ impl Game {
             structures: Vec::new(),
             zone,
         };
-        // Only the species half needs an anchor tile. A run with no Home has
-        // no doorstep to read, so it is offered no Hunt — but it can still be
-        // asked to deliver or to build, neither of which is a question about
-        // the ground.
-        if let Some((cx, cy)) = self.world.resource::<crate::resources::Platform>().center {
-            let band = self.build_radius() + 1;
+        // Only the species half needs a tile to read from, and it is the
+        // anchor's: the base itself is out of phase now and has no ground on
+        // the zone surface at all, so the door it is reached through is the
+        // whole of its presence in the sector. A run with no anchor has no
+        // doorstep to read and is offered no Hunt — but it can still be asked
+        // to deliver or to build, neither of which is a question about the
+        // ground.
+        if let Some((cx, cy)) = self.anchor_position() {
+            let band = crate::tuning::STARTING_POCKET_RADIUS + 1;
             let perimeter = 8 * band;
             let samples = crate::tuning::CONTRACT_HABITAT_SAMPLES.min(perimeter);
             let mut species: Vec<String> = Vec::new();
@@ -568,32 +568,35 @@ impl Game {
     /// and the screen's own header) and two independent booleans would let
     /// them disagree about whether a board that is drawn can be taken from.
     ///
-    /// The Broker's own tile does not enter into it. `place_structure` refuses
-    /// everything but a Home until a Home is standing and the slab always
-    /// covers every structure on it, so a Broker is on the base by
-    /// construction — which makes "is the player on the base" the whole
-    /// question, and `Platform::covers` the one place it is asked. Reading
-    /// `MAX_BUILD_DISTANCE_FROM_HOME` here instead would freeze the desk at
-    /// the radius a base *starts* at.
+    /// The Broker's own tile does not enter into it, and never did — this
+    /// measures the **base**. `place_structure` refuses everything but a Home
+    /// until a Home is standing and every structure has to stand on laid
+    /// floor, so a Broker is in the base by construction; "is the player in
+    /// the base" is therefore the whole question. Since the base moved out of
+    /// phase that reads as: the party is in base space, standing on
+    /// `BaseCell::Floor`.
+    ///
+    /// Floor and not merely `walkable`, so it keeps saying what it said: the
+    /// desk is reachable from the base's laid ground, not from a corridor
+    /// mined out past its edge. Nothing else is asked — no `is_underground`
+    /// check, because `base_pos` is already `None` in every locale but this
+    /// one, and no locale-dependent `Position` read, because `Position` is
+    /// pinned to the anchor tile the whole time the party is in here.
     pub fn broker_reach(&mut self) -> BrokerReach {
         if !self.has_broker() {
             return BrokerReach::NoBroker;
         }
-        // Explicit rather than left to the slab check, even though the
-        // entrance tile a `Position` is pinned to while underground sits
-        // outside the slab by construction — `spawn_surface_links` draws it
-        // from the ring just outside. Leaning on that would make this rule
-        // depend on where links are allowed to land.
-        if self.is_underground() {
-            return BrokerReach::OffBase;
-        }
-        let Some(here) = self.world.get::<Position>(self.player_entity()).copied() else {
+        let Some((x, y)) = self.base_pos() else {
             return BrokerReach::OffBase;
         };
-        let platform = self.world.resource::<crate::resources::Platform>().clone();
-        match platform.center {
-            Some((cx, cy)) if platform.covers(here.x - cx, here.y - cy) => BrokerReach::AtBroker,
-            _ => BrokerReach::OffBase,
+        if self
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(x, y)
+        {
+            BrokerReach::AtBroker
+        } else {
+            BrokerReach::OffBase
         }
     }
 

@@ -23,6 +23,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
 use crate::items::ItemId;
@@ -161,8 +162,8 @@ pub(crate) fn structures_by_tile(game: &Game) -> std::collections::HashMap<(i32,
 /// deployed structure declaring `StructureDef::stores`.
 ///
 /// Asked of the *base* rather than of a particular depot's distance,
-/// for `Game::broker_reach`'s reason: a depot is on the slab by
-/// construction, so which one it is says nothing the slab does not.
+/// for `Game::broker_reach`'s reason: a depot stands on laid floor by
+/// construction, so which one it is says nothing the base does not.
 fn shelf_is_standing(game: &Game) -> bool {
     let db = game.world.resource::<StructureDb>();
     game.world.iter_entities().any(|e| {
@@ -704,19 +705,27 @@ impl Game {
 
         // Step 5, deepest first — and standing jobs last, since they were
         // appended after the order's wants and the list is not re-sorted.
-        let from = self
-            .world
-            .get::<Position>(self.player_entity())
-            .copied()
-            .unwrap_or(Position { x: 0, y: 0 });
+        // Where a body sets off from, in base space — which is where the
+        // machines are. The party's own cell while they are in here, and the
+        // door they left through when they are not: a base keeps running
+        // while the player is out on the grid or four frames down, and the
+        // exit cell is the one place in base space that is theirs by
+        // definition rather than by whatever `Position` happens to hold.
+        let from = match self.base_pos() {
+            Some((x, y)) => Position { x, y },
+            None => Position {
+                x: crate::game::base_space::BASE_EXIT_CELL.0,
+                y: crate::game::base_space::BASE_EXIT_CELL.1,
+            },
+        };
         let blocked = self.structure_tiles();
-        let build_radius = self.build_radius();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (post, kind) in remaining {
             if idle.is_empty() {
                 break;
             }
             if kind == TaskKind::GatherResource
-                && !self.can_walk_to_post(from, post, &blocked, build_radius)
+                && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
                 // A machine the base has been built around, or one with no
                 // route from where the player is standing. **Skipped rather
@@ -750,13 +759,13 @@ impl Game {
         from: Position,
         machine: Entity,
         blocked: &std::collections::HashSet<(i32, i32)>,
-        build_radius: i32,
+        pocket_radius: i32,
     ) -> bool {
         let Some(target) = self.world.get::<Position>(machine).copied() else {
             return false;
         };
-        let mut map = self.world.resource_mut::<WorldMap>();
-        hauling::post_reach(&mut map, from, target, blocked, build_radius).is_ok()
+        let grid = self.world.resource::<BaseGrid>();
+        hauling::post_reach(grid, from, target, blocked, pocket_radius).is_ok()
     }
 
     /// Walks every staff member with no post to its parking tile.
@@ -767,17 +776,16 @@ impl Game {
     /// and `post_worker` overwrites it anyway.
     ///
     /// The ring respects the same two rules a posted worker's field does:
-    /// inside the build radius, and never a tile a `Structure` stands on. A
+    /// carved out in `BaseGrid`, and never a tile a `Structure` stands on. A
     /// candidate that breaks either is simply not taken — the program holds
     /// its ground for that beat rather than being nudged somewhere the rule
     /// would have refused.
     fn park_idle_staff(&mut self, staff: &[Entity]) {
         let Some(home) = self.home_position() else {
-            // No Home means no base to loiter at, and `build_radius` has
-            // nothing to measure from either.
+            // No Home means no base to loiter at, and no origin for the ring
+            // to be laid out around either.
             return;
         };
-        let radius = self.build_radius();
         let tick = self.world.resource::<GameClock>().tick;
         let occupied = structures_by_tile(self);
         for (index, &worker) in staff.iter().enumerate() {
@@ -788,7 +796,7 @@ impl Game {
             if occupied.contains_key(&(tile.x, tile.y)) {
                 continue;
             }
-            if (tile.x - home.x).abs().max((tile.y - home.y).abs()) > radius {
+            if !self.world.resource::<BaseGrid>().walkable(tile.x, tile.y) {
                 continue;
             }
             if let Some(mut pos) = self.world.get_mut::<Position>(worker) {

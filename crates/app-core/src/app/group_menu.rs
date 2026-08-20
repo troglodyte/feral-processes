@@ -22,34 +22,71 @@ pub struct GroupMenuRow {
 struct GroupEntry {
     label: &'static str,
     target: Mode,
-    /// Whether this row's action is one of `Game::require_base`'s callers,
-    /// and so is on screen **only** while the party is in base space.
+    /// Where this row's action is legal, which for most of the base menu is
+    /// "in base space" — see `Locality`.
     ///
-    /// It used to be `surface_only` and used to ask `is_underground()`,
-    /// which was the same question while "not in the Stack" and "where the
-    /// base is" were one condition. They are two now — `docs/seams.md`
-    /// carries the split — and this flag names the half it always meant:
-    /// the engine refuses each of these rows anywhere but base space, so
-    /// offering them on the open grid advertises a screen whose every action
-    /// is a dead end.
+    /// It used to be a `surface_only` bool and used to ask
+    /// `is_underground()`, which was the same question while "not in the
+    /// Stack" and "where the base is" were one condition. They are two now —
+    /// `docs/seams.md` carries the split — and this names the half it always
+    /// meant: the engine refuses each of these rows anywhere but base space,
+    /// so offering them on the open grid advertises a screen whose every
+    /// action is a dead end.
     ///
-    /// A flag in a readable table rather than an `in_base()` check folded
+    /// A field in a readable table rather than an `in_base()` check folded
     /// into each `available` closure, because it has to be kept in step with
     /// that list in the engine and a table is what makes that checkable.
     /// Emptiness alone would not do the job: every row below that reads
-    /// `App::nearby_*` scans around the player's `Position`, which is pinned
-    /// to the Stack entrance underground and to the anchor tile in base
-    /// space — so those menus would cheerfully list a base the party is
-    /// nowhere near.
-    base_only: bool,
+    /// `App::nearby_*` scans around the party, which in base space is a
+    /// different coordinate space entirely — so those menus would cheerfully
+    /// list a base the party is nowhere near.
+    locality: Locality,
     available: fn(&mut App) -> bool,
+}
+
+/// Where a group-menu row's action is legal.
+///
+/// Three answers and not two, because the build row genuinely has a third:
+/// deploying is a `Game::require_base` caller like everything else in the
+/// base menu, *except* for the run's first Home. That one is the act that
+/// opens base space at all, so it has to be reachable from the open grid or
+/// a fresh run can never start a base — and a row that was hidden until you
+/// were inside would hide the only way of getting inside.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Locality {
+    /// Legal wherever the party is standing.
+    Anywhere,
+    /// Base space only — one of `Game::require_base`'s callers.
+    Base,
+    /// Base space, and the open grid while no Home stands: founding.
+    BaseOrFounding,
+}
+
+impl Locality {
+    /// Whether a row with this locality belongs on screen right now.
+    fn permits(self, app: &App) -> bool {
+        let Some(game) = app.game.as_ref() else {
+            return self == Locality::Anywhere;
+        };
+        match self {
+            Locality::Anywhere => true,
+            Locality::Base => game.in_base(),
+            // Deliberately not "anywhere but the Stack": the founding deploy
+            // asks `Game::require_surface`, so the open grid is the only
+            // place outside the base it is permitted from.
+            Locality::BaseOrFounding => {
+                game.in_base() || (!game.has_home() && !game.is_underground())
+            }
+        }
+    }
 }
 
 const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
+        // The one row with a third answer: see `Locality::BaseOrFounding`.
         label: "Deploy a structure",
         target: Mode::Build,
-        base_only: true,
+        locality: Locality::BaseOrFounding,
         available: |app| {
             app.game
                 .as_ref()
@@ -59,7 +96,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Compile an item",
         target: Mode::Craft,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_ref()
@@ -76,7 +113,7 @@ const BASE_ROWS: &[GroupEntry] = &[
         // party is nowhere near.
         label: "Work orders",
         target: Mode::WorkOrders,
-        base_only: true,
+        locality: Locality::Base,
         available: |app| {
             app.game
                 .as_ref()
@@ -86,31 +123,31 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Base staff",
         target: Mode::BaseStaff,
-        base_only: true,
+        locality: Locality::Base,
         available: |app| !app.nearby_programs().is_empty(),
     },
     GroupEntry {
         label: "Work a structure yourself",
         target: Mode::WorkStructure,
-        base_only: true,
+        locality: Locality::Base,
         available: |app| !app.workable_structures().is_empty(),
     },
     GroupEntry {
         label: "Upgrade a structure",
         target: Mode::Upgrade,
-        base_only: true,
+        locality: Locality::Base,
         available: |app| !app.upgradeable_structures().is_empty(),
     },
     GroupEntry {
         label: "Demolish a structure",
         target: Mode::Remove,
-        base_only: true,
+        locality: Locality::Base,
         available: |app| !app.nearby_structures().is_empty(),
     },
     GroupEntry {
         label: "Structure roster",
         target: Mode::Structures,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -120,7 +157,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Research",
         target: Mode::Research,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_ref()
@@ -141,7 +178,7 @@ const BASE_ROWS: &[GroupEntry] = &[
         // used to short-circuit all of that.
         label: "Contracts",
         target: Mode::Contracts,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game.as_mut().is_some_and(|g| {
                 g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
@@ -154,7 +191,7 @@ const BASE_ROWS: &[GroupEntry] = &[
         // frames down as it does standing in the base.
         label: "Recipes",
         target: Mode::Recipes,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_ref()
@@ -167,7 +204,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Companions",
         target: Mode::Companion,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -177,7 +214,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Read a manifest",
         target: Mode::ManifestPick,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| !app.manifest_subjects().is_empty(),
     },
     GroupEntry {
@@ -185,13 +222,13 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // has nothing to fuse with and the second picker would be empty.
         label: "Fuse two programs",
         target: Mode::Fuse,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| app.game.as_mut().is_some_and(|g| g.owned_pets().len() >= 2),
     },
     GroupEntry {
         label: "Install a routine",
         target: Mode::RoutineTarget,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -205,7 +242,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // out could not reach the screen that makes disks at all.
         label: "Etch a routine disk",
         target: Mode::RoutineEtch,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_ref()
@@ -219,7 +256,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // `Position`, so it works four frames down.
         label: "Refactor a program",
         target: Mode::Refactor,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -233,7 +270,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // spend. Not `base_only`, like the refactor row above it.
         label: "Develop a program",
         target: Mode::Develop,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -243,7 +280,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -253,7 +290,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Perks",
         target: Mode::Perks,
-        base_only: false,
+        locality: Locality::Anywhere,
         available: |app| app.game.as_ref().is_some_and(|g| !g.perk_defs().is_empty()),
     },
 ];
@@ -283,10 +320,14 @@ impl App {
     /// Asking the whole chain would need a bespoke predicate per row, which
     /// is the duplication this table exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {
-        let in_base = self.game.as_ref().is_some_and(|g| g.in_base());
-        entries
+        // The locality pass is resolved up front rather than chained into
+        // the same iterator as `available`: both read `self`, and only the
+        // second one needs it mutably.
+        let here: Vec<&GroupEntry> = entries
             .iter()
-            .filter(|e| !e.base_only || in_base)
+            .filter(|e| e.locality.permits(self))
+            .collect();
+        here.into_iter()
             .filter(|e| (e.available)(self))
             .map(|e| GroupMenuRow {
                 label: e.label,

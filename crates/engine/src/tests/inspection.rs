@@ -125,10 +125,11 @@ fn use_symlink_teleports_the_player_to_the_structure_and_charges_the_cost() {
     game.use_symlink(home).unwrap();
 
     let pos = *game.world.get::<Position>(player).unwrap();
+    let anchor = game.anchor_position().expect("a fresh game has an anchor");
     assert_eq!(
-        pos,
-        Position { x: 50, y: 50 },
-        "symlink should teleport the player onto the structure"
+        (pos.x, pos.y),
+        anchor,
+        "a symlink drops you at the base's anchor — Home itself is out of phase,          and its Position is in a coordinate space the player's is not"
     );
     for ((item, qty), before) in cost.iter().zip(before) {
         let after = game.world.get::<Inventory>(player).unwrap().count(item);
@@ -1037,7 +1038,7 @@ fn the_manifest_lists_only_non_neutral_affinities() {
 fn structure_report_lists_every_assignee_not_just_one() {
     let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1076,7 +1077,7 @@ fn structure_report_lists_every_assignee_not_just_one() {
 #[test]
 fn structure_report_is_zone_wide_and_not_relative_to_the_player() {
     let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     let before = game.structure_report().len();
     assert!(before > 0, "the Home should be reported");
 
@@ -1103,7 +1104,7 @@ fn structure_report_is_zone_wide_and_not_relative_to_the_player() {
 fn structure_report_carries_tier_durability_and_whether_the_structure_is_workable() {
     let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1135,7 +1136,7 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
 fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1181,7 +1182,7 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 60);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     game.place_structure("mining_node", 2, 0).unwrap();
     game.place_structure("armory", 1, 0).unwrap();
     game.place_structure("mining_node", 3, 0).unwrap();
@@ -1496,7 +1497,7 @@ fn the_inspector_scans_no_creature_while_the_party_is_underground() {
 fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
     let mut game = Game::new(1409, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1542,7 +1543,7 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
 fn a_structures_assignee_row_carries_its_workers_level_and_health() {
     let mut game = Game::new(1410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1636,7 +1637,7 @@ fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {
 fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
     let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1653,8 +1654,8 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
     let guard = spawn_tamed_on_map(&mut game, 6, 7);
     let idle = spawn_tamed_on_map(&mut game, 6, 8);
     // Posted from across the base, which is what leaves the worker with a
-    // walk to make: `assign_cronjob` starts it from the player's tile.
-    stand_player_at(&mut game, 6, 6);
+    // walk to make: `assign_cronjob` starts it from the player's cell.
+    stand_in_base_at(&mut game, 0, -4);
     game.assign_cronjob(worker, node).unwrap();
     game.assign_guard(guard, node).unwrap();
 
@@ -1689,7 +1690,7 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
 fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
     let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1706,7 +1707,7 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
 
     let worker = spawn_tamed_on_map(&mut game, 6, 6);
     let guard = spawn_tamed_on_map(&mut game, 6, 7);
-    stand_player_at(&mut game, 6, 6);
+    stand_in_base_at(&mut game, 0, -4);
     game.assign_cronjob(worker, worked).unwrap();
     game.assign_guard(guard, guarded).unwrap();
 
@@ -1739,7 +1740,7 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
 fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
     let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1786,7 +1787,7 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
 fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
     let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1887,7 +1888,7 @@ fn adjacent_structure_finds_only_the_neighbouring_tile() {
     let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     stand_player_at(&mut game, 0, 0);
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1915,8 +1916,9 @@ fn adjacent_structure_finds_only_the_neighbouring_tile() {
 #[test]
 fn adjacent_structure_reports_the_home_it_finds() {
     let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_player_at(&mut game, 0, 0);
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
+    // One cell west of base space's origin, where the Home now stands.
+    stand_in_base_at(&mut game, -1, 0);
 
     let found = game
         .adjacent_structure(1, 0)
@@ -1933,9 +1935,10 @@ fn adjacent_structure_reports_the_home_it_finds() {
 #[test]
 fn adjacent_structure_finds_nothing_underground() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_player_at(&mut game, 0, 0);
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
+    stand_in_base_at(&mut game, -1, 0);
     assert!(game.adjacent_structure(1, 0).is_some(), "precondition");
+    game.world.insert_resource(Locale::Surface);
 
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_stack(start.x, start.y);

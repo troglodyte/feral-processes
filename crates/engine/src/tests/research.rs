@@ -222,7 +222,7 @@ fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
         "the blueprint alone isn't enough — you still need the Fabricator"
     );
 
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -239,7 +239,7 @@ fn a_built_bench_alone_does_not_unlock_its_recipe() {
     let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "weapon_bench");
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -271,7 +271,7 @@ fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
     // The Fabricator itself is research-gated; that gates the bench, not
     // the recipe, which has no research node of its own.
     unlock_research_chain(&mut game, "weapon_bench");
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -353,7 +353,7 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "overclock");
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -425,7 +425,7 @@ fn a_research_gated_structure_is_hidden_from_the_build_menu_until_researched() {
 fn placing_an_unresearched_structure_is_rejected_even_when_called_directly() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)

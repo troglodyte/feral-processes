@@ -243,8 +243,13 @@ impl Game {
 
     /// Stamps the base platform centered on `(cx, cy)`: every tile
     /// `Platform::covers` claims becomes walkable `Biome::Platform`, and
-    /// every hostile and nest standing inside is obliterated. Deploying a
-    /// Home and breaching into a new zone are the only callers.
+    /// every hostile and nest standing inside is obliterated.
+    ///
+    /// Breaching into a new zone is the only caller left. Deploying a Home
+    /// used to be the other one and lays `Game::lay_starting_pocket` instead
+    /// — the base is out of phase, and nothing a build does writes a tile
+    /// into `WorldMap` any more. Both this and `Platform` itself retire with
+    /// the rest of the slab.
     pub(crate) fn stamp_platform(&mut self, cx: i32, cy: i32) {
         // Computed before the map borrow: `build_radius` needs `&mut self`
         // and the stamping loop holds `WorldMap` across its whole run.

@@ -997,50 +997,41 @@ fn the_broker_is_buildable_from_turn_one() {
 
 /// A Broker beside the player, standing on a base the player is also on —
 /// which is what a run that has one actually looks like, since
-/// `place_structure` refuses everything but a Home until a Home is standing
-/// and `stamp_platform` then covers every structure on the slab.
+/// A base with a Broker in it, and the party standing in there with it.
 ///
-/// The slab is laid directly rather than through `place_home`, which spends a
-/// `tick()` and five Core Fragments: a tick here would move the shared
-/// `GameRng` for every seeded board below it.
+/// The structures are spawned directly rather than deployed through
+/// `place_home`, which spends a `tick()` and five Core Fragments: a tick here
+/// would move the shared `GameRng` for every seeded board below it. The
+/// pocket is laid by the same call deploying a Home would have made — it is
+/// the floor `Game::broker_reach` reads.
 ///
-/// The Home itself still has to stand, and not for tidiness — the load path
-/// restores `Platform::center` from `Game::home_position`, so a slab stamped
-/// without one comes back from a save as no slab at all. That is a fixture
-/// that survives its own round trip, which
-/// `the_same_rolled_contract_comes_back_after_a_save_and_load` needs: the
-/// species half of `template_pools` is read off the ring around the slab, and
-/// a board rolled with no slab is a different board.
+/// The Home itself still has to stand: a base with a Broker and no Home is
+/// not a state the game can reach, and these fixtures have to survive their
+/// own save round trip, which
+/// `the_same_rolled_contract_comes_back_after_a_save_and_load` needs.
 fn deploy_broker(game: &mut Game) {
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    deploy(game, "home", pos.x, pos.y + 1);
-    game.stamp_platform(pos.x, pos.y + 1);
-    deploy(game, "contract_broker", pos.x + 1, pos.y);
+    game.lay_starting_pocket();
+    deploy(game, "home", 0, 0);
+    deploy(game, "contract_broker", 1, 0);
+    stand_in_base_at(game, 1, 1);
 }
 
-/// Off the slab entirely, and far enough out that the Broker's own tile
-/// cannot be what answers.
+/// Out of the base entirely — on the open grid, which is where a party not in
+/// base space is, and where no floor can answer for them.
 fn stand_off_base(game: &mut Game) {
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    stand_player_at(game, pos.x + 10, pos.y);
+    game.world.insert_resource(Locale::Surface);
 }
 
-/// The far edge of the slab: on the base, but outside the arm's-length reach
-/// the board used to be reachable from. This is the case the whole rule
+/// The far edge of the pocket: in the base, but well outside the arm's-length
+/// reach the board used to be reachable from. This is the case the whole rule
 /// exists for.
 fn stand_across_the_base(game: &mut Game) {
-    let (cx, cy) = game
-        .world
-        .resource::<crate::resources::Platform>()
-        .center
-        .expect("deploy_broker lays the slab");
-    let edge = crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
-    stand_player_at(game, cx + edge, cy);
+    let edge = crate::tuning::STARTING_POCKET_RADIUS;
+    stand_in_base_at(game, edge, 0);
     let broker_gap = edge - 1;
     assert!(
         broker_gap > 2,
-        "the far edge has to be further from the Broker than arm's length, \
-         or this fixture proves nothing"
+        "the far edge has to be further from the Broker than arm's length, or this fixture proves nothing"
     );
 }
 
@@ -1912,7 +1903,7 @@ fn the_shipped_templates_reach_a_loaded_game() {
 #[test]
 fn every_shipped_template_rolls_something_finishable_in_a_fresh_sector() {
     let mut game = fresh();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let pools = game.template_pools();
     assert!(
         !pools.species.is_empty(),
@@ -2062,7 +2053,7 @@ fn deleting_a_template_does_not_reshuffle_what_the_others_rolled() {
 #[test]
 fn a_rolled_delivery_never_asks_for_the_breaching_currency() {
     let mut game = fresh();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let pools = game.template_pools();
     assert!(
         !pools
@@ -2079,7 +2070,7 @@ fn a_rolled_delivery_never_asks_for_the_breaching_currency() {
 #[test]
 fn a_rolled_delivery_asks_only_for_bulk_stock() {
     let mut game = fresh();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let pools = game.template_pools();
     assert!(!pools.items.is_empty(), "there is stock to ask for");
     for (id, name) in &pools.items {
@@ -2125,7 +2116,7 @@ fn the_catalogue_covers_the_widest_row_a_template_can_roll() {
 #[test]
 fn a_contract_the_run_has_already_done_is_never_offered() {
     let mut game = fresh();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     deploy_broker(&mut game);
 
     // Both cases are real: the `contracts` dev-save offered *Stand Up a
@@ -2160,7 +2151,7 @@ fn a_contract_the_run_has_already_done_is_never_offered() {
 #[test]
 fn no_shipped_contract_or_template_can_be_offered_already_finished() {
     let mut game = fresh();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     deploy_broker(&mut game);
     // The state that actually reproduces it, and the one the `contracts`
     // dev-save is in: sector 3 with a Refinery standing, which pre-meets the
@@ -2353,39 +2344,36 @@ fn broker_reach_reports_the_three_states() {
     assert_eq!(
         game.broker_reach(),
         BrokerReach::AtBroker,
-        "the far edge of the slab is still the base"
+        "the far edge of the pocket is still the base"
     );
 
     stand_off_base(&mut game);
     assert_eq!(game.broker_reach(), BrokerReach::OffBase);
 }
 
-/// The slab is derived and grows, so the rule has to grow with it — reading
-/// `MAX_BUILD_DISTANCE_FROM_HOME` where the question is about a base that
-/// *exists* is the mistake this guards.
+/// The base's floor is laid, not derived from a radius, so the rule has to
+/// follow the floor — freezing the desk at `STARTING_POCKET_RADIUS` where the
+/// question is about a base that *exists* is the mistake this guards. Slice 2
+/// lets the player lay floor for a price; this lays it directly, because what
+/// is under test is the desk following it and not what it costs.
 #[test]
 fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
     let mut game = fresh();
     deploy_broker(&mut game);
-    let (cx, cy) = game
-        .world
-        .resource::<crate::resources::Platform>()
-        .center
-        .unwrap();
-    let grown = crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME + 3;
-    stand_player_at(&mut game, cx + grown, cy);
+    let grown = (crate::tuning::STARTING_POCKET_RADIUS + 3, 0);
+    stand_in_base_at(&mut game, grown.0, grown.1);
     assert_eq!(
         game.broker_reach(),
         BrokerReach::OffBase,
-        "that tile is outside the slab as it stands"
+        "that cell is unmined rock, well past the pocket the Home laid"
     );
 
     game.world
-        .resource_mut::<crate::resources::Platform>()
-        .radius = grown;
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .lay_floor(grown.0, grown.1);
     assert_eq!(
         game.broker_reach(),
         BrokerReach::AtBroker,
-        "the same tile, once the slab reaches it"
+        "the same cell, once it is floor"
     );
 }

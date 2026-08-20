@@ -289,12 +289,10 @@ fn inspecting_a_direction_reaches_no_further_than_the_examine_range() {
 #[test]
 fn inspecting_toward_a_structure_opens_the_structure_sheet() {
     let mut app = test_app(76);
-    stand_in_base(&mut app);
-    app.game
-        .as_mut()
-        .unwrap()
-        .place_structure("home", 1, 0)
-        .expect("a fresh run can afford its Home");
+    found_the_base(&mut app);
+    // One cell west of the Home the founding deploy stood on base space's
+    // origin, so it is the thing one step east.
+    stand_in_base_at(&mut app, -1, 0);
 
     app.handle_key(GameKey::Char('x'));
     assert_eq!(app.mode, Mode::InspectDirection);
@@ -316,12 +314,8 @@ fn inspecting_toward_a_structure_opens_the_structure_sheet() {
 #[test]
 fn any_key_leaves_the_structure_sheet_and_forgets_its_subject() {
     let mut app = test_app(77);
-    stand_in_base(&mut app);
-    app.game
-        .as_mut()
-        .unwrap()
-        .place_structure("home", 1, 0)
-        .expect("a fresh run can afford its Home");
+    found_the_base(&mut app);
+    stand_in_base_at(&mut app, -1, 0);
     app.handle_key(GameKey::Char('x'));
     app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::StructureManifest);

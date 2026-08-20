@@ -1036,7 +1036,7 @@ fn a_bench_beside_the_wrong_feeder_reports_no_edge() {
 #[test]
 fn a_home_reports_no_edges_and_no_machine_status() {
     let mut game = Game::new(1204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let home = find_home(&mut game).unwrap();
 
     assert!(edges_of(&mut game, home).is_empty());
@@ -1080,7 +1080,7 @@ fn edges_of(game: &mut Game, structure: Entity) -> Vec<(i32, i32)> {
 fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
     let mut game = Game::new(1210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
     game.place_structure("refinery", 1, 0)
         .expect("a Refinery is buildable from the start");

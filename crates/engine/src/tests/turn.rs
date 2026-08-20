@@ -137,7 +137,7 @@ fn rest_fully_heals_and_restores_power() {
         let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
         *needs = PowerReserve::new(10.0);
     }
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
 
     game.rest();
 
@@ -147,50 +147,23 @@ fn rest_fully_heals_and_restores_power() {
     assert_eq!(needs.get(), 100.0, "rest should fully restore Power");
 }
 
-/// A battle starting mid-`rest` (see the comment at its internal loop in
-/// `game/turn.rs`) must abort the rest before the loop's final heal, not
-/// let a swarm catch up to a player who then walks away fully healed
-/// anyway.
+/// A rest in base space cannot be interrupted, and that is a property of
+/// where resting now happens rather than of `rest` itself.
 ///
-/// This only bites on the slab's *outer ring*: `home.ron` sets
-/// `enables_rest`'s radius well past the radius a base starts at, so rest is
-/// enabled everywhere the opening slab reaches, and everywhere inside the
-/// platform's interior — where decision 4's base-disband
-/// rule (see `standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian`
-/// in `tests/zone.rs`) would strip the pursuer's `Pursuing` before it ever
-/// got close. Standing exactly on the edge (Chebyshev `half` from Home)
-/// keeps rest enabled while leaving three of the player's eight neighbours
-/// — the ones pointing away from Home — outside the slab and not
-/// `Platform`, so a guardian approaching from that side still has a route
-/// in.
+/// `rest` still bails out of its loop on `is_game_over` or an active battle
+/// — see the comment at that loop in `game/turn.rs` — but nothing on the
+/// zone surface can reach a party out of phase: `nest_aggro_tick` refuses to
+/// open a battle on a party in base space, and an ambush is only ever rolled
+/// by a step taken on the surface. Resting used to be interruptible on the
+/// slab's outer ring; it is not, now that the base is somewhere else
+/// entirely, and this is what says so rather than leaving it to be
+/// rediscovered.
 #[test]
-fn a_battle_starting_mid_rest_aborts_before_the_heal() {
+fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
     let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
-    let half = MAX_BUILD_DISTANCE_FROM_HOME;
-
-    // Open ground from Home's site out past the slab's far edge, so both
-    // `place_home` has walkable ground to build on and a guardian
-    // approaching from beyond the slab has somewhere to walk.
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dx in -(half + 2)..=(half + 6) {
-            for dy in -2..=2 {
-                map.set_override(
-                    ppos.x + dx,
-                    ppos.y + dy,
-                    Tile {
-                        biome: Biome::OpenGrid,
-                        walkable: true,
-                    },
-                );
-            }
-        }
-    }
-    // Home sits `half` tiles west of the player, so the player stands
-    // exactly on the slab's outer edge — see the doc comment above.
-    place_home(&mut game, -half, 0);
+    stand_in_base_beside_home(&mut game);
 
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -201,28 +174,26 @@ fn a_battle_starting_mid_rest_aborts_before_the_heal() {
         *needs = PowerReserve::new(10.0);
     }
 
-    let nest = spawn_bare_nest(&mut game, ppos.x + 3, ppos.y);
-    spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 3, ppos.y);
+    // Standing on the anchor's own doorstep, which is where the player's
+    // `Position` is pinned the whole time they are inside.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
+    spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
 
     game.rest();
 
     assert!(
-        game.has_active_battle(),
-        "a pursuer reaching the player mid-rest should interrupt it, same as any other battle"
+        !game.has_active_battle(),
+        "a pursuer on the anchor tile must not reach a party out of phase"
     );
     let stats = *game.world.get::<Stats>(player).unwrap();
-    let needs = *game.world.get::<PowerReserve>(player).unwrap();
     assert_eq!(
-        stats.hp, 1,
-        "rest must abort before its heal once a battle starts"
+        stats.hp, stats.max_hp,
+        "and the rest runs to its heal, since nothing interrupted it"
     );
-    // Ordinary per-tick Power drain moves the meter a little even during the
-    // handful of ticks before the pursuer catches up, so this checks
-    // "nowhere near the full restore", not "exactly untouched".
-    assert!(
-        needs.get() < 50.0,
-        "rest must abort before restoring Power to 100, found {}",
-        needs.get()
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "Power too"
     );
 }
 
@@ -235,7 +206,7 @@ fn rest_also_fully_heals_the_active_companion() {
         let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
         stats.hp = 1;
     }
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
 
     game.rest();
 
@@ -256,7 +227,7 @@ fn rest_heals_every_party_member() {
     for e in [a, b] {
         game.world.get_mut::<Stats>(e).unwrap().hp = 1;
     }
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
 
     game.rest();
 
@@ -284,7 +255,7 @@ fn a_new_game_starts_with_two_power_outlets() {
 fn rest_is_refused_with_no_outlet_and_does_not_tick() {
     let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     {
         let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
         let held = inv.count(&ItemId::from(ids::OUTLET));
@@ -312,7 +283,7 @@ fn rest_is_refused_with_no_outlet_and_does_not_tick() {
 fn rest_spends_exactly_one_outlet_not_the_whole_stack() {
     let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
 
     game.rest();
 
@@ -331,7 +302,7 @@ fn rest_spends_exactly_one_outlet_not_the_whole_stack() {
 fn rest_refused_by_game_over_consumes_no_outlet() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
 
     game.rest();
@@ -350,7 +321,7 @@ fn rest_refused_by_game_over_consumes_no_outlet() {
 fn rest_refused_by_active_battle_consumes_no_outlet() {
     let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     start_battle_with_a_wild_program(&mut game);
 
     game.rest();
@@ -409,13 +380,13 @@ fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
         let held = inv.count(&ItemId::from(ids::OUTLET));
         inv.take(ItemId::from(ids::OUTLET), held);
     }
-    let pos = *game.world.get::<Position>(player).unwrap();
     game.world.spawn((
         Structure {
             kind: "free_rest_pad".to_string(),
         },
-        Position { x: pos.x, y: pos.y },
+        Position { x: 0, y: 0 },
     ));
+    stand_in_base(&mut game);
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
 
     game.rest();
@@ -465,13 +436,13 @@ fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
         inv.take(ItemId::from(ids::OUTLET), held);
         inv.add(ItemId::from(ids::OUTLET), 1);
     }
-    let pos = *game.world.get::<Position>(player).unwrap();
     game.world.spawn((
         Structure {
             kind: "double_charge_rest_pad".to_string(),
         },
-        Position { x: pos.x, y: pos.y },
+        Position { x: 0, y: 0 },
     ));
+    stand_in_base(&mut game);
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
     let before_tick = game.current_tick();
 
@@ -650,7 +621,7 @@ fn tick_field_buffs_ages_buffs_on_party_members_too() {
 fn rest_ages_field_buffs_but_not_temporary_structures() {
     let mut game = Game::new(603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     game.arm_field_buff(
         player,
         ActiveFieldBuff {
@@ -788,7 +759,7 @@ fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
 fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
     let mut game = Game::new(622, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     game.arm_field_buff(
         player,
         ActiveFieldBuff {
@@ -840,7 +811,7 @@ fn resting_drops_a_companions_until_rest_buffs_too() {
     let mut game = Game::new(623, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
     game.add_companion(companion).unwrap();
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
     game.arm_field_buff(
         companion,
         ActiveFieldBuff {
@@ -884,7 +855,9 @@ fn a_refused_rest_keeps_until_rest_buffs() {
         },
     );
 
-    // No `spawn_rest_structure_at_player`, so the rest is refused outright.
+    // In the base, but with no Home standing in it: the rest is refused for
+    // want of something to rest at, rather than for want of the base.
+    stand_in_base(&mut game);
     game.rest();
 
     assert_eq!(
@@ -1705,21 +1678,34 @@ fn an_ambush_never_fields_a_boss() {
     );
 }
 
-/// The base platform is a manufactured floor, not terrain. Nothing spawns
-/// on it and nothing should jump you on it — it is the one safe ground.
+/// The base is out of phase and nothing out on the zone surface can reach
+/// it — it is the one safe ground, and walking around inside it must never
+/// draw an ambush.
+///
+/// Driven through `move_player` rather than `maybe_ambush` directly, because
+/// what keeps the base safe is that `move_player` dispatches on locale and
+/// the base-space branch never rolls at all. Calling the roll by hand would
+/// be testing a path nothing in base space takes.
 #[test]
-fn no_ambush_fires_on_the_base_platform() {
+fn no_ambush_fires_while_walking_the_base() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     despawn_every_hostile(&mut game);
+    stand_in_base(&mut game);
 
-    for _ in 0..2000 {
-        game.maybe_ambush();
+    for step in 0..2000 {
+        let (dx, dy) = if step % 2 == 0 { (1, 0) } else { (-1, 0) };
+        game.move_player(dx, dy);
         assert!(
             !game.has_active_battle(),
-            "the base platform must never be ambushed"
+            "walking your own base must never be ambushed"
         );
     }
+    assert_eq!(
+        game.base_pos(),
+        Some((0, 0)),
+        "the sweep must really have been walking, or it proves nothing"
+    );
 }
 
 /// The integration the ambush actually ships as: a walked step can open a

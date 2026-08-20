@@ -1,6 +1,7 @@
 //! Placing, upgrading, and demolishing structures, and assigning programs
 //! to work them.
 
+use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
 use crate::structures::UpgradeDef;
@@ -12,7 +13,6 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't deploy right now.".into());
         }
-        self.require_base()?;
         let def = self
             .world
             .resource::<StructureDb>()
@@ -22,47 +22,58 @@ impl Game {
         if !self.structure_unlocked(structure_id) {
             return Err(format!("{} hasn't been researched yet.", def.name));
         }
+        // Both before the locale guard below, deliberately. A player on the
+        // open grid with no base yet who picks a machine out of the build
+        // menu is told the thing they can act on — deploy a Home — rather
+        // than being told they are in the wrong place for a build that would
+        // be refused wherever they stood.
         if structure_id != HOME_STRUCTURE_ID && !self.has_structure(HOME_STRUCTURE_ID) {
             return Err("Deploy a Home first before building anything else.".into());
         }
         if structure_id == HOME_STRUCTURE_ID && self.has_structure(HOME_STRUCTURE_ID) {
             return Err("A Home is already deployed. Remove it before building another.".into());
         }
-        let player = self.player_entity();
-        let ppos = *self.world.get::<Position>(player).unwrap();
-        let (x, y) = (ppos.x + dx, ppos.y + dy);
+
+        // Where a deploy is made *from*, and the run's first Home is the one
+        // exception in the game.
+        //
+        // Every other build is a base action: it stands a structure in base
+        // space, beside the ones already there, measured from the cell the
+        // party is standing in. The first Home cannot be, because there is
+        // no base to stand in yet — base space is solid everywhere and the
+        // anchor refuses entry for want of a Home, so a run that had to be
+        // inside to deploy one could never start a base at all. Founding is
+        // therefore an open-grid act, and it lands the Home on base space's
+        // own origin whatever direction was pointed: the pocket it lays is
+        // laid around that origin, and a Home somewhere else in it would
+        // make `BASE_EXIT_CELL` a door onto bare floor.
+        let founding = structure_id == HOME_STRUCTURE_ID;
+        let (x, y) = if founding {
+            self.require_surface()?;
+            crate::game::base_space::BASE_EXIT_CELL
+        } else {
+            self.require_base()?;
+            let (px, py) = self
+                .base_pos()
+                .expect("require_base passed, so the party is in base space");
+            (px + dx, py + dy)
+        };
 
         // Where a build may go is the one question the two kinds of build
         // answer differently, and they are opposites: an ordinary structure
-        // must be on the slab, while a claim exists precisely to put ground
-        // where the slab is not.
-        if structure_id != HOME_STRUCTURE_ID {
-            let home = self.home_position().expect("checked above: a Home exists");
+        // must be on laid floor, while a claim exists precisely to put
+        // ground where the floor is not. The founding Home skips both — the
+        // pocket it lays does not exist to be measured against yet.
+        if !founding {
             if def.claims_ground {
                 self.check_claim_site(x, y)?;
-            } else {
-                let platform = self.world.resource::<Platform>().clone();
-                if !platform.covers(x - home.x, y - home.y) {
-                    let radius = platform.radius;
-                    return Err(format!(
-                        "Too far from Home — structures must be built within {radius} tiles of it."
-                    ));
-                }
+            } else if !self.world.resource::<BaseGrid>().is_floor(x, y) {
+                return Err(
+                    "There's no floor there — a structure has to stand on laid ground.".into(),
+                );
             }
         }
 
-        // A link and a structure on one tile makes walking onto it
-        // ambiguous — `move_player` checks the link first, so the structure
-        // would become unbumpable and you'd descend every time you tried to
-        // reach it.
-        if self.find_surface_link_at(x, y).is_some() {
-            return Err("There's a link here — deploy clear of it.".into());
-        }
-
-        let walkable = self.world.resource_mut::<WorldMap>().tile(x, y).walkable;
-        if !walkable {
-            return Err("Can't deploy onto that terrain.".into());
-        }
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
         }
@@ -81,33 +92,15 @@ impl Game {
             }
         }
 
-        // A structure that widens the slab claims a ring of ground, and
-        // `stamp_platform` obliterates everything standing in what it
-        // claims. A wild program or a nest going that way is the price of
-        // growth; a link is the way down to the only source of Portal
-        // Fragments in the game, so it is refused instead. Only the new ring
-        // needs scanning — the existing slab has no links in it by
-        // construction — and the refusal comes before the materials check,
-        // the same ordering `install_routine` keeps between checking
-        // knowledge and taking the disk.
-        if def.build_radius_bonus > 0
-            && let Some(home) = self.home_position()
-        {
-            let radius = self.build_radius();
-            let grown = self.build_radius_with(def.build_radius_bonus);
-            let buried = self.links_in_ring(home, radius, grown);
-            if !buried.is_empty() && self.count_surface_links() == buried.len() {
-                return Err(
-                    "That would bury the last link in this sector, and the Stack is the \
-                     only place Portal Fragments come from. Grow the base another way."
-                        .into(),
-                );
-            }
-            for (lx, ly) in &buried {
-                self.log_base(format!("The expansion buries the link at ({lx}, {ly})."));
-            }
-        }
+        // A structure that widened the slab used to claim a ring of ground
+        // on the zone surface, burying whatever stood in it — which is why
+        // there was a refusal here for the ring that would take the sector's
+        // last Stack link. Nothing a build does touches the zone surface any
+        // more, so there is no ring, nothing to bury, and no refusal to
+        // make. `build_radius_bonus` is read by nothing at all now; the two
+        // structures that carry it retire with `resources::Platform`.
         let build_cost = self.structure_build_cost(&def);
+        let player = self.player_entity();
         // Every shortfall at once, and each with its numbers: the build menu
         // is off screen by the time this fires, so one item per attempt would
         // make finding out what a structure needs a matter of walking back and
@@ -190,15 +183,13 @@ impl Game {
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
         }
-        // Re-laying the inner slab writes the same overrides to the same
-        // tiles, so stamping again is idempotent and the only visible effect
-        // is that the new ring gets floor.
+        // The Home is what opens base space, and it opens it exactly where
+        // it stands: the pocket is laid around the origin the Home was just
+        // put on. A one-for-one replacement for the `stamp_platform` call
+        // this used to be, at the same site and with the same trigger — see
+        // `Game::lay_starting_pocket`.
         if def.id == HOME_STRUCTURE_ID {
-            self.stamp_platform(x, y);
-        } else if def.build_radius_bonus > 0
-            && let Some(home) = self.home_position()
-        {
-            self.stamp_platform(home.x, home.y);
+            self.lay_starting_pocket();
         }
         self.log_base(format!("You deploy a {}.", def.name));
         self.tick();
@@ -285,48 +276,6 @@ impl Game {
     fn count_structures(&mut self, kind: &StructureId) -> u32 {
         let mut query = self.world.query::<&Structure>();
         query.iter(&self.world).filter(|s| &s.kind == kind).count() as u32
-    }
-
-    /// Every `SurfaceLink` standing in the ground a slab of `radius` would
-    /// claim by reaching `grown`.
-    ///
-    /// These are not refused for existing — `stamp_platform` despawns any
-    /// link inside the slab it lays, which is what deploying a Home over one
-    /// has always done, and growing the base is the same act one ring at a
-    /// time. What the caller checks is that they are not *all* of them.
-    ///
-    /// Both radii are passed in rather than one and a bonus, because a base
-    /// already wider than the starting radius absorbs a Pillar's bonus
-    /// entirely — see `build_radius_with`, which is the only thing that
-    /// knows that. Asked of the ring rather than the whole box because the
-    /// existing slab has no links in it by construction: `stamp_platform`
-    /// despawns any it covers, so a hit inside it would be a bug elsewhere
-    /// rather than anything this should act on.
-    fn links_in_ring(&mut self, home: Position, radius: i32, grown: i32) -> Vec<(i32, i32)> {
-        let grown = Platform {
-            center: Some((home.x, home.y)),
-            radius: grown,
-            ..Default::default()
-        };
-        let current = Platform {
-            center: Some((home.x, home.y)),
-            radius,
-            ..Default::default()
-        };
-        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
-        query
-            .iter(&self.world)
-            .map(|p| (p.x - home.x, p.y - home.y))
-            .filter(|&(dx, dy)| grown.in_shape(dx, dy) && !current.in_shape(dx, dy))
-            .map(|(dx, dy)| (home.x + dx, home.y + dy))
-            .collect()
-    }
-
-    /// How many Stack links this zone has left — the thing a growing base
-    /// must not take the last of.
-    fn count_surface_links(&mut self) -> usize {
-        let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
-        query.iter(&self.world).count()
     }
 
     /// The highest tier a structure with this `upgrade` path can currently
@@ -653,10 +602,13 @@ impl Game {
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }
-        let here = *self
-            .world
-            .get::<Position>(self.player_entity())
-            .ok_or_else(|| "You aren't anywhere you can work from.".to_string())?;
+        // The party's *base* cell, not their `Position` — that is pinned to
+        // the anchor tile on the zone surface the whole time they are in
+        // here, and the machine being worked stands in base space.
+        let (hx, hy) = self
+            .base_pos()
+            .expect("require_base passed, so the party is in base space");
+        let here = Position { x: hx, y: hy };
         let structure_pos = *self
             .world
             .get::<Position>(structure)

@@ -197,7 +197,7 @@ fn group_size_is_the_same_everywhere_in_a_zone() {
         "zone 4 should field packs, or this asserts nothing"
     );
 
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     assert_eq!(
         game.max_group_size(None),
         expected,
@@ -231,7 +231,7 @@ fn max_enemy_groups_gains_one_group_per_zone_and_stops_at_the_ceiling() {
 #[test]
 fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
     let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -744,7 +744,7 @@ fn portal_cost_grows_by_half_the_base_rate_per_zone() {
 fn portal_build_cost_ramps_with_current_zone_level() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
 
     // Zone 1: base rate from portal.ron, 10 PortalFragment, unramped.
     game.world

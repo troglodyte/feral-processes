@@ -88,7 +88,7 @@ fn the_base_staff_marker_survives_a_save_round_trip() {
 fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 1, 0);
+    place_home(&mut game);
     let node = spawn_mining_node(&mut game, 3, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
     stand_player_at_post(&mut game, node);
@@ -127,7 +127,7 @@ fn a_hand_posted_cronjob_loads_back_as_base_staff() {
 ///
 /// Returns the three entities in that order.
 fn lay_disk_line(game: &mut Game) -> (Entity, Entity, Entity) {
-    place_home(&mut *game, 0, 1);
+    place_home(&mut *game);
     let mine = spawn_machine_at(game, "mining_node", 2, 0);
     let lathe = spawn_machine_at(game, "lathe", 3, 0);
     let press = spawn_machine_at(game, "disk_press", 4, 0);
@@ -138,7 +138,7 @@ fn lay_disk_line(game: &mut Game) -> (Entity, Entity, Entity) {
 fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     // Everything upstream of the press is standing; the press itself is not.
     spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "lathe", 3, 0);
@@ -158,7 +158,7 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
 fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "lathe", 3, 0);
     // Deployed, but nowhere near the Lathe, so nothing can ever feed it.
@@ -179,7 +179,7 @@ fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
 fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let unmakeable = game
         .item_defs()
         .into_iter()
@@ -210,7 +210,7 @@ fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
 fn a_banked_item_is_refused_even_with_its_machine_standing() {
     let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
 
     assert_eq!(
@@ -371,7 +371,7 @@ fn put_input(game: &mut Game, machine: Entity, item: &str, qty: u32) {
 #[test]
 fn a_clogged_machine_cannot_progress() {
     let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
 
     assert!(
@@ -389,7 +389,7 @@ fn a_clogged_machine_cannot_progress() {
 #[test]
 fn an_assembler_with_nothing_beside_it_holding_its_ingredient_cannot_progress() {
     let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
     let _ = mine;
@@ -409,7 +409,7 @@ fn an_assembler_with_nothing_beside_it_holding_its_ingredient_cannot_progress() 
 #[test]
 fn an_assembler_whose_feeder_holds_the_ingredient_can_progress() {
     let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
@@ -423,7 +423,7 @@ fn an_assembler_whose_feeder_holds_the_ingredient_can_progress() {
 #[test]
 fn an_assembler_with_a_stocked_input_can_progress_with_no_feeder_at_all() {
     let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let lathe = spawn_machine_at(&mut game, "lathe", 3, 0);
     put_input(&mut game, lathe, ids::CORE_FRAGMENT, 8);
 
@@ -529,7 +529,7 @@ fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
         ("widget_bench.ron", SHARED_FEEDER_ASSEMBLER),
     );
     let mut game = Game::new(25, DifficultyMode::Forgiving, &dir).unwrap();
-    place_home(&mut game, 4, 4);
+    place_home(&mut game);
     let bench = spawn_machine_at(&mut game, "widget_bench", 0, 0);
     let mine = spawn_machine_at(&mut game, "mining_node", 0, 1);
     let press = spawn_machine_at(&mut game, "disk_press", 1, 0);
@@ -571,7 +571,7 @@ fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
 #[test]
 fn base_holding_counts_depots_and_machine_outputs_but_not_your_pockets() {
     let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let depot = spawn_machine_at(&mut game, "depot", 4, 0);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 7);
@@ -730,7 +730,7 @@ fn two_staff_take_the_two_deepest_machines() {
 fn a_second_machine_making_the_ordered_item_is_staffed_too() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
     let staff = hire(&mut game, 2);
@@ -756,7 +756,7 @@ fn a_second_machine_making_the_ordered_item_is_staffed_too() {
 fn the_report_names_every_machine_making_the_ordered_item() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
     game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
@@ -905,7 +905,7 @@ fn a_base_with_no_staff_queues_and_reports_without_posting_or_panicking() {
 #[test]
 fn a_standing_work_job_is_filled_when_no_order_needs_the_body() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 1);
     game.set_standing_job(node, true, false).unwrap();
@@ -952,7 +952,7 @@ fn a_standing_job_yields_the_body_to_an_order_and_takes_it_back_after() {
 #[test]
 fn a_standing_guard_is_filled_and_refilled_after_a_sweep() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let shield = spawn_machine_at(&mut game, "shield", 2, 0);
     let staff = hire(&mut game, 1);
     game.set_standing_job(shield, false, true).unwrap();
@@ -973,7 +973,7 @@ fn a_standing_guard_is_filled_and_refilled_after_a_sweep() {
 #[test]
 fn a_guard_job_on_an_unraidable_structure_is_refused() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let home = find_home(&mut game).expect("the Home is standing");
 
     let err = game
@@ -991,7 +991,7 @@ fn a_guard_job_on_an_unraidable_structure_is_refused() {
 #[test]
 fn standing_jobs_survive_a_save_but_not_a_demolition() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     game.set_standing_job(node, true, false).unwrap();
 
@@ -1013,7 +1013,7 @@ fn standing_jobs_survive_a_save_but_not_a_demolition() {
 
     // Rebuilt on the same tile, the replacement carries no job order.
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let first = spawn_machine_at(&mut game, "research_node", 2, 0);
     game.set_standing_job(first, true, false).unwrap();
     game.world.entity_mut(first).despawn();
@@ -1045,7 +1045,7 @@ fn two_staff_park_on_different_tiles_at_the_same_tick() {
 #[test]
 fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 2);
     let radius = game.build_radius();
@@ -1076,7 +1076,7 @@ fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
 #[test]
 fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     // `spawn_tamed_on_map` rather than `spawn_tamed`: `view_entities` draws
     // from `Glyph`, and a program without one is invisible for reasons that
     // have nothing to do with this rule.
@@ -1119,7 +1119,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
 fn idle_staff_take_no_rng_draws() {
     let sample = |staff_count: usize| {
         let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        place_home(&mut game, 0, 1);
+        place_home(&mut game);
         hire(&mut game, staff_count);
         for _ in 0..20 {
             game.tick();
@@ -1304,7 +1304,7 @@ fn a_completed_order_is_announced_as_a_completion() {
 fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "depot", 3, 0);
     // Somewhere else for the scheduler to want a body, so the pass that
@@ -1446,7 +1446,7 @@ fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
 /// the path `Errand::Collect` already takes and `batch_within_reach` already
 /// counts through `depot_holding`.
 fn lay_depot_route(game: &mut Game) -> (Entity, Entity, Entity) {
-    place_home(&mut *game, 0, 4);
+    place_home(&mut *game);
     let mine = spawn_machine_at(game, "mining_node", 2, 0);
     let lathe = spawn_machine_at(game, "lathe", 0, 0);
     let depot = spawn_machine_at(game, "depot", -2, 0);
@@ -1545,7 +1545,7 @@ fn a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it() {
 fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, 0, 4);
+    place_home(&mut game);
     spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "lathe", 0, 0);
 

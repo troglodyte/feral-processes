@@ -274,6 +274,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("extract", seed);
+    found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -326,7 +327,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
-        position: (px + 30, py + 30),
+        // Base space, two cells east of the Home the fixture just founded.
+        position: (2, 0),
         durability: None,
         tier: None,
         stock_input: Vec::new(),
@@ -418,9 +420,9 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
     for n in 0..posts {
         data.structures.push(save::StructureSave {
             kind: "market".to_string(),
-            // Spread along -y so none lands on the player, the program at
-            // `px + 2` or each other.
-            position: (px + 1, py - n),
+            // Base space, spread along -y so none lands on the Home at the
+            // origin, the player, or each other.
+            position: (1, -n),
             durability: None,
             tier: None,
             stock_input: Vec::new(),
@@ -441,16 +443,36 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
     app
 }
 
-/// Puts `app`'s party out of phase, inside base space, by the same
-/// save-edit-reload trick `app_underground` uses and for the same reason:
-/// the engine deliberately exposes no way in from outside the crate, since
-/// on a real run that only ever happens by stepping onto the anchor.
+/// Founds the run's base: deploys the first Home through the public API,
+/// which stands it on base space's own origin and lays the starting pocket
+/// around it.
 ///
-/// Every base action — deploying, demolishing, upgrading, collecting,
-/// buying and selling at a deployed trader — asks `Game::require_base` now,
-/// so a key test about one of them has to stand where the player would be
-/// standing to press it.
+/// Every fixture that hand-places a structure into the base needs this
+/// first. A structure standing on unmined rock has no station tile beside
+/// it, `Game::broker_reach` reads the floor under the party, and
+/// `place_structure` refuses a cell with no floor — so a base written
+/// straight into a save with no pocket under it is not a base.
+///
+/// Deployed rather than written into the save because founding is the one
+/// build made from the open grid, and it is the only thing that lays floor
+/// this slice.
+pub(crate) fn found_the_base(app: &mut App) {
+    app.game
+        .as_mut()
+        .expect("a fixture with a game")
+        .place_structure("home", 0, 0)
+        .expect("a fresh run can afford its first Home, and founds from the open grid");
+}
+
+/// Puts `app`'s party out of phase, inside base space, by the same
+/// save-edit-reload trick `app_underground` uses.
 pub(crate) fn stand_in_base(app: &mut App) {
+    stand_in_base_at(app, 0, 0);
+}
+
+/// The same, on a chosen base-space cell — for a test that needs the party
+/// somewhere other than the exit, the pocket's edge most often.
+pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
     // Counted rather than keyed on a seed, the same as `app_underground`:
     // tests run in parallel and several share a seed.
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -462,7 +484,7 @@ pub(crate) fn stand_in_base(app: &mut App) {
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    data.locale = Locale::Base { x: 0, y: 0 };
+    data.locale = Locale::Base { x, y };
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -834,24 +856,25 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("small_base", seed);
+    found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
     let (px, py) = data.player.position;
-    for (kind, position) in [("home", (px, py - 1)), ("mining_node", (px + 1, py))] {
-        data.structures.push(save::StructureSave {
-            kind: kind.to_string(),
-            position,
-            durability: None,
-            tier: None,
-            stock_input: Vec::new(),
-            stock_output: Vec::new(),
-            standing_work: false,
-            standing_guard: false,
-        });
-    }
+    // The Home is already standing on base space's origin, laid down by
+    // `found_the_base`; this is the machine beside it.
+    data.structures.push(save::StructureSave {
+        kind: "mining_node".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+    });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
             boss: false,
@@ -905,6 +928,10 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         // name has always claimed this and the locale is what makes it true.
         // Every base action the callers press a key for is
         // `Game::require_base`.
+        //
+        // On the exit cell, which is where walking in through the anchor
+        // puts you and where walking back out is allowed from — the Home
+        // stands on it, and the machine is the cell east.
         Locale::Base { x: 0, y: 0 }
     };
     save::save_to_file(&path, &data).unwrap();
@@ -944,40 +971,44 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("broker", seed);
+    found_the_base(&mut app);
     let game = app.game.as_mut().unwrap();
     game.save(&path).unwrap();
 
     let mut data = save::load_from_file(&path).unwrap();
-    let (px, py) = data.player.position;
-    for (kind, position) in [("home", (px, py + 1)), ("contract_broker", (px + 1, py))] {
-        data.structures.push(save::StructureSave {
-            kind: kind.to_string(),
-            position,
-            durability: None,
-            tier: None,
-            stock_input: Vec::new(),
-            stock_output: Vec::new(),
-            standing_work: false,
-            standing_guard: false,
-        });
-    }
-    if underground {
-        data.locale = Locale::Stack {
+    // The Home is already standing, laid down by `found_the_base`; the desk
+    // goes up beside it, on the pocket floor it laid.
+    data.structures.push(save::StructureSave {
+        kind: "contract_broker".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+    });
+    data.locale = if underground {
+        Locale::Stack {
             depth: 1,
             frames: 2,
             x: 1,
             y: 1,
             facing: feral_processes_engine::stack::Dir::North,
             entrance: data.player.position,
-        };
-    }
+        }
+    } else {
+        // Standing in the base with the desk, which is what `AtBroker` asks
+        // for. One cell north of the Home so nothing shares a tile.
+        Locale::Base { x: 0, y: 1 }
+    };
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
     app
 }
 
-/// Moves the player well clear of the base slab, without walking there.
+/// Takes the party out of the base entirely, without walking there.
 ///
 /// A save round trip rather than ten movement keys, which is what the
 /// contracts fixtures already do and for the same reason — the engine hands
@@ -988,13 +1019,10 @@ pub(crate) fn walk_far_from_the_base(app: &mut App) {
     let path = scratch_path("off_base", 0);
     app.game.as_mut().unwrap().save(&path).unwrap();
     let mut data = save::load_from_file(&path).unwrap();
-    let (px, py) = data.player.position;
-    // Twice `MAX_BUILD_RADIUS_TILES` clear of the slab, so this stays true of
-    // a base that has grown as far as one can.
-    data.player.position = (
-        px + feral_processes_engine::tuning::MAX_BUILD_RADIUS_TILES * 2,
-        py,
-    );
+    // Out on the zone surface. Distance is not what puts a party off the
+    // base any more — the base is a different coordinate space, and being
+    // anywhere but in it is the whole of being off it.
+    data.locale = Locale::Surface;
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &test_assets_dir()).ok();
     let _ = std::fs::remove_file(&path);

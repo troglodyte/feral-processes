@@ -80,7 +80,7 @@
     creatures: [
         (
             species: "sub_process",
-            position: (6, 4),
+            position: (2, -1),
             hp: 120,
             max_hp: 120,
             atk: 11,
@@ -148,7 +148,7 @@
         ),
         (
             species: "sub_process",
-            position: (8, 4),
+            position: (4, -1),
             hp: 120,
             max_hp: 120,
             atk: 11,
@@ -216,7 +216,7 @@
         ),
         (
             species: "sub_process",
-            position: (10, 4),
+            position: (3, 2),
             hp: 120,
             max_hp: 120,
             atk: 11,
@@ -250,7 +250,7 @@
         ),
         (
             species: "sub_process",
-            position: (0, 0),
+            position: (-2, -1),
             hp: 155,
             max_hp: 155,
             atk: 13,
@@ -318,7 +318,7 @@
         ),
         (
             species: "drone",
-            position: (0, 0),
+            position: (-1, -3),
             hp: 173,
             max_hp: 173,
             atk: 11,
@@ -352,7 +352,7 @@
         ),
         (
             species: "rootkit",
-            position: (0, 0),
+            position: (-1, -1),
             hp: 449,
             max_hp: 449,
             atk: 41,
@@ -1675,6 +1675,10 @@
         (-25, -19),
         (28, 31),
     ],
-    locale: Surface,
+    base_grid: (
+        cells: {(-4, -2): Floor, (-4, -1): Floor, (-4, 0): Floor, (-4, 1): Floor, (-4, 2): Floor, (-3, -3): Floor, (-3, -2): Floor, (-3, -1): Floor, (-3, 0): Floor, (-3, 1): Floor, (-3, 2): Floor, (-3, 3): Floor, (-2, -4): Floor, (-2, -3): Floor, (-2, -2): Floor, (-2, -1): Floor, (-2, 0): Floor, (-2, 1): Floor, (-2, 2): Floor, (-2, 3): Floor, (-2, 4): Floor, (-1, -4): Floor, (-1, -3): Floor, (-1, -2): Floor, (-1, -1): Floor, (-1, 0): Floor, (-1, 1): Floor, (-1, 2): Floor, (-1, 3): Floor, (-1, 4): Floor, (0, -4): Floor, (0, -3): Floor, (0, -2): Floor, (0, -1): Floor, (0, 0): Floor, (0, 1): Floor, (0, 2): Floor, (0, 3): Floor, (0, 4): Floor, (1, -4): Floor, (1, -3): Floor, (1, -2): Floor, (1, -1): Floor, (1, 0): Floor, (1, 1): Floor, (1, 2): Floor, (1, 3): Floor, (1, 4): Floor, (2, -4): Floor, (2, -3): Floor, (2, -2): Floor, (2, -1): Floor, (2, 0): Floor, (2, 1): Floor, (2, 2): Floor, (2, 3): Floor, (2, 4): Floor, (3, -3): Floor, (3, -2): Floor, (3, -1): Floor, (3, 0): Floor, (3, 1): Floor, (3, 2): Floor, (3, 3): Floor, (4, -2): Floor, (4, -1): Floor, (4, 0): Floor, (4, 1): Floor, (4, 2): Floor},
+    ),
+    anchor: Some((4, -1)),
+    locale: Base(x: 0, y: 1),
     stack_memory: ({}),
 )

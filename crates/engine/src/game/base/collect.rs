@@ -29,7 +29,13 @@ impl Game {
             return Vec::new();
         }
         let player = self.player_entity();
-        let pos = *self.world.get::<Position>(player).unwrap();
+        // The party's base cell rather than their `Position`: every machine
+        // with a `Stock` stands in base space, and `Position` is pinned to
+        // the anchor tile on the zone surface while the party is in here.
+        let Some((px, py)) = self.base_pos() else {
+            return Vec::new();
+        };
+        let pos = Position { x: px, y: py };
 
         let neighbours: Vec<Entity> = {
             let mut query = self

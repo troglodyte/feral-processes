@@ -777,6 +777,7 @@ pub(super) fn work_node_parts() -> (Stock, MachineStatus) {
 /// `MachineStatus` is skipped by `task_progress_system`'s query and
 /// silently produces nothing.
 pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.lay_starting_pocket();
     let def = game
         .structure_defs()
         .into_iter()
@@ -813,11 +814,23 @@ pub(super) fn stand_player_at(game: &mut Game, x: i32, y: i32) {
     pos.y = y;
 }
 
-/// Stands the player at the post east of `structure`, so a cronjob assigned
-/// next starts its program already at the machine.
+/// Stands the party in base space at the post east of `structure`, so a
+/// cronjob assigned next starts its program already at the machine.
+///
+/// The **base** cell and not the player's `Position`: every `Structure`
+/// stands in base space, and both of the actions this sets up for —
+/// `assign_cronjob` and `Game::work_structure` — measure from the cell the
+/// party is standing in there. `Position` is pinned to the anchor tile on
+/// the zone surface and has no say.
 pub(super) fn stand_player_at_post(game: &mut Game, structure: Entity) {
     let target = *game.world.get::<Position>(structure).unwrap();
-    stand_player_at(game, target.x + 1, target.y);
+    stand_in_base_at(game, target.x + 1, target.y);
+}
+
+/// Puts the party in base space on `(x, y)` — `stand_in_base`, at a chosen
+/// cell rather than at the exit.
+pub(crate) fn stand_in_base_at(game: &mut Game, x: i32, y: i32) {
+    game.world.insert_resource(Locale::Base { x, y });
 }
 
 /// Stands `worker` on the tile east of `structure` — a post it can work
@@ -847,16 +860,24 @@ pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
         .unwrap_or(0)
 }
 
-/// Deploys a Home just off the player's current position (`dx`, `dy`
-/// relative, so it doesn't collide with whatever the caller places
-/// next) — `place_structure` refuses anything else until a Home
-/// exists, so most structure-placement tests need this first.
-pub(super) fn place_home(game: &mut Game, dx: i32, dy: i32) {
+/// Deploys the run's first Home, which lands on base space's own origin and
+/// lays the starting pocket around it — `place_structure` refuses anything
+/// else until a Home exists, so most structure-placement tests need this
+/// first.
+///
+/// No offsets, because the founding deploy takes none: wherever the player
+/// points, the first Home stands on `BASE_EXIT_CELL`. It is also the one
+/// build made from the open grid, so this deliberately does *not* route
+/// through `from_inside_the_base` — there is no inside yet.
+pub(super) fn place_home(game: &mut Game) {
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 5);
-    from_inside_the_base(game, |g| g.place_structure("home", dx, dy)).unwrap();
+    let outside = game.locale();
+    game.world.insert_resource(Locale::Surface);
+    game.place_structure("home", 0, 0).unwrap();
+    game.world.insert_resource(outside);
 }
 
 /// How many of `id` the player is holding.
@@ -1234,22 +1255,30 @@ pub(super) fn rouse_a_tameable_guardian(game: &mut Game) -> Entity {
     guardian
 }
 
-/// Deploys a Home directly on the player's current tile — `Game::rest`
-/// requires a rest-enabling structure nearby, so tests exercising `rest`
-/// need one in place first. Spawned directly rather than through
-/// `place_structure` to sidestep its cost and one-Home-only
-/// requirements, which aren't what these tests are about.
-pub(super) fn spawn_rest_structure_at_player(game: &mut Game) {
-    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+/// Stands a Home on base space's exit cell and puts the party on it —
+/// `Game::rest` is a base action and requires a rest-enabling structure in
+/// reach, so tests exercising `rest` need both halves.
+///
+/// Both, and not just the structure, because either alone leaves `rest`
+/// refused: the locale guard and the reach check are two separate things a
+/// fixture has to satisfy, and a helper that supplied one of them would make
+/// every caller restate the other. A test *about* the locale overwrites it
+/// afterwards.
+///
+/// Spawned directly rather than through `place_structure` to sidestep its
+/// cost and one-Home-only requirements, which aren't what these tests are
+/// about.
+pub(super) fn stand_in_base_beside_home(game: &mut Game) {
     game.world.spawn((
         Structure {
             kind: "home".to_string(),
         },
         Position {
-            x: player_pos.x,
-            y: player_pos.y,
+            x: crate::game::base_space::BASE_EXIT_CELL.0,
+            y: crate::game::base_space::BASE_EXIT_CELL.1,
         },
     ));
+    stand_in_base(game);
 }
 
 /// Sets up a single-round battle with one companion (stunned or not)
@@ -1527,6 +1556,7 @@ pub(super) fn fuse_to_depth(game: &mut Game, depth: u32) -> Entity {
 /// a node short of those reads as a rate that moved rather than as a fixture
 /// missing a component.
 pub(super) fn spawn_mining_node(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.lay_starting_pocket();
     game.world
         .spawn((
             Structure {
@@ -1549,6 +1579,7 @@ pub(super) fn spawn_market(game: &mut Game) -> Entity {
 /// The same, at a chosen tile — for tests about the buyback shelf, which is
 /// keyed by the tile its trader stands on.
 pub(super) fn spawn_market_at(game: &mut Game, x: i32, y: i32) -> Entity {
+    game.lay_starting_pocket();
     let kind = game
         .structure_defs()
         .into_iter()
@@ -1678,7 +1709,7 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
     // On the player's own tile, which is walkable by definition — the
     // Home's slab then guarantees everything around it is too, so this
     // works for any seed.
-    place_home(game, 0, 0);
+    place_home(game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1700,7 +1731,7 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
 /// player is not standing at the station of — so a diagonal fixture left
 /// every test that works this node by hand testing an unreachable state.
 pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
-    place_home(game, 0, 1);
+    place_home(game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -1901,22 +1932,22 @@ impl Game {
         if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
-        let from = *self
-            .world
-            .get::<Position>(self.player_entity())
+        let (fx, fy) = self
+            .base_pos()
             .ok_or_else(|| "You aren't anywhere you can post a program from.".to_string())?;
+        let from = Position { x: fx, y: fy };
         let target = *self
             .world
             .get::<Position>(structure)
             .ok_or_else(|| "That structure isn't anywhere you can post to.".to_string())?;
         let blocked = self.structure_tiles();
-        let build_radius = self.build_radius();
+        let pocket_radius = self.world.resource::<crate::base_grid::BaseGrid>().radius();
         {
-            let mut map = self.world.resource_mut::<WorldMap>();
+            let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             // The two errands stay distinct, as they were: a machine the
             // base has been built around needs digging out, one with no
             // route may just need you to walk over to it.
-            crate::game::base::hauling::post_reach(&mut map, from, target, &blocked, build_radius)
+            crate::game::base::hauling::post_reach(grid, from, target, &blocked, pocket_radius)
                 .map_err(|reason| match reason {
                     crate::game::base::hauling::NoPost::BoxedIn => {
                         "That structure is walled in — nothing can stand next to it.".to_string()

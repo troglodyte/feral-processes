@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use pathfinding::directed::dijkstra::dijkstra_all;
 
-use crate::world::{NEIGHBOURS, Tile, WorldMap};
+use crate::world::{NEIGHBOURS, WorldMap};
 
 /// Chebyshev step counts from `origin` to every tile reachable within
 /// `radius`, routed around unwalkable terrain and around whatever else
@@ -23,37 +23,35 @@ use crate::world::{NEIGHBOURS, Tile, WorldMap};
 /// the walker should step onto.
 ///
 /// The step rule is a parameter because the callers genuinely disagree about
-/// which tiles are theirs to cross: `pursuit_field` below refuses the base
-/// slab, and a hauling program has to cross it but must not walk over the
-/// buildings standing on it. A further caller widens this predicate rather
-/// than copying the walk.
+/// which tiles are theirs to cross: `pursuit_field` below refuses the ground
+/// the base is safe on, and a hauling program walks base space instead —
+/// a different coordinate space entirely, whose walkability lives in
+/// `BaseGrid` and not in any `Tile`.
 ///
-/// It takes the coordinate as well as the tile because only one of those two
-/// rules is about terrain. What occupies a tile is entity state — a
-/// `Structure`'s `Position` — and is not readable from a `Tile` at all.
+/// That is why the rule takes a *coordinate* and reads whatever it likes for
+/// itself, rather than being handed a `Tile`. This function knows how to walk
+/// a grid; it deliberately knows nothing about which grid, so the map it used
+/// to hold is now the caller's business and the two spaces share one search.
+/// `FnMut` because a `WorldMap` reader has to hold the map mutably —
+/// `WorldMap::tile` generates chunks lazily.
 pub(crate) fn walk_field(
-    map: &mut WorldMap,
     origin: (i32, i32),
     radius: i32,
-    step_allowed: impl Fn(&Tile, (i32, i32)) -> bool,
+    mut step_allowed: impl FnMut((i32, i32)) -> bool,
 ) -> HashMap<(i32, i32), u32> {
-    // `WorldMap::tile` takes `&mut self` — it generates chunks lazily — so
-    // the successor closure has to hold the map mutably. `dijkstra_all`
-    // takes `FnMut`, which permits exactly this; nothing else in the call
-    // borrows the map.
     let reached = dijkstra_all(&origin, |&(x, y)| {
         NEIGHBOURS
             .iter()
             .map(move |(dx, dy)| (x + dx, y + dy))
             .filter(|&(nx, ny)| {
                 // Bounding the *successors*, not just the result, is what
-                // bounds the search: an unbounded failed search on this
-                // lazily-generated, effectively infinite map would keep
+                // bounds the search: an unbounded failed search on the
+                // lazily-generated, effectively infinite zone map would keep
                 // walking `WorldMap::tile` outward, generating chunks with
                 // nothing to stop it.
                 (nx - origin.0).abs() <= radius
                     && (ny - origin.1).abs() <= radius
-                    && step_allowed(&map.tile(nx, ny), (nx, ny))
+                    && step_allowed((nx, ny))
             })
             // Movement is Chebyshev: all eight directions, diagonals
             // included, cost the same single step.
@@ -79,9 +77,9 @@ pub(crate) fn pursuit_field(
     origin: (i32, i32),
     radius: i32,
 ) -> HashMap<(i32, i32), u32> {
-    // The coordinate is ignored here: a guardian's refusal is entirely a
-    // property of the terrain it is standing on.
-    walk_field(map, origin, radius, |t, _| t.open_to_hostiles())
+    // A guardian's refusal is entirely a property of the terrain it is
+    // standing on, so this reads the tile and nothing else.
+    walk_field(origin, radius, |(x, y)| map.tile(x, y).open_to_hostiles())
 }
 
 #[cfg(test)]
@@ -89,7 +87,7 @@ mod tests {
     use super::*;
     // Only the fixtures below name a biome now that `pursuit_field` refuses
     // the slab through `Tile::open_to_hostiles` rather than spelling it out.
-    use crate::world::Biome;
+    use crate::world::{Biome, Tile};
 
     fn floor() -> Tile {
         Tile {
@@ -130,11 +128,11 @@ mod tests {
             "pursuit must still refuse the base slab"
         );
 
-        let walked = walk_field(&mut map, (0, 0), 2, |t, _| t.walkable);
+        let walked = walk_field((0, 0), 2, |(x, y)| map.tile(x, y).walkable);
         assert_eq!(
             walked.get(&(1, 0)),
             Some(&1),
-            "a hauler must be able to cross the base slab"
+            "an ordinary walk must be able to cross the base slab"
         );
     }
 

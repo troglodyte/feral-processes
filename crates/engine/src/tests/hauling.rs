@@ -2,7 +2,7 @@
 //! and coming back.
 
 use super::support::*;
-use crate::tuning::MAX_BUILD_DISTANCE_FROM_HOME;
+use crate::tuning::STARTING_POCKET_RADIUS;
 use crate::*;
 
 /// A Home on the player's own tile — walkable by definition — plus enough
@@ -11,7 +11,7 @@ use crate::*;
 /// terrain.
 fn base(seed: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, 0, 0);
+    place_home(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
@@ -23,13 +23,13 @@ fn base(seed: u32) -> Game {
     game
 }
 
-/// Deploys `kind` at the player's position plus `(dx, dy)` and returns it.
+/// Deploys `kind` at the party's base cell plus `(dx, dy)` and returns it.
 /// `place_structure` reports only success, so the entity is found by the
-/// tile it must now be standing on.
+/// cell it must now be standing on.
 fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
     game.place_structure(kind, dx, dy).unwrap();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    let (x, y) = (ppos.x + dx, ppos.y + dy);
+    let (x, y) = (px + dx, py + dy);
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
     query
         .iter(&game.world)
@@ -278,12 +278,10 @@ fn a_posted_program_walks_to_its_machine_before_producing() {
     let worker = hauler(&mut game);
     // The distance is the *player's*: a posted program sets off from
     // wherever you were standing when you posted it, so posting from the
-    // far edge of the slab is what buys the walk.
-    let player = game.player_entity();
-    move_to(
+    // far side of the pocket is what buys the walk.
+    stand_in_base_at(
         &mut game,
-        player,
-        node_pos.x + MAX_BUILD_DISTANCE_FROM_HOME - 1,
+        node_pos.x + STARTING_POCKET_RADIUS - 1,
         node_pos.y,
     );
     game.assign_cronjob(worker, node).unwrap();

@@ -10,6 +10,7 @@ use std::collections::HashSet;
 
 use bevy_ecs::system::SystemParam;
 
+use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
@@ -148,7 +149,7 @@ pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> Hash
 /// and the player could never have collected from it either, since
 /// `collect_adjacent` is orthogonal and they cannot stand on a building.
 pub(crate) fn station_tile(
-    map: &mut WorldMap,
+    grid: &BaseGrid,
     structure: Position,
     from: Position,
     blocked: &HashSet<(i32, i32)>,
@@ -159,7 +160,7 @@ pub(crate) fn station_tile(
             x: structure.x + dx,
             y: structure.y + dy,
         })
-        .filter(|p| map.tile(p.x, p.y).walkable && !blocked.contains(&(p.x, p.y)))
+        .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
         .min_by_key(|p| (chebyshev(*p, from), p.x, p.y))
 }
 
@@ -197,17 +198,17 @@ pub(crate) enum NoPost {
 /// field and frozen for the rest of the run. You may step *off* an occupied
 /// tile, never onto one.
 fn post_field(
-    map: &mut WorldMap,
+    grid: &BaseGrid,
     from: Position,
     structure: Position,
     blocked: &HashSet<(i32, i32)>,
-    build_radius: i32,
+    pocket_radius: i32,
 ) -> Result<PostRoute, NoPost> {
-    let station = station_tile(map, structure, from, blocked).ok_or(NoPost::BoxedIn)?;
+    let station = station_tile(grid, structure, from, blocked).ok_or(NoPost::BoxedIn)?;
     let start = (from.x, from.y);
-    let reach = haul_walk_radius(build_radius);
-    let field = walk_field(map, (station.x, station.y), reach, |t, p| {
-        t.walkable && (p == start || !blocked.contains(&p))
+    let reach = haul_walk_radius(pocket_radius);
+    let field = walk_field((station.x, station.y), reach, |p| {
+        grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
     });
     let here = *field.get(&start).ok_or(NoPost::NoRoute)?;
     Ok((field, here))
@@ -221,16 +222,16 @@ fn post_field(
 /// already on one of the four tiles it works from never walks, so it never
 /// builds a field and cannot be refused for lacking a route through one.
 pub(crate) fn post_reach(
-    map: &mut WorldMap,
+    grid: &BaseGrid,
     from: Position,
     structure: Position,
     blocked: &HashSet<(i32, i32)>,
-    build_radius: i32,
+    pocket_radius: i32,
 ) -> Result<(), NoPost> {
     if at_station(from, structure) {
         return Ok(());
     }
-    post_field(map, from, structure, blocked, build_radius).map(|_| ())
+    post_field(grid, from, structure, blocked, pocket_radius).map(|_| ())
 }
 
 /// Moves as much of `load` into `stock`'s output as fits, and reports how
@@ -424,8 +425,7 @@ pub(crate) fn haul_step_system(
     mut structures: Query<HaulStructure, Without<Tamed>>,
     departure: HaulDeparture,
     defs: HaulLookups,
-    platform: Res<Platform>,
-    mut map: ResMut<WorldMap>,
+    grid: Res<BaseGrid>,
     mut commands: Commands,
 ) {
     let HaulDeparture {
@@ -438,10 +438,10 @@ pub(crate) fn haul_step_system(
         items,
     } = defs;
     let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
-    // The cached radius rather than `Game::build_radius`: a system has no
-    // `Game`, and `Platform` is where that derivation is kept readable from
-    // a borrow this shallow.
-    let build_radius = platform.radius;
+    // What bounds the Dijkstra field a walker rebuilds each tick: how far
+    // the base actually reaches, measured off the grid rather than taken
+    // from the size the pocket started at. See `BaseGrid::radius`.
+    let pocket_radius = grid.radius();
 
     // Rebuilt every tick rather than cached: this is the list that makes a
     // demolished or newly-filled depot stop being a destination without
@@ -689,10 +689,10 @@ pub(crate) fn haul_step_system(
 
         // No field means no route. `assign_cronjob` refuses that case up
         // front, so what is left here is a route lost after the posting — a
-        // wall of new buildings, a depot demolished behind one, or terrain
+        // wall of new buildings, a depot demolished behind one, or ground
         // that changed. The worker stands still, and the marker is what turns
         // its machine's status from `Unstaffed` into `Stranded`.
-        let Ok((field, here)) = post_field(&mut map, worker_pos, dest_pos, &blocked, build_radius)
+        let Ok((field, here)) = post_field(&grid, worker_pos, dest_pos, &blocked, pocket_radius)
         else {
             commands.entity(worker).insert(Stranded);
             continue;

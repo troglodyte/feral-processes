@@ -160,7 +160,7 @@ fn home_loads_as_non_raidable_and_other_structures_default_to_raidable() {
 #[test]
 fn deploying_home_gives_it_no_durability_pool() {
     let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     let home = find_home(&mut game).expect("place_home should have spawned a Home");
 
     assert!(
@@ -176,7 +176,7 @@ fn deploying_a_raidable_structure_still_gives_it_a_durability_pool() {
     // already places two structures on.
     let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
     let player = game.player_entity();
     game.world
         .get_mut::<Inventory>(player)
@@ -214,7 +214,7 @@ fn raid_check_never_targets_home_even_as_the_only_structure() {
     for e in existing {
         game.world.despawn(e);
     }
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
 
     for _ in 0..500 {
         game.raid_check();
@@ -239,7 +239,7 @@ fn raid_check_never_targets_home_even_as_the_only_structure() {
 fn home_survives_save_and_load_without_gaining_a_durability_pool() {
     let assets = test_assets_dir();
     let mut game = Game::new(703, DifficultyMode::Forgiving, &assets).unwrap();
-    place_home(&mut game, -1, 0);
+    place_home(&mut game);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_home_raidable_test_{}.bin",
@@ -1409,7 +1409,7 @@ fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
     let mut game = Game::new(146, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "fortification");
-    place_home(&mut game, 0, 1);
+    place_home(&mut game);
     {
         let mut inv = game
             .world

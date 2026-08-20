@@ -674,11 +674,22 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        if let Err(reason) = self.require_surface() {
+        // `require_base`, not `require_surface`. Resting needs an
+        // `enables_rest` structure in reach, Home is the only one that sets
+        // it, and Home stands in base space — so the surface guard would
+        // leave resting working only where the anchor tile and base space's
+        // origin happened to carry the same numbers.
+        if let Err(reason) = self.require_base() {
             self.log(reason);
             return;
         }
-        let player_pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        // And the reach is measured in the space the structure is in. The
+        // player's `Position` is pinned to the anchor tile out on the zone
+        // surface the whole time they are in here.
+        let (x, y) = self
+            .base_pos()
+            .expect("require_base passed, so the party is in base space");
+        let player_pos = Position { x, y };
         let Some(rest_structure) = self.nearby_rest_structure(player_pos) else {
             self.log("You need to be within your base, near Home, to power down and rest.");
             return;

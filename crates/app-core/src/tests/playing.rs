@@ -172,6 +172,12 @@ fn a_refused_step_in_base_space_is_not_an_action() {
         inside.game.as_ref().is_some_and(|g| g.in_base()),
         "the fixture must start inside the base, where the rock is"
     );
+    // The pocket's north edge, so the step up leaves it and meets rock.
+    stand_in_base_at(
+        &mut inside,
+        0,
+        -feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
+    );
     inside.status_line = Some("an earlier refusal".to_string());
     let _ = inside.take_sounds();
 

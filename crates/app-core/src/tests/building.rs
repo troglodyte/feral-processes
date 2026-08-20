@@ -47,11 +47,16 @@ fn a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown() {
 
 /// Home is the first entry in the build menu and declares no upgrade path,
 /// which makes it the fixture for "deployed, but nothing to upgrade".
+///
+/// Driven from the open grid, because founding the run's first Home is the
+/// one deploy made from out there — and leaves the party inside afterwards,
+/// which is where every other base key is pressed from.
 fn deploy_home(app: &mut App) {
     open_via_menu(app, 'b', "Deploy a structure");
     app.handle_key(GameKey::Enter);
     app.handle_key(GameKey::Up);
     assert_eq!(structure_count(app), 1, "Home should now be deployed");
+    stand_in_base(app);
 }
 
 /// Home declares no upgrade path, so a base consisting only of one leaves
@@ -60,7 +65,6 @@ fn deploy_home(app: &mut App) {
 #[test]
 fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
     let mut app = test_app(231);
-    stand_in_base(&mut app);
     deploy_home(&mut app);
 
     app.handle_key(GameKey::Char('b'));
@@ -75,14 +79,12 @@ fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
     );
 }
 
+/// How many structures are deployed, from the roster rather than from a
+/// scan around the party: the roster is the whole base whichever locale it
+/// is asked from, and a scan centred on the party would answer this
+/// differently depending on where they happen to be standing.
 fn structure_count(app: &mut App) -> usize {
-    app.game
-        .as_mut()
-        .unwrap()
-        .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
-        .into_iter()
-        .filter(|e| e.is_structure)
-        .count()
+    app.game.as_mut().unwrap().structure_report().len()
 }
 
 #[test]
@@ -90,8 +92,8 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
     let mut app = test_app(101);
     assert!(app.game.is_some(), "test game should have loaded");
     assert!(app.mode == Mode::Playing);
-    // Deploying happens from inside the base now.
-    stand_in_base(&mut app);
+    // From the open grid: the run has no base yet, and founding one is the
+    // deploy that opens it.
 
     let structure_count_in_menu = app.game.as_mut().unwrap().buildable_structure_defs().len();
     let mut placed = false;
@@ -141,8 +143,6 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
 #[test]
 fn remove_key_on_home_requires_confirmation_before_demolishing() {
     let mut app = test_app(203);
-    stand_in_base(&mut app);
-
     deploy_home(&mut app);
 
     open_via_menu(&mut app, 'b', "Demolish a structure");
@@ -253,6 +253,10 @@ fn the_demolish_key_removes_the_structure_next_to_you() {
 #[test]
 fn the_demolish_key_still_asks_before_taking_down_home() {
     let mut app = app_inside_a_small_base(241, false);
+    // One cell south of the Home, which stands on the exit cell the fixture
+    // otherwise puts the party on: the direct key aims at a *neighbour*, and
+    // the tile you are standing on is not one.
+    stand_in_base_at(&mut app, 0, 1);
 
     app.handle_key(GameKey::Char('d'));
     app.handle_key(GameKey::Up);
@@ -359,6 +363,17 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
     let mut inside = app_owning_a_program_and_a_compiler(2432, &[]);
     stand_in_base(&mut inside);
     open_via_menu(&mut inside, 'b', "Structure roster");
+    let workable = inside
+        .game
+        .as_mut()
+        .unwrap()
+        .structure_report()
+        .iter()
+        .position(|r| r.workable)
+        .expect("the fixture's Compiler is workable");
+    for _ in 0..workable {
+        inside.handle_key(GameKey::Down);
+    }
     inside.handle_key(GameKey::Enter);
     assert_eq!(
         inside.mode,

@@ -1,7 +1,7 @@
 (
     id: "home",
     name: "Home",
-    description: "Anchors your base — everything else must be deployed on its platform, and demolishing it cascades. GC Entropy Sweeps can't touch it, you can recharge beside it for a Power Outlet, you can symlink home from anywhere for 4 Power Cells, and it supplies your base's Grid on its own, before you ever build a Recharger.",
+    description: "Anchors your base — everything else must be deployed on laid floor, and demolishing it cascades. GC Entropy Sweeps can't touch it, you can recharge beside it for a Power Outlet, you can symlink home from anywhere for 4 Power Cells, and it supplies your base's Grid on its own, before you ever build a Recharger.",
     glyph: 'H',
     color: Green,
     build_cost: [("core_fragment", 5)],

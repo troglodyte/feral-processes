@@ -86,7 +86,7 @@ impl Game {
         if self.is_underground() {
             return None;
         }
-        let center = *self.world.get::<Position>(self.player_entity())?;
+        let center = self.scan_center();
         let target = (center.x + dx, center.y + dy);
         // A square box just big enough to contain the one tile asked about,
         // rather than a per-axis one: the scan is only a way to reach the
@@ -204,7 +204,7 @@ impl Game {
         if self.is_underground() {
             return None;
         }
-        let start = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let start = self.scan_center();
         // `(dx, dy)` is a cardinal unit vector, so a tile is on the ray
         // exactly when its offset *is* `step` copies of it — which rules out
         // the off-axis tile, the player's own tile and everything behind
@@ -301,8 +301,25 @@ impl Game {
         }
     }
 
+    /// The tile every scan around the party is centered on, **in the
+    /// coordinate space the things being scanned live in.**
+    ///
+    /// In base space that is the party's base cell, not their `Position`:
+    /// `Position` is pinned to the anchor tile on the zone surface while
+    /// they are out of phase, and every `Structure` stands in base space. A
+    /// scan centered on the pinned tile would list the base only when the
+    /// anchor happened to sit at the same numbers base space's origin does
+    /// — which the zone spawn point usually does, so it would read as
+    /// working and quietly stop the day a sector spawned somewhere else.
+    fn scan_center(&self) -> Position {
+        match self.base_pos() {
+            Some((x, y)) => Position { x, y },
+            None => *self.world.get::<Position>(self.player_entity()).unwrap(),
+        }
+    }
+
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
-        let center = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let center = self.scan_center();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
         let hits: Vec<(Entity, Position, Glyph)> = query
             .iter(&self.world)
@@ -983,6 +1000,19 @@ impl Game {
         let cost = self
             .symlink_cost(target)
             .ok_or_else(|| "That structure has no symlink.".to_string())?;
+        // Where a symlink puts you down: the anchor, not the structure's own
+        // tile. Every `Structure` stands in base space, so its `Position` is
+        // in a coordinate space the player's `Position` is not — writing one
+        // across to the other would drop the party on whatever happens to be
+        // at those numbers out on the zone surface. The anchor is the base's
+        // one presence there, and it is where a trip home ends now.
+        //
+        // Read before the cost is taken, with the other refusals: a symlink
+        // that cannot land must not have been paid for.
+        let target_pos = self
+            .anchor_position()
+            .map(|(x, y)| Position { x, y })
+            .ok_or_else(|| "There's no anchor in this sector to link to.".to_string())?;
         let player = self.player_entity();
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
@@ -998,7 +1028,6 @@ impl Game {
                 inv.take(item.clone(), *qty);
             }
         }
-        let target_pos = *self.world.get::<Position>(target).unwrap();
         let name = self.entity_label(target);
         // Only once every check above has passed: a symlink that is refused
         // must not have surfaced the party on its way to refusing. Doing it
@@ -1015,9 +1044,9 @@ impl Game {
             pos.y = target_pos.y;
         }
         self.log(if surfaced {
-            format!("The symlink hauls you up out of the stack and drops you at {name}.")
+            format!("The symlink hauls you up out of the stack and drops you at {name}'s anchor.")
         } else {
-            format!("You use a symlink and teleport to {name}.")
+            format!("You use a symlink and teleport to {name}'s anchor.")
         });
         self.tick();
         Ok(())

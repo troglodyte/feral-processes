@@ -168,13 +168,14 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
         .into_iter()
         .find(|d| d.work.is_some())
         .expect("at least one workable structure should exist");
+    game.lay_starting_pocket();
     let structure = game
         .world
         .spawn((
             Structure {
                 kind: structure_def.id.clone(),
             },
-            Position { x: 3, y: 4 },
+            Position { x: 2, y: 0 },
             ResourceNode {
                 resource: structure_def.work.as_ref().unwrap().produces.clone(),
                 level: None,
@@ -1795,7 +1796,7 @@ fn rest_refills_a_drained_companions_reserve() {
     let mut game = Game::new(7406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
     *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(3.0);
-    spawn_rest_structure_at_player(&mut game);
+    stand_in_base_beside_home(&mut game);
 
     game.rest();
 

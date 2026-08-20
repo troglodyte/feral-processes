@@ -2004,6 +2004,25 @@ pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 /// never read as a settlement that grew.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
+/// How far the pre-cleared pocket reaches from base space's own origin when
+/// the first Home is deployed — `Game::lay_starting_pocket`, which lays
+/// `BaseCell::Floor` over the chamfered box this radius and
+/// `PLATFORM_CORNER_CUT` describe and writes nothing into `WorldMap` at all.
+///
+/// **Deliberately equal to `MAX_BUILD_DISTANCE_FROM_HOME` above, and
+/// deliberately not defined as it.** The opening base has to play exactly as
+/// it did when it was a slab stamped onto the zone surface — that is the
+/// whole claim of the relocation, and the same 69 buildable cells is what
+/// makes it checkable. But the slab constant is on its way out with
+/// `resources::Platform`, and a pocket that followed it by reference would
+/// go wherever that deletion left it rather than staying where it was
+/// measured.
+///
+/// This is the *starting* size, the way the old constant was the starting
+/// radius: slice 2's mining is what makes floor space something a player
+/// buys, and this is only the ground the run opens with.
+pub const STARTING_POCKET_RADIUS: i32 = 4;
+
 /// The widest a base can ever get: `Game::build_radius` clamps here no
 /// matter how many `build_radius_bonus` structures are deployed. A 201x201
 /// slab, which is not a balance figure — it is a backstop, deliberately far

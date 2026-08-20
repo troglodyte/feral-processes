@@ -76,12 +76,9 @@ impl BaseGrid {
     /// included, so a mined tile that gets floored does not stack the two
     /// states.
     ///
-    /// Unreached by production code this task, the same as `open` below:
-    /// this task builds only `BaseGrid` and its predicates, and the tasks
-    /// that stamp a base's floor and mine into its walls land later in the
-    /// plan. `#[allow(dead_code)]` says so rather than leaving a standing
-    /// warning on an otherwise-clean lib build.
-    #[allow(dead_code)]
+    /// `Game::lay_starting_pocket` is the only caller in gameplay: the
+    /// pocket the run opens with when its first Home goes down. Slice 2's
+    /// tiling action is the second one.
     pub(crate) fn lay_floor(&mut self, x: i32, y: i32) {
         self.cells.insert((x, y), BaseCell::Floor);
     }
@@ -94,6 +91,29 @@ impl BaseGrid {
     #[allow(dead_code)]
     pub(crate) fn open(&mut self, x: i32, y: i32, tick: u64) {
         self.cells.insert((x, y), BaseCell::Open { mined_at: tick });
+    }
+
+    /// How far the carved-out space reaches from base space's origin: the
+    /// largest Chebyshev distance of any cell in it, and 0 while everything
+    /// is still solid.
+    ///
+    /// Bounds the Dijkstra field a posted worker walks (`tuning::
+    /// haul_walk_radius`), which is why it is measured rather than taken
+    /// from `STARTING_POCKET_RADIUS`: a walk bounded by the size the pocket
+    /// *started* at would refuse postings across a base the player has since
+    /// mined outward, which is a machine you can see from your Home and
+    /// cannot staff.
+    ///
+    /// Walked rather than cached, the same argument `Game::build_radius`
+    /// makes about deriving over stored state: a cell opened, floored or
+    /// reclaimed by entropy changes this answer, and a cached one would need
+    /// keeping in step with all three.
+    pub(crate) fn radius(&self) -> i32 {
+        self.cells
+            .keys()
+            .map(|&(x, y)| x.abs().max(y.abs()))
+            .max()
+            .unwrap_or(0)
     }
 
     /// How many cells are laid floor — the cheapest assertion that a base

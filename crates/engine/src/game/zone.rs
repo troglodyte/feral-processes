@@ -582,6 +582,18 @@ impl Game {
             }
         }
 
+        // The anchor is not zone-local the way a `SurfaceLink` is — it is
+        // not in the stale sweep above and so survives the breach at its
+        // old coordinates — but a door back to a base that travels with the
+        // party has to travel with it too. Moved rather than despawned and
+        // respawned, so `resources::AnchorEntity` still names the same
+        // entity on both sides of a breach.
+        let anchor = self.world.resource::<AnchorEntity>().0;
+        if let Some(mut pos) = self.world.get_mut::<Position>(anchor) {
+            pos.x = start.0;
+            pos.y = start.1;
+        }
+
         // Build salvage and breach keys are zone-local: the next breach has
         // to be funded in the zone you leave from, so a stockpile can't chain
         // breaches past content it never engaged with. Keyed on economy role,

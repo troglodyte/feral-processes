@@ -418,3 +418,123 @@ fn a_nest_guardian_does_not_open_a_battle_in_base_space() {
         "a pursuer beside the anchor must not reach a party out of phase"
     );
 }
+
+// ---------------------------------------------------------------------
+// The anchor: the permanent door into base space
+// ---------------------------------------------------------------------
+
+/// `Game::new` spawns exactly one `BaseAnchor`, standing on the same tile
+/// the player does — both are placed from the same `start` coordinate in
+/// `Game::new`.
+#[test]
+fn a_new_game_has_exactly_one_anchor_where_the_player_starts() {
+    let mut game = game(3116);
+    let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    let anchors: Vec<Position> = {
+        let mut query = game.world.query_filtered::<&Position, With<BaseAnchor>>();
+        query.iter(&game.world).copied().collect()
+    };
+
+    assert_eq!(
+        anchors.len(),
+        1,
+        "a fresh game must have exactly one anchor"
+    );
+    assert_eq!(
+        anchors[0], player_pos,
+        "the anchor must stand where the player starts"
+    );
+    assert_eq!(
+        game.anchor_position(),
+        Some((player_pos.x, player_pos.y)),
+        "Game::anchor_position must agree with the entity's own Position"
+    );
+}
+
+/// The anchor's position round-trips through a real `Game::save`/
+/// `Game::load`, not only the RON round trip — a round trip through
+/// `to_ron`/`from_ron` alone cannot catch `#[serde(skip)]` on
+/// `SaveData::anchor`, nor a load path that quietly falls back to the zone
+/// spawn point instead of trusting the persisted value.
+///
+/// Moved off the zone spawn point first so the two cannot coincidentally
+/// agree: a load path that derived the anchor from `spawn_point` instead of
+/// `data.anchor` would pass a test that left the two equal, which is
+/// exactly the trap this repo has been bitten by before — the zone spawn
+/// point is usually `(0, 0)`, so a derivation bug is invisible against it.
+#[test]
+fn the_anchors_position_survives_a_real_save_and_load() {
+    let mut game = game(3117);
+    let anchor = {
+        let mut query = game.world.query_filtered::<Entity, With<BaseAnchor>>();
+        query.iter(&game.world).next().unwrap()
+    };
+    {
+        let mut pos = game.world.get_mut::<Position>(anchor).unwrap();
+        pos.x += 40;
+        pos.y += 40;
+    }
+    let moved = *game.world.get::<Position>(anchor).unwrap();
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    assert_ne!(
+        (moved.x, moved.y),
+        (spawn.x, spawn.y),
+        "the fixture must move the anchor away from the spawn point to be a real test"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_anchor_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.anchor_position(), Some((moved.x, moved.y)));
+}
+
+/// `run_raid` selects its target from `With<Durability>`, and the anchor
+/// carries none — so a forced sweep against a base with nothing else
+/// standing must find no target at all, rather than hitting the one entity
+/// present. If the anchor ever gained a `Durability` component (the mistake
+/// `components::BaseAnchor`'s doc warns against), this is what would go
+/// non-empty.
+#[test]
+fn a_forced_raid_never_targets_the_anchor() {
+    let mut game = game(3118);
+
+    game.dev_force_raid();
+
+    assert!(
+        game.take_effects().is_empty(),
+        "the anchor has no Durability, so a raid against an otherwise-empty base must find no target"
+    );
+}
+
+/// `structure_report` is the roster every deployed-structure count in the
+/// game reads from — `Game::structure_manifest` filters it by entity rather
+/// than building a second one — and it requires a `Structure` component,
+/// which the anchor deliberately does not carry. A fresh game reports
+/// nothing deployed, and placing a real structure beside the anchor reports
+/// exactly the one structure, not two.
+#[test]
+fn the_anchor_is_not_counted_as_a_deployed_structure() {
+    let mut game = game(3119);
+    assert!(
+        game.structure_report().is_empty(),
+        "the anchor exists from the start but must not appear on the structure roster"
+    );
+
+    from_inside_the_base(&mut game, |g| {
+        give(g, &ItemId::from(ids::CORE_FRAGMENT), 20);
+        g.place_structure("home", 1, 0)
+    })
+    .unwrap();
+
+    assert_eq!(
+        game.structure_report().len(),
+        1,
+        "only the placed Home should be on the roster, not the anchor standing beside it"
+    );
+}

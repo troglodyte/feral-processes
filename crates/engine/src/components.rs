@@ -1401,6 +1401,28 @@ pub struct Nest {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SurfaceLink;
 
+/// The permanent door into base space — the player's pocket-dimension base,
+/// stepped into by walking onto this tile (`Game::enter_base`, wired in a
+/// later task). Modeled on `SurfaceLink`: it carries `Position` and `Glyph`
+/// alongside this, and stands on the zone map like any other surface
+/// entity.
+///
+/// Deliberately **not** a `Structure`. That is load-bearing rather than
+/// cosmetic: "every `Structure` entity is in base space" is how this slice
+/// tells a deployed building apart from anything standing on the surface,
+/// with no marker component of its own — making the anchor a `Structure`
+/// would silently break that rule.
+///
+/// There is exactly one, spawned once by `Game::new` (and restored once by
+/// `Game::load`) and never destroyed: it carries no `Durability`, so
+/// `run_raid`'s `With<Durability>` query cannot select it. Unlike a
+/// `SurfaceLink`, it survives `Game::enter_next_zone`'s stale-entity sweep
+/// — it is not zone-local — and is moved to the new zone's spawn point
+/// rather than despawned and respawned, so its identity carries across a
+/// breach.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BaseAnchor;
+
 /// Tags a wild program that was conjured for a Stack encounter rather
 /// than found on the zone map.
 ///

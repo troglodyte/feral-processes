@@ -554,6 +554,13 @@ pub struct BattleTelemetry {
 #[derive(Resource, Clone, Copy)]
 pub struct PlayerEntity(pub Entity);
 
+/// The single `components::BaseAnchor` entity. Kept as a resource for the
+/// same reason `PlayerEntity` is: `Game::anchor_position` is `&self` and
+/// reads far more often than the anchor moves, so a cached handle is what
+/// lets it look the position up without a `World`-mutating query.
+#[derive(Resource, Clone, Copy)]
+pub struct AnchorEntity(pub Entity);
+
 /// The stack lair a fight was roused from: which frame it is, and the
 /// program the lair was built around.
 ///

@@ -326,6 +326,24 @@ impl Game {
         }
     }
 
+    /// The anchor's tile on the zone surface — the permanent door into base
+    /// space, regardless of which locale the party currently stands in.
+    ///
+    /// `Some` from the moment `Game::new` or `Game::load` finishes: both
+    /// constructors spawn the one `components::BaseAnchor` entity and record
+    /// it in `resources::AnchorEntity` before returning. `None` here would
+    /// mean that bookkeeping has gone missing, not a normal outcome the way
+    /// `base_pos`'s `None` is.
+    ///
+    /// A plain resource-then-component read rather than a query, so this can
+    /// stay `&self` — `World::query_filtered` needs `&mut World` to build,
+    /// and every other reader of "where is the anchor" only ever wants the
+    /// answer, never a chance to move it.
+    pub fn anchor_position(&self) -> Option<(i32, i32)> {
+        let anchor = self.world.get_resource::<AnchorEntity>()?.0;
+        self.world.get::<Position>(anchor).map(|p| (p.x, p.y))
+    }
+
     /// `Err` unless the party is on the zone surface proper — for actions
     /// that reach into the **zone map** through the player's `Position`.
     ///

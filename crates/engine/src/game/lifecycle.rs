@@ -199,6 +199,25 @@ impl Game {
             .id();
         world.insert_resource(PlayerEntity(player));
 
+        // The anchor's permanent door into base space, standing where the
+        // player does. Spawned here rather than through a `Game` method —
+        // there is no `Game` yet to call one on, the same reason the player
+        // above is a bare `world.spawn`.
+        let anchor = world
+            .spawn((
+                BaseAnchor,
+                Position {
+                    x: start.0,
+                    y: start.1,
+                },
+                Glyph {
+                    ch: '<',
+                    color: GlyphColor::Blue,
+                },
+            ))
+            .id();
+        world.insert_resource(AnchorEntity(anchor));
+
         let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
@@ -499,6 +518,33 @@ impl Game {
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
+
+        // The anchor's saved position, or — only for a save written before
+        // this field existed, since `Game::save` always writes `Some` from
+        // here on — the zone spawn point it started at. **Not** a
+        // derivation from `data.spawn_point` in the normal case: a load
+        // path that quietly recomputed the anchor from the spawn point
+        // instead of trusting `data.anchor` would agree with this fallback
+        // whenever the two happen to coincide (which is most of the time,
+        // and always at `(0, 0)`) and only disagree once something has
+        // moved the anchor independently of where the party breaches in —
+        // exactly the kind of bug this repo has been bitten by before for
+        // looking cheaper than threading the persisted field through.
+        let anchor_pos = data.anchor.unwrap_or(data.spawn_point);
+        let anchor = world
+            .spawn((
+                BaseAnchor,
+                Position {
+                    x: anchor_pos.0,
+                    y: anchor_pos.1,
+                },
+                Glyph {
+                    ch: '<',
+                    color: GlyphColor::Blue,
+                },
+            ))
+            .id();
+        world.insert_resource(AnchorEntity(anchor));
 
         let schedule = Self::build_schedule();
 
@@ -1135,6 +1181,7 @@ impl Game {
             nests,
             tile_overrides,
             base_grid,
+            anchor: self.anchor_position(),
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {
                 let p = self.world.resource::<ZoneSpawnPoint>();

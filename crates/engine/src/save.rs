@@ -486,6 +486,24 @@ pub struct SaveData {
     /// empty (fully solid) base rather than needing a hand recapture.
     #[serde(default)]
     pub base_grid: crate::base_grid::BaseGrid,
+    /// The anchor's tile on the zone surface — see `components::BaseAnchor`.
+    /// Persisted rather than derived from `spawn_point` on load: the two
+    /// agree today (the anchor is auto-placed at each zone's spawn point and
+    /// re-placed there on every breach) but nothing enforces that they must,
+    /// and deriving one from the other is exactly the kind of shortcut whose
+    /// bug would be invisible against a spawn point that is usually
+    /// `(0, 0)` in a test fixture.
+    ///
+    /// `#[serde(default)]` is the whole compatibility story since v29 (see
+    /// that constant's docs): a file written before this field existed —
+    /// every `dev-saves/` template as of this change — loads it as `None`,
+    /// and `Game::load` falls back to `spawn_point` for that one case. It
+    /// does not earn `SAVE_FORMAT_VERSION` a second bump in this slice: an
+    /// *added* field behind a default is additive, unlike `base_grid`
+    /// replacing `claimed_tiles` above, which is a removal and already spent
+    /// the only bump this migration needs.
+    #[serde(default)]
+    pub anchor: Option<(i32, i32)>,
     /// Which zone sector the player had breached into.
     pub zone: u32,
     /// Where the player materialized on breaching into that zone — see
@@ -894,6 +912,7 @@ mod tests {
             nests: Vec::new(),
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
+            anchor: None,
             zone: 1,
             spawn_point: (0, 0),
             buyback: Vec::new(),

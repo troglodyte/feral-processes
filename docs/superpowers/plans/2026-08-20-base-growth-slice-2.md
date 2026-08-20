@@ -21,7 +21,7 @@ egui/bevy renderer behind `gui/src/paint.rs`.
 
 **Spec:** `docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`,
 section **"Slice 2 in detail: growing the base"**. Read that section before
-Task 1; its nine settled decisions are the argument for everything below, and
+A1; its nine settled decisions are the argument for everything below, and
 this plan does not repeat them.
 
 ## Global Constraints
@@ -61,7 +61,53 @@ this plan does not repeat them.
 
 ---
 
-### Task 1: Rock you can hit
+## Phases, and why they are drawn here
+
+Eight tasks in four phases. **Each phase ends playable**, which is what makes
+it a place to stop — and stopping is the point. Context cost is size times
+remaining turns, so the expensive thing is not a dispatch, it is a
+conversation that carries a phase's exploration through every later turn.
+A phase boundary is a `/clear`: this file and the commits are the handoff, and
+the next session opens on two documents instead of replaying how they were
+written.
+
+| Phase | Tasks | Crates | Ends with |
+| --- | --- | --- | --- |
+| **A** — the hand loop | A1 rock, A2 tile, A3 entropy, A4 save | engine (+1 key) | You can dig and floor a wing by hand |
+| **B** — the plan you draw | B1 marks, B2 build mode | engine, app-core, gui | You can draw a plan and work it yourself |
+| **C** — the crew | C1 posting, digging, complaining | engine | The base grows while you are away |
+| **D** — landing it | D1 docs and seams | docs | Measured, reviewed, released |
+
+**Dispatch economics**, from what this repo has already paid: a single
+Phase-1 refactor cost ~1.6M subagent tokens across 16 sequential dispatches,
+and the isolation was worth it there and is not worth it by reflex.
+
+- **Sonnet is the default.** A1-A4, B1-B2 and C1 are mechanical TDD against
+  interfaces this plan already fixes. Opus buys nothing there. Reserve it for
+  the whole-branch review in Phase D, which is the one judgment call.
+- **One review per phase, not one per task.** Per-task gates roughly double
+  the dispatch count and buy earlier defect discovery; the final whole-branch
+  review is the gate that is *not* optional.
+- **Don't re-run the full suite to confirm what a subagent reported.**
+  Spot-check with `cargo test -p feral-processes-engine <name>`; the
+  workspace run belongs at the phase boundary.
+- **Hand a subagent a diff as a file, never pasted into the prompt** — pasted
+  text stays in context for the rest of the session.
+- **Forbid pushing in every dispatch.** A finished agent stays resumable, and
+  one has released to `main` on its own before.
+
+## Phase A — the hand loop
+
+**Lands:** you can walk up to the black, hit it until it opens, lay a
+VectorStasis Tile over what you opened, and lose the frontier you dug and
+never floored. Engine crate plus one key in app-core.
+
+**Playable on its own**, and save-safe: A4 puts `DigSite` in the save before
+anything can be lost to a reload. Its mark-round-trip test sets
+`DigSite::marked` directly on the component — the field exists from A1, and
+the verb that writes it does not arrive until B1.
+
+### A1: Rock you can hit
 
 The hand loop's first half: a solid cell becomes a thing you swing at, and a
 couple of swings bring it down.
@@ -91,7 +137,7 @@ pub const BASE_ROCK_DURABILITY: u32 = 24;
 pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 ```
 
-`announced_stuck` is unused until Task 5 and carries `#[allow(dead_code)]`
+`announced_stuck` is unused until C1 and carries `#[allow(dead_code)]`
 until then, the same way `BaseGrid::open` did through slice 1.
 
 **Consumes:** `BaseGrid::{cell, walkable, open}`, `Game::attack_range`,
@@ -112,7 +158,7 @@ until then, the same way `BaseGrid::open` did through slice 1.
     player, take the same damage. This is `attack_nest`'s determinism rule and
     the reason mining does not go through `battle::resolve_attack`.
   - `an_opened_cell_records_the_tick_it_was_opened` — `Open { mined_at }`
-    equals `GameClock::tick`, which Task 3 depends on entirely.
+    equals `GameClock::tick`, which A3 depends on entirely.
   - `a_swing_costs_a_turn` — `GameClock::tick` advances by one per swing.
   - `mining_a_wall_never_pays_more_than_flooring_it_costs` — a census, not a
     sampling test: assert `BASE_MINE_FRAGMENT_CHANCE` is strictly below the
@@ -126,7 +172,7 @@ until then, the same way `BaseGrid::open` did through slice 1.
       struck cell; damage exactly as `game/zone.rs::attack_nest:53-54`
       computes it (weapon band mean via `attack_range` plus `effective_atk`,
       floored at 1); on reaching zero, `BaseGrid::open(x, y, tick)`, despawn
-      the site unless `marked` (Task 4 relies on that clause existing), roll
+      the site unless `marked` (B1 relies on that clause existing), roll
       the fragment, log through `log_kind(MessageKind::Loot, ..)` when it
       lands. The `move_in_base` branch mirrors `move_player`'s nest branch:
       strike, `tick()`, return — **before** the walkable check.
@@ -138,7 +184,7 @@ until then, the same way `BaseGrid::open` did through slice 1.
 
 ---
 
-### Task 2: Laying a VectorStasis Tile
+### A2: Laying a VectorStasis Tile
 
 **Files:**
 - Modify: `crates/engine/src/game/base/building.rs`
@@ -156,7 +202,7 @@ impl Game {
 }
 ```
 
-**Consumes:** Task 1's `BaseGrid` states, `items::ids::BLANK_SUBSTRATE`,
+**Consumes:** A1's `BaseGrid` states, `items::ids::BLANK_SUBSTRATE`,
 `Game::base_pos`, `Game::require_base`, `components::Inventory::{count, take}`.
 
 Pays from the player's `Inventory` because that is where `place_structure`
@@ -190,7 +236,7 @@ pays every build cost from (`building.rs:127-132`) — one store, not two.
 
 ---
 
-### Task 3: Entropy on the frontier
+### A3: Entropy on the frontier
 
 **Files:**
 - Create: `crates/engine/src/game/base/entropy.rs`
@@ -239,7 +285,71 @@ the reason has to be written down.
 
 ---
 
-### Task 4: Marks
+### A4: Saving what you dug and what you marked
+
+**Files:**
+- Modify: `crates/engine/src/save.rs` — `DigSiteSave`, `SaveData::dig_sites`,
+  both the write and the restore path
+- Test: `crates/engine/src/save.rs`'s own `#[cfg(test)] mod tests` (where
+  `a_save_file_written_before_a_defaulted_field_existed_still_loads` already
+  lives, ~line 1060) for the encoding half, and
+  `crates/engine/src/tests/base_space.rs` for the game-level round trip.
+  There is no `tests/save.rs`; don't create one.
+
+**Interfaces produced:**
+
+```rust
+pub struct DigSiteSave { pub position: (i32, i32), pub durability: u32, pub marked: bool }
+// SaveData gains:  #[serde(default)] pub dig_sites: Vec<DigSiteSave>,
+```
+
+`SAVE_FORMAT_VERSION` **stays 32** — see Global Constraints. Do not touch it,
+and do not recapture templates.
+
+- [ ] **Step 1: Write the failing tests.**
+  - `a_half_cut_wall_survives_a_save_round_trip` — through a real
+    `save_to_file`/`load_from_file` on a temp path, **not** only the RON
+    round trip: a round trip cannot catch a `#[serde(skip)]`.
+  - `a_mark_survives_a_save_round_trip`.
+  - `a_save_written_before_dig_sites_existed_still_loads` — the
+    `#[serde(default)]` guarantee, modelled on the existing
+    `a_save_file_written_before_a_defaulted_field_existed_still_loads`.
+  - Confirm `every_checked_in_template_still_loads` stays green untouched.
+- [ ] **Step 2: Run them; confirm they fail.**
+- [ ] **Step 3: Implement** both directions.
+- [ ] **Step 4: Run them; confirm they pass.** Mutation-prove by dropping
+      `marked` from the restore path and confirming the mark test fails.
+- [ ] **Step 5: fmt, clippy, commit.**
+
+---
+
+
+---
+
+> ### Phase A boundary — stop here
+>
+> 1. `cargo fmt`, `cargo clippy --workspace`, `cargo test --workspace` green.
+> 2. Commit. Do **not** push.
+> 3. **Play it.** Dig a wing by hand and floor it. Does a wall take a satisfying number of swings, and does 300 ticks of entropy punish over-digging without ever costing you ground you meant to keep?
+> 4. **`/clear` the session.** This is the point of the phasing: everything
+>    above is now recorded in this file and in the commits, so the next phase
+>    starts from this plan plus the spec's "Slice 2 in detail" section and
+>    needs none of the conversation that produced them.
+> 5. The next session's whole opening context is: this plan from **Phase
+>    B**, that spec section, and `git log --oneline main..base-growth`.
+
+---
+
+## Phase B — the plan you draw
+
+**Lands:** an Excavation plan mode — a cursor, a box, marks that persist and
+survive a save. Nothing digs them for you yet, so a mark is a plan you
+execute by hand, which is exactly enough to answer whether drawing one feels
+right before a crew exists to work it.
+
+**Crates:** engine (the verb), app-core (the mode), gui (the drawing).
+
+### B1: Marks
 
 The verb the build mode drives, engine-side and headlessly testable before any
 UI exists.
@@ -261,7 +371,7 @@ impl Game {
 }
 ```
 
-**Consumes:** Task 1's `DigSite`, `dig_site_at`.
+**Consumes:** A1's `DigSite`, `dig_site_at`.
 
 A marked **solid** cell needs a `DigSite` with full `Durability`; a marked
 **`Open`** cell needs one whose durability is already spent. A `Floor` cell
@@ -277,7 +387,7 @@ takes no mark at all — there is nothing left to do to it.
     the cell is `Open` **and still marked**, floor it, assert the mark is
     gone and no `DigSite` entity is left behind.
   - `an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut` — the leak
-    check on Task 1's despawn clause.
+    check on A1's despawn clause.
   - `marked_cells_is_sorted` — the renderer draws in a stable order run to
     run, for the reason `Stock` keys by `BTreeMap`.
 - [ ] **Step 2: Run them; confirm they fail.**
@@ -288,7 +398,76 @@ takes no mark at all — there is nothing left to do to it.
 
 ---
 
-### Task 5: The crew
+### B2: Excavation plan — the build mode
+
+**Files:**
+- Modify: `crates/app-core/src/lib.rs` — `Mode::Excavate` plus the cursor and
+  anchor state on `App`
+- Modify: `crates/app-core/src/app/playing.rs` — `m` enters, base only
+- Create: `crates/app-core/src/app/excavate.rs` — the mode's key handling
+- Modify: `crates/gui/src/render/base.rs` — mark tint, cursor, box preview
+- Modify: `crates/gui/src/render/meta.rs:209` — `HELP_ROWS`, the one help
+  table, read back by the test at ~line 297
+- Test: `crates/app-core/src/tests/` (new file), plus the existing gui help
+  text test
+
+**Consumes:** `Game::toggle_mark_box`, `Game::marked_cells`, `Game::base_pos`.
+
+**Interaction, exactly:** `m` from `Mode::Playing` while in base space opens
+it; cursor starts on the party's cell; `hjkl`/arrows move it; `space` drops
+the anchor, and with an anchor down the cursor's movement previews the box;
+`space` again commits through `toggle_mark_box`; `esc` leaves, dropping any
+anchor first so one press is never two undos. **Nothing here ticks** — this
+is a mode, not an action, so marking a wing of the base costs no game time.
+
+Draw the marks through the existing `Painter` operations. `paint.rs` must not
+gain a fifteenth operation for this; tint and glyph over the grid
+`render/base.rs` already draws is the whole of it.
+
+- [ ] **Step 1: Write the failing tests** (app-core, headless):
+  - `m_opens_excavation_plan_in_base_space_and_does_nothing_on_the_surface`.
+  - `the_cursor_starts_on_the_party_and_moves_with_the_direction_keys`.
+  - `committing_a_box_reaches_toggle_mark_box` — assert on the marks the
+    engine now holds, not on a call count.
+  - `excavation_plan_never_ticks_the_game` — `GameClock::tick` is unchanged
+    across opening, moving, committing and leaving.
+  - `esc_with_an_anchor_down_drops_the_anchor_and_stays_in_the_mode`.
+  - gui: the help text names the key; and the existing test holding the help
+    text to never naming the `W` easter egg must stay green.
+- [ ] **Step 2: Run them; confirm they fail.**
+- [ ] **Step 3: Implement**, app-core first, then the renderer.
+- [ ] **Step 4: Run them; confirm they pass.** Mutation-prove the no-tick rule
+      by adding a `tick()` to the commit path and confirming that test fails.
+- [ ] **Step 5: fmt, clippy, commit.**
+
+---
+
+
+---
+
+> ### Phase B boundary — stop here
+>
+> 1. `cargo fmt`, `cargo clippy --workspace`, `cargo test --workspace` green.
+> 2. Commit. Do **not** push.
+> 3. **Play it.** Draw a plan across the black. Is a cursor and a box the right verb, or does marking a wing want something faster?
+> 4. **`/clear` the session.** This is the point of the phasing: everything
+>    above is now recorded in this file and in the commits, so the next phase
+>    starts from this plan plus the spec's "Slice 2 in detail" section and
+>    needs none of the conversation that produced them.
+> 5. The next session's whole opening context is: this plan from **Phase
+>    C**, that spec section, and `git log --oneline main..base-growth`.
+
+---
+
+## Phase C — the crew
+
+**Lands:** post a program and your marks get cut and floored while you are
+off in a zone. The base grows without you standing in it, which is the whole
+claim of the feature.
+
+**Crate:** engine only.
+
+### C1: The crew
 
 **Files:**
 - Modify: `crates/engine/src/components.rs` — `TaskKind::Excavate`
@@ -319,7 +498,7 @@ pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 **Consumes:** `hauling::post_reach(grid, from, target, blocked,
 pocket_radius) -> Result<(), NoPost>`, `hauling::NoPost::{BoxedIn, NoRoute}`,
 `Game::effective_atk`, `Game::base_staff`, `Game::lay_tile`'s substrate spend,
-Task 4's marks.
+B1's marks.
 
 **The two reach outcomes are not symmetrical, and this is the task's whole
 subtlety:**
@@ -365,89 +544,29 @@ subtlety:**
 
 ---
 
-### Task 6: Saving what you dug and what you marked
-
-**Files:**
-- Modify: `crates/engine/src/save.rs` — `DigSiteSave`, `SaveData::dig_sites`,
-  both the write and the restore path
-- Test: `crates/engine/src/save.rs`'s own `#[cfg(test)] mod tests` (where
-  `a_save_file_written_before_a_defaulted_field_existed_still_loads` already
-  lives, ~line 1060) for the encoding half, and
-  `crates/engine/src/tests/base_space.rs` for the game-level round trip.
-  There is no `tests/save.rs`; don't create one.
-
-**Interfaces produced:**
-
-```rust
-pub struct DigSiteSave { pub position: (i32, i32), pub durability: u32, pub marked: bool }
-// SaveData gains:  #[serde(default)] pub dig_sites: Vec<DigSiteSave>,
-```
-
-`SAVE_FORMAT_VERSION` **stays 32** — see Global Constraints. Do not touch it,
-and do not recapture templates.
-
-- [ ] **Step 1: Write the failing tests.**
-  - `a_half_cut_wall_survives_a_save_round_trip` — through a real
-    `save_to_file`/`load_from_file` on a temp path, **not** only the RON
-    round trip: a round trip cannot catch a `#[serde(skip)]`.
-  - `a_mark_survives_a_save_round_trip`.
-  - `a_save_written_before_dig_sites_existed_still_loads` — the
-    `#[serde(default)]` guarantee, modelled on the existing
-    `a_save_file_written_before_a_defaulted_field_existed_still_loads`.
-  - Confirm `every_checked_in_template_still_loads` stays green untouched.
-- [ ] **Step 2: Run them; confirm they fail.**
-- [ ] **Step 3: Implement** both directions.
-- [ ] **Step 4: Run them; confirm they pass.** Mutation-prove by dropping
-      `marked` from the restore path and confirming the mark test fails.
-- [ ] **Step 5: fmt, clippy, commit.**
 
 ---
 
-### Task 7: Excavation plan — the build mode
-
-**Files:**
-- Modify: `crates/app-core/src/lib.rs` — `Mode::Excavate` plus the cursor and
-  anchor state on `App`
-- Modify: `crates/app-core/src/app/playing.rs` — `m` enters, base only
-- Create: `crates/app-core/src/app/excavate.rs` — the mode's key handling
-- Modify: `crates/gui/src/render/base.rs` — mark tint, cursor, box preview
-- Modify: `crates/gui/src/render/meta.rs:209` — `HELP_ROWS`, the one help
-  table, read back by the test at ~line 297
-- Test: `crates/app-core/src/tests/` (new file), plus the existing gui help
-  text test
-
-**Consumes:** `Game::toggle_mark_box`, `Game::marked_cells`, `Game::base_pos`.
-
-**Interaction, exactly:** `m` from `Mode::Playing` while in base space opens
-it; cursor starts on the party's cell; `hjkl`/arrows move it; `space` drops
-the anchor, and with an anchor down the cursor's movement previews the box;
-`space` again commits through `toggle_mark_box`; `esc` leaves, dropping any
-anchor first so one press is never two undos. **Nothing here ticks** — this
-is a mode, not an action, so marking a wing of the base costs no game time.
-
-Draw the marks through the existing `Painter` operations. `paint.rs` must not
-gain a fifteenth operation for this; tint and glyph over the grid
-`render/base.rs` already draws is the whole of it.
-
-- [ ] **Step 1: Write the failing tests** (app-core, headless):
-  - `m_opens_excavation_plan_in_base_space_and_does_nothing_on_the_surface`.
-  - `the_cursor_starts_on_the_party_and_moves_with_the_direction_keys`.
-  - `committing_a_box_reaches_toggle_mark_box` — assert on the marks the
-    engine now holds, not on a call count.
-  - `excavation_plan_never_ticks_the_game` — `GameClock::tick` is unchanged
-    across opening, moving, committing and leaving.
-  - `esc_with_an_anchor_down_drops_the_anchor_and_stays_in_the_mode`.
-  - gui: the help text names the key; and the existing test holding the help
-    text to never naming the `W` easter egg must stay green.
-- [ ] **Step 2: Run them; confirm they fail.**
-- [ ] **Step 3: Implement**, app-core first, then the renderer.
-- [ ] **Step 4: Run them; confirm they pass.** Mutation-prove the no-tick rule
-      by adding a `tick()` to the commit path and confirming that test fails.
-- [ ] **Step 5: fmt, clippy, commit.**
+> ### Phase C boundary — stop here
+>
+> 1. `cargo fmt`, `cargo clippy --workspace`, `cargo test --workspace` green.
+> 2. Commit. Do **not** push.
+> 3. **Play it.** Mark a wing, walk out through the anchor, come back. Did the crew cut and floor it, and did an unreachable mark say so exactly once?
+> 4. **`/clear` the session.** This is the point of the phasing: everything
+>    above is now recorded in this file and in the commits, so the next phase
+>    starts from this plan plus the spec's "Slice 2 in detail" section and
+>    needs none of the conversation that produced them.
+> 5. The next session's whole opening context is: this plan from **Phase
+>    D**, that spec section, and `git log --oneline main..base-growth`.
 
 ---
 
-### Task 8: The documentation the seams owe
+## Phase D — landing it
+
+**Lands:** the seams written down, the knobs measured against a real session,
+the branch reviewed and released.
+
+### D1: The documentation the seams owe
 
 Not optional and not a chore: two of these are rules that go silently wrong
 later if they are only in a commit message.

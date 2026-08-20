@@ -90,6 +90,28 @@ impl App {
                 self.mode = Mode::FieldCast;
                 return;
             }
+            // The Excavation plan. Refused out here rather than in the mode
+            // itself for the reason `d` above is: the cursor would open over
+            // the player's tile on the open grid, which is a coordinate in a
+            // different space entirely, and every cell it could reach would
+            // refuse a mark. `Game::toggle_mark_box` has no locale guard of
+            // its own because nothing but this mode calls it.
+            GameKey::Char('m') => {
+                match self.game.as_ref().and_then(|g| g.base_pos()) {
+                    Some(party) => {
+                        self.excavate_cursor = Some(party);
+                        self.excavate_anchor = None;
+                        self.mode = Mode::Excavate;
+                    }
+                    None => {
+                        self.status_line = Some(
+                            "Nothing to excavate out here — the rock is through the anchor."
+                                .to_string(),
+                        )
+                    }
+                }
+                return;
+            }
             GameKey::Char('t') => {
                 // Underground the same key opens whoever is selling *here*.
                 // The trader list would otherwise scan from a `Position`

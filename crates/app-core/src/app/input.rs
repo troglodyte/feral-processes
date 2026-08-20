@@ -168,6 +168,7 @@ impl App {
             Mode::FieldCast => self.handle_field_cast_key(key),
             Mode::FieldCastAlly => self.handle_field_cast_ally_key(key),
             Mode::FieldCastCell => self.handle_field_cast_cell_key(key),
+            Mode::Excavate => self.handle_excavate_key(key),
             Mode::Refactor => self.handle_refactor_key(key),
             Mode::RefactorItem => self.handle_refactor_item_key(key),
             Mode::Develop => self.handle_develop_key(key),

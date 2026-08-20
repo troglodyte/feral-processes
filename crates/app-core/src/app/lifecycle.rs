@@ -53,6 +53,8 @@ impl App {
             pending_extract_index: None,
             pending_field_routine: None,
             field_cursor: None,
+            excavate_cursor: None,
+            excavate_anchor: None,
             pending_battle_action: None,
             pending_party_attack: false,
             pending_special_ability: None,

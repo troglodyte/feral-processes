@@ -36,6 +36,14 @@ const STAFFED_MARK_INSET: f32 = 2.0;
 /// standing on a machine-adjacent tile can never collide with either a
 /// staffed mark or the outline `outline_open` drops along a chained pair's
 /// shared edge.
+/// The Excavation plan's two washes. A committed mark is dim enough to walk
+/// over without the base becoming unreadable; the box being previewed is
+/// brighter, because it is the thing about to happen and has to read over a
+/// mark it may be drawn across.
+const MARK_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.18);
+const MARK_EDGE: Color = Color::new(0.9, 0.8, 0.2, 0.45);
+const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
+
 const NEMESIS_MARK: f32 = 0.22;
 const NEMESIS_MARK_INSET: f32 = 2.0;
 
@@ -488,6 +496,16 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
     let log_capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
     let log_lines = app.visible_log(log_capacity.saturating_sub(1));
     let log_header = log_pane_header(app.log_filter, app.filtered_out_log_lines());
+    // Before the `game` borrow, like `status_line` above. `None` outside
+    // `Mode::Excavate`, which is what keeps the cursor off the map the rest
+    // of the time without the renderer having to know the mode's rules.
+    let plan = app
+        .excavate_cursor
+        .filter(|_| app.mode == Mode::Excavate)
+        .map(|cursor| PlanCursor {
+            cursor,
+            anchor: app.excavate_anchor,
+        });
     let Some(game) = &mut app.game else { return };
 
     let map_w = painter.screen_w() * PANE_W;
@@ -506,7 +524,9 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
             draw_map_inset(&map, stack_zoom, painter, map_w, map_h, m);
         }
     } else {
-        draw_surface_map(game, fx, painter, map_w, map_h, tile_px, glyph_px, &status);
+        draw_surface_map(
+            game, fx, painter, map_w, map_h, tile_px, glyph_px, &status, plan,
+        );
     }
 
     draw_status_panel(
@@ -676,6 +696,7 @@ fn draw_surface_map(
     tile_px: f32,
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
+    plan: Option<PlanCursor>,
 ) {
     // Two rings wider than the pane can show. The first is the tile the
     // camera's sub-tile offset slides in from, without which the trailing
@@ -719,6 +740,15 @@ fn draw_surface_map(
         // same rule so that `x` can only name what this draws.
         .filter(|e| drawn_on_surface_map(e.is_tamed, e.position_is_honest))
         .collect();
+    // Base space only: `marked_cells` answers in base-space coordinates, and
+    // asking it on the surface would draw a plan over the zone map at
+    // coordinates that mean something else entirely — the cross-space read
+    // 0.13.0 shipped two fixes for.
+    let marked = if base_pos.is_some() {
+        game.marked_cells()
+    } else {
+        Vec::new()
+    };
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
     // Read once for the whole map: the sector is a property of the zone, so
@@ -995,6 +1025,19 @@ fn draw_surface_map(
             }
         }
     }
+    // Over the tiles and under the sparks: a plan is a thing drawn on the
+    // ground, and a burst is a thing happening above it.
+    if base_pos.is_some() {
+        draw_excavation_plan(
+            painter,
+            &marked,
+            plan,
+            |world| tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px),
+            tile_px,
+            map_w,
+            map_h,
+        );
+    }
     // After every tile so debris lands on top of the base rather than under
     // it, and before the border so a spark from a structure at the pane's
     // edge cannot draw over the frame.
@@ -1002,6 +1045,71 @@ fn draw_surface_map(
         tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px)
     });
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+}
+
+/// What the Excavation plan is drawing over the base map: where the cursor
+/// is, and the anchor it has dropped, both in base-space coordinates.
+///
+/// Read off `App` before the `game` borrow, the same way `status_line` and
+/// `stack_zoom` are, and `None` outside `Mode::Excavate`. The *marks* are not
+/// in here: a plan the player drew has to stay visible while they walk it, so
+/// those are drawn whenever the pane is showing base space.
+#[derive(Clone, Copy)]
+pub(super) struct PlanCursor {
+    pub cursor: (i32, i32),
+    pub anchor: Option<(i32, i32)>,
+}
+
+/// The marks, the box being previewed, and the cursor — one pass over world
+/// coordinates after the tile loop, the same shape the spark pass takes.
+///
+/// A pass of its own rather than three more branches inside the tile loop
+/// because none of it is a property of a *tile*: a mark is an entity in base
+/// space, and the box is a rectangle that happens to cross tiles. Culling is
+/// the pane's, so a box drawn past the edge is simply not painted.
+#[allow(clippy::too_many_arguments)]
+fn draw_excavation_plan(
+    painter: &Painter,
+    marked: &[(i32, i32)],
+    plan: Option<PlanCursor>,
+    at: impl Fn((i32, i32)) -> (f32, f32),
+    tile_px: f32,
+    map_w: f32,
+    map_h: f32,
+) {
+    let size = tile_px - 1.0;
+    let tile = |world: (i32, i32), fill: Option<Color>, outline: Option<(f32, Color)>| {
+        let (px, py) = at(world);
+        if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
+            return;
+        }
+        if let Some(fill) = fill {
+            painter.rect(px, py, size, size, fill);
+        }
+        if let Some((thickness, color)) = outline {
+            painter.rect_lines(px, py, size, size, thickness, color);
+        }
+    };
+    // The plan itself, drawn under the cursor: a wash rather than a glyph,
+    // because the cell underneath is already saying whether it is rock, cut
+    // or floor and the mark is a second reading on top of that one.
+    for &cell in marked {
+        tile(cell, Some(MARK_FILL), Some((1.0, MARK_EDGE)));
+    }
+    let Some(plan) = plan else { return };
+    // The box the anchor is spanning, brighter than a committed mark: this
+    // is the thing about to happen, and it has to read over the marks it may
+    // be drawn across.
+    if let Some(anchor) = plan.anchor {
+        let (x0, x1) = (anchor.0.min(plan.cursor.0), anchor.0.max(plan.cursor.0));
+        let (y0, y1) = (anchor.1.min(plan.cursor.1), anchor.1.max(plan.cursor.1));
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                tile((x, y), Some(PREVIEW_FILL), None);
+            }
+        }
+    }
+    tile(plan.cursor, None, Some((2.0, WHITE)));
 }
 
 /// Where a world tile's top-left corner falls in the map pane.

@@ -9,6 +9,7 @@ mod building;
 mod contracts;
 mod dev_console;
 mod develop;
+mod excavate;
 mod field;
 mod fusion;
 mod group_menus;

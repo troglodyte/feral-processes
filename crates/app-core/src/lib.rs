@@ -920,6 +920,14 @@ pub enum Mode {
     /// rather than lethal. Enter commits, Esc backs out spending nothing,
     /// matching every other second pick.
     FieldCastCell,
+    /// The Excavation plan, opened with `m` in base space: a cursor, an
+    /// anchor and a box, which commit through `Game::toggle_mark_box`.
+    ///
+    /// **A mode, not an action.** Nothing in it ticks the game, so planning
+    /// a wing of the base costs no turns and entropy is not eating the
+    /// frontier while the player draws. That is the property
+    /// `excavation_plan_never_ticks_the_game` exists to hold.
+    Excavate,
     /// Picking which program to permanently upgrade. Reached from the party
     /// group menu; `surface_only: false`, since a refactor reaches no
     /// zone-map state through `Position` and so works four frames down.
@@ -1120,6 +1128,7 @@ impl Mode {
             | Mode::FieldCast
             | Mode::FieldCastAlly
             | Mode::FieldCastCell
+            | Mode::Excavate
             | Mode::Refactor
             | Mode::RefactorItem
             | Mode::Develop
@@ -1351,6 +1360,18 @@ pub struct App {
     /// coordinates. `None` outside that mode — a routine needing no cell
     /// never sets it, and Esc and a committed jump both clear it.
     pub field_cursor: Option<(i32, i32)>,
+    /// Where the Excavation plan's cursor is aimed, in **base-space**
+    /// coordinates. `None` outside `Mode::Excavate` — opening the mode puts
+    /// it on the party's own cell and leaving clears it.
+    ///
+    /// A different coordinate space from `App::field_cursor` above, which is
+    /// in Stack frame coordinates. Nothing converts between them and nothing
+    /// should: the two modes are reachable from different locales.
+    pub excavate_cursor: Option<(i32, i32)>,
+    /// The far corner of the box being drawn, once `space` has dropped it.
+    /// `None` while the cursor is loose, which is what makes `space` a
+    /// two-press verb rather than a drag.
+    pub excavate_anchor: Option<(i32, i32)>,
     /// The action kind picked in `Mode::Battle`, awaiting an enemy group
     /// from `Mode::BattleTarget` before it becomes a `BattleAction`.
     pub pending_battle_action: Option<ActionKind>,

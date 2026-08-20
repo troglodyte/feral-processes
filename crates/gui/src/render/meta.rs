@@ -222,6 +222,9 @@ pub(super) const HELP_ROWS: &[&str] = &[
     "c collect from adjacent structures   t trade   a routine",
     "u symlink   x examine a direction   d demolish a direction",
     "v lay a VectorStasis Tile on the cell you're standing on",
+    "m Excavation plan   space anchors a box, space again marks it,",
+    "                  Esc backs out. Marked rock is cut and floored;",
+    "                  drawing a plan costs no time.",
     "> phase into the base, on the anchor   < phase back out, at the exit",
     "L history   f filter the log (all/field/base)",
     "s save   q main menu (confirms first)",
@@ -291,6 +294,19 @@ mod tests {
         let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
         assert!(at("Achievements") < at("Arena"));
         assert!(at("Arena") < at("Quit"));
+    }
+
+    /// The Excavation plan is the one verb in the game with no engine-side
+    /// refusal to teach it: `m` opens a mode, and a mode nobody can find is
+    /// a feature nobody has. So the help screen is where it is learned.
+    #[test]
+    fn the_help_screen_names_the_excavation_plan_key() {
+        let says = |what: &str| HELP_ROWS.iter().any(|row| row.contains(what));
+        assert!(says("m "), "the help screen never names the m key");
+        assert!(
+            says("Excavation"),
+            "the help screen names no Excavation plan"
+        );
     }
 
     #[test]

@@ -9,6 +9,8 @@ fn the_upgrade_picker_opens_from_the_base_menu_and_esc_backs_into_it() {
     // A Compiler, not a Home: the row is hidden unless something nearby
     // actually declares an upgrade path (see `App::upgradeable_structures`).
     let mut app = app_owning_a_program_and_a_compiler(230, &[]);
+    // Upgrading is a base action, so the row is offered in one locale only.
+    stand_in_base(&mut app);
 
     open_via_menu(&mut app, 'b', "Upgrade a structure");
     assert_eq!(app.mode, Mode::Upgrade);
@@ -182,6 +184,7 @@ fn remove_key_on_home_requires_confirmation_before_demolishing() {
 #[test]
 fn working_a_structure_yourself_opens_the_same_structure_list() {
     let mut app = app_owning_a_program_and_a_compiler(960, &[]);
+    stand_in_base(&mut app);
     open_via_menu(&mut app, 'b', "Work a structure yourself");
     assert_eq!(app.mode, Mode::WorkStructure);
 
@@ -286,27 +289,81 @@ fn the_demolish_key_says_when_there_is_nothing_that_way() {
     );
 }
 
-/// `Position` is pinned to the surface entrance tile underground, so a
-/// direction key down there would aim at the base overhead. Refused at the
-/// keypress, matching the `surface_only` flag the menu's Demolish row carries.
+/// Every structure stands in base space, so a direction key pressed anywhere
+/// else aims at four tiles with nothing of the player's on them. Refused at
+/// the keypress, matching the `base_only` flag the menu's Demolish row
+/// carries and `Game::remove_structure`'s own `require_base`.
+///
+/// The permitted half is `the_demolish_key_says_when_there_is_nothing_that_way`
+/// above, which drives the same key from inside the base and reaches the
+/// direction prompt.
 #[test]
-fn the_demolish_key_is_refused_underground() {
-    let mut app = app_inside_a_small_base(243, true);
-    assert!(
-        app.game.as_ref().is_some_and(|g| g.is_underground()),
-        "precondition: the fixture really went down"
+fn the_demolish_key_is_refused_outside_base_space() {
+    for (standing, mut app) in [
+        ("in the Stack", app_inside_a_small_base(243, true)),
+        (
+            "on the open grid",
+            app_owning_a_program_and_a_compiler(2431, &[]),
+        ),
+    ] {
+        assert!(
+            app.game.as_ref().is_some_and(|g| !g.in_base()),
+            "precondition: the fixture really is {standing}"
+        );
+
+        app.handle_key(GameKey::Char('d'));
+
+        assert_eq!(
+            app.mode,
+            Mode::Playing,
+            "the direction prompt must not even open {standing}"
+        );
+        assert!(
+            app.status_line.is_some(),
+            "a refused key says why rather than doing nothing, {standing}"
+        );
+    }
+}
+
+/// Enter on a roster row posts a worker, and both actions behind it —
+/// `Game::assign_cronjob` and `Game::work_structure` — are `require_base`.
+/// So the keypress is refused anywhere else rather than opening a picker
+/// whose every row the engine would turn down.
+///
+/// The roster itself still reads from any locale, which is why it carries no
+/// `base_only` flag: the same fixture opens the screen in both halves below
+/// and only the Enter differs.
+#[test]
+fn enter_on_a_roster_row_is_refused_outside_base_space() {
+    let mut outside = app_owning_a_program_and_a_compiler(2432, &[]);
+    open_via_menu(&mut outside, 'b', "Structure roster");
+    assert_eq!(
+        outside.mode,
+        Mode::Structures,
+        "the roster reads fine from the open grid"
     );
 
-    app.handle_key(GameKey::Char('d'));
+    outside.handle_key(GameKey::Enter);
 
     assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "the direction prompt must not even open down here"
+        outside.mode,
+        Mode::Structures,
+        "the staffing picker must not open from the open grid"
     );
     assert!(
-        app.status_line.is_some(),
+        outside.status_line.is_some(),
         "a refused key says why rather than doing nothing"
+    );
+
+    // The same row, the same key, from the one locale the engine accepts.
+    let mut inside = app_owning_a_program_and_a_compiler(2432, &[]);
+    stand_in_base(&mut inside);
+    open_via_menu(&mut inside, 'b', "Structure roster");
+    inside.handle_key(GameKey::Enter);
+    assert_eq!(
+        inside.mode,
+        Mode::StructureAssign,
+        "the row is workable, so inside the base it must open"
     );
 }
 
@@ -417,6 +474,7 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
     // The Compiler in this fixture sits 30 tiles off, which is the same
     // question asked of a structure the player is nowhere near.
     let mut far = app_owning_a_program_and_a_compiler(249, &[]);
+    stand_in_base(&mut far);
     open_via_menu(&mut far, 'b', "Structure roster");
     let compiler = far
         .game

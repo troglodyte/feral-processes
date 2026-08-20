@@ -167,14 +167,18 @@ impl App {
             return;
         };
         // `assign_cronjob` and `work_structure` are both behind
-        // `require_base`: `Position` is pinned to the entrance tile down
-        // here, so a posting would measure its walk from the wrong end of the
-        // map. Refused at the keypress like the demolish key, rather than
-        // opening a picker whose every row is a dead end — the roster itself
-        // still reads fine underground, which is why it carries no
-        // `surface_only` flag in `BASE_ROWS`.
-        if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-            self.status_line = Some("Not from down here.".into());
+        // `require_base`, so posting to a structure is legal in exactly one
+        // locale. The guard used to ask `is_underground()`, which was the
+        // same question when there were two locales and is not now: on the
+        // open grid the keypress was permitted and the engine refused it a
+        // moment later, which reads to the player as the key doing nothing.
+        //
+        // Refused at the keypress like the demolish key, rather than opening
+        // a picker whose every row is a dead end — the roster itself still
+        // reads fine from anywhere, which is why it carries no `base_only`
+        // flag in `BASE_ROWS`.
+        if self.game.as_ref().is_some_and(|g| !g.in_base()) {
+            self.status_line = Some("Not from out here — that's back at the base.".into());
             return;
         }
         if !report[idx].workable {

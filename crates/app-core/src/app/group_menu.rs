@@ -23,24 +23,25 @@ struct GroupEntry {
     label: &'static str,
     target: Mode,
     /// Whether this row's action is one of `Game::require_base`'s callers,
-    /// and so must disappear while the party is underground.
+    /// and so is on screen **only** while the party is in base space.
     ///
-    /// The name predates `Locale::Base`, and the flag has always really
-    /// meant "not in the Stack" — the same conflation the guard split in
-    /// `docs/seams.md` unpicked on the engine side. It is still correct
-    /// about the Stack, which is all it is asked; making the base rows
-    /// appear *only* inside base space waits on there being a way to walk
-    /// in.
+    /// It used to be `surface_only` and used to ask `is_underground()`,
+    /// which was the same question while "not in the Stack" and "where the
+    /// base is" were one condition. They are two now — `docs/seams.md`
+    /// carries the split — and this flag names the half it always meant:
+    /// the engine refuses each of these rows anywhere but base space, so
+    /// offering them on the open grid advertises a screen whose every action
+    /// is a dead end.
     ///
-    /// A flag in a readable table rather than an `is_underground()` check
-    /// folded into each `available` closure, because it has to be kept in
-    /// step with that list in the engine and a table is what makes that
-    /// checkable. Emptiness alone would not do the job: every row below
-    /// that reads `App::nearby_*` scans around the player's `Position`,
-    /// which stays pinned to the surface entrance tile while the party is
-    /// in the Stack — so those menus would cheerfully list a base four
-    /// frames overhead.
-    surface_only: bool,
+    /// A flag in a readable table rather than an `in_base()` check folded
+    /// into each `available` closure, because it has to be kept in step with
+    /// that list in the engine and a table is what makes that checkable.
+    /// Emptiness alone would not do the job: every row below that reads
+    /// `App::nearby_*` scans around the player's `Position`, which is pinned
+    /// to the Stack entrance underground and to the anchor tile in base
+    /// space — so those menus would cheerfully list a base the party is
+    /// nowhere near.
+    base_only: bool,
     available: fn(&mut App) -> bool,
 }
 
@@ -48,7 +49,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Deploy a structure",
         target: Mode::Build,
-        surface_only: true,
+        base_only: true,
         available: |app| {
             app.game
                 .as_ref()
@@ -58,7 +59,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Compile an item",
         target: Mode::Craft,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_ref()
@@ -66,16 +67,16 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Surface-only for the reason every scan row is, and the engine
+        // Base-only for the reason every scan row is, and the engine
         // agrees rather than trusting the flag: `queue_work_order` calls
         // `Game::require_base`. The screen is read-only but it *claims
         // something about where the base is*, which is the test
         // `find_target_in_direction` established — a report answered from a
-        // `Position` pinned to the surface entrance tile would describe a
-        // base four frames overhead.
+        // `Position` that is pinned somewhere else would describe a base the
+        // party is nowhere near.
         label: "Work orders",
         target: Mode::WorkOrders,
-        surface_only: true,
+        base_only: true,
         available: |app| {
             app.game
                 .as_ref()
@@ -85,31 +86,31 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Base staff",
         target: Mode::BaseStaff,
-        surface_only: true,
+        base_only: true,
         available: |app| !app.nearby_programs().is_empty(),
     },
     GroupEntry {
         label: "Work a structure yourself",
         target: Mode::WorkStructure,
-        surface_only: true,
+        base_only: true,
         available: |app| !app.workable_structures().is_empty(),
     },
     GroupEntry {
         label: "Upgrade a structure",
         target: Mode::Upgrade,
-        surface_only: true,
+        base_only: true,
         available: |app| !app.upgradeable_structures().is_empty(),
     },
     GroupEntry {
         label: "Demolish a structure",
         target: Mode::Remove,
-        surface_only: true,
+        base_only: true,
         available: |app| !app.nearby_structures().is_empty(),
     },
     GroupEntry {
         label: "Structure roster",
         target: Mode::Structures,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -119,7 +120,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Research",
         target: Mode::Research,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_ref()
@@ -127,7 +128,7 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not surface-only, and deliberately so: mission status is the
+        // Not base-only, and deliberately so: mission status is the
         // question worth answering four frames down, and the board itself is
         // a property of the sector rather than of where the party is
         // standing. Off the base the screen opens read-only — see
@@ -140,7 +141,7 @@ const BASE_ROWS: &[GroupEntry] = &[
         // used to short-circuit all of that.
         label: "Contracts",
         target: Mode::Contracts,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game.as_mut().is_some_and(|g| {
                 g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
@@ -148,12 +149,12 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
-        // Not surface-only: the chains come off the loaded assets, not off a
+        // Not base-only: the chains come off the loaded assets, not off a
         // scan around the player, so this one row means the same thing four
         // frames down as it does standing in the base.
         label: "Recipes",
         target: Mode::Recipes,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_ref()
@@ -166,7 +167,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Companions",
         target: Mode::Companion,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -176,7 +177,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Read a manifest",
         target: Mode::ManifestPick,
-        surface_only: false,
+        base_only: false,
         available: |app| !app.manifest_subjects().is_empty(),
     },
     GroupEntry {
@@ -184,13 +185,13 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // has nothing to fuse with and the second picker would be empty.
         label: "Fuse two programs",
         target: Mode::Fuse,
-        surface_only: false,
+        base_only: false,
         available: |app| app.game.as_mut().is_some_and(|g| g.owned_pets().len() >= 2),
     },
     GroupEntry {
         label: "Install a routine",
         target: Mode::RoutineTarget,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -204,7 +205,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // out could not reach the screen that makes disks at all.
         label: "Etch a routine disk",
         target: Mode::RoutineEtch,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_ref()
@@ -214,11 +215,11 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         // Both halves matter: a program to spend an upgrade on, and an
         // upgrade to spend. Either missing leaves the second page empty.
-        // Not `surface_only` — a refactor reaches no zone-map state through
+        // Not `base_only` — a refactor reaches no zone-map state through
         // `Position`, so it works four frames down.
         label: "Refactor a program",
         target: Mode::Refactor,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -229,10 +230,10 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // One half, not two: a program is enough. Whether a ring can be
         // opened depends on cargo, but the same page shows the talent ladder
         // — a developed program with no rings left to buy still has points to
-        // spend. Not `surface_only`, like the refactor row above it.
+        // spend. Not `base_only`, like the refactor row above it.
         label: "Develop a program",
         target: Mode::Develop,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -242,7 +243,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
-        surface_only: false,
+        base_only: false,
         available: |app| {
             app.game
                 .as_mut()
@@ -252,7 +253,7 @@ const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Perks",
         target: Mode::Perks,
-        surface_only: false,
+        base_only: false,
         available: |app| app.game.as_ref().is_some_and(|g| !g.perk_defs().is_empty()),
     },
 ];
@@ -272,8 +273,8 @@ impl App {
         self.group_rows(PARTY_ROWS)
     }
 
-    /// A row survives when it is not surface-only underground, and when the
-    /// screen it opens would have at least one row of its own.
+    /// A row survives when the party is standing where its action is legal,
+    /// and when the screen it opens would have at least one row of its own.
     ///
     /// That second clause deliberately asks only the *first* screen a row
     /// opens. "Work orders" can therefore open on a queue and then land on
@@ -282,10 +283,10 @@ impl App {
     /// Asking the whole chain would need a bespoke predicate per row, which
     /// is the duplication this table exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {
-        let underground = self.game.as_ref().is_some_and(|g| g.is_underground());
+        let in_base = self.game.as_ref().is_some_and(|g| g.in_base());
         entries
             .iter()
-            .filter(|e| !(e.surface_only && underground))
+            .filter(|e| !e.base_only || in_base)
             .filter(|e| (e.available)(self))
             .map(|e| GroupMenuRow {
                 label: e.label,

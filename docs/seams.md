@@ -1992,17 +1992,28 @@ dispatches `rows[idx].target` and `render/group_menu.rs` draws
 list from the static table would be right until the first hidden row and
 then silently open a different screen from the one under the highlight.
 The table itself is in `app/group_menu.rs`, and a row survives two
-clauses: it is not `surface_only` while underground, *and* the screen it
-opens would have at least one row. The second clause deliberately asks
-only the first screen — Cronjob can list a program and land on an empty
-structure picker, which is survivable because Esc backs into the menu.
-`surface_only` is a flag in that table rather than an `is_underground()`
-check inside each predicate, because what it has to stay in step with is
-`require_surface`'s caller list in the engine, and only a table makes
-that checkable. Emptiness alone would not do it: every `App::nearby_*`
-scan reads the player's `Position`, which is pinned to the surface
-entrance tile in the Stack, so those rows would offer to demolish a base
-four frames overhead.
+clauses: it is not `base_only` while the party is outside base space,
+*and* the screen it opens would have at least one row. The second clause
+deliberately asks only the first screen — Cronjob can list a program and
+land on an empty structure picker, which is survivable because Esc backs
+into the menu. `base_only` is a flag in that table rather than an
+`in_base()` check inside each predicate, because what it has to stay in
+step with is `require_base`'s caller list in the engine, and only a table
+makes that checkable. Emptiness alone would not do it: every
+`App::nearby_*` scan reads the player's `Position`, which is pinned to the
+Stack entrance underground and to the anchor tile in base space, so those
+rows would offer to demolish a base the party is nowhere near.
+
+**The flag was `surface_only` and asked `is_underground()` until the base
+moved out of phase**, which was the same question while "not in the Stack"
+and "where the base is" were one condition. It is the app-core twin of the
+eleven-site re-reading above, and it went wrong the same silent way: on the
+zone surface the row was offered, the player picked it, and the engine
+refused — a menu row that reads as a dead key. Two flat map keys carried
+the same imprecision and moved with it: `d` (demolish, aimed) and Enter on
+the structure roster, both now `in_base()` rather than `!is_underground()`.
+`t` (the trader list) is the one left: it still opens on the open grid, and
+every row behind it is a `require_base` call that refuses.
 
 ### A work order stores an item and a quantity, and nothing else
 
@@ -2840,7 +2851,7 @@ Broker four frames above, the same trap `find_target_in_direction` fell
 into. What retired that reading was retiring the range check; see
 **Reading a Broker's board and signing it are two questions** below.
 `Game::active_contracts` was always the half that read anywhere, and the
-base-menu row has always been `surface_only: false` precisely because the
+base-menu row has always been `base_only: false` precisely because the
 *engine* answers rather than the frontend guessing.
 
 ### Reading a Broker's board and signing it are two questions, and one call answers both

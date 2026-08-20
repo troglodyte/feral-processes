@@ -348,22 +348,47 @@ impl Game {
         }
     }
 
+    /// Drops any job the player is working, narrating it once.
+    ///
+    /// Its own function because both walkable locales have to do it: a job
+    /// is posted from base space (`Game::work_structure` is a base action,
+    /// and promises in so many words that moving off breaks it), and the
+    /// party can then walk in either base space or on the zone surface. Two
+    /// copies would be two places for that narration to drift.
+    pub(crate) fn break_off_job(&mut self) {
+        let player = self.player_entity();
+        if self.world.get::<Task>(player).is_some() {
+            self.world.entity_mut(player).remove::<Task>();
+            self.log("You break off what you were doing.");
+        }
+    }
+
+    /// One step on the zone surface — or, in base space, one step through
+    /// that, since the same four keys steer both.
+    ///
+    /// The Stack is the exception rather than a third branch: down there the
+    /// party has a facing and moves through `step_forward`/`turn_left` and
+    /// friends instead, so these keys are routed away from here entirely by
+    /// app-core and this is only the backstop. Walking a pinned `Position`
+    /// would drag the player across the zone map without their ever leaving
+    /// the Stack.
     pub fn move_player(&mut self, dx: i32, dy: i32) {
-        // Underground the party moves through `step_forward`/`turn_left` and
-        // friends instead — `Position` is pinned to the entrance tile while
-        // down there, so walking it would drag the player across the zone
-        // map without their ever leaving the Stack.
         if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
+            return;
+        }
+        // Base space is its own coordinate space with its own walkability,
+        // and the player's `Position` stays pinned to the anchor tile
+        // throughout — everything below this line is about the zone map and
+        // means nothing in there.
+        if self.in_base() {
+            self.move_in_base(dx, dy);
             return;
         }
         let player = self.player_entity();
         // Any attempt to move ends a job you were working (see
         // `Game::work_structure`) — including one that turns into a fight or
         // bounces off a wall, since either way you stopped working to do it.
-        if self.world.get::<Task>(player).is_some() {
-            self.world.entity_mut(player).remove::<Task>();
-            self.log("You break off what you were doing.");
-        }
+        self.break_off_job();
         let pos = *self.world.get::<Position>(player).unwrap();
         let (nx, ny) = (pos.x + dx, pos.y + dy);
 

@@ -106,3 +106,53 @@ fn c_reaches_the_collect_action() {
         "pressing C with nothing adjacent should reach Game::collect_adjacent"
     );
 }
+
+/// `>` and `<` are the anchor's two doors on the map screen — the same pair
+/// the Stack already binds for its link, rather than a third set of keys for
+/// a third way of going somewhere.
+///
+/// Driven out and back in, because a fixture with a Home standing is the
+/// only one that can be entered at all: the anchor leads nowhere until one
+/// is deployed. Going out first also proves the entry half is not passing on
+/// a locale the fixture handed it.
+#[test]
+fn the_link_keys_walk_out_of_the_base_and_back_in_through_the_anchor() {
+    let mut app = app_inside_a_small_base_with_programs(215, false, 1);
+    assert!(
+        app.game.as_ref().unwrap().in_base(),
+        "the fixture must start inside the base"
+    );
+
+    app.handle_key(GameKey::Char('<'));
+    assert!(
+        !app.game.as_ref().unwrap().in_base(),
+        "'<' must reach Game::leave_base"
+    );
+
+    app.handle_key(GameKey::Char('>'));
+    assert!(
+        app.game.as_ref().unwrap().in_base(),
+        "'>' must reach Game::enter_base"
+    );
+}
+
+/// A refused crossing puts the engine's own words on the status line. Wired
+/// the way the Stack path already wires `o` and `Z`: a refusal is not an
+/// action, so it must not be cleared by the bookkeeping that follows one.
+///
+/// The refusal asserted on is the *no Home* one specifically — a fresh run
+/// starts standing on the anchor, so anything about position would mean the
+/// key had reached something other than `Game::enter_base`.
+#[test]
+fn a_refused_crossing_reports_the_engines_own_reason() {
+    let mut app = test_app(216);
+
+    app.handle_key(GameKey::Char('>'));
+
+    assert!(!app.game.as_ref().unwrap().in_base());
+    let said = app.status_line.clone().expect("a refused key says why");
+    assert!(
+        said.contains("deploy a Home"),
+        "the status line must carry the engine's refusal, got: {said}"
+    );
+}

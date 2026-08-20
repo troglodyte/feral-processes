@@ -1381,6 +1381,15 @@ fn walking_away_stops_the_job() {
         "starting the job should put the same Task on you a worker would carry"
     );
 
+    // Somewhere to step *to*: base space is solid until something lays
+    // floor, and a step into rock is refused rather than being a step at
+    // all — which would make the assertion below pass for the wrong reason.
+    // The starting pocket lands in slice-1 Task 6; until then a test that
+    // walks in here lays its own ground.
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .lay_floor(1, 0);
+
     game.move_player(1, 0);
 
     assert!(

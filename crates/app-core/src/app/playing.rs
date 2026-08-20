@@ -41,17 +41,21 @@ impl App {
                 return;
             }
             // Demolish, aimed rather than picked from a list. Refused here
-            // rather than in the direction handler because `Position` is
-            // pinned to the surface entrance tile underground: the prompt
-            // would open onto four directions that all mean the base
-            // overhead. Matches the `surface_only` flag on the group menu's
-            // Demolish row, which hides that route for the same reason.
+            // rather than in the direction handler because the prompt would
+            // otherwise open onto four directions that mean nothing: the
+            // structures are all in base space, and outside it the player's
+            // `Position` is either their tile on the open grid or pinned to
+            // the Stack entrance. Matches the `base_only` flag on the group
+            // menu's Demolish row, which hides that route for the same
+            // reason, and `Game::remove_structure`'s own `require_base`.
             GameKey::Char('d') => {
-                if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-                    self.status_line =
-                        Some("There's nothing of yours to demolish down here.".to_string());
-                } else {
+                if self.game.as_ref().is_some_and(|g| g.in_base()) {
                     self.mode = Mode::RemoveDirection;
+                } else {
+                    self.status_line = Some(
+                        "Nothing of yours to demolish here — the base is through the anchor."
+                            .to_string(),
+                    );
                 }
                 return;
             }
@@ -67,8 +71,12 @@ impl App {
                 // The trader list would otherwise scan from a `Position`
                 // pinned to the surface entrance tile and offer to trade
                 // with a base four frames overhead — the same hole the
-                // `surface_only` group-menu rows and the `d` refusal above
-                // are each closing at their own door.
+                // `base_only` group-menu rows and the `d` refusal above are
+                // each closing at their own door. **Still only half-closed
+                // on the surface:** every `Game::sell_item`/`buy_item` call
+                // behind this screen is a base action now, so the list opens
+                // on the open grid and every row is refused there. Noted in
+                // `docs/seams.md` alongside the two keys that did move.
                 if self
                     .game
                     .as_mut()
@@ -155,6 +163,11 @@ impl App {
             return;
         }
 
+        // Set after the `self.game` borrow below releases, exactly as the
+        // Stack path does it: a refusal is not an action, so it leaves
+        // `acted` false and `after_world_action` returns before it can clear
+        // the line that explains why.
+        let mut refusal = None;
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -193,9 +206,37 @@ impl App {
                     game.rest();
                     true
                 }
+                // The same two keys the Stack binds, for the same two
+                // things: `>` goes in, `<` comes back out. Deliberately not
+                // a third pair — the anchor is a door like the link is, and
+                // a player who has learned one has learned the other.
+                //
+                // Both are bound in this one block rather than split across
+                // a locale check up here, because the engine already
+                // dispatches: `enter_base` asks `require_surface` and
+                // `leave_base` asks `require_base`, so pressing either in
+                // the wrong place gets the engine's own words rather than a
+                // second opinion from app-core that could disagree with it.
+                GameKey::Char('>') => match game.enter_base() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
+                GameKey::Char('<') => match game.leave_base() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
                 _ => false,
             }
         };
+        if refusal.is_some() {
+            self.status_line = refusal;
+        }
         self.after_world_action(acted, is_move_key);
     }
 

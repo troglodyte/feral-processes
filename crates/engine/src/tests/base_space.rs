@@ -538,3 +538,263 @@ fn the_anchor_is_not_counted_as_a_deployed_structure() {
         "only the placed Home should be on the roster, not the anchor standing beside it"
     );
 }
+
+// ---------------------------------------------------------------------
+// Walking in and out through the anchor, and moving around inside
+// ---------------------------------------------------------------------
+
+/// The fragment `Game::enter_base` uses when the anchor has nothing behind
+/// it yet. Deliberately shares no wording with the "you are not on the
+/// anchor" refusal: a player standing in the right place with no base built
+/// and a player standing in the wrong place are told different things, and a
+/// test that could not tell the two apart would pass against an entry that
+/// refused for the wrong reason.
+const NO_BASE_YET: &str = "nothing on the other side";
+
+/// A run that has a base to walk into: a Home deployed, and one cell of
+/// laid Floor east of the base-space exit cell so there is somewhere to
+/// walk *to*.
+///
+/// The Home is placed at the player's tile + `(1, 0)` because
+/// `place_structure` is a base action and measures from the player's
+/// `Position`, which is the anchor tile — dropping it *on* the anchor would
+/// put a structure on the door.
+///
+/// The floor is laid directly rather than by deploying anything: the pocket
+/// is not stamped until slice-1 Task 6, and this task's subject is the
+/// walking, not what lays the ground.
+fn game_with_a_base(seed: u32) -> Game {
+    let mut game = game(seed);
+    place_home(&mut game, 1, 0);
+    let mut grid = game.world.resource_mut::<base_grid::BaseGrid>();
+    grid.lay_floor(0, 0);
+    grid.lay_floor(1, 0);
+    game
+}
+
+/// The player's tile on the zone surface.
+fn player_tile(game: &Game) -> Position {
+    *game.world.get::<Position>(game.player_entity()).unwrap()
+}
+
+/// The round trip the spec names: stepping through the anchor puts the party
+/// out of phase at the exit cell, coming back out restores the surface, and
+/// the player's surface `Position` is the anchor tile throughout — pinned
+/// there rather than merely starting there, which is what every guard on the
+/// eleven re-read sites is protecting against.
+#[test]
+fn entering_and_leaving_through_the_anchor_round_trips_the_players_position() {
+    let mut game = game_with_a_base(3120);
+    let anchor = game.anchor_position().expect("a fresh game has an anchor");
+    let before = player_tile(&game);
+    assert_eq!(
+        (before.x, before.y),
+        anchor,
+        "the fixture must start the player on the anchor, or this tests nothing"
+    );
+
+    game.enter_base()
+        .expect("standing on an anchor with a Home behind it");
+
+    assert!(game.in_base());
+    assert!(!game.is_underground(), "base space is not the Stack");
+    assert_eq!(game.base_pos(), Some((0, 0)), "you arrive at the exit cell");
+    assert_eq!(
+        player_tile(&game),
+        before,
+        "the surface Position stays pinned to the anchor tile"
+    );
+
+    game.leave_base().expect("standing on the exit cell");
+
+    assert!(!game.in_base());
+    assert_eq!(game.locale(), Locale::Surface);
+    assert_eq!(
+        player_tile(&game),
+        before,
+        "you come back out where you went in"
+    );
+}
+
+/// The anchor is the only door. Asserted against the same fixture from the
+/// anchor tile too, so this cannot pass against an `enter_base` that refuses
+/// everywhere.
+#[test]
+fn the_anchor_is_the_only_way_in() {
+    let mut game = game_with_a_base(3121);
+    {
+        let player = game.player_entity();
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x += 3;
+    }
+
+    let refused = game
+        .enter_base()
+        .expect_err("three tiles off the anchor is not the door");
+    assert!(
+        !refused.contains(NO_BASE_YET),
+        "the fixture has a Home, so this must refuse for the position, got: {refused}"
+    );
+
+    {
+        let player = game.player_entity();
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x -= 3;
+    }
+    game.enter_base()
+        .expect("back on the anchor, the same call must be permitted");
+}
+
+/// A new run has no base at all — `place_structure` refuses everything until
+/// a Home is deployed — so the anchor leads nowhere, and says so in its own
+/// words rather than by claiming the player is standing somewhere else.
+#[test]
+fn an_anchor_with_no_home_behind_it_refuses_entry() {
+    let mut game = game(3122);
+    let standing = player_tile(&game);
+    assert_eq!(
+        (standing.x, standing.y),
+        game.anchor_position().unwrap(),
+        "the player starts on the anchor, so position cannot be what refuses"
+    );
+
+    let refused = game
+        .enter_base()
+        .expect_err("a run with no Home has no base to enter");
+
+    assert!(
+        refused.contains(NO_BASE_YET),
+        "entry with no Home must name the missing base, got: {refused}"
+    );
+    assert!(!game.in_base());
+}
+
+/// **The silent-guard test.** In the Stack the player's `Position` is pinned
+/// to the entrance tile, and a run that dived from its starting tile dived
+/// from the anchor — so the "are you standing on the anchor?" check passes
+/// four frames down. `enter_base` therefore has to ask `require_surface`
+/// first, and this is the only thing that says so.
+#[test]
+fn entering_is_refused_from_the_stack_even_standing_on_the_anchor_tile() {
+    let mut game = game_with_a_base(3123);
+    descend(&mut game);
+
+    let pinned = player_tile(&game);
+    assert_eq!(
+        (pinned.x, pinned.y),
+        game.anchor_position().unwrap(),
+        "the fixture must pin Position to the anchor tile, or this tests nothing"
+    );
+
+    let refused = game
+        .enter_base()
+        .expect_err("there is no anchor four frames down");
+
+    assert!(
+        refused.contains(OPEN_GRID),
+        "entry from the Stack must be refused by the surface guard, got: {refused}"
+    );
+    assert!(!game.in_base());
+}
+
+/// Leaving belongs to base space, and is refused in the other two locales by
+/// the base guard rather than by a check that happens to fail there.
+#[test]
+fn leaving_is_a_base_action() {
+    is_a_base_action(
+        3124,
+        "leaving base space",
+        |_| (),
+        |game, ()| game.leave_base(),
+    );
+}
+
+/// The way out is the one cell the Home stands on, not wherever you happen
+/// to be — otherwise base space would have a door in every wall.
+#[test]
+fn the_way_out_is_only_at_the_exit_cell() {
+    let mut game = game_with_a_base(3125);
+    game.enter_base().unwrap();
+    game.move_player(1, 0);
+    assert_eq!(
+        game.base_pos(),
+        Some((1, 0)),
+        "the fixture must walk a tile"
+    );
+
+    let refused = game
+        .leave_base()
+        .expect_err("one cell east of the Home is not the door");
+    assert!(
+        !refused.contains(THE_BASE),
+        "this must refuse for the cell, not by the locale guard, got: {refused}"
+    );
+    assert!(
+        game.in_base(),
+        "a refused exit leaves the party where it was"
+    );
+
+    game.move_player(-1, 0);
+    game.leave_base().expect("back on the exit cell");
+    assert!(!game.in_base());
+}
+
+/// Solid rock is not walkable, and shoving at it is not a turn. Both halves
+/// of the pin are asserted: base-space coordinates unchanged, *and* the
+/// surface `Position` unchanged — without the second, a `move_player` that
+/// never dispatched on locale at all would walk the party across the zone
+/// map and still pass.
+#[test]
+fn walking_into_solid_rock_is_refused_and_costs_no_turn() {
+    let mut game = game_with_a_base(3126);
+    game.enter_base().unwrap();
+    let standing = player_tile(&game);
+    let tick = game.current_tick();
+
+    // North of the exit cell was never laid: absent from `BaseGrid`, so solid.
+    game.move_player(0, -1);
+
+    assert_eq!(game.base_pos(), Some((0, 0)), "solid rock does not give");
+    assert_eq!(game.current_tick(), tick, "a refused step costs no turn");
+    assert_eq!(player_tile(&game), standing);
+}
+
+/// A step onto laid Floor moves the base-space coordinates, spends a turn,
+/// and leaves the surface `Position` exactly where it was.
+#[test]
+fn walking_onto_floor_moves_only_the_base_space_coordinates() {
+    let mut game = game_with_a_base(3127);
+    game.enter_base().unwrap();
+    let standing = player_tile(&game);
+    let tick = game.current_tick();
+
+    game.move_player(1, 0);
+
+    assert_eq!(game.base_pos(), Some((1, 0)));
+    assert!(game.current_tick() > tick, "a step in base space is a turn");
+    assert_eq!(
+        player_tile(&game),
+        standing,
+        "the surface Position must not move a tile"
+    );
+}
+
+/// Movement reads `BaseGrid::walkable`, not `is_floor`: mined-out rock is
+/// somewhere you can stand long before it is somewhere you can build.
+#[test]
+fn mined_rock_is_walkable_before_it_is_floored() {
+    let mut game = game_with_a_base(3128);
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(0, 1, tick);
+    game.enter_base().unwrap();
+
+    game.move_player(0, 1);
+
+    assert_eq!(game.base_pos(), Some((0, 1)));
+    assert!(
+        !game.world.resource::<base_grid::BaseGrid>().is_floor(0, 1),
+        "the fixture cell must be Open and not Floor, or this tests nothing"
+    );
+}

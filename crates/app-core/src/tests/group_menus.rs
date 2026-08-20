@@ -24,6 +24,11 @@ fn b_and_p_open_the_group_menus() {
 #[test]
 fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
     let mut app = test_app(4002);
+    // Inside the base, which is where every one of these rows is legal at
+    // all now — see `the_base_menu_offers_its_base_rows_only_inside_base_space`.
+    // Without it the Deploy assertion below would be asking the locale
+    // rather than asking whether the screen has anything in it.
+    stand_in_base(&mut app);
     let rows = labels(&app.base_menu_rows());
     for absent in [
         "Base staff",
@@ -46,43 +51,73 @@ fn the_base_menu_hides_rows_whose_screen_would_be_empty() {
 #[test]
 fn a_program_in_range_brings_back_the_rows_that_need_one() {
     let mut app = app_owning_a_program_and_a_compiler(4003, &[]);
+    stand_in_base(&mut app);
     let rows = labels(&app.base_menu_rows());
     assert!(rows.contains(&"Base staff"), "{rows:?}");
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
-/// Clause 1. Every row that reads `App::nearby_*` scans around the player's
-/// `Position`, which stays pinned to the surface entrance tile while the
-/// party is in the Stack — so without the `surface_only` flag the base menu
-/// would list a base four frames overhead and offer to demolish it.
+/// Clause 1, and the whole job of the `base_only` flag. Every one of these
+/// rows is a `Game::require_base` caller, so base space is the only locale
+/// the engine will accept them in — offering them anywhere else advertises a
+/// screen whose every action is refused on the far side. The flag used to be
+/// `surface_only` and used to ask `is_underground()`, which was the same
+/// question only while there were two locales.
+///
+/// One fixture in all three locales rather than three fixtures, for the
+/// reason the engine's own `tests/base_space.rs` gives: the base, the
+/// machines and the player's `Position` are identical in all three runs, so
+/// where the party is standing is the only thing that can explain a
+/// difference.
 #[test]
-fn underground_the_base_menu_drops_its_surface_only_rows() {
-    let mut app = app_underground(4004);
-    let rows = labels(&app.base_menu_rows());
-    for absent in [
+fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
+    const GUARDED: [&str; 5] = [
         "Deploy a structure",
         "Base staff",
-        "Work orders",
         "Work a structure yourself",
         "Upgrade a structure",
         "Demolish a structure",
-    ] {
+    ];
+
+    let mut inside = app_owning_a_program_and_a_compiler(4004, &[]);
+    stand_in_base(&mut inside);
+    let rows = labels(&inside.base_menu_rows());
+    for present in GUARDED {
         assert!(
-            !rows.contains(&absent),
-            "{absent:?} reaches the zone map through a pinned Position: {rows:?}"
+            rows.contains(&present),
+            "{present:?} must be offered where the engine permits it: {rows:?}"
         );
     }
-    assert!(
-        rows.contains(&"Research"),
-        "research is not surface-gated: {rows:?}"
-    );
-    // The chains are a property of the loaded assets, not of anything the
-    // player's `Position` can reach — and four frames down is exactly when
-    // you want to check what the base upstairs still needs.
-    assert!(
-        rows.contains(&"Recipes"),
-        "recipes are asset data, not a scan around the party: {rows:?}"
-    );
+
+    for (standing, mut app) in [
+        (
+            "on the open grid",
+            app_owning_a_program_and_a_compiler(4004, &[]),
+        ),
+        (
+            "in the Stack",
+            app_owning_a_program_and_a_compiler_deep(4004, &[], &[], true),
+        ),
+    ] {
+        let rows = labels(&app.base_menu_rows());
+        for absent in GUARDED {
+            assert!(
+                !rows.contains(&absent),
+                "{absent:?} is a base action, so it must not be offered {standing}: {rows:?}"
+            );
+        }
+        assert!(
+            rows.contains(&"Research"),
+            "research is not locale-gated, {standing}: {rows:?}"
+        );
+        // The chains are a property of the loaded assets, not of anything the
+        // player's `Position` can reach — and four frames down is exactly when
+        // you want to check what the base back home still needs.
+        assert!(
+            rows.contains(&"Recipes"),
+            "recipes are asset data, not a scan around the party, {standing}: {rows:?}"
+        );
+    }
 }
 
 /// The party menu is deliberately almost all non-surface — managing what you
@@ -134,6 +169,7 @@ fn a_hidden_row_cannot_be_reached_by_its_table_position() {
 #[test]
 fn esc_from_a_screen_opened_by_a_group_menu_returns_to_it() {
     let mut app = test_app(4008);
+    stand_in_base(&mut app);
     app.handle_key(GameKey::Char('b'));
     let deploy = app
         .base_menu_rows()
@@ -166,6 +202,7 @@ fn esc_from_a_screen_opened_from_the_map_returns_to_the_map() {
 #[test]
 fn completing_an_action_lands_on_the_map_and_forgets_the_menu() {
     let mut app = test_app(4010);
+    stand_in_base(&mut app);
     app.handle_key(GameKey::Char('b'));
     let deploy = app
         .base_menu_rows()
@@ -296,6 +333,7 @@ fn refactoring_works_underground() {
 #[test]
 fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
     let mut app = app_owning_a_program_and_a_compiler(4030, &[]);
+    stand_in_base(&mut app);
     let rows = labels(&app.base_menu_rows());
 
     assert!(!rows.contains(&"Assign a cronjob"), "{rows:?}");

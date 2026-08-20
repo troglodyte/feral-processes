@@ -153,8 +153,31 @@ impl Game {
         }
     }
 
+    /// Every `DigSite` in base space, by the tile it stands on.
+    ///
+    /// The lookup `toggle_mark_box` walks its box against. Built once per
+    /// press rather than per cell: bevy's `World::query_filtered` constructs
+    /// a fresh `QueryState` and scans every entity on each call, so asking
+    /// tile by tile made one committed 25x25 box cost 625 of those, times a
+    /// linear scan that grows with the sites already standing.
+    ///
+    /// **The keys are in base space**, so this must never be indexed with a
+    /// zone-surface coordinate — see `components::DigSite`.
+    fn dig_sites_by_tile(&mut self) -> HashMap<(i32, i32), Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<DigSite>>();
+        query
+            .iter(&self.world)
+            .map(|(e, p)| ((p.x, p.y), e))
+            .collect()
+    }
+
     /// The `DigSite` standing on base-space `(x, y)`, if the player has
     /// started on that wall or marked it.
+    ///
+    /// For a single tile. Anything walking a region wants
+    /// `dig_sites_by_tile` instead, for the reason stated there.
     ///
     /// **Its `Position` is in base space**, so this must never be reached
     /// for with a zone-surface coordinate — see `components::DigSite`.
@@ -277,12 +300,13 @@ impl Game {
     /// A `Floor` cell takes no mark. There is nothing left to do to it, and a
     /// site spawned over one would be a mark the crew could never clear.
     pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32)) {
-        let marking = !self.is_marked(a.0, a.1);
+        let mut sites = self.dig_sites_by_tile();
+        let marking = !self.is_marked_in(&sites, a.0, a.1);
         let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
         let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
         for y in y0..=y1 {
             for x in x0..=x1 {
-                self.set_mark(x, y, marking);
+                self.set_mark(&mut sites, x, y, marking);
             }
         }
     }
@@ -306,9 +330,10 @@ impl Game {
     /// Whether base-space `(x, y)` is marked. A cell with no `DigSite` is
     /// not, which is what makes an untouched wall the unmarked case without
     /// storing anything for it.
-    fn is_marked(&mut self, x: i32, y: i32) -> bool {
-        self.dig_site_at(x, y)
-            .and_then(|site| self.world.get::<DigSite>(site))
+    fn is_marked_in(&self, sites: &HashMap<(i32, i32), Entity>, x: i32, y: i32) -> bool {
+        sites
+            .get(&(x, y))
+            .and_then(|&site| self.world.get::<DigSite>(site))
             .is_some_and(|d| d.marked)
     }
 
@@ -319,13 +344,13 @@ impl Game {
     /// none — its mark means floor it. Clearing retires the site unless it is
     /// still holding chip progress, so an unmarked wall the player had
     /// started on does not heal.
-    fn set_mark(&mut self, x: i32, y: i32, marked: bool) {
+    fn set_mark(&mut self, sites: &mut HashMap<(i32, i32), Entity>, x: i32, y: i32, marked: bool) {
         let grid = self.world.resource::<BaseGrid>();
         if grid.is_floor(x, y) {
             return;
         }
         let solid = grid.is_solid(x, y);
-        match self.dig_site_at(x, y) {
+        match sites.get(&(x, y)).copied() {
             Some(site) => {
                 if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
                     dig.marked = marked;
@@ -345,11 +370,12 @@ impl Game {
                 let keep = marked || (solid && holds_progress);
                 if !keep {
                     self.world.despawn(site);
+                    sites.remove(&(x, y));
                 }
             }
             None if marked => {
                 let max_hp = crate::tuning::BASE_ROCK_DURABILITY;
-                self.world.spawn((
+                let site = self.world.spawn((
                     DigSite {
                         marked: true,
                         announced_stuck: false,
@@ -360,6 +386,7 @@ impl Game {
                     },
                     Position { x, y },
                 ));
+                sites.insert((x, y), site.id());
             }
             None => {}
         }

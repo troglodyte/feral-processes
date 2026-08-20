@@ -219,12 +219,17 @@ impl Game {
             .map(|inv| inv.count(&substrate))
             .unwrap_or(0);
         if held == 0 {
-            let msg = format!(
+            // Reported through the `Err` alone, like the two refusals above
+            // it: app-core raises every one of them as the status banner,
+            // and logging this one as well put the same sentence in the
+            // base log permanently — once per press, folded by
+            // `resources::condense` into a row with a count rather than
+            // suppressed. A refusal is news to the player standing there,
+            // not to the base's own record of what it did.
+            return Err(format!(
                 "You have no {} to press into a tile.",
                 self.item_name(&substrate)
-            );
-            self.log_base(msg.clone());
-            return Err(msg);
+            ));
         }
         self.world
             .get_mut::<Inventory>(player)
@@ -652,29 +657,15 @@ impl Game {
         });
     }
 
-    /// Posts `worker` (a tamed program you own) to guard `structure`
-    /// against raids (see `raid_check`), without assigning it a cronjob.
-    /// Unlike `assign_cronjob`, this works on any structure — including
-    /// ones with no `work` recipe at all, like a Terminal — since defending
-    /// doesn't require producing anything. A structure that's already
-    /// cronjob-worked is already defended by its worker; this is for posting
-    /// a guard on structures that otherwise have no defender. A structure
-    /// raids can't target at all (`StructureDef::raidable`, e.g. Home) is
-    /// refused, since a guard there would wait forever for a raid that never
-    /// comes.
-    /// `post_worker`'s counterpart for a guard post, split for the same
-    /// reason: the scheduler fills a standing guard job and has answered
-    /// the refusals above its own way.
-    ///
-    /// No `work_ticks_for` and no `Position` write — guarding produces
-    /// nothing, so there is no cycle to rate and no station to walk to.
     /// `post_worker`'s counterpart for a dig site: the crew job, posted by
     /// `schedule_base_labour` and worked by `Game::run_dig_crew`.
     ///
     /// The rate is `tuning::BASE_DIG_TICKS_PER_SWING` rather than
     /// `work_ticks_for`, because a dig site is not a structure and has no
-    /// def to read one off — what the *worker* brings is the damage each
-    /// swing lands, through its own `Game::swing_damage`.
+    /// def to read one off. What the *worker* brings is the bite instead:
+    /// `Game::swing_damage` takes its own species band and `atk`, so a
+    /// stronger program cuts a wall out in fewer swings rather than faster
+    /// ones.
     pub(crate) fn post_digger(&mut self, worker: Entity, site: Entity) {
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world
@@ -692,6 +683,23 @@ impl Game {
         });
     }
 
+    /// Posts `worker` (a tamed program you own) to guard `structure`
+    /// against raids (see `raid_check`), without assigning it a cronjob.
+    /// Unlike `assign_cronjob`, this works on any structure — including
+    /// ones with no `work` recipe at all, like a Terminal — since defending
+    /// doesn't require producing anything. A structure that's already
+    /// cronjob-worked is already defended by its worker; this is for posting
+    /// a guard on structures that otherwise have no defender. A structure
+    /// raids can't target at all (`StructureDef::raidable`, e.g. Home) is
+    /// refused, since a guard there would wait forever for a raid that never
+    /// comes.
+    ///
+    /// `post_worker`'s counterpart for a guard post, split for the same
+    /// reason: the scheduler fills a standing guard job and has answered
+    /// the refusals above its own way.
+    ///
+    /// No `work_ticks_for` and no `Position` write — guarding produces
+    /// nothing, so there is no cycle to rate and no station to walk to.
     pub(crate) fn post_guard(&mut self, worker: Entity, structure: Entity) {
         if self.world.resource::<Party>().0.contains(&worker) {
             self.world

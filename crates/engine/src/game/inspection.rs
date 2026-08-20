@@ -367,14 +367,32 @@ impl Game {
             "The Anchor".to_string()
         } else if self.world.get::<SurfaceLink>(entity).is_some() {
             "Stack Entrance".to_string()
-        } else if self.world.get::<DigSite>(entity).is_some() {
+        } else if let Some(dig) = self.world.get::<DigSite>(entity) {
             // A dig site is named by its tile, because it has nothing else:
             // no def, no species, and no glyph. Without this arm it falls
             // through to `"You"` below, and a posted digger's manifest row
             // reads as the player standing at their own post.
-            match self.world.get::<Position>(entity) {
-                Some(p) => format!("Marked Cell ({}, {})", p.x, p.y),
-                None => "Marked Cell".to_string(),
+            //
+            // *What* it is called comes off the mark and the cell under it,
+            // for `toggle_mark_box`'s reason: one verb, and the cell decides
+            // which half of the job it means. An unmarked site is one the
+            // player walked away from mid-swing — it appears in no plan, so
+            // calling it marked is a claim about the plan that is false.
+            let marked = dig.marked;
+            let at = self.world.get::<Position>(entity).copied();
+            let solid = at.is_none_or(|p| {
+                self.world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_solid(p.x, p.y)
+            });
+            let what = match (marked, solid) {
+                (true, true) => "Marked Wall",
+                (true, false) => "Marked Floor",
+                (false, _) => "Chipped Wall",
+            };
+            match at {
+                Some(p) => format!("{what} ({}, {})", p.x, p.y),
+                None => what.to_string(),
             }
         } else {
             "You".to_string()

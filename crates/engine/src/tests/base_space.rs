@@ -2638,8 +2638,8 @@ fn a_posted_digger_is_named_by_the_cell_it_is_cutting() {
     let activity = game.program_activity(staff[0]);
 
     assert!(
-        activity.contains("Marked Cell"),
-        "a digger's post must name the cell, got: {activity}"
+        activity.contains("Marked Wall (") && activity.contains(&format!("{}, {}", WALL.0, WALL.1)),
+        "a digger's post must name the cell it is cutting, got: {activity}"
     );
     assert!(
         !activity.contains("You"),
@@ -2770,5 +2770,44 @@ fn a_crew_program_swings_its_own_species_band_at_rock() {
         game.swing_damage(worker),
         (8 + atk).max(1) as u32,
         "a crew program swung the player's unarmed band instead of its own"
+    );
+}
+
+/// A refusal is news to the player standing there, not to the base's own
+/// record of what it did. `lay_tile`'s other two refusals are reported by
+/// the `Err` alone, and this one wrote the base log as well — so every
+/// press of `v` with an empty pack left a permanent line behind.
+#[test]
+fn a_refused_tile_is_reported_once() {
+    let mut game = game_on_open_rock(3243, 0);
+
+    let refusal = game.lay_tile().expect_err("no substrate means no tile");
+
+    assert!(
+        !game
+            .message_log(40)
+            .into_iter()
+            .any(|entry| entry.text == refusal),
+        "the refusal was written to the base log as well as returned: {refusal}"
+    );
+}
+
+/// Most dig sites are not marked: one is left behind by every wall the
+/// player bumps into and walks away from. Calling those "Marked" is a claim
+/// about a plan they appear in nowhere.
+#[test]
+fn an_unmarked_half_cut_wall_is_not_called_marked() {
+    let mut game = game_at_the_frontier(3244);
+    let player = game.player_entity();
+    game.strike_rock(player, WALL.0, WALL.1);
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("a struck wall has a dig site");
+
+    let label = game.entity_label(site);
+
+    assert!(
+        label.starts_with("Chipped Wall"),
+        "an unmarked, half-cut wall is named as though it were in a plan: {label}"
     );
 }

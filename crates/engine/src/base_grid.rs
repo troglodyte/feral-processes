@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 pub enum BaseCell {
     /// Carved out but not yet floored: walkable, but not a `Floor` for
     /// whatever a later task ties to build placement. `mined_at` is the
-    /// tick it was opened — unread this slice, for slice 2's mining.
+    /// tick it was opened, and `base::entropy::base_entropy_system` reads it
+    /// every tick: an `Open` cell left unfloored past
+    /// `BASE_ENTROPY_REFILL_TICKS` goes back to solid.
     Open { mined_at: u64 },
     /// Carved out and floored: the buildable, walkable base tile.
     Floor,
@@ -76,19 +78,18 @@ impl BaseGrid {
     /// included, so a mined tile that gets floored does not stack the two
     /// states.
     ///
-    /// `Game::lay_starting_pocket` is the only caller in gameplay: the
-    /// pocket the run opens with when its first Home goes down. Slice 2's
-    /// tiling action is the second one.
+    /// Two callers in gameplay: `Game::lay_starting_pocket`, the pocket the
+    /// run opens with when its first Home goes down, and `Game::floor_cell`,
+    /// which is the one door a cell becomes floor through in play.
     pub(crate) fn lay_floor(&mut self, x: i32, y: i32) {
         self.cells.insert((x, y), BaseCell::Floor);
     }
 
-    /// Carves `(x, y)` out of solid rock: walkable, not floored. Dead in
-    /// gameplay this slice — nothing calls it before slice 2's mining —
-    /// specified now so `BaseGrid` is complete, and covered by a test
-    /// here for the same reason. `#[allow(dead_code)]` for the same
-    /// reason `lay_floor` above carries it.
-    #[allow(dead_code)]
+    /// Carves `(x, y)` out of solid rock: walkable, not floored.
+    ///
+    /// `Game::strike_rock` is the one caller in play — the swing that takes
+    /// a wall's last durability — which is what makes `mined_at` the tick
+    /// the wall came down and so the tick entropy measures its window from.
     pub(crate) fn open(&mut self, x: i32, y: i32, tick: u64) {
         self.cells.insert((x, y), BaseCell::Open { mined_at: tick });
     }

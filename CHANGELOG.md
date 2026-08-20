@@ -100,6 +100,16 @@ plan says nothing at all, because it opens itself as the shell comes down.
 - Clearing a mark off a cell the frontier had already reclaimed left an
   invisible record behind — drawn nowhere, wanted by nobody, and saved from
   then on.
+- Committing a large plan no longer costs more the more of the base you
+  have already dug. The box was looked up tile by tile against every dig
+  site standing, which is a full scan per cell — a maximum box ran 625 of
+  them. It builds one lookup per press now.
+- A wall you chipped and walked away from is called a Chipped Wall rather
+  than a Marked Cell: most dig sites are not in any plan, and the manifest
+  said they were.
+- Pressing the tile key with nothing to press left the refusal in the base
+  log as well as on screen, once per press. The base log records what the
+  base did, not what it declined to.
 - The fragment-payout bound is now stated per tick, against the Mining
   Node's own rate. As a per-cell comparison it could not fail: a cut cell
   pays at most one fragment against the four a Blank Substrate costs, so

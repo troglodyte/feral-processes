@@ -30,20 +30,21 @@ const VIGNETTE_MIN: f32 = 0.75;
 const STAFFED_MARK: f32 = 0.28;
 const STAFFED_MARK_INSET: f32 = 2.0;
 
+/// The Excavation plan's three washes, all one hue so a plan reads as one
+/// thing. A committed mark's fill is dim enough to walk over without the
+/// base becoming unreadable and its edge carries the shape; the box being
+/// previewed is brighter than either, because it is the thing about to
+/// happen and has to read over a mark it may be drawn across.
+const MARK_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.18);
+const MARK_EDGE: Color = Color::new(0.9, 0.8, 0.2, 0.45);
+const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
+
 /// The nemesis mark's side, as a fraction of the tile, and how far it sits
 /// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
 /// opposite corner (top-right rather than bottom-left), so a marked program
 /// standing on a machine-adjacent tile can never collide with either a
 /// staffed mark or the outline `outline_open` drops along a chained pair's
 /// shared edge.
-/// The Excavation plan's two washes. A committed mark is dim enough to walk
-/// over without the base becoming unreadable; the box being previewed is
-/// brighter, because it is the thing about to happen and has to read over a
-/// mark it may be drawn across.
-const MARK_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.18);
-const MARK_EDGE: Color = Color::new(0.9, 0.8, 0.2, 0.45);
-const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
-
 const NEMESIS_MARK: f32 = 0.22;
 const NEMESIS_MARK_INSET: f32 = 2.0;
 

@@ -38,6 +38,7 @@ fn player_tile(game: &Game) -> Position {
 #[test]
 fn collecting_empties_every_orthogonal_neighbour_and_no_diagonal_one() {
     let mut game = Game::new(940, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let p = player_tile(&game);
 
     for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
@@ -84,6 +85,7 @@ fn collecting_empties_every_orthogonal_neighbour_and_no_diagonal_one() {
 #[test]
 fn collecting_leaves_a_neighbours_input_untouched() {
     let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let p = player_tile(&game);
 
     let node = stocked_structure(
@@ -142,6 +144,7 @@ fn collecting_from_an_empty_neighbour_costs_no_turn() {
 #[test]
 fn a_successful_collect_costs_a_turn() {
     let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let p = player_tile(&game);
     stocked_structure(
         &mut game,

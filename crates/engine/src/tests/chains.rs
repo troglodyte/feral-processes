@@ -300,6 +300,8 @@ fn post_species(game: &mut Game, machine: Entity, species: &str) -> Entity {
 #[test]
 fn a_quicker_program_runs_the_same_assembler_harder() {
     let mut game = game_with_assembler("assembler_speed", 1000);
+    // Deploying and posting are base actions; the party stands in the base.
+    stand_in_base(&mut game);
 
     let quick = assembler_at(&mut game, 40, 40, false);
     feeder_at(&mut game, 41, 40, 200);
@@ -565,6 +567,8 @@ fn units_mined_by(tag: &str, species: &str, ticks: u32) -> u32 {
         &[],
     );
     let mut game = Game::new(4181, DifficultyMode::Forgiving, &dir).unwrap();
+    // Deploying and posting are base actions; the party stands in the base.
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let worker = spawn_tamed(&mut game, 40, 4);
     // A fixture that fails to parse is *skipped* with a warning, and the
@@ -642,6 +646,8 @@ fn a_sharper_program_mines_more_from_the_same_node() {
 #[test]
 fn a_program_can_be_posted_to_an_assembler() {
     let mut game = game_with_assembler("chain_assign", 1012);
+    // Deploying and posting are base actions; the party stands in the base.
+    stand_in_base(&mut game);
     let machine = assembler_at(&mut game, 40, 40, false);
     let worker = spawn_tamed(&mut game, 10, 3);
     // A program is posted from wherever the player stands, and the machine
@@ -1073,6 +1079,7 @@ fn edges_of(game: &mut Game, structure: Entity) -> Vec<(i32, i32)> {
 #[test]
 fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
     let mut game = Game::new(1210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
     game.place_structure("refinery", 1, 0)

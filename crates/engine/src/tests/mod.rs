@@ -9,6 +9,7 @@ mod achievements;
 mod affixes;
 mod assets;
 mod base_grid;
+mod base_space;
 mod battle_timeline;
 mod building;
 mod catalog;

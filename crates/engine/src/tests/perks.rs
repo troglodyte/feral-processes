@@ -495,6 +495,7 @@ fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i3
 #[test]
 fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
     let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     assert_eq!(
         game.world.get::<ResourceNode>(node).unwrap().level,
@@ -536,6 +537,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
 #[test]
 fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();

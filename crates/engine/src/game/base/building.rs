@@ -12,7 +12,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't deploy right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         let def = self
             .world
             .resource::<StructureDb>()
@@ -371,7 +371,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         let Some(kind) = self
             .world
             .get::<Structure>(structure)
@@ -454,7 +454,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         let kind = self
             .world
             .get::<Structure>(structure)
@@ -649,7 +649,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }

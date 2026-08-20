@@ -296,29 +296,81 @@ impl Game {
         ));
     }
 
+    /// Strictly "down inside the Stack", and deliberately **not** "not on
+    /// the surface" — base space is off the surface too and must not answer
+    /// yes here, or every Stack rule in the game (no Power supply, Trace,
+    /// the frame view) would start applying to the base.
     pub fn is_underground(&self) -> bool {
         matches!(self.world.resource::<Locale>(), Locale::Stack { .. })
     }
 
-    /// `Err` if the party is underground — for actions that reach into the
-    /// zone map through the player's `Position`.
+    /// Whether the party is out of phase, inside base space.
+    pub fn in_base(&self) -> bool {
+        matches!(self.world.resource::<Locale>(), Locale::Base { .. })
+    }
+
+    /// The party's cell in base space, or `None` anywhere else.
     ///
-    /// While underground that `Position` is pinned to the entrance tile
-    /// (see `resources::Locale`), so these would otherwise operate on a tile
-    /// out in the wild that the player is nowhere near: deploying a
-    /// structure beside the link, or — worst of all — `use_symlink`
-    /// teleporting the pinned entrance somewhere else and changing where
-    /// climbing back up puts you.
+    /// The mirror of `stack_pos`, and the refusal mechanism for anything
+    /// base-only in the same way: a `None` here is what makes a base-space
+    /// action impossible from the surface, rather than a second guard
+    /// somewhere else that could disagree with this one.
+    ///
+    /// `pub` for the same reason `stack_pos_xy` is: base space has no
+    /// facing and no depth, so this one pair is the whole of "where the
+    /// party is standing" that a frontend has to ask for.
+    pub fn base_pos(&self) -> Option<(i32, i32)> {
+        match *self.world.resource::<Locale>() {
+            Locale::Base { x, y } => Some((x, y)),
+            Locale::Surface | Locale::Stack { .. } => None,
+        }
+    }
+
+    /// `Err` unless the party is on the zone surface proper — for actions
+    /// that reach into the **zone map** through the player's `Position`.
+    ///
+    /// In both of the other two locales that `Position` is pinned: to the
+    /// Stack entrance tile while underground, and to the anchor tile while
+    /// in base space (see `resources::Locale`). So these would otherwise
+    /// operate on a tile out in the wild that the player is nowhere near:
+    /// `use_symlink` teleporting the pinned entrance somewhere else and
+    /// changing where climbing back up puts you, worst of all.
+    ///
+    /// **This guard used to mean "not in the Stack",** which was the same
+    /// condition while there were two locales. It is not any more, and the
+    /// ten sites that turned out to mean base space rather than the surface
+    /// moved to `require_base`. `docs/seams.md` carries the table; adding a
+    /// caller here means asserting the action belongs to the *wild*, not to
+    /// the base.
     ///
     /// Party and inventory management deliberately isn't on this list.
     /// Fusing programs, installing routines, crafting, equipping and
     /// spending perk points all work fine four frames down, and stopping to
     /// sort your gear in the Stack is a thing the genre expects.
     pub(crate) fn require_surface(&self) -> Result<(), String> {
-        if self.is_underground() {
-            return Err("Not down here — that needs open grid.".into());
+        match *self.world.resource::<Locale>() {
+            Locale::Surface => Ok(()),
+            Locale::Stack { .. } => Err("Not down here — that needs open grid.".into()),
+            Locale::Base { .. } => Err("Not in here — that needs open grid.".into()),
         }
-        Ok(())
+    }
+
+    /// `Err` unless the party is in base space — for actions that reach
+    /// into the **base** through the player's `Position`: deploying,
+    /// upgrading, demolishing, working a machine by hand, collecting from
+    /// one, filing a work order, and every counter a deployed trader keeps.
+    ///
+    /// The counterpart to `require_surface` and the larger half of what it
+    /// used to cover. Every `Structure` lives in base space, so an action
+    /// about a structure asked from the zone surface is asking about a tile
+    /// in another space entirely — the same misread `require_surface`
+    /// already refused underground, one locale over.
+    pub(crate) fn require_base(&self) -> Result<(), String> {
+        match *self.world.resource::<Locale>() {
+            Locale::Base { .. } => Ok(()),
+            Locale::Surface => Err("Not out here — that's back at the base.".into()),
+            Locale::Stack { .. } => Err("Not down here — that's back at the base.".into()),
+        }
     }
 
     /// Descends into the Stack reached through the entrance standing at
@@ -553,10 +605,11 @@ impl Game {
         self.log("You surface through the link, back onto open grid.".to_string());
     }
 
-    /// The party's current cell and facing, or `None` on the surface.
+    /// The party's current cell and facing, or `None` anywhere but the
+    /// Stack.
     pub(crate) fn stack_pos(&self) -> Option<StackPos> {
         match *self.world.resource::<Locale>() {
-            Locale::Surface => None,
+            Locale::Surface | Locale::Base { .. } => None,
             Locale::Stack {
                 depth,
                 frames,

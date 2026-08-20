@@ -951,7 +951,10 @@ impl Game {
         // party underground has its `Position` pinned to the surface
         // entrance tile, so anything claiming something about where the base
         // is has to refuse rather than answer from a tile four frames up.
-        self.require_surface()?;
+        // `require_base` rather than `require_surface` since the base went
+        // out of phase — this reads which machines are standing, and they
+        // stand in base space.
+        self.require_base()?;
         if let Some(reason) = chain_break(self, &item) {
             return Err(reason);
         }

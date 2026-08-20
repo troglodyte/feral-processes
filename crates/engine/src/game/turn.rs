@@ -196,7 +196,18 @@ impl Game {
     /// packmate still mid-chase), so the swarm arrives together rather than
     /// one at a time.
     pub(crate) fn nest_aggro_tick(&mut self) {
-        if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
+        // Off the surface in *either* direction, not just underground: the
+        // player's `Position` is pinned to the anchor tile in base space as
+        // much as to the entrance tile in the Stack, so a guardian standing
+        // beside that tile would otherwise open a battle on a party that is
+        // out of phase and nowhere near it. `is_underground` stays
+        // Stack-only by design (see `Game::is_underground`), so this is two
+        // questions rather than one.
+        if self.is_game_over().is_some()
+            || self.has_active_battle()
+            || self.is_underground()
+            || self.in_base()
+        {
             return;
         }
 

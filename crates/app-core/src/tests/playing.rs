@@ -89,6 +89,9 @@ fn update_realtime_ticks_once_a_second_only_while_playing() {
 #[test]
 fn c_reaches_the_collect_action() {
     let mut app = test_app(203);
+    // `c` collects from the machines around you, and those stand in base
+    // space — so the key only reaches the action from inside it.
+    stand_in_base(&mut app);
     app.handle_key(GameKey::Char('c'));
 
     let said = app

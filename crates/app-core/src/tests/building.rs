@@ -58,6 +58,7 @@ fn deploy_home(app: &mut App) {
 #[test]
 fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
     let mut app = test_app(231);
+    stand_in_base(&mut app);
     deploy_home(&mut app);
 
     app.handle_key(GameKey::Char('b'));
@@ -87,6 +88,8 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
     let mut app = test_app(101);
     assert!(app.game.is_some(), "test game should have loaded");
     assert!(app.mode == Mode::Playing);
+    // Deploying happens from inside the base now.
+    stand_in_base(&mut app);
 
     let structure_count_in_menu = app.game.as_mut().unwrap().buildable_structure_defs().len();
     let mut placed = false;
@@ -136,6 +139,7 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
 #[test]
 fn remove_key_on_home_requires_confirmation_before_demolishing() {
     let mut app = test_app(203);
+    stand_in_base(&mut app);
 
     deploy_home(&mut app);
 
@@ -436,7 +440,7 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
 }
 
 /// The roster reads the same underground, but `work_structure` is behind
-/// `require_surface` — `Position` is pinned
+/// `require_base` — `Position` is pinned
 /// to the entrance tile down there, so posting would measure a walk from the
 /// wrong end of the map. Refused at the keypress, like the demolish key.
 #[test]

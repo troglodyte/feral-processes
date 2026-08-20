@@ -442,8 +442,8 @@ impl Game {
     ///
     /// The Stack half of `Game::sell_item`, and deliberately not a second
     /// caller of it: that one is keyed on a trading-post `Entity`, is gated
-    /// by `require_surface`, and stocks a `BuybackLedger` shelf. A trader
-    /// down here has none of those — no entity, no surface, and no memory of
+    /// by `require_base`, and stocks a `BuybackLedger` shelf. A trader
+    /// down here has none of those — no entity, no base, and no memory of
     /// the transaction. What the two do share is the one thing that must not
     /// drift, `Game::item_value`, which both reach through.
     pub fn sell_to_market(&mut self, copy: GearCopy, qty: u32) -> Result<(), String> {

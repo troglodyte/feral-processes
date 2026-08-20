@@ -175,6 +175,7 @@ fn deploying_a_raidable_structure_still_gives_it_a_durability_pool() {
     // the seed `place_structure_rejects_anything_but_home_until_a_home_exists`
     // already places two structures on.
     let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     let player = game.player_entity();
     game.world
@@ -800,6 +801,7 @@ fn raid_defense_active_tracks_whether_any_shield_is_standing() {
 #[test]
 fn assign_guard_refuses_a_structure_that_cant_be_raided() {
     let mut game = Game::new(705, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let home = game
         .world
         .spawn((
@@ -824,6 +826,7 @@ fn assign_guard_refuses_a_structure_that_cant_be_raided() {
 #[test]
 fn assign_guard_defends_a_structure_with_no_work_recipe() {
     let mut game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     // A Recharger Node, not Home: Home is non-raidable now, so it is the one
     // structure a guard is refused on.
     let structure = game
@@ -887,6 +890,7 @@ fn a_guard_task_never_produces_resources_even_on_a_workable_node() {
 #[test]
 fn guard_assignment_on_a_non_resource_structure_survives_save_and_load() {
     let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     // A Recharger Node, not Home: Home is non-raidable, so guarding it is refused.
     let structure = game
         .world
@@ -1403,6 +1407,7 @@ fn nests_do_not_regenerate_at_all() {
 #[test]
 fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
     let mut game = Game::new(146, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "fortification");
     place_home(&mut game, 0, 1);
     {

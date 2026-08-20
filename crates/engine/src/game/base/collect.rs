@@ -25,7 +25,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
         }
-        if self.require_surface().is_err() {
+        if self.require_base().is_err() {
             return Vec::new();
         }
         let player = self.player_entity();

@@ -55,7 +55,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         if qty == 0 {
             return Err("Sell at least 1.".into());
         }
@@ -213,7 +213,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         if qty == 0 {
             return Err("Buy back at least 1.".into());
         }
@@ -445,7 +445,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         if self.program_sell_divisor(structure).is_none() {
             return Err("That trader doesn't deal in programs.".into());
         }
@@ -486,7 +486,7 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
-        self.require_surface()?;
+        self.require_base()?;
         if qty == 0 {
             return Err("Buy at least 1.".into());
         }

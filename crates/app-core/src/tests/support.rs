@@ -429,12 +429,44 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             standing_guard: false,
         });
     }
+    // A trader is a deployed `Structure`, and every structure stands in base
+    // space — so a player at a counter is a player out of phase, and buying
+    // and selling are `Game::require_base`.
+    data.locale = Locale::Base { x: 0, y: 0 };
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
     app.mode = Mode::Playing;
     app
+}
+
+/// Puts `app`'s party out of phase, inside base space, by the same
+/// save-edit-reload trick `app_underground` uses and for the same reason:
+/// the engine deliberately exposes no way in from outside the crate, since
+/// on a real run that only ever happens by stepping onto the anchor.
+///
+/// Every base action — deploying, demolishing, upgrading, collecting,
+/// buying and selling at a deployed trader — asks `Game::require_base` now,
+/// so a key test about one of them has to stand where the player would be
+/// standing to press it.
+pub(crate) fn stand_in_base(app: &mut App) {
+    // Counted rather than keyed on a seed, the same as `app_underground`:
+    // tests run in parallel and several share a seed.
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let assets_dir = test_assets_dir();
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_base_{unique}.sav"));
+    let game = app.game.as_mut().expect("a fixture with a game");
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
 }
 
 /// A game where the player has `routines` installed (in place of the
@@ -859,16 +891,22 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             staff: false,
         });
     }
-    if underground {
-        data.locale = Locale::Stack {
+    data.locale = if underground {
+        Locale::Stack {
             depth: 1,
             frames: 2,
             x: 1,
             y: 1,
             facing: Dir::North,
             entrance: data.player.position,
-        };
-    }
+        }
+    } else {
+        // *Inside* the base, which is a place of its own now — the fixture's
+        // name has always claimed this and the locale is what makes it true.
+        // Every base action the callers press a key for is
+        // `Game::require_base`.
+        Locale::Base { x: 0, y: 0 }
+    };
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);

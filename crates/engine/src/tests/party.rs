@@ -158,6 +158,7 @@ fn set_companion_clears_any_active_cronjob_task() {
 fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
     let assets = test_assets_dir();
     let mut game = Game::new(25, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.add_companion(worker).unwrap();
     assert!(!game.player_status().companions.is_empty());

@@ -501,6 +501,12 @@ fn shoving_at_a_wall_still_passes_time() {
     assert!(game.current_tick() > before);
 }
 
+/// Still refused four frames down, but by `require_base` rather than
+/// `require_surface`: deploying is a base action, and the Stack is neither
+/// the base nor the surface. The refusal naming the base rather than open
+/// grid is the assertion — a message about open grid here would mean the
+/// site had been left on the surface guard, which permits nothing a player
+/// can reach.
 #[test]
 fn deploying_a_structure_is_refused_underground() {
     let mut game = game();
@@ -509,7 +515,7 @@ fn deploying_a_structure_is_refused_underground() {
         panic!("a Home should not go up inside the Stack");
     };
     assert!(
-        reason.contains("open grid"),
+        reason.contains("back at the base"),
         "the refusal should say why, got: {reason}"
     );
 }
@@ -517,7 +523,7 @@ fn deploying_a_structure_is_refused_underground() {
 /// Deploys a Home one tile east, puts the party underground through a link
 /// on their own tile, and returns the Home and where it stands.
 fn home_then_descend(game: &mut Game) -> (Entity, Position) {
-    game.place_structure("home", 1, 0).unwrap();
+    from_inside_the_base(game, |g| g.place_structure("home", 1, 0)).unwrap();
     let home = game
         .view_entities(5, 5)
         .into_iter()
@@ -600,7 +606,7 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     let (home, _) = home_then_descend(&mut game);
     let link = match locale(&game) {
         Locale::Stack { entrance, .. } => entrance,
-        Locale::Surface => unreachable!("just descended"),
+        Locale::Surface | Locale::Base { .. } => unreachable!("just descended"),
     };
     walk_corridors(&mut game, 12);
     let before = map(&game).explored;
@@ -747,8 +753,10 @@ fn no_entrance_opens_onto_unwalkable_ground() {
 #[test]
 fn breaching_with_a_base_never_opens_a_link_inside_the_platform() {
     let mut game = game();
-    // Home to the south so it doesn't share the portal's tile.
-    game.place_structure("home", 0, 1).unwrap();
+    // Home to the south so it doesn't share the portal's tile. Deployed from
+    // inside the base and then back out, since the rest of this test is about
+    // walking the surface into a portal.
+    from_inside_the_base(&mut game, |g| g.place_structure("home", 0, 1)).unwrap();
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.world.spawn((
         Structure {
@@ -863,7 +871,7 @@ fn deploying_a_home_obliterates_a_link_under_the_platform() {
         ))
         .id();
 
-    game.place_structure("home", 1, 0)
+    from_inside_the_base(&mut game, |g| g.place_structure("home", 1, 0))
         .expect("a fresh game can afford its first Home");
 
     assert!(
@@ -892,7 +900,7 @@ fn a_structure_cannot_be_deployed_on_top_of_a_link() {
             color: GlyphColor::Magenta,
         },
     ));
-    let Err(reason) = game.place_structure("home", 1, 0) else {
+    let Err(reason) = from_inside_the_base(&mut game, |g| g.place_structure("home", 1, 0)) else {
         panic!("a structure sharing a tile with a link makes the tile ambiguous to walk onto");
     };
     assert!(reason.contains("link"), "got: {reason}");

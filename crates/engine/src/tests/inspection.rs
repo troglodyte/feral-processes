@@ -1036,6 +1036,7 @@ fn the_manifest_lists_only_non_neutral_affinities() {
 #[test]
 fn structure_report_lists_every_assignee_not_just_one() {
     let mut game = Game::new(700, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1101,6 +1102,7 @@ fn structure_report_is_zone_wide_and_not_relative_to_the_player() {
 #[test]
 fn structure_report_carries_tier_durability_and_whether_the_structure_is_workable() {
     let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1132,6 +1134,7 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
 #[test]
 fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1172,6 +1175,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
 #[test]
 fn structure_report_puts_home_first_and_groups_by_kind() {
     let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1491,6 +1495,7 @@ fn the_inspector_scans_no_creature_while_the_party_is_underground() {
 #[test]
 fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
     let mut game = Game::new(1409, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1536,6 +1541,7 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
 #[test]
 fn a_structures_assignee_row_carries_its_workers_level_and_health() {
     let mut game = Game::new(1410, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1629,6 +1635,7 @@ fn a_structure_manifest_for_something_that_is_not_a_structure_is_none() {
 #[test]
 fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
     let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1681,6 +1688,7 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
 #[test]
 fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
     let mut game = Game::new(1406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1730,6 +1738,7 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
 #[test]
 fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
     let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1776,6 +1785,7 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
 #[test]
 fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
     let mut game = Game::new(1408, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1875,6 +1885,7 @@ fn the_manifest_shows_a_programs_zone_tier_against_the_players_own() {
 #[test]
 fn adjacent_structure_finds_only_the_neighbouring_tile() {
     let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     stand_player_at(&mut game, 0, 0);
     place_home(&mut game, 0, 0);
     game.world

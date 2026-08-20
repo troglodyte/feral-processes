@@ -87,6 +87,7 @@ fn the_base_staff_marker_survives_a_save_round_trip() {
 #[test]
 fn a_hand_posted_cronjob_loads_back_as_base_staff() {
     let mut game = Game::new(5, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 1, 0);
     let node = spawn_mining_node(&mut game, 3, 0);
     let worker = spawn_tamed(&mut game, 10, 3);
@@ -136,6 +137,7 @@ fn lay_disk_line(game: &mut Game) -> (Entity, Entity, Entity) {
 #[test]
 fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     let mut game = Game::new(10, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     // Everything upstream of the press is standing; the press itself is not.
     spawn_machine_at(&mut game, "mining_node", 2, 0);
@@ -155,6 +157,7 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
 #[test]
 fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "lathe", 3, 0);
@@ -225,6 +228,7 @@ fn a_banked_item_is_refused_even_with_its_machine_standing() {
 #[test]
 fn a_whole_line_correctly_laid_out_is_accepted() {
     let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
 
     game.queue_work_order(ItemId::from("routine_disk"), 3)
@@ -242,6 +246,7 @@ fn a_whole_line_correctly_laid_out_is_accepted() {
 #[test]
 fn cancelling_an_order_shifts_the_queue_up_and_unwinds_nothing() {
     let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("core_fragment"), 5)
         .unwrap();
@@ -267,6 +272,7 @@ fn cancelling_an_order_shifts_the_queue_up_and_unwinds_nothing() {
 #[test]
 fn cancelling_an_out_of_range_order_is_refused_rather_than_panicking() {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("core_fragment"), 5)
         .unwrap();
@@ -278,6 +284,7 @@ fn cancelling_an_out_of_range_order_is_refused_rather_than_panicking() {
 #[test]
 fn work_orders_round_trip_through_a_save() {
     let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("routine_disk"), 3)
         .unwrap();
@@ -610,6 +617,7 @@ fn hire(game: &mut Game, n: usize) -> Vec<Entity> {
 #[test]
 fn one_staff_member_is_posted_to_the_top_of_the_line() {
     let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
     game.queue_work_order(ItemId::from("routine_disk"), 3)
@@ -631,6 +639,7 @@ fn one_staff_member_is_posted_to_the_top_of_the_line() {
 #[test]
 fn a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful() {
     let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
     game.queue_work_order(ItemId::from("routine_disk"), 30)
@@ -670,6 +679,7 @@ fn a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful() {
 #[test]
 fn three_staff_spread_across_a_running_line_without_doubling_up() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
@@ -689,6 +699,7 @@ fn three_staff_spread_across_a_running_line_without_doubling_up() {
 #[test]
 fn two_staff_take_the_two_deepest_machines() {
     let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
@@ -716,6 +727,7 @@ fn two_staff_take_the_two_deepest_machines() {
 #[test]
 fn a_second_machine_making_the_ordered_item_is_staffed_too() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
@@ -741,6 +753,7 @@ fn a_second_machine_making_the_ordered_item_is_staffed_too() {
 #[test]
 fn the_report_names_every_machine_making_the_ordered_item() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
@@ -763,6 +776,7 @@ fn the_report_names_every_machine_making_the_ordered_item() {
 #[test]
 fn a_second_unfed_bench_does_not_refuse_a_line_that_is_whole() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (_mine, _lathe, press) = lay_disk_line(&mut game);
     // Lower in `(x, y)` order than the fed Press, so an arbitrary
     // first-producer pick lands on the one with nothing beside it.
@@ -785,6 +799,7 @@ fn a_second_unfed_bench_does_not_refuse_a_line_that_is_whole() {
 #[test]
 fn an_order_the_base_already_holds_completes_without_staffing_anything() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (_mine, _lathe, _press) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
     put_output(&mut game, depot, "routine_disk", 5);
@@ -809,6 +824,7 @@ fn an_order_the_base_already_holds_completes_without_staffing_anything() {
 #[test]
 fn a_posted_worker_is_not_moved_when_an_unrelated_buffer_changes() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
     let staff = hire(&mut game, 1);
@@ -839,6 +855,7 @@ fn a_posted_worker_is_not_moved_when_an_unrelated_buffer_changes() {
 #[test]
 fn a_stalled_front_order_does_not_block_the_queue() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, _lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
     game.queue_work_order(ItemId::from("routine_disk"), 30)
@@ -864,6 +881,7 @@ fn a_stalled_front_order_does_not_block_the_queue() {
 #[test]
 fn a_base_with_no_staff_queues_and_reports_without_posting_or_panicking() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("routine_disk"), 3)
         .unwrap();
@@ -900,6 +918,7 @@ fn a_standing_work_job_is_filled_when_no_order_needs_the_body() {
 #[test]
 fn a_standing_job_yields_the_body_to_an_order_and_takes_it_back_after() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 3);
     let staff = hire(&mut game, 1);
@@ -1128,6 +1147,7 @@ fn idle_staff_take_no_rng_draws() {
 #[test]
 fn the_report_lists_exactly_what_the_scheduler_walks() {
     let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, _press) = lay_disk_line(&mut game);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
@@ -1151,6 +1171,7 @@ fn the_report_lists_exactly_what_the_scheduler_walks() {
 #[test]
 fn the_report_counts_what_the_base_holds_against_the_target() {
     let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
     game.queue_work_order(ItemId::from("routine_disk"), 5)
@@ -1165,6 +1186,7 @@ fn the_report_counts_what_the_base_holds_against_the_target() {
 #[test]
 fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (_mine, _lathe, press) = lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("routine_disk"), 3)
         .unwrap();
@@ -1190,6 +1212,7 @@ fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
 #[test]
 fn a_base_with_no_staff_reports_its_orders_normally_rather_than_stalled() {
     let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from("routine_disk"), 3)
         .unwrap();
@@ -1205,6 +1228,7 @@ fn a_base_with_no_staff_reports_its_orders_normally_rather_than_stalled() {
 #[test]
 fn the_report_names_who_is_posted_on_each_machine() {
     let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     hire(&mut game, 1);
     game.queue_work_order(ItemId::from("routine_disk"), 30)
@@ -1232,6 +1256,7 @@ fn the_report_names_who_is_posted_on_each_machine() {
 #[test]
 fn a_completed_order_is_announced_as_a_completion() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, ..) = lay_disk_line(&mut game);
     game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5)
         .unwrap();
@@ -1276,6 +1301,7 @@ fn a_completed_order_is_announced_as_a_completion() {
 #[test]
 fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     let mut game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "depot", 3, 0);
@@ -1333,6 +1359,7 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
 #[test]
 fn a_bench_fed_from_the_depot_does_not_staff_its_feeder() {
     let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 3, 1);
     game.world
@@ -1371,6 +1398,7 @@ fn a_bench_fed_from_the_depot_does_not_staff_its_feeder() {
 #[test]
 fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
     let mut game = Game::new(68, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (mine, ..) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 3, 1);
     hire(&mut game, 1);
@@ -1437,6 +1465,7 @@ fn stock_output(game: &mut Game, structure: Entity, item: &str, qty: u32) {
 #[test]
 fn a_machine_fed_from_a_depot_is_orderable_without_a_neighbour() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let (_mine, lathe, depot) = lay_depot_route(&mut game);
     stock_output(&mut game, depot, ids::CORE_FRAGMENT, 12);
 
@@ -1513,6 +1542,7 @@ fn a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it() {
 #[test]
 fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 4);
     spawn_machine_at(&mut game, "mining_node", 2, 0);
     spawn_machine_at(&mut game, "lathe", 0, 0);

@@ -23,8 +23,10 @@ programs, nests, cronjob targets, raid pathing and the build radius all
 share, so Stack coordinates in it would silently point every one of
 those systems at the wrong tile. The payoff is that nothing on the surface
 knows the Stack exists, and the base keeps running while you are four
-frames down. `Game::require_surface` guards the eleven actions that reach
-into the zone map through `Position`.
+frames down. `Game::require_surface` and `Game::require_base` between them
+guard the eleven actions that reach into a map through `Position` — see
+the next entry for which is which, and why that is two guards rather than
+one.
 **A read-only screen can fall into the same hole**, which is why
 `find_target_in_direction` (`game/inspection.rs`) finds nothing at all
 underground — structures and creatures alike. It takes no action and moves
@@ -38,6 +40,63 @@ same pinned tile and only places things, and `nest_aggro_tick` below, which
 reads it and drags you into a fight. Underground, `x` routes to
 `Game::describe_view_direction` instead — a claim about the frame the party
 is actually in.
+
+### `require_surface` used to mean "not in the Stack", and ten of its eleven callers turned out to mean "in the base"
+
+**`Game::require_surface` used to mean "not in the Stack", and ten of its
+eleven callers turned out to mean "in the base".** While there were two
+locales, "not underground" and "on the surface proper" were the same
+condition, so no site had ever had to say which it meant. `Locale::Base`
+made them two conditions and forced eleven independent re-readings — and
+**a wrong one is silent**: nothing fails to compile, and both guards refuse
+in the Stack, so the Stack's own tests cannot tell them apart either. What
+each site settled on:
+
+| Site | Guard | Why |
+| --- | --- | --- |
+| `game/base/building.rs` `place_structure` | `require_base` | deploys a `Structure`, and every `Structure` is in base space |
+| `game/base/building.rs` `upgrade_structure` | `require_base` | same, on one already standing |
+| `game/base/building.rs` `remove_structure` | `require_base` | same |
+| `game/base/building.rs` `work_structure` | `require_base` | stands the player at a machine's station tile |
+| `game/base/work_orders.rs` `queue_work_order` | `require_base` | reads which machines the base has standing |
+| `game/base/collect.rs` `collect_adjacent` | `require_base` | empties the buffers of the machines around you |
+| `game/trade.rs` `sell_item` | `require_base` | a trader is a deployed `Structure` |
+| `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
+| `game/trade.rs` `sell_companion` | `require_base` | same |
+| `game/trade.rs` `buy_item` | `require_base` | same |
+| `game/turn.rs` `rest` | `require_surface` | the one site the split left where it was |
+
+The test for whether a reader needs a guard at all is unchanged — not
+"does it act" but "does it claim something about where the party is". What
+is new is that answering yes no longer picks the guard for you. **Adding a
+`require_surface` caller now asserts the action belongs to the wild**, not
+merely that it is not a Stack action; if what it touches is a `Structure`,
+it wants `require_base`.
+
+`Game::is_underground` stays strictly Stack-only through all of this,
+deliberately: base space is off the surface too, and widening that
+predicate would apply every Stack rule in the game — no Power supply,
+`Trace`, the frame view — to the base. The two systems that guard on it
+rather than on a `require_*` therefore ask *two* questions now
+(`is_underground() || in_base()`); see `nest_aggro_tick`'s entry below.
+`power_regen_system` was already stricter than its own doc comment claimed
+— it matches on `Locale::Surface` positively — so it refused base space
+the moment the variant existed, which is luck rather than design and is
+locked by a test.
+
+**`rest` is the contested row.** It is the one site that kept
+`require_surface`, on the spec's authority
+(`docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`), and its
+own code argues the other way: it demands a structure whose def sets
+`enables_rest` within reach of the player's `Position`, Home is the only
+shipped one, and Home stands in base space. Once the base's structures
+move into base-space coordinates, the only tile from which
+`nearby_rest_structure` can legitimately succeed is in the locale this
+guard refuses — and the only way it can succeed on the surface is the
+coordinate-space collision between a base-space structure and a surface
+`Position`, which is the exact class of bug the base guard exists to
+close. Recorded rather than quietly flipped; it is a one-line change at
+`game/turn.rs` and one assertion in `tests/base_space.rs`.
 
 ### Examine names only what the surface map draws, and that rule is one function
 
@@ -2495,6 +2554,12 @@ on every kill. Contrast `maybe_spawn_wild_creature`, which reads the same
 pinned `Position` and is harmless because it only *places* creatures. The
 distinction that matters is whether the code drags the player into
 something, not whether it reads `Position`.
+**It asks two questions now, not one** — `is_underground() || in_base()` —
+because `Position` is pinned to the anchor tile in base space exactly as it
+is to the entrance tile in the Stack, and `is_underground` deliberately
+stays Stack-only. Same for `power_regen_system`, which is on the other
+shape of the same guard: it matches `Locale::Surface` positively, so a
+third locale refused it for free.
 
 ### `start_battle` is the only path that caps a pack, and `begin_battle` is the one that opens a battle
 

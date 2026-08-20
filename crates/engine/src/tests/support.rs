@@ -109,6 +109,32 @@ pub(crate) fn test_assets_dir() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
 }
 
+/// Puts the party out of phase, in base space, without walking there —
+/// nothing can walk there until the anchor's door is built.
+///
+/// Deliberately leaves everything else alone, the player's `Position`
+/// included, so a base stood up while on the surface still lines up with
+/// the party standing in it and the only thing this changes is which guard
+/// an action meets (`Game::require_base` against `Game::require_surface`).
+pub(crate) fn stand_in_base(game: &mut Game) {
+    game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+}
+
+/// Runs `act` from inside base space and comes back out to wherever the
+/// party was standing before.
+///
+/// For a fixture that has to *build* a base before a test about something
+/// else entirely — a breach, a raid, a dive. Deploying is a base action now
+/// (`Game::require_base`), so a test that stands a machine up and then walks
+/// the surface has to cross twice, the same as the player does.
+pub(crate) fn from_inside_the_base<T>(game: &mut Game, act: impl FnOnce(&mut Game) -> T) -> T {
+    let outside = game.locale();
+    stand_in_base(game);
+    let done = act(game);
+    game.world.insert_resource(outside);
+    done
+}
+
 /// Drops the party into depth 1 through an entrance on the tile they are
 /// standing on, which is what walking onto a link does.
 pub(crate) fn descend(game: &mut Game) {
@@ -830,7 +856,7 @@ pub(super) fn place_home(game: &mut Game, dx: i32, dy: i32) {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 5);
-    game.place_structure("home", dx, dy).unwrap();
+    from_inside_the_base(game, |g| g.place_structure("home", dx, dy)).unwrap();
 }
 
 /// How many of `id` the player is holding.
@@ -1657,7 +1683,7 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 1).unwrap();
+    from_inside_the_base(game, |g| g.place_structure("mining_node", 1, 1)).unwrap();
     (
         find_structure_by_kind(game, "home").unwrap(),
         find_structure_by_kind(game, "mining_node").unwrap(),
@@ -1679,7 +1705,7 @@ pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    from_inside_the_base(game, |g| g.place_structure("mining_node", 1, 0)).unwrap();
     find_structure_by_kind(game, "mining_node").unwrap()
 }
 
@@ -1855,18 +1881,23 @@ pub(super) fn held_any(game: &Game, item: &ItemId) -> u32 {
 /// be fixture noise that hides what they are actually asserting.
 ///
 /// **Composed from the shipping primitives, never a copy of the removed
-/// body.** `require_surface`, `accepts_a_program`, `post_reach` and
+/// body.** `require_base`, `accepts_a_program`, `post_reach` and
 /// `post_worker` are the same four the scheduler goes through, so a test
 /// that passes here is a test about a posting the live game could make.
 /// A hand-copied body would be the second copy `CLAUDE.md` records drifting
 /// four times.
+///
+/// `require_base` rather than `require_surface` since the base went out of
+/// phase: a posting is about a machine, and every machine stands in base
+/// space. `Game::queue_work_order`, the live queue this stands in for,
+/// carries the same guard.
 impl Game {
     pub(super) fn assign_cronjob(
         &mut self,
         worker: Entity,
         structure: Entity,
     ) -> Result<(), String> {
-        self.require_surface()?;
+        self.require_base()?;
         if !self.accepts_a_program(structure) {
             return Err("That structure can't be worked.".into());
         }
@@ -1905,10 +1936,12 @@ impl Game {
     }
 
     pub(super) fn assign_guard(&mut self, worker: Entity, structure: Entity) -> Result<(), String> {
-        self.require_surface()?;
-        // The live route to a guard post is `Game::set_standing_job`, which
-        // carries this same refusal — asked here so the fixture cannot
-        // create a post the game would not.
+        // A guard post is about a structure, and every structure stands in
+        // base space — asked here so the fixture cannot create a post from
+        // a locale the base's own actions refuse. `Game::set_standing_job`,
+        // the live route, carries no locale guard of its own; this fixture
+        // is deliberately the stricter of the two.
+        self.require_base()?;
         let kind = self
             .world
             .get::<Structure>(structure)

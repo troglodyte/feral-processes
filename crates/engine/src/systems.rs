@@ -1067,13 +1067,20 @@ pub fn assembler_system(
 /// and shown the "power reserves are critical!" warning on the very tick
 /// the structure was about to cover them.
 ///
-/// Refused outright while underground. The player's `Position` is pinned to
-/// the surface entrance tile for the whole of a Stack run, so without this a
-/// link sited inside a Recharger's radius would top the party up four frames
-/// down — and the Stack's whole Power budget is that there is no supply
-/// underground. Same shape as `nest_aggro_tick`: a reader of the player's
-/// `Position` that never went through `require_surface` but still claims
-/// something about where the party is standing.
+/// Refused anywhere but the zone surface. The player's `Position` is pinned
+/// to the surface entrance tile for the whole of a Stack run, so without this
+/// a link sited inside a Recharger's radius would top the party up four
+/// frames down — and the Stack's whole Power budget is that there is no
+/// supply underground. Same shape as `nest_aggro_tick`: a reader of the
+/// player's `Position` that never went through `require_surface` but still
+/// claims something about where the party is standing.
+///
+/// The guard matches `Locale::Surface` *positively* rather than asking
+/// `is_underground`, which is why base space was refused the moment that
+/// variant existed rather than needing a second clause. That is luck, not
+/// foresight — a Recharger within radius of the anchor would otherwise
+/// refill the party while they are out of phase — so it is held by a test
+/// (`tests::base_space`).
 pub fn power_regen_system(
     mut player: Query<(&Position, &mut PowerReserve), With<Player>>,
     structures: Query<(&Structure, &Position)>,

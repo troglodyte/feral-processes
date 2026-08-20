@@ -22,8 +22,15 @@ pub struct GroupMenuRow {
 struct GroupEntry {
     label: &'static str,
     target: Mode,
-    /// Whether this row's action is one of `Game::require_surface`'s
-    /// callers, and so must disappear while the party is underground.
+    /// Whether this row's action is one of `Game::require_base`'s callers,
+    /// and so must disappear while the party is underground.
+    ///
+    /// The name predates `Locale::Base`, and the flag has always really
+    /// meant "not in the Stack" — the same conflation the guard split in
+    /// `docs/seams.md` unpicked on the engine side. It is still correct
+    /// about the Stack, which is all it is asked; making the base rows
+    /// appear *only* inside base space waits on there being a way to walk
+    /// in.
     ///
     /// A flag in a readable table rather than an `is_underground()` check
     /// folded into each `available` closure, because it has to be kept in
@@ -61,7 +68,7 @@ const BASE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         // Surface-only for the reason every scan row is, and the engine
         // agrees rather than trusting the flag: `queue_work_order` calls
-        // `Game::require_surface`. The screen is read-only but it *claims
+        // `Game::require_base`. The screen is read-only but it *claims
         // something about where the base is*, which is the test
         // `find_target_in_direction` established — a report answered from a
         // `Position` pinned to the surface entrance tile would describe a

@@ -39,7 +39,10 @@ pub fn contract_system(
 ) {
     let depth = match *locale {
         Locale::Stack { depth, .. } => depth,
-        Locale::Surface => 0,
+        // Base space has no depth to reach, and it is not the surface
+        // either — but 0 is what "no Stack depth reached" already means
+        // here, so both non-Stack locales answer the same.
+        Locale::Surface | Locale::Base { .. } => 0,
     };
 
     let standing: Vec<crate::structures::StructureId> =

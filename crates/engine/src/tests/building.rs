@@ -150,6 +150,7 @@ fn breaching_recuts_the_corners_of_a_legacy_square_slab() {
 #[test]
 fn a_cut_corner_is_not_buildable() {
     let mut game = Game::new(926, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     let player = game.player_entity();
     game.world
@@ -267,6 +268,7 @@ fn obliterating_a_nest_untethers_a_guardian_standing_outside_the_radius() {
 #[test]
 fn demolishing_the_home_clears_the_platform_back_to_natural_terrain() {
     let mut game = Game::new(923, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
     place_home(&mut game, 0, 1);
 
@@ -319,6 +321,7 @@ fn no_wild_creature_ever_spawns_on_platform_floor() {
 #[test]
 fn place_structure_rejects_anything_but_home_until_a_home_exists() {
     let mut game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     let player = game.player_entity();
     game.world
@@ -354,6 +357,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
 #[test]
 fn place_structure_rejects_a_second_home() {
     let mut game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, -1, 0);
 
     let err = game
@@ -365,6 +369,7 @@ fn place_structure_rejects_a_second_home() {
 #[test]
 fn place_structure_rejects_building_beyond_max_distance_from_home() {
     let mut game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     let player = game.player_entity();
     game.world
@@ -396,6 +401,7 @@ fn place_structure_rejects_building_beyond_max_distance_from_home() {
 #[test]
 fn deploying_without_the_materials_logs_the_shortfall() {
     let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     place_home(&mut game, -1, 0);
 
@@ -428,6 +434,7 @@ fn deploying_without_the_materials_logs_the_shortfall() {
 #[test]
 fn the_nearby_scan_lists_entities_by_name_then_position() {
     let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     place_home(&mut game, 0, 1);
     let player = game.player_entity();
@@ -460,6 +467,7 @@ fn the_nearby_scan_lists_entities_by_name_then_position() {
 #[test]
 fn remove_structure_refunds_a_percentage_of_its_build_cost() {
     let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     let player = game.player_entity();
     game.world
@@ -504,6 +512,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
 #[test]
 fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
     let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     unlock_research_chain(&mut game, "weapon_bench");
     let player = game.player_entity();
@@ -572,6 +581,7 @@ fn armory_and_fabricator_are_not_cronjob_workable() {
 #[test]
 fn researching_and_building_an_armory_unlocks_firewall_plating() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "firewall");
     assert!(
         game.craft_recipes()
@@ -977,6 +987,7 @@ fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
 #[test]
 fn upgrading_a_node_costs_materials_and_raises_its_tier() {
     let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     set_zone(&mut game, 2);
     game.world
@@ -1006,6 +1017,7 @@ fn upgrading_a_node_costs_materials_and_raises_its_tier() {
 #[test]
 fn upgrading_a_node_makes_its_extraction_more_reliable() {
     let mut game = Game::new(971, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     set_zone(&mut game, 2);
     game.world
@@ -1026,6 +1038,7 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 #[test]
 fn upgrading_refuses_past_max_tier_and_without_materials() {
     let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     // Deep enough that the zone ceiling is out of the way: this test is about
     // the def's own `max_tier` and about materials, both of which are checked
@@ -1063,6 +1076,7 @@ fn upgrading_refuses_past_max_tier_and_without_materials() {
 #[test]
 fn upgrading_is_refused_until_you_have_breached_to_the_matching_zone() {
     let mut game = Game::new(978, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1086,6 +1100,7 @@ fn upgrading_is_refused_until_you_have_breached_to_the_matching_zone() {
 #[test]
 fn breaching_raises_the_upgrade_ceiling_one_tier() {
     let mut game = Game::new(979, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1106,6 +1121,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
 #[test]
 fn the_defs_max_tier_still_wins_in_a_deep_zone() {
     let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1138,6 +1154,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
 #[test]
 fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
     let mut game = Game::new(973, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let home = find_structure_by_kind(&mut game, "home").unwrap();
     let err = game
@@ -1164,6 +1181,7 @@ fn tier_adds_to_payout_on_top_of_the_zone_bonus() {
 #[test]
 fn a_structures_tier_survives_a_save_and_load_round_trip() {
     let mut game = Game::new(975, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -1310,6 +1328,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
 #[test]
 fn working_a_node_yourself_pays_what_a_cronjob_pays() {
     let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     game.world.get_mut::<ResourceNode>(node).unwrap().level = None;
     let resource = game
@@ -1351,6 +1370,7 @@ fn working_a_node_yourself_pays_what_a_cronjob_pays() {
 #[test]
 fn walking_away_stops_the_job() {
     let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let player = game.player_entity();
 
@@ -1379,6 +1399,7 @@ fn walking_away_stops_the_job() {
 #[test]
 fn working_a_node_you_are_not_standing_beside_is_refused() {
     let mut game = Game::new(952, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let player = game.player_entity();
     let node_pos = *game.world.get::<Position>(node).unwrap();
@@ -1403,6 +1424,7 @@ fn working_a_node_you_are_not_standing_beside_is_refused() {
 #[test]
 fn a_diagonal_neighbour_is_not_close_enough_to_work() {
     let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let player = game.player_entity();
     let node_pos = *game.world.get::<Position>(node).unwrap();
@@ -1464,6 +1486,7 @@ fn holders(game: &mut Game, structure: Entity, kind: TaskKind) -> Vec<Entity> {
 #[test]
 fn a_second_cronjob_on_one_structure_displaces_the_first() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
@@ -1487,6 +1510,7 @@ fn a_second_cronjob_on_one_structure_displaces_the_first() {
 #[test]
 fn a_guard_and_a_cronjob_can_share_a_structure() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed(&mut game, 10, 3);
     let guard = spawn_tamed(&mut game, 10, 3);
@@ -1505,6 +1529,7 @@ fn a_guard_and_a_cronjob_can_share_a_structure() {
 #[test]
 fn a_second_guard_on_one_structure_displaces_the_first() {
     let mut game = Game::new(43, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 10, 3);
@@ -1529,6 +1554,7 @@ fn a_second_guard_on_one_structure_displaces_the_first() {
 #[test]
 fn a_posted_program_starts_from_the_player() {
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     // Where the player is standing when they post it: at the machine's east
     // station tile, so the assignment turns on nothing but the two positions.
@@ -1558,6 +1584,7 @@ fn a_posted_program_starts_from_the_player() {
 #[test]
 fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
     let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed_on_map(&mut game, 3, 3);
     let reach = haul_walk_radius(game.build_radius());
@@ -1585,6 +1612,7 @@ fn posting_to_a_structure_the_player_cannot_reach_is_refused() {
 #[test]
 fn the_players_own_work_holds_the_cronjob_slot() {
     let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let structure = workable_structure(&mut game, 3, 4);
     let worker = spawn_tamed(&mut game, 10, 3);
 
@@ -1623,6 +1651,7 @@ fn tamed_of(game: &mut Game, species: &str) -> Entity {
 #[test]
 fn a_quicker_program_is_posted_on_a_shorter_cycle() {
     let mut game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = workable_structure(&mut game, 3, 4);
     stand_player_at_post(&mut game, node);
 
@@ -1654,6 +1683,7 @@ fn a_quicker_program_is_posted_on_a_shorter_cycle() {
 #[test]
 fn working_a_node_by_hand_still_costs_exactly_the_machines_own_rate() {
     let mut game = Game::new(955, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
 
     for (i, kind) in ["mining_node", "research_node"].iter().enumerate() {
         let def = game
@@ -1828,6 +1858,7 @@ fn base_log_hits(game: &Game, needle: &str) -> usize {
 #[test]
 fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
     let mut game = Game::new(980, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
@@ -1859,6 +1890,7 @@ fn a_worked_node_fills_its_own_buffer_and_not_the_players_pocket() {
 #[test]
 fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
     let mut game = Game::new(981, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 1);
 
     for _ in 0..60 {
@@ -1886,6 +1918,7 @@ fn a_node_at_output_capacity_clogs_and_says_so_exactly_once() {
 #[test]
 fn collecting_from_a_clogged_node_lets_it_resume() {
     let mut game = Game::new(982, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let p = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = worked_node_at(
         &mut game,
@@ -1928,6 +1961,7 @@ fn collecting_from_a_clogged_node_lets_it_resume() {
 #[test]
 fn a_worker_still_earns_xp_from_a_completed_cycle() {
     let mut game = Game::new(983, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = worked_node_at(&mut game, "mining_node", ids::CORE_FRAGMENT, 3, 4, 20);
     let worker = holders(&mut game, node, TaskKind::GatherResource)[0];
     let before = {
@@ -2161,6 +2195,10 @@ fn fully_grown_base(tag: &str, seed: u32) -> (Game, ScratchAssets) {
         GROWN_RADIUS,
         "precondition: the base is grown well past its start"
     );
+    // Standing in the base rather than out on the zone surface: deploying,
+    // upgrading, demolishing and working a machine by hand are all
+    // `Game::require_base` now that the base is out of phase.
+    stand_in_base(&mut game);
     (game, dir)
 }
 
@@ -2252,6 +2290,10 @@ fn base_ready_for_pillars(seed: u32) -> Game {
         .resource_mut::<Research>()
         .0
         .insert("heap_allocation".to_string());
+    // Standing in the base rather than out on the zone surface: deploying,
+    // upgrading, demolishing and working a machine by hand are all
+    // `Game::require_base` now that the base is out of phase.
+    stand_in_base(&mut game);
     game
 }
 
@@ -2685,6 +2727,10 @@ fn base_ready_for_claims(tag: &str, seed: u32) -> Game {
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     let _ = std::fs::remove_dir_all(&dir);
+    // Standing in the base rather than out on the zone surface: deploying,
+    // upgrading, demolishing and working a machine by hand are all
+    // `Game::require_base` now that the base is out of phase.
+    stand_in_base(&mut game);
     game
 }
 
@@ -2843,6 +2889,7 @@ fn a_machine_on_claimed_ground_does_not_grow_the_slab() {
 fn claimed_ground_does_not_survive_a_save_and_load() {
     let dir = assets_dir_with_extra_structure("claim_save", "test_tile.ron", CLAIMING_TILE);
     let mut game = Game::new(735, DifficultyMode::Forgiving, &dir).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
     let home = game.home_position().expect("the fixture just placed one");
@@ -2929,6 +2976,7 @@ fn a_heap_pillar_supplies_grid_energy() {
 #[test]
 fn a_shipped_heap_block_claims_ground() {
     let mut game = Game::new(738, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 4);
     let (dx, dy) = stand_at_a_claimable_edge(&mut game);
@@ -2967,6 +3015,7 @@ fn a_shipped_heap_block_claims_ground() {
 #[test]
 fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     let mut game = Game::new(801, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
@@ -3000,6 +3049,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
 #[test]
 fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
     let mut game = Game::new(802, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 120);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
@@ -3038,6 +3088,7 @@ fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
 #[test]
 fn a_line_driver_is_refused_without_the_zone_two_material() {
     let mut game = Game::new(803, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);

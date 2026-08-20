@@ -117,6 +117,7 @@ fn a_companion_level_up_lists_its_stat_growth() {
 #[test]
 fn a_posted_worker_levels_up_in_the_base_log_beside_its_machine() {
     let mut game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     game.assign_cronjob(worker, node).unwrap();

@@ -236,7 +236,7 @@ fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
-    game.place_structure("portal", 1, 0).unwrap();
+    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
 
     game.move_player(1, 0);
 
@@ -751,7 +751,7 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
-    game.place_structure("portal", 1, 0).unwrap();
+    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -773,14 +773,14 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 14);
     assert!(
-        game.place_structure("portal", 1, 0).is_err(),
+        from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).is_err(),
         "14 fragments shouldn't be enough for a zone-2 portal"
     );
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 1);
-    game.place_structure("portal", 1, 0).unwrap();
+    from_inside_the_base(&mut game, |g| g.place_structure("portal", 1, 0)).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)

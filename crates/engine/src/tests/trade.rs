@@ -10,6 +10,7 @@ use crate::*;
 #[test]
 fn program_activity_tells_a_guard_apart_from_a_worker() {
     let mut game = Game::new(130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let idle = spawn_tamed(&mut game, 30, 5);
     let fighter = spawn_tamed(&mut game, 30, 5);
     let guard = spawn_tamed(&mut game, 30, 5);
@@ -37,6 +38,7 @@ fn program_activity_tells_a_guard_apart_from_a_worker() {
 #[test]
 fn program_activity_names_the_structure_a_worker_is_on() {
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
     let node = spawn_mining_node(&mut game, 4, 4);
 
@@ -63,6 +65,7 @@ fn program_activity_names_the_structure_a_worker_is_on() {
 #[test]
 fn program_post_names_the_structure_and_which_job_it_is() {
     let mut game = Game::new(130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let idle = spawn_tamed(&mut game, 30, 5);
     let fighter = spawn_tamed(&mut game, 30, 5);
     let guard = spawn_tamed(&mut game, 30, 5);
@@ -88,6 +91,7 @@ fn program_post_names_the_structure_and_which_job_it_is() {
     );
 
     let mut game = Game::new(131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
     let node = spawn_mining_node(&mut game, 4, 4);
     game.assign_cronjob(worker, node).unwrap();
@@ -103,6 +107,7 @@ fn program_post_names_the_structure_and_which_job_it_is() {
 #[test]
 fn a_manifest_names_the_structure_a_program_is_posted_to() {
     let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
     let node = spawn_mining_node(&mut game, 4, 4);
     game.assign_cronjob(worker, node).unwrap();
@@ -139,6 +144,7 @@ fn a_sale_row_carries_the_programs_activity() {
 #[test]
 fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
     let mut game = Game::new(120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     // `Stats::power` prices mitigation as the effective HP it buys rather
     // than summing a percentage into a total: 60 / (1 - 0.02) = 61, + 8 atk
@@ -163,6 +169,7 @@ fn selling_a_program_pays_a_tenth_of_its_power_and_despawns_it() {
 #[test]
 fn selling_a_buffed_companion_leaves_no_orphaned_field_buff() {
     let mut game = Game::new(133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 30, 5);
     game.arm_field_buff(
@@ -193,6 +200,7 @@ fn selling_a_buffed_companion_leaves_no_orphaned_field_buff() {
 #[test]
 fn a_program_too_weak_to_price_still_sells_for_one_credit() {
     let mut game = Game::new(121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 2, 1);
     game.world.get_mut::<Stats>(pet).unwrap().mitigation = 0;
@@ -249,6 +257,7 @@ fn a_trader_that_does_not_buy_programs_refuses() {
 #[test]
 fn selling_detaches_the_program_from_its_party_slot_and_its_job() {
     let mut game = Game::new(124, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
     let fighter = spawn_tamed(&mut game, 30, 5);
@@ -273,6 +282,7 @@ fn selling_detaches_the_program_from_its_party_slot_and_its_job() {
 #[test]
 fn selling_a_program_frees_a_roster_slot() {
     let mut game = Game::new(125, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let capacity = game.pet_capacity();
     let pets: Vec<Entity> = (0..capacity)
@@ -355,6 +365,7 @@ fn program_sale_options_carry_the_programs_fusion_depth() {
 #[test]
 fn sell_item_pays_for_the_sold_quantity_and_mints_no_salvage() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let player = game.player_entity();
     let def = game
         .structure_defs()
@@ -406,6 +417,7 @@ fn sell_item_pays_for_the_sold_quantity_and_mints_no_salvage() {
 #[test]
 fn sell_item_pays_each_item_its_own_value() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     let fragment = ItemId::from(ids::CORE_FRAGMENT);
@@ -439,6 +451,7 @@ fn sell_item_pays_each_item_its_own_value() {
 #[test]
 fn the_quoted_sell_price_is_what_selling_actually_pays() {
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
@@ -455,6 +468,7 @@ fn the_quoted_sell_price_is_what_selling_actually_pays() {
 #[test]
 fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let player = game.player_entity();
     let def = game
         .structure_defs()
@@ -493,6 +507,7 @@ fn sell_item_accepts_core_fragments_and_pays_credits_for_them() {
 #[test]
 fn selling_stocks_the_shelf_at_double_what_the_trader_paid() {
     let mut game = Game::new(140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 5);
@@ -518,6 +533,7 @@ fn selling_stocks_the_shelf_at_double_what_the_trader_paid() {
 #[test]
 fn the_shelf_records_what_was_taken_not_what_was_asked_for() {
     let mut game = Game::new(141, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
@@ -531,6 +547,7 @@ fn the_shelf_records_what_was_taken_not_what_was_asked_for() {
 #[test]
 fn buying_back_returns_the_item_charges_double_and_empties_the_row() {
     let mut game = Game::new(142, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
@@ -554,6 +571,7 @@ fn buying_back_returns_the_item_charges_double_and_empties_the_row() {
 #[test]
 fn buying_back_takes_only_part_of_a_stack() {
     let mut game = Game::new(143, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 5);
@@ -571,6 +589,7 @@ fn buying_back_takes_only_part_of_a_stack() {
 #[test]
 fn you_cannot_buy_back_more_than_you_sold() {
     let mut game = Game::new(144, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     let amplifier = ItemId::from(ids::NEURAL_AMPLIFIER);
@@ -594,6 +613,7 @@ fn you_cannot_buy_back_more_than_you_sold() {
 #[test]
 fn buying_back_without_the_credits_is_refused_and_costs_nothing() {
     let mut game = Game::new(145, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
@@ -614,6 +634,7 @@ fn buying_back_without_the_credits_is_refused_and_costs_nothing() {
 #[test]
 fn buying_back_is_barred_during_a_battle() {
     let mut game = Game::new(146, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
@@ -633,6 +654,7 @@ fn buying_back_is_barred_during_a_battle() {
 #[test]
 fn a_shelf_outlives_the_trader_standing_on_it() {
     let mut game = Game::new(148, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
@@ -654,6 +676,7 @@ fn a_shelf_outlives_the_trader_standing_on_it() {
 #[test]
 fn a_trader_rebuilt_on_a_different_tile_opens_empty() {
     let mut game = Game::new(149, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
@@ -671,6 +694,7 @@ fn a_trader_rebuilt_on_a_different_tile_opens_empty() {
 #[test]
 fn two_traders_in_one_zone_keep_separate_shelves() {
     let mut game = Game::new(150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let near = spawn_market_at(&mut game, 5, 5);
     let far = spawn_market_at(&mut game, 9, 9);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
@@ -690,6 +714,7 @@ fn two_traders_in_one_zone_keep_separate_shelves() {
 #[test]
 fn another_structure_on_the_tile_inherits_nothing() {
     let mut game = Game::new(151, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
@@ -715,6 +740,7 @@ fn another_structure_on_the_tile_inherits_nothing() {
 #[test]
 fn a_breach_clears_every_shelf() {
     let mut game = Game::new(152, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 3);
@@ -742,6 +768,7 @@ fn a_breach_clears_every_shelf() {
 #[test]
 fn a_shelf_survives_a_save_and_load_round_trip() {
     let mut game = Game::new(153, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let standing = spawn_market_at(&mut game, 5, 5);
     let doomed = spawn_market_at(&mut game, 9, 9);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
@@ -784,6 +811,7 @@ fn a_shelf_survives_a_save_and_load_round_trip() {
 #[test]
 fn losing_a_trader_that_holds_stock_says_so() {
     let mut game = Game::new(154, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 2);
@@ -837,6 +865,7 @@ fn losing_an_empty_trader_is_silent_about_the_shelf() {
 #[test]
 fn demolishing_a_trader_that_holds_stock_says_so_too() {
     let mut game = Game::new(156, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 0);
     let market = spawn_market_at(&mut game, 5, 5);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
@@ -860,6 +889,7 @@ fn demolishing_a_trader_that_holds_stock_says_so_too() {
 #[test]
 fn selling_a_program_stocks_nothing() {
     let mut game = Game::new(147, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 60, 8);
 
@@ -900,6 +930,7 @@ fn sell_item_rejects_credits_and_items_you_dont_have() {
 #[test]
 fn buy_item_charges_credits_and_grants_the_item() {
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let player = game.player_entity();
     let def = game
         .structure_defs()
@@ -977,6 +1008,7 @@ fn buy_item_fails_without_enough_credits_or_for_an_unlisted_item() {
 #[test]
 fn a_banked_item_cannot_be_sold() {
     let mut game = Game::new(128, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     grant_research_data(&mut game, 40);
     let before = credits(&game);
@@ -1005,6 +1037,7 @@ fn a_banked_item_cannot_be_sold() {
 #[test]
 fn selling_a_fused_copy_and_buying_it_back_returns_it_fused() {
     let mut game = Game::new(1441, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let plating = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 5);
@@ -1126,6 +1159,7 @@ fn a_program_tamed_in_a_deep_zone_still_sells_for_what_it_is() {
 #[test]
 fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
     let mut game = Game::new(134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let weapon = ItemId::from(ids::OVERCLOCK_CORE);
     give(&mut game, &weapon, 1);
@@ -1167,6 +1201,7 @@ fn selling_a_geared_program_returns_the_gear_and_prices_the_program_alone() {
 #[test]
 fn selling_a_rare_copy_buys_back_the_same_copy() {
     let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let post = spawn_market_at(&mut game, 1, 0);
     let rare = GearCopy {
         item: ItemId::from(ids::ABLATIVE_PLATING),

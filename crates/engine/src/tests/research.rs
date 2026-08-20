@@ -6,6 +6,7 @@ use crate::*;
 #[test]
 fn a_cronjob_worker_fills_the_unbounded_buffer_past_the_old_cap() {
     let mut game = Game::new(708, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = assign_worker_producing(&mut game, ItemId::from(ids::CORE_FRAGMENT));
     let before = node_output(&game, node, ids::CORE_FRAGMENT);
     let carried = held(&game, &ItemId::from(ids::CORE_FRAGMENT));
@@ -70,6 +71,7 @@ fn the_bank_is_still_readable_by_name() {
 #[test]
 fn a_research_cronjob_banks_straight_to_the_player() {
     let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let node = assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
     let before = research_data_held(&game);
 
@@ -95,6 +97,7 @@ fn a_research_cronjob_banks_straight_to_the_player() {
 #[test]
 fn the_player_working_a_research_node_banks_it_too() {
     let mut game = Game::new(710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     // Spawned bare rather than through `assign_worker_producing`: a posted
     // program would run the cronjob path on the same node and leave the test
     // unable to say which path did the banking.
@@ -140,6 +143,7 @@ fn the_player_working_a_research_node_banks_it_too() {
 #[test]
 fn research_banks_while_the_party_is_underground() {
     let mut game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
     dive_to_depth(&mut game, 2);
     let before = research_data_held(&game);
@@ -206,6 +210,7 @@ fn only_the_starters_and_scavenged_gear_need_no_research_or_bench() {
 #[test]
 fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "overclock");
 
     let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
@@ -229,6 +234,7 @@ fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
 #[test]
 fn a_built_bench_alone_does_not_unlock_its_recipe() {
     let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "weapon_bench");
     place_home(&mut game, 1, 0);
     let player = game.player_entity();
@@ -251,6 +257,7 @@ fn a_built_bench_alone_does_not_unlock_its_recipe() {
 #[test]
 fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let arc_lance = ItemId::from("arc_lance");
 
     assert!(
@@ -341,6 +348,7 @@ fn a_species_side_equipment_drop_still_works_on_its_own() {
 #[test]
 fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     unlock_research_chain(&mut game, "overclock");
     place_home(&mut game, 1, 0);
     let player = game.player_entity();
@@ -413,6 +421,7 @@ fn a_research_gated_structure_is_hidden_from_the_build_menu_until_researched() {
 #[test]
 fn placing_an_unresearched_structure_is_rejected_even_when_called_directly() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 1, 0);
     let player = game.player_entity();
     game.world

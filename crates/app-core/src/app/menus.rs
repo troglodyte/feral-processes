@@ -167,7 +167,7 @@ impl App {
             return;
         };
         // `assign_cronjob` and `work_structure` are both behind
-        // `require_surface`: `Position` is pinned to the entrance tile down
+        // `require_base`: `Position` is pinned to the entrance tile down
         // here, so a posting would measure its walk from the wrong end of the
         // map. Refused at the keypress like the demolish key, rather than
         // opening a picker whose every row is a dead end — the roster itself

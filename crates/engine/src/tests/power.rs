@@ -20,8 +20,8 @@ use bevy_ecs::prelude::*;
 
 use super::support::{
     ScratchAssets, copy_shipped_assets, find_structure_by_kind, node_output, park_at_post,
-    scratch_assets_dir, spawn_machine_at, spawn_structure_at, spawn_tamed, stand_player_at,
-    stand_player_at_post,
+    scratch_assets_dir, spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base,
+    stand_player_at, stand_player_at_post,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -396,6 +396,8 @@ fn post_a_worker_at(game: &mut Game, machine: Entity) -> Entity {
 #[test]
 fn a_dark_machine_makes_no_progress_on_a_cronjob() {
     let mut game = game_on_a_short_grid("power_dark_cronjob", 4001);
+    // Posting and hand-working are base actions; the party stands in the base.
+    stand_in_base(&mut game);
     let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
     let worker = post_a_worker_at(&mut game, node);
 
@@ -427,6 +429,8 @@ fn a_dark_machine_makes_no_progress_on_a_cronjob() {
 #[test]
 fn a_dark_assembler_makes_no_progress() {
     let mut game = game_on_a_short_grid("power_dark_assembler", 4002);
+    // Posting and hand-working are base actions; the party stands in the base.
+    stand_in_base(&mut game);
     let lathe = spawn_machine_at(&mut game, "test_greedy_lathe", 3, 4);
     // Fed and roomy before the worker is posted, because those are
     // `assembler_system`'s other two stalls: a test about the power guard
@@ -471,6 +475,8 @@ fn hand_working_a_dark_machine_yields_nothing() {
     // payout, so with the guard gone this machine does not merely inch along —
     // it pays out, repeatedly, inside the window below.
     let mut game = game_on_a_short_grid("power_hand_work", 4007);
+    // Posting and hand-working are base actions; the party stands in the base.
+    stand_in_base(&mut game);
     let node = spawn_machine_at(&mut game, "test_greedy_quick_node", 3, 4);
     // `work_structure` refuses a node the player is not at the station of, so
     // this stand is what makes the hand-work legal — and it ticks once itself.

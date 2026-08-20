@@ -289,6 +289,7 @@ fn inspecting_a_direction_reaches_no_further_than_the_examine_range() {
 #[test]
 fn inspecting_toward_a_structure_opens_the_structure_sheet() {
     let mut app = test_app(76);
+    stand_in_base(&mut app);
     app.game
         .as_mut()
         .unwrap()
@@ -315,6 +316,7 @@ fn inspecting_toward_a_structure_opens_the_structure_sheet() {
 #[test]
 fn any_key_leaves_the_structure_sheet_and_forgets_its_subject() {
     let mut app = test_app(77);
+    stand_in_base(&mut app);
     app.game
         .as_mut()
         .unwrap()

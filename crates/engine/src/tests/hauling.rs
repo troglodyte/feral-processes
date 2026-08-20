@@ -16,6 +16,10 @@ fn base(seed: u32) -> Game {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    // Standing in it, not out on the zone surface looking at where it used
+    // to be: hauling is entirely a base subject, and deploying, posting and
+    // collecting are all `Game::require_base` now.
+    stand_in_base(&mut game);
     game
 }
 

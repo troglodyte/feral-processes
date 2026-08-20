@@ -302,10 +302,12 @@ mod tests {
     #[test]
     fn the_help_screen_names_the_excavation_plan_key() {
         let says = |what: &str| HELP_ROWS.iter().any(|row| row.contains(what));
-        assert!(says("m "), "the help screen never names the m key");
+        // The key and the verb in one substring, deliberately: `"m "` alone
+        // is already inside "collect from adjacent structures", so asserting
+        // on it separately passes with every Excavation row deleted.
         assert!(
-            says("Excavation"),
-            "the help screen names no Excavation plan"
+            says("m Excavation plan"),
+            "the help screen never binds the m key to the Excavation plan"
         );
     }
 

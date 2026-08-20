@@ -330,11 +330,20 @@ impl Game {
                 if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
                     dig.marked = marked;
                 }
-                let untouched = self
+                // An unmarked site earns its keep by holding chip progress,
+                // and *both* ends of the meter hold none. A full meter is a
+                // wall nobody has touched; a spent one on a cell that is
+                // still solid is what entropy leaves behind when it reverts
+                // a marked `Open` cell, and `strike_rock` refills it on the
+                // next swing anyway. Keeping either leaves an entity drawn
+                // nowhere, wanted by nobody, and written to every save from
+                // then on.
+                let holds_progress = self
                     .world
                     .get::<Durability>(site)
-                    .is_some_and(|d| d.hp == d.max_hp);
-                if !marked && (!solid || untouched) {
+                    .is_some_and(|d| d.hp > 0 && d.hp < d.max_hp);
+                let keep = marked || (solid && holds_progress);
+                if !keep {
                     self.world.despawn(site);
                 }
             }
@@ -418,10 +427,19 @@ impl Game {
             let Some(site) = self.world.get::<Task>(worker).map(|t| t.target) else {
                 continue;
             };
-            // The site is gone — cut and floored by somebody else, or its
-            // mark cleared while this body was walking. There is nothing
-            // left to dig, and the scheduler will find it something else.
-            let Some(target) = self.world.get::<Position>(site).copied() else {
+            // The site is gone — cut and floored by somebody else — or its
+            // mark was cleared while this body was working. Either way there
+            // is nothing left to dig here, and the scheduler will find it
+            // something else.
+            //
+            // The cleared mark is the half that has to be said separately:
+            // `set_mark` deliberately *keeps* an unmarked site that still
+            // holds chip progress, so a cancelled plan does not look like a
+            // despawned entity. `dig_wants` stops listing it, but
+            // `schedule_base_labour` never takes a body off a post it has
+            // nowhere better to send — so nothing upstream frees this one.
+            let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
+            let Some(target) = self.world.get::<Position>(site).copied().filter(|_| marked) else {
                 self.world.entity_mut(worker).remove::<Task>();
                 continue;
             };

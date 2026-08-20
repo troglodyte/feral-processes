@@ -2068,12 +2068,17 @@ pub const BASE_ROCK_DURABILITY: u32 = 24;
 
 /// Chance, 0.0-1.0, that opening a cell of rock yields one Core Fragment.
 ///
-/// **Bounded above by what flooring the same cell costs**, and that bound is
-/// the whole rule: a Blank Substrate is four Core Fragments at a Lathe, so a
-/// dug cell has to return a fraction of that or the wall becomes a fragment
-/// tap that undercuts the Mining Node. `mining_a_wall_never_pays_more_than_
-/// flooring_it_costs` holds it against the real assets rather than against a
-/// number written here.
+/// **Bounded above by the Mining Node's rate**, and that bound is the whole
+/// rule: a dug cell has to return a trickle or the wall becomes a fragment
+/// tap that undercuts the machine built to be one.
+/// `mining_a_wall_never_undercuts_a_mining_node` holds it against the real
+/// assets rather than against a number written here — and holds it **per
+/// tick**, because this constant is a probability the strike clamps to
+/// `0.0..=1.0`, so any per-cell comparison against a Blank Substrate's four
+/// fragments passes for every legal value and asserts nothing. The rate
+/// takes `BASE_ROCK_DURABILITY` and `BASE_DIG_TICKS_PER_SWING` in with it,
+/// which is what makes softening the rock or quickening the swing show up
+/// here too.
 pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
 
 /// How long a cut cell survives unfloored before base space takes it back —

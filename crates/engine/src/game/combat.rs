@@ -44,8 +44,15 @@ impl Game {
     /// `battle::resolve_attack`: a structure has no speed and cannot dodge,
     /// and identical swings have to stay identical or wearing something down
     /// becomes a slot machine.
+    ///
+    /// The band comes from `natural_range_of`, which is the one conversion
+    /// from an entity to what it swings for: a `Creature`'s own species
+    /// move, a weapon's band where one is worn, and `PLAYER_UNARMED_DAMAGE`
+    /// only as the fallback the player actually falls through to. Naming
+    /// the player's fists here instead handed every unarmed crew program the
+    /// player's band, so a Scrapper and a Medic dug at the same rate.
     pub(crate) fn swing_damage(&self, attacker: Entity) -> u32 {
-        let range = self.attack_range(attacker, crate::tuning::PLAYER_UNARMED_DAMAGE);
+        let range = self.natural_range_of(attacker);
         (range.mean().round() as i32 + self.effective_atk(attacker)).max(1) as u32
     }
 

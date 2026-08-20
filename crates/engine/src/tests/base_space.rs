@@ -1725,31 +1725,51 @@ fn a_swing_costs_a_turn() {
 }
 
 /// Settled decision 5, held as an assertion against the real assets: a cut
-/// cell may pay a trickle, but never more than flooring the same cell costs.
-/// Raising the chance past that ratio turns the wall into a fragment tap
-/// that undercuts the Mining Node.
+/// cell may pay a trickle, but never enough to undercut the Mining Node.
+///
+/// **Stated as a rate, because the per-cell form cannot fail.** A cell pays
+/// at most one fragment — `BASE_MINE_FRAGMENT_CHANCE` is a probability, and
+/// `strike_rock` clamps it — against the four a Blank Substrate costs, so
+/// "a cut pays less than a floor" passes for every legal value of the knob
+/// and holds nothing. What can actually breach the decision is the payout
+/// *per tick*, which three constants decide between them: raise the chance,
+/// soften the rock, or quicken the swing far enough and the wall becomes a
+/// better fragment source than the machine built to be one.
 #[test]
-fn mining_a_wall_never_pays_more_than_flooring_it_costs() {
+fn mining_a_wall_never_undercuts_a_mining_node() {
     let game = game(3215);
-    let items = game.world.resource::<ItemDb>();
-    let substrate = items
-        .get(ids::BLANK_SUBSTRATE)
-        .expect("the shipped assets craft a Blank Substrate");
-    let fragments = substrate
-        .craftable
+    // A fresh player's swing, so the comparison is made where the player
+    // actually stands rather than at a level nobody has reached yet — the
+    // rock is the same rock all run, and it is the digger that improves.
+    let player = game.player_entity();
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+    let per_tick_dug = crate::tuning::BASE_MINE_FRAGMENT_CHANCE
+        / (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as f32;
+
+    let structures = game.world.resource::<StructureDb>();
+    let work = structures
+        .get("mining_node")
+        .expect("the shipped assets deploy a Mining Node")
+        .work
         .as_ref()
-        .expect("a Blank Substrate is crafted, not found")
-        .cost
-        .iter()
-        .find(|(id, _)| id.as_str() == ids::CORE_FRAGMENT)
-        .map(|(_, qty)| *qty)
-        .expect("a Blank Substrate is pressed out of Core Fragments");
+        .expect("a Mining Node is worked");
+    assert_eq!(
+        work.produces.as_str(),
+        ids::CORE_FRAGMENT,
+        "this bound compares fragment sources — a Mining Node that stopped \
+         producing fragments makes it meaningless"
+    );
+    // The node's ceiling, not its average: `level` makes a cycle fizzle
+    // sometimes, and a bound that assumed the fizzle would quietly widen
+    // every time node reliability was retuned.
+    let per_tick_node =
+        crate::systems::node_payout(1, ZoneLevel(1)) as f32 / work.ticks_per_unit as f32;
 
     assert!(
-        crate::tuning::BASE_MINE_FRAGMENT_CHANCE < fragments as f32,
-        "a cut cell pays {} Core Fragments on average against the {fragments} \
-         that flooring it costs — the wall has become a fragment tap",
-        crate::tuning::BASE_MINE_FRAGMENT_CHANCE
+        per_tick_dug < per_tick_node,
+        "a cut cell pays {per_tick_dug} Core Fragments a tick against a \
+         Mining Node's best case of {per_tick_node} — the wall has become a \
+         fragment tap"
     );
 }
 
@@ -2649,5 +2669,106 @@ fn a_cell_an_idle_base_staffer_is_standing_on_never_reverts() {
     assert!(
         matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
         "the cell under an idle base staffer closed over it"
+    );
+}
+
+/// Cancelling a plan has to stop the crew, and "the site is gone" is not
+/// what cancelling looks like: an unmarked site is deliberately *kept*
+/// while it still holds chip progress. `dig_wants` drops it, but
+/// `schedule_base_labour` never takes a body off a post it has nowhere
+/// better to send — so without a check here the digger cuts a wall the
+/// player already told it to leave.
+#[test]
+fn a_digger_drops_a_post_whose_mark_was_cleared() {
+    let target = WALL;
+    let mut game = game_at_the_frontier(3240);
+    let player = game.player_entity();
+    game.toggle_mark_box(target, target);
+    // One swing, so the site holds progress and survives the unmarking.
+    game.strike_rock(player, target.0, target.1);
+    let site = game
+        .dig_site_at(target.0, target.1)
+        .expect("a marked, struck wall has a dig site");
+    let chipped = game.world.get::<Durability>(site).unwrap().hp;
+
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        components::BaseStaff,
+        Position {
+            x: crate::tuning::STARTING_POCKET_RADIUS,
+            y: 0,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    game.toggle_mark_box(target, target);
+
+    for _ in 0..50 {
+        game.run_dig_crew();
+    }
+
+    assert!(
+        game.world.get::<Task>(digger).is_none(),
+        "the digger kept its post on a cell the player unmarked"
+    );
+    assert_eq!(
+        game.world.get::<Durability>(site).map(|d| d.hp),
+        Some(chipped),
+        "the crew went on cutting a cancelled job"
+    );
+}
+
+/// An unmarked site earns its keep by holding chip progress, and a spent
+/// meter on a solid cell holds none — `strike_rock` refills it on the next
+/// swing. Keeping one leaves an invisible entity that is drawn nowhere,
+/// wanted by nobody, and written to every save from then on.
+#[test]
+fn clearing_a_mark_leaves_no_site_behind_on_a_reverted_cell() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3241, cut);
+    // An `Open` cell's site starts at zero: there is nothing left to cut.
+    game.toggle_mark_box(cut, cut);
+    assert!(
+        game.dig_site_at(cut.0, cut.1).is_some(),
+        "marking an open cell spawns a site to floor"
+    );
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+    assert!(
+        cell(&game, cut).is_none(),
+        "the frontier cell should have reverted to solid"
+    );
+    game.toggle_mark_box(cut, cut);
+
+    assert!(
+        game.dig_site_at(cut.0, cut.1).is_none(),
+        "an unmarked site with a spent meter on solid rock outlived its mark"
+    );
+}
+
+/// What a program brings to a wall is its own species' band, not the
+/// player's fists. `natural_range_of` is the one derivation — a second
+/// reading of a species' first move here is the drift `swing_damage` exists
+/// to prevent.
+#[test]
+fn a_crew_program_swings_its_own_species_band_at_rock() {
+    let mut game = game_at_the_frontier(3242);
+    let worker = spawn_tamed(&mut game, 30, 3);
+    // Scrapper's first move is power 8, spread 2 — a mean of 8 against
+    // `PLAYER_UNARMED_DAMAGE`'s 5, so reading the player's band is visible.
+    game.world
+        .get_mut::<components::Creature>(worker)
+        .expect("a tamed program is a creature")
+        .species = "scrapper".to_string();
+
+    let atk = game.effective_atk(worker);
+    assert_eq!(
+        game.swing_damage(worker),
+        (8 + atk).max(1) as u32,
+        "a crew program swung the player's unarmed band instead of its own"
     );
 }

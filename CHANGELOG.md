@@ -91,6 +91,21 @@ plan says nothing at all, because it opens itself as the shell comes down.
   out from under it and be sealed into solid rock permanently — unable to be
   posted, and unable to walk anywhere, for the rest of the run. The frontier
   now counts anybody standing on it, not just somebody mid-job.
+- Clearing a plan the crew had already started on did not call them off: the
+  site keeps its chip progress by design, and nothing downstream was reading
+  the mark, so a digger finished a wall you had told it to leave.
+- Every program dug at the player's rate. A crew program now swings its own
+  species' attack band, so which program you put on a wall is worth
+  something beyond its attack score.
+- Clearing a mark off a cell the frontier had already reclaimed left an
+  invisible record behind — drawn nowhere, wanted by nobody, and saved from
+  then on.
+- The fragment-payout bound is now stated per tick, against the Mining
+  Node's own rate. As a per-cell comparison it could not fail: a cut cell
+  pays at most one fragment against the four a Blank Substrate costs, so
+  every legal value of the knob passed it. At the shipped numbers the real
+  bound still has about fourteen times the slack it needs, so it is a
+  backstop rather than a tight gate.
 
 ## 0.13.0
 

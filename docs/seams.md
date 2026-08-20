@@ -1240,7 +1240,18 @@ A `Floor` cell takes no mark at all — there is nothing left to do to it,
 and a site spawned over one would be a job the crew could never finish.
 Clearing a mark retires the `DigSite` **unless it is still holding chip
 progress**, so unmarking a wall you had already started on does not heal
-it.
+it. *Progress* is the meter strictly between its ends: a full one is a wall
+nobody has touched, and a spent one on a cell that is still solid is what
+entropy leaves behind when it reverts a marked `Open` cell — `strike_rock`
+refills that on the next swing anyway. Keeping either leaves an entity
+drawn nowhere, wanted by nobody, and written to every save from then on.
+
+**And a kept site is exactly why `run_dig_crew` has to check the mark
+itself.** A cancelled plan does not look like a despawned entity: the site
+survives holding its progress, `dig_wants` stops listing it, and
+`schedule_base_labour` never takes a body off a post it has nowhere better
+to send — so nothing upstream frees the digger. Without the check the crew
+finishes a wall the player told it to leave.
 
 The trap runs the other way through `Durability`, and it runs twice. The
 first is the raid query: a `DigSite` carries `Durability` and no `Nest`,
@@ -1321,7 +1332,14 @@ one down becomes a slot machine you cannot plan a wing around.
 
 `swing_damage` is **shared with the crew rather than copied for it**, and
 that is what makes a stronger program dig a wall out in fewer swings rather
-than faster ones. `BASE_DIG_TICKS_PER_SWING` is the crew's *rate* and
+than faster ones. Its band comes from `natural_range_of` — the one
+conversion from an entity to what it swings for, giving a `Creature` its own
+species move, a weapon's band where one is worn, and `PLAYER_UNARMED_DAMAGE`
+only as the fallback the player (who carries no `Creature`) actually falls
+through to. Naming the player's fists here instead was silent in exactly the
+way a shared formula is supposed to prevent: every unarmed crew program dug
+at the player's rate, so which program you put on a wall changed only its
+`atk` and a Scrapper and a Medic cut at nearly the same speed. `BASE_DIG_TICKS_PER_SWING` is the crew's *rate* and
 `swing_damage` is its *bite*; the two knobs mean different things and a
 retune that confuses them turns levelling into a speed bonus for the base
 instead of a reward for the player.

@@ -12,6 +12,7 @@ pub mod descriptions;
 pub mod difficulty;
 pub mod environment;
 mod game;
+pub mod help;
 pub mod items;
 pub mod items_db;
 pub mod nemesis;

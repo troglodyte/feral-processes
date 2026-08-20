@@ -178,6 +178,64 @@ impl Game {
         Ok(())
     }
 
+    /// Lays a VectorStasis Tile over the carved cell the party is standing
+    /// on, turning it into buildable floor for one Blank Substrate.
+    ///
+    /// The substrate is raw stock; the tile is what it becomes underfoot.
+    /// `BaseCell::Floor` stays the code's name for the result — this is the
+    /// player's word for it, the same way "GC Entropy Sweep" is the player's
+    /// word for a raid — and no new item exists for it.
+    ///
+    /// Paid out of the player's own `Inventory`, because that is where
+    /// `place_structure` pays every build cost from: one store, not two.
+    /// **Refusals first, and each one distinct**: nothing to lay and nothing
+    /// to lay it on leave the player different errands, so they may not read
+    /// as the same refusal.
+    pub fn lay_tile(&mut self) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Not right now.".into());
+        }
+        self.require_base()?;
+        let (x, y) = self
+            .base_pos()
+            .expect("require_base passed, so the party is in base space");
+        match self.world.resource::<BaseGrid>().cell(x, y) {
+            Some(base_grid::BaseCell::Open { .. }) => {}
+            Some(base_grid::BaseCell::Floor) => {
+                return Err("This cell is already floored.".into());
+            }
+            // Unreachable in play — solid rock is struck rather than stood
+            // in — and worded for the day a fifth way into base space makes
+            // it reachable rather than left to the `Floor` refusal, which
+            // would send the player looking for a tile they already laid.
+            None => return Err("Cut the entropy out first — nothing stands on raw rock.".into()),
+        }
+
+        let substrate = ItemId::from(ids::BLANK_SUBSTRATE);
+        let player = self.player_entity();
+        let held = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&substrate))
+            .unwrap_or(0);
+        if held == 0 {
+            let msg = format!(
+                "You have no {} to press into a tile.",
+                self.item_name(&substrate)
+            );
+            self.log_base(msg.clone());
+            return Err(msg);
+        }
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(substrate, 1);
+        self.world.resource_mut::<BaseGrid>().lay_floor(x, y);
+        self.log_base("You lay a VectorStasis Tile, and the cell reads as floor.");
+        self.tick();
+        Ok(())
+    }
+
     /// How many of `kind` are deployed right now.
     fn count_structures(&mut self, kind: &StructureId) -> u32 {
         let mut query = self.world.query::<&Structure>();

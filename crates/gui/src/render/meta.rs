@@ -221,6 +221,7 @@ pub(super) const HELP_ROWS: &[&str] = &[
     "",
     "c collect from adjacent structures   t trade   a routine",
     "u symlink   x examine a direction   d demolish a direction",
+    "v lay a VectorStasis Tile on the cell you're standing on",
     "> phase into the base, on the anchor   < phase back out, at the exit",
     "L history   f filter the log (all/field/base)",
     "s save   q main menu (confirms first)",

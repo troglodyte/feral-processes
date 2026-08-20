@@ -157,16 +157,18 @@ fn a_refused_crossing_reports_the_engines_own_reason() {
     );
 }
 
-/// A step that never happened is not an action. Base space is solid until
-/// something lays floor, so a movement key from the exit cell is refused and
-/// costs no turn — and `App::after_world_action` must not then clear the
-/// status line explaining an earlier refusal, nor queue a footstep.
+/// `stepped` reads the clock rather than assuming, and slice 2 is what
+/// makes that pay: a movement key into base-space rock used to be refused
+/// for free and is a swing now (`Game::strike_rock`), so the same keypress
+/// changed from no action to one — without a line of app-core changing.
+/// The status line explaining an earlier refusal clears, because something
+/// really happened.
 ///
-/// The surface half is the control: the identical keypress there *is* an
-/// action, so a `stepped` that always answered `false` would fail here
-/// rather than pass this test twice over.
+/// The surface half is the control: the identical keypress there is an
+/// action too, so a `stepped` that always answered `true` would pass this
+/// twice over — which is why the turn is asserted as well as the line.
 #[test]
-fn a_refused_step_in_base_space_is_not_an_action() {
+fn a_swing_at_rock_in_base_space_is_an_action() {
     let mut inside = app_inside_a_small_base_with_programs(217, false, 1);
     assert!(
         inside.game.as_ref().is_some_and(|g| g.in_base()),
@@ -180,17 +182,24 @@ fn a_refused_step_in_base_space_is_not_an_action() {
     );
     inside.status_line = Some("an earlier refusal".to_string());
     let _ = inside.take_sounds();
+    let tick = inside.game.as_ref().unwrap().current_tick();
 
     inside.handle_key(GameKey::Up);
 
     assert_eq!(
-        inside.status_line.as_deref(),
-        Some("an earlier refusal"),
-        "a step into rock must leave the line that was explaining something"
+        inside.game.as_ref().unwrap().current_tick(),
+        tick + 1,
+        "a swing at rock spends the turn a step would have"
     );
-    assert!(
-        inside.take_sounds().is_empty(),
-        "and must not play a footstep for a step that did not happen"
+    assert_eq!(
+        inside.status_line, None,
+        "and clears the line, because something really happened"
+    );
+    assert_eq!(
+        inside.take_sounds().len(),
+        1,
+        "and cues the movement key's one sound, as shoving at a wall on the \
+         surface already does"
     );
 
     let mut outside = test_app(218);

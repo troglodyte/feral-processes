@@ -1184,7 +1184,7 @@ fn draw_status_panel(
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
         "b base menu   p party menu   i pack",
-        "c collect  t trade  a routine  u symlink  x examine",
+        "c collect  t trade  a routine  u symlink  x examine  v tile",
         "L history  f filter  s save  q main menu  ? help  +/- zoom",
     ];
     let keys_line_height = m.line_height - m.gap;

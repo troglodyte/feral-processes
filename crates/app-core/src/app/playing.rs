@@ -7,12 +7,15 @@ use crate::*;
 ///
 /// `Game::move_player` returns nothing, and on the zone surface assuming an
 /// action was fine — every step there spends a turn, a bounce off a wall
-/// included. Base space does not work that way: a step into solid rock is
-/// refused outright and costs nothing (see `Game::move_in_base`), so
-/// reporting it as an action would clear the status line explaining an
-/// earlier refusal and queue a footstep for a step that never happened.
+/// included. Base space did not work that way when it shipped: a step into
+/// solid rock was refused outright and cost nothing, so reporting it as an
+/// action would have cleared the status line explaining an earlier refusal
+/// and queued a footstep for a step that never happened. Slice 2 turned that
+/// bounce into a swing, which does spend a turn — and this function needed
+/// no edit for it, which is the whole argument for reading the clock instead
+/// of assuming per locale.
 ///
-/// The clock is what both locales agree on, so that is what this reads.
+/// The clock is what all three locales agree on, so that is what this reads.
 /// The game-over clause is the one case a real action leaves the clock
 /// standing still: ground that kills you sets `GameOver` before
 /// `Game::tick` runs and `tick` then returns without advancing — but
@@ -246,6 +249,23 @@ impl App {
                     }
                 },
                 GameKey::Char('<') => match game.leave_base() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
+                // Lay a VectorStasis Tile over the carved cell underfoot.
+                // `v` for the tile's own name: `t` is trade, and `T` is
+                // spoken for by two battle screens that nothing may
+                // document — see `crates/engine/EASTER_EGGS.md`, which is
+                // why a key that has to appear in the help screen cannot
+                // have it. Bound in this block rather than behind an
+                // `in_base` check up top for the same reason `>` and `<`
+                // are: `Game::lay_tile` asks `require_base` itself, so
+                // pressing it on the open grid gets the engine's own words
+                // instead of a second opinion from here.
+                GameKey::Char('v') => match game.lay_tile() {
                     Ok(()) => true,
                     Err(reason) => {
                         refusal = Some(reason);

@@ -644,3 +644,67 @@ fn a_staff_row_carries_what_the_program_is_worth_at_a_post() {
         "the two rows must not be reporting the same program"
     );
 }
+
+/// The one key slice 2 adds to the map screen, driven end to end: swing at
+/// the pocket's edge until it opens, step into it, and lay a tile on it.
+///
+/// `v` for the tile's own name — `t` is trade, and `T` belongs to two
+/// battle screens nothing may document (`crates/engine/EASTER_EGGS.md`).
+/// The surface half is asserted in the same test because the base half alone
+/// passes against a key that fires everywhere — and out there the party's
+/// `Position` is a tile on the zone map, with no cell of base space under it
+/// at all.
+#[test]
+fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
+    use feral_processes_engine::tuning::STARTING_POCKET_RADIUS;
+    use feral_processes_engine::world::Biome;
+
+    let mut app =
+        app_owning_a_program_and_a_compiler_with_cargo(750, &[], &[("blank_substrate", 1)]);
+    let edge = (STARTING_POCKET_RADIUS, 0);
+    let cut = (STARTING_POCKET_RADIUS + 1, 0);
+    stand_in_base_at(&mut app, edge.0, edge.1);
+
+    // However many swings the rock's durability implies, and then the step
+    // onto what they opened. Bounded rather than counted: what this test is
+    // about is the key, not the wall.
+    for _ in 0..20 {
+        app.handle_key(GameKey::Char('l'));
+        if app.game.as_ref().unwrap().base_pos() == Some(cut) {
+            break;
+        }
+    }
+    assert_eq!(
+        app.game.as_ref().unwrap().base_pos(),
+        Some(cut),
+        "the fixture must dig through and stand on the cut cell"
+    );
+    let under_the_party = |app: &mut App| {
+        let tiles = app.game.as_mut().unwrap().view_tiles(1, 1);
+        tiles[1][1].biome
+    };
+    assert_eq!(
+        under_the_party(&mut app),
+        Biome::Excavated,
+        "the cut cell must start unfloored, or the tiling below proves nothing"
+    );
+
+    app.handle_key(GameKey::Char('v'));
+
+    assert_eq!(
+        under_the_party(&mut app),
+        Biome::Platform,
+        "v on carved rock lays a VectorStasis Tile over it"
+    );
+
+    let mut outside =
+        app_owning_a_program_and_a_compiler_with_cargo(751, &[], &[("blank_substrate", 1)]);
+    let tick = outside.game.as_ref().unwrap().current_tick();
+    outside.handle_key(GameKey::Char('v'));
+    assert_eq!(
+        outside.game.as_ref().unwrap().current_tick(),
+        tick,
+        "v on the open grid must spend nothing — there is no cell under you"
+    );
+    assert_eq!(outside.mode, Mode::Playing, "and must open no screen");
+}

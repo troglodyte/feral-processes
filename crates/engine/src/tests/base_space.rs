@@ -1751,3 +1751,159 @@ fn mining_a_wall_never_pays_more_than_flooring_it_costs() {
         crate::tuning::BASE_MINE_FRAGMENT_CHANCE
     );
 }
+
+// ---------------------------------------------------------------------------
+// Slice 2: laying a VectorStasis Tile
+// ---------------------------------------------------------------------------
+
+/// The party standing on a carved, unfloored cell with substrate to hand —
+/// the one situation `Game::lay_tile` is for.
+fn game_on_open_rock(seed: u32, substrate: u32) -> Game {
+    let mut game = game_at_the_frontier(seed);
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(WALL.0, WALL.1, tick);
+    stand_in_base_at(&mut game, WALL.0, WALL.1);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), substrate);
+    game
+}
+
+fn substrate_held(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(ids::BLANK_SUBSTRATE))
+}
+
+/// Words the two refusals below may share, because everything is built out
+/// of them: the test is about the *errand* each one leaves the player, and
+/// two refusals that differ only in an article leave the same one.
+fn meaningful_words(msg: &str) -> Vec<String> {
+    msg.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() > 3)
+        .map(|w| w.to_lowercase())
+        .collect()
+}
+
+#[test]
+fn laying_a_tile_spends_exactly_one_substrate() {
+    let mut game = game_on_open_rock(3220, 3);
+
+    game.lay_tile()
+        .expect("standing on carved rock, holding stock");
+
+    assert_eq!(
+        substrate_held(&game),
+        2,
+        "a tile costs one Blank Substrate and leaves the rest"
+    );
+}
+
+#[test]
+fn a_tile_turns_the_cell_you_stand_on_into_floor() {
+    let mut game = game_on_open_rock(3221, 1);
+    assert!(
+        !game
+            .world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(WALL.0, WALL.1),
+        "the fixture cell must start carved and unfloored"
+    );
+
+    game.lay_tile().unwrap();
+
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(WALL.0, WALL.1),
+        "the cell the party stands on is what a tile floors"
+    );
+}
+
+#[test]
+fn laying_a_tile_without_substrate_refuses_and_spends_nothing() {
+    let mut game = game_on_open_rock(3222, 0);
+
+    game.lay_tile()
+        .expect_err("nothing to lay means nothing happens");
+
+    assert!(
+        !game
+            .world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(WALL.0, WALL.1),
+        "a refused tiling laid floor anyway"
+    );
+}
+
+/// Two different errands for the player — go make a substrate, against you
+/// are standing in the wrong place — so they may not read as the same
+/// refusal. `NoPost::BoxedIn` against `NoPost::NoRoute`, one level down.
+#[test]
+fn laying_a_tile_on_floor_refuses_in_different_words_from_having_no_substrate() {
+    let mut broke = game_on_open_rock(3223, 0);
+    let no_stock = broke.lay_tile().unwrap_err();
+
+    let mut floored = game_on_open_rock(3224, 1);
+    floored.lay_tile().expect("the first tile lands");
+    let already = floored
+        .lay_tile()
+        .expect_err("the cell is floor now, and a second tile has nothing to do");
+
+    let shared: Vec<String> = meaningful_words(&no_stock)
+        .into_iter()
+        .filter(|w| meaningful_words(&already).contains(w))
+        .collect();
+    assert!(
+        shared.is_empty(),
+        "the two refusals share wording ({shared:?}) — \
+         \"{no_stock}\" against \"{already}\""
+    );
+    assert_eq!(
+        substrate_held(&floored),
+        0,
+        "the refused second tile must not have spent anything"
+    );
+}
+
+/// `Game::require_base`, not `require_surface`: laying a tile claims
+/// something about where the party is standing, and out on the open grid
+/// there is no cell of base space under them at all.
+#[test]
+fn laying_a_tile_on_the_surface_refuses() {
+    let mut game = game_on_open_rock(3225, 1);
+    game.world.insert_resource(Locale::Surface);
+
+    let refused = game
+        .lay_tile()
+        .expect_err("there is no base space out here");
+
+    assert!(
+        refused.contains(THE_BASE),
+        "a tiling attempt on the surface must meet the base guard, got: {refused}"
+    );
+    assert_eq!(substrate_held(&game), 1, "and must spend nothing");
+}
+
+/// Settled decision 8, and the only thing pinning the player's word for a
+/// laid tile: the substrate is raw stock in the store, the tile is what it
+/// becomes underfoot. `BaseCell::Floor` stays the code's name for it, the
+/// same way "GC Entropy Sweep" is the player's word for a raid.
+#[test]
+fn the_laid_tile_is_named_a_vectorstasis_tile() {
+    let mut game = game_on_open_rock(3226, 1);
+
+    game.lay_tile().unwrap();
+
+    let said = game
+        .message_history(20)
+        .iter()
+        .any(|line| line.text.contains("VectorStasis Tile"));
+    assert!(said, "laying a tile never names what was laid");
+    assert_eq!(
+        game.item_name(&ItemId::from(ids::BLANK_SUBSTRATE)),
+        "Blank Substrate",
+        "and the stock it was pressed from keeps its own name"
+    );
+}

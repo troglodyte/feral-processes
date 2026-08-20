@@ -1,9 +1,7 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
-use crate::tuning::{
-    MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, PROCESS_POOL_SLOTS_PER_LEVEL,
-};
+use crate::tuning::PROCESS_POOL_SLOTS_PER_LEVEL;
 use crate::*;
 
 impl Game {
@@ -545,39 +543,6 @@ impl Game {
         BASE_PET_CAPACITY
             + bonus as usize
             + self.player_perk_level(Perk::ProcessPool) as usize * PROCESS_POOL_SLOTS_PER_LEVEL
-    }
-
-    /// How wide the base platform is right now, clamped to
-    /// `MAX_BUILD_RADIUS_TILES`.
-    ///
-    /// **The last reader of this is `Game::stamp_platform`,** which
-    /// `Game::enter_next_zone` still calls on a breach; both retire with
-    /// `resources::Platform`. Nothing about a *base* is decided here any
-    /// more — the base is out of phase and its footprint is
-    /// `BaseGrid::is_floor`.
-    ///
-    /// The `build_radius_bonus` term is gone with the field: it was the Heap
-    /// Pillar's whole mechanism, and a slab that could be widened has no
-    /// meaning once nothing stands on one. What is left is the starting
-    /// radius and the floor under it — **the slab always covers every
-    /// structure standing on it** — which is what kept a legacy save's
-    /// stamped floor buildable when the starting radius was halved.
-    pub fn build_radius(&mut self) -> i32 {
-        let home = self.home_position();
-        let mut query = self.world.query::<(&Structure, &Position)>();
-        let deployed: Vec<Position> = query.iter(&self.world).map(|(_, p)| *p).collect();
-        let covering = home
-            .map(|h| {
-                deployed
-                    .iter()
-                    .map(|p| (p.x - h.x).abs().max((p.y - h.y).abs()))
-                    .max()
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0);
-        MAX_BUILD_DISTANCE_FROM_HOME
-            .max(covering)
-            .min(MAX_BUILD_RADIUS_TILES)
     }
 
     /// How many tamed programs the player currently owns, wherever they are —

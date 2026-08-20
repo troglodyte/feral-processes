@@ -1,11 +1,9 @@
 //! The zone the player currently stands in: locating things on the map,
-//! stamping the base platform, and stepping through a portal to the next
-//! zone.
+//! and stepping through a portal to the next zone.
 
 use crate::tuning::{
-    MAX_BUILD_DISTANCE_FROM_HOME, MAX_BUILD_RADIUS_TILES, NEST_CACHE_CREDIT_ZONE_BONUS,
-    NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS, NEST_CACHE_WORK_RESOURCE_MULT,
-    NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+    NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS,
+    NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -241,150 +239,6 @@ impl Game {
             .any(|(g, pursuing)| g.nest == nest && pursuing.is_some())
     }
 
-    /// Stamps the base platform centered on `(cx, cy)`: every tile
-    /// `Platform::covers` claims becomes walkable `Biome::Platform`, and
-    /// every hostile and nest standing inside is obliterated.
-    ///
-    /// Breaching into a new zone is the only caller left. Deploying a Home
-    /// used to be the other one and lays `Game::lay_starting_pocket` instead
-    /// — the base is out of phase, and nothing a build does writes a tile
-    /// into `WorldMap` any more. Both this and `Platform` itself retire with
-    /// the rest of the slab.
-    pub(crate) fn stamp_platform(&mut self, cx: i32, cy: i32) {
-        // Computed before the map borrow: `build_radius` needs `&mut self`
-        // and the stamping loop holds `WorldMap` across its whole run.
-        let radius = self.build_radius();
-        {
-            // The grown circle on its own, to ask `in_shape` of while the
-            // resource itself is borrowed mutably.
-            let circle = Platform {
-                radius,
-                ..Default::default()
-            };
-            let mut platform = self.world.resource_mut::<Platform>();
-            platform.radius = radius;
-            // A claim the circle has since grown over is redundant, and
-            // dropping it here is what keeps the saved set to ground the
-            // player actually bought rather than to every tile a Pillar
-            // later covered anyway.
-            platform
-                .claimed
-                .retain(|&(dx, dy)| !circle.in_shape(dx, dy));
-        }
-        let platform = self.world.resource::<Platform>().clone();
-        let floor = Tile {
-            biome: Biome::Platform,
-            walkable: true,
-        };
-        {
-            let mut map = self.world.resource_mut::<WorldMap>();
-            for dy in -radius..=radius {
-                for dx in -radius..=radius {
-                    if !platform.in_shape(dx, dy) {
-                        continue;
-                    }
-                    map.set_override(cx + dx, cy + dy, floor);
-                }
-            }
-            // Claimed ground sits outside the circle by construction, so it
-            // needs its own pass — the box above cannot reach it, and a
-            // re-stamp that skipped it would take back paid-for floor on the
-            // next Pillar or the next breach.
-            for &(dx, dy) in &platform.claimed {
-                map.set_override(cx + dx, cy + dy, floor);
-            }
-        }
-
-        let inside = |p: &Position| platform.covers(p.x - cx, p.y - cy);
-        let hostiles: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), With<Hostile>>();
-            query
-                .iter(&self.world)
-                .filter(|(_, p)| inside(p))
-                .map(|(e, _)| e)
-                .collect()
-        };
-        for e in hostiles {
-            self.world.despawn(e);
-        }
-        // Nests route through despawn_nest rather than a bare despawn: a
-        // guardian can be standing outside the slab while its nest is
-        // inside it, and would otherwise be left tethered to a dead entity.
-        let nests: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), With<Nest>>();
-            query
-                .iter(&self.world)
-                .filter(|(_, p)| inside(p))
-                .map(|(e, _)| e)
-                .collect()
-        };
-        for nest in nests {
-            self.despawn_nest(nest);
-        }
-        // A Stack link under the slab is unreachable — nothing spawns on
-        // platform floor and the base's own structures sit on it — so it goes
-        // the way of the hostiles above. This matters for the Home-deployment
-        // caller only: on a breach the platform is stamped before
-        // `spawn_surface_links` runs, and that skips `Biome::Platform`
-        // outright. It is not a rare collision, which is why it is worth
-        // sweeping rather than trusting placement: `STACK_NEAREST_LINK_TILES`
-        // puts a zone's first link just outside whatever slab existed when
-        // the zone was generated, and deploying a Home afterwards moves the
-        // slab somewhere the link placement never saw.
-        let links: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), With<SurfaceLink>>();
-            query
-                .iter(&self.world)
-                .filter(|(_, p)| inside(p))
-                .map(|(e, _)| e)
-                .collect()
-        };
-        for e in links {
-            self.world.despawn(e);
-        }
-
-        self.world.resource_mut::<Platform>().center = Some((cx, cy));
-    }
-
-    /// Removes the platform slab, restoring natural terrain underneath.
-    /// Called when the Home is demolished — the slab is defined as
-    /// "centered on the current Home", so no Home means no slab.
-    ///
-    /// Sweeps `MAX_BUILD_RADIUS_TILES` rather than the live radius, and the
-    /// whole box rather than `Platform::covers`'s cut shape. This is the one
-    /// place the sweep and the footprint deliberately disagree, and it has to
-    /// be the *largest slab that could ever have existed*: nothing else
-    /// overrides terrain near a base, so clearing a tile that was never
-    /// stamped costs nothing, while floor the current shape does not claim
-    /// would otherwise be kept forever. Two ways to be in that position, and
-    /// the second is now the common one — a save written before the corners
-    /// were cut, and any save written before the starting radius was halved,
-    /// which carries a 15x15 slab in `tile_overrides` against a base that now
-    /// starts at 9x9.
-    pub(crate) fn clear_platform(&mut self) {
-        let Some((cx, cy)) = self.world.resource::<Platform>().center else {
-            return;
-        };
-        {
-            let mut map = self.world.resource_mut::<WorldMap>();
-            for dy in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-                for dx in -MAX_BUILD_RADIUS_TILES..=MAX_BUILD_RADIUS_TILES {
-                    map.clear_override(cx + dx, cy + dy);
-                }
-            }
-        }
-        let mut platform = self.world.resource_mut::<Platform>();
-        platform.center = None;
-        platform.radius = MAX_BUILD_DISTANCE_FROM_HOME;
-        platform.claimed.clear();
-    }
-
     /// Every tile a deployed structure stands on — the set a hauler's walk
     /// refuses, from the `Game` side. `haul_step_system` builds the same set
     /// from its own query; both go through `hauling::structure_tiles` so the
@@ -395,7 +249,27 @@ impl Game {
         crate::game::base::hauling::structure_tiles(positions.into_iter())
     }
 
+    /// The `Structure` standing at `(x, y)`, if any — and `None` outright
+    /// whenever the party is not in base space, regardless of what `(x, y)`
+    /// numerically is.
+    ///
+    /// **`Structure` is the space tag** (see `docs/seams.md`): every
+    /// structure stands in `base_grid::BaseGrid`'s coordinate space, never
+    /// the zone surface, so a `Structure` query only ever answers a
+    /// base-space question. Gating on `in_base` closes that generally
+    /// instead of at each call site — `game/stack.rs`'s `link_site_free`
+    /// used to call this with **surface** coordinates while scattering
+    /// Stack entrances, and with the zone spawn point and base space's
+    /// origin both commonly `(0, 0)`, it silently refused valid link sites
+    /// near a base. The one legitimate caller left with `(x, y)` computed
+    /// while off base (`place_structure`'s founding Home) is asking about a
+    /// base that cannot exist yet — no Home means no other structure either,
+    /// since removing a Home cascades to every structure it stands beside —
+    /// so `None` is the right answer there too, not a special case.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        if !self.in_base() {
+            return None;
+        }
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position), With<Structure>>();
@@ -451,10 +325,16 @@ impl Game {
     }
 
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
-    /// `(x, y)`, if any — checked before the generic blocking-structure
-    /// check in `move_player` so walking onto one breaches the zone instead
-    /// of just bumping into it.
+    /// `(x, y)`, if any — checked from `Game::move_in_base` so walking onto
+    /// one breaches the zone. `(x, y)` is a base-space coordinate: a Portal
+    /// is a `Structure`, and every `Structure` stands in base space now, so
+    /// this refuses to answer at all outside it — see
+    /// `find_blocking_structure_at`'s doc for why that guard belongs here
+    /// rather than at each caller.
     pub(crate) fn find_zone_portal_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        if !self.in_base() {
+            return None;
+        }
         let mut query = self
             .world
             .query_filtered::<(Entity, &Position, &Structure), ()>();
@@ -567,12 +447,15 @@ impl Game {
                 pos.y = start.1 + dy;
             }
         }
-        // The departed zone's slab went with the old WorldMap — a freshly
-        // generated one starts with an empty override overlay — so there's
-        // nothing to clean up and only ever one slab in existence.
-        if home.is_some() {
-            self.stamp_platform(start.0, start.1);
-        }
+        // `stamp_platform` used to run here, re-laying the slab under the
+        // relocated structures once the new `WorldMap` was in. It retired
+        // with `resources::Platform` this task, and nothing has replaced it
+        // yet — the base's floor is `BaseGrid`, not a `WorldMap` override,
+        // and this offset-based reposition above still writes `Position` as
+        // if the base lived on the zone surface. That rebuild belongs to
+        // whatever task next makes a breach correct for an out-of-phase
+        // base; this one only removed the call to a function that no longer
+        // exists.
 
         let travelers: Vec<Entity> = {
             let mut query = self

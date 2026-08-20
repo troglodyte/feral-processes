@@ -304,9 +304,6 @@ pub struct StructureDef {
     /// existed.
     #[serde(default)]
     pub pet_slot_bonus: u32,
-    /// How many tiles this structure widens the base platform by while it's
-    /// deployed (see `Game::build_radius`). Stacks additively across every
-    /// deployed structure that sets it, so each Heap Pillar creeps the edge
     /// How many of this structure may stand at once. `0` — the default, and
     /// what every shipped structure but the Line Driver leaves it at — means
     /// no limit, so an existing file and any mod that never heard of the

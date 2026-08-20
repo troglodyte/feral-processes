@@ -462,3 +462,35 @@ fn the_sell_list_hides_a_banked_item() {
          Credits are the currency, so neither is a sell row"
     );
 }
+
+/// `Structure` is the space tag: `traders_in_range` (`Game::view_entities`
+/// underneath) must not match a base-space Market against the anchor tile
+/// on the zone surface, even though `app_at_trading_posts` deliberately
+/// puts both near numeric zero — the collision `find_walkable_start` and
+/// base space's own origin share by default. Before `view_entities` closed
+/// this generally, standing on the surface tile that happened to alias a
+/// deployed Market's cell made `[S]ell` appear on the inventory screen, and
+/// every trade call behind it then refused via `require_base`.
+#[test]
+fn traders_in_range_is_empty_on_the_surface_even_near_a_base_market() {
+    let mut app = app_at_trading_posts(946, &[(ids::CORE_FRAGMENT, 5)], 1);
+    {
+        let game = app.game.as_mut().unwrap();
+        assert!(
+            !traders_in_range(game).is_empty(),
+            "precondition: the fixture's Market must actually be in range from inside the base"
+        );
+        game.leave_base()
+            .expect("app_at_trading_posts stands the party at the base exit");
+        assert!(
+            !game.in_base(),
+            "leave_base must actually put the party back on the surface"
+        );
+    }
+
+    let game = app.game.as_mut().unwrap();
+    assert!(
+        traders_in_range(game).is_empty(),
+        "a base-space Market must not answer a surface-space scan, however close the numbers land"
+    );
+}

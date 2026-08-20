@@ -365,6 +365,39 @@ fn breaching_with_a_base_still_populates_the_new_zone() {
     }
 }
 
+/// `Structure` is the space tag: `find_blocking_structure_at` must refuse
+/// to answer at all outside base space, rather than matching a base-space
+/// `Structure`'s position against a surface coordinate that happens to
+/// carry the same numbers. `Game::new`'s spawn point and base space's own
+/// origin are both commonly `(0, 0)` (see the standing note on
+/// `find_walkable_start`), which is exactly the collision this closes —
+/// before it, `game/stack.rs::link_site_free` could refuse a valid Stack
+/// entrance near a base for no reason a player could see.
+#[test]
+fn find_blocking_structure_at_refuses_outside_base_space() {
+    let mut game = Game::new(944, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, _node) = build_a_base(&mut game);
+    assert!(
+        !game.in_base(),
+        "build_a_base's fixtures return the party to the surface"
+    );
+    let home_pos = *game.world.get::<Position>(home).unwrap();
+
+    assert!(
+        game.find_blocking_structure_at(home_pos.x, home_pos.y)
+            .is_none(),
+        "a Structure's base-space position must not answer a surface-space query, \
+         even when the numbers coincide"
+    );
+
+    stand_in_base_at(&mut game, home_pos.x, home_pos.y);
+    assert_eq!(
+        game.find_blocking_structure_at(home_pos.x, home_pos.y),
+        Some(home),
+        "the same coordinates answer correctly once the query is actually asked from base space"
+    );
+}
+
 #[test]
 fn breaching_preserves_structure_durability_and_node_stock() {
     let mut game = Game::new(941, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -387,29 +420,6 @@ fn breaching_preserves_structure_durability_and_node_stock() {
         node_output(&game, node, ids::CORE_FRAGMENT),
         2,
         "so does anything still sitting in its output buffer, uncollected"
-    );
-}
-
-#[test]
-fn breaching_restamps_the_platform_around_the_new_spawn_point() {
-    let mut game = Game::new(942, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    build_a_base(&mut game);
-
-    game.enter_next_zone();
-
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
-    assert_eq!(
-        game.world
-            .resource_mut::<WorldMap>()
-            .tile(spawn.x, spawn.y)
-            .biome,
-        Biome::Platform,
-        "the slab is re-stamped on the new map"
-    );
-    assert_eq!(
-        game.world.resource::<Platform>().center,
-        Some((spawn.x, spawn.y)),
-        "and the resource follows it"
     );
 }
 
@@ -1374,12 +1384,29 @@ fn pursuers_never_step_onto_the_base_platform() {
         }
     }
     // Stamped after the walkable override (so Platform wins inside the
-    // slab) but before the nest and pursuer are placed — stamp_platform
-    // despawns every Hostile and Nest standing inside it. Sits east of the
-    // player, not on top of it: `half - 3` would have put the player's own
-    // tile inside the slab.
+    // slab) but before the nest and pursuer are placed. Written directly
+    // through `set_override` rather than `Game::stamp_platform`, which
+    // retired with `resources::Platform` — what this test exercises is
+    // `pursuit_field`'s `Biome::Platform` exclusion, not the (now gone)
+    // production path that used to lay the tile, so any Platform region
+    // does. Sits east of the player, not on top of it: `half - 3` would
+    // have put the player's own tile inside the slab.
     let platform_center = (ppos.x + half + 1, ppos.y);
-    game.stamp_platform(platform_center.0, platform_center.1);
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        for dx in -half..=half {
+            for dy in -half..=half {
+                map.set_override(
+                    platform_center.0 + dx,
+                    platform_center.1 + dy,
+                    Tile {
+                        biome: Biome::Platform,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
 
     // Wall off the southern detour entirely, so the only way around the
     // slab is north — where the nest sits — instead of leaving dijkstra a
@@ -1541,8 +1568,7 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
 /// `Pursuing` — the platform is what did that, not distance, which is what
 /// the previous version of this test (guardian 40 tiles out, past the
 /// 20-tile search box on distance alone) failed to isolate. Verified: with
-/// the `stamp_platform` call below removed, this test fails; restored, it
-/// passes.
+/// the Platform stamp below removed, this test fails; restored, it passes.
 #[test]
 fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1570,7 +1596,26 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
         }
     }
 
-    game.stamp_platform(ppos.x, ppos.y);
+    // Written directly through `set_override` rather than
+    // `Game::stamp_platform`, which retired with `resources::Platform` —
+    // same substitution as `pursuers_never_step_onto_the_base_platform`
+    // above, at the same radius the old stamp laid.
+    {
+        let mut map = game.world.resource_mut::<WorldMap>();
+        let r = MAX_BUILD_DISTANCE_FROM_HOME;
+        for dx in -r..=r {
+            for dy in -r..=r {
+                map.set_override(
+                    ppos.x + dx,
+                    ppos.y + dy,
+                    Tile {
+                        biome: Biome::Platform,
+                        walkable: true,
+                    },
+                );
+            }
+        }
+    }
     assert_eq!(
         game.world
             .resource_mut::<WorldMap>()

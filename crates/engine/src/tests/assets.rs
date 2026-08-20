@@ -5,6 +5,41 @@ use crate::abilities::AffinityKind;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_MIN, AFFINITY_NEUTRAL};
 use crate::*;
 
+/// `build_radius_bonus` and `claims_ground` are gone from `StructureDef` —
+/// deleted along with the Heaps that were their only shipped readers (Task
+/// 6) and with `resources::Platform`, the last engine-side reader (this
+/// task). Neither field's removal would fail a normal `ron::from_str` on a
+/// file that still declares one: an unknown key is silently ignored rather
+/// than refused, so a stray `build_radius_bonus: 4` left in a `.ron` would
+/// parse clean and simply do nothing forever. A text census over the raw
+/// shipped files, not a parsed-struct assertion, is the only thing that can
+/// catch that.
+#[test]
+fn no_shipped_structure_declares_a_retired_platform_field() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/structures");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        checked += 1;
+        for retired in ["build_radius_bonus", "claims_ground"] {
+            assert!(
+                !text.contains(retired),
+                "{} still declares `{retired}`, a field deleted with resources::Platform — \
+                 serde would silently ignore it rather than refuse the file",
+                path.display()
+            );
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census must actually walk assets/structures, or this passes vacuously"
+    );
+}
+
 #[test]
 fn game_new_aborts_startup_when_the_item_set_is_missing_the_currency_role() {
     // The economy can't run without a Currency-role item — see

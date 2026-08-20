@@ -7,7 +7,6 @@ use crate::battle::{BattleAction, EnemyGroup};
 use crate::items::GearCopy;
 use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, PLATFORM_CORNER_CUT};
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum DifficultyMode {
@@ -840,88 +839,6 @@ pub struct WieldedProgram(pub Option<Entity>);
 pub enum SlotShift {
     Forward,
     Back,
-}
-
-/// Center and current width of the player's base platform — the slab of
-/// `Biome::Platform` stamped when a Home is deployed. `center` is `None`
-/// until the run's first Home goes down, which is why the opening minutes
-/// of a run scale danger exactly as they did before platforms existed.
-///
-/// Exists as a resource rather than being looked up from the Home entity
-/// because readers like `Game::max_group_size` take `&self`, while querying
-/// for the Home needs `&mut self`. `radius` is here for exactly that reason
-/// too: it is *derived*, by `Game::build_radius` over every deployed
-/// structure's `build_radius_bonus`, and cached here so the footprint stays
-/// readable from `&self`.
-///
-/// All three fields are written at the same three sites and nowhere else —
-/// `Game::stamp_platform`, `Game::clear_platform`, and the load path in
-/// `game/lifecycle.rs`. A fourth writer means the cache can disagree with
-/// the structures it is derived from.
-///
-/// `center` and `radius` are deliberately not serialized: the first is
-/// reconstructed on load from the Home's own position and the second from
-/// the deployed structures, both of which `save::SaveData::structures`
-/// already carries. That is what lets the base grow with no save-format
-/// change.
-///
-/// `claimed` is the exception, and it is the one that has to be saved. A
-/// tile bought one at a time leaves no entity standing on it — that is the
-/// whole point of it, since a structure on the tile would make the ground
-/// useless — so there is nothing to derive it back from. It rides an
-/// additive `#[serde(default)]` field on `SaveData`, which the field-named
-/// encoding takes without a version bump.
-#[derive(Resource, Clone)]
-pub struct Platform {
-    pub center: Option<(i32, i32)>,
-    pub radius: i32,
-    /// Ground claimed a tile at a time, as offsets from `center` — see
-    /// `Game::claim_ground`. Offsets rather than absolute tiles so the
-    /// claims travel with the base on a breach, the same way every
-    /// structure's position does.
-    pub claimed: std::collections::HashSet<(i32, i32)>,
-}
-
-impl Default for Platform {
-    fn default() -> Self {
-        Self {
-            center: None,
-            radius: MAX_BUILD_DISTANCE_FROM_HOME,
-            claimed: std::collections::HashSet::new(),
-        }
-    }
-}
-
-impl Platform {
-    /// Whether a tile `(dx, dy)` from the Home is part of the slab: inside
-    /// the grown circle, or bought outright as a `claimed` tile.
-    ///
-    /// The one statement of the base's footprint — `stamp_platform` lays the
-    /// floor, `clear_platform` takes it up, and `place_structure` decides
-    /// what may stand on it, and a shape one of the three disagreed about
-    /// would put a machine on wild ground at a cut corner or leave orphan
-    /// floor behind a demolished Home. It reads the resource's own radius
-    /// rather than the starting constant, so those three stay in step with
-    /// each other *and* with a base that has grown.
-    pub(crate) fn covers(&self, dx: i32, dy: i32) -> bool {
-        self.in_shape(dx, dy) || self.claimed.contains(&(dx, dy))
-    }
-
-    /// The grown *circle* alone: the build box at the current `radius` with
-    /// `PLATFORM_CORNER_CUT` diagonal steps trimmed off each corner, and no
-    /// claimed ground.
-    ///
-    /// Split out from `covers` because the two answer different questions
-    /// and only one of them is about growth. A Heap Pillar adds a ring to
-    /// this shape; a Heap Block bolts a tile onto the footprint without
-    /// touching it. `stamp_platform` reads this one to know which tiles a
-    /// claim is now redundant on top of, and everything asking whether a
-    /// tile is *base* reads `covers`.
-    pub(crate) fn in_shape(&self, dx: i32, dy: i32) -> bool {
-        dx.abs() <= self.radius
-            && dy.abs() <= self.radius
-            && dx.abs() + dy.abs() <= 2 * self.radius - PLATFORM_CORNER_CUT
-    }
 }
 
 /// What each trading post has bought off the player and will sell back to

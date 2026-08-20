@@ -93,11 +93,7 @@ impl App {
                 // pinned to the surface entrance tile and offer to trade
                 // with a base four frames overhead — the same hole the
                 // `base_only` group-menu rows and the `d` refusal above are
-                // each closing at their own door. **Still only half-closed
-                // on the surface:** every `Game::sell_item`/`buy_item` call
-                // behind this screen is a base action now, so the list opens
-                // on the open grid and every row is refused there. Noted in
-                // `docs/seams.md` alongside the two keys that did move.
+                // each closing at their own door.
                 if self
                     .game
                     .as_mut()
@@ -109,6 +105,22 @@ impl App {
                 }
                 if self.game.as_ref().is_some_and(|g| g.is_underground()) {
                     self.status_line = Some("There's nobody selling anything here.".to_string());
+                    return;
+                }
+                // Closed the same way `d` above is: `Game::view_entities`
+                // now refuses to answer a `Structure` query outside base
+                // space (every trader is one), so the list this used to
+                // open on the open grid would always come back empty —
+                // Task 5 left it noted rather than fixed in `docs/seams.md`,
+                // and this is the guard flip that note asked for. Both
+                // remaining branches are surface-or-base only, `is_underground`
+                // having already returned above, so `in_base` cannot collide
+                // with the Stack case handled there.
+                if !self.game.as_ref().is_some_and(|g| g.in_base()) {
+                    self.status_line = Some(
+                        "Nobody's selling out here — the traders are through the anchor."
+                            .to_string(),
+                    );
                     return;
                 }
                 // Opening the trader list from the map is a fresh visit, not

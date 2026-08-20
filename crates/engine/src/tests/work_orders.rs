@@ -1048,7 +1048,7 @@ fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
     place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 2);
-    let radius = game.build_radius();
+    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
     let home_entity = find_home(&mut game).unwrap();
     let home = *game.world.get::<Position>(home_entity).unwrap();
 

@@ -33,13 +33,26 @@ pub enum Biome {
     Mainframe,
     OpenGrid,
     BlackIce,
-    /// The floor of a player base, stamped across the build radius when a
-    /// Home is deployed (`Game::stamp_platform`) and never produced by
-    /// `classify`. No shipped species lists it as a habitat, which is the
-    /// entire mechanism behind a base being a safe haven:
+    /// Laid base floor — `base_grid::BaseCell::Floor`. **Never produced by
+    /// `classify` and never written into a `WorldMap` any more**: the base
+    /// went out of phase into `base_grid::BaseGrid`, its own coordinate
+    /// space, and this variant survives only as the rendering vocabulary
+    /// `Game::view_tiles` synthesises for it — see that function for the
+    /// three-way mapping. No shipped species lists it as a habitat, which is
+    /// the entire mechanism behind a base being a safe haven:
     /// `Game::try_spawn_habitat_creature` already bails when both candidate
     /// pools come back empty, so no spawn-suppression code exists anywhere.
     Platform,
+    /// Carved-out base space, not yet floored — `BaseCell::Open`. Walkable,
+    /// like `Platform`, and the same rendering-only status: synthesised by
+    /// `Game::view_tiles`, never written into a `WorldMap`, never produced
+    /// by `classify`.
+    Excavated,
+    /// Solid, unmined base space — what `Game::view_tiles` draws for every
+    /// base coordinate `BaseGrid` has no cell for. The base's equivalent of
+    /// a hole in the map: nothing is ever placed there, the same as
+    /// `DataVoid` and `BlackIce` on the surface.
+    Entropy,
 }
 
 impl Biome {
@@ -50,7 +63,7 @@ impl Biome {
     /// match. An unwalkable biome is a hole in the map, so nothing is ever
     /// placed there: no spawn, no structure, and no Stack link.
     pub fn walkable(self) -> bool {
-        !matches!(self, Biome::DataVoid | Biome::BlackIce)
+        !matches!(self, Biome::DataVoid | Biome::BlackIce | Biome::Entropy)
     }
 
     /// What the player calls this ground.
@@ -68,6 +81,8 @@ impl Biome {
             Biome::OpenGrid => "Open Grid",
             Biome::BlackIce => "Black Ice",
             Biome::Platform => "Platform",
+            Biome::Excavated => "Excavated",
+            Biome::Entropy => "Entropy",
         }
     }
 }
@@ -80,6 +95,13 @@ pub struct Tile {
 
 impl Tile {
     /// Whether a hostile may stand here: walkable, and not the base slab.
+    ///
+    /// **Unreachable now that nothing writes `Biome::Platform` into a
+    /// `WorldMap`** — the base is out of phase and its floor is
+    /// `base_grid::BaseGrid`, not a tile override. Left as-is rather than
+    /// deleted; slice 2/3 is where the slab-era readers below get replaced
+    /// with a base-space equivalent of this rule, and `stamp_platform`
+    /// (named below) no longer exists.
     ///
     /// `walkable` alone is not the rule, and the slab is why. It is the one
     /// safe ground in the game, established in three places already —
@@ -313,6 +335,12 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
                     Biome::Mainframe => 'm',
                     Biome::OpenGrid => 'o',
                     Biome::Platform => 'p',
+                    // Base-space rendering vocabulary only — `classify`
+                    // never produces either, so this map capture can never
+                    // actually reach them.
+                    Biome::Excavated | Biome::Entropy => {
+                        unreachable!("classify never produces a base-space biome")
+                    }
                 });
             }
             out.push('\n');

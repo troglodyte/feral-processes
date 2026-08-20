@@ -12,9 +12,9 @@ use crate::game::spawning::SpawnEscalation;
 use crate::resources::{CurrentStack, Locale, Trace};
 use crate::stack::{self, CellKind, Dir};
 use crate::tuning::{
-    STACK_COLLAPSE_RELINK_TILES, STACK_ENCOUNTER_CHANCE, STACK_FRAMES_MAX, STACK_FRAMES_MIN,
-    STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES, STACK_NEAREST_LINK_TILES,
-    STACK_TILES_PER_FRAME,
+    MAX_BUILD_DISTANCE_FROM_HOME, STACK_COLLAPSE_RELINK_TILES, STACK_ENCOUNTER_CHANCE,
+    STACK_FRAMES_MAX, STACK_FRAMES_MIN, STACK_LINK_SCATTER_TILES, STACK_MIN_LINK_TILES,
+    STACK_NEAREST_LINK_TILES, STACK_TILES_PER_FRAME,
 };
 use crate::*;
 
@@ -145,12 +145,9 @@ impl Game {
     }
 
     /// Spawns `STACK_LINKS_PER_ZONE` links scattered around the
-    /// player's arrival point, on walkable ground outside the base platform.
-    /// Called once per zone, alongside `spawn_initial_creatures`.
-    ///
-    /// Platform tiles are skipped rather than merely unlikely: the base is
-    /// the one safe ground in the game, and a hole down into the Stack in
-    /// the middle of it would undo that.
+    /// player's arrival point, on walkable ground clear of the player's
+    /// immediate starting patch. Called once per zone, alongside
+    /// `spawn_initial_creatures`.
     ///
     /// Draws from a locally seeded RNG rather than `resources::GameRng`, for
     /// two reasons. Where the entrances are is world generation, and world
@@ -170,17 +167,22 @@ impl Game {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut rng = StdRng::seed_from_u64(((seed as u64) << 32) ^ zone as u64 ^ ENTRANCE_SALT);
 
-        // The on-ramp is drawn from the ring just outside the slab rather
-        // than from a box centred on the player, because the slab can eat
-        // that box outright: the largest `|dx| + |dy|` in it is twice
-        // `STACK_NEAREST_LINK_TILES`, and `Platform::covers` spares a tile
-        // only while that exceeds `2 * radius - PLATFORM_CORNER_CUT`. Since
-        // `reach` widens only once one link is down and the attempt budget
-        // is shared across all three, an on-ramp that can never land does
-        // not cost the zone its first link — it costs the zone every link,
-        // which ends the run's access to Portal Fragments and reads as a bad
-        // seed rather than as a bug.
-        let inner = self.world.resource::<Platform>().radius + 1;
+        // The on-ramp is drawn from a ring just outside the player's
+        // starting patch rather than from a box centred on them, so a link
+        // can never land directly underfoot. `MAX_BUILD_DISTANCE_FROM_HOME`
+        // rather than a live radius: this used to widen with
+        // `resources::Platform`'s grown slab so a link could never spawn
+        // *inside* it, but the base is out of phase now and nothing a build
+        // does touches the zone surface — `link_site_free`'s own
+        // `Biome::Platform` check below is dead for the same reason, kept
+        // rather than deleted because slice 2/3 is where this whole
+        // avoidance gets a base-space replacement. What is left of the
+        // reasoning still holds: since `reach` widens only once one link is
+        // down and the attempt budget is shared across all three, too
+        // narrow an on-ramp would not cost the zone its first link — it
+        // would cost the zone every link, which reads as a bad seed rather
+        // than as a bug.
+        let inner = MAX_BUILD_DISTANCE_FROM_HOME + 1;
 
         let mut placed = 0;
         let mut attempts = 0;
@@ -223,7 +225,11 @@ impl Game {
     ///
     /// Platform tiles are refused rather than merely unlikely: the base is
     /// the one safe ground in the game, and a hole down into the Stack in
-    /// the middle of it would undo that.
+    /// the middle of it would undo that. **Unreachable now that nothing
+    /// writes `Biome::Platform` into a `WorldMap`** — kept rather than
+    /// deleted, same as `find_blocking_structure_at`'s call below (which now
+    /// refuses to answer outside base space and so is always `None` here);
+    /// slice 2/3 is where this gets a `BaseGrid`-aware replacement.
     ///
     /// A nest is checked before an entrance in `move_player`, so a link
     /// sharing a nest's tile is a link that can never be walked into — the

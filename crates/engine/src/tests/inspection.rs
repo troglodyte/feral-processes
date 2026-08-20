@@ -2080,3 +2080,77 @@ fn a_work_profile_is_none_for_a_species_the_db_never_heard_of() {
 
     assert!(game.work_profile(program).is_none());
 }
+
+/// "In base space they ray across the zone surface" — the bug carried into
+/// Task 7 for this function. `stand_in_base` puts base space's own origin
+/// at `(0, 0)`, so a wild creature planted on the *zone surface* at `(3, 0)`
+/// lands squarely on the eastward ray once the party phases in, by the same
+/// numeric coincidence `find_walkable_start` and the base's origin usually
+/// share. Before the fix this named it; a tamed one at the same tile is the
+/// control that proves the guard is about wildlife, not about base space
+/// finding nothing at all.
+#[test]
+fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
+    let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.species_defs().into_iter().next().unwrap().id;
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.clone(),
+            },
+            Position { x: 3, y: 0 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                mitigation: 1,
+            },
+        ))
+        .id();
+    stand_in_base(&mut game);
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        None,
+        "a wild, untamed program on the zone surface must not be named from inside the base"
+    );
+
+    // `BaseStaff` with no `Task` alongside `Tamed` is what
+    // `position_is_honest` reads as an idle base staffer — the only way to
+    // make `drawn_on_surface_map` say yes without also giving it a post to
+    // walk to or from.
+    let owner = game.player_entity();
+    game.world
+        .entity_mut(wild)
+        .insert((Tamed { owner }, BaseStaff));
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        Some(InspectTarget::Creature(wild)),
+        "the same tile, now tamed, proves the refusal above was about wildlife specifically"
+    );
+}
+
+/// Unreachable before base space rendered at all: nothing ever called
+/// `view_entities` near the anchor or a link, so `entity_label`'s
+/// fall-through — "You", the same body the player's own entity gets — never
+/// had a caller. `Game::view_tiles` makes it reachable, and a screen naming
+/// the anchor "You" would be worse than not naming it.
+#[test]
+fn entity_label_names_the_anchor_and_a_surface_link_rather_than_falling_through_to_you() {
+    let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let anchor = game.world.resource::<resources::AnchorEntity>().0;
+    assert_eq!(game.entity_label(anchor), "The Anchor");
+
+    let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
+    let link = query
+        .iter(&game.world)
+        .next()
+        .expect("a fresh zone always scatters at least one Stack entrance");
+    assert_eq!(game.entity_label(link), "Stack Entrance");
+
+    // The player's own entity is the one thing that must still say "You" —
+    // this guards against a fix that widened the match past the two new
+    // arms and swallowed the fall-through's real case.
+    assert_eq!(game.entity_label(game.player_entity()), "You");
+}

@@ -216,6 +216,16 @@ fn biome_reference_tint(biome: Biome) -> Color {
         Biome::Deadlock => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),
         Biome::NullSector => Color::new(0.20, 0.50, 0.52, 1.0),
+        // Excavated: carved but not floored — brighter than Platform (the
+        // laid, finished ground) so a mined-but-unbuilt patch of the base
+        // still reads as less "done" than a tile with a machine on it,
+        // without leaving the cool family passability depends on.
+        Biome::Excavated => Color::new(0.15, 0.22, 0.42, 1.0),
+        // Entropy: solid, unmined base space — a hole in the map exactly
+        // like DataVoid and BlackIce, so it takes the same hot family. Kept
+        // close to black rather than their amber/red brightness: this is
+        // what "you have not dug here yet" looks like, not a hazard.
+        Biome::Entropy => Color::new(0.10, 0.04, 0.04, 1.0),
     }
 }
 
@@ -288,6 +298,13 @@ fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32
         Biome::Platform => draw_slab(painter, r, ink),
         Biome::DataVoid => draw_depth(painter, r, ink),
         Biome::BlackIce => draw_shards(painter, r, ink, h),
+        // Rough, unfinished ground — the speckle Deadlock also wears, not
+        // the clean laid lines of `draw_slab`: this tile is specifically
+        // *not* floored yet.
+        Biome::Excavated => draw_speckle(painter, r, ink, h),
+        // A hole in the map, drawn the same way the surface's other two
+        // holes are.
+        Biome::Entropy => draw_depth(painter, r, ink),
     }
 }
 
@@ -672,7 +689,18 @@ fn draw_surface_map(
     let hw = half_w + RINGS;
     let hh = half_h + RINGS;
 
-    let (off_x, off_y) = fx.camera_offset(status.position, painter.delta());
+    // `status.position` is the player's `Position` component, which stays
+    // pinned to the anchor tile on the zone surface while the party is out
+    // of phase — see `resources::Locale`'s own doc for why. `view_tiles`
+    // and `view_entities` both centre on `Game::base_pos` in that locale
+    // instead, so this pane has to agree with them or a base's structures
+    // draw offset from its own floor by however far base space has been
+    // walked from its origin. `base_pos` is `None` everywhere but base
+    // space, which is exactly when the pinned tile is already the right
+    // answer.
+    let base_pos = game.base_pos();
+    let center = base_pos.unwrap_or(status.position);
+    let (off_x, off_y) = fx.camera_offset(center, painter.delta());
     let tiles = game.view_tiles(hw, hh);
     let entities: Vec<_> = game
         .view_entities(hw, hh)
@@ -708,17 +736,8 @@ fn draw_surface_map(
             let mut ch = None;
             let mut color = biome_color;
             let mut bg_source = biome_color;
-            let world = (
-                status.position.0 + rx as i32 - hw,
-                status.position.1 + ry as i32 - hh,
-            );
-            let (px, py) = tile_origin_px(
-                world,
-                status.position,
-                (half_w, half_h),
-                (off_x, off_y),
-                tile_px,
-            );
+            let world = (center.0 + rx as i32 - hw, center.1 + ry as i32 - hh);
+            let (px, py) = tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px);
             // The fetched rings exist to be *read* — by the camera slide and
             // by `draw_tile_edges` — not to be drawn. Nothing clips this pane,
             // and the log panel below it is drawn at 0.95 alpha, so a row
@@ -745,8 +764,8 @@ fn draw_surface_map(
             // dead end below.
             let mut mark: Option<(Entity, bool)> = None;
             for ev in &entities {
-                let erx = ev.pos.0 - status.position.0 + hw;
-                let ery = ev.pos.1 - status.position.1 + hh;
+                let erx = ev.pos.0 - center.0 + hw;
+                let ery = ev.pos.1 - center.1 + hh;
                 if erx != rx as i32 || ery != ry as i32 {
                     continue;
                 }
@@ -889,11 +908,16 @@ fn draw_surface_map(
             // zone (see `Game::zone_spawn_point`) — an outline rather than
             // replacing the glyph, so whatever's actually standing there
             // (the player, a creature, a rebuilt structure) still reads
-            // clearly on top of it.
-            let spawn_rx = spawn_point.0 - status.position.0 + hw;
-            let spawn_ry = spawn_point.1 - status.position.1 + hh;
-            if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
+            // clearly on top of it. `spawn_point` is a surface coordinate,
+            // so this only means anything while the pane is drawing the
+            // surface — comparing it against a base-space `center` would be
+            // the same cross-space aliasing `view_entities` refuses now.
+            if base_pos.is_none() {
+                let spawn_rx = spawn_point.0 - center.0 + hw;
+                let spawn_ry = spawn_point.1 - center.1 + hh;
+                if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
+                    painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
+                }
             }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.
@@ -975,13 +999,7 @@ fn draw_surface_map(
     // it, and before the border so a spark from a structure at the pane's
     // edge cannot draw over the frame.
     fx.draw_bursts(painter, tile_px, |world| {
-        tile_origin_px(
-            world,
-            status.position,
-            (half_w, half_h),
-            (off_x, off_y),
-            tile_px,
-        )
+        tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px)
     });
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 }
@@ -1110,7 +1128,14 @@ fn draw_status_panel(
             status.level, status.xp, status.xp_to_next, status.perk_points
         ),
         format!("Zone {}", status.zone),
-        format!("Position: ({}, {})", status.position.0, status.position.1),
+        {
+            // The pinned surface tile, same as `status.position` always was,
+            // except in base space — where the number that has any meaning
+            // to a player walking around inside it is `Game::base_pos`, not
+            // the anchor tile they stepped through to get there.
+            let (x, y) = game.base_pos().unwrap_or(status.position);
+            format!("Position: ({x}, {y})")
+        },
         format!(
             "Attack {}  Defense {}  Strength {}",
             status.atk, status.mitigation, status.strength
@@ -1218,7 +1243,7 @@ mod tests {
     /// prevent — but `biome_tint`'s match is exhaustive, so a new biome
     /// cannot reach a test run without someone having already been sent to
     /// this file by the compiler.
-    const ALL_BIOMES: [Biome; 7] = [
+    const ALL_BIOMES: [Biome; 9] = [
         Biome::DataVoid,
         Biome::Deadlock,
         Biome::NullSector,
@@ -1226,6 +1251,8 @@ mod tests {
         Biome::OpenGrid,
         Biome::BlackIce,
         Biome::Platform,
+        Biome::Excavated,
+        Biome::Entropy,
     ];
 
     /// Whether a tint reads as hostile: red dominant over both other
@@ -1328,6 +1355,8 @@ mod tests {
             (Biome::Deadlock, Color::new(0.70, 0.92, 0.95, 1.0)),
             (Biome::OpenGrid, Color::new(0.35, 0.85, 0.60, 1.0)),
             (Biome::NullSector, Color::new(0.20, 0.50, 0.52, 1.0)),
+            (Biome::Excavated, Color::new(0.15, 0.22, 0.42, 1.0)),
+            (Biome::Entropy, Color::new(0.10, 0.04, 0.04, 1.0)),
         ];
         for (biome, expected) in table {
             let got = biome_tint(biome, NEUTRAL);

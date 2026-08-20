@@ -71,8 +71,8 @@ pub use research::{ResearchId, ResearchRecipe};
 use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BuybackLedger, ClosingRoster,
     CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines, Locale, MessageLog,
-    Party, Platform, PlayerEntity, Research, RosterFrame, StackMemory, WieldedProgram, XpTally,
-    ZoneLevel, ZoneSpawnPoint,
+    Party, PlayerEntity, Research, RosterFrame, StackMemory, WieldedProgram, XpTally, ZoneLevel,
+    ZoneSpawnPoint,
 };
 pub use resources::{
     DifficultyMode, EffectKind, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource,

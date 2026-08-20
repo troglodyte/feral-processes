@@ -329,18 +329,48 @@ fn i_opens_the_pack_and_x_inspects() {
 }
 
 /// The three party-side actions deliberately left flat, because they are
-/// pressed every few turns while walking.
+/// pressed every few turns while walking. `t` is tested separately below —
+/// every trader is a base-space `Structure` now, so it only opens on a base.
 #[test]
 fn the_hot_keys_stayed_on_the_map() {
     for (key, expected) in [
         (GameKey::Char('a'), Mode::FieldCast),
-        (GameKey::Char('t'), Mode::Trade),
         (GameKey::Char('u'), Mode::Symlink),
     ] {
         let mut app = test_app(4014);
         app.handle_key(key);
         assert_eq!(app.mode, expected, "{key:?} should still be a map key");
     }
+}
+
+/// `t` closes the same hole `d`'s `in_base()` guard and the group menu's
+/// `base_only` rows already closed: every trader `Game::view_entities` can
+/// now find is a `Structure`, and a `Structure` is never found outside base
+/// space — so the open grid used to open `Mode::Trade` onto a list that
+/// could only ever come back empty. Noted rather than fixed in
+/// `docs/seams.md` when the other two keys moved.
+#[test]
+fn t_opens_the_trader_list_only_from_the_base() {
+    let mut app = test_app(4015);
+    app.handle_key(GameKey::Char('t'));
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "no base exists yet, so there is nowhere for the list to open onto"
+    );
+    assert!(
+        app.status_line.is_some(),
+        "the refusal has to say something, not fail silently"
+    );
+
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    app.handle_key(GameKey::Char('t'));
+    assert_eq!(
+        app.mode,
+        Mode::Trade,
+        "standing in the base, the same key opens the trader list"
+    );
 }
 
 /// Clause 2 again, and the one row where both halves of it bite: a refactor

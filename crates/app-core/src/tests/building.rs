@@ -27,9 +27,16 @@ fn the_upgrade_picker_opens_from_the_base_menu_and_esc_backs_into_it() {
 /// screen would be empty — and a player who has never breached would never
 /// learn that upgrading exists. The row explains itself instead, which is
 /// what `EntityView::ceiling` is carried for.
+///
+/// `stand_in_base` is load-bearing here now, not decoration: the Compiler
+/// is a `Structure`, and `Game::view_entities` refuses to answer for one
+/// outside base space — `upgradeable_structures` would otherwise come back
+/// empty on the surface `app_owning_a_program_and_a_compiler` leaves the
+/// party on.
 #[test]
 fn a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown() {
     let mut app = app_owning_a_program_and_a_compiler(232, &[]);
+    stand_in_base(&mut app);
 
     let listed = app.upgradeable_structures();
     let compiler = listed

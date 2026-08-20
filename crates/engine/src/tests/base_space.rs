@@ -1289,17 +1289,20 @@ fn a_portal_in_the_base_does_not_breach_from_the_zone_surface() {
 }
 
 // ---------------------------------------------------------------------
-// `resources::Platform` is not resurrected, and the two readers that
-// branched on it take their radius off the grid instead
+// `resources::Platform` no longer exists, and the two readers that used to
+// branch on it take their radius off the grid instead
 // ---------------------------------------------------------------------
 
 /// The load path used to rebuild `Platform::center` from
-/// `Game::home_position`, which is a **base-space** coordinate now. That made
-/// a loaded run behave differently from the same run before the reload, and
-/// it put `Game::clear_platform`'s 401x401 override sweep back in reach of a
-/// Home demolition.
+/// `Game::home_position`, which is a **base-space** coordinate now — that
+/// made a loaded run behave differently from the same run before the
+/// reload, and it put `Game::clear_platform`'s 401x401 override sweep back
+/// in reach of a Home demolition. Both retired with `resources::Platform`
+/// itself, so there is nothing left to resurrect; what is still worth
+/// asserting is the other half this test always carried — that the pocket
+/// `BaseGrid` actually laid survives the round trip.
 #[test]
-fn a_reload_does_not_resurrect_the_slab() {
+fn a_reload_keeps_the_pocket() {
     let mut game = game(3142);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     game.place_structure("home", 1, 0).unwrap();
@@ -1316,14 +1319,10 @@ fn a_reload_does_not_resurrect_the_slab() {
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    assert!(
-        loaded.world.resource::<Platform>().center.is_none(),
-        "a base standing in base space is not a slab on the zone surface"
-    );
     assert_eq!(
         loaded.world.resource::<base_grid::BaseGrid>().floor_count(),
         pocket_cells(),
-        "and the pocket itself came back, so this is not passing on an empty base"
+        "the pocket the Home laid must come back, not an empty base"
     );
 }
 
@@ -1410,4 +1409,98 @@ fn a_link_near_the_base_runs_shallower_than_one_by_a_baseless_run() {
         based,
         "how deep a link runs must not depend on whether the run has been reloaded"
     );
+}
+
+// ---------------------------------------------------------------------
+// `Game::view_tiles` dispatches on locale — Task 7
+// ---------------------------------------------------------------------
+
+/// In base space, `view_tiles` synthesises tiles from `BaseGrid` rather
+/// than reading `WorldMap` at the player's (surface-pinned) `Position`:
+/// laid floor reads as `Biome::Platform`, a merely-carved cell as
+/// `Biome::Excavated`, and solid, untouched rock as `Biome::Entropy` — the
+/// three-way mapping `Game::view_tiles` documents.
+#[test]
+fn view_tiles_synthesises_the_three_base_biomes() {
+    let mut game = game(3200);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    // A cell mined but not floored, just past the starting pocket's edge —
+    // `BaseGrid::open` is `pub(crate)` and unused by any gameplay path this
+    // slice, so this is the only way to put one on the board at all.
+    let open_at = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(open_at.0, open_at.1, 0);
+    stand_in_base(&mut game);
+
+    // A window wide enough to reach the Open cell just past the pocket and
+    // solid rock well beyond it, centred on base space's own origin —
+    // `stand_in_base` always lands the party there.
+    let half = crate::tuning::STARTING_POCKET_RADIUS + 3;
+    let tiles = game.view_tiles(half, half);
+    let at = |x: i32, y: i32| tiles[(half + y) as usize][(half + x) as usize];
+
+    assert_eq!(
+        at(0, 0).biome,
+        Biome::Platform,
+        "base space's own origin is laid floor — the Home stands on it"
+    );
+    assert!(at(0, 0).walkable);
+
+    assert_eq!(
+        at(open_at.0, open_at.1).biome,
+        Biome::Excavated,
+        "a carved, unfloored cell reads as Excavated"
+    );
+    assert!(
+        at(open_at.0, open_at.1).walkable,
+        "carved rock is walkable even unfloored"
+    );
+
+    let solid = (half, half);
+    assert_eq!(
+        at(solid.0, solid.1).biome,
+        Biome::Entropy,
+        "untouched base space, absent from BaseGrid, reads as Entropy"
+    );
+    assert!(
+        !at(solid.0, solid.1).walkable,
+        "Entropy is solid — nothing has dug there yet"
+    );
+}
+
+/// `view_tiles` on the surface is unchanged: still a straight read of
+/// `WorldMap` centred on the player's own `Position`, `Biome::Platform`
+/// included wherever a test hand-writes one — the point being that base
+/// space's synthesis in `view_tiles` only ever engages through
+/// `Game::base_pos`, never by inspecting the biome it would produce.
+#[test]
+fn view_tiles_is_unchanged_on_the_surface() {
+    let mut game = game(3201);
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let half = 5;
+    let expected: Vec<Vec<Tile>> = (-half..=half)
+        .map(|ty| {
+            (-half..=half)
+                .map(|tx| {
+                    game.world
+                        .resource_mut::<WorldMap>()
+                        .tile(ppos.x + tx, ppos.y + ty)
+                })
+                .collect()
+        })
+        .collect();
+
+    let got = game.view_tiles(half, half);
+
+    for (gy, (grow, erow)) in got.iter().zip(expected.iter()).enumerate() {
+        for (gx, (g, e)) in grow.iter().zip(erow.iter()).enumerate() {
+            assert_eq!(
+                (g.biome, g.walkable),
+                (e.biome, e.walkable),
+                "surface view_tiles diverged from a direct WorldMap read at grid ({gx}, {gy})"
+            );
+        }
+    }
 }

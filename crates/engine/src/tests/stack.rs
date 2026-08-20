@@ -746,32 +746,6 @@ fn no_entrance_opens_onto_unwalkable_ground() {
     }
 }
 
-/// The Platform check only has anything to do on a zone breach, where the
-/// base slab is stamped down *before* the new sector's links are placed
-/// (see `enter_next_zone`). On a fresh run no platform exists yet, and a
-/// player later stamping a Home over a link is their own doing — that
-/// still works, and a Stack mouth inside your base is a fine place for one.
-#[test]
-fn breaching_with_a_base_never_opens_a_link_inside_the_platform() {
-    let mut game = game();
-    // The Home stands out of phase; the rest of this test is about walking
-    // the surface into a portal.
-    place_home(&mut game);
-    breach_through_a_portal(&mut game);
-    assert_eq!(game.player_status().zone, 2);
-
-    let tiles = entrance_tiles(&mut game);
-    assert!(!tiles.is_empty());
-    for (x, y) in tiles {
-        let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
-        assert_ne!(
-            tile.biome,
-            Biome::Platform,
-            "a link opened at ({x}, {y}), inside the one safe ground in the game"
-        );
-    }
-}
-
 /// A nest and a link on the same tile is a link that can never be
 /// used: `move_player` checks `find_nest_at` before `find_surface_link_at`,
 /// so walking onto it attacks the nest forever. Nests are placed first in
@@ -1828,11 +1802,6 @@ fn the_replacement_link_stands_on_ground_a_link_may_stand_on() {
         .expect("a replacement link should have appeared");
     let tile = game.world.resource_mut::<WorldMap>().tile(new.0, new.1);
     assert!(tile.walkable, "the replacement landed on unwalkable ground");
-    assert_ne!(
-        tile.biome,
-        Biome::Platform,
-        "the replacement opened a hole in the base slab"
-    );
     assert!(game.find_nest_at(new.0, new.1).is_none());
     assert!(game.find_blocking_structure_at(new.0, new.1).is_none());
     assert!(
@@ -4850,67 +4819,6 @@ fn a_refused_purchase_spends_nothing() {
     );
 }
 
-/// The failure this is here to prevent ends runs, and it does not look like
-/// a bug from inside the game — it looks like a bad seed.
-///
-/// `spawn_surface_links` places the *first* link of a zone from a small box
-/// around the arrival point and widens to `STACK_LINK_SCATTER_TILES` only
-/// once one is down, against an attempt budget shared across all three. So
-/// an on-ramp that can never land does not cost you the first link; it
-/// spends every attempt failing to place it and the zone gets **none**. No
-/// links means no Stack, and `award_loot` underground is the game's only
-/// source of Portal Fragments, so the run can never breach again.
-///
-/// A slab swallows that box as it grows: the largest `|dx| + |dy|` inside
-/// it is twice `STACK_NEAREST_LINK_TILES`, and the corner cut spares a tile
-/// only while that exceeds `2 * radius - PLATFORM_CORNER_CUT`.
-#[test]
-fn a_fully_grown_base_still_gets_its_zones_links() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    for entrance in {
-        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
-        query.iter(&game.world).collect::<Vec<Entity>>()
-    } {
-        game.world.despawn(entrance);
-    }
-    // A base at its ceiling, stamped straight onto the resource: what is
-    // under test is the draw box against a wide slab, not how the slab got
-    // wide.
-    game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
-    // Well past the starting radius, but not the backstop ceiling: stamping
-    // 201x201 tiles measures the stamp rather than the draw.
-    const GROWN: i32 = 20;
-    game.world.resource_mut::<Platform>().radius = GROWN;
-    let platform = game.world.resource::<Platform>().clone();
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        let r = GROWN;
-        for dy in -r..=r {
-            for dx in -r..=r {
-                if platform.covers(dx, dy) {
-                    map.set_override(
-                        ppos.x + dx,
-                        ppos.y + dy,
-                        Tile {
-                            biome: Biome::Platform,
-                            walkable: true,
-                        },
-                    );
-                }
-            }
-        }
-    }
-
-    game.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
-
-    assert_eq!(
-        entrance_tiles(&mut game).len(),
-        crate::tuning::STACK_LINKS_PER_ZONE,
-        "a zone under a full-size base got fewer links than it owes"
-    );
-}
-
 /// Pushing the on-ramp out past the slab would otherwise make every stack
 /// deeper as the base grows — a difficulty change caused entirely by a
 /// cosmetic one. `frames_for` therefore measures from the edge of safe
@@ -4925,51 +4833,6 @@ fn a_growing_base_does_not_deepen_the_stack_under_its_nearest_link() {
     assert_eq!(
         at_start, at_ceiling,
         "the nearest link opens a deeper stack purely because the base grew"
-    );
-}
-
-/// The same at the backstop ceiling, where the slab is 201x201 and every
-/// tile of the old draw box — and of the *scatter* box the other two links
-/// used — is platform. The band the links are drawn from starts outside the
-/// slab, so its size cannot matter; this is what says so.
-#[test]
-fn a_base_at_the_ceiling_still_gets_its_zones_links() {
-    let mut game = game();
-    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    for entrance in {
-        let mut query = game.world.query_filtered::<Entity, With<SurfaceLink>>();
-        query.iter(&game.world).collect::<Vec<Entity>>()
-    } {
-        game.world.despawn(entrance);
-    }
-    let r = crate::tuning::MAX_BUILD_RADIUS_TILES;
-    game.world.resource_mut::<Platform>().center = Some((ppos.x, ppos.y));
-    game.world.resource_mut::<Platform>().radius = r;
-    let platform = game.world.resource::<Platform>().clone();
-    {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        for dy in -r..=r {
-            for dx in -r..=r {
-                if platform.covers(dx, dy) {
-                    map.set_override(
-                        ppos.x + dx,
-                        ppos.y + dy,
-                        Tile {
-                            biome: Biome::Platform,
-                            walkable: true,
-                        },
-                    );
-                }
-            }
-        }
-    }
-
-    game.spawn_surface_links(crate::tuning::STACK_LINKS_PER_ZONE);
-
-    assert_eq!(
-        entrance_tiles(&mut game).len(),
-        crate::tuning::STACK_LINKS_PER_ZONE,
-        "a zone under a base at the ceiling got fewer links than it owes"
     );
 }
 

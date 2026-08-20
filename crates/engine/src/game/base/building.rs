@@ -93,8 +93,10 @@ impl Game {
         // there was a refusal here for the ring that would take the sector's
         // last Stack link. Nothing a build does touches the zone surface any
         // more, so there is no ring, nothing to bury, and no refusal to
-        // make. `build_radius_bonus` is read by nothing at all now; the two
-        // structures that carry it retire with `resources::Platform`.
+        // make. The two structures that carried `build_radius_bonus` (the
+        // Heaps) were deleted along with the field itself, and
+        // `resources::Platform` — the field's one remaining reader — retires
+        // in the same task.
         let build_cost = self.structure_build_cost(&def);
         let player = self.player_entity();
         // Every shortfall at once, and each with its numbers: the build menu
@@ -376,9 +378,13 @@ impl Game {
             self.announce_lost_shelf(target);
             self.world.despawn(target);
         }
-        if is_home {
-            self.clear_platform();
-        }
+        // `clear_platform` used to run here, restoring the zone surface
+        // under a demolished Home's slab. The base is out of phase now —
+        // its floor is `BaseGrid`, the player's own dug ground, and
+        // `Game::has_home`'s own doc already states the design this
+        // implies: demolishing the Home takes every structure with it but
+        // leaves the floor standing, so you can be in base space having
+        // just demolished the Home out from under yourself.
 
         // Route through `grant_loot`, not a direct `add`: demolishing a Home
         // cascades every other structure's refund in one shot, easily

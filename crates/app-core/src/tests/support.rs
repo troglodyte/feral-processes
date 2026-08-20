@@ -961,9 +961,9 @@ pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
 /// the party into a Stack frame afterwards, which is what refuses the verbs
 /// while leaving the board readable.
 ///
-/// The Home is what puts the slab there: the load path derives
-/// `Platform::center` from `Game::home_position`, so a save with a Broker and
-/// no Home loads as a base that does not exist.
+/// The Home is what puts the floor there: `found_the_base` lays the
+/// starting pocket into `BaseGrid` when it deploys one, so a save with a
+/// Broker and no Home loads as a base that does not exist.
 ///
 /// Built by editing a save for the reason `app_at_trading_posts` is: the
 /// engine exposes no way to hand-place a structure from outside the crate.

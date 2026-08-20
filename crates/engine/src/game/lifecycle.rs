@@ -129,7 +129,6 @@ impl Game {
         ));
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
-        world.insert_resource(Platform::default());
         world.insert_resource(crate::base_grid::BaseGrid::default());
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
@@ -381,7 +380,6 @@ impl Game {
                 .collect()
         }));
         world.insert_resource(ZoneLevel(data.zone));
-        world.insert_resource(Platform::default());
         world.insert_resource(data.base_grid);
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
@@ -859,19 +857,6 @@ impl Game {
                 }
             }
         }
-
-        // `resources::Platform` is deliberately **not** restored here.
-        //
-        // This used to set `center` from `Game::home_position`, which was the
-        // right answer while the Home stood on the zone surface. It is a
-        // base-space coordinate now, and resurrecting the slab around it made
-        // a loaded run behave differently from the same run before the
-        // reload: `distance_from_danger_origin` and `frames_at` both branched
-        // on `center` being `Some`, and `clear_platform` swept a 401x401 box
-        // of `WorldMap` overrides centred on wherever base space's origin
-        // numerically landed. Both readers take their radius off `BaseGrid`
-        // now, so nothing left needs a restored `Platform` — and the resource
-        // itself retires with the rest of the slab.
 
         // Reconnect each restored cronjob to its target structure now that
         // both sides exist. A structure is matched by position (entity ids

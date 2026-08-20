@@ -818,13 +818,13 @@ pub const STACK_LINKS_PER_ZONE: usize = 3;
 /// itself when the player reaches it, however far out it is, so a link may
 /// now scatter as far as it likes.
 ///
-/// It does *not* keep links off the base platform, and neither does the
-/// on-ramp's ring by itself — that ring is measured from the slab that
-/// exists when the zone is generated, and a Home deployed afterwards moves
-/// the slab somewhere placement never saw. What holds the line is
-/// `Game::stamp_platform`, which despawns any link inside the slab, plus
-/// `spawn_surface_links` skipping `Biome::Platform` when the platform
-/// already exists.
+/// It does *not* keep links off the base platform by itself. That used to be
+/// `Game::stamp_platform`'s job on top of it — despawning any link caught
+/// inside the slab it stamped — and it retired with `resources::Platform`:
+/// the base is out of phase now, so nothing a build does can catch a link
+/// under it any more. `spawn_surface_links` skipping `Biome::Platform` is
+/// dead for the same reason (nothing ever produces that biome on a
+/// `WorldMap` again); a base-space replacement for both is slice 2/3's.
 pub const STACK_LINK_SCATTER_TILES: i32 = 40;
 
 /// How far past the base's own edge the *first* link of a zone is placed —
@@ -1990,18 +1990,16 @@ pub const RAID_DAMAGE: u32 = 4;
 /// (`RAID_DAMAGE.saturating_sub(worker_def)`).
 pub const RAID_DEFENDER_DAMAGE: i32 = 6;
 
-/// The radius a base *starts* at, not the radius it has: every non-Home
-/// structure must be deployed within `Game::build_radius` tiles (per axis,
-/// same box-radius style as `StructureDef::power_regen`'s `radius`) of the
-/// Home, and that live value is this constant plus every deployed
-/// structure's `StructureDef::build_radius_bonus`, clamped to
-/// `MAX_BUILD_RADIUS_TILES`. Read the live one anywhere the answer is about
-/// a base that exists; this one only says where a fresh Home begins.
-///
-/// A 9x9 slab of ~69 buildable tiles, halved from the 15x15 it was until
-/// the Heap Pillar shipped. The opening base is deliberately cramped —
-/// growth is the feature, and a base that starts at its final size can
-/// never read as a settlement that grew.
+/// The radius the base starts at — a 9x9 pocket of ~69 buildable tiles,
+/// halved from the 15x15 it was until the Heap Pillar shipped and never
+/// grown by anything today: `Game::build_radius` and the Heap Pillar's
+/// `build_radius_bonus` that widened it both retired with
+/// `resources::Platform`, and nothing has replaced "how wide is a base" as
+/// a *derived* question yet — `Game::lay_starting_pocket` is the only
+/// reader, and it just lays this much floor once. The opening base is
+/// deliberately cramped — growth is the feature, and a base that starts at
+/// its final size can never read as a settlement that grew; slice 2's
+/// mining is what makes it grow again.
 pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 
 /// How far the pre-cleared pocket reaches from base space's own origin when
@@ -2013,9 +2011,9 @@ pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 /// deliberately not defined as it.** The opening base has to play exactly as
 /// it did when it was a slab stamped onto the zone surface — that is the
 /// whole claim of the relocation, and the same 69 buildable cells is what
-/// makes it checkable. But the slab constant is on its way out with
-/// `resources::Platform`, and a pocket that followed it by reference would
-/// go wherever that deletion left it rather than staying where it was
+/// makes it checkable. But the slab constant belonged to `resources::Platform`,
+/// which is deleted now, and a pocket that followed it by reference would
+/// have gone wherever that deletion left it rather than staying where it was
 /// measured.
 ///
 /// This is the *starting* size, the way the old constant was the starting

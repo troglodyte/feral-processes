@@ -952,16 +952,20 @@ fn the_shipped_broker_is_the_one_structure_that_issues_contracts() {
 #[test]
 fn a_deployed_broker_reports_the_flag_and_nothing_else_does() {
     let mut game = fresh();
-    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    deploy(&mut game, "contract_broker", pos.x + 1, pos.y);
-    deploy(&mut game, "mining_node", pos.x + 2, pos.y);
+    // `Structure` is the space tag — `view_entities` below refuses to
+    // answer for one outside base space, so this fixture's raw spawns have
+    // to land there too, not at the player's surface `Position`.
+    stand_in_base(&mut game);
+    let pos = game.base_pos().unwrap();
+    deploy(&mut game, "contract_broker", pos.0 + 1, pos.1);
+    deploy(&mut game, "mining_node", pos.0 + 2, pos.1);
 
     let views = game.view_entities(10, 10);
     let broker = views
         .iter()
         .find(|v| v.issues_contracts)
         .expect("the Broker reports the flag");
-    assert_eq!(broker.pos, (pos.x + 1, pos.y));
+    assert_eq!(broker.pos, (pos.0 + 1, pos.1));
     assert_eq!(
         views.iter().filter(|v| v.issues_contracts).count(),
         1,

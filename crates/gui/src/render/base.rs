@@ -722,6 +722,18 @@ fn draw_surface_map(
     // answer.
     let base_pos = game.base_pos();
     let center = base_pos.unwrap_or(status.position);
+    // Every `VisualEffect` the engine queues names a *structure's* tile —
+    // all three `Game::push_effect` callers are structure damage — so the
+    // whole queue is base-space by construction. This pane draws one space
+    // at a time, so on the surface those coordinates would land on
+    // unrelated open ground: the same cross-space aliasing `view_entities`
+    // and the spawn-point outline below both refuse, and the structure
+    // being flashed is not even drawn there to explain it.
+    //
+    // Suppressed rather than moved to the anchor: a raid already reaches a
+    // player who is out of the base through the log pane's own flash and a
+    // `MessageKind::Raid` line, and neither of those claims a tile.
+    let show_effects = base_pos.is_some();
     let (off_x, off_y) = fx.camera_offset(center, painter.delta());
     let tiles = game.view_tiles(hw, hh);
     let entities: Vec<_> = game
@@ -1027,7 +1039,7 @@ fn draw_surface_map(
                     Color { a: alpha, ..base },
                 );
             }
-            if let Some(flash) = fx.tile_flash(world) {
+            if show_effects && let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
             }
         }
@@ -1048,9 +1060,11 @@ fn draw_surface_map(
     // After every tile so debris lands on top of the base rather than under
     // it, and before the border so a spark from a structure at the pane's
     // edge cannot draw over the frame.
-    fx.draw_bursts(painter, tile_px, |world| {
-        tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px)
-    });
+    if show_effects {
+        fx.draw_bursts(painter, tile_px, |world| {
+            tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px)
+        });
+    }
     painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
 }
 

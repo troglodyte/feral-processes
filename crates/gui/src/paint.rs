@@ -484,6 +484,40 @@ pub(crate) fn painted_text(shapes: &[egui::epaint::ClippedShape]) -> Vec<String>
 /// wants to know how wide a popup drew (e.g. to tell `PopupSize::Large`
 /// from `Small`, which otherwise leaves no trace outside `popup.rs`) does
 /// not have to reach for `egui::Shape` itself to get it.
+/// How many filled rects `with_painter` recorded in exactly `color`.
+///
+/// The same deliberate exception `painted_rect_widths` is: a test that wants
+/// to know whether a particular cue was painted has no way to ask `Painter`,
+/// and quantisation to egui's 8-bit channels happens on the way in — so the
+/// comparison is made here, against `to_egui(color)`, rather than handing
+/// `render/` a colour it would have to round itself.
+#[cfg(test)]
+pub(crate) fn painted_rect_fill_count(
+    shapes: &[egui::epaint::ClippedShape],
+    color: Color,
+) -> usize {
+    let want = to_egui(color);
+    shapes
+        .iter()
+        .filter(|cs| match &cs.shape {
+            egui::Shape::Rect(r) => r.fill == want,
+            _ => false,
+        })
+        .count()
+}
+
+/// How many line segments `with_painter` recorded. The spark bursts a
+/// `VisualEffect` throws are the map's only `Painter::line` work, so a test
+/// can ask whether debris was drawn without naming its colour — which fades
+/// with the burst and so is not a fixed value to compare against.
+#[cfg(test)]
+pub(crate) fn painted_line_count(shapes: &[egui::epaint::ClippedShape]) -> usize {
+    shapes
+        .iter()
+        .filter(|cs| matches!(&cs.shape, egui::Shape::LineSegment { .. }))
+        .count()
+}
+
 #[cfg(test)]
 pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<f32> {
     shapes

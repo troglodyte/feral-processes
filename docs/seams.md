@@ -1206,6 +1206,55 @@ A fixture that reaches for `view_entities` merely to *locate* an owned
 program wants `Game::owned_program_views`, which is the roster rather
 than a window onto the map.
 
+### A raid's flash is base-space too, and the pane has to say so
+
+**Every `VisualEffect` the engine queues names a structure's tile, so the
+whole queue is base-space by construction — and `render/base.rs` draws it
+only while the pane is showing base space.** All three `Game::push_effect`
+callers are structure damage (`run_raid`'s deflect, the mitigated deflect
+in `damage_structure`'s defender path, and the damage itself), and a
+`Structure` stands in base space by the rule above.
+
+The entry above swept the *entities* and missed the two draw sites that
+paint over them. `fx.tile_flash(world)` ran once per tile and
+`fx.draw_bursts` once per pane, neither asking `base_pos` — so a GC
+Entropy Sweep landing while the party was out on the grid washed a red
+tile and threw debris onto whatever open ground happened to share the
+struck machine's base-space numbers. The tell was the tile the party was
+standing on: base space's origin and the zone spawn point are both
+usually `(0, 0)`, the same aliasing the three faults above are, and the
+structure being flashed is not drawn on the zone map at all any more, so
+there was nothing on the tile to explain the red.
+
+Eighty lines up, the spawn-point outline already guards itself with `if
+base_pos.is_none()` and its comment names this exact hazard — "comparing
+it against a base-space `center` would be the same cross-space aliasing
+`view_entities` refuses now". The flash and the sparks were simply not in
+that pass.
+
+**Suppressed rather than relocated onto the anchor.** A raid already
+reaches a player who is out of the base on a channel that claims no tile:
+the log pane runs its own flash (`LOG_FLASH_SECONDS`) and a
+`MessageKind::Raid` line lands in the log. Moving the cue to the anchor
+would invent a position the engine never queued and pile every
+simultaneous hit onto one tile; and a tile cue exists to say *which*
+machine was struck, which is a thing the zone map cannot show.
+
+`VisualEffect` deliberately did **not** grow a space tag. Every effect
+queued today is base-space, so the field would have one variant and the
+renderer would still be the thing deciding — an abstraction bought
+against a second space that does not exist. If something ever queues a
+*surface* effect, that is the change that earns the tag, and this entry
+is what says so.
+
+The two guards are proved separately: `a_raid_flash_draws_in_base_space_
+and_never_on_the_surface` counts painted rects in the flash's own colour
+for the wash and compares line-segment counts against an effect-free draw
+for the sparks. Both halves put the effect on the pane's centre tile, so
+neither can pass by being scrolled off-screen. Deleting either guard
+fails it: the wash half reports one rect where it wants none, the spark
+half fourteen extra lines.
+
 ### A `DigSite` is the second non-`Structure` entity standing in base space
 
 **`components::DigSite` carries a base-space `Position` and is not a

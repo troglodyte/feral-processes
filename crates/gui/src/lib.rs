@@ -328,7 +328,8 @@ fn frame(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_engine::resources::Locale;
+    use feral_processes_engine::items::{ItemId, ids};
+    use feral_processes_engine::resources::{EffectKind, Locale, VisualEffect};
     use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
     use feral_processes_engine::{DifficultyMode, Game, save};
     use std::path::PathBuf;
@@ -405,6 +406,52 @@ mod tests {
             })
     }
 
+    /// An `App` with a Home deployed and the party standing in base space,
+    /// reached through `place_structure` and `enter_base` themselves.
+    ///
+    /// The materials are stocked by editing the save, the same trick and for
+    /// the same reason as `app_underground`'s locale: a Home costs five Core
+    /// Fragments, a fresh run carries none, and the engine deliberately
+    /// hands nothing to a caller outside the crate. Everything after that is
+    /// the real path in, so the fixture cannot manufacture a locale the game
+    /// would never produce.
+    fn app_in_base(seed: u32) -> App {
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let seed_tag = format!(
+            "base_{seed}_{}",
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        let assets = assets_dir();
+        let tmp = std::env::temp_dir();
+        let mut app = App::new(
+            assets.clone(),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_saves")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}.log")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_profile.ron")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_arenas")),
+            tmp.join(format!("feral_processes_gui_{seed_tag}_telemetry.jsonl")),
+        );
+        app.game = Game::new(seed, DifficultyMode::Forgiving, &assets).ok();
+        app.mode = Mode::Playing;
+
+        let path = tmp.join(format!("feral_processes_gui_{seed_tag}.sav"));
+        app.game.as_mut().unwrap().save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.player
+            .inventory
+            .push((ItemId::from(ids::CORE_FRAGMENT), 20));
+        save::save_to_file(&path, &data).unwrap();
+        let mut game = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        game.place_structure("home", 1, 0)
+            .expect("the fixture stocked the Home's cost");
+        game.enter_base()
+            .expect("a fresh run starts the player on the anchor");
+        app.game = Some(game);
+        app
+    }
+
     /// One turn of the real frontend loop: drain effects the way `frame`
     /// does, then draw whatever mode the app is now in.
     fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
@@ -416,6 +463,87 @@ mod tests {
         fx.begin_frame(now, effects, in_battle);
         fx.observe_log(last_log.as_ref());
         paint::with_painter(|p| render::draw(app, fx, p));
+    }
+
+    /// A raid's tile flash is a *base-space* cue and must be drawn in base
+    /// space alone.
+    ///
+    /// Every `VisualEffect` the engine queues names a structure's tile, and
+    /// a structure stands in base space — so drawing one while the pane is
+    /// showing the surface paints it onto whatever unrelated ground happens
+    /// to share those numbers, with no structure there to explain it. The
+    /// same cross-space read `view_entities` and the spawn-point outline
+    /// already refuse.
+    ///
+    /// Both halves put the effect on the pane's own centre tile — base
+    /// space's origin in one, the player's surface `Position` in the other
+    /// — so neither half can pass merely by being scrolled off-screen, and
+    /// dropping the guard makes the surface half paint the flash on the
+    /// party's own tile.
+    #[test]
+    fn a_raid_flash_draws_in_base_space_and_never_on_the_surface() {
+        let mut app = app_in_base(4242);
+        let in_base = app
+            .game
+            .as_ref()
+            .unwrap()
+            .base_pos()
+            .expect("in base space");
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            vec![VisualEffect {
+                pos: in_base,
+                kind: EffectKind::Hit,
+            }],
+            false,
+        );
+        let flash = fx
+            .tile_flash(in_base)
+            .expect("a flash queued this frame is live");
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert_eq!(
+            paint::painted_rect_fill_count(&shapes, flash),
+            1,
+            "a raid on a structure must wash its tile while the party is home"
+        );
+
+        app.game.as_mut().unwrap().leave_base().unwrap();
+        let on_surface = app.game.as_ref().unwrap().player_status().position;
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            vec![VisualEffect {
+                pos: on_surface,
+                kind: EffectKind::Hit,
+            }],
+            false,
+        );
+        let flash = fx
+            .tile_flash(on_surface)
+            .expect("a flash queued this frame is live");
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert_eq!(
+            paint::painted_rect_fill_count(&shapes, flash),
+            0,
+            "the zone map draws no structures, so it must draw no structure's raid flash \
+             either — this is the tile the party is standing on"
+        );
+
+        // The wash and the debris are two draw sites reading one queue, so
+        // the guard has to be on both — a rect count alone would leave the
+        // sparks free to keep landing on open ground.
+        let mut quiet = Fx::new();
+        quiet.begin_frame(0.0, Vec::new(), false);
+        let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p));
+        assert_eq!(
+            paint::painted_line_count(&shapes),
+            paint::painted_line_count(&bare),
+            "an effect queued while the party is on the surface must change nothing \
+             the pane paints, sparks included"
+        );
     }
 
     /// Changing frame is the one thing that swaps the map out from under the

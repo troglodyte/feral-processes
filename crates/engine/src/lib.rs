@@ -29,6 +29,7 @@ pub mod systems;
 pub mod talents;
 pub mod taming;
 pub mod telemetry;
+pub mod text;
 pub mod tuning;
 pub mod views;
 pub mod world;

@@ -578,27 +578,10 @@ pub(super) fn wrapped_row_lines(head: String, tags: &[String]) -> Vec<String> {
 /// Greedy word wrap to `columns`, for prose too long to sit on one popup
 /// row — an item's authored description, chiefly.
 ///
-/// A word longer than `columns` is emitted whole on its own line rather
-/// than split or dropped: one row running wide is a smaller problem than
-/// losing text, and the alternative is hyphenating identifiers.
+/// The wrap itself is the engine's, so the manual's row count and the
+/// renderer's cannot drift; this is the name the drawing code already uses.
 pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in text.split_whitespace() {
-        if line.is_empty() {
-            line.push_str(word);
-        } else if line.chars().count() + 1 + word.chars().count() <= columns {
-            line.push(' ');
-            line.push_str(word);
-        } else {
-            lines.push(std::mem::take(&mut line));
-            line.push_str(word);
-        }
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines
+    feral_processes_engine::text::wrap(text, columns)
 }
 
 #[cfg(test)]
@@ -738,43 +721,6 @@ mod tests {
         assert!(selected);
         assert_eq!(color, RED, "CRITICAL still owns the row text");
         assert_eq!(icon, Some(('o', GREEN)), "the glyph still owns its colour");
-    }
-
-    #[test]
-    fn wrapping_breaks_on_spaces_and_never_exceeds_the_column_budget() {
-        let text = "A fragment of stolen authorization, cut for locks the Stack \
-                    no longer uses.";
-        let lines = wrap_text(text, 30);
-        assert!(
-            lines.iter().all(|l| l.chars().count() <= 30),
-            "no wrapped line may run past the budget: {lines:?}"
-        );
-        assert_eq!(
-            lines.join(" "),
-            text,
-            "wrapping must preserve the words and their order exactly"
-        );
-    }
-
-    #[test]
-    fn a_short_description_stays_on_one_line() {
-        assert_eq!(
-            wrap_text("Standard armor. Solid protection.", 72),
-            vec!["Standard armor. Solid protection."]
-        );
-    }
-
-    /// A single word longer than the budget has nowhere to break, so it gets
-    /// its own overlong line rather than being silently truncated or
-    /// dropped. Losing text is worse than one row running wide.
-    #[test]
-    fn an_unbreakable_word_gets_its_own_line_rather_than_being_lost() {
-        let lines = wrap_text("tiny supercalifragilisticexpialidocious end", 10);
-        assert!(lines.contains(&"supercalifragilisticexpialidocious".to_string()));
-        assert_eq!(
-            lines.join(" "),
-            "tiny supercalifragilisticexpialidocious end"
-        );
     }
 
     /// Window heights worth sizing a popup against: the default window, the

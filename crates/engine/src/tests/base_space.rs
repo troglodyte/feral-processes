@@ -1611,6 +1611,20 @@ fn the_player_is_drawn_where_the_party_stands_in_base_space() {
         "the player's glyph is drawn at the base-space cell the party is on, \
          not at the surface tile Position is pinned to"
     );
+
+    // Out on the surface the two are the same tile, so the substitution has
+    // to be a no-op there rather than a second rule.
+    game.world.insert_resource(Locale::Surface);
+    let out_here = game.view_entities(10, 10);
+    let player = out_here
+        .iter()
+        .find(|v| v.is_player)
+        .expect("the player is drawn on the zone map");
+    assert_eq!(
+        player.pos,
+        (pinned.x, pinned.y),
+        "on the surface the player is drawn on its own Position"
+    );
 }
 
 /// Nothing standing on the zone surface is drawn inside the base.
@@ -1651,6 +1665,19 @@ fn surface_fixtures_are_not_drawn_inside_the_base() {
         !views.iter().any(|v| v.entity == anchor),
         "the anchor stands on the zone surface too — from the inside it is the way out, \
          not a tile of the base"
+    );
+
+    // And the other way, so the gate cannot be satisfied by drawing nothing:
+    // both are fixtures of the zone map and both belong on it.
+    game.world.insert_resource(Locale::Surface);
+    let out_here = game.view_entities(20, 20);
+    assert!(
+        out_here.iter().any(|v| v.entity == link),
+        "a Stack entrance is drawn on the zone surface"
+    );
+    assert!(
+        out_here.iter().any(|v| v.entity == anchor),
+        "so is the anchor — it is the door, and you have to be able to find it"
     );
 }
 

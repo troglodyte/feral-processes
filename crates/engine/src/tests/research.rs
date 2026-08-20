@@ -143,8 +143,11 @@ fn the_player_working_a_research_node_banks_it_too() {
 #[test]
 fn research_banks_while_the_party_is_underground() {
     let mut game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
+    // Posted from inside the base and then back out, since the whole point of
+    // this test is where the party goes next.
+    from_inside_the_base(&mut game, |g| {
+        assign_worker_producing(g, ItemId::from(ids::RESEARCH_DATA))
+    });
     dive_to_depth(&mut game, 2);
     let before = research_data_held(&game);
 

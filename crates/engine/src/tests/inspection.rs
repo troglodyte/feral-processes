@@ -305,6 +305,34 @@ fn spawn_marker_structure(game: &mut Game, start: Position, dx: i32, dy: i32) ->
         .id()
 }
 
+/// The same as `spawn_marker_creature`, but tamed and marked idle base
+/// staff. `find_target_in_direction`'s `Structure` query only answers
+/// inside base space now (`Structure` is the space tag), so any fixture
+/// mixing a structure and a creature on one ray has to stand in base space
+/// too — and an *untamed* creature is refused there (base space has no
+/// wildlife). `Tamed` plus `BaseStaff` with no `Task` is what
+/// `position_is_honest` reads as a legitimate, drawn position, which is
+/// what lets this coexist with `spawn_marker_structure` on the same ray.
+fn spawn_marker_staffer(game: &mut Game, start: Position, dx: i32, dy: i32) -> Entity {
+    let creature = spawn_marker_creature(game, start, dx, dy);
+    let owner = game.player_entity();
+    game.world
+        .entity_mut(creature)
+        .insert((Tamed { owner }, BaseStaff));
+    creature
+}
+
+/// `start`, but in base space rather than on the surface: the fixed origin
+/// `stand_in_base` puts the party at. Fixtures that mix a `Structure` with
+/// a creature must be built around this instead of the player's own
+/// `Position`, since a `Structure` only answers `find_target_in_direction`'s
+/// ray inside base space.
+fn stand_in_base_and_get_origin(game: &mut Game) -> Position {
+    stand_in_base(game);
+    let (x, y) = game.base_pos().expect("stand_in_base just set the locale");
+    Position { x, y }
+}
+
 /// The inspector is a ray one tile wide, so a creature that merely *leans*
 /// east is not east. This is the direct inversion of a deleted test that
 /// asserted `(+4, -3)` — a pure-ish diagonal — was found by an eastward
@@ -353,9 +381,13 @@ fn a_nearer_thing_on_the_ray_shadows_a_farther_one() {
     let mut game = Game::new(1405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
+    // A `Structure` only answers this ray inside base space, so both
+    // fixtures below have to stand there — `spawn_marker_staffer`'s own doc
+    // says why the creature is tamed staff rather than a wild marker.
+    let base = stand_in_base_and_get_origin(&mut game);
 
-    let near_creature = spawn_marker_creature(&mut game, start, 2, 0);
-    let far_structure = spawn_marker_structure(&mut game, start, 5, 0);
+    let near_creature = spawn_marker_staffer(&mut game, base, 2, 0);
+    let far_structure = spawn_marker_structure(&mut game, base, 5, 0);
     let found = game.find_target_in_direction(1, 0, 10);
     assert_eq!(found, Some(InspectTarget::Creature(near_creature)));
     assert_ne!(
@@ -365,7 +397,7 @@ fn a_nearer_thing_on_the_ray_shadows_a_farther_one() {
     );
 
     // Swap which kind is in front; the shadowing must not care.
-    game.world.get_mut::<Position>(near_creature).unwrap().x = start.x + 7;
+    game.world.get_mut::<Position>(near_creature).unwrap().x = base.x + 7;
     let found = game.find_target_in_direction(1, 0, 10);
     assert_eq!(found, Some(InspectTarget::Structure(far_structure)));
     assert_ne!(found, Some(InspectTarget::Creature(near_creature)));
@@ -410,12 +442,16 @@ fn two_things_on_one_tile_resolve_the_same_way_however_they_were_spawned() {
         let mut game = Game::new(1407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let start = *game.world.get::<Position>(game.player_entity()).unwrap();
         clear_creatures_east_of_player(&mut game, start, 10);
+        // A `Structure` only answers this ray inside base space, so the
+        // creature sharing its tile has to be tamed staff rather than a
+        // wild marker — see `spawn_marker_staffer`'s doc for why.
+        let base = stand_in_base_and_get_origin(&mut game);
         if structure_first {
-            spawn_marker_structure(&mut game, start, 3, 0);
-            spawn_marker_creature(&mut game, start, 3, 0);
+            spawn_marker_structure(&mut game, base, 3, 0);
+            spawn_marker_staffer(&mut game, base, 3, 0);
         } else {
-            spawn_marker_creature(&mut game, start, 3, 0);
-            spawn_marker_structure(&mut game, start, 3, 0);
+            spawn_marker_staffer(&mut game, base, 3, 0);
+            spawn_marker_structure(&mut game, base, 3, 0);
         }
         game.find_target_in_direction(1, 0, 10)
     };
@@ -1304,6 +1340,8 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
     let mut game = Game::new(1400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
+    // A `Structure` only answers this ray inside base space.
+    let base = stand_in_base_and_get_origin(&mut game);
 
     let refinery = game
         .world
@@ -1312,8 +1350,8 @@ fn the_inspector_finds_a_structure_when_no_creature_is_on_the_ray() {
                 kind: "refinery".to_string(),
             },
             Position {
-                x: start.x + 3,
-                y: start.y,
+                x: base.x + 3,
+                y: base.y,
             },
         ))
         .id();
@@ -1337,6 +1375,11 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let species = game.species_defs().into_iter().next().unwrap();
     clear_creatures_east_of_player(&mut game, start, 10);
+    // A `Structure` only answers this ray inside base space, so the
+    // creature fixture below is tamed staff rather than a wild marker —
+    // see `spawn_marker_staffer`'s doc for why the pairing has to be that.
+    let base = stand_in_base_and_get_origin(&mut game);
+    let owner = game.player_entity();
 
     let spawn_creature = |game: &mut Game, dx: i32| {
         game.world
@@ -1345,8 +1388,8 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
                     species: species.id.clone(),
                 },
                 Position {
-                    x: start.x + dx,
-                    y: start.y,
+                    x: base.x + dx,
+                    y: base.y,
                 },
                 Stats {
                     hp: 1,
@@ -1354,6 +1397,8 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
                     atk: 1,
                     mitigation: 1,
                 },
+                Tamed { owner },
+                BaseStaff,
             ))
             .id()
     };
@@ -1364,8 +1409,8 @@ fn the_inspector_returns_whichever_of_the_two_kinds_is_nearer() {
                     kind: "refinery".to_string(),
                 },
                 Position {
-                    x: start.x + dx,
-                    y: start.y,
+                    x: base.x + dx,
+                    y: base.y,
                 },
             ))
             .id()
@@ -2128,6 +2173,50 @@ fn find_target_in_direction_refuses_a_wild_creature_seen_from_base_space() {
         game.find_target_in_direction(1, 0, 10),
         Some(InspectTarget::Creature(wild)),
         "the same tile, now tamed, proves the refusal above was about wildlife specifically"
+    );
+}
+
+/// The mirror bug on the surface side, closed generally rather than left
+/// open: `Structure` is the space tag, and `find_target_in_direction`'s own
+/// `Structure` query answered it with no locale check at all, unlike
+/// `find_blocking_structure_at`, `view_entities` and `adjacent_structure`.
+/// A player who breaches, builds a Home, and walks back near the spawn tile
+/// could aim `x` at a base structure drawn nowhere on their screen — base
+/// space's own origin and the zone spawn point are both commonly `(0, 0)`,
+/// which this reproduces deliberately (the player is moved onto the exact
+/// tile the fixture's Mining Node's base-space position numerically
+/// carries) rather than relying on that coincidence to land by luck.
+#[test]
+fn find_target_in_direction_refuses_a_base_structure_seen_from_the_surface() {
+    let mut game = Game::new(3213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_home, node) = build_a_base(&mut game);
+    assert!(
+        !game.in_base(),
+        "build_a_base's fixtures return the party to the surface"
+    );
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    // Standing one tile west of the node's own coordinates, on the
+    // surface, so the eastward ray runs straight through them.
+    let player = game.player_entity();
+    let start = Position {
+        x: node_pos.x - 1,
+        y: node_pos.y,
+    };
+    {
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x = start.x;
+        pos.y = start.y;
+    }
+    // A wild program spawned on this exact tile would find *it* first and
+    // mask the assertion this test is actually making.
+    clear_creatures_east_of_player(&mut game, start, 10);
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 10),
+        None,
+        "a base structure's position must not answer a surface-space ray, \
+         however close the numbers land"
     );
 }
 

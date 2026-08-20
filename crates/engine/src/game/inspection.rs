@@ -253,33 +253,29 @@ impl Game {
             (step >= 1 && step <= max_range && ddx == dx * step && ddy == dy * step).then_some(step)
         };
 
-        // The base-space half of the space-tag rule `view_entities` reads
-        // generally: an untamed creature is refused while `in_base`, since
-        // base space has no wildlife, ever — without this, standing inside
+        // `Structure` is the space tag (see `find_blocking_structure_at`):
+        // it only ever stands in base space, so the query below is gated on
+        // `in_base` the same way `view_entities` and `adjacent_structure`
+        // gate it. Without this, a player on the open surface aiming toward
+        // wherever a base structure's live position happens to numerically
+        // coincide — commonly near `(0, 0)`, since a base's own origin and
+        // the zone spawn point usually share it — could get named a
+        // structure drawn nowhere on their screen, the same
+        // "Examine names things that are not drawn" failure
+        // `drawn_on_surface_map` exists to prevent, reached here by a query
+        // that bypasses it entirely.
+        //
+        // An untamed creature gets the mirror gate, refused while `in_base`:
+        // base space has no wildlife, ever, so without this, standing inside
         // the base and aiming at a wild program out on the actual zone
-        // surface that happens to numerically line up would name it, which
-        // is the "rays across the zone surface" bug named for this
-        // function. A `Tamed` one gets no such gate: unlike a `Structure`,
-        // it does not always live in base space (a party companion's stale
+        // surface that happens to numerically line up would name it — the
+        // "rays across the zone surface" bug named for this function. A
+        // `Tamed` creature gets no such gate: unlike a `Structure`, it does
+        // not always live in base space (a party companion's stale
         // `Position` can be anywhere), and `drawn_on_surface_map` below is
         // already the correct, locale-independent filter for it.
-        //
-        // `Structure` itself is deliberately left ungated here, unlike
-        // `adjacent_structure` and `view_entities`. The brief for this
-        // change names one bug for this function — a base-space ray seeing
-        // the zone surface, closed above — not the mirror one on the
-        // surface side, and every existing fixture this ray is tested
-        // against (`spawn_marker_structure` and its kin) is a bare ECS
-        // marker asserting the ray's own ordering and tie-break rules with
-        // no base standing behind it, which a `Structure` gate here would
-        // break wholesale. A surface player aiming at a base structure
-        // whose position happens to numerically coincide is a real,
-        // narrower gap this task consciously leaves open — recorded here
-        // rather than fixed quietly, since `find_blocking_structure_at` and
-        // `view_entities` closing the *general* rule elsewhere makes this
-        // one exception easy to miss.
         let mut candidates: Vec<(i32, u8, Entity)> = Vec::new();
-        {
+        if in_base {
             let mut structures = self.world.query::<(Entity, &Position, &Structure)>();
             candidates.extend(
                 structures

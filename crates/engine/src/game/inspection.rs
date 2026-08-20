@@ -703,7 +703,13 @@ impl Game {
     /// a group. Sorting here rather than in the frontend keeps one order for
     /// every consumer.
     pub fn structure_report(&mut self) -> Vec<StructureReport> {
-        let center = *self.world.get::<Position>(self.player_entity()).unwrap();
+        // `Game::scan_center`, not the player's `Position` — every
+        // `Structure` this reports on lives in base space, and `Position`
+        // stays pinned to the anchor tile for the whole of a base visit.
+        // `Mode::StructureAssign` only ever opens while `in_base()`
+        // (`app-core`'s `menus.rs`), which is exactly when `center` and the
+        // player's real `Position` disagree.
+        let center = self.scan_center();
         let mut structures = self.world.query::<(Entity, &Structure, &Position)>();
         let found: Vec<(Entity, StructureId, Position)> = structures
             .iter(&self.world)

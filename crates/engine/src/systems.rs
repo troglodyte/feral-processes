@@ -1067,31 +1067,48 @@ pub fn assembler_system(
 /// and shown the "power reserves are critical!" warning on the very tick
 /// the structure was about to cover them.
 ///
-/// Refused anywhere but the zone surface. The player's `Position` is pinned
-/// to the surface entrance tile for the whole of a Stack run, so without this
-/// a link sited inside a Recharger's radius would top the party up four
-/// frames down — and the Stack's whole Power budget is that there is no
-/// supply underground. Same shape as `nest_aggro_tick`: a reader of the
-/// player's `Position` that never went through `require_surface` but still
+/// Refused only in the Stack. The player's `Position` is pinned to the
+/// surface entrance tile for the whole of a Stack run, so comparing it
+/// against a Recharger's radius would top the party up four frames down —
+/// and the Stack's whole Power budget is that there is no supply
+/// underground. Same trap `nest_aggro_tick` carries: a reader of the
+/// player's `Position` that never went through a locale guard but still
 /// claims something about where the party is standing.
 ///
-/// The guard matches `Locale::Surface` *positively* rather than asking
-/// `is_underground`, which is why base space was refused the moment that
-/// variant existed rather than needing a second clause. That is luck, not
-/// foresight — a Recharger within radius of the anchor would otherwise
-/// refill the party while they are out of phase — so it is held by a test
-/// (`tests::base_space`).
+/// Everywhere else, this measures the space `Structure` actually lives in
+/// rather than the player's `Position` — the same dispatch
+/// `Game::scan_center` makes, though this is a bare system with no `Game`
+/// to call it on. In base space that is `Locale::Base`'s own cell, not the
+/// pinned `Position`: a `Structure` is base-space, full stop, so on the
+/// surface (where no `Structure` really is) the raw `Position` is compared
+/// as a harmless no-op and in base space it would have missed every real
+/// Recharger entirely.
+///
+/// **Reaching the party in base space is a deliberate reversal, not an
+/// oversight carried forward.** The old guard matched `Locale::Surface`
+/// positively and refused base space outright, on the theory that a
+/// Recharger near the anchor would otherwise top the party up while they
+/// were out of phase for free. That reasoning no longer holds: every
+/// `Structure` — Recharger included — can only ever be deployed *in* base
+/// space now (`Game::place_structure` requires `require_base` for
+/// everything but the founding Home), so refusing base space left the
+/// Recharger's whole purpose, `recharger_node.ron`'s own "while you stand
+/// anywhere on your base", unreachable in any real play session. The Stack
+/// stays refused; base space does not. Held by
+/// `tests::base_space::a_recharger_regens_the_party_through_the_real_path_into_base_space`.
 pub fn power_regen_system(
     mut player: Query<(&Position, &mut PowerReserve), With<Player>>,
     structures: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
     locale: Res<Locale>,
 ) {
-    if !matches!(*locale, Locale::Surface) {
-        return;
-    }
+    let base_cell = match *locale {
+        Locale::Stack { .. } => return,
+        Locale::Base { x, y } => Some(Position { x, y }),
+        Locale::Surface => None,
+    };
     for (player_pos, mut needs) in &mut player {
-        let player_pos = *player_pos;
+        let scan_pos = base_cell.unwrap_or(*player_pos);
         for (structure, pos) in &structures {
             let Some(regen) = structure_db
                 .get(&structure.kind)
@@ -1099,8 +1116,8 @@ pub fn power_regen_system(
             else {
                 continue;
             };
-            if (pos.x - player_pos.x).abs() > regen.radius
-                || (pos.y - player_pos.y).abs() > regen.radius
+            if (pos.x - scan_pos.x).abs() > regen.radius
+                || (pos.y - scan_pos.y).abs() > regen.radius
             {
                 continue;
             }

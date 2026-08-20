@@ -64,7 +64,7 @@ each site settled on:
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
 | `game/trade.rs` `buy_item` | `require_base` | same |
-| `game/turn.rs` `rest` | `require_surface` | the one site the split left where it was |
+| `game/turn.rs` `rest` | `require_base` | flipped in Task 6 — Home is a deployed `Structure`, so resting reaches it from base space |
 
 The test for whether a reader needs a guard at all is unchanged — not
 "does it act" but "does it claim something about where the party is". What
@@ -79,24 +79,30 @@ predicate would apply every Stack rule in the game — no Power supply,
 `Trace`, the frame view — to the base. The two systems that guard on it
 rather than on a `require_*` therefore ask *two* questions now
 (`is_underground() || in_base()`); see `nest_aggro_tick`'s entry below.
-`power_regen_system` was already stricter than its own doc comment claimed
-— it matches on `Locale::Surface` positively — so it refused base space
-the moment the variant existed, which is luck rather than design and is
-locked by a test.
+`power_regen_system` used to match `Locale::Surface` positively rather than
+asking `is_underground`, so it refused base space the moment the variant
+existed — luck rather than design, and it went on to leave the Recharger
+Node's whole purpose unreachable in real play once every `Structure` moved
+into base-space coordinates and no Recharger could stand anywhere else.
+The final review caught it: the system now measures against
+`Game::base_pos` while in base space, the same dispatch `Game::scan_center`
+makes, and refuses only the Stack — no supply underground stays a rule
+of its own, not a side effect of the surface-only guard.
 
-**`rest` is the contested row.** It is the one site that kept
+**`rest` was the contested row, until Task 6 flipped it.** It briefly kept
 `require_surface`, on the spec's authority
-(`docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`), and its
-own code argues the other way: it demands a structure whose def sets
-`enables_rest` within reach of the player's `Position`, Home is the only
+(`docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`), while its
+own code argued the other way: it demands a structure whose def sets
+`enables_rest` within reach of the player's base cell, Home is the only
 shipped one, and Home stands in base space. Once the base's structures
-move into base-space coordinates, the only tile from which
-`nearby_rest_structure` can legitimately succeed is in the locale this
-guard refuses — and the only way it can succeed on the surface is the
-coordinate-space collision between a base-space structure and a surface
-`Position`, which is the exact class of bug the base guard exists to
-close. Recorded rather than quietly flipped; it is a one-line change at
-`game/turn.rs` and one assertion in `tests/base_space.rs`.
+moved into base-space coordinates, the only tile from which
+`nearby_rest_structure` could legitimately succeed was the locale the
+surface guard refused — and the only way it could have succeeded on the
+surface at all was the coordinate-space collision between a base-space
+structure and a surface `Position`, exactly the class of bug the base
+guard exists to close. Task 6 made the one-line change at `game/turn.rs`
+and added the assertion in `tests/base_space.rs` that this entry once
+described as still pending.
 
 ### Examine names only what the surface map draws, and that rule is one function
 
@@ -1977,8 +1983,8 @@ every row behind it is a `require_base` call that refuses.
 per-machine plan, no unit targets, no progress counters — which machines a
 line needs, in what order, who is on each and how far along it is are all
 recomputed from live world state every time they are asked. This is the
-same call `Game::build_radius`, `Game::contract_board`, `descriptions.rs`,
-`Game::wielded_program` and the Stack's regenerated frames each make, and
+same call `Game::contract_board`, `descriptions.rs`, `Game::wielded_program`
+and the Stack's regenerated frames each make, and
 it buys the same things: the derivation cannot go stale against a base
 that has been rebuilt, it needs no save field beyond the order, and it
 costs no migration. The alternative was considered and rejected —
@@ -2828,13 +2834,14 @@ matching half on the way back out — distinct from `NotOffered` because the
 two leave the player different errands, one a walk home and one a contract
 that was never on offer.
 
-What `AtBroker` measures is the **base**, through `Platform::covers`, and
+What `AtBroker` measures is the **base**, through `BaseGrid::is_floor`, and
 not the distance to the Broker. That is not a relaxation for its own sake:
 `place_structure` refuses everything but a Home until a Home is standing
-and the slab always covers every structure on it, so a Broker is on the
-base by construction and its own tile carries no information the slab does
-not. The old rule was `CONTRACT_BOARD_RANGE_TILES: 2` — arm's length,
-which read as arbitrary from the far corner of a base the player had built
+and every deployed structure stands on laid floor, so a Broker is on the
+base by construction and its own tile carries no information the base's
+floor does not. The old rule was `CONTRACT_BOARD_RANGE_TILES: 2` — arm's
+length, which read as arbitrary from the far corner of a base the player
+had built
 themselves. The constant is gone rather than widened, because a base's
 footprint is already derived and grows: a number here would have frozen the
 desk at the radius a base *starts* at, which is

@@ -1168,6 +1168,14 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
 /// player is not *orthogonally* beside, so the two answers genuinely differ
 /// on a diagonal — which is the case a screen filtering its "work it
 /// yourself" row on `distance <= 1` would get wrong.
+///
+/// Walked into place through `move_player`, which is the only thing that
+/// ever changes `Game::base_pos` — not by mutating the player's `Position`
+/// component, which stays pinned to the anchor tile for the whole visit and
+/// has no say in base-space adjacency. A fixture that moved `Position`
+/// instead would still pass today by accident: `structure_report` used to
+/// measure `center` off that same pinned `Position`, which is exactly the
+/// bug this test now guards against.
 #[test]
 fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1186,10 +1194,12 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
             .expect("the node was just deployed")
     };
 
-    let player = game.player_entity();
-    let mut pos = game.world.get_mut::<Position>(player).unwrap();
-    pos.x = 2;
-    pos.y = 1;
+    game.move_player(2, 1);
+    assert_eq!(
+        game.base_pos(),
+        Some((2, 1)),
+        "walked there for real, not spawned there"
+    );
     let node = node_at(&mut game);
     assert_eq!(
         node.distance, 1,
@@ -1200,9 +1210,8 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
         "a diagonal is not a tile the node can be worked from"
     );
 
-    let mut pos = game.world.get_mut::<Position>(player).unwrap();
-    pos.x = 2;
-    pos.y = 0;
+    game.move_player(0, -1);
+    assert_eq!(game.base_pos(), Some((2, 0)));
     assert!(node_at(&mut game).player_adjacent, "one orthogonal step is");
 }
 

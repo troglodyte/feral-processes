@@ -310,12 +310,13 @@ pub struct StructureDef {
     /// field is unaffected.
     ///
     /// This is where a structure whose *effect accumulates* is bounded, and
-    /// the Pillar is the case it exists for: bounding growth by
-    /// `MAX_BUILD_RADIUS_TILES` alone puts the limit ninety-six purchases
-    /// away, which is no limit a player will ever meet. A count is the knob
-    /// worth tuning, and it lives here rather than in `tuning.rs` because it
-    /// is a property of the structure — a mod adds a capped structure by
-    /// setting a number, not by editing the engine.
+    /// the Line Driver is the case it exists for: its `power_supply` adds to
+    /// the base's Grid capacity from wherever it stands, with no radius to
+    /// bound it and no worker slot to make deploying a second one cost
+    /// anything beyond the build itself — a count is the only knob that
+    /// paces it. It lives here rather than in `tuning.rs` because it is a
+    /// property of the structure — a mod adds a capped structure by setting
+    /// a number, not by editing the engine.
     #[serde(default)]
     pub max_deployed: u32,
     /// If set, `Game::rest` is only allowed while the player stands within

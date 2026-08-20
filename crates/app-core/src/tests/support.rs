@@ -470,6 +470,21 @@ pub(crate) fn stand_in_base(app: &mut App) {
     stand_in_base_at(app, 0, 0);
 }
 
+/// Deletes the `.sav` it was built from when it drops, unwind included —
+/// `save`, `load_from_file`, `save_to_file` and `Game::load` all sit
+/// between this guard's construction and the plain `remove_file` a
+/// straight-line version would use at the end, and every one of them can
+/// panic. This repo has a recorded history of `/tmp` inode exhaustion from
+/// exactly that shape of leak, so the cleanup has to survive a panic partway
+/// through, not just the happy path.
+struct RemoveOnDrop<'a>(&'a std::path::Path);
+
+impl Drop for RemoveOnDrop<'_> {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(self.0);
+    }
+}
+
 /// The same, on a chosen base-space cell — for a test that needs the party
 /// somewhere other than the exit, the pocket's edge most often.
 pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
@@ -480,6 +495,7 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
 
     let assets_dir = test_assets_dir();
     let path = std::env::temp_dir().join(format!("feral_processes_appcore_base_{unique}.sav"));
+    let _cleanup = RemoveOnDrop(&path);
     let game = app.game.as_mut().expect("a fixture with a game");
     game.save(&path).unwrap();
 
@@ -488,7 +504,6 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
-    let _ = std::fs::remove_file(&path);
 }
 
 /// A game where the player has `routines` installed (in place of the

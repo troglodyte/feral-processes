@@ -72,6 +72,11 @@ balance change.
 - Two biomes were added for the new space, `Entropy` and `Excavated`, drawn
   through the existing surface renderer — nothing new to build for them on
   the graphics side.
+- A Recharger Node now regens the party while they're genuinely standing in
+  base space, and the structure roster's "Work it yourself" row now appears
+  when you're really beside a machine in there — both were measuring the
+  player's surface tile against a base-space structure's coordinates and
+  came up wrong for the whole of the base.
 
 ## 0.12.0
 

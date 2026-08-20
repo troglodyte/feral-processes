@@ -388,35 +388,56 @@ fn base_pos_answers_nowhere_but_base_space() {
     assert!(!game.in_base());
 }
 
-/// A Recharger's radius is measured from the player's `Position`, and that
-/// `Position` is pinned to the anchor tile for the whole of a visit to base
-/// space — so a Recharger standing near the anchor would otherwise top the
-/// party up while they are out of phase, every tick, for free.
+/// A Recharger's radius is measured from `Game::base_pos`, not the player's
+/// `Position` — that stays pinned to the anchor tile for the whole of a
+/// visit to base space, and every `Structure`, Recharger included, can only
+/// ever be deployed *in* base space now (`place_structure` requires
+/// `require_base` for everything but the founding Home).
 ///
-/// Asserted against the surface half in the same test, since the base half
-/// alone passes against a system that regenerates nothing anywhere.
+/// **Reaching the party in base space is the deliberate, corrected
+/// behaviour, not a bug.** `recharger_node.ron`'s own description reads
+/// "while you stand anywhere on your base" — a Recharger that could never
+/// regen anyone in base space would be a structure with no reachable
+/// purpose at all. See `power_regen_system`'s doc comment for the fuller
+/// argument; this test held the opposite claim before that fix and is the
+/// reason the defect survived review.
+///
+/// Walked through the real entry points — `enter_base` and `place_structure`
+/// — rather than `spawn_recharger_node`'s old trick of spawning a structure
+/// at an offset from the player's `Position`. That fixture places a
+/// structure in whatever coordinate space `Position` happens to hold,
+/// which is base-space numbers on the surface and surface-space numbers
+/// once `stand_in_base` flips the locale without moving anything — the
+/// exact manufactured coincidence that let the old, inverted assertion
+/// here pass.
 #[test]
-fn power_regen_does_not_reach_the_party_in_base_space() {
-    let restored = |at: At| {
-        let mut game = game(3114);
-        spawn_recharger_node(&mut game, 0, 0);
-        let player = game.player_entity();
-        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(20.0);
-        if let At::Base = at {
-            stand_in_base(&mut game);
-        }
-        let before = game.world.get::<PowerReserve>(player).unwrap().get();
-        game.tick();
-        game.world.get::<PowerReserve>(player).unwrap().get() - before
-    };
-
-    assert!(
-        restored(At::Surface) > 0.0,
-        "the same fixture on the surface must still regenerate"
+fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
+    let mut game = game(3114);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    game.enter_base().unwrap();
+    game.place_structure("recharger_node", 1, 0)
+        .expect("floor beside the origin is inside the starting pocket");
+    assert_eq!(
+        game.base_pos(),
+        Some((0, 0)),
+        "the party never moved off the exit cell — the Recharger sits one step away"
     );
+
+    let player = game.player_entity();
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(5.0);
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    game.tick();
+
+    let after = game.world.get::<PowerReserve>(player).unwrap().get();
     assert!(
-        restored(At::Base) <= 0.0,
-        "a Recharger beside the anchor must not reach a party out of phase"
+        after > before,
+        "a Recharger deployed in base space must regen a party genuinely \
+         standing in there, reached through enter_base: {before} -> {after}"
     );
 }
 

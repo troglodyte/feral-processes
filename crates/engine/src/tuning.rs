@@ -2021,37 +2021,26 @@ pub const MAX_BUILD_DISTANCE_FROM_HOME: i32 = 4;
 /// buys, and this is only the ground the run opens with.
 pub const STARTING_POCKET_RADIUS: i32 = 4;
 
-/// The widest a base can ever get: `Game::build_radius` clamps here no
-/// matter how many `build_radius_bonus` structures are deployed. A 201x201
-/// slab, which is not a balance figure — it is a backstop, deliberately far
-/// past anything a run will build.
+/// The widest a base was ever meant to get, from when it was a slab stamped
+/// onto the zone surface: `Game::build_radius` clamped here no matter how
+/// many `build_radius_bonus` structures (the Heap Pillar's own) were
+/// deployed, and `Game::clear_platform` swept this box when a Home came
+/// down, since it had to cover the largest slab that could ever have
+/// existed rather than the current shape.
 ///
-/// **This is not the knob that decides how big a base gets.** Ninety-six
-/// Heap Pillars is what the ceiling costs, and the Pillar's price is what
-/// actually paces growth. The constant exists because two things need a
-/// bound rather than a live radius: `Game::clear_platform` sweeps this box
-/// when a Home comes down, since it has to cover the largest slab that
-/// could ever have existed rather than the current shape, and nothing
-/// downstream should have to reason about an unbounded footprint.
+/// **All three — `build_radius`, `clear_platform` and the Heap Pillar —
+/// are deleted along with `resources::Platform`.** Base space grows by
+/// laying floor on `base_grid::BaseGrid` now (`Game::lay_starting_pocket`,
+/// slice 2's mining), not by widening a clamped radius, and nothing reads
+/// this constant as an active ceiling any more.
 ///
-/// It was 10 until 2026-08-13, on two arguments that no longer hold. One
-/// was that the 31x31 base predating 2026-07-24 had been judged too big —
-/// but that was a base handed to you, and this one is bought a ring at a
-/// time. The other was the Stack on-ramp: a slab wide enough swallowed the
-/// box a zone's links were drawn from, which starved the zone of links
-/// entirely. That is fixed at the source — every link now draws from the
-/// ring *outside* the slab, not from a box the slab can eat — so the cap
-/// is no longer holding anything up.
-///
-/// Two costs scale with the square of a real base's radius and are worth
-/// knowing before anyone builds toward this: `stamp_platform` writes a tile
-/// override per slab tile and the save carries every one of them, and
-/// `haul_walk_radius` doubles it into a Dijkstra field a walking worker
-/// rebuilds each tick.
-///
-/// Two asset radii are pinned to this rather than to the starting radius —
-/// the Home's `enables_rest` and the Recharger Node's `power_regen` — so
-/// "covers the whole base" stays true of a base that has grown.
+/// Kept rather than deleted: two of this file's own doc comments
+/// (`STACK_NEAREST_LINK_TILES`, `CONTRACT_HABITAT_SAMPLES`) still reason
+/// about "the widest a base can ever get" in these terms, and several tests
+/// use it to construct a base at the old worst case. A future slice giving
+/// `BaseGrid` a real bound should retune or delete this against whatever
+/// that bound turns out to be — it is a placeholder for "very large," not a
+/// measured figure, and no longer the backstop it was written as.
 pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 
 /// How deep each of the base slab's four corners is chamfered, in diagonal

@@ -512,9 +512,10 @@ impl Game {
     ///
     /// Deliberately a loop over the real `enter_next_zone` rather than a
     /// write to `ZoneLevel`: everything that makes a breach coherent — the
-    /// base travelling, the zone-local wipes, fresh spawns scaled to the new
-    /// zone — lives in that function, and a shortcut would produce a save
-    /// that no amount of play could have reached. `enter_next_zone` is
+    /// base staying untouched out of phase, the zone-local wipes, fresh
+    /// spawns scaled to the new zone — lives in that function, and a
+    /// shortcut would produce a save that no amount of play could have
+    /// reached. `enter_next_zone` is
     /// `pub(crate)` and a `src/bin/` target is a separate crate, so this is
     /// also the seam that lets the tool reach it at all.
     ///

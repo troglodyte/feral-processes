@@ -141,6 +141,15 @@ zone portals: all three draw a glyph, none carries `Creature` or
 known gap, recorded in `TODO.md`, and it is the one place the "names what
 it draws" rule above does not yet hold in both directions.
 
+**There is a second rule beside this one, and it took three bug reports
+to see that neither subsumes the other.** `drawn_on_surface_map` answers
+whether a program's `Position` is a tile the sim keeps up to date. It does
+*not* answer which coordinate space that tile is a tile of — see **The map
+draws one space, and `stands_in_base_space` is which** — and reading the
+first as if it were the second is what put the base's whole roster out on
+the open grid. The two are asked together, in that order, at both
+readers.
+
 ### `use_symlink` is the one action that leaves the Stack instead of being refused by it
 
 **`use_symlink` is the one action that leaves the Stack instead of being
@@ -1137,7 +1146,65 @@ not — and `traders_in_range` needed no change of its own once that
 landed, because it is built entirely on `view_entities` and inherited the
 closure for free. **A caller that gates a `Structure` query on anything
 other than `in_base` — or skips the gate because the coordinates
-"obviously" already agree — is reopening one of these.**
+"obviously" already agree — is reopening one of these.** That per-kind
+pair of gates was itself not general enough, which the entry below is
+about.
+
+### The map draws one space, and `stands_in_base_space` is which
+
+**An entity is drawn on the map exactly when the space its `Position` is
+a tile of is the space the party is in, and
+`Game::stands_in_base_space` is the one statement of which space that
+is.** A `Structure` or a `Tamed` program stands in base space; everything
+else with a `Glyph` — a wild program, a nest, a Stack entrance, the
+anchor — is a fixture of the zone map. `view_entities` and
+`find_target_in_direction` both select on it, because the map and the
+examine ray have to stay the same set.
+
+The entry above got two thirds of this and stopped, gating `Structure`
+one way and an untamed `Creature` the other. Three player-visible faults
+lived in the third, and all three are the same aliasing: base space's
+origin and the zone spawn point are both usually `(0, 0)`.
+
+- **`Tamed` had no gate at all**, on the argument recorded in
+  `view_entities`' own doc that `drawn_on_surface_map` was already the
+  right filter for a program and that "every entity with an honest one
+  happens to be base-space today". Both halves were true and the
+  conclusion did not follow: honest *means* base-space, so on the surface
+  those are precisely the ones drawn wrongly. `schedule_base_labour`
+  parks idle staff on a ring around the Home every tick, which is what
+  makes them honest, so a developed base put its whole roster out on the
+  open grid.
+- **Nothing gated the entities that are neither.** A `SurfaceLink`, a
+  `Nest` and the anchor carry a `Position` and a `Glyph` and no
+  `Structure` or `Creature`, so both gates looked straight past them and
+  a Stack entrance drew inside the base. The anchor is the one that
+  always reproduces: there is exactly one per run and it stands on the
+  zone spawn point, so it drew on top of the Home.
+- **The player is in both spaces at once** and so has no answer here. Its
+  `Position` stays pinned to the anchor tile on the surface while the
+  party is out of phase (`resources::Locale`), and `view_entities` is the
+  map's only source of the `@` it draws — so the player's icon sat still
+  at whatever base cell the anchor aliased onto, however far the party
+  walked. It is held out of the space test and read through
+  `scan_center` instead, which on the surface *is* that same pinned tile
+  and so is a no-op there.
+
+A party companion and a posted guard are the two tamed programs whose
+`Position` is never written again, so theirs is the tile they were beaten
+on — a surface tile, or one four frames down. Answering "base space" for
+them is still right for the question being asked: a companion is standing
+beside you rather than where it was caught, and `position_is_honest` is
+what says so. Between the two rules a stale tile is drawn in neither
+space, which is the property that actually matters.
+
+Three engine tests had asserted the old behaviour from the wrong side of
+the anchor — that idle staff are drawn, that `x` can name one, that a
+tamed program keeps its own glyph colour — all three on the zone surface,
+where an owned program has never been. They ask from inside the base now.
+A fixture that reaches for `view_entities` merely to *locate* an owned
+program wants `Game::owned_program_views`, which is the roster rather
+than a window onto the map.
 
 ### A `DigSite` is the second non-`Structure` entity standing in base space
 

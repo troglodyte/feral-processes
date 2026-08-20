@@ -214,6 +214,7 @@ fn a_program_too_weak_to_price_still_sells_for_one_credit() {
 #[test]
 fn a_refused_sale_never_destroys_the_program() {
     let mut game = Game::new(127, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let market = spawn_market(&mut game);
     let pet = spawn_tamed(&mut game, 30, 5);
 
@@ -237,6 +238,7 @@ fn a_refused_sale_never_destroys_the_program() {
 #[test]
 fn a_trader_that_does_not_buy_programs_refuses() {
     let mut game = Game::new(123, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let kind = game
         .structure_defs()
         .into_iter()
@@ -901,6 +903,7 @@ fn selling_a_program_stocks_nothing() {
 #[test]
 fn sell_item_rejects_credits_and_items_you_dont_have() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let def = game
         .structure_defs()
         .into_iter()
@@ -967,6 +970,7 @@ fn buy_item_charges_credits_and_grants_the_item() {
 #[test]
 fn buy_item_fails_without_enough_credits_or_for_an_unlisted_item() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     let player = game.player_entity();
     let def = game
         .structure_defs()

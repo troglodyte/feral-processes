@@ -178,6 +178,7 @@ fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
 #[test]
 fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
     let mut game = Game::new(12, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let unmakeable = game
         .item_defs()
@@ -208,6 +209,7 @@ fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
 #[test]
 fn a_banked_item_is_refused_even_with_its_machine_standing() {
     let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
     place_home(&mut game, 0, 1);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
 

@@ -64,10 +64,12 @@ and a wandering program can walk into you. That is the cost.
 Three refusals. Each is skipped with a warning naming the file and the reason,
 and each protects something a file has no business revoking:
 
-- **`Platform` may not be claimed.** The base slab is the one safe ground in
-  the game: nothing spawns there and no ambush fires there. A base is also
-  stamped over whatever terrain it lands on, so ground that bit there would
-  make the safe floor depend on where you built.
+- **`Platform` may not be claimed.** It is the base's own floor — laid in the
+  base's pocket space rather than on the zone surface, which no longer carries
+  a `Platform` tile at all — and it is the one safe ground in the game:
+  nothing spawns there and no ambush fires there. Ground that bit there would
+  make the base itself hostile, which is the one place in the game that must
+  not be.
 - **`hp_percent` is capped** at `tuning::MAX_ENVIRONMENT_ATTRITION`. Terrain
   cannot be fled, refused or out-levelled, and a step is the cheapest action in
   the game — an authored `0.5` is death in two steps with no decision in

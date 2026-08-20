@@ -1,7 +1,7 @@
 (
     id: "hunt",
     name: "Hunt: {target}",
-    description: "{count} {target} have been logged running loose past the slab. Shut them down.",
+    description: "{count} {target} have been logged running loose within sight of your anchor. Shut them down.",
     objective: Terminate(count: (5, 12)),
     reward: [Credits(7), Xp(20)],
     repeatable: true,

@@ -724,8 +724,10 @@ pub enum TaskKind {
     ///
     /// **The one task kind whose `target` is not a `Structure`**, which is
     /// why neither `task_progress_system` nor `haul_step_system` touches it:
-    /// both resolve their target through a structure query, and a dig site
-    /// answers neither. Its whole cycle is `&mut Game` work instead, for the
+    /// each resolves its target through a query a dig site cannot answer —
+    /// `haul_step_system` requires a `Structure`, `task_progress_system` a
+    /// `ResourceNode` and a `Stock`. Its whole cycle is `&mut Game` work
+    /// instead, for the
     /// reason `schedule_base_labour` is — it cuts through `Game::strike_rock`
     /// and floors through `Game::floor_cell` rather than keeping a second
     /// copy of either.

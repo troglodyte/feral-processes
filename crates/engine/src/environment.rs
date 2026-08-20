@@ -57,14 +57,14 @@ impl EnvironmentDef {
     /// Why this file is unusable, or `None` if it is fine.
     ///
     /// Three refusals, each protecting something a file has no business
-    /// revoking: the base slab is the one safe ground in the game, an
+    /// revoking: the base's own floor is the one safe ground in the game, an
     /// authored attrition of `0.5` is death in two steps, and an authored
     /// drag of `10_000` is a hang the player cannot tell from a crash.
     fn fault(&self) -> Option<String> {
         if self.biomes.contains(&Biome::Platform) {
             return Some(
-                "claims Platform, which is the base slab — nothing spawns there and no ambush \
-                 fires there, and that is not a file's decision to revoke"
+                "claims Platform, which is the base's own floor — nothing spawns there and \
+                 no ambush fires there, and that is not a file's decision to revoke"
                     .to_string(),
             );
         }

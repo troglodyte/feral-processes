@@ -27,6 +27,61 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.1
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the walls you have started on and the plans you have drawn are a new,
+additive save field, and a file written before it existed loads with no dig
+sites, which is exactly what that run had.
+
+### The base grows, and you cut it out yourself
+
+0.13.0 moved the base into its own space and said growing it was out of
+scope. This is that scope. The pocket you start with is a room in solid
+entropy, and every cell past it is rock you can take down.
+
+**Rock is hit, not walked through.** Step into a solid cell in base space and
+you swing at it, the same way you wear a nest down. There is no new key and
+no direction prompt — the wall is a thing you attack. Swings are
+deterministic, so a wall never becomes a slot machine: it takes about three
+hits at level 1 and one hit late in a run, and **that is the reward for
+levelling rather than a curve that scales away from you**. Rock is the same
+rock in every zone at every depth; what changes is you. A cell that opens
+sometimes shakes a Core Fragment loose.
+
+**A cut cell is not floor yet.** `v` lays a VectorStasis Tile on the cell
+you're standing on for one Blank Substrate, and that is what makes ground
+permanent and buildable. Bare cut ground is the frontier, and the frontier
+does not keep: leave a cell open long enough and base space takes it back to
+solid rock, at full thickness, so re-opening it costs the swings it cost the
+first time. Laid tile is never reclaimed at any age, and neither is a cell
+somebody is standing on — a base can be left alone while its owner is off in
+a zone without coming home to a smaller one.
+
+**`m` opens the Excavation plan**, a mode rather than an action: the cursor
+costs no time and no tick, `space` drops an anchor, moving previews a
+rectangle, and `space` again commits it. Marking and clearing are the same
+verb, decided by the cell you anchored on — anchor a marked cell and the box
+clears instead. A marked wall runs the whole way through on one mark: it gets
+cut, the mark survives the cut, and then it gets floored.
+
+**And you don't have to be there.** Post programs to your base and marked
+cells are cut and floored while you are off in a sector. Dig jobs are the
+**lowest** priority the base has, below work orders and standing jobs, so a
+spare body digs and a needed one does not — marking a corridor can never
+stop production. A marked cell your crew genuinely cannot reach says so
+once, and then stays quiet; a marked cell walled in by the rest of your own
+plan says nothing at all, because it opens itself as the shell comes down.
+
+### Also
+
+- Three contract and environment texts still described the base as a "slab"
+  stamped onto the zone surface, which it stopped being in 0.13.0. A Hunt
+  contract now speaks of what is loose within sight of your anchor.
+- All four of the new tuning values — rock durability, the fragment chance,
+  how long the frontier holds, and how fast a posted digger swings — are
+  unmeasured starting values.
+
 ## 0.13.0
 
 **Saves written by 0.12.0 and earlier will not load.**

@@ -177,7 +177,7 @@ existed.
     // {target} becomes the rolled species, item or structure's display name.
     // {count} becomes the number rolled. Both are optional.
     name: "Hunt: {target}",
-    description: "{count} {target} have been logged running loose past the slab. Shut them down.",
+    description: "{count} {target} have been logged running loose within sight of your anchor. Shut them down.",
 
     // What varies. One of the five below.
     objective: Terminate(count: (5, 12)),
@@ -221,10 +221,13 @@ run's worth of work stated as an errand. Portal Fragments are excluded by
 that rule, which matters: they are the breaching currency and the only source
 of them is a boss at the bottom of a stack.
 
-Which programs count as living near your base is read from the ring just
-outside your base slab — the floor itself is `Platform`, which nothing lives
-on. A run with no Home yet is offered no `Terminate`, but can still be asked
-to deliver or to build.
+Which programs count as living near your base is read from the Chebyshev ring
+just outside your **anchor** — the door the base is reached through, and the
+only thing it still has on the zone surface now that the base itself is out of
+phase. The base's own floor is `Platform`, which nothing lives on and which is
+in another space entirely. A run with no anchor is offered no `Terminate`, but
+can still be asked to deliver or to build; neither is a question about the
+ground.
 
 ### `reward` on a template
 

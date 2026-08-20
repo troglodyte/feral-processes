@@ -1,7 +1,7 @@
 (
     id: "scrapper_bounty",
     name: "Scrapper Bounty",
-    description: "Scrappers are stripping anything left standing out past the slab. Put six of them down.",
+    description: "Scrappers are stripping anything left standing within sight of your anchor. Put six of them down.",
     objective: Terminate(species: Some("scrapper"), count: 6),
     reward: [Credits(45), Xp(130)],
     min_zone: 1,

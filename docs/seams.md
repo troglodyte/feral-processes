@@ -881,8 +881,12 @@ while a base was one fixed size. The Heap Pillar made it two things at
 once — halving the start would have shrunk the nursery to 4 for the
 opening minutes, and every Pillar afterwards would have *widened* it,
 which is a difficulty knob keyed to base geometry and exactly what the
-2026-08-05 removal was for. It is now its own literal 7. Nothing would
-have caught either half: `balance_sim` is RNG-free and models no spawn
+2026-08-05 removal was for. It is now its own literal 7. **Slice 2 of the
+out-of-phase base revives the hazard the second decoupling closed** — a
+player digs the pocket outward for the rest of the run, so a ring derived
+from base geometry would be a nursery that grows every time somebody
+swings at a wall. The literal is what stops that, and it is worth more now
+than when it was written. Nothing would have caught either half: `balance_sim` is RNG-free and models no spawn
 positions, and the census below is of the roster rather than of the
 radius.
 The ring is also why the four species it draws from (drone, glitch,
@@ -1054,7 +1058,8 @@ outright, along with every structure and tuning constant that fed it.
 Deploying the first Home now calls `Game::lay_starting_pocket`, which
 lays `BaseCell::Floor` over a `STARTING_POCKET_RADIUS` chamfered box of
 `base_grid::BaseGrid` at base space's own origin — one shape, laid once,
-never grown or re-stamped by anything this slice ships. Its own doc
+never grown or re-stamped by anything slice 1 shipped — slice 2 is what
+grows it, and does so by writing the grid, not by reviving a derivation. Its own doc
 comment states the point directly: "It writes no `WorldMap` tile. That is
 the point of the whole relocation: `Biome::Platform` stops being stamped
 into the zone surface, and the base's footprint becomes
@@ -1065,17 +1070,23 @@ instead: `place_structure` refuses a build off laid floor, and
 the player's base-space tile is `is_floor`, both a straight `is_floor(x, y)`
 call with no derivation in between. `BaseGrid::walkable` is a related but
 wider question — `Open` cells count too, the mined-but-unfloored state
-slice 2's tiling will produce — so `move_in_base`'s step check and
+slice 2's digging produces — so `move_in_base`'s step check and
 `hauling`'s walk both read `walkable`, not `is_floor`; a caller asking
 whether ground is *buildable* wants the narrower predicate, and one asking
 whether a program may merely *stand there* wants the wider one. Conflating
 them would let a build land on carved-but-unfloored rock, or refuse a
 hauler a path across ground nobody has floored yet.
 There is no growth axis left to derive, and no cached value to keep in
-step with one: mining floor in (slice 2) or reclaiming it to entropy
-(slice 3) will change what `is_floor` answers by writing `BaseGrid`
-directly, the same way `lay_starting_pocket` does, rather than by feeding
-a formula that used to sit between the structures and the shape.
+step with one. Slice 2 shipped both directions of change and both write
+`BaseGrid` directly, the same way `lay_starting_pocket` does, rather than
+feeding a formula sitting between the structures and the shape:
+`Game::floor_cell` is the one place a cell becomes `Floor` in play, and
+`base::entropy::base_entropy_system` is the one place laid ground is
+*not* taken back — it reverts unfloored `Open` cells only, so the
+footprint this entry names is permanent once it exists and a base can be
+left alone while its owner is off in a zone. The starting pocket is
+therefore no longer the whole of it; what has not changed is that
+`is_floor` remains the only question anyone asks.
 
 ### `Structure` is the space tag
 
@@ -1127,6 +1138,188 @@ landed, because it is built entirely on `view_entities` and inherited the
 closure for free. **A caller that gates a `Structure` query on anything
 other than `in_base` — or skips the gate because the coordinates
 "obviously" already agree — is reopening one of these.**
+
+### A `DigSite` is the second non-`Structure` entity standing in base space
+
+**`components::DigSite` carries a base-space `Position` and is not a
+`Structure`.** The entry above is the rule this widens: `Structure` is the
+space tag, so a `With<Structure>` query answers a base-space question by
+construction and needs nothing to say so. That rule had exactly one prior
+exception — a posted program, which stands in the pocket carrying
+`Position` and `BaseStaff` and no `Structure` — and slice 2 adds the
+second. A cell of rock the player has started cutting, or marked for a
+crew, is an entity with `DigSite`, `Durability` and a `Position` in the
+pocket's coordinates. It is spawned lazily, by the first swing or by the
+mark, which is why `base_grid::BaseCell` gains no `Rock` variant: absent
+from `BaseGrid` still means solid and untouched, and a parallel cell
+variant would be a second representation to keep in step. The alternative
+considered and rejected was exactly that variant, `Rock { chipped }`,
+which fails the moment a crew has to be *posted* to one —
+`schedule_base_labour` works in `(Entity, TaskKind)` pairs and cannot
+address a coordinate.
+
+Two consequences, both found by writing the code rather than by predicting
+it in the plan.
+
+**The first is that neither system that moves or progresses a posted body
+can touch a dig job.** Each resolves its target through a query a dig site
+cannot answer: `haul_step_system`'s `HaulStructure` requires a
+`&Structure`, and `task_progress_system`'s `WorkedNode` requires a
+`ResourceNode` and a `Stock`. A `TaskKind::Excavate` arm added to either
+would have been dead code that silently never ran. So the crew's whole
+cycle is `Game::run_dig_crew`, a `&mut Game` method called from
+`tick_inner` immediately after `schedule_base_labour` and for that call's
+own stated reason — a digger posted this tick swings this tick. It has to
+be `&mut Game` work regardless of the query problem, because the cycle
+ends in `Game::strike_rock` and `Game::floor_cell`, which are *the* place
+rock takes damage and *the* place a cell becomes floor; a bevy system
+could reach neither and would have had to keep second copies of the swing
+damage, the fragment roll, the substrate spend and the cell write. Four
+formulas with one door each is the drift `balance_sim.rs` has already been
+bitten by four times. What the split genuinely needed was the walk, and it
+was **shared rather than rewritten**: `hauling::step_to_post` was lifted
+out of `haul_step_system`'s tail so a digger and a machine worker walk the
+same walk. A digger that loses its route drops the `Task` rather than
+standing in the dark forever, which is what keeps the stall announcement
+below honest — `schedule_base_labour` only ever looks at sites nobody is
+posted to.
+
+**The second is that a `Position` read against the wrong space is silent
+here in exactly the way 0.13.0 shipped two fixes for** — a Recharger Node
+refilling the party four frames down the Stack, and the structure roster's
+"Work it yourself" row appearing off a numerically identical surface tile.
+`base_entropy_system` is where that class would land next, because it has
+to know which cells are occupied before it takes any back, and occupancy
+comes from two places that must not be confused. The party's cell is
+`Locale::Base`'s own coordinates — **never** the player's `Position`,
+which is pinned to the anchor tile on the zone surface — while a posted
+program's cell *is* its `Position`, because a posted program is the other
+base-space exception. The occupancy query is `(With<Task>, Without<Player>)`
+rather than `With<Task>` for the same reason: the player can hold a `Task`
+too, since `Game::work_structure` posts them, and `With<Task>` alone does
+not mean "a body standing in base space". Getting that wrong does not
+crash or fail a test; it reverts the cell somebody is standing on, and
+"the party is inside solid rock" is a state the Stack spent its own seam
+making unreachable.
+
+### A mark is one verb, and what it means is decided by the cell under it
+
+**`Game::toggle_mark_box` is the entire designation vocabulary.** A marked
+solid cell means *cut it*, a marked `Open` cell means *floor it*, and the
+mark **survives the cut** — so one verb runs a wall the whole way from rock
+to laid tile, with the same body doing both halves. There is no second
+designation kind and no separate erase verb, because **the anchor cell
+decides**: a box whose first corner is already marked clears instead of
+marking. That is why the anchor is read before anything in the box is
+written, and why the box is normalised rather than assumed ordered — a plan
+dragged up-left is the same plan dragged down-right.
+
+What the single verb buys is the default path. "Mark the walls you want
+gone, come back to floor" is otherwise a combination the player has to
+assemble out of two designations, and the crew would have to be told which
+half a given cell is on — a fact already sitting in `BaseGrid`. What it
+costs is that the meaning is **not stored anywhere**, and that is the part
+to keep: `dig_wants` yields one want per marked site whichever half it is
+on, and `run_dig_crew` re-derives the half from the cell every cycle.
+Someone adding a `Mode` field to `DigSite` to "make it explicit" is adding
+the second representation this avoided.
+
+A `Floor` cell takes no mark at all — there is nothing left to do to it,
+and a site spawned over one would be a job the crew could never finish.
+Clearing a mark retires the `DigSite` **unless it is still holding chip
+progress**, so unmarking a wall you had already started on does not heal
+it.
+
+The trap runs the other way through `Durability`. Entropy reverts a cut
+cell to *solid*, not to chipped, and a marked site outlives that revert
+with its `hp` sitting at zero. `strike_rock` refills it to `max_hp` when it
+finds one, or the next swing lands on a spent meter and opens a whole wall
+for free — which makes the promise `BASE_ENTROPY_REFILL_TICKS` is there to
+make read backwards.
+
+### A dig site's two unreachable states are not symmetrical
+
+**`hauling::post_reach`'s `BoxedIn`/`NoRoute` split is what decides whether
+the base says anything**, and the two answers are deliberately given
+different voices. A marked cell with every neighbour still solid is the
+normal interior of any block a player marks — a 3x3 wing has one at its
+centre before a single swing lands — and it resolves itself as the shell
+comes down, so it is skipped **silently**. A marked cell that has a
+standable neighbour and still no route to it is stuck until the player does
+something about it, and **says so once**.
+
+Once is enforced by `DigSite::announced_stuck`, a latch written by
+`schedule_base_labour` and read nowhere else, following `set_machine_status`'s
+rule exactly: entering a state is news, staying in it is not. The reason the
+two states need different treatment is the one CLAUDE.md already gives for
+the `BoxedIn`/`NoRoute` split itself — they leave the player different
+errands. Collapse them into one silent skip and the only signal that a plan
+is unworkable is gone; collapse them into one complaint and every interior
+cell of every marked block puts a line in the log for the rest of the run.
+
+`announced_stuck` is deliberately **not saved**. It is true of a
+conversation rather than of the world, and a reload is exactly the moment
+the player should be told again.
+
+### Dig wants are appended last in `schedule_base_labour`, and the priority *is* the position in that list
+
+**There is no priority field anywhere in the scheduler.**
+`schedule_base_labour` builds one `wanted` list in order — worked orders,
+then standing jobs, then dig sites — and then `wanted.truncate(staff.len())`
+cuts from the **end**. Position in that list is the whole ranking, and
+appending dig wants last is the entirety of what makes a spare body dig
+while a needed one does not.
+
+**Anything inserted above them silently starves production.** The diff that
+follows runs against the *truncated* list, so a want that never survives the
+cut is simply never posted, and nothing anywhere reports that it was
+dropped. The failure mode is a base that stops running because the player
+marked a corridor — which is the thing decision 7 of the slice-2 spec exists
+to prevent, and it is held by an append site rather than by a check.
+
+`dig_wants` is **structural rather than a stock count**, for
+`work_orders::feeders_for`'s reason: what makes a site a want is that the
+player marked it, not whether the base can currently pay for the substrate
+that finishes it. A want that flickered as the shelf drained would walk
+bodies on and off the frontier for the rest of the run. It is also sorted by
+tile before it is returned, for `assembler_system`'s reason — bevy's
+iteration order is not stable, and two diggers whose swings land in a
+different order between runs would make the same base save differently.
+`run_dig_crew` sorts its diggers the same way and for the same reason.
+
+### Mining does not go through `battle::resolve_attack`
+
+**Rock is hit, not rolled against.** `Game::strike_rock` takes
+`Game::swing_damage` — the weapon band's mean plus `effective_atk`, floored
+at 1 — and subtracts it. No hit chance, no crit band, no fumble, and no
+`GameRng` draw for the damage at all. The argument is `Game::attack_nest`'s,
+which CLAUDE.md already states for structures: a wall has no speed and
+cannot dodge, and identical swings have to land identical damage or wearing
+one down becomes a slot machine you cannot plan a wing around.
+
+`swing_damage` is **shared with the crew rather than copied for it**, and
+that is what makes a stronger program dig a wall out in fewer swings rather
+than faster ones. `BASE_DIG_TICKS_PER_SWING` is the crew's *rate* and
+`swing_damage` is its *bite*; the two knobs mean different things and a
+retune that confuses them turns levelling into a speed bonus for the base
+instead of a reward for the player.
+
+`BASE_ROCK_DURABILITY` is **never scaled by zone, depth or level.** The rock
+is the same rock all run, so the thing that changes is the player: a wall
+that takes about three swings at level 1 takes one late, and that *is* the
+reward rather than a curve to tune. A scaled wall makes digging cost the
+same forever, which is the one thing it must not do — the same shape of
+argument that keeps mitigation off the level curve.
+
+The one RNG draw in the whole action is the fragment roll on the break, and
+it is `GameRng` on purpose: this is a live action rather than world
+generation, so nothing about it has to be reproduced by a reload. Its
+chance is bounded above by what flooring the same cell costs — a Blank
+Substrate is four Core Fragments at a Lathe — so a dug cell returns a
+fraction of what finishing it costs *by construction*. Raising it past that
+ratio turns the wall into a fragment tap that undercuts the Mining Node,
+and `mining_a_wall_never_pays_more_than_flooring_it_costs` holds it against
+the real assets rather than against a number written in `tuning.rs`.
 
 ### `Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a wild program's swing is decided
 

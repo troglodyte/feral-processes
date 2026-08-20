@@ -2095,3 +2095,186 @@ fn a_mark_survives_a_save_round_trip() {
         "a plan the player drew must survive the reload that loses it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Slice 2: the marks a plan is drawn out of
+// ---------------------------------------------------------------------------
+
+/// Two cells of solid rock well outside the opening pocket, drawn with the
+/// far corner *up-left* of the anchor so the box has to be normalised rather
+/// than assumed ordered.
+const PLAN_ANCHOR: (i32, i32) = (6, 6);
+const PLAN_FAR: (i32, i32) = (5, 5);
+
+fn is_marked(game: &mut Game, (x, y): (i32, i32)) -> bool {
+    game.dig_site_at(x, y)
+        .and_then(|e| game.world.get::<DigSite>(e))
+        .is_some_and(|d| d.marked)
+}
+
+fn dig_site_count(game: &mut Game) -> usize {
+    let mut query = game.world.query_filtered::<Entity, With<DigSite>>();
+    query.iter(&game.world).count()
+}
+
+#[test]
+fn marking_a_box_marks_every_solid_cell_in_it() {
+    let mut game = game_at_the_frontier(3250);
+    for (x, y) in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+        assert!(
+            game.world.resource::<base_grid::BaseGrid>().is_solid(x, y),
+            "the fixture must draw its box over solid rock"
+        );
+    }
+
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+
+    for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+        assert!(
+            is_marked(&mut game, cell),
+            "{cell:?} is inside the box the player drew and took no mark"
+        );
+    }
+}
+
+/// Decision 4's erase rule: there is no second verb, so the anchor cell is
+/// what says which of the two a box does.
+#[test]
+fn an_anchor_on_a_marked_cell_clears_the_box_instead_of_marking_it() {
+    let mut game = game_at_the_frontier(3251);
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+
+    game.toggle_mark_box(PLAN_ANCHOR, PLAN_FAR);
+
+    for cell in [(5, 5), (5, 6), (6, 5), (6, 6)] {
+        assert!(
+            !is_marked(&mut game, cell),
+            "{cell:?} kept its mark when the box was drawn again"
+        );
+    }
+    assert_eq!(
+        dig_site_count(&mut game),
+        0,
+        "clearing a mark on untouched rock must leave no entity behind"
+    );
+}
+
+/// A `Floor` cell is finished — there is nothing left to do to it, so there
+/// is nothing to mark and nothing for the renderer to tint.
+#[test]
+fn marking_a_floor_cell_does_nothing() {
+    let mut game = game_at_the_frontier(3252);
+    let floored = (1, 1);
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_floor(floored.0, floored.1),
+        "the fixture must draw over a cell the opening pocket already floored"
+    );
+
+    game.toggle_mark_box(floored, floored);
+
+    assert!(!is_marked(&mut game, floored));
+    assert_eq!(
+        dig_site_count(&mut game),
+        0,
+        "a marked floor cell spawned a dig site with nothing to record"
+    );
+}
+
+/// Marked `Open` means *floor it*, which is the second half of the one verb:
+/// a cell someone else already cut still takes a mark.
+#[test]
+fn marking_an_open_cell_marks_it_for_flooring() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3253, cut);
+
+    game.toggle_mark_box(cut, cut);
+
+    assert!(
+        is_marked(&mut game, cut),
+        "an open, unfloored cell must be markable — that is the flooring half"
+    );
+}
+
+/// The whole of settled decision 4 in one test: one verb runs a wall all the
+/// way from solid to finished floor, and the mark clears itself at the end
+/// rather than needing a second erase.
+#[test]
+fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
+    let mut game = game_at_the_frontier(3254);
+    game.toggle_mark_box(WALL, WALL);
+
+    let player = game.player_entity();
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+    for _ in 0..swings {
+        game.move_player(1, 0);
+    }
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the fixture must have cut the wall through"
+    );
+    assert!(
+        is_marked(&mut game, WALL),
+        "the mark did not survive the cut — marked solid means cut it, \
+         marked open means floor it, and the crew needs the second half"
+    );
+
+    game.move_player(1, 0);
+    assert_eq!(
+        game.base_pos().unwrap(),
+        WALL,
+        "the party stepped onto the cut cell"
+    );
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 1);
+    game.lay_tile().unwrap();
+
+    assert!(
+        !is_marked(&mut game, WALL),
+        "a floored cell is still marked"
+    );
+    assert_eq!(
+        dig_site_count(&mut game),
+        0,
+        "the finished cell left its dig site behind"
+    );
+}
+
+/// The leak check on the despawn clause: only a *marked* cell keeps its site
+/// past the cut, or every wall the player ever hit stays in the world.
+#[test]
+fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
+    let mut game = game_at_the_frontier(3255);
+    let player = game.player_entity();
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+
+    for _ in 0..swings {
+        game.move_player(1, 0);
+    }
+
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the fixture must have cut the wall through"
+    );
+    assert_eq!(
+        dig_site_count(&mut game),
+        0,
+        "an unmarked wall kept its dig site after it opened"
+    );
+}
+
+/// The renderer draws these in the order it gets them, so the order has to
+/// be a property of the answer rather than of bevy's entity iteration —
+/// the same reason `Stock` keys by `BTreeMap`.
+#[test]
+fn marked_cells_is_sorted() {
+    let mut game = game_at_the_frontier(3256);
+    game.toggle_mark_box((7, 7), (5, 5));
+
+    let cells = game.marked_cells();
+
+    let mut sorted = cells.clone();
+    sorted.sort_unstable();
+    assert_eq!(cells, sorted, "marked_cells came back in query order");
+    assert_eq!(cells.len(), 9, "a 3x3 box of solid rock is nine marks");
+}

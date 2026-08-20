@@ -230,7 +230,7 @@ impl Game {
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(substrate, 1);
-        self.world.resource_mut::<BaseGrid>().lay_floor(x, y);
+        self.floor_cell(x, y);
         self.log_base("You lay a VectorStasis Tile, and the cell reads as floor.");
         self.tick();
         Ok(())

@@ -153,34 +153,6 @@ impl Game {
         }
     }
 
-    /// One step through base space, reached from `Game::move_player` — the
-    /// same four keys, dispatched on locale.
-    ///
-    /// Reads `BaseGrid::walkable` for whether the step lands, and then the
-    /// one thing a step can do besides land: walk onto a Portal and breach.
-    /// `WorldMap` is a different coordinate space entirely and has no say
-    /// here, and solid rock is simply not walkable — there is no way to end
-    /// up standing inside it, so base space needs no analogue of the Stack's
-    /// `die_in_the_rock`.
-    ///
-    /// Nothing *blocks*. A structure standing on a cell is walked over, not
-    /// bumped into, unlike the zone surface — and it has to be, because the
-    /// Home stands on `BASE_EXIT_CELL` and a blocked exit cell is a base
-    /// with no way out of it.
-    ///
-    /// **A step into solid rock is a swing**, and costs the turn the step
-    /// would have — see `Game::strike_rock`. Slice 1 refused it for free, on
-    /// the grounds that base space is walls until the player cuts them and
-    /// brushing against your own corners should not be taxed; slice 2 makes
-    /// cutting them the point, so the wall is a thing you attack instead.
-    ///
-    /// **It still breaks off a posted job**, and that matches the surface:
-    /// `move_player` drops the job before it looks at what is in the way, on
-    /// the grounds that either way you stopped working to do it, and
-    /// `Game::work_structure` promises the player as much when it posts.
-    /// The drop sits above every branch below rather than inside one, which
-    /// is why turning the refusal into a swing did not quietly stop it
-    /// happening.
     /// The `DigSite` standing on base-space `(x, y)`, if the player has
     /// started on that wall or marked it.
     ///
@@ -265,6 +237,143 @@ impl Game {
         }
     }
 
+    /// Marks — or clears — every cell in the inclusive box spanned by `a`
+    /// and `b`.
+    ///
+    /// **The anchor decides which of the two it does**: a box whose `a` cell
+    /// is already marked clears, an unmarked one marks. That is the whole of
+    /// why there is no second erase verb — settled decision 4 — and it is
+    /// also why the anchor is read *before* anything in the box is written.
+    ///
+    /// The box is normalised rather than assumed ordered: a plan drawn
+    /// up-left is the same plan drawn down-right, and a cursor the player
+    /// dragged backwards is the ordinary case rather than the corner one.
+    ///
+    /// A `Floor` cell takes no mark. There is nothing left to do to it, and a
+    /// site spawned over one would be a mark the crew could never clear.
+    pub fn toggle_mark_box(&mut self, a: (i32, i32), b: (i32, i32)) {
+        let marking = !self.is_marked(a.0, a.1);
+        let (x0, x1) = (a.0.min(b.0), a.0.max(b.0));
+        let (y0, y1) = (a.1.min(b.1), a.1.max(b.1));
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                self.set_mark(x, y, marking);
+            }
+        }
+    }
+
+    /// Every marked cell, in `(x, y)` order.
+    ///
+    /// Sorted rather than handed back in query order for the reason `Stock`
+    /// keys by `BTreeMap`: bevy's iteration order is not stable, and the
+    /// renderer draws these in the order it gets them.
+    pub fn marked_cells(&mut self) -> Vec<(i32, i32)> {
+        let mut query = self.world.query::<(&DigSite, &Position)>();
+        let mut cells: Vec<(i32, i32)> = query
+            .iter(&self.world)
+            .filter(|(d, _)| d.marked)
+            .map(|(_, p)| (p.x, p.y))
+            .collect();
+        cells.sort_unstable();
+        cells
+    }
+
+    /// Whether base-space `(x, y)` is marked. A cell with no `DigSite` is
+    /// not, which is what makes an untouched wall the unmarked case without
+    /// storing anything for it.
+    fn is_marked(&mut self, x: i32, y: i32) -> bool {
+        self.dig_site_at(x, y)
+            .and_then(|site| self.world.get::<DigSite>(site))
+            .is_some_and(|d| d.marked)
+    }
+
+    /// Writes one cell's mark, spawning or retiring its `DigSite` as needed.
+    ///
+    /// The durability a *marked* site is born with is the cell's own state:
+    /// a solid cell has the whole wall left to cut, an already-open one has
+    /// none — its mark means floor it. Clearing retires the site unless it is
+    /// still holding chip progress, so an unmarked wall the player had
+    /// started on does not heal.
+    fn set_mark(&mut self, x: i32, y: i32, marked: bool) {
+        let grid = self.world.resource::<BaseGrid>();
+        if grid.is_floor(x, y) {
+            return;
+        }
+        let solid = grid.is_solid(x, y);
+        match self.dig_site_at(x, y) {
+            Some(site) => {
+                if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                    dig.marked = marked;
+                }
+                let untouched = self
+                    .world
+                    .get::<Durability>(site)
+                    .is_some_and(|d| d.hp == d.max_hp);
+                if !marked && (!solid || untouched) {
+                    self.world.despawn(site);
+                }
+            }
+            None if marked => {
+                let max_hp = crate::tuning::BASE_ROCK_DURABILITY;
+                self.world.spawn((
+                    DigSite {
+                        marked: true,
+                        announced_stuck: false,
+                    },
+                    Durability {
+                        hp: if solid { max_hp } else { 0 },
+                        max_hp,
+                    },
+                    Position { x, y },
+                ));
+            }
+            None => {}
+        }
+    }
+
+    /// Lays floor over base-space `(x, y)` and retires the cell's `DigSite`
+    /// with it.
+    ///
+    /// The one place a base-space cell becomes `Floor` in play — `lay_tile`
+    /// today, the crew's flooring job next — because a finished cell has
+    /// nothing left to record and a mark that outlived the tile would be a
+    /// job no one could ever complete. `lay_starting_pocket` writes the grid
+    /// directly instead: it runs before anything can have dug.
+    pub(crate) fn floor_cell(&mut self, x: i32, y: i32) {
+        self.world.resource_mut::<BaseGrid>().lay_floor(x, y);
+        if let Some(site) = self.dig_site_at(x, y) {
+            self.world.despawn(site);
+        }
+    }
+
+    /// One step through base space, reached from `Game::move_player` — the
+    /// same four keys, dispatched on locale.
+    ///
+    /// Reads `BaseGrid::walkable` for whether the step lands, and then the
+    /// one thing a step can do besides land: walk onto a Portal and breach.
+    /// `WorldMap` is a different coordinate space entirely and has no say
+    /// here, and solid rock is simply not walkable — there is no way to end
+    /// up standing inside it, so base space needs no analogue of the Stack's
+    /// `die_in_the_rock`.
+    ///
+    /// Nothing *blocks*. A structure standing on a cell is walked over, not
+    /// bumped into, unlike the zone surface — and it has to be, because the
+    /// Home stands on `BASE_EXIT_CELL` and a blocked exit cell is a base
+    /// with no way out of it.
+    ///
+    /// **A step into solid rock is a swing**, and costs the turn the step
+    /// would have — see `Game::strike_rock`. Slice 1 refused it for free, on
+    /// the grounds that base space is walls until the player cuts them and
+    /// brushing against your own corners should not be taxed; slice 2 makes
+    /// cutting them the point, so the wall is a thing you attack instead.
+    ///
+    /// **It still breaks off a posted job**, and that matches the surface:
+    /// `move_player` drops the job before it looks at what is in the way, on
+    /// the grounds that either way you stopped working to do it, and
+    /// `Game::work_structure` promises the player as much when it posts.
+    /// The drop sits above every branch below rather than inside one, which
+    /// is why turning the refusal into a swing did not quietly stop it
+    /// happening.
     pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
         let Some((x, y)) = self.base_pos() else {
             return;

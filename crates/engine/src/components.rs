@@ -1378,6 +1378,37 @@ pub struct Durability {
     pub max_hp: u32,
 }
 
+/// A cell of base-space rock the player has started on: the one
+/// representation of rock-in-progress, carrying `Durability` on the same
+/// entity the way a nest does.
+///
+/// **Spawned lazily** — by the first swing at a wall, or by marking one —
+/// which is why `base_grid::BaseCell` gains no `Rock` variant: absent from
+/// `BaseGrid` still means solid and untouched, and a parallel cell variant
+/// would have to be kept in step with this entity. It despawns when the cell
+/// opens, unless it is marked: a mark outlives the cut, because marked solid
+/// means *cut it* and marked `Open` means *floor it*, one verb running a wall
+/// all the way to finished floor.
+///
+/// **Its `Position` is in base space, not on the zone surface.** That widens
+/// the space rule this repo otherwise holds — a `Structure` is the space tag,
+/// with posted programs the one prior exception — so anything reading a
+/// `Position` off one of these must already know which locale it is in. See
+/// `docs/seams.md`; 0.13.0 shipped two fixes for exactly this bug class, and
+/// a wrong-space read is silent.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct DigSite {
+    /// Whether the player marked this cell for a crew. Set by the mark verb
+    /// (slice 2, phase B) and saved, because a plan you drew has to survive
+    /// a reload.
+    pub marked: bool,
+    /// Whether the crew has already said it cannot reach this one. Written
+    /// by the dig scheduler (phase C) and read nowhere else: the
+    /// announcement follows `set_machine_status` and fires only on
+    /// transition, because entering a state is news and staying in it is not.
+    pub announced_stuck: bool,
+}
+
 /// A stationary spawner for a wild species. Present on the nest entity
 /// itself, which also carries `Position`, `Glyph`, and `Durability` (all
 /// reused as-is — a nest is destroyed the same way a structure is, just

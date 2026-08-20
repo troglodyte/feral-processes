@@ -2048,6 +2048,34 @@ pub const MAX_BUILD_RADIUS_TILES: i32 = 100;
 /// takes buildable ground away. 0 restores the square.
 pub const PLATFORM_CORNER_CUT: i32 = 2;
 
+// ---- Growing the base: rock you cut ----------------------------------
+//
+// None of these is measured. They are starting values to play and then
+// record under `docs/measurements/` — see the slice 2 section of
+// `docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`.
+
+/// How much damage one cell of base-space rock absorbs before it opens.
+///
+/// **Never scaled by zone, depth or level.** The rock is the same rock all
+/// run, so the thing that changes is the player: a wall that takes about
+/// three swings at level 1 takes one late, and that is the reward for
+/// levelling rather than a curve to tune. A scaled wall would make digging
+/// cost the same forever, which is the one thing it must not do.
+///
+/// Priced against a level-1 player's swing — `PLAYER_UNARMED_DAMAGE`'s mean
+/// of 5 plus `PLAYER_BASE_STATS`' atk of 6, so about 11 a hit.
+pub const BASE_ROCK_DURABILITY: u32 = 24;
+
+/// Chance, 0.0-1.0, that opening a cell of rock yields one Core Fragment.
+///
+/// **Bounded above by what flooring the same cell costs**, and that bound is
+/// the whole rule: a Blank Substrate is four Core Fragments at a Lathe, so a
+/// dug cell has to return a fraction of that or the wall becomes a fragment
+/// tap that undercuts the Mining Node. `mining_a_wall_never_pays_more_than_
+/// flooring_it_costs` holds it against the real assets rather than against a
+/// number written here.
+pub const BASE_MINE_FRAGMENT_CHANCE: f32 = 0.25;
+
 /// How often (in ticks) the base's repairers restore `Durability` to
 /// damaged structures — see `Game::structure_regen`.
 ///

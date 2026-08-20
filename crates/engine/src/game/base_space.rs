@@ -168,19 +168,103 @@ impl Game {
     /// Home stands on `BASE_EXIT_CELL` and a blocked exit cell is a base
     /// with no way out of it.
     ///
-    /// **A refused step costs no turn**, unlike shoving at a wall on the zone
-    /// surface or in the Stack, which both charge one. Base space is walls
-    /// until the player cuts them, and charging a turn for every corner of
-    /// your own base you brush against would tax walking around indoors.
+    /// **A step into solid rock is a swing**, and costs the turn the step
+    /// would have — see `Game::strike_rock`. Slice 1 refused it for free, on
+    /// the grounds that base space is walls until the player cuts them and
+    /// brushing against your own corners should not be taxed; slice 2 makes
+    /// cutting them the point, so the wall is a thing you attack instead.
     ///
-    /// **A refused step still breaks off a posted job**, and that one *does*
-    /// match the surface: `move_player` drops the job before it looks at
-    /// what is in the way, on the grounds that either way you stopped
-    /// working to do it, and `Game::work_structure` promises the player as
-    /// much when it posts. The two rules point opposite ways on purpose —
-    /// the turn is what the world charges for a step, and the job is what
-    /// the player's attention was on — so the order below is load-bearing
-    /// rather than incidental.
+    /// **It still breaks off a posted job**, and that matches the surface:
+    /// `move_player` drops the job before it looks at what is in the way, on
+    /// the grounds that either way you stopped working to do it, and
+    /// `Game::work_structure` promises the player as much when it posts.
+    /// The drop sits above every branch below rather than inside one, which
+    /// is why turning the refusal into a swing did not quietly stop it
+    /// happening.
+    /// The `DigSite` standing on base-space `(x, y)`, if the player has
+    /// started on that wall or marked it.
+    ///
+    /// **Its `Position` is in base space**, so this must never be reached
+    /// for with a zone-surface coordinate — see `components::DigSite`.
+    pub(crate) fn dig_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<DigSite>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// One swing at the solid base-space cell `(x, y)`, spawning the
+    /// `DigSite` that records the wall's progress if this is the first.
+    ///
+    /// The shape is `Game::attack_nest`'s, down to sharing its damage
+    /// through `Game::swing_damage`: rock is a thing you wear down by
+    /// bumping into it, it cannot dodge, and identical swings land identical
+    /// damage. What it does *not* share is a `Durability` sized from an
+    /// asset — `tuning::BASE_ROCK_DURABILITY` is the same for every cell in
+    /// every zone at every depth, so the thing that changes as a run goes on
+    /// is the player's swing.
+    ///
+    /// Opening the cell despawns the site **unless it is marked**: a mark
+    /// outlives the cut, because marked solid means cut it and marked `Open`
+    /// means floor it (slice 2, phase B).
+    pub(crate) fn strike_rock(&mut self, x: i32, y: i32) {
+        let player = self.player_entity();
+        let dmg = self.swing_damage(player);
+        let site = self.dig_site_at(x, y).unwrap_or_else(|| {
+            self.world
+                .spawn((
+                    DigSite::default(),
+                    Durability {
+                        hp: crate::tuning::BASE_ROCK_DURABILITY,
+                        max_hp: crate::tuning::BASE_ROCK_DURABILITY,
+                    },
+                    Position { x, y },
+                ))
+                .id()
+        });
+        let Some(mut durability) = self.world.get_mut::<Durability>(site) else {
+            return;
+        };
+        durability.hp = durability.hp.saturating_sub(dmg);
+        if durability.hp > 0 {
+            self.log(format!("You cut into the entropy for {dmg} damage."));
+            return;
+        }
+
+        // Read before the cell is opened rather than after: the swing lands
+        // on this tick, and `base_entropy_system` measures its window from
+        // it.
+        let tick = self.world.resource::<GameClock>().tick;
+        self.world.resource_mut::<BaseGrid>().open(x, y, tick);
+        let marked = self.world.get::<DigSite>(site).is_some_and(|d| d.marked);
+        if !marked {
+            self.world.despawn(site);
+        }
+        self.log("The entropy gives way, and the cell opens.");
+
+        // A live action, not world generation, so `GameRng` is the right
+        // stream to draw from: nothing here has to be reproduced by a
+        // reload.
+        let paid = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0
+                .random_bool(crate::tuning::BASE_MINE_FRAGMENT_CHANCE.clamp(0.0, 1.0) as f64)
+        };
+        if paid {
+            let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
+            let landed = self.grant_loot(item.clone(), 1);
+            if landed > 0 {
+                self.log_kind(
+                    MessageKind::Loot,
+                    format!("A {} shakes loose from the cut.", self.item_name(&item)),
+                );
+            }
+        }
+    }
+
     pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
         let Some((x, y)) = self.base_pos() else {
             return;
@@ -188,6 +272,19 @@ impl Game {
         // Before the wall check, exactly as `move_player` does it.
         self.break_off_job();
         let (nx, ny) = (x + dx, y + dy);
+        // Solid rock is hit, not bumped into — the branch sits exactly where
+        // `move_player` holds its nest branch, and for the same reason: the
+        // wall is a thing you attack, and a swing costs the turn a step
+        // would have. There is no new key and no direction prompt.
+        if self.world.resource::<BaseGrid>().is_solid(nx, ny) {
+            self.strike_rock(nx, ny);
+            self.tick();
+            return;
+        }
+        // Still the one statement of what a step lands on. Every cell state
+        // `BaseGrid` has today is walkable, so nothing reaches this return —
+        // it is what a fifth `BaseCell` variant would meet, rather than a
+        // branch play can take.
         if !self.world.resource::<BaseGrid>().walkable(nx, ny) {
             return;
         }

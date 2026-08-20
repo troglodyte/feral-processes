@@ -46,12 +46,10 @@ impl Game {
         self.provoke_nest(nest);
         let player = self.player_entity();
         let label = self.entity_label(nest);
-        // A structure has no speed and cannot dodge, so this keeps the
-        // deterministic path it always had — only creature-versus-creature
-        // attacks go through `battle::resolve_attack`. Identical swings have
-        // to stay identical, or wearing a nest down becomes a slot machine.
-        let range = self.attack_range(player, crate::tuning::PLAYER_UNARMED_DAMAGE);
-        let dmg = (range.mean().round() as i32 + self.effective_atk(player)).max(1) as u32;
+        // Deterministic, and shared with the base's rock — see
+        // `Game::swing_damage` for why neither goes through
+        // `battle::resolve_attack`.
+        let dmg = self.swing_damage(player);
         let Some(mut durability) = self.world.get_mut::<Durability>(nest) else {
             return;
         };

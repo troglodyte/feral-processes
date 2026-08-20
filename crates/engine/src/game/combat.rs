@@ -34,6 +34,21 @@ impl Game {
         }
     }
 
+    /// What one deterministic swing at a thing that cannot dodge lands:
+    /// the band's mean plus `effective_atk`, floored at 1.
+    ///
+    /// The one definition, shared by `Game::attack_nest` and
+    /// `Game::strike_rock` — a nest and a wall of base-space rock are the
+    /// two things in the game worn down by bumping into them, and a copy of
+    /// this formula in either would let them drift. Neither goes through
+    /// `battle::resolve_attack`: a structure has no speed and cannot dodge,
+    /// and identical swings have to stay identical or wearing something down
+    /// becomes a slot machine.
+    pub(crate) fn swing_damage(&self, attacker: Entity) -> u32 {
+        let range = self.attack_range(attacker, crate::tuning::PLAYER_UNARMED_DAMAGE);
+        (range.mean().round() as i32 + self.effective_atk(attacker)).max(1) as u32
+    }
+
     /// How many members of one species group may fight — the ceiling a
     /// gathered cluster fights under, and the same value in `gather_pack`
     /// and `group_pack` because it depends only on the zone and the depth.

@@ -832,13 +832,18 @@ fn the_way_out_is_only_at_the_exit_cell() {
     assert!(!game.in_base());
 }
 
-/// Solid rock is not walkable, and shoving at it is not a turn. Both halves
-/// of the pin are asserted: base-space coordinates unchanged, *and* the
-/// surface `Position` unchanged — without the second, a `move_player` that
-/// never dispatched on locale at all would walk the party across the zone
-/// map and still pass.
+/// Solid rock does not give, and the party stays out of it. Both halves of
+/// the pin are asserted: base-space coordinates unchanged, *and* the surface
+/// `Position` unchanged — without the second, a `move_player` that never
+/// dispatched on locale at all would walk the party across the zone map and
+/// still pass.
+///
+/// The turn is slice 2's, and it moved: a step into rock is a *swing* now
+/// (`Game::strike_rock`), and a swing costs the turn a step would have, the
+/// same way shoving at a nest on the surface does. What it never does is
+/// land the party inside the wall, which is what this asserts.
 #[test]
-fn walking_into_solid_rock_is_refused_and_costs_no_turn() {
+fn swinging_at_solid_rock_moves_nothing_in_either_space() {
     let mut game = game_with_a_base(3126);
     game.enter_base().unwrap();
     // The pocket's north edge, so the step north leaves it.
@@ -857,7 +862,11 @@ fn walking_into_solid_rock_is_refused_and_costs_no_turn() {
     game.move_player(0, -1);
 
     assert_eq!(game.base_pos(), Some(edge), "solid rock does not give");
-    assert_eq!(game.current_tick(), tick, "a refused step costs no turn");
+    assert_eq!(
+        game.current_tick(),
+        tick + 1,
+        "a swing at rock costs the turn the step would have"
+    );
     assert_eq!(player_tile(&game), standing);
 }
 
@@ -901,18 +910,17 @@ fn mined_rock_is_walkable_before_it_is_floored() {
     );
 }
 
-/// A refused step still breaks off a posted job, exactly as shoving at a
+/// A swing at rock still breaks off a posted job, exactly as shoving at a
 /// wall on the zone surface does — `move_player` drops the job before it
 /// looks at what is in the way, "since either way you stopped working to do
 /// it", and `Game::work_structure` promises the player as much when it
 /// posts.
 ///
-/// The turn and the job point opposite ways at this one site — the step
-/// costs nothing, the job ends anyway — so this is the only thing that says
-/// the ordering inside `move_in_base` was chosen rather than fallen out of
-/// an early return.
+/// The drop happens *before* the wall is even looked at, which is why it
+/// survived slice 2 turning that shove into a swing: had it lived in the
+/// refusal branch instead, digging would have quietly stopped ending jobs.
 #[test]
-fn shoving_at_solid_rock_still_breaks_off_a_job() {
+fn swinging_at_solid_rock_still_breaks_off_a_job() {
     let mut game = game_with_a_base(3129);
     // The pocket's north edge, with a machine beside it: a job to break off,
     // and solid rock one step further north to break it off against.
@@ -934,9 +942,13 @@ fn shoving_at_solid_rock_still_breaks_off_a_job() {
     assert_eq!(
         game.base_pos(),
         Some(edge),
-        "the fixture's step must really be refused, or this proves nothing"
+        "the fixture's step must really meet rock, or this proves nothing"
     );
-    assert_eq!(game.current_tick(), tick, "and must still cost no turn");
+    assert_eq!(
+        game.current_tick(),
+        tick + 1,
+        "and the swing itself must still cost its turn"
+    );
     assert!(
         game.world.get::<Task>(player).is_none(),
         "a shove at rock is still you stopping work to try it"
@@ -1567,4 +1579,175 @@ fn view_tiles_is_unchanged_on_the_surface() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2: rock you can hit
+// ---------------------------------------------------------------------------
+
+/// The party in base space at the eastern edge of the starting pocket, one
+/// step from solid rock.
+///
+/// Deploying the Home is what lays the pocket, so this is the cheapest
+/// fixture that has a *frontier* at all — a wall with floor behind it, which
+/// is the only place a player ever swings.
+fn game_at_the_frontier(seed: u32) -> Game {
+    let mut game = game(seed);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
+    game.place_structure("home", 1, 0).unwrap();
+    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    game
+}
+
+/// The solid cell east of `game_at_the_frontier`'s standing tile.
+const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
+
+fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
+    game.world.resource::<base_grid::BaseGrid>().cell(x, y)
+}
+
+/// The swing count is computed from the constants rather than written down:
+/// retuning `BASE_ROCK_DURABILITY` retunes this test with it, which is the
+/// point — what is pinned is that a wall takes *the swings its durability
+/// implies*, not that it takes three.
+#[test]
+fn a_wall_opens_after_the_swings_its_durability_implies() {
+    let mut game = game_at_the_frontier(3210);
+    let player = game.player_entity();
+    let per_swing = game.swing_damage(player);
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(per_swing);
+    assert!(
+        swings > 1,
+        "a wall that opens on the first swing makes this test vacuous — \
+         BASE_ROCK_DURABILITY is below one swing of a level-1 player"
+    );
+
+    for swing in 1..swings {
+        game.move_player(1, 0);
+        assert!(
+            game.world
+                .resource::<base_grid::BaseGrid>()
+                .is_solid(WALL.0, WALL.1),
+            "the wall gave way on swing {swing} of {swings}"
+        );
+    }
+
+    game.move_player(1, 0);
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the wall was still standing after the {swings} swings its \
+         durability implies"
+    );
+}
+
+#[test]
+fn a_swing_at_rock_does_not_move_the_party() {
+    let mut game = game_at_the_frontier(3211);
+    let standing = game.base_pos().unwrap();
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(WALL.0, WALL.1),
+        "this test is about a swing that does not break through"
+    );
+    assert_eq!(
+        game.base_pos().unwrap(),
+        standing,
+        "a swing at rock moved the party into it"
+    );
+}
+
+/// `attack_nest`'s determinism rule, one space over: identical swings have
+/// to land identical damage, or wearing a wall down becomes a slot machine.
+/// This is why mining does not go through `battle::resolve_attack`.
+#[test]
+fn identical_swings_at_rock_do_identical_damage() {
+    let mut game = game_at_the_frontier(3212);
+    let east = WALL;
+    let north = (0, crate::tuning::STARTING_POCKET_RADIUS + 1);
+
+    game.strike_rock(east.0, east.1);
+    game.strike_rock(north.0, north.1);
+
+    let left = |game: &mut Game, (x, y): (i32, i32)| {
+        let site = game
+            .dig_site_at(x, y)
+            .expect("a struck wall has a dig site");
+        game.world.get::<Durability>(site).unwrap().hp
+    };
+    assert_eq!(
+        left(&mut game, east),
+        left(&mut game, north),
+        "two fresh walls took different damage from the same player"
+    );
+}
+
+/// A3's entropy window is measured against this and nothing else, so the
+/// tick a cell was opened on has to be the tick the swing landed on.
+#[test]
+fn an_opened_cell_records_the_tick_it_was_opened() {
+    let mut game = game_at_the_frontier(3213);
+    let player = game.player_entity();
+    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+
+    for _ in 1..swings {
+        game.move_player(1, 0);
+    }
+    // Read before the breaking swing: the clock advances after it lands.
+    let opened_on = game.world.resource::<GameClock>().tick;
+    game.move_player(1, 0);
+
+    assert_eq!(
+        cell(&game, WALL),
+        Some(base_grid::BaseCell::Open {
+            mined_at: opened_on
+        }),
+        "the opened cell records a different tick from the swing that opened it"
+    );
+}
+
+#[test]
+fn a_swing_costs_a_turn() {
+    let mut game = game_at_the_frontier(3214);
+    let before = game.world.resource::<GameClock>().tick;
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        game.world.resource::<GameClock>().tick - before,
+        1,
+        "a swing at rock should cost exactly one turn, like a swing at a nest"
+    );
+}
+
+/// Settled decision 5, held as an assertion against the real assets: a cut
+/// cell may pay a trickle, but never more than flooring the same cell costs.
+/// Raising the chance past that ratio turns the wall into a fragment tap
+/// that undercuts the Mining Node.
+#[test]
+fn mining_a_wall_never_pays_more_than_flooring_it_costs() {
+    let game = game(3215);
+    let items = game.world.resource::<ItemDb>();
+    let substrate = items
+        .get(ids::BLANK_SUBSTRATE)
+        .expect("the shipped assets craft a Blank Substrate");
+    let fragments = substrate
+        .craftable
+        .as_ref()
+        .expect("a Blank Substrate is crafted, not found")
+        .cost
+        .iter()
+        .find(|(id, _)| id.as_str() == ids::CORE_FRAGMENT)
+        .map(|(_, qty)| *qty)
+        .expect("a Blank Substrate is pressed out of Core Fragments");
+
+    assert!(
+        crate::tuning::BASE_MINE_FRAGMENT_CHANCE < fragments as f32,
+        "a cut cell pays {} Core Fragments on average against the {fragments} \
+         that flooring it costs — the wall has become a fragment tap",
+        crate::tuning::BASE_MINE_FRAGMENT_CHANCE
+    );
 }

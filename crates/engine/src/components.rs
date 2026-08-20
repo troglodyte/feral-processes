@@ -1459,7 +1459,8 @@ pub struct SurfaceLink;
 ///
 /// There is exactly one, spawned once by `Game::new` (and restored once by
 /// `Game::load`) and never destroyed: it carries no `Durability`, so
-/// `run_raid`'s `With<Durability>` query cannot select it. Unlike a
+/// `run_raid`'s `(With<Durability>, With<Structure>)` query cannot select
+/// it. Unlike a
 /// `SurfaceLink`, it survives `Game::enter_next_zone`'s stale-entity sweep
 /// — it is not zone-local — and is moved to the new zone's spawn point
 /// rather than despawned and respawned, so its identity carries across a

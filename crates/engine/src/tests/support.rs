@@ -631,7 +631,7 @@ struct GridSupplyStood;
 /// Built out of `spawn_structure_at`, so — like the rest of this file's
 /// fixtures — it carries no `Durability`, which keeps it out of the GC
 /// Entropy Sweep's target pool (`Game::run_raid` filters on
-/// `With<Durability>`). A raidable fixture here would change how many
+/// `(With<Durability>, With<Structure>)`). A raidable fixture here would change how many
 /// `GameRng` draws a multi-tick test consumes and shift every roll after it;
 /// see the RNG-stream hazard this file's fixtures already avoid.
 pub(super) fn stand_ample_grid_supply(game: &mut Game) {

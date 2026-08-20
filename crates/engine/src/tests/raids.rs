@@ -1608,3 +1608,33 @@ fn a_raid_defender_brought_to_zero_is_destroyed_rather_than_standing_down() {
         "the loss is reported as a Raid line, since the player wasn't there to see it"
     );
 }
+
+/// A `DigSite` carries `Durability` and no `Nest`, which is the pair the
+/// raid query used to mean "a structure". A marked box is 625 of them, so
+/// an unfixed query hands a sweep marked rock instead of a machine — and
+/// destroying a site drops the mark and every swing of chip progress while
+/// `BaseGrid` still reports the cell solid, i.e. the wall heals to full.
+#[test]
+fn raid_check_never_targets_a_dig_site_even_as_the_only_durability_holder() {
+    let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let existing: Vec<Entity> = {
+        let mut query = game.world.query_filtered::<Entity, With<Durability>>();
+        query.iter(&game.world).collect()
+    };
+    for e in existing {
+        game.world.despawn(e);
+    }
+    game.toggle_mark_box((4, 4), (4, 4));
+    let site = game.dig_site_at(4, 4).expect("marking spawns a dig site");
+    let full = game.world.get::<Durability>(site).unwrap().hp;
+
+    for _ in 0..500 {
+        game.raid_check();
+    }
+
+    assert_eq!(
+        game.world.get::<Durability>(site).map(|d| d.hp),
+        Some(full),
+        "a marked cell must never take raid damage, even as the only Durability holder"
+    );
+}

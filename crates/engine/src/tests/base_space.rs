@@ -2626,3 +2626,28 @@ fn a_posted_digger_is_named_by_the_cell_it_is_cutting() {
         "and must not fall through to the player, got: {activity}"
     );
 }
+
+/// The occupancy rule is "a body is standing here", not "a body holding a
+/// `Task` is standing here". Base staff between postings hold none — and a
+/// cell reverted under one seals it inside solid rock, where `post_field`
+/// gates its own start tile on `BaseGrid::walkable` and can never route it
+/// out again.
+#[test]
+fn a_cell_an_idle_base_staffer_is_standing_on_never_reverts() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3234, cut);
+    // No `Task`: `schedule_base_labour` early-returns on a game over or an
+    // active battle without parking anyone, and `park_idle_staff` declines
+    // a park tile that is occupied or unwalkable. Entropy still runs.
+    game.world.spawn((
+        crate::components::BaseStaff,
+        Position { x: cut.0, y: cut.1 },
+    ));
+
+    wait_out(&mut game, crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3);
+
+    assert!(
+        matches!(cell(&game, cut), Some(base_grid::BaseCell::Open { .. })),
+        "the cell under an idle base staffer closed over it"
+    );
+}

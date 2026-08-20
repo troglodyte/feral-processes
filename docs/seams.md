@@ -1194,13 +1194,25 @@ comes from two places that must not be confused. The party's cell is
 `Locale::Base`'s own coordinates — **never** the player's `Position`,
 which is pinned to the anchor tile on the zone surface — while a posted
 program's cell *is* its `Position`, because a posted program is the other
-base-space exception. The occupancy query is `(With<Task>, Without<Player>)`
-rather than `With<Task>` for the same reason: the player can hold a `Task`
-too, since `Game::work_structure` posts them, and `With<Task>` alone does
-not mean "a body standing in base space". Getting that wrong does not
-crash or fail a test; it reverts the cell somebody is standing on, and
-"the party is inside solid rock" is a state the Stack spent its own seam
-making unreachable.
+base-space exception. The occupancy query excludes `Player` for the same
+reason: the player can hold a `Task` too, since `Game::work_structure`
+posts them, and `With<Task>` alone does not mean "a body standing in base
+space". Getting that wrong does not crash or fail a test; it reverts the
+cell somebody is standing on, and "the party is inside solid rock" is a
+state the Stack spent its own seam making unreachable.
+
+**And `With<Task>` alone does not mean "a body standing in base space" in
+the other direction either**, which is why the query is
+`Or<(With<Task>, With<BaseStaff>)>`. A `Task` is what a body is *doing*;
+occupancy is where it is *standing*. Staff between postings hold none, and
+`park_idle_staff` cannot always walk one home — it declines a park tile
+that is occupied or unwalkable, and `schedule_base_labour` early-returns
+without parking anyone at all on a game over or during a battle, while
+this system keeps running from the schedule regardless. A cell reverted
+under an idle staffer is not a cosmetic loss: `hauling::post_field` gates
+its own **start** tile on `BaseGrid::walkable`, so the field is empty, the
+body reports `NoRoute` forever, and it can never be posted or walked again
+for the rest of the run.
 
 ### A mark is one verb, and what it means is decided by the cell under it
 
@@ -1230,8 +1242,18 @@ Clearing a mark retires the `DigSite` **unless it is still holding chip
 progress**, so unmarking a wall you had already started on does not heal
 it.
 
-The trap runs the other way through `Durability`. Entropy reverts a cut
-cell to *solid*, not to chipped, and a marked site outlives that revert
+The trap runs the other way through `Durability`, and it runs twice. The
+first is the raid query: a `DigSite` carries `Durability` and no `Nest`,
+which is exactly the pair `run_raid` used to mean "a building". A marked
+box is up to 625 of them, so sweeps landed on rock instead of machines,
+and a sweep that destroyed a site dropped the mark and every swing of chip
+progress while `BaseGrid` still reported the cell solid — the wall healed
+to full. Both raid target queries are `With<Structure>` now, for
+`repair_system`'s reason: `Durability` alone has never meant "a building",
+and a positive filter keeps the next carrier out by construction rather
+than needing a fourth exclusion.
+
+The second: entropy reverts a cut cell to *solid*, not to chipped, and a marked site outlives that revert
 with its `hp` sitting at zero. `strike_rock` refills it to `max_hp` when it
 finds one, or the next swing lands on a spent meter and opens a whole wall
 for free — which makes the promise `BASE_ENTROPY_REFILL_TICKS` is there to

@@ -81,6 +81,16 @@ plan says nothing at all, because it opens itself as the shell comes down.
 - All four of the new tuning values — rock durability, the fragment chance,
   how long the frontier holds, and how fast a posted digger swings — are
   unmeasured starting values.
+- GC Entropy Sweeps were landing on marked rock instead of your machines. A
+  dig site carries a durability pool, which is what the raid picked its
+  target by, so a large plan drew nearly every sweep away from the base —
+  and a sweep that finished one off took the mark and every swing of
+  progress with it while the wall stayed standing, so it healed to full.
+  Sweeps target buildings again.
+- A base staffer standing between postings could have the ground reclaimed
+  out from under it and be sealed into solid rock permanently — unable to be
+  posted, and unable to walk anywhere, for the rest of the run. The frontier
+  now counts anybody standing on it, not just somebody mid-job.
 
 ## 0.13.0
 

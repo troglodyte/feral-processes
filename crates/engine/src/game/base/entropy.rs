@@ -11,9 +11,15 @@
 use bevy_ecs::prelude::*;
 
 use crate::base_grid::{BaseCell, BaseGrid};
-use crate::components::{Player, Position, Task};
+use crate::components::{BaseStaff, Player, Position, Task};
 use crate::resources::{GameClock, Locale};
 use crate::tuning::BASE_ENTROPY_REFILL_TICKS;
+
+/// "A body standing in base space", as the occupancy filter for
+/// `base_entropy_system`: a posted program (`Task`) or a base staffer
+/// between postings (`BaseStaff`), and never the player, whose `Position`
+/// is pinned to the anchor tile on the zone surface.
+type BaseOccupant = (Or<(With<Task>, With<BaseStaff>)>, Without<Player>);
 
 /// Reverts every unoccupied `Open` cell older than
 /// `tuning::BASE_ENTROPY_REFILL_TICKS` to solid rock — *absent* from
@@ -31,11 +37,21 @@ use crate::tuning::BASE_ENTROPY_REFILL_TICKS;
 /// (`Game::work_structure` posts them), which is exactly why the query
 /// excludes them rather than trusting `With<Task>` to mean "a body in base
 /// space".
+///
+/// **A `Task` is not what makes a body occupy a cell — standing there is**,
+/// which is why `BaseStaff` is the other arm. Staff between postings hold
+/// no `Task`, and `park_idle_staff` cannot always move one home: it declines
+/// a park tile that is occupied or unwalkable, and `schedule_base_labour`
+/// early-returns without parking anyone at all on a game over or during a
+/// battle, while this system keeps running. A cell reverted under an idle
+/// staffer seals it inside solid rock, and `hauling::post_field` gates its
+/// own start tile on `BaseGrid::walkable` — so the body is unpostable and
+/// unreachable for the rest of the run.
 pub(crate) fn base_entropy_system(
     mut grid: ResMut<BaseGrid>,
     clock: Res<GameClock>,
     locale: Res<Locale>,
-    occupants: Query<&Position, (With<Task>, Without<Player>)>,
+    occupants: Query<&Position, BaseOccupant>,
 ) {
     let party = match *locale {
         Locale::Base { x, y } => Some((x, y)),

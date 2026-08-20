@@ -280,15 +280,18 @@ impl Game {
     /// broken by id so a press resolves the same way every time rather than
     /// on bevy's query iteration order.
     ///
-    /// `Without<Nest>` because a nest carries `Durability` too and is not
-    /// part of the base — a trigger meant for a machine must not quietly
-    /// pick the wildlife.
+    /// `With<Structure>` for `repair_system`'s reason, and it is what the
+    /// target pool is stated as: `Durability` alone has never meant "a
+    /// building". A `Nest` carries one and is wildlife; a `DigSite` carries
+    /// one and is marked rock. A trigger meant for a machine must pick a
+    /// machine, and the positive filter keeps a fifth `Durability` carrier
+    /// out by construction rather than needing a fourth exclusion.
     fn nearest_damageable_structure(&mut self) -> Option<Entity> {
         let at = self.world.get::<Position>(self.player_entity()).copied()?;
         let mut targets: Vec<(Entity, i32)> = {
             let mut query = self
                 .world
-                .query_filtered::<(Entity, &Position), (With<Durability>, Without<Nest>)>();
+                .query_filtered::<(Entity, &Position), (With<Durability>, With<Structure>)>();
             query
                 .iter(&self.world)
                 .map(|(e, p)| (e, (p.x - at.x).abs() + (p.y - at.y).abs()))
@@ -314,11 +317,18 @@ impl Game {
     /// Split from the roll so the dev console can fire the real thing. The
     /// roll stays in `raid_check` because that is the only caller that
     /// should be making the decision.
+    ///
+    /// The target pool is `With<Structure>` and not merely `Durability`, for
+    /// the reason `nearest_damageable_structure` states. A marked box is up
+    /// to 625 `DigSite`s, each carrying `Durability`; under the old filter
+    /// they swamped the real machines, and a sweep that destroyed one
+    /// dropped the mark and every swing of chip progress while `BaseGrid`
+    /// still reported the cell solid — the wall silently healed to full.
     fn run_raid(&mut self) {
         let targets: Vec<Entity> = {
             let mut query = self
                 .world
-                .query_filtered::<Entity, (With<Durability>, Without<Nest>)>();
+                .query_filtered::<Entity, (With<Durability>, With<Structure>)>();
             query.iter(&self.world).collect()
         };
         if targets.is_empty() {

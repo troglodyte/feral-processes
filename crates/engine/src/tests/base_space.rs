@@ -798,3 +798,42 @@ fn mined_rock_is_walkable_before_it_is_floored() {
         "the fixture cell must be Open and not Floor, or this tests nothing"
     );
 }
+
+/// A refused step still breaks off a posted job, exactly as shoving at a
+/// wall on the zone surface does — `move_player` drops the job before it
+/// looks at what is in the way, "since either way you stopped working to do
+/// it", and `Game::work_structure` promises the player as much when it
+/// posts.
+///
+/// The turn and the job point opposite ways at this one site — the step
+/// costs nothing, the job ends anyway — so this is the only thing that says
+/// the ordering inside `move_in_base` was chosen rather than fallen out of
+/// an early return.
+#[test]
+fn shoving_at_solid_rock_still_breaks_off_a_job() {
+    let mut game = game_with_a_base(3129);
+    let at = player_tile(&game);
+    let node = spawn_mining_node(&mut game, at.x - 1, at.y);
+    game.enter_base().unwrap();
+    game.work_structure(node).expect("standing beside the node");
+    let player = game.player_entity();
+    assert!(
+        game.world.get::<Task>(player).is_some(),
+        "the fixture must actually post a job"
+    );
+    let tick = game.current_tick();
+
+    // North of the exit cell was never laid: absent from `BaseGrid`, so solid.
+    game.move_player(0, -1);
+
+    assert_eq!(
+        game.base_pos(),
+        Some((0, 0)),
+        "the fixture's step must really be refused, or this proves nothing"
+    );
+    assert_eq!(game.current_tick(), tick, "and must still cost no turn");
+    assert!(
+        game.world.get::<Task>(player).is_none(),
+        "a shove at rock is still you stopping work to try it"
+    );
+}

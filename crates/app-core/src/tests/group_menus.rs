@@ -57,65 +57,121 @@ fn a_program_in_range_brings_back_the_rows_that_need_one() {
     assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
 }
 
-/// Clause 1, and the whole job of the `base_only` flag. Every one of these
-/// rows is a `Game::require_base` caller, so base space is the only locale
+/// Every row the `base_only` flag carries, and the flag's whole job. Each of
+/// them is a `Game::require_base` caller, so base space is the only locale
 /// the engine will accept them in — offering them anywhere else advertises a
 /// screen whose every action is refused on the far side. The flag used to be
 /// `surface_only` and used to ask `is_underground()`, which was the same
 /// question only while there were two locales.
-///
-/// One fixture in all three locales rather than three fixtures, for the
-/// reason the engine's own `tests/base_space.rs` gives: the base, the
-/// machines and the player's `Position` are identical in all three runs, so
-/// where the party is standing is the only thing that can explain a
-/// difference.
-#[test]
-fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
-    const GUARDED: [&str; 5] = [
-        "Deploy a structure",
-        "Base staff",
-        "Work a structure yourself",
-        "Upgrade a structure",
-        "Demolish a structure",
-    ];
+const GUARDED: [&str; 6] = [
+    "Deploy a structure",
+    "Work orders",
+    "Base staff",
+    "Work a structure yourself",
+    "Upgrade a structure",
+    "Demolish a structure",
+];
 
-    let mut inside = app_owning_a_program_and_a_compiler(4004, &[]);
-    stand_in_base(&mut inside);
-    let rows = labels(&inside.base_menu_rows());
-    for present in GUARDED {
+/// Which of `GUARDED` `app` offers from inside the base, having asserted
+/// that walking back out through the anchor takes **every** one of them off
+/// screen.
+///
+/// One fixture on both sides of the door rather than two fixtures, for the
+/// reason the engine's own `tests/base_space.rs` gives: the base, the
+/// machines and the player's `Position` are identical either side, so where
+/// the party is standing is the only thing that can explain a difference.
+///
+/// Returns what it found so the caller can prove the fixtures between them
+/// exercise all six rows. A row no fixture ever makes available inside is a
+/// row whose flag has no coverage at all — flipping it to `base_only: false`
+/// would leave the suite green, which is exactly the hole this returns a
+/// value to close.
+fn base_rows_lost_on_leaving(mut app: App) -> Vec<&'static str> {
+    assert!(
+        app.game.as_ref().is_some_and(|g| g.in_base()),
+        "the fixture must start inside the base"
+    );
+    let offered: Vec<&'static str> = labels(&app.base_menu_rows())
+        .into_iter()
+        .filter(|label| GUARDED.contains(label))
+        .collect();
+
+    app.game
+        .as_mut()
+        .unwrap()
+        .leave_base()
+        .expect("the fixture stands on the exit cell");
+
+    let rows = labels(&app.base_menu_rows());
+    for absent in GUARDED {
         assert!(
-            rows.contains(&present),
-            "{present:?} must be offered where the engine permits it: {rows:?}"
+            !rows.contains(&absent),
+            "{absent:?} is a base action, so it must not be offered on the open grid: {rows:?}"
         );
     }
+    // Not a menu that lost every row: the two that are not locale-gated at
+    // all have to survive the walk out, or the assertions above would pass
+    // against a base menu that had simply gone empty.
+    assert!(
+        rows.contains(&"Research"),
+        "research is not locale-gated: {rows:?}"
+    );
+    assert!(
+        rows.contains(&"Recipes"),
+        "recipes are asset data, not a scan around the party: {rows:?}"
+    );
 
-    for (standing, mut app) in [
-        (
-            "on the open grid",
-            app_owning_a_program_and_a_compiler(4004, &[]),
-        ),
-        (
-            "in the Stack",
-            app_owning_a_program_and_a_compiler_deep(4004, &[], &[], true),
-        ),
+    offered
+}
+
+#[test]
+fn the_base_menu_offers_its_base_rows_only_inside_base_space() {
+    let mut covered: Vec<&'static str> = Vec::new();
+
+    // Two fixtures because no single one stands up every guarded row: the
+    // compiler fixture has something to upgrade and clearance to deploy, the
+    // small base has an extractor whose product can be ordered.
+    let mut compiler = app_owning_a_program_and_a_compiler(4004, &[]);
+    stand_in_base(&mut compiler);
+    covered.extend(base_rows_lost_on_leaving(compiler));
+    covered.extend(base_rows_lost_on_leaving(
+        app_inside_a_small_base_with_programs(4006, false, 1),
+    ));
+
+    for row in GUARDED {
+        assert!(
+            covered.contains(&row),
+            "no fixture here ever offers {row:?} inside the base, so its `base_only` flag is untested: {covered:?}"
+        );
+    }
+}
+
+/// The same rows are off screen four frames down, where they were already
+/// hidden before the base moved out of phase — so the flag's rename cannot
+/// have quietly re-opened the Stack.
+#[test]
+fn the_base_menu_drops_its_base_rows_underground_too() {
+    for mut app in [
+        app_owning_a_program_and_a_compiler_deep(4005, &[], &[], true),
+        app_inside_a_small_base_with_programs(4007, true, 1),
     ] {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.is_underground()),
+            "precondition: the fixture really went down"
+        );
         let rows = labels(&app.base_menu_rows());
         for absent in GUARDED {
             assert!(
                 !rows.contains(&absent),
-                "{absent:?} is a base action, so it must not be offered {standing}: {rows:?}"
+                "{absent:?} reaches the base through a pinned Position: {rows:?}"
             );
         }
-        assert!(
-            rows.contains(&"Research"),
-            "research is not locale-gated, {standing}: {rows:?}"
-        );
         // The chains are a property of the loaded assets, not of anything the
         // player's `Position` can reach — and four frames down is exactly when
         // you want to check what the base back home still needs.
         assert!(
             rows.contains(&"Recipes"),
-            "recipes are asset data, not a scan around the party, {standing}: {rows:?}"
+            "recipes are asset data, not a scan around the party: {rows:?}"
         );
     }
 }
@@ -351,6 +407,12 @@ fn the_base_menu_offers_work_orders_and_staff_rather_than_manual_posting() {
 #[test]
 fn the_work_orders_row_appears_once_something_is_orderable() {
     let mut app = test_app(4031);
+    // Inside the base, where the row is legal at all: `base_only` drops it
+    // before `available` is ever consulted, so on the open grid the
+    // assertion below would pass at the locale guard rather than at the
+    // rule it names. Which locale hides the row is
+    // `the_base_menu_offers_its_base_rows_only_inside_base_space`'s job.
+    stand_in_base(&mut app);
     assert!(
         !labels(&app.base_menu_rows()).contains(&"Work orders"),
         "nothing is deployed, so nothing can be ordered"

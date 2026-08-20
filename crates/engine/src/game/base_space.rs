@@ -112,22 +112,29 @@ impl Game {
     /// inside it, so base space needs no analogue of the Stack's
     /// `die_in_the_rock`.
     ///
-    /// A refused step costs no turn, unlike shoving at a wall on the zone
-    /// surface. Base space is walls until the player cuts them, and charging
-    /// a turn for every corner of your own base you brush against would tax
-    /// walking around indoors.
+    /// **A refused step costs no turn**, unlike shoving at a wall on the zone
+    /// surface or in the Stack, which both charge one. Base space is walls
+    /// until the player cuts them, and charging a turn for every corner of
+    /// your own base you brush against would tax walking around indoors.
+    ///
+    /// **A refused step still breaks off a posted job**, and that one *does*
+    /// match the surface: `move_player` drops the job before it looks at
+    /// what is in the way, on the grounds that either way you stopped
+    /// working to do it, and `Game::work_structure` promises the player as
+    /// much when it posts. The two rules point opposite ways on purpose —
+    /// the turn is what the world charges for a step, and the job is what
+    /// the player's attention was on — so the order below is load-bearing
+    /// rather than incidental.
     pub(crate) fn move_in_base(&mut self, dx: i32, dy: i32) {
         let Some((x, y)) = self.base_pos() else {
             return;
         };
+        // Before the wall check, exactly as `move_player` does it.
+        self.break_off_job();
         let (nx, ny) = (x + dx, y + dy);
         if !self.world.resource::<BaseGrid>().walkable(nx, ny) {
             return;
         }
-        // The machines are in base space, so the walk that breaks off a job
-        // posted to one is a walk in here — see `Game::work_structure`,
-        // which promises exactly that when it posts.
-        self.break_off_job();
         self.world.insert_resource(Locale::Base { x: nx, y: ny });
         self.tick();
     }

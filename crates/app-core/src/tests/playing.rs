@@ -156,3 +156,50 @@ fn a_refused_crossing_reports_the_engines_own_reason() {
         "the status line must carry the engine's refusal, got: {said}"
     );
 }
+
+/// A step that never happened is not an action. Base space is solid until
+/// something lays floor, so a movement key from the exit cell is refused and
+/// costs no turn — and `App::after_world_action` must not then clear the
+/// status line explaining an earlier refusal, nor queue a footstep.
+///
+/// The surface half is the control: the identical keypress there *is* an
+/// action, so a `stepped` that always answered `false` would fail here
+/// rather than pass this test twice over.
+#[test]
+fn a_refused_step_in_base_space_is_not_an_action() {
+    let mut inside = app_inside_a_small_base_with_programs(217, false, 1);
+    assert!(
+        inside.game.as_ref().is_some_and(|g| g.in_base()),
+        "the fixture must start inside the base, where the rock is"
+    );
+    inside.status_line = Some("an earlier refusal".to_string());
+    let _ = inside.take_sounds();
+
+    inside.handle_key(GameKey::Up);
+
+    assert_eq!(
+        inside.status_line.as_deref(),
+        Some("an earlier refusal"),
+        "a step into rock must leave the line that was explaining something"
+    );
+    assert!(
+        inside.take_sounds().is_empty(),
+        "and must not play a footstep for a step that did not happen"
+    );
+
+    let mut outside = test_app(218);
+    outside.status_line = Some("an earlier refusal".to_string());
+    let _ = outside.take_sounds();
+
+    outside.handle_key(GameKey::Up);
+
+    assert_eq!(
+        outside.status_line, None,
+        "the control: a real step on the open grid still clears the line"
+    );
+    assert_eq!(
+        outside.take_sounds().len(),
+        1,
+        "and still plays exactly one sound"
+    );
+}

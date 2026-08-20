@@ -3,6 +3,27 @@
 use crate::DEV_CONSOLE_KEY;
 use crate::*;
 
+/// One step, reported honestly: `true` only when the world actually moved.
+///
+/// `Game::move_player` returns nothing, and on the zone surface assuming an
+/// action was fine — every step there spends a turn, a bounce off a wall
+/// included. Base space does not work that way: a step into solid rock is
+/// refused outright and costs nothing (see `Game::move_in_base`), so
+/// reporting it as an action would clear the status line explaining an
+/// earlier refusal and queue a footstep for a step that never happened.
+///
+/// The clock is what both locales agree on, so that is what this reads.
+/// The game-over clause is the one case a real action leaves the clock
+/// standing still: ground that kills you sets `GameOver` before
+/// `Game::tick` runs and `tick` then returns without advancing — but
+/// `App::after_world_action` still has to see an action, or the run would
+/// never reach the death screen.
+fn stepped(game: &mut Game, dx: i32, dy: i32) -> bool {
+    let before = game.current_tick();
+    game.move_player(dx, dy);
+    game.current_tick() > before || game.is_game_over().is_some()
+}
+
 impl App {
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
         match key {
@@ -171,22 +192,10 @@ impl App {
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
-                GameKey::Up | GameKey::Char('k') => {
-                    game.move_player(0, -1);
-                    true
-                }
-                GameKey::Down | GameKey::Char('j') => {
-                    game.move_player(0, 1);
-                    true
-                }
-                GameKey::Left | GameKey::Char('h') => {
-                    game.move_player(-1, 0);
-                    true
-                }
-                GameKey::Right | GameKey::Char('l') => {
-                    game.move_player(1, 0);
-                    true
-                }
+                GameKey::Up | GameKey::Char('k') => stepped(game, 0, -1),
+                GameKey::Down | GameKey::Char('j') => stepped(game, 0, 1),
+                GameKey::Left | GameKey::Char('h') => stepped(game, -1, 0),
+                GameKey::Right | GameKey::Char('l') => stepped(game, 1, 0),
                 GameKey::Char('.') => {
                     game.wait();
                     true

@@ -1369,19 +1369,35 @@ fn deploying_a_home_widens_the_opening_ring_and_a_reload_keeps_it() {
 }
 
 /// The same fault on the other reader: `frames_at` subtracts the base's reach
-/// before charging a link its distance, so a link near the base ran deeper
-/// than it should on a fresh run and shallower again after a reload.
+/// before charging a link its distance, so a run with a base standing gets
+/// shallower stacks near it than a run without one.
+///
+/// Asserted as a strict inequality at a distance where the subtraction has to
+/// change the answer — `STACK_TILES_PER_FRAME * 2` out, where four tiles of
+/// reach is a whole frame — rather than as "the same before and after a
+/// reload". That weaker shape passes against a reader that has stopped
+/// subtracting anything at all, because it then answers the same wrong
+/// number on both sides of the save.
 #[test]
-fn a_links_depth_near_the_base_is_the_same_before_and_after_a_reload() {
-    let bare = game(3144);
+fn a_link_near_the_base_runs_shallower_than_one_by_a_baseless_run() {
     let mut game = game(3144);
     let spawn = game.zone_spawn_point();
-    let link = (spawn.0 + crate::tuning::STARTING_POCKET_RADIUS + 6, spawn.1);
+    let link = (spawn.0 + crate::tuning::STACK_TILES_PER_FRAME * 2, spawn.1);
 
+    let unbased = game.frames_at(link);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     game.place_structure("home", 1, 0).unwrap();
-    let before = game.frames_at(link);
+    let based = game.frames_at(link);
 
+    assert!(
+        based < unbased,
+        "the base's own reach has to come off a link's distance: \
+         no base={unbased}, base={based}"
+    );
+
+    // And the same run reloaded answers the same, which is what the fault
+    // actually broke: `Platform::radius` was rebuilt on load and not before
+    // it, so one run played two ways.
     let path = std::env::temp_dir().join(format!(
         "feral_processes_frames_at_{}.bin",
         std::process::id()
@@ -1389,18 +1405,9 @@ fn a_links_depth_near_the_base_is_the_same_before_and_after_a_reload() {
     game.save(&path).unwrap();
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
-
     assert_eq!(
         loaded.frames_at(link),
-        before,
+        based,
         "how deep a link runs must not depend on whether the run has been reloaded"
-    );
-    // And the base's reach really is being subtracted, or the two halves
-    // above would agree on a number that ignores the base entirely.
-    let unbased = bare.frames_at(link);
-    assert!(
-        unbased >= before,
-        "a run with no base charges a link the whole distance, so the base \
-         can only ever make it shallower: bare={unbased} based={before}"
     );
 }

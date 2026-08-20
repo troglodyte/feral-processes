@@ -3944,3 +3944,57 @@ repeating here is that the base slab may not be claimed: it is the one safe
 ground in the game, nothing spawns there and no ambush fires there, and a
 base is stamped over whatever terrain it lands on — so ground that bit there
 would make the safe floor depend on where the player happened to build.
+
+### The manual's index is a menu and a page is a document
+
+`?` used to draw `HELP_ROWS`, a const in the renderer, over a screen that
+closed again on any key. It is now `assets/help/*.md` behind two screens,
+and the split between them is the load-bearing decision.
+
+The two answer to different idioms and a page cannot be both. Selection-
+driven scrolling — `popup_layout`'s, which every list screen shares — keeps
+the *selected* row visible. Put the further-reading rows at the bottom of a
+menu-idiom page and it opens scrolled to the end of the prose, because the
+first selectable row is down there. Put them at the top instead and long
+prose is unreachable, because the highlight never leaves the head of the
+list. Scroll and select are the same key on this screen, and a document
+needs scroll, so links take a typed label rather than a highlight.
+
+That is the whole reason `Mode::HelpPage` exists rather than the index
+gaining a second job. The index stays an ordinary numbered menu, which is
+why more than nine topics is already solved by `menu_shortcut`.
+
+**The link rule replaces a `see_also:` field.** `[label](topic-id)` does two
+things from one authoring gesture: the sentence reads as `label`, and
+`topic-id` joins that page's further-reading list, deduped, in
+first-appearance order. A separate field would be the cross-reference
+written twice — once in the sentence that motivates it and once in a list —
+and the copy that drifts is the one nobody reads. Resolution is a **second
+pass** in `load_dir`, because a target cannot be checked until the whole
+directory has parsed; an unresolvable target is dropped from `links` and
+warned about rather than kept, since a menu row that refuses when picked is
+worse than a row that was never offered. The prose still reads as written:
+only the row goes.
+
+**The wrap is engine-side** (`text::wrap`, lifted out of
+`render/popup.rs::wrap_text`, which is now a call) for the reason the
+read-only-screen seam gives at length: a screen's row count is owned by
+app-core, so a per-row transform done in the renderer opens the screen on
+rows that are not drawn. A second wrap implementation here is exactly the
+copy this repo has been bitten by four times.
+
+Markdown rather than RON, and the argument is not house style: a page is
+prose with nothing to validate past "does it have a title", so RON would buy
+consistency at the cost of escaping every quote in every paragraph — on
+content whose whole point is that a player can edit it. Identity and
+ordering come from the filename (`10-start-here.md`), so there is no front
+matter and therefore no second parser; a file without the `NN-` prefix is
+skipped rather than defaulted to order 0, because ordering is the whole of
+what the filename is for.
+
+Two traps. `assets/help/README.md` is a `.md` file in a directory of `.md`
+content — the one asset directory whose schema reference shares an extension
+with the thing it documents — so `load_dir` skips the name explicitly and in
+silence. And the easter-egg census moved here with the content it guards: it
+reads parsed pages rather than raw files, because that README names all
+three hidden keys in the course of forbidding them.

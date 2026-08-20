@@ -4,8 +4,9 @@
 //! screen: `W`, `Z` and `T` twice — see `crates/engine/EASTER_EGGS.md`.
 //! An omission is invisible, so these are the assertions that hold it.
 //!
-//! The gui half lives in `crates/gui/src/render/meta.rs`, over the one
-//! screen in the game that lists key bindings.
+//! The other half is `tests::assets::no_shipped_help_page_names_a_hidden_key`,
+//! over `assets/help/` — the manual is the one thing in the game that lists
+//! key bindings.
 
 use super::support::*;
 use crate::*;

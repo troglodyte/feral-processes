@@ -31,14 +31,22 @@ something. That is the whole reason this file exists.
 Two assertions, because there are only two places a key can reach the
 player:
 
-- `crates/gui/src/render/meta.rs` —
-  `the_help_screen_never_names_a_hidden_key`. `draw_help` is the *only*
-  screen in the game that lists key bindings; it covers the map, the Stack,
-  trading and battle in one list. The test asserts no row contains `W`, `T`
-  or `Z` as a standalone whitespace-delimited token, which is the binding
-  idiom that screen uses (`s save`, `L history`, `A all attack`). Tokens,
-  never substrings — the rows are full of those letters inside ordinary
-  words, and of the lowercase `t` that legitimately binds trade.
+- `crates/engine/src/tests/assets.rs` —
+  `no_shipped_help_page_names_a_hidden_key`, over `assets/help/*.md`. The
+  manual is the *only* thing in the game that lists key bindings; its
+  Controls page covers the map, the Stack, trading and battle in one list.
+  The test asserts no row contains `W`, `T` or `Z` as a standalone
+  whitespace-delimited token, which is the binding idiom those pages use
+  (`s — save`, `L — history`, `A — all attack`). Tokens, never substrings —
+  the prose is full of those letters inside ordinary words, and of the
+  lowercase `t` that legitimately binds trade.
+
+  It used to read `HELP_ROWS`, a const in `crates/gui/src/render/meta.rs`.
+  The manual is authored content now, so the census guards against the
+  **player** editing a page as well as against a developer editing a const —
+  which is the reason it moved. It reads *parsed* pages rather than raw
+  files, because `assets/help/README.md` names all three keys in the course
+  of forbidding them.
 - `crates/engine/src/tests/easter_eggs.rs` —
   `no_battle_action_or_party_command_claims_a_hidden_key`. Everything else a
   player reads about battle keys comes from `Game::battle_action_options`

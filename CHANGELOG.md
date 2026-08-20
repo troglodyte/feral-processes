@@ -27,6 +27,45 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.2
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the manual is content read off disk and nothing about it is written into a
+run.
+
+### A manual you read inside the game
+
+`?` used to draw a card of key bindings that closed again on any key. It now
+opens a manual: an index of topics, each one a page you can scroll, with
+further reading at the bottom of each page that you follow by typing its
+key. Four pages ship — Start here, Controls, Zones and breaching, and
+Getting stronger — and the old key-bindings card is one of them rather than
+a second help surface you have to know about separately.
+
+**`?` no longer closes on any key.** That is a real change to an existing
+reflex: the screen is navigable now, so Esc backs out of it one page at a
+time, like every other screen. Esc from the index closes the manual.
+
+The index is a menu and a page is a document, which is why they take
+different keys. On the index, Up/Down and Enter or a row's own key pick a
+topic. On a page, Up/Down scroll the prose, Enter does nothing, and a
+further-reading row is followed by typing the key beside it. Esc pops one
+level of wherever you have read to, so following three links and walking
+back out lands you where you started.
+
+### Pages are files you can edit
+
+The manual is `assets/help/*.md` — ordinary markdown, five rules' worth of
+it, documented in `assets/help/README.md`. Adding a topic is dropping a file
+in that directory: no rebuild, no registration, and the filename is both the
+ordering and the id a link points at. `[label](topic-id)` in a sentence
+reads as the label and adds the further-reading row in one gesture, so a
+cross-reference is written once, where it belongs.
+
+A malformed page is skipped with a warning rather than refusing to start, as
+every other asset directory does, and a link pointing at nothing is dropped
+from the list instead of drawing a row that refuses when you pick it.
+
 ## 0.13.1
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

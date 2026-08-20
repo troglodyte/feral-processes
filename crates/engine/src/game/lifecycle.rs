@@ -210,9 +210,20 @@ impl Game {
                     x: start.0,
                     y: start.1,
                 },
+                // `#` / Gray: neither arrow character was free for an
+                // entrance. `SurfaceLink` already claims `>` for "a way
+                // down" on this same surface map, and `<` is reserved to
+                // mean "a way up/out" — `stack::FrameMapCell::LinkUp` /
+                // `views::StackCellView::LinkUp` render `('<', YELLOW)` — so
+                // a door only ever entered from the surface would read
+                // backwards under either. Blue and Cyan are reserved too:
+                // Blue marks a Nemesis and Cyan is the player's own glyph
+                // colour (`game::inspection::difficulty_color`), and a
+                // permanent map fixture has no business being mistaken for
+                // either.
                 Glyph {
-                    ch: '<',
-                    color: GlyphColor::Blue,
+                    ch: '#',
+                    color: GlyphColor::Gray,
                 },
             ))
             .id();
@@ -538,9 +549,11 @@ impl Game {
                     x: anchor_pos.0,
                     y: anchor_pos.1,
                 },
+                // See `Game::new`'s copy of this spawn for why `#`/Gray
+                // rather than an arrow character or Blue/Cyan.
                 Glyph {
-                    ch: '<',
-                    color: GlyphColor::Blue,
+                    ch: '#',
+                    color: GlyphColor::Gray,
                 },
             ))
             .id();

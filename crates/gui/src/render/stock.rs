@@ -234,6 +234,25 @@ mod tests {
         );
     }
 
+    /// The strip's border is a line at its own bottom edge, so a row that
+    /// does not fit inside the band is drawn straight through it — the same
+    /// silent overflow the width is measured to avoid, on the other axis.
+    /// Measured with the real font rather than assumed off the ratio.
+    #[test]
+    fn the_row_fits_between_the_strips_top_inset_and_its_border() {
+        for window_h in [600.0, 900.0, 1080.0, 1440.0, 2160.0] {
+            let m = ui_metrics(window_h);
+            with_painter(|p| {
+                let line = p.measure_ui("[CF] 142", m.font_size).height;
+                assert!(
+                    m.inset + line <= strip_height(&m),
+                    "at {window_h}px a {line}px row does not fit a {}px strip",
+                    strip_height(&m)
+                );
+            });
+        }
+    }
+
     /// The strip has to stay inside the band `draw_popup` leaves clear at
     /// the top of the window, or it is buried by the first menu the player
     /// opens — which is most of the screens it exists to be visible on.

@@ -4736,3 +4736,80 @@ with the thing it documents — so `load_dir` skips the name explicitly and in
 silence. And the easter-egg census moved here with the content it guards: it
 reads parsed pages rather than raw files, because that README names all
 three hidden keys in the course of forbidding them.
+
+### The panes take their origin from the caller, and each view states it once
+
+**The panes take their origin from the caller, and each view states it
+once.** `draw_playing_base` hands `draw_surface_map`, `draw_stack` and
+`draw_map_inset` a `Rect` rather than a width and a height, because the
+base stock strip claims a row off the top of the window and everything
+below it has to start clear of that row.
+
+That was affordable only because both views already funnelled their
+geometry through a single converter. The corridor's whole projection —
+faces, floors, ceilings, walls, marks, the lot — derives from
+`stack::slice`, so the origin is added to one `cy` and every one of the
+~700 lines of perspective drawing follows it; `column_slice` is a
+one-line wrapper on top. The surface map's every world-to-pixel
+conversion goes through `base::tile_origin_px`, which has three call
+sites all passing identical arguments. `frame_map::inset_rect` is the
+third. Threading a `top` through the drawing code cell by cell would
+have been a change nothing could hold in step, and the first thing added
+afterwards would have been drawn at the window's origin again.
+
+**The trap is a literal `0.0` in either file.** A new draw call in
+`render/stack.rs` or `draw_surface_map` that reaches for the window
+rather than the pane draws under the strip, and there is no test that
+would see it — the panes are geometry, not text, and nothing measures
+where they start. A `Rect` in the signature is what makes the question
+unavoidable: the pane is the only origin in scope.
+
+Two rejected alternatives are worth recording, because both look cheaper
+than they are. **Clipping instead of offsetting** — leaving the panes at
+the window's origin and cutting the strip's band out with
+`Painter::clipped` — costs the map's top border and puts the corridor's
+centred perspective off-centre, since a symmetric projection cropped
+asymmetrically no longer looks like one. **Drawing the strip along the
+bottom instead**, in the band `draw_status_banner` already uses, needs no
+offset at all, but stacks a second full-width strip under the first and
+puts the readout in the one place a refusal message is already
+competing for.
+
+### A base stock tag is derived, unique, and two letters
+
+**A base stock tag is derived, unique, and two letters.** `ItemDef::tag`
+takes the initials of the name's words — `Core Fragment` becomes `CF` —
+so a modded item is listed on the strip without its author adding a
+field, the same bargain `ItemDef::category` strikes. `abbrev` overrides
+it and exists for exactly one reason: across the 23 shipped materials
+and currencies the derivation collides once, `Research Data` against
+`Routine Disk`, and the strip carries the tag and the quantity and
+nothing else — so a shared tag is a readout that lies about which pile
+is filling, and it fails with both rows drawn and both looking right.
+
+`no_two_shipped_stock_items_share_a_tag` is the census, and it is a
+census rather than a refusal inside `load_dir` because a collision is a
+content accident, not a malformed file: a mod's own is its author's to
+settle, and nothing here refuses their item. It walks `Material` and
+`Currency` alone — what `Game::base_stock` lists — and skips etched
+disks through `ItemId::etched_ability`. Every disk derives the same
+family tag by construction, and 66 of them could not have distinct
+two-letter tags; none can reach a `Stock` in the first place, so the
+exclusion costs nothing.
+
+The strip's width is **measured, never estimated from a character
+count.** The UI font is proportional, and the status column seam is the
+warning: a row wider than its panel is not clipped, it is drawn off the
+end in silence. `stock::fits` measures each candidate line including the
+`+N` tail the piles left over will need, so what does not fit is counted
+rather than dropped.
+
+`Game::base_stock` reads the same buffers `work_orders::base_holding`
+sums, through `stock::output_buffers` — one statement of which buffers
+are the base's, or the strip becomes a second opinion about the base
+rather than a readout of it. It is ordered by item id and not by
+quantity: a strip that re-sorted as buffers filled and drained would
+move every tag under the eye of the player reading it, which is the one
+thing a glanceable row cannot do. And it makes no claim about where the
+party is standing, so like a Broker's board it reads the same four
+frames down the Stack and needs no `require_surface`.

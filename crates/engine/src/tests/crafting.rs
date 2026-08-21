@@ -547,3 +547,146 @@ fn a_careful_batch_is_smaller_and_can_be_refused_outright() {
         "and the same material still buys the ordinary compile"
     );
 }
+
+/// Every copy of `item` the player is carrying, from **both** stores.
+///
+/// A copy that rolls exactly `QUALITY_DEFAULT` is plain by definition —
+/// nothing tells it from an authored one — so it stacks in `Inventory`
+/// rather than taking a ledger row, and a batch that read the ledger alone
+/// would come back short by however many rolled perfectly.
+fn compiled_copies(game: &Game, item: &str) -> Vec<GearCopy> {
+    let player = game.player_entity();
+    let id = ItemId::from(item);
+    let plain = game
+        .world
+        .get::<Inventory>(player)
+        .map(|inv| inv.count(&id))
+        .unwrap_or(0);
+    let mut copies: Vec<GearCopy> =
+        std::iter::repeat_n(GearCopy::plain(id.clone()), plain as usize).collect();
+    if let Some(ledger) = game.world.get::<GearCopies>(player) {
+        for (copy, qty) in ledger.copies.iter().filter(|(c, _)| c.item == id) {
+            copies.extend(std::iter::repeat_n(copy.clone(), *qty as usize));
+        }
+    }
+    copies
+}
+
+/// A compiled piece of gear is a *copy* now, not a stack: it carries the
+/// quality it rolled and so lands in the ledger rather than in `Inventory`.
+#[test]
+fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
+    use crate::tuning::{QUALITY_BASE, QUALITY_SPREAD};
+    let mut game = Game::new(49, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let edge = ItemId::from("kinetic_edge");
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7)]);
+
+    game.craft(&edge, 1, false).unwrap();
+
+    let copies = compiled_copies(&game, "kinetic_edge");
+    assert_eq!(copies.len(), 1, "one compile, one copy");
+    assert_eq!(
+        copies[0].rarity,
+        Rarity::Ordinary,
+        "crafting is not a chase"
+    );
+    assert!(copies[0].affix.is_none(), "and it rolls no affix either");
+    assert!(
+        (QUALITY_BASE..=QUALITY_BASE + QUALITY_SPREAD).contains(&copies[0].quality),
+        "a bare bench compiles inside its band, got {}",
+        copies[0].quality
+    );
+    assert_eq!(
+        held(&game, &edge),
+        u32::from(copies[0].quality == crate::tuning::QUALITY_DEFAULT),
+        "a copy that rolled the authored spec is plain and stacks; anything \
+         else takes a ledger row of its own"
+    );
+}
+
+/// The loop the axis exists for: compile a batch, keep the best. The roll is
+/// per unit, so a batch is a spread rather than N of one thing.
+#[test]
+fn a_batch_compiles_copies_that_differ_from_each_other() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let edge = ItemId::from("kinetic_edge");
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 12)]);
+
+    game.craft(&edge, 12, false).unwrap();
+
+    let mut seen: Vec<u8> = compiled_copies(&game, "kinetic_edge")
+        .iter()
+        .map(|c| c.quality)
+        .collect();
+    assert_eq!(seen.len(), 12, "twelve units, twelve copies");
+    seen.sort_unstable();
+    seen.dedup();
+    assert!(
+        seen.len() > 1,
+        "a per-unit roll should spread a batch, got {seen:?}"
+    );
+}
+
+/// What the base buys: a developed bench and a careful compile put the
+/// *whole* batch above what a bare one can reach.
+#[test]
+fn a_better_bench_lifts_every_copy_in_the_batch() {
+    use crate::tuning::{
+        QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_SPREAD,
+    };
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let lance = ItemId::from("arc_lance");
+    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 6)]);
+
+    game.craft(&lance, 6, false).unwrap();
+    let bare = compiled_copies(&game, "arc_lance");
+    assert!(
+        bare.iter()
+            .all(|c| c.quality <= QUALITY_BASE + QUALITY_SPREAD),
+        "a tier-one bench cannot reach past its band: {:?}",
+        bare.iter().map(|c| c.quality).collect::<Vec<_>>()
+    );
+
+    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    game.world.entity_mut(bench).insert(StructureTier(5));
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 6)]);
+    game.craft(&lance, 6, true).unwrap();
+
+    let floor = QUALITY_BASE + 4 * QUALITY_BENCH_PER_TIER + QUALITY_CAREFUL_BONUS;
+    let developed: Vec<u8> = compiled_copies(&game, "arc_lance")
+        .iter()
+        .map(|c| c.quality)
+        .filter(|q| *q >= floor)
+        .collect();
+    assert_eq!(
+        developed.len(),
+        6,
+        "every copy off the developed bench should clear {floor}"
+    );
+}
+
+/// Only gear costs a quality roll. `craft` ticks once whatever the batch
+/// size, so compiling one unit and compiling five leave the shared stream in
+/// the same place for a material — and in different places for gear, which
+/// is the per-unit roll being visible from outside.
+#[test]
+fn only_gear_spends_a_quality_roll() {
+    fn stream_after(item: &str, quantity: u32) -> u64 {
+        let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
+        game.craft(&ItemId::from(item), quantity, false).unwrap();
+        game.world.resource_mut::<GameRng>().0.random()
+    }
+
+    assert_eq!(
+        stream_after(ids::ICE_BREAKER, 1),
+        stream_after(ids::ICE_BREAKER, 5),
+        "a material compiles off the same stream however many are made"
+    );
+    assert_ne!(
+        stream_after("kinetic_edge", 1),
+        stream_after("kinetic_edge", 5),
+        "gear rolls per unit, so five units are five draws"
+    );
+}

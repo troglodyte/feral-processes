@@ -867,6 +867,10 @@ fn a_material_drop_spends_no_rarity_roll() {
 /// is never rare, so gear you *find* is categorically better. An omission
 /// is invisible without a test naming it — the same reason
 /// `an_arena_fight_writes_no_save` exists.
+///
+/// It reads the ledger rather than counting it empty, because a compile
+/// does write rows there now: a copy carries the quality it rolled, and
+/// only one that came out exactly at spec is plain enough to stack.
 #[test]
 fn crafted_gear_is_never_rare() {
     let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -887,17 +891,19 @@ fn crafted_gear_is_never_rare() {
         let _ = game.craft(&recipe.result, 1, false);
     }
 
-    assert!(
-        game.count_copies(&GearCopy::plain(recipe.result.clone())) > 0,
-        "the crafted copies should be in the plain store"
-    );
     assert_eq!(
-        game.world
-            .get::<GearCopies>(player)
-            .map(|g| g.total())
-            .unwrap_or(0),
-        0,
-        "crafting must never produce a rare copy"
+        held_any(&game, &recipe.result),
+        20,
+        "twenty compiles, twenty copies, wherever the quality axis put them"
+    );
+    let ledger = game.world.get::<GearCopies>(player).unwrap();
+    assert!(
+        ledger
+            .copies
+            .iter()
+            .all(|(copy, _)| copy.rarity == Rarity::Ordinary && copy.affix.is_none()),
+        "crafting must never produce a rare or affixed copy — the ledger rows \
+         a compile writes are there for its quality alone"
     );
 }
 

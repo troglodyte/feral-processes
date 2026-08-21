@@ -214,6 +214,12 @@ impl Game {
     /// `careful` spends `QUALITY_CAREFUL_COST_PERCENT` more material for a
     /// better floor on every unit in the batch — the toggle is the batch's,
     /// not the unit's.
+    ///
+    /// **A piece of gear is rolled per unit**, so compiling five is five
+    /// copies to compare rather than a stack of five identical ones; that
+    /// spread is the whole of what the quality axis is for. Anything else
+    /// stacks in `Inventory` exactly as it did and spends **no** `GameRng`
+    /// draw, the property `grant_gear_drop` already holds for a material.
     pub fn craft(&mut self, result: &ItemId, quantity: u32, careful: bool) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -221,9 +227,13 @@ impl Game {
         if quantity == 0 {
             return Err("Compile at least 1.".into());
         }
-        if self.craft_recipes().iter().all(|r| &r.result != result) {
+        let Some(recipe) = self
+            .craft_recipes()
+            .into_iter()
+            .find(|r| &r.result == result)
+        else {
             return Err(format!("{} can't be compiled.", self.item_name(result)));
-        }
+        };
         let player = self.player_entity();
         let cost = self.craft_cost(result, careful);
         {
@@ -245,7 +255,22 @@ impl Game {
             for (item, qty) in &cost {
                 inv.take(item.clone(), *qty * quantity);
             }
-            inv.add(result.clone(), quantity);
+        }
+        if self.equipment_of(result).is_some() {
+            let floor = self.craft_quality_floor(&self.player_craft_order(&recipe, careful));
+            for _ in 0..quantity {
+                let quality = self.roll_quality(floor);
+                let copy = GearCopy {
+                    quality,
+                    ..GearCopy::plain(result.clone())
+                };
+                self.add_copies(&copy, 1);
+            }
+        } else {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(result.clone(), quantity);
         }
         self.log_base_kind(
             MessageKind::Loot,

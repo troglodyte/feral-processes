@@ -439,11 +439,10 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
     game.craft(&ItemId::from(ids::FIREWALL_PLATING), 1, false)
         .unwrap();
     assert_eq!(
-        game.world
-            .get::<Inventory>(game.player_entity())
-            .unwrap()
-            .count(&ItemId::from(ids::FIREWALL_PLATING)),
-        1
+        held_any(&game, &ItemId::from(ids::FIREWALL_PLATING)),
+        1,
+        "both stores: a compiled piece of gear carries the quality it rolled, \
+         so it only stacks in `Inventory` when that came out exactly at spec"
     );
 }
 

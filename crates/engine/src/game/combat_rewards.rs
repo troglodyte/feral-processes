@@ -173,15 +173,27 @@ impl Game {
     /// and it is the engine's job rather than a renderer's so the inventory,
     /// the swap picker, the trade screen and a drop line cannot come to
     /// disagree about what a copy is called.
+    ///
+    /// The quality figure goes **last**, after the tier word and the affix's
+    /// decoration, and is omitted at `QUALITY_DEFAULT` — the call
+    /// `Rarity::label` makes for `Ordinary`, and the reason nothing already
+    /// on screen gets wider when the axis ships, since every copy in every
+    /// existing save sits there. It costs seven cells on the worst case,
+    /// which is what moved `SWAP_NAME_COLUMN` and pushed the swap screen's
+    /// stat column out of the row's un-wrappable head.
     pub fn copy_name(&self, copy: &GearCopy) -> String {
         let base = self.item_name(&copy.item);
         let named = match self.affix_of(copy) {
             Some(affix) => affix.decorate(base),
             None => base.to_string(),
         };
-        match copy.rarity.label() {
+        let tiered = match copy.rarity.label() {
             Some(tier) => format!("{tier} {named}"),
             None => named,
+        };
+        match copy.quality {
+            crate::tuning::QUALITY_DEFAULT => tiered,
+            q => format!("{tiered} ({q}%)"),
         }
     }
 

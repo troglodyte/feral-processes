@@ -1549,3 +1549,45 @@ fn the_quality_roll_clamps_at_both_ends_of_the_band() {
         assert!(game.roll_quality(0) >= QUALITY_MIN);
     }
 }
+
+/// **A name is what lets two otherwise identical copies be told apart**,
+/// which is the whole point of a fourth axis — five compiles of one blade
+/// are five rows in the ledger and the player has to be able to pick the
+/// good one.
+///
+/// A copy at spec shows **no** figure, the call `Rarity::label` makes for
+/// `Ordinary`. Everything in every existing save is at `QUALITY_DEFAULT`,
+/// so nothing already on screen gets wider.
+#[test]
+fn a_name_carries_the_quality_only_when_it_is_off_spec() {
+    let game = Game::new(4404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let at_spec = GearCopy::plain(whip);
+    let bare = game.copy_name(&at_spec);
+
+    assert!(
+        !bare.contains('%'),
+        "a copy compiled to spec names no figure: {bare}"
+    );
+
+    let poor = GearCopy {
+        quality: 85,
+        ..at_spec.clone()
+    };
+    assert_eq!(game.copy_name(&poor), format!("{bare} (85%)"));
+
+    // The figure goes last, after the rare tier's word and the affix's
+    // decoration — one segment appended to a name already built, so the
+    // three axes cannot come to fight over the order.
+    let decorated = GearCopy {
+        rarity: Rarity::Gold,
+        quality: 130,
+        ..at_spec
+    };
+    let name = game.copy_name(&decorated);
+    assert!(name.ends_with(" (130%)"), "{name}");
+    assert!(
+        name.starts_with(Rarity::Gold.label().expect("Gold reads as a word")),
+        "{name}"
+    );
+}

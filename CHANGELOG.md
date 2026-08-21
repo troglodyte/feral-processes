@@ -27,6 +27,56 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.6
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+Nothing here is stored — both features read figures the game already held.
+
+### The player sheet states its to-hit pair
+
+COMBAT grows to six rows on the player page — Damage, Attack, **Accuracy**,
+**Evasion**, Mitigation, Power. The two new figures come from the same
+`accuracy_of` / `evasion_of` calls `resolve_attack` consults, so the sheet
+cannot quote you odds the fight then disagrees with.
+
+Player-only, and that is a layout budget rather than a data gap: the
+program page's worst case clears its footer by 17.3px against a 10px floor,
+so one more row anywhere on it overflows at 1280x720. Both figures are
+carried for both subjects, so buying that page room later is a layout
+change and not a data change.
+
+### A RUN box says what the run is holding
+
+Credits, Portal Fragments, the difficulty mode, the cycle, and how many
+contracts the run is signed to. Credits and Portal Fragments are banked
+pools that deliberately sit outside your inventory, which is why the cargo
+row has never said anything about either. Trace is absent on purpose —
+it is underground-only and the Stack view already draws it.
+
+### A stock strip says what the base is holding, on every screen
+
+One row across the top of the window, on every screen that draws the world
+behind it — including under a menu, since a popup is capped at 85% of the
+window and leaves the top band clear. Each pile is a two-letter tag and a
+quantity.
+
+**It is a readout, not a second opinion.** `Game::base_stock` reads the same
+output buffers the base's own holdings are summed from, so the strip cannot
+drift from what the base actually has. Piles are ordered by item id rather
+than by quantity — a strip that re-sorted as buffers filled would move
+every tag under the eye of the player reading it — and the row is
+*measured* rather than estimated, so the piles that fit are named and the
+rest are counted in a `+N` tail instead of being drawn off the edge in
+silence.
+
+Tags are derived from an item's name, so a modded item gets one for free,
+with an override for the one shipped collision: Research Data takes `[R]`
+and the Research Disk keeps `[RD]`.
+
+The panes below the strip now take their origin from the caller rather than
+from the window. Both views already funnelled their geometry through one
+converter each, so the offset is stated once and everything follows it.
+
 ## 0.13.5
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

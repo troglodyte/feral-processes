@@ -35,7 +35,7 @@ Each file is one kind:
 |---|---|
 | `id` | Unique across the directory. It is what a save records, so renaming one drops whatever was remembered under the old name. |
 | `name` | What a row on the memories screen leads with, in front of the subject. |
-| `blurb` | One line of flavour under it, in the player's vocabulary. |
+| `blurb` | One line of flavour on the same row, in the player's vocabulary. Said **once per kind** — see below. |
 | `valence` | Signed. The intensity of one undecayed strike — negative is a grudge, positive a fondness. Zero means the memory is worth nothing, and a census refuses it. |
 | `half_life` | In **ticks**: how long until intensity halves. |
 | `subject` | Which kind of thing a record of this def is about (below). |
@@ -66,6 +66,27 @@ content decision and lives here.
 An entry that has faded below a threshold is dropped the next time the program
 forms a memory, and a program holds a bounded number of them at once — when it
 is over, the weakest goes.
+
+## `name` and `blurb` on the screen
+
+A program's memories screen (`R` on the roster) is one row per entry:
+
+```
+Mauled by — Zero-Day 3  (-8, recently)  One hit and there was almost nothing left of me.
+```
+
+The `blurb` is a property of the *kind*, so it is printed on the first row
+naming that def and left off the repeats — a store easily holds three or four
+entries of one def about different subjects, and the same sentence four times
+down a page is worse than not printing it.
+
+**Both fields are measured, not estimated.** The page does not scroll and
+nothing clips a row horizontally, so a `name` or `blurb` long enough to run
+past the right edge is simply lost, taking the strength and age figures with
+it. A census measures the worst page the catalogue can build; a def authored
+too long fails the build rather than shipping a row that runs off the box. If
+you are writing a mod def, keep the blurb to roughly the length of the shipped
+ones.
 
 ## `subject`
 

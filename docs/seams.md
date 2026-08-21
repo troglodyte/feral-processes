@@ -4817,3 +4817,186 @@ move every tag under the eye of the player reading it, which is the one
 thing a glanceable row cannot do. And it makes no claim about where the
 party is standing, so like a Broker's board it reads the same four
 frames down the Stack and needs no `require_surface`.
+
+### `Game::remember` is the one door a memory is written through
+
+**`Game::remember` is the one door a memory is written through.** It is to
+`components::Memories` what `Game::apply_damage` is to `Stats::hp`: a rule
+that must see *every* memory has one place to go. Nothing else in the engine
+pushes a `Memory`, and the four triggers — `note_maul` off
+`resolve_and_apply_attack`, `form_victory_memories` off `end_battle` (twice:
+a bond and, if the fight was uphill at the bell, the fight itself), and
+`note_strandings` off `tick_inner` — are all callers of it rather than
+writers beside it.
+
+**A `who` with no `Memories` is a no-op**, the same deliberate asymmetry
+`Game::spend_power` makes for a missing `PowerReserve`. The store is minted
+at `Game::roster_parts` and nowhere else, so its absence *is* "not on the
+roster" — which keeps hostiles, structures and the player safe here without
+a branch at any of the four call sites. That is also why the player is
+neither a holder of a bond nor a subject of one: it falls out of `ProgramId`
+never being minted for them, not out of a `Player` check anybody could
+forget.
+
+The refusals are **returned**, not logged and not asserted. The spec asked
+for a subject-kind mismatch to warn, and the engine has no runtime warning
+channel — `load_dir` warnings are startup `String`s and the message log is
+player-facing text this feature is forbidden to write. Four observable
+outcomes (`Written`, `NoStore`, `UnknownDef`, `WrongSubject`), one per no-op,
+is what makes the no-op rule testable without a `debug_assert!` sitting in
+the middle of the test that asserts it. It is deliberately not `#[must_use]`:
+a trigger firing on a body that may or may not be on the roster is the normal
+case, and `NoStore` is the answer it is entitled to ignore.
+
+**It draws no RNG at all** — no `GameRng`, no local `StdRng`. That is what
+keeps every seeded test and every `dev-arenas/` report where they are, and it
+is why none of the RNG-stream-shift diagnostics apply to anything this
+feature breaks. **And it writes no log line.** The screen is the surface. A
+line every time a machine strands a body would flood the map's log pane and
+drag the fold, filter and reveal seams into a feature that does not need
+them; announcing memories is a `MessageKind`/`MessageSource` decision to make
+deliberately rather than to acquire by default.
+
+The order inside it is load-bearing: the def resolves **before** the store is
+touched, so an install with `assets/memories/` deleted is *inert* rather than
+merely quiet.
+
+### A memory's intensity is derived from the clock, never stored or ticked
+
+**A memory's intensity is derived from the clock, never stored or ticked.**
+`components::Memory` carries what happened — the def, the subject, the tick
+it last landed on, how many times — and not what it is worth.
+`Memory::intensity` is `valence * min(strikes, strike_cap) * 2^-(elapsed /
+(half_life * MEMORY_HALF_LIFE_MULTIPLIER))`, evaluated on every read.
+
+This is `Platform`'s radius, a program's role and a Broker's board again:
+nothing ticks, nothing oscillates, reinforcement is a single field write, and
+a stored weight cannot drift out of step with the clock the way a per-tick
+decrement can. It also means a save carries no derived number that a retune
+would invalidate — changing a `.ron` half-life retunes memories already
+formed, which is the behaviour a content edit should have.
+
+The decay is a **magnitude scale and never a sign flip**, because `morale` is
+a signed sum over the figure: a grudge that decayed into a fondness would
+read as a program cheering up because it was hurt a while ago. `elapsed` is
+`saturating_sub`, since a hand-edited save can hold a memory reinforced later
+than `now` and an underflow there is a panic in release arithmetic rather
+than a wrong number.
+
+`MEMORY_HALF_LIFE_MULTIPLIER` reaches the formula through
+`intensity_with`, which takes the dial as a **parameter** for `walk_field`'s
+reason: at its shipped neutral value of 1.0 a test cannot tell a formula that
+honours the dial from one that ignores it, so the only way to *prove* it
+reaches the denominator is to vary it.
+
+**Eviction is lazy and lives in one place** — the tail of `remember`, so
+nothing sweeps. It drops what has faded and then the weakest while the store
+is over `MEMORY_CAP_PER_PROGRAM`, by **magnitude at both**: a signed
+comparison evicts every grudge and keeps every fondness, which is not a
+memory system, since the deepest scar a program carries is the smallest
+number in its store. An entry naming a def no file defines is **kept** by the
+threshold sweep — restoring a removed mod file restores the memories that
+named it — but cannot be scored, so when the cap forces a choice it goes
+first: a memory the game cannot weigh must not hold a slot against one it
+can.
+
+### `MemorySubject::BaseTile` names the space, because two spaces share one pair of integers
+
+**`MemorySubject::BaseTile` names the space in the type, and that is the
+whole reason it is not called `Place`.** Base space and the zone surface are
+the same two integers meaning different things, and reading one as the other
+is what put the base's roster on the open grid once already
+(`stands_in_base_space`, under **The base**). Naming the space in the variant
+is what stops that recurring in a subject payload nobody would think to
+check.
+
+It matters at both ends. `note_strandings` writes the **worker's own
+`Position`**, which for a posted program is base space — not its post, since
+a stranded body is stranded precisely because it is *not* at its post, "left
+stranded here" is a claim about where it is standing, and a memory keyed to
+the machine's tile could never be read by the parking hook it exists for
+(`park_idle_staff` already refuses a tile a `Structure` stands on). And the
+row renders it as base coordinates rather than as a map location.
+
+A *surface* variant, when content asks for one, is **zone-local** and has to
+be wiped by name in `Game::enter_next_zone` alongside `StackMemory`,
+`BuybackLedger` and `PopulatedChunks`. A base tile needs no such wipe,
+because the base travels with the party across a breach.
+
+Serde lives on `MemorySubject` directly rather than on a `save::` mirror of
+it, which is the opposite call from `save::CronjobKind`. A mirror would be a
+second copy of a six-variant enum that a new variant must be added to twice
+with nothing failing to compile if it isn't — and the whole point of
+`kind()`'s exhaustive match is that a new variant *must* fail to compile. The
+on-disk form is field-named RON, so variants encode by name and reordering
+them is not a save-format change, unlike `perks::Perk`, which bincode encodes
+positionally.
+
+### The memories page is one derivation and has no scroll
+
+**The memories page is one derivation and has no scroll.** `R` from the
+roster opens `Mode::CompanionMemories`, and every figure on it comes out of
+`Game::memory_report` and `Game::morale` — `Game::gear_detail`'s rule. A
+renderer that weighed a memory itself would be the fourth screen in this repo
+to keep a private copy of a formula the engine already owns; the subject of a
+row it could not render at all, since a species needs `SpeciesDb`, a
+structure `StructureDb`, and a destroyed program the name the record captured
+when it was written.
+
+**`R` and not the `M` the spec asked for.** `M` on the roster has opened the
+manifest since well before memories existed. Uppercase either way, for the
+reason `W`/`N`/`E`/`P`/`M` all are: an uppercase key reaches app-core as a
+distinct key and so can never collide with `menu_shortcut`'s
+digits-then-lowercase scheme however large the roster grows. The pair
+`(Companion, CompanionMemories)` is in `input.rs`'s `keeps_highlight` table
+beside the manifest's, so Esc comes back to the row the player was reading
+down the list — the page indexes nothing with the highlight, so there is
+nothing for it to reset to.
+
+**The report evicts nothing.** It is `&self` and it skips a faded entry
+rather than dropping it: a read-only screen that rewrote the roster it is
+drawing would make what a program remembers depend on whether anybody looked.
+An entry whose def no file defines contributes no row, `memory_sum`'s rule,
+and that is where the empty-database property comes from at this end — with
+`assets/memories/` deleted the store is intact and the page says nothing has
+happened yet.
+
+Rows are ordered by **magnitude**, `evict`'s rule mirrored rather than
+described. `sort_by` and not `sort_unstable_by` so a tie keeps insertion
+order — and there is deliberately **no test for that**, because none can
+exist: measured, the unstable sort returns equal keys in insertion order too
+at every length a store can reach, the cap being 12 and the unstable sort
+running insertion sort under 20. A test that cannot tell the two calls apart
+is coverage-shaped, so the guarantee is taken from the standard library's
+contract and stated in the doc comment instead.
+
+**Age reaches a row in words, not in ticks.** Nothing in any screen or any
+log line has ever shown the player a tick, so a count here would be the
+first, and a number the player has no scale for is not an answer. It is
+banded against the **def's own half-life** — the only yardstick that makes
+two memories comparable, since 6,000 ticks is fresh for a mauling and ancient
+for a bad shift. Four bands and no more: past two half-lives a memory is
+under a quarter of what it was and close to what `evict` drops, so everything
+out there is simply long ago.
+
+**The blurb is said once per kind.** A store holds several entries of one def
+— three corners of the base that strand a worker, four species that have
+nearly ended it — and printing one sentence of flavour verbatim four times
+down a page is worse than not printing it. Rows arrive strongest first, so
+the copy that keeps it is the one that characterises the program.
+
+**Two censuses, one per axis, because the page has no scroll.**
+`draw_popup` pages a `Row::Item` span and this page has none, so a row past
+the bottom is dropped in silence — the trap
+`the_tallest_gear_page_fits_its_popup` exists to catch, and
+`the_tallest_memory_page_fits_its_popup` is its mirror. Nothing clamps a row
+*horizontally* at all, which is `no_memory_row_overflows_its_popup`'s axis
+and the one where the lost tail is the strength and the age, the two figures
+the row is read for. Both build the worst case from the **real catalogue**,
+with every def name made distinct so the blurb is never deduped away —
+deduped, the width census would measure eleven rows carrying no blurb and
+pass against a page that overflows. `MEMORY_CAP_PER_PROGRAM` is therefore a
+layout constraint before it is a feel one: raising it past what fits means
+giving the page a scroll first, not editing the number. Caught in the
+building — at 12 entries over two rows each the page ran 29 rows into a
+23-row popup, which is why the blurb is on the row rather than under it.

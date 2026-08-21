@@ -10,8 +10,9 @@ use crate::tuning::{
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
-    MAX_GROUP_SIZE_STEPS, PLATINUM_SPAWN_CHANCE, PRISMATIC_SPAWN_CHANCE, SILVER_SPAWN_CHANCE,
-    WILD_LOCAL_DENSITY_TARGET, WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
+    MAX_GROUP_SIZE_STEPS, PLATINUM_SPAWN_CHANCE, PRISMATIC_SPAWN_CHANCE, QUALITY_MAX, QUALITY_MIN,
+    QUALITY_SPREAD, QUALITY_STEP, SILVER_SPAWN_CHANCE, WILD_LOCAL_DENSITY_TARGET,
+    WILD_ROUTINE_CHANCE, WILD_SPAWN_CHANCE, WILD_SPAWN_RADIUS_TILES,
 };
 use crate::world::CHUNK_SIZE;
 use crate::*;
@@ -525,6 +526,32 @@ impl Game {
         let mut rng = self.world.resource_mut::<GameRng>();
         let roll: f64 = rng.0.random_range(0.0..1.0);
         rarity_for_roll(roll)
+    }
+
+    /// The quality one copy compiles or drops at: its `floor` plus a stepped
+    /// spread, clamped to the band.
+    ///
+    /// **One formula and one clamp for every source of a copy.** It lives
+    /// beside `roll_gear_rarity` for that one's reason — a per-copy axis is
+    /// rolled from more than one file, so the ladder belongs where both
+    /// callers reach it rather than in whichever of them was written first.
+    /// `grant_gear_drop` passes `QUALITY_DROP_BASE`; crafting passes a floor
+    /// it builds out of a bench tier, a perk and the careful toggle.
+    ///
+    /// The spread is drawn **in steps** of `QUALITY_STEP` rather than drawn
+    /// fine and rounded, so every reachable value is on the lattice and the
+    /// end buckets are the same width as the middle ones.
+    ///
+    /// `floor` may legitimately exceed `QUALITY_MAX` — a developed base's
+    /// does — so the sum is taken in `u16` before the clamp rather than
+    /// overflowing the `u8` the band is expressed in.
+    pub(crate) fn roll_quality(&mut self, floor: u8) -> u8 {
+        let steps = (QUALITY_SPREAD / QUALITY_STEP) as u32;
+        let luck = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..=steps) as u16 * QUALITY_STEP as u16
+        };
+        (floor as u16 + luck).clamp(QUALITY_MIN as u16, QUALITY_MAX as u16) as u8
     }
 
     /// How many escalation steps a fight sits at — the one input both group

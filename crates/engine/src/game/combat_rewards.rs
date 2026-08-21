@@ -77,6 +77,13 @@ impl Game {
     /// shift the shared `GameRng` stream on every material drop in the game,
     /// which is the kind of change that silently rewrites a seeded combat
     /// test three files away.
+    ///
+    /// Three rolls in a fixed order — rarity, affix, quality — and the last
+    /// of them is last on purpose: for a given seed a dropped copy's tier
+    /// and affix are exactly what they were before quality existed, so only
+    /// what follows the drop in the stream moves. The quality floor is
+    /// `QUALITY_DROP_BASE`, deliberately below what a bench pays: the world
+    /// does not make good gear, your base does.
     pub(crate) fn grant_gear_drop(&mut self, item: ItemId, floor: Rarity) -> GearCopy {
         if self.equipment_of(&item).is_none() {
             self.grant_loot(item.clone(), 1);
@@ -84,12 +91,13 @@ impl Game {
         }
         let rarity = self.roll_gear_rarity().max(floor);
         let affix = self.roll_affix(&item);
+        let quality = self.roll_quality(crate::tuning::QUALITY_DROP_BASE);
         let copy = GearCopy {
             item,
             rarity,
             tier: 0,
             affix,
-            quality: crate::tuning::QUALITY_DEFAULT,
+            quality,
         };
         self.add_copies(&copy, 1);
         copy

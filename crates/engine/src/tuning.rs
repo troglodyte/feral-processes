@@ -1423,6 +1423,36 @@ pub const QUALITY_UNDER_MAX: u8 = 90;
 pub const QUALITY_SPEC_MAX: u8 = 105;
 pub const QUALITY_ABOVE_MAX: u8 = 120;
 
+/// The granularity of a rolled quality. Every term in the roll is a
+/// multiple of this and the spread is drawn **in steps** of it, so the sum
+/// is on-step by construction and the clamp cannot produce an off-step
+/// value.
+///
+/// Drawn in steps rather than drawn fine and rounded: rounding a uniform
+/// draw onto a lattice gives the two end buckets half the width of the
+/// others, which biases exactly the ends of the band the player reads for.
+pub const QUALITY_STEP: u8 = 5;
+
+/// The luck term — how far above its floor any one compile can roll, drawn
+/// as `0..=QUALITY_SPREAD` in `QUALITY_STEP`s.
+///
+/// It is the same width at every floor, so improving a bench or taking the
+/// perk moves the whole band up rather than narrowing it. That is what
+/// keeps compiling a batch and keeping the best worth doing at every stage
+/// of a run rather than only at the start of one.
+pub const QUALITY_SPREAD: u8 = 20;
+
+/// The floor a **found** copy rolls off, giving drops a 70–90 band against
+/// a crafted piece's 80–100 at a bare bench.
+///
+/// Deliberately below `QUALITY_BASE`. Leaving drops at a flat
+/// `QUALITY_DEFAULT` was rejected because an average find would then beat a
+/// bad craft, which cuts against the whole intent; giving them the crafting
+/// band was rejected because the base would then confer no reliability
+/// advantage. A lucky find can still beat an unlucky craft, which is what
+/// keeps a drop a lottery ticket rather than a disappointment.
+pub const QUALITY_DROP_BASE: u8 = 70;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

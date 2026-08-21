@@ -2,8 +2,9 @@
 
 use super::support::*;
 use crate::tuning::{
-    PARTY_XP_DIVISOR, STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS,
-    SURFACE_BOSS_LOOT_RARITY_FLOOR, TEARDOWN_SALVAGE_PER_LEVEL,
+    PARTY_XP_DIVISOR, QUALITY_DROP_BASE, QUALITY_MAX, QUALITY_MIN, QUALITY_SPREAD, QUALITY_STEP,
+    STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
+    TEARDOWN_SALVAGE_PER_LEVEL,
 };
 use crate::*;
 
@@ -1493,4 +1494,58 @@ fn a_boss_defeated_on_the_surface_drops_no_privilege_ring() {
         0,
         "a developed companion is bought by descending, not by clearing the surface"
     );
+}
+
+/// **The world does not make good gear; your base does.** A field drop
+/// rolls off `QUALITY_DROP_BASE`, below the crafting floor Phase 3 will
+/// add, so an average drop loses to an average craft — which is the whole
+/// design intent the axis exists to express.
+///
+/// The band is asserted rather than a single sample because the roll is the
+/// point: a drop that always landed on its floor would satisfy any bound
+/// test and still be the flat 100 this replaces.
+#[test]
+fn a_dropped_weapon_rolls_its_quality_off_the_drop_floor() {
+    let mut game = Game::new(4402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let weapon = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("shipped assets include equippable gear")
+        .id;
+
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..200 {
+        let copy = game.grant_gear_drop(weapon.clone(), Rarity::Ordinary);
+        assert!(
+            (QUALITY_DROP_BASE..=QUALITY_DROP_BASE + QUALITY_SPREAD).contains(&copy.quality),
+            "a drop rolls its spread off the drop floor, got {}",
+            copy.quality
+        );
+        assert_eq!(
+            copy.quality % QUALITY_STEP,
+            0,
+            "the spread is drawn in steps, never drawn fine and rounded: {}",
+            copy.quality
+        );
+        seen.insert(copy.quality);
+    }
+    assert!(
+        seen.len() > 1,
+        "every drop rolled {seen:?} — the spread is not being drawn"
+    );
+}
+
+/// The clamp is the band and both of its ends are reachable, so it is
+/// asserted at both. A floor above the ceiling is what Phase 3's developed
+/// base produces (`QUALITY_BASE` + bench + perk + care already exceeds
+/// `QUALITY_MAX`), and it must saturate rather than wrap a `u8`.
+#[test]
+fn the_quality_roll_clamps_at_both_ends_of_the_band() {
+    let mut game = Game::new(4403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    for _ in 0..50 {
+        assert_eq!(game.roll_quality(QUALITY_MAX), QUALITY_MAX);
+        assert!(game.roll_quality(0) >= QUALITY_MIN);
+    }
 }

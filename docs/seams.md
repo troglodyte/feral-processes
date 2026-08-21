@@ -3393,8 +3393,8 @@ exists.
 
 **A finished fight keeps the battle screen; it does not hand off to a
 summary page.** `Mode::BattleResult` renders `draw_battle` — same
-rosters, same log pane, with the pruned results scrolling into it and
-the action bar replaced by a continue prompt. The mode exists only so
+rosters, same log pane, with the decisive round and the results scrolling
+into it and the action bar replaced by a continue prompt. The mode exists only so
 keys stop planning actions against a battle that is over; it is not a
 second screen, and a `draw_battle_result` of its own was built, played,
 and removed for exactly that reason.
@@ -3446,8 +3446,11 @@ neighbours' payoffs at once: battles are never serialised, so no
 `SAVE_FORMAT_VERSION` bump, and no new resource to shift bevy's query
 iteration order under an unrelated test. The flush sits **above**
 `dissolve_tamed_program` (the last moment a companion that died winning
-is still nameable) and **above** `retain_outcomes_since_battle` (whose
-four surviving kinds are exactly the ones the tally carries). One flush
+is still nameable) and ahead of `retain_outcomes_since_battle`, whose four
+surviving kinds are exactly the ones the tally carries — the prune waits
+for the player to leave the results screen now (its own entry below), but a
+tally written after it would still be in the right place and the wrong
+order. One flush
 point covers a win and a jack-out alike because `end_battle` is the only
 place `BattleState` is dropped — you keep what you killed before you ran.
 And with no battle live, `record_drop` and `award_player_xp` announce on
@@ -3462,16 +3465,76 @@ haul. Merging on the whole copy is `BuybackLedger`'s argument reached
 again: keyed on the item alone, an Overclocked copy would be tallied as
 another ordinary one.
 
-### `MessageLog::retain_outcomes_since_battle` deletes lines, and runs inside `battle_resolve_round`
+### The prune waits for the player to leave the results screen
 
-**`MessageLog::retain_outcomes_since_battle` deletes lines, and runs
-inside `battle_resolve_round`.** So the narration of the round that *ends*
-a fight is unreachable from outside no matter how carefully a caller reads
-the log — capturing per round gets every round but the decisive one. That
-is why `MessageLog::keep_battle_narration` exists: a flag rather than
-better reading, set only by `arena`, whose report is the blow-by-blow the
-prune is designed to keep off a map pane. Nothing else should set it; the
-prune is right for every reader that has a pane.
+**`MessageLog::retain_outcomes_since_battle` deletes lines, and used to run
+inside `battle_resolve_round`.** `end_battle` called it, and `end_battle`
+runs inside the round that ends the fight — so the decisive round's
+blow-by-blow was deleted before a frontend had revealed a single line of
+it. Everything downstream was correct and the player still never saw the
+final blows: `settle_after_round` flipped to `Mode::BattleResult` and
+restarted the reveal, and what scrolled in was the kill line followed
+immediately by `Salvage:`. The fight appeared to skip its own ending.
+
+The prune is now `Game::prune_battle_narration`, called when the player
+*leaves* that screen. The results page reads: the final round's swings, the
+outcome, the salvage, the XP — which is the order the fight happened in.
+
+`Mode::BattleResult` has exactly one key handler (`input.rs` routes every
+key in that mode to `handle_battle_result_key`) and nothing ticks there, so
+app-core has two exits to get right and no more: that handler on the way to
+the map, and `check_game_over` on a run that ends on the losing round. Both
+go through `App::leave_battle_result`. Miss one and the blow-by-blow follows
+the player onto the map, which is the whole thing the prune exists to stop.
+A two-stage prune — everything before the final round at `end_battle`, the
+rest at the exit — was considered and rejected: it guards against a third
+exit that does not exist, at the cost of a second prune shape.
+
+Two consequences worth knowing. The roster beside the narration is
+`BattleTimeline::closing` for the whole of the results screen — the frames
+are still dropped at `end_battle`, because they index a roster that goes
+with `BattleState` — so the final blows are read against an already-empty
+hostile pane. That was already true of the kill line; this extends it by a
+few rows rather than introducing it. And `dissolve_tamed_program`'s `Info`
+detachment lines used to be written and pruned in the same call, never
+reaching anything; they now scroll past on the results page before the
+prune takes them, so a companion that died winning reads its death line and
+then its departure.
+
+`MessageLog::keep_battle_narration` is unaffected and still exists for
+`arena`, whose report *is* the blow-by-blow: a flag rather than better
+reading, set only there. Nothing else should set it; the prune is right for
+every reader that has a pane.
+
+### A won fight says so, and it is the only ending that needed telling
+
+**A won fight says so, and it is the only ending that needed telling.**
+`settle_rewards` heads the results with "You won!", read off
+`BattleState::groups` being empty — the same one definition `end_battle`'s
+telemetry takes eight lines later, and for its reason: a defeat is absorbed
+inside the round that lands it by `difficulty::death_handling_system`, so
+the player's HP afterwards says nothing about the outcome.
+
+**The other two endings are deliberately left alone, and that is not a
+narrowing of the feature.** They already declare themselves in this exact
+slot, one line higher: `battle_flee` logs "You jack out safely." (or the
+counter-strike wording) immediately before calling `end_battle`, and a
+flatline is announced by `death_handling_system` inside the round that
+lands it. A headline for those would be a second line saying what the first
+just said. A `BattleOutcome` parameter threaded through `end_battle`'s four
+call sites was specced for this and dropped once that was clear — the
+information the flush needs was already in `BattleState`, and a parameter
+carrying it would have been a second answer to a question with one.
+
+The XP lines take an `Experience:` header and the two-space indent
+`Salvage:` rows already carry. The lines are **built before the header is
+written** (`announce_xp` over `player_xp_lines` / `companion_xp_lines`), so
+a header can never stand over an empty block; asking two predicates whether
+anything is about to print would have been a second copy of the guards
+inside the builders, and the copy that drifts is the one nobody runs. The
+two out-of-battle callers take the same builders and log them unindented
+and unheaded, since outside a fight those lines are standalone news rather
+than rows in a block.
 
 ### There is one way into a staged arena fight, `arena::stage`, and one reader of what one cost, `arena::Watch`
 

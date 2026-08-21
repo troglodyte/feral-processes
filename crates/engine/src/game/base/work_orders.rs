@@ -30,6 +30,49 @@ use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
 use crate::*;
 
+/// Which band an order was filed in, and so where in the queue it landed.
+///
+/// **A label, not a second ranking rule.** It decides the insert position
+/// once, at filing; what the scheduler reads is still position, so
+/// `settle_orders`, `cancel_work_order` (a raw Vec index) and the screen
+/// (which indexes straight into `work_order_report`) all stay as they were.
+/// A sort at scheduling time would make Vec order and effective order
+/// diverge, and every index in the system would then have to know which of
+/// the two it was holding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum OrderPriority {
+    High,
+    #[default]
+    Normal,
+    Low,
+}
+
+impl OrderPriority {
+    /// Sooner is lower. Deliberately not `Ord` on the enum: `High < Normal`
+    /// is true under any encoding that puts High first and reads backwards
+    /// at every call site that would use it.
+    fn rank(self) -> u8 {
+        match self {
+            Self::High => 0,
+            Self::Normal => 1,
+            Self::Low => 2,
+        }
+    }
+
+    /// The next band `[P]` shows. **Raises first**, because raising is what
+    /// the feature is for — before bands the only control over the base's
+    /// attention was cancel-and-refile, which drops the order you care
+    /// about to the bottom. Three bands means one direction costs two
+    /// presses; this is the direction that gets the common one in one.
+    pub fn cycled(self) -> Self {
+        match self {
+            Self::Normal => Self::High,
+            Self::High => Self::Low,
+            Self::Low => Self::Normal,
+        }
+    }
+}
+
 /// One queue entry: an item and how many of it the base should hold.
 ///
 /// A **named struct, never a tuple.** RON parses a `(` in a struct position
@@ -53,6 +96,10 @@ pub struct WorkOrder {
     /// standing ones existed loads as the batch it was.
     #[serde(default)]
     pub standing: bool,
+    /// Which band it was filed in. Read once, by `queue_work_order`, to
+    /// decide where in the queue it lands — see `OrderPriority`.
+    #[serde(default)]
+    pub priority: OrderPriority,
 }
 
 impl WorkOrder {
@@ -62,6 +109,7 @@ impl WorkOrder {
             item,
             qty,
             standing: false,
+            priority: OrderPriority::Normal,
         }
     }
 
@@ -79,6 +127,15 @@ impl WorkOrder {
             standing: true,
             ..Self::batch(item, qty)
         }
+    }
+
+    /// Files it in `priority`'s band instead of the ordinary one.
+    ///
+    /// A setter rather than a third constructor because a band is a *value*
+    /// on an order and not a kind of one, and named `with_priority` rather
+    /// than `priority` because that is the field it sets.
+    pub fn with_priority(self, priority: OrderPriority) -> Self {
+        Self { priority, ..self }
     }
 }
 
@@ -1177,10 +1234,16 @@ impl Game {
         }
         let name = self.item_name(&order.item).to_string();
         let (qty, standing) = (order.qty, order.standing);
-        self.world
-            .resource_mut::<resources::WorkOrders>()
+        let mut orders = self.world.resource_mut::<resources::WorkOrders>();
+        // **After** the last order of equal-or-higher band, not before the
+        // first: that is what makes ties break by insertion order, so one
+        // band is still a queue.
+        let at = orders
             .0
-            .push(order);
+            .iter()
+            .rposition(|queued| queued.priority.rank() <= order.priority.rank())
+            .map_or(0, |i| i + 1);
+        orders.0.insert(at, order);
         // Said differently, because the two are different errands and the
         // flag has nowhere else to show itself until the queue screen
         // learns to say which orders are dormant.

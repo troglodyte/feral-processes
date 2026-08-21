@@ -4,7 +4,7 @@ use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, ProgramRole, WorkOrderRow};
-use feral_processes_engine::WorkProfile;
+use feral_processes_engine::{OrderPriority, WorkProfile};
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -245,6 +245,17 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
     lines
 }
 
+/// What a band means, spelled out rather than named: "Normal" alone says
+/// nothing about where the order lands, and where it lands is the whole of
+/// what the band does.
+fn priority_line(priority: OrderPriority) -> &'static str {
+    match priority {
+        OrderPriority::High => "high — files above the ordinary orders",
+        OrderPriority::Normal => "normal — files behind the orders already queued",
+        OrderPriority::Low => "low — files below everything, worked with what is left",
+    }
+}
+
 /// Picking what to order — `Game::orderable_items`, which asks the same
 /// chain question the queue refuses on, so nothing here can be rejected.
 pub(super) fn draw_work_order_pick(
@@ -268,7 +279,8 @@ pub(super) fn draw_work_order_pick(
     draw_popup("New Work Order", PopupSize::Large, &rows, painter, m);
 }
 
-const WORK_ORDER_QUANTITY_KEYS: &str = "[S] Standing order   Digits then Enter   Esc to go back";
+const WORK_ORDER_QUANTITY_KEYS: &str =
+    "[S] Standing order   [P] Priority   Digits then Enter   Esc to go back";
 
 /// How many of it. The same two-page shape the compile flow uses.
 ///
@@ -280,6 +292,7 @@ pub(super) fn draw_work_order_quantity(
     item: Option<ItemId>,
     typed: &str,
     standing: bool,
+    priority: OrderPriority,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -288,7 +301,7 @@ pub(super) fn draw_work_order_quantity(
         .map(|i| game.item_name(i).to_string())
         .unwrap_or_default();
     let shown = if typed.is_empty() { "1" } else { typed };
-    let rows: Vec<Row> = work_order_quantity_lines(&name, shown, standing)
+    let rows: Vec<Row> = work_order_quantity_lines(&name, shown, standing, priority)
         .into_iter()
         .map(text_row)
         .collect();
@@ -299,7 +312,12 @@ pub(super) fn draw_work_order_quantity(
 /// built out of text rows has no scroll and `draw_row` never clips one
 /// horizontally, so a sentence that outgrows the popup body is lost in
 /// silence and only a headless measurement catches it.
-fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<String> {
+fn work_order_quantity_lines(
+    name: &str,
+    shown: &str,
+    standing: bool,
+    priority: OrderPriority,
+) -> Vec<String> {
     vec![
         format!("How many {name} should the base hold?"),
         String::new(),
@@ -313,6 +331,8 @@ fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<Str
                 "off — one batch, and the order is done with"
             }
         ),
+        String::new(),
+        format!("Priority: {}", priority_line(priority)),
         String::new(),
         // `base_holding` sums machine and depot buffers only, so a player
         // carrying forty of the thing still reads 0/20 on the queue screen.
@@ -1097,8 +1117,16 @@ mod work_order_tests {
         let name = "Recompiled Kernel Substrate Blank";
         crate::paint::with_painter(|p| {
             let box_w = p.screen_w() * 0.88;
-            for standing in [true, false] {
-                for line in work_order_quantity_lines(name, "9999", standing) {
+            let bands = [
+                OrderPriority::High,
+                OrderPriority::Normal,
+                OrderPriority::Low,
+            ];
+            for (standing, priority) in [true, false]
+                .into_iter()
+                .flat_map(|s| bands.map(|b| (s, b)))
+            {
+                for line in work_order_quantity_lines(name, "9999", standing, priority) {
                     let text_w = p.measure_ui_advance(&line, m.font_size);
                     assert!(
                         text_w + 2.0 * m.pad < box_w,

@@ -2891,6 +2891,44 @@ also moved from `PopupSize::Small` to `Large` when it gained the toggle: its
 widest sentence already ran 8px past a small box, and `draw_row` never clips
 a row horizontally, so nothing would have said so.
 
+### A work order's band is an insert position, not a second sort
+
+**`OrderPriority` decides where an order lands in the queue, once, at
+filing.** `queue_work_order` inserts it after the last order of
+equal-or-higher band instead of pushing; nothing reads the field again.
+
+The obvious build is the expensive one. A `priority` field plus a sort at
+scheduling time compiles just as well and makes Vec order and effective
+order two different things — and every index in the system then has to know
+which of the two it is holding. `cancel_work_order` takes a **raw Vec
+index**, `work_order_report` returns in Vec order, and the screen indexes
+straight into that report, so the sort would have had to be threaded
+through all three or they would start naming different rows. Keeping the
+Vec in effective order leaves `settle_orders`, `cancel_work_order`,
+`work_order_report` and the screen untouched. The stored field is a label;
+position remains the one thing the scheduler reads.
+
+**After the last order of equal band, not before the first**, which is what
+makes ties break by insertion order — one band is still a queue. The
+mutation is worth knowing: inserting before the first equal-priority order
+reds not only the tie test but four older tests that had nothing to do with
+bands and everything to do with the queue keeping the order things were
+filed in.
+
+**`OrderPriority` is deliberately not `Ord`.** `High < Normal` is true under
+any encoding that puts High first, and reads backwards at every call site
+that would use it, so the comparison goes through a private `rank()`
+instead.
+
+**Set at filing, and that is why there is no reorder verb.** `[P]` on the
+quantity page cycles the band, raising first — three bands means one
+direction costs two presses, and raising is the common intent, since before
+bands the only control over the base's attention was cancel-and-refile,
+which lands the order you care about at the *bottom*. Refiling now restores
+the band instead. Reordering *within* a band is knowingly left open:
+`move_work_order` is about twenty lines and composes with bands if a short
+queue turns out to need the resolution.
+
 ### `schedule_base_labour` decides the whole assignment by priority and then diffs it against what is posted, and both halves of that are load-bearing
 
 **`schedule_base_labour` decides the whole assignment by priority and then

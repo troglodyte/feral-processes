@@ -541,13 +541,16 @@ impl App {
             // as a level the base holds forever, from a page that had gone
             // back to saying nothing about it.
             self.standing_order = false;
+            self.order_priority = OrderPriority::default();
             self.mode = Mode::WorkOrderQuantity;
         }
     }
 
     /// Digits and Enter, the shape `Mode::CraftQuantity` already uses, plus
-    /// `[S]` for a standing order — the careful-compile toggle's shape one
-    /// screen over, cleared on the way in for the same reason.
+    /// `[S]` for a standing order and `[P]` for its band — the
+    /// careful-compile toggle's shape one screen over, both cleared on the
+    /// way in for the same reason. Keys rather than digits, which belong to
+    /// the quantity.
     pub(crate) fn handle_work_order_quantity_key(&mut self, key: GameKey) {
         match key {
             GameKey::Esc => {
@@ -564,6 +567,9 @@ impl App {
             GameKey::Char('s') | GameKey::Char('S') => {
                 self.standing_order = !self.standing_order;
             }
+            GameKey::Char('p') | GameKey::Char('P') => {
+                self.order_priority = self.order_priority.cycled();
+            }
             GameKey::Enter => {
                 let Some(item) = self.pending_order.take() else {
                     self.mode = Mode::WorkOrders;
@@ -575,7 +581,8 @@ impl App {
                     WorkOrder::level(item, qty)
                 } else {
                     WorkOrder::batch(item, qty)
-                };
+                }
+                .with_priority(self.order_priority);
                 if let Some(game) = &mut self.game {
                     self.status_line = game.queue_work_order(order).err();
                 }

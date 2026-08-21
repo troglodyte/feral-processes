@@ -76,6 +76,7 @@ impl App {
             pending_order: None,
             order_quantity_input: String::new(),
             standing_order: false,
+            order_priority: OrderPriority::default(),
             pending_trade_structure: None,
             pending_trade_choice: None,
             trade_origin: TradeOrigin::Trader,

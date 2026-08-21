@@ -63,7 +63,7 @@ use components::{
     Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Task, TaskKind,
     Temporary, WanderAi, ZonePortal,
 };
-pub use game::base::work_orders::WorkOrder;
+pub use game::base::work_orders::{OrderPriority, WorkOrder};
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::party::ProgramRole;
 pub use game::stack_view::ExamineDir;

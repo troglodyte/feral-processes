@@ -766,3 +766,69 @@ fn the_standing_flag_does_not_outlive_its_order() {
     assert_eq!(app.mode, Mode::WorkOrderQuantity);
     assert!(!app.standing_order, "and a fresh order opens as a batch");
 }
+
+/// `[P]` raises first, because raising is what the feature is for: before
+/// bands the only control over the base's attention was cancel-and-refile,
+/// which lands the order you care about at the bottom.
+#[test]
+fn the_priority_key_cycles_the_band_and_the_filed_order_carries_it() {
+    let mut app = app_inside_a_small_base(254, false);
+    open_order_quantity_page(&mut app);
+    assert_eq!(
+        app.order_priority,
+        OrderPriority::Normal,
+        "an order is ordinary unless asked"
+    );
+
+    app.handle_key(GameKey::Char('p'));
+    assert_eq!(app.order_priority, OrderPriority::High, "[P] raises");
+    app.handle_key(GameKey::Char('p'));
+    assert_eq!(
+        app.order_priority,
+        OrderPriority::Low,
+        "and wraps past the top"
+    );
+    app.handle_key(GameKey::Char('p'));
+    assert_eq!(
+        app.order_priority,
+        OrderPriority::Normal,
+        "and back round to where it started"
+    );
+
+    app.handle_key(GameKey::Char('p'));
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Enter);
+
+    let orders = app.game.as_ref().unwrap().work_orders();
+    assert_eq!(orders.len(), 1, "the order is filed");
+    assert_eq!(
+        orders[0].priority,
+        OrderPriority::High,
+        "and carries the band the page was showing"
+    );
+}
+
+/// The band is the page's, like the standing flag beside it: a High left
+/// set would jump the queue with an order nobody asked to prioritise.
+#[test]
+fn the_priority_band_does_not_outlive_its_order() {
+    let mut app = app_inside_a_small_base(255, false);
+    open_order_quantity_page(&mut app);
+    app.handle_key(GameKey::Char('p'));
+    assert_eq!(
+        app.order_priority,
+        OrderPriority::High,
+        "precondition: the band is raised"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::WorkOrderPick);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::WorkOrderQuantity);
+    assert_eq!(
+        app.order_priority,
+        OrderPriority::Normal,
+        "and a fresh order opens ordinary"
+    );
+}

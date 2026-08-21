@@ -2212,6 +2212,79 @@ on close would leave the flag alive between two compiles: the next batch
 would quietly pay half again for a floor the player did not ask for, on a
 screen that had gone back to saying nothing about it.
 
+### The category tag is a column on the row, not a substring of it
+
+**Six screens print a `WEP` / `ARM` / `MOD` tag, and every one of them used
+to `format!` it into the middle of a row string.** `[a] ×3  WEP  Arc
+Lance` was one `String` by the time a renderer saw it, so there was no span
+left to paint — and painting the whole row is not available, because a
+row's colour already means fusion-then-rarity and has to go on meaning
+that. Quality is a *third* thing a row has to say, which is exactly the
+argument `Row::Item::icon` already makes for a token that is visually set
+apart: two axes never collide on one glyph.
+
+So the tag is a field. `with_tag` is the combinator, `ItemTag` the value,
+and `quality_tag_style` the one palette. The alternative — keep the
+`format!` and record the offset the tag starts at — was rejected in the
+spec as five-way duplication with a subtler failure mode, and it is worse
+than that: once a constructor is joining the pieces, storing the join
+*and* an index into it is two representations of one row to keep in step.
+Store the pieces; `item_text` is the join.
+
+**The tag carries what precedes it, and that is what keeps every row where
+it was.** The column is not at the start of a row — it follows `[a] ` on
+the Compile screen and `[a] ×3 ` on the other five — so a slot reserved
+after the selection caret the way `ICON_SLOT` is would have moved the
+shortcut out of the lead position on six screens, and left a trader's
+program rows (which carry no tag) ragged against its item rows. `ItemTag`
+holds a `lead` instead, `draw_row` lays the row out as three `TextRun`s,
+and nothing moves a pixel. `row_lead` is the one definition of those
+columns, for `qty_column`'s reason: a lead one space out puts the tag half
+a character off the column it is supposed to form, and
+`a_lifted_tag_row_reads_exactly_as_the_hand_formatted_one_did` pins all
+six leads against the literals they were lifted out of.
+
+**The drawn pieces and the measured string must be one row.** `suffix_x`
+measures a row's label to place its suffix past it, so a label measured
+without the column would drop a suffix on top of the row's own tail — the
+bug that function was split out of `draw_row` to hold off in the first
+place. `tag_pieces` and `item_text` are held to joining to the same string
+by a test rather than by a comment. The same applies one level up: the two
+screens that wrap a long row onto continuations (`craft_rows`,
+`inventory_row_lines`) measure with the column joined back on, or they
+budget for a row narrower than the one they draw, and both hand their head
+line back *without* it so the row builder can take the pieces.
+
+**The ramp is emphasis, not hue, and it is monotone.** Gray at normal
+weight, default, default at bold, gold at bold: only the two extremes
+spend a colour, so an ordinary copy is never painted an alarming one and
+the eye is drawn to what is worth looking at. A green-to-red con ramp was
+rejected for spending four hues on an axis the row colour beside it is
+already spending two on. The top band keeps the weight the band below it
+earned — gold at normal weight would read as *less* emphatic than the rung
+under it, so the ladder would invert at its own peak. And the as-designed
+band is literally no change, default colour and default weight, which is
+what makes this repaint nothing already on screen: every copy in every
+existing save sits at `QUALITY_DEFAULT`. The con ramp did not have that
+property either.
+
+**Width is unchanged in all four bands**, because no characters are added
+and the two UI faces are one monospace design at two weights —
+`emphasising_part_of_a_line_does_not_shift_the_rest_of_it` is what says
+so, and `ui_runs` lays the whole line out as one galley rather than
+placing the pieces itself. The known collision is `GOLD`, which is also
+`rarity_color`'s colour for `Rarity::Gold`, so an Overclocked exceptional
+copy shows a gold name and a gold tag meaning two different things. They
+are different columns and each colour means exactly one thing in its own,
+which is the distinction the `icon` field already draws; `YELLOW` is the
+alternative and sits close enough to `GOLD` that telling them apart may be
+worse than the collision. Worth a look in a session.
+
+**A row naming something no copy exists of yet passes `None`** — a
+recipe's result on the Compile screen, a trader's stock — and draws
+exactly as it always did. Only equipment carries quality, so `USE` / `MAT`
+/ `CUR` tags are untouched whether their caller passes a copy or not.
+
 ### A copy's name is built in exactly one place, `Game::copy_name`
 
 **A copy's name is built in exactly one place, `Game::copy_name`.** It is

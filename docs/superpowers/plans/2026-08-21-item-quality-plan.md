@@ -94,7 +94,7 @@ starts, so no one pays for detail they are not executing yet.
 | 2 | ✅ **Drops roll it, and it reads** | `QUALITY_DROP_BASE`, the stepped spread through `Game::roll_quality`, the figure in `copy_name`, the row on the gear inspect page, and the swap row's stat column lifted out of its un-wrappable head — which the roadmap did not price and measurement forced. | `2026-08-21-item-quality-phase-2.md` |
 | 3 | ✅ **Crafting rolls it** | `CraftOrder`, `Game::best_structure_tier`, the bench on `CraftRecipe`, per-unit rolls routed through `add_copies`, the careful-compile toggle through app-core and the Compile screen — plus the upgrade path the two compile benches turned out not to have, without which the bench term was inert on every shipped recipe. | `2026-08-21-item-quality-phase-3.md` |
 | 4 | ✅ **The perk term** | `Perk::TightenTolerances`, *appended* because that enum's order is save format, its `assets/perks/` entry, and the `perk_level` field on `CraftOrder` that Phase 3 shipped without rather than carrying a term that was always 0. Read at the compile, not applied at purchase. | executed inline — one crate plus a catalogue file, so no plan file (see `CLAUDE.md`, Process weight) |
-| 5 | **The tag column** | `Row::Item::tag` as a reserved, painted column; the five hand-formatted tag sites lifted into it; the four-band emphasis ramp; the width tests re-baselined. | phase-5 |
+| 5 | ✅ **The tag column** | `Row::Item::tag` as a painted column carrying its own lead, the *six* hand-formatted tag sites lifted into it, `row_lead` as the one definition of the columns in front of it, and the four-band emphasis ramp. The width tests re-ran rather than re-baselining: the tag stayed where it was, so no row moved. | executed inline — one crate, so no plan file (see `CLAUDE.md`, Process weight) |
 
 **Why this order.** Phase 1 is inert by construction — every copy is still
 100 — so it can land and be reviewed on the seam alone. Phase 2 makes the
@@ -106,7 +106,8 @@ in that phase's plan and in `docs/seams.md`.) Phase 3 is the design intent (a ba
 is the phase to play before calling the numbers correct. Phase 4 depends on
 Phase 3's `CraftOrder`. Phase 5 is presentation and touches the most
 renderer sites, so it goes last where a re-baseline cannot mask a
-behavioural fault.
+behavioural fault — and in the event no re-baseline was needed, because the
+tag column carries the text in front of it and so did not move.
 
 **Stated balance consequence, to be felt before it is called correct:**
 with `QUALITY_BASE` at 80, early crafted gear is *weaker* than today, where

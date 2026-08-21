@@ -1428,8 +1428,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 6,
-        "expected the six upgradeable structures; one that lost its path would drop out of this scan unnoticed"
+        checked, 8,
+        "expected the eight upgradeable structures — the six nodes plus the two compile benches, whose tier is what a compiled copy's quality floor is built out of; one that lost its path would drop out of this scan unnoticed"
     );
 }
 

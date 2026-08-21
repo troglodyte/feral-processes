@@ -233,6 +233,13 @@ any non-finite `taming_potency`, `consume.power`, or
     // free. Naming that machine as `requires_structure` is the shipped
     // pattern: hand-crafting then reads as the manual fallback for a machine
     // you already own, rather than a way around building it.
+    //
+    // For an item with an `equipment` def, the named bench decides more than
+    // whether the recipe is offered: each tier the player has upgraded it to
+    // raises the quality floor every copy compiled there rolls off. Quality
+    // is per-copy runtime state rather than an authored field, so there is
+    // nothing to write here for it. A recipe naming no bench compiles at
+    // the base floor, the same as one naming a bench nobody has upgraded.
     craftable: Some((
         cost: [("core_fragment", 12)],
         requires_structure: Some("fabricator"),

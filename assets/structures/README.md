@@ -356,11 +356,17 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `max_tier` above 5 is legal and simply means the ceiling stays the
     // zone's for longer.
     //
-    // A structure's tier does two things at once. It multiplies its `work`
-    // payout (on top of the zone multiplier — see `work` above), and it
+    // A structure's tier does three things at once. It multiplies its
+    // `work` payout (on top of the zone multiplier — see `work` above), it
     // becomes the node's effective `level`, which raises the odds a gather
-    // cycle actually yields. That reliability saturates at level 6 (100%),
-    // so tiers past that add payout only.
+    // cycle actually yields, and — when a recipe names this structure in
+    // `requires_structure` (see `assets/items/README.md`) — it raises the
+    // quality floor every copy compiled at it rolls off. That reliability
+    // saturates at level 6 (100%), so tiers past that add payout only.
+    //
+    // The first two do nothing for a structure with no `work` recipe, which
+    // is why the two compile benches carry an upgrade path that buys
+    // nothing but better gear.
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10)])),
 
     // Optional; can be left out entirely (defaults to false). If true,

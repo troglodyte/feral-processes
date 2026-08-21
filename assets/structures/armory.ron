@@ -1,12 +1,13 @@
 (
     id: "armory",
     name: "Armory",
-    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing. Assign a program and it builds Hardened Shells out of Bytecode Blocks from whatever is touching it. Put it next to a Refinery.",
+    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing, and every tier you upgrade it to compiles better copies. Assign a program and it builds Hardened Shells out of Bytecode Blocks from whatever is touching it. Put it next to a Refinery.",
     glyph: '%',
     color: Blue,
     build_cost: [("core_fragment", 18)],
     work: None,
     capacity: 15,
     assembles: Some((item: "hardened_shell", ticks_per_unit: 30)),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
     power_draw: 3,
 )

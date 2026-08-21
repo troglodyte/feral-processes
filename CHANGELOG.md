@@ -27,6 +27,109 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.5
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+An order filed before this release loads as a one-shot batch at the Normal
+band, which is what it was.
+
+### The base works every order at once, in priority order
+
+The queue used to be a to-do list: the base worked the front order and
+nothing else, so a base with more programs than that one line could use
+parked the spares beside a machine that already had somebody on it. It is a
+production policy now — every unsatisfied order is worked at the same time,
+and the order nearest the top gets first refusal on every body.
+
+Priority is still queue position, and nothing was added to make that work.
+The wants come back in queue order and the scheduler already cut the list
+from the end, the same mechanism that has always made dig jobs the lowest
+priority. Two orders wanting the same machine are counted once, so the
+higher one keeps it.
+
+**Your staffed base is materially more productive as a result**, and nothing
+in the suite can see that — `balance_sim` has no base term at all. It is a
+pacing question for play.
+
+### An order can be a level the base holds, not just a batch it makes
+
+`[S]` on the quantity page files a **standing** order. A batch is finished
+and removed; a level is held — when the shelf drains, the order re-arms and
+the base makes more.
+
+That closes a hole the old behaviour had no answer for: collecting from a
+machine empties its whole output buffer, so walking past your own base
+drained the very stock the order had just declared complete, and the order
+was already gone. There is no hysteresis and no refill threshold, because
+the drain is a burst rather than a trickle and there is nothing to
+oscillate around.
+
+A standing order says nothing when it tops itself up — "complete" is a lie
+about something that is not complete — so **filing** one announces itself
+instead.
+
+The quantity page also now says that the target is what the *base* holds:
+machine and depot buffers, not your pockets. `0/20` while carrying forty of
+the thing is the figure working correctly.
+
+### An order can be filed above or below the queue
+
+`[P]` on the quantity page cycles a priority band — **High**, **Normal**,
+**Low** — and it raises first, since raising is what the feature is for.
+Before this the only control you had over the base's attention was cancel
+and refile, which lands the order you care about at the *bottom*: strictly
+worse than useless.
+
+The band is an insert position rather than a second sort. An order lands
+after the last order of equal or higher band and nothing reads the field
+again, so ties still break by the order you filed them in and one band is
+still a queue. Refiling an order now restores its band instead of dropping
+it to the foot of the list.
+
+### The queue screen says what the base is doing about each order
+
+Every order carries a tag: **WORKING** (somebody is standing on its chain
+right now), **QUEUED** (it wants machines and the base ran out of bodies
+before it got here), **HOLDING** (a standing order at its level — the
+feature working), or **STALLED** (the line broke).
+
+The two that needed telling apart are HOLDING and STALLED. Both want
+nobody, and one of them is a base that needs rebuilding. WORKING is read
+off who is actually posted rather than off what the scheduler asked for,
+because two machines in the want list never get a body — one the base has
+been built around with no route to it, and one held by a program the
+scheduler is not allowed to move — and calling those "working" sends you
+off to watch a machine nobody will ever stand at.
+
+### A broken line says so in the log
+
+A stalled order was news only if you opened the queue screen on purpose.
+It now logs **once**, on the way into the stall, and again if it breaks a
+second time after you have repaired it. Not every tick: a line you have
+already been told about is not news.
+
+The log line is the headline alone — "Work order stalled: 30 x Routine
+Disk." The sentence naming *which* machine went missing stays on the queue
+screen, where it is wrapped; the commoner of its two shapes runs to 198
+characters, and the map's log pane draws a line as exactly one unwrapped
+row about 135 cells wide.
+
+Reloading a save announces the stall again. The run that was told is over.
+
+### The screen says how short of bodies the base is
+
+A header above the key hints: how many posts the queue asked for against
+how many programs the base has. The scheduler cuts its list to the bodies
+it has and the posts past the end vanished in silence, so a three-machine
+line with two programs said "no one" on the third machine and nothing
+anywhere said you were one program short.
+
+It answers "why is nothing happening" from the other side to the tags: a
+tag says which order has the base's attention, this says whether the base
+has anyone to give it. It is **silent when you have bodies to spare**,
+because a line that shows on every visit is a line nobody reads by the
+third one.
+
 ## 0.13.4
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

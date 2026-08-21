@@ -2001,6 +2001,63 @@ by making `copy_bonus` `pub` and the three axis methods on
 `EquipmentStats` `pub(crate)`: outside the engine the hand-rolled chain
 now fails to compile, which is the barrier rather than the convention.
 
+### A copy's quality is the fourth axis, and it is an integer
+
+**A copy's quality is the fourth axis, and it is an integer.** `GearCopy`
+gained a `quality: u8` — a percentage of the item's authored bonus, 100
+meaning "compiled exactly to spec" — so that how well *this* copy was made
+is a property of the copy rather than of the item. The design argument is
+in `docs/superpowers/specs/2026-08-21-item-quality-design.md`; the phased
+build is `docs/superpowers/plans/2026-08-21-item-quality-plan.md`.
+
+**Why an integer and not an `f32`.** `GearCopy` is the key of the
+`components::GearCopies` ledger — `add`, `count` and `take` find their rows
+by `==` — and `EquippedItem` holds the same key so an equip and its unequip
+can be matched. An `f32` field takes `Eq` with it, and with `Eq` the whole
+keyed-by-value seam. A `u8` percent has more resolution than the band
+needs and costs nothing.
+
+**Why the `serde` default is a named function.** `#[serde(default =
+"default_quality")]`, never a bare `#[serde(default)]`. `u8`'s own
+`Default` is 0, so the bare form would load every piece of gear in every
+existing save at 0% of its authored bonus — a total loss of stats
+presenting as a balance bug rather than as a failed load, which is the
+worst shape a save fault can take. The same argument holds three times
+over: a *carried* copy rides `serde` through `data.player.gear_copies`, a
+*worn player* copy rides three flat `PlayerSave` fields, and a *worn
+companion* copy rides `EquippedItemSave` — three independent defaults, so
+`a_pre_quality_save_loads_its_gear_as_designed` strips the field out of a
+real save file on disk and each route's default fails that test on its own.
+A RON round-trip in memory cannot prove a defaulting fault; only a file
+can. The field is additive on named structs, so it costs no
+`SAVE_FORMAT_VERSION` bump.
+
+**Why it sits third in `copy_bonus`'s chain.** Affix into the base, then
+`scaled_for_level`, then `for_quality`, then `fused_for_tier`, then
+`for_rarity`. `for_quality` deliberately carries **no** per-step floor —
+the two axes after it have one because a *discrete rung* has to be
+observable at the 1..=4 points gear ships at, while quality is a continuous
+gradient that a floor would flatten onto one number. Being floor-free is
+exactly why it cannot go last: applied to an unscaled 4-point stat it is
+eaten by rounding, and worse, it inverts the rare ladder. Worked, at level
+1 on a base-4 stat: quality last gives a `Silver` copy at 70% `round(4 *
+1.5 = 6 * 0.7) = 4` against an `Ordinary` copy at 130% `round(4 * 1.3) =
+5`, so the rarer copy prices *below* the common one and the row colour is a
+lie about which is better. Quality third gives 5 against 5 — the ladder
+stands. `the_rare_ladder_survives_the_whole_quality_band` is that
+comparison; `a_rarer_copy_beats_an_ordinary_one_of_equal_quality` is the
+honest form of the rare guarantee, which is *against a copy of equal
+quality* rather than globally.
+
+**The band is the engine's and the palette is the renderer's.**
+`items::quality_band` buckets the percentage into four rungs against three
+`tuning.rs` cuts, centred so `QUALITY_DEFAULT` reads as no change and every
+copy in every existing save is repainted by nothing. The thresholds live in
+the engine because several renderer sites will read them, and that is the
+argument `Rarity::label` and `Game::copy_name` already make; the colour and
+weight stay the renderer's, because a band carrying an emphasis as well as
+a hue is not expressible as a `Color`.
+
 ### A copy's name is built in exactly one place, `Game::copy_name`
 
 **A copy's name is built in exactly one place, `Game::copy_name`.** It is

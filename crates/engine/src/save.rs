@@ -331,6 +331,18 @@ pub struct CreatureSave {
     /// changes meaning under a name it keeps.
     #[serde(default)]
     pub program_id: u32,
+    /// What this program remembers — see `components::Memories`. Only
+    /// meaningful when `tamed` is true; a wild creature's is written empty
+    /// and ignored, exactly as its `power` is.
+    ///
+    /// Additive behind `#[serde(default)]`, so it earns no
+    /// `SAVE_FORMAT_VERSION` bump — nothing is removed and no field changes
+    /// meaning under a name it keeps. The default is load-bearing rather than
+    /// decorative here: the on-disk form is field-named RON, so a file
+    /// written before memories existed carries no `memories` key at all and
+    /// every program in it loads with an empty store.
+    #[serde(default)]
+    pub memories: Vec<MemorySave>,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -411,6 +423,30 @@ pub struct DigSiteSave {
     pub position: (i32, i32),
     pub durability: u32,
     pub marked: bool,
+}
+
+/// One remembered thing on disk — see `components::Memory`.
+///
+/// A **named struct, never a positional tuple**. A tuple is the one shape
+/// field-named RON does not save you from: the next property a memory grows
+/// would arrive as a legacy positional field rather than as a defaulted named
+/// one.
+///
+/// What the memory is *worth* is deliberately absent. Intensity is derived
+/// from the game clock at read time, so there is nothing here that could come
+/// back out of step with the tick it is measured against.
+///
+/// `subject` is `components::MemorySubject` itself rather than a mirror of it,
+/// which is the opposite call from `CronjobKind` below — see that enum's
+/// doc comment there and `MemorySubject`'s own for why a mirror is right for
+/// one and wrong for the other.
+#[derive(Serialize, Deserialize)]
+pub struct MemorySave {
+    pub def: crate::memories::MemoryId,
+    pub subject: crate::components::MemorySubject,
+    pub subject_name: Option<String>,
+    pub reinforced: u64,
+    pub strikes: u32,
 }
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
@@ -1044,6 +1080,7 @@ mod tests {
             nemesis_grudges: 0,
             equipment: Vec::new(),
             program_id: 1,
+            memories: Vec::new(),
             staff: false,
         }
     }

@@ -58,11 +58,11 @@ use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BaseAnchor, Boss, BuffKind,
     BuffSource, Carrying, CombatBuff, Creature, CustomName, Decompiler, DigSite, Durability,
     Equipment, EquippedItem, Experience, FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph,
-    GlyphColor, Hostile, Inventory, KernelRing, MachineStatus, Nemesis, Nest, NestGuardian,
-    POWER_MAX, Perks, Player, Position, Potential, PowerReserve, ProgramId, PurchasedTiers,
-    Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, StandingJob, Stats,
-    StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents,
-    Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    GlyphColor, Hostile, Inventory, KernelRing, MachineStatus, Memories, Memory, Nemesis, Nest,
+    NestGuardian, POWER_MAX, Perks, Player, Position, Potential, PowerReserve, ProgramId,
+    PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, StandingJob,
+    Stats, StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink,
+    Talents, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::base::work_orders::{OrderPriority, WorkOrder};
 pub use game::contracts::{BrokerReach, ContractRefusal};

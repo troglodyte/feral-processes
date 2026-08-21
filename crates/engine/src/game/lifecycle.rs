@@ -809,8 +809,26 @@ impl Game {
                 } else {
                     c.program_id
                 };
+                // Owned programs only, beside the id: the store's absence is
+                // what "not on the roster" means, so a wild creature's
+                // `memories` is written empty and read back nowhere, exactly
+                // as its `power` is. An entry naming a def no file defines is
+                // restored rather than purged — see `components::Memory`.
+                let memories = Memories(
+                    c.memories
+                        .iter()
+                        .map(|m| Memory {
+                            def: m.def.clone(),
+                            subject: m.subject.clone(),
+                            subject_name: m.subject_name.clone(),
+                            reinforced: m.reinforced,
+                            strikes: m.strikes,
+                        })
+                        .collect(),
+                );
                 entity.insert((
                     ProgramId(program_id),
+                    memories,
                     Tamed { owner: player },
                     PowerReserve::new(c.power),
                     Experience {
@@ -1040,6 +1058,7 @@ impl Game {
                 Option<&PowerReserve>,
                 Option<&Boss>,
                 Option<&ProgramId>,
+                Option<&Memories>,
             ),
         )>();
         for (
@@ -1070,6 +1089,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
+                memories,
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1144,6 +1164,19 @@ impl Game {
                 rarity: rarity.copied().unwrap_or_default(),
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
                 program_id: program_id.map(|p| p.0).unwrap_or(0),
+                memories: memories
+                    .map(|m| {
+                        m.0.iter()
+                            .map(|m| save::MemorySave {
+                                def: m.def.clone(),
+                                subject: m.subject.clone(),
+                                subject_name: m.subject_name.clone(),
+                                reinforced: m.reinforced,
+                                strikes: m.strikes,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL

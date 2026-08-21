@@ -898,3 +898,206 @@ fn an_empty_database_leaves_every_reader_at_zero() {
     assert_eq!(game.morale(program), 0.0);
     assert_eq!(game.opinion_of(program, &subject), 0.0);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5: the save round trip.
+//
+// Every test here goes through `Game::save` and `Game::load` — the real
+// doors, and a file on disk. A RON round trip is the weaker instrument and
+// deliberately not what these use: `#[serde(skip)]` leaves one green while
+// the field never reaches the file at all.
+// ---------------------------------------------------------------------------
+
+/// Saves to scratch, lets `edit` stand in for however the file came to be
+/// what it is, and loads it back.
+///
+/// The scratch guard lives for the whole call, so the file outlives the save
+/// and dies with the directory — an engine fixture leaking into `/tmp`
+/// exhausted the tmpfs inode table here once already.
+fn round_trip_with(
+    game: &mut Game,
+    tag: &str,
+    edit: impl FnOnce(&mut crate::save::SaveData),
+) -> Game {
+    let dir = scratch_assets_dir(tag);
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    edit(&mut data);
+    crate::save::save_to_file(&path, &data).unwrap();
+    Game::load(&path, &test_assets_dir()).unwrap()
+}
+
+fn round_trip(game: &mut Game, tag: &str) -> Game {
+    round_trip_with(game, tag, |_| {})
+}
+
+/// The program answering to `id` after a load. Entity ids are not stable
+/// across the round trip, which is the whole reason `ProgramId` exists.
+fn by_id(game: &mut Game, id: ProgramId) -> Entity {
+    game.world
+        .query::<(Entity, &ProgramId)>()
+        .iter(&game.world)
+        .find(|(_, held)| **held == id)
+        .map(|(e, _)| e)
+        .unwrap_or_else(|| panic!("{id:?} came back from the load"))
+}
+
+/// A companion whose species a shipped file defines — `Game::load` resolves
+/// every creature against `SpeciesDb` and drops what it cannot name, so a
+/// `spawn_tamed` fixture never survives a save.
+fn adopt(game: &mut Game, species: &str, x: i32) -> Entity {
+    game.adopt_program(species, x, 4, 1.0)
+        .expect("a shipped species")
+}
+
+/// The def, the subject, the strike count and the tick it last landed on all
+/// have to travel, and `morale` has to read the same figure on the other
+/// side — a reinforcement count that came back as 1 is a program that
+/// quietly forgot half of what happened to it.
+#[test]
+fn a_programs_memories_survive_a_save_and_load() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let id = id_of(&game, program);
+    let mauling = MemorySubject::Species("scrapper".to_string());
+    set_tick(&mut game, 3_000);
+    game.remember(program, "mauled_by", mauling.clone());
+    game.remember(program, "mauled_by", mauling.clone());
+    set_tick(&mut game, 4_500);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    let before = game.morale(program);
+
+    let mut loaded = round_trip(&mut game, "memories_save");
+    let who = by_id(&mut loaded, id);
+    let mut held = memories_of(&loaded, who);
+    held.sort_by_key(|m| m.def.clone());
+
+    assert_eq!(held.len(), 2, "both entries travelled: {held:?}");
+    assert_eq!(held[0].def, MemoryId::from("hard_won"));
+    assert_eq!(held[0].subject, MemorySubject::Nothing);
+    assert_eq!(held[0].strikes, 1);
+    assert_eq!(held[0].reinforced, 4_500, "the tick it landed on");
+    assert_eq!(held[1].def, MemoryId::from("mauled_by"));
+    assert_eq!(held[1].subject, mauling, "and what it was about");
+    assert_eq!(held[1].strikes, 2, "reinforcement is not re-rolled on load");
+    assert_eq!(held[1].reinforced, 3_000);
+    let after = loaded.morale(who);
+    assert!(
+        (after - before).abs() < 1e-4,
+        "the same store weighs the same: {after} against {before}"
+    );
+}
+
+/// Decision 2's whole reason. The name is stamped on the memory at the write
+/// rather than resolved at the read, so it has to be in the file — resolved
+/// at save time instead, a program destroyed before the next save takes its
+/// name with it and the screen has nothing left to draw.
+#[test]
+fn a_remembered_name_survives_the_program_it_names() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let comrade = adopt(&mut game, "glitch", 5);
+    let id = id_of(&game, program);
+    let comrade_id = id_of(&game, comrade);
+    let name = game.creature_label(comrade);
+    set_tick(&mut game, 1_000);
+    game.remember(
+        program,
+        "bonded_in_battle",
+        MemorySubject::Program(comrade_id),
+    );
+    game.dissolve_tamed_program(comrade);
+
+    let mut loaded = round_trip(&mut game, "memories_name_save");
+    let who = by_id(&mut loaded, id);
+    let held = memories_of(&loaded, who);
+
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(held[0].subject, MemorySubject::Program(comrade_id));
+    assert_eq!(
+        held[0].subject_name.as_deref(),
+        Some(name.as_str()),
+        "the name outlives the program"
+    );
+    assert!(
+        loaded
+            .world
+            .query::<&ProgramId>()
+            .iter(&loaded.world)
+            .all(|held| *held != comrade_id),
+        "and the program itself really is gone, so nothing re-resolved it"
+    );
+}
+
+/// A file written before this field existed has no `memories` key at all,
+/// which is what `#[serde(default)]` answers. Every owned program still gets
+/// a store: a loaded companion that cannot *hold* a memory is a companion
+/// whose screen stays empty for the rest of the run.
+#[test]
+fn a_save_written_before_memories_existed_loads_with_an_empty_store() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for (species, x) in [("scrapper", 4), ("glitch", 5)] {
+        let program = adopt(&mut game, species, x);
+        game.remember(program, "hard_won", MemorySubject::Nothing);
+    }
+
+    let mut loaded = round_trip_with(&mut game, "memories_legacy", |data| {
+        for c in &mut data.creatures {
+            c.memories.clear();
+        }
+    });
+
+    let owned = owned_programs(&mut loaded);
+    assert_eq!(owned.len(), 2, "both programs came back");
+    for who in owned {
+        let store = loaded.world.get::<Memories>(who);
+        assert!(
+            store.is_some(),
+            "present and empty, never absent — absence means 'not on the roster'"
+        );
+        assert!(store.unwrap().0.is_empty());
+        assert_eq!(
+            loaded.remember(who, "hard_won", MemorySubject::Nothing),
+            Remembered::Written,
+            "and it can hold one from here on"
+        );
+    }
+}
+
+/// `MemorySubject` derives serde directly rather than being mirrored on the
+/// save side, so every variant's encoding is this file's business.
+/// `Activity(TaskKind)` is the one most likely to break: `TaskKind` gained
+/// its derives for this and nothing else uses them.
+///
+/// Implanted rather than remembered, because the shipped catalogue declares
+/// only four of the six kinds — and what is under test here is the encoding
+/// of a subject, not the write door's kind check.
+#[test]
+fn every_subject_kind_survives_the_round_trip() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let comrade = adopt(&mut game, "glitch", 5);
+    let id = id_of(&game, program);
+    let subjects = vec![
+        MemorySubject::Nothing,
+        MemorySubject::Program(id_of(&game, comrade)),
+        MemorySubject::Species("scrapper".to_string()),
+        MemorySubject::Structure("mining_node".to_string()),
+        MemorySubject::BaseTile { x: -3, y: 7 },
+        MemorySubject::Activity(crate::components::TaskKind::Excavate),
+    ];
+    for subject in &subjects {
+        implant(&mut game, program, "hard_won", subject.clone());
+    }
+
+    let mut loaded = round_trip(&mut game, "memories_subjects");
+    let who = by_id(&mut loaded, id);
+    let held: Vec<MemorySubject> = memories_of(&loaded, who)
+        .into_iter()
+        .map(|m| m.subject)
+        .collect();
+
+    assert_eq!(held, subjects, "every variant, in the order it was written");
+}

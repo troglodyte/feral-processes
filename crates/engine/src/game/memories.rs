@@ -256,15 +256,118 @@ impl crate::Game {
     /// A body carrying no `Memories` reads zero rather than panicking, the
     /// same asymmetry `remember` makes on the write side: hostiles, structures
     /// and the player are safe here without a branch at the call site.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the screen that heads a page with this figure is phase 4"
-        )
-    )]
-    pub(crate) fn morale(&self, who: Entity) -> f32 {
+    pub fn morale(&self, who: Entity) -> f32 {
         self.memory_sum(who, |_| true)
+    }
+
+    /// Every memory `who` currently holds, as the page draws them: strongest
+    /// first, each already named and already weighed.
+    ///
+    /// **One derivation, `Game::gear_detail`'s rule.** Every figure on the
+    /// screen is a call rather than a formula the renderer keeps a copy of —
+    /// `intensity` is `Memory::intensity` projected, not a second expression
+    /// of the decay, which is the shape that has drifted in this repo four
+    /// times.
+    ///
+    /// **`&self`, and it evicts nothing.** A read-only screen that rewrote
+    /// the roster it is drawing would make what a program remembers depend on
+    /// whether anybody looked; a faded entry is still one the program holds,
+    /// and it is `Game::remember` that drops it at the next formation.
+    ///
+    /// **An entry whose def no file defines is skipped**, contributing no
+    /// row — `memory_sum`'s rule, and where the empty-database property comes
+    /// from at this end: with `assets/memories/` deleted the store is intact
+    /// and the page is empty.
+    ///
+    /// The order is by **magnitude**, `evict`'s rule mirrored rather than
+    /// described: a signed sort files every grudge below every fondness, so
+    /// the deepest scar a program carries would sit at the bottom of the page
+    /// most often opened to read it.
+    ///
+    /// `sort_by` and not `sort_unstable_by`, so a tie keeps insertion order —
+    /// but **there is deliberately no test for that**, because none can
+    /// exist: measured, the unstable sort returns equal keys in insertion
+    /// order too at every length a store can reach, `MEMORY_CAP_PER_PROGRAM`
+    /// being 12 and the unstable sort running insertion sort under 20. A test
+    /// that cannot tell the two calls apart is coverage-shaped, so the
+    /// guarantee is taken from the standard library's contract and stated
+    /// here instead.
+    pub fn memory_report(&self, who: Entity) -> Vec<crate::views::MemoryRow> {
+        let Some(store) = self.world.get::<Memories>(who) else {
+            return Vec::new();
+        };
+        let db = self.world.resource::<MemoryDb>();
+        let now = self.world.resource::<GameClock>().tick;
+        let mut rows: Vec<crate::views::MemoryRow> = store
+            .0
+            .iter()
+            .filter_map(|m| {
+                let def = db.get(&m.def)?;
+                Some(crate::views::MemoryRow {
+                    name: def.name.clone(),
+                    blurb: def.blurb.clone(),
+                    subject: self.subject_name(m),
+                    intensity: m.intensity(def, now),
+                    age_ticks: now.saturating_sub(m.reinforced),
+                })
+            })
+            .collect();
+        rows.sort_by(|a, b| {
+            b.intensity
+                .abs()
+                .partial_cmp(&a.intensity.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        rows
+    }
+
+    /// What a row calls the thing a memory is about.
+    ///
+    /// Exhaustive, and it stays exhaustive — `cell_mark`'s rule. Under a
+    /// `_ =>` arm a seventh `MemorySubject` variant would ship drawing a row
+    /// that names nothing, and the symptom is a blank column rather than a
+    /// compiler error.
+    ///
+    /// A `Program` is named off the **record** rather than by a live lookup.
+    /// The name is captured at the write for exactly this case: the program a
+    /// memory is about can be destroyed, and the screen still has to say who
+    /// it was. A species or a structure a mod has since removed falls back to
+    /// its id, which is at least a thing the player can search a file for.
+    fn subject_name(&self, memory: &Memory) -> Option<String> {
+        match &memory.subject {
+            MemorySubject::Nothing => None,
+            MemorySubject::Program(_) => Some(
+                memory
+                    .subject_name
+                    .clone()
+                    .unwrap_or_else(|| "a program that is gone".to_string()),
+            ),
+            MemorySubject::Species(id) => Some(
+                self.world
+                    .resource::<crate::species::SpeciesDb>()
+                    .get(id)
+                    .map_or_else(|| id.clone(), |def| def.name.clone()),
+            ),
+            MemorySubject::Structure(id) => Some(
+                self.world
+                    .resource::<crate::structures::StructureDb>()
+                    .get(id)
+                    .map_or_else(|| id.clone(), |def| def.name.clone()),
+            ),
+            // Named as *base* space, never as a tile on the zone surface:
+            // the two are the same pair of integers meaning different
+            // things, and reading one as the other put the base's roster on
+            // the open grid once already.
+            MemorySubject::BaseTile { x, y } => Some(format!("the base at ({x}, {y})")),
+            MemorySubject::Activity(kind) => Some(
+                match kind {
+                    crate::components::TaskKind::GatherResource => "working a machine",
+                    crate::components::TaskKind::Guard => "standing guard",
+                    crate::components::TaskKind::Excavate => "cutting rock",
+                }
+                .to_string(),
+            ),
+        }
     }
 
     /// What `who` thinks of one thing: `morale` restricted to the memories

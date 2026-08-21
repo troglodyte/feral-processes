@@ -1691,3 +1691,243 @@ fn with_no_catalogue_loaded_every_trigger_is_inert() {
     assert!(memories_of(&game, comrade).is_empty());
     assert_eq!(game.morale(worker), 0.0);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: what the screen draws.
+//
+// `Game::memory_report` is the one derivation the page is built from, the way
+// `Game::gear_detail` is for the gear inspect page. Every test here reads the
+// report and nothing reads the store behind it — a renderer that reached past
+// the report for one figure is how four screens came to rebuild `copy_bonus`
+// by hand.
+// ---------------------------------------------------------------------------
+
+/// A program with a store, on a game whose catalogue is the shipped one.
+fn a_program_with_memories(game: &mut Game) -> Entity {
+    adopt(game, "scrapper", 4)
+}
+
+/// Both fields have never had a reader before this screen. A def carrying a
+/// name and a blurb that nothing draws is content the census already refuses
+/// to let ship empty, held to a page that never says it.
+#[test]
+fn a_row_carries_the_defs_name_and_blurb() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    implant(&mut game, program, "hard_won", MemorySubject::Nothing);
+
+    let rows = game.memory_report(program);
+
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].name, "Won against the odds");
+    assert_eq!(rows[0].blurb, "We had no business walking away from that.");
+}
+
+/// **Magnitude, never signed value** — `evict`'s rule, mirrored rather than
+/// described. A signed sort files every grudge below every fondness, which
+/// puts the deepest scar a program carries at the bottom of the page it is
+/// most often opened to read.
+///
+/// The two are built so a signed sort inverts them: the grudge is the larger
+/// magnitude and the smaller number.
+#[test]
+fn rows_are_ordered_by_magnitude_and_not_by_sign() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    // `hard_won` is +5.0, `mauled_by` -8.0, both at one undecayed strike.
+    implant(&mut game, program, "hard_won", MemorySubject::Nothing);
+    implant(
+        &mut game,
+        program,
+        "mauled_by",
+        MemorySubject::Species("glitch".to_string()),
+    );
+
+    let rows = game.memory_report(program);
+
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(
+        rows[0].name, "Mauled by",
+        "the strongest thing it holds leads the page, whatever its sign: {rows:?}"
+    );
+    assert!(rows[0].intensity < 0.0, "{rows:?}");
+    assert!(rows[1].intensity > 0.0, "{rows:?}");
+}
+
+/// A memory of an event rather than of a thing has nothing to name, and the
+/// row says so by carrying no subject at all rather than by carrying an empty
+/// string the renderer would have to test for.
+#[test]
+fn a_memory_about_nothing_renders_no_subject() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    implant(&mut game, program, "hard_won", MemorySubject::Nothing);
+
+    assert_eq!(game.memory_report(program)[0].subject, None);
+}
+
+/// A species is named by its display name and never by its id: `zero_day` is
+/// what a file is called, not what the player has ever seen the thing called.
+#[test]
+fn a_species_subject_renders_its_display_name() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    let wanted = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .get("zero_day")
+        .expect("a shipped species")
+        .name
+        .clone();
+    implant(
+        &mut game,
+        program,
+        "mauled_by",
+        MemorySubject::Species("zero_day".to_string()),
+    );
+
+    let subject = game.memory_report(program)[0].subject.clone();
+
+    assert_eq!(subject.as_deref(), Some(wanted.as_str()));
+    assert_ne!(
+        subject.as_deref(),
+        Some("zero_day"),
+        "the id is a filename, not a name"
+    );
+}
+
+/// The remembered name, resolved at the write, is what the row draws — and
+/// the case it exists for is a subject that is **gone**. A live lookup
+/// answers nothing here and the row would name an id or a blank.
+#[test]
+fn a_destroyed_programs_name_still_reaches_the_row() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let holder = adopt(&mut game, "scrapper", 4);
+    let subject = adopt(&mut game, "glitch", 5);
+    let name = game.creature_label(subject);
+    let id = id_of(&game, subject);
+
+    assert_eq!(
+        game.remember(holder, "bonded_in_battle", MemorySubject::Program(id)),
+        Remembered::Written
+    );
+    game.dissolve_tamed_program(subject);
+
+    let rows = game.memory_report(holder);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        rows[0].subject.as_deref(),
+        Some(name.as_str()),
+        "the screen still has to say who it was"
+    );
+}
+
+/// Age is elapsed ticks since the memory last landed, and reinforcement is
+/// what resets it — the same field the decay measures from, so a row that
+/// says "just now" and a row worth its full valence are the same row.
+#[test]
+fn age_is_elapsed_ticks_since_the_last_reinforcement() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    set_tick(&mut game, 1_000);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    set_tick(&mut game, 1_250);
+    assert_eq!(game.memory_report(program)[0].age_ticks, 250);
+
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    assert_eq!(
+        game.memory_report(program)[0].age_ticks,
+        0,
+        "reinforcing it makes it new again"
+    );
+}
+
+/// The row is a projection of `Memory::intensity` and not a second copy of
+/// the formula — the doc-comment-claiming-to-mirror trap this repo has been
+/// bitten by four times. Decayed, so a test that ignored the clock would have
+/// to quote the undecayed valence instead.
+#[test]
+fn a_rows_intensity_is_the_one_formula_decayed() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    set_tick(&mut game, 1_000);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    // One shipped half-life for `hard_won`, so the row is worth exactly half.
+    set_tick(&mut game, 6_000);
+
+    let held = memories_of(&game, program);
+    let def = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .get(&MemoryId::from("hard_won"))
+        .expect("a shipped def")
+        .clone();
+    let wanted = held[0].intensity(&def, 6_000);
+
+    let rows = game.memory_report(program);
+    assert!(
+        (rows[0].intensity - wanted).abs() < 1e-5,
+        "row {} against the formula's {wanted}",
+        rows[0].intensity
+    );
+    assert!(
+        (rows[0].intensity - def.valence / 2.0).abs() < 1e-5,
+        "and one half-life in, that is half the valence: {}",
+        rows[0].intensity
+    );
+}
+
+/// `morale`'s asymmetry at the report end: a hostile, a structure or the
+/// player has no store, and asking is a real answer rather than a panic.
+#[test]
+fn a_body_with_no_store_reports_no_rows() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = game.spawn_wild_creature("glitch", 6, 6).unwrap();
+
+    assert!(game.memory_report(wild).is_empty());
+    assert!(game.memory_report(game.player_entity()).is_empty());
+}
+
+/// The deleting-`assets/memories/` property at the screen: the store holds
+/// what it held, and the page draws nothing because nothing can be weighed.
+#[test]
+fn an_empty_database_reports_no_rows() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    implant(&mut game, program, "hard_won", MemorySubject::Nothing);
+    implant(
+        &mut game,
+        program,
+        "mauled_by",
+        MemorySubject::Species("glitch".to_string()),
+    );
+    game.world
+        .insert_resource(crate::memories::MemoryDb::default());
+
+    assert_eq!(memories_of(&game, program).len(), 2, "the store is intact");
+    assert!(game.memory_report(program).is_empty());
+}
+
+/// **A read-only screen may not rewrite the roster it is drawing.** The
+/// faded entry below is one `evict` would drop at the next formation, and
+/// what makes this test more than a tautology is that the report has to
+/// *skip* it without removing it — otherwise what a program remembers would
+/// depend on whether anybody looked.
+#[test]
+fn reading_the_report_evicts_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    // Far enough past `hard_won`'s half-life that it is under
+    // `MEMORY_FORGET_THRESHOLD` and would not survive another formation.
+    set_tick(&mut game, 100_000);
+
+    let before = memories_of(&game, program).len();
+    let rows = game.memory_report(program);
+    let after = memories_of(&game, program).len();
+
+    assert_eq!(before, 1);
+    assert_eq!(after, 1, "the page is a reader, not a sweep");
+    assert_eq!(rows.len(), 1, "a faded memory is still one it holds");
+}

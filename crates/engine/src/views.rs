@@ -1788,3 +1788,37 @@ pub struct StockRow {
     pub name: String,
     pub qty: u32,
 }
+
+/// One thing a program remembers, as `Mode::CompanionMemories` lists it —
+/// see `Game::memory_report`.
+///
+/// **The subject is rendered here and not by the renderer.** A `Species`
+/// subject needs `SpeciesDb`, a `Structure` subject `StructureDb`, and a
+/// `Program` subject the name captured on the record when it was written;
+/// the renderer holds none of the three. It is also `render/stack.rs`'s
+/// `cell_mark` rule — the match behind this field is exhaustive, so a
+/// seventh `MemorySubject` variant fails to compile rather than shipping a
+/// row that names nothing.
+///
+/// `intensity` and `age_ticks` are numbers rather than pre-rendered text, in
+/// the other direction: neither needs the world, and pre-rendering them
+/// would invent a second formatting seam for the one screen that reads this.
+#[derive(Clone, Debug)]
+pub struct MemoryRow {
+    /// `memories::MemoryDef::name` — its first reader.
+    pub name: String,
+    /// `memories::MemoryDef::blurb` — likewise.
+    pub blurb: String,
+    /// What it is about, already named. `None` for
+    /// `components::MemorySubject::Nothing`, which is a memory of an event
+    /// rather than of a thing and so has nothing to name — an empty string
+    /// would leave the renderer testing for one.
+    pub subject: Option<String>,
+    /// Signed and decayed to the current tick: `components::Memory::
+    /// intensity`, projected rather than recomputed.
+    pub intensity: f32,
+    /// Ticks since it last landed. The decay measures from the same field,
+    /// so the freshest row on the page is also the strongest one of its
+    /// kind.
+    pub age_ticks: u64,
+}

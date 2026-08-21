@@ -279,10 +279,10 @@ current save is at 100, so nothing already on screen gets wider.
 one derivation and every figure on it is a call, so it picks the change up
 through `copy_bonus` for free; only the explicit row is new.
 
-### The category tag carries the quality colour
+### The category tag carries the quality read
 
-The `WEP` / `ARM` / `MOD` tag on a list row is painted in a con colour
-derived from the copy's quality. **The tag only** — the rest of the row
+The `WEP` / `ARM` / `MOD` tag on a list row is styled by the copy's
+quality. **The tag only** — the rest of the row
 keeps `tier_color`, which already means fusion-then-rarity and must go on
 meaning that.
 
@@ -293,37 +293,67 @@ something else per screen. A tag colour is that same argument for a token
 that is already visually set apart, so the two axes never collide on one
 glyph.
 
-**Direction: the con ramp runs the way it always has.** A green con is
-beneath you and a red con is above you, and an item reads the same way — a
-70% copy is junk you would not stoop for, a 130% copy is above spec.
-Yellow lands on exactly 100, which is what "even con" has always meant.
+**The ramp is emphasis, not hue.** Four bands running from under spec to
+over spec, each strictly more emphatic than the last:
 
-| Quality | Rung | Reads as |
-| --- | --- | --- |
-| 70–90 | Green | under spec |
-| 95–105 | Yellow | as designed |
-| 110–120 | Orange | above spec |
-| 125–130 | Red | exceptional |
+| Quality | Colour | Weight | Reads as |
+| --- | --- | --- | --- |
+| 70–90 | `GRAY` | normal | under spec |
+| 95–105 | `TEXT` (default) | normal | as designed |
+| 110–120 | `TEXT` (default) | bold | above spec |
+| 125–130 | `GOLD` | bold | exceptional |
 
-Inverting this — green for good, red for bad — is the other defensible
-choice and is a five-word change to the thresholds if the con reading turns
-out to feel wrong in a session.
+Only the two extremes draw the eye; the middle two differ by weight alone.
+Rejected in favour of this: a green→red con ramp, which spends four hues on
+an axis the row colour is already using two of, and which paints an
+alarming colour on gear that is merely ordinary.
+
+**The second band is literally no change** — default colour, default
+weight. Every copy in every existing save is at 100 and so lands there, so
+this repaints nothing that is already on screen. That is a property the con
+ramp did not have.
+
+**The top band stays bold.** With the third band bold, a gold-but-normal
+top band would read as *less* emphatic than the one below it. Emphasis has
+to be monotone or the ramp inverts at its own peak.
+
+**Known collision, accepted:** `GOLD` is already `rarity_color`'s colour for
+`Rarity::Gold`, so an Overclocked exceptional copy shows a gold name and a
+gold tag meaning two different things. They are different glyphs in
+different columns and each colour means exactly one thing *in its own
+column*, which is the distinction `Row::Item`'s `icon` field already draws.
+Worth a look in a session; `YELLOW` is the alternative, though it sits close
+enough to `GOLD` that telling them apart may be worse than the collision.
 
 Only equipment carries quality, so `USE` / `MAT` / `CUR` tags keep their
-current colour and are unaffected.
+current treatment and are unaffected.
 
-**The ladder is shared, not copied.** `game::inspection::difficulty_color`
-spells the four rungs out in an if/else chain today. It and the quality
-read must not each hold their own list of the four `GlyphColor`s — that is
-the "a doc comment claiming to mirror is a call, not a copy" rule, which
-this repo has been bitten by four times. The four rungs become one const
-ladder both index; each keeps its own thresholds, since a power ratio and a
-quality percentage are genuinely different numbers.
+**No shared con ladder.** An earlier draft of this spec had the quality read
+and `game::inspection::difficulty_color` indexing one extracted four-rung
+ladder, to satisfy the "a mirror must be a call, not a copy" rule. This
+palette shares nothing with the con colours, so that extraction is not
+needed and should not be built — `difficulty_color` is left exactly as it
+is.
 
-The bucketing itself is the engine's, beside `difficulty_color`, returning
-a `GlyphColor` the renderer maps as it already does. Five renderer sites
-build this tag today and an engine-owned rule is what stops them drifting —
-the same argument `Rarity::label` and `Game::copy_name` make.
+**The engine buckets, the renderer paints.** A pure `items::quality_band`
+returns a four-variant `QualityBand`; the renderer maps a band to its
+colour and weight. The engine owns the thresholds because five renderer
+sites build this tag and an engine-owned rule is what stops them drifting —
+the argument `Rarity::label` and `Game::copy_name` make. The renderer owns
+the palette because it owns every other colour in the game, and because a
+band carrying a weight as well as a hue is not expressible as a
+`GlyphColor`.
+
+**The painter already does this.** `TextRun { text, bold, color }` and
+`Painter::ui_runs` draw mixed weight and colour within one line, and
+`render/mod.rs::emphasize_numbers` is a working, tested precedent for
+building exactly such a run inside a row's text. No new painter capability
+is needed.
+
+**Width is unchanged in all four bands.** No characters are added, and the
+UI face is monospace, so bold carries the same advance. The width tests
+should be re-run to confirm the bold advance rather than to absorb a new
+number.
 
 ### The tag becomes a column
 
@@ -382,8 +412,10 @@ stream, not a difficulty change.
 - Per-unit rolls: compiling N can produce more than one distinct copy.
 - Both popup width tests, extended to the worst-case name and re-baselined
   for the tag column.
-- The quality bucketing at every rung boundary, and that 100 lands on the
-  even rung; a non-equipment tag is left uncoloured.
+- `quality_band` at every band boundary, and that 100 lands in the
+  no-change band; a non-equipment tag is left untouched.
+- Emphasis is monotone across the four bands — the pinned two-weight
+  assertion `TextRun` already carries is the model.
 - Every new test gets the mutation check — delete the fix, watch it fail,
   restore.
 
@@ -393,9 +425,9 @@ stream, not a difficulty change.
 | --- | --- |
 | `engine/items.rs` | the field, `default_quality`, `for_quality`, `is_plain` |
 | `engine/game/crafting.rs` | `CraftOrder`, the roll, `craft` signature, `copy_bonus` chain |
+| `engine/items.rs` (2) | `quality_band` and its thresholds |
 | `engine/game/combat_rewards.rs` | `grant_gear_drop` roll, `copy_name` |
 | `engine/game/catalog.rs` | `best_structure_tier` |
-| `engine/game/inspection.rs` | the shared con ladder + the quality bucketing |
 | `engine/perks.rs` | one appended variant + hook |
 | `engine/tuning.rs` | the band, step, base, spread and per-term constants |
 | `app-core` | the careful-compile keypress and craft dispatch |

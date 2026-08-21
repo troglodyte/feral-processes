@@ -304,8 +304,22 @@ pub struct GearInspect {
 /// on a different row from the one that fires.
 pub struct SwapRow {
     pub choice: SwapChoice,
-    /// The name and stat columns — what this copy *is*.
+    /// The name column — what this copy *is*, padded to `SWAP_NAME_COLUMN`.
     pub label: String,
+    /// What the player would be wearing, padded to `SWAP_STATS_COLUMN` and
+    /// carrying its own leading space.
+    ///
+    /// **A tag rather than part of `label`**, for `delta`'s reason and
+    /// measured the same way: `wrapped_row_lines` never breaks the head, so
+    /// anything joined into it has to fit at the worst case. Once
+    /// `Game::copy_name` gained the quality figure that stopped being true —
+    /// the longest name plus six stat axes at zone 10 on a maxed Gold copy is
+    /// 118 cells against a 114.65-cell popup body, and `draw_row` clips
+    /// vertically only, so the right-hand end was simply lost. As a tag it
+    /// sheds onto a continuation exactly when it has to. The padding lives
+    /// inside the tag so the delta still lands in one column on every row
+    /// that keeps both on the same line, which is every ordinary row.
+    pub stats: String,
     /// What swapping to it would change, as its own string.
     ///
     /// **Split from `label` so the renderer can wrap between them.** Six stat
@@ -329,9 +343,9 @@ pub struct SwapRow {
 /// How wide the swap picker's name and stat columns are. Padding lives here
 /// rather than in the renderer because the labels do — see `SwapRow`.
 /// Wide enough for the longest name `Game::copy_name` can build out of the
-/// shipped assets — a rare tier's word, an affix's prefix or suffix, and the
-/// item's own name. "Overclocked Singularity Matrix of Quiet Handshakes" is
-/// 50 cells.
+/// shipped assets — a rare tier's word, an affix's prefix or suffix, the
+/// item's own name, and the quality figure. "Overclocked Singularity Matrix
+/// of Quiet Handshakes (130%)" is 57 cells.
 ///
 /// `{:<N}` pads but never truncates, so a name past this does not clip: it
 /// shunts the stat and delta columns right and misaligns every row below it.
@@ -343,7 +357,7 @@ pub struct SwapRow {
 /// Held by `the_widest_swap_row_still_fits_its_popup`, which measures real
 /// text rather than counting characters. **Adding a long affix or a long
 /// item name can break this**, and that test is what says so.
-const SWAP_NAME_COLUMN: usize = 50;
+const SWAP_NAME_COLUMN: usize = 57;
 const SWAP_STATS_COLUMN: usize = 20;
 
 #[cfg(test)]
@@ -394,9 +408,9 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
             // the stat column, because they are different lengths of thing:
             // "Overclocked" is a word that belongs beside the item it
             // describes, while "T2/3" is a measurement that belongs beside
-            // the numbers. Both columns are fixed width — see
+            // the numbers. Both columns are padded — see
             // `SWAP_NAME_COLUMN` — so this is also what keeps either from
-            // pushing the other's content out of view.
+            // pushing the other's content out of alignment.
             // Through the engine's one name-builder, so this column cannot
             // come to disagree with a drop line or the trade screen about
             // what a copy is called.
@@ -410,7 +424,8 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
                 name.clone(),
                 SwapRow {
                     choice: SwapChoice::Equip(copy.clone()),
-                    label: swap_columns(&name, &stats),
+                    label: swap_name_column(&name),
+                    stats: swap_stats_column(&stats),
                     delta: swap_delta(game, mods, worn_mods),
                     fusion_tier: copy.tier,
                     rarity: copy.rarity,
@@ -426,7 +441,11 @@ pub fn equip_swap_rows(game: &Game, wearer: Entity, slot: EquipmentSlot) -> Vec<
     if worn.is_some() {
         rows.push(SwapRow {
             choice: SwapChoice::Unequip,
-            label: swap_columns("(Unequip)", ""),
+            label: swap_name_column("(Unequip)"),
+            // Padded blank rather than empty: an empty tag contributes
+            // nothing to `wrapped_row_lines`, which would slide this row's
+            // delta out of the column every other row's sits in.
+            stats: swap_stats_column(""),
             delta: swap_delta(game, EquipmentStats::default(), worn_mods),
             fusion_tier: 0,
             rarity: Rarity::Ordinary,
@@ -474,10 +493,17 @@ fn swap_delta(game: &Game, mods: EquipmentStats, worn: EquipmentStats) -> String
     }
 }
 
-/// The name and stat columns of one swap row, padded so the two line up
-/// down the list.
-fn swap_columns(name: &str, stats: &str) -> String {
-    format!("{name:<SWAP_NAME_COLUMN$} {stats:<SWAP_STATS_COLUMN$}")
+/// The name column of one swap row, padded so the names line up down the
+/// list. The stat column is `SwapRow::stats` and is packed on by the
+/// renderer rather than joined in here — see that field.
+fn swap_name_column(name: &str) -> String {
+    format!("{name:<SWAP_NAME_COLUMN$}")
+}
+
+/// The stat column of one swap row: its own leading space, then the summary
+/// padded so the delta after it lands in one column down the list.
+fn swap_stats_column(stats: &str) -> String {
+    format!(" {stats:<SWAP_STATS_COLUMN$}")
 }
 
 /// How many game ticks (see `Game::current_tick`) pass between autosaves —

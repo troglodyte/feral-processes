@@ -2,6 +2,7 @@
 
 use feral_processes_engine::affixes::AffixId;
 use feral_processes_engine::items::ids;
+use feral_processes_engine::tuning::{QUALITY_DEFAULT, QUALITY_MAX, QUALITY_MIN};
 
 use super::support::*;
 use crate::*;
@@ -296,9 +297,9 @@ fn a_swap_row_carries_its_items_fusion_tier() {
 
     assert_eq!(row.fusion_tier, 1);
     assert!(
-        row.label.contains("T1/3"),
+        row.stats.contains("T1/3"),
         "the stat column names the ceiling too, got: {}",
-        row.label
+        row.stats
     );
 }
 
@@ -509,9 +510,9 @@ fn a_spare_of_the_worn_item_reports_the_gain_from_re_equipping_it() {
     // Base +3 ATK: worn remembers level 1, a fresh equip lands at zone 3
     // (3 * 3 = 9), so re-equipping is worth +6.
     assert!(
-        row.label.contains("+9 ATK"),
+        row.stats.contains("+9 ATK"),
         "the candidate should be previewed at the level it would equip at; got {:?}",
-        row.label
+        row.stats
     );
     assert!(
         row.delta.contains("+6 ATK"),
@@ -677,14 +678,20 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
     for item in &equippables {
         for rarity in Rarity::ALL {
             for affix in &affixes {
-                let name = game.copy_name(&GearCopy {
-                    rarity,
-                    tier: 0,
-                    affix: affix.clone(),
-                    ..GearCopy::plain(item.clone())
-                });
-                if name.chars().count() > worst.1 {
-                    worst = (name.clone(), name.chars().count());
+                // `QUALITY_DEFAULT` names no figure at all and the two ends
+                // of the band name the widest one, so three values cover
+                // every width `copy_name` can produce on this axis.
+                for quality in [QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX] {
+                    let name = game.copy_name(&GearCopy {
+                        rarity,
+                        tier: 0,
+                        affix: affix.clone(),
+                        quality,
+                        ..GearCopy::plain(item.clone())
+                    });
+                    if name.chars().count() > worst.1 {
+                        worst = (name.clone(), name.chars().count());
+                    }
                 }
             }
         }
@@ -739,9 +746,9 @@ fn an_affixed_swap_row_prices_the_affix_it_names() {
     assert_eq!(granted, 15, "the affix scales with the zone like the base");
 
     assert!(
-        row.label.contains(&format!("+{granted} ATK")),
+        row.stats.contains(&format!("+{granted} ATK")),
         "the row promised something other than the {granted} ATK it grants: {}",
-        row.label
+        row.stats
     );
 }
 
@@ -900,22 +907,27 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
     let mut worst = (String::new(), 0usize);
     for item in &equippables {
         for affix in &affixes {
-            let copy = GearCopy {
-                rarity: Rarity::ALL[Rarity::ALL.len() - 1],
-                tier: MAX_FUSIONS,
-                affix: affix.clone(),
-                ..GearCopy::plain(item.clone())
-            };
-            let Some(mods) = game.copy_bonus(&copy, 10) else {
-                continue;
-            };
-            let stats = format!(
-                "{} {}",
-                stat_summary(game, mods),
-                item_fusion_note(copy.tier)
-            );
-            if stats.chars().count() > worst.1 {
-                worst = (stats.clone(), stats.chars().count());
+            // A copy at `QUALITY_MAX` prices 30% higher through
+            // `copy_bonus`, which is where a stat figure could gain a digit.
+            for quality in [QUALITY_DEFAULT, QUALITY_MAX] {
+                let copy = GearCopy {
+                    rarity: Rarity::ALL[Rarity::ALL.len() - 1],
+                    tier: MAX_FUSIONS,
+                    affix: affix.clone(),
+                    quality,
+                    ..GearCopy::plain(item.clone())
+                };
+                let Some(mods) = game.copy_bonus(&copy, 10) else {
+                    continue;
+                };
+                let stats = format!(
+                    "{} {}",
+                    stat_summary(game, mods),
+                    item_fusion_note(copy.tier)
+                );
+                if stats.chars().count() > worst.1 {
+                    worst = (stats.clone(), stats.chars().count());
+                }
             }
         }
     }

@@ -260,14 +260,16 @@ pub(super) fn draw_equip_swap(
         text_row(""),
     ];
     for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
-        // Wrapped, not joined: six stat axes and their six deltas do not fit
-        // one popup line, so the delta sheds onto a continuation when it has
-        // to — the same treatment `inventory_row_lines` gives an equip tag.
-        // Both lines carry the row's selection and tier colour, so a wrapped
-        // entry still highlights as one thing.
+        // Wrapped, not joined: the name column alone runs 57 cells, and six
+        // stat axes plus their six deltas do not fit the same line — so both
+        // trailing columns are tags and shed onto a continuation when they
+        // have to, the treatment `inventory_row_lines` gives an equip tag.
+        // Ordinary rows keep all three on one line; the packer only sheds
+        // what will not fit. Both lines carry the row's selection and tier
+        // colour, so a wrapped entry still highlights as one thing.
         for line in wrapped_row_lines(
             format!("[{}] {}", menu_shortcut(i), row.label),
-            &[format!(" {}", row.delta)],
+            &[row.stats.clone(), format!(" {}", row.delta)],
         ) {
             rows.push(tier_row(line, i == selected, row.fusion_tier, row.rarity));
         }
@@ -472,7 +474,7 @@ mod tests {
     use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
-    use feral_processes_engine::tuning::MAX_FUSIONS;
+    use feral_processes_engine::tuning::{MAX_FUSIONS, QUALITY_MAX};
     use feral_processes_engine::{DifficultyMode, Game, save};
 
     /// **The equipped panel prints what the player is actually wearing.**
@@ -660,6 +662,11 @@ mod tests {
                         rarity: Rarity::Gold,
                         tier,
                         affix: affix.clone(),
+                        // The widest a copy gets on the quality axis: the
+                        // figure is three digits and the stats it prices are
+                        // 30% higher, so a figure that gained a digit would
+                        // show up here.
+                        quality: QUALITY_MAX,
                         ..GearCopy::plain(def.id.clone().into())
                     })
                 })
@@ -778,13 +785,22 @@ mod tests {
     }
 
     /// A rare tier is drawn as a *word* in front of the item name, and
-    /// `swap_label` pads its columns with `{:<N}` — which never truncates.
-    /// So a name past `SWAP_NAME_COLUMN` does not clip: it pushes the stat
-    /// and delta columns right and misaligns every row below it.
+    /// `swap_name_column` pads with `{:<N}` — which never truncates. So a
+    /// name past `SWAP_NAME_COLUMN` does not clip: it pushes the stat and
+    /// delta columns right and misaligns every row below it.
     ///
     /// Measured against the real font rather than counted in characters,
     /// because counting is exactly what missed this — the column was 20
     /// cells and "Overclocked Monofilament Whip" is 29.
+    ///
+    /// **Measured again when quality shipped.** At 900px the popup body is
+    /// 1243.2px and a UI cell is 10.8438px — 114.65 cells. The old joined
+    /// head (`[a] {name:<50} {stats:<20}`, plus `draw_row`'s two-space
+    /// prefix) was 111 cells and fitted with 3.7 to spare; the quality
+    /// figure costs seven, which put it 35.6px past the edge. That is why
+    /// the stat column is a tag now and not part of the head — and why this
+    /// builds its lines the way `draw_equip_swap` does rather than joining
+    /// them itself.
     #[test]
     fn the_widest_swap_row_still_fits_its_popup() {
         // The widest row this screen can build out of the shipped assets: the
@@ -799,20 +815,24 @@ mod tests {
         // one line and `draw_equip_swap` no longer asks them to. Every line
         // the row produces has to fit, which is what this iterates.
         let head = format!(
-            "[a] {:<50} {:<20}",
+            "[a] {:<57}",
             format!(
-                "{} Singularity Matrix of Quiet Handshakes",
+                "{} Singularity Matrix of Quiet Handshakes (130%)",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
-            "206–310 DMG +103 ATK +103 MIT +69 ACC +103 DECOMP T3/3",
         );
         let lines = wrapped_row_lines(
             head,
-            &[" -206–-310 DMG -103 ATK -103 MIT -69 ACC -103 DECOMP".to_string()],
+            &[
+                " 206–310 DMG +103 ATK +103 MIT +69 ACC +103 DECOMP T3/3".to_string(),
+                " -206–-310 DMG -103 ATK -103 MIT -69 ACC -103 DECOMP".to_string(),
+            ],
         );
-        assert!(
-            lines.len() > 1,
-            "the worst case has to actually wrap, or this measures the easy case"
+        assert_eq!(
+            lines.len(),
+            3,
+            "the worst case has to shed both tags, or this measures the easy \
+             case: {lines:#?}"
         );
 
         with_painter(|p| {

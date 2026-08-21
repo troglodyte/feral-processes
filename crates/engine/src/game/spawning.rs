@@ -318,13 +318,26 @@ impl Game {
     /// program, not as a missing component.
     ///
     /// Reserves are full on arrival at every door.
-    pub(crate) fn roster_parts(&self) -> (Tamed, Experience, PowerReserve) {
+    ///
+    /// Minting a `ProgramId` here is the strongest instance of that
+    /// argument, and the reason this takes `&mut self`: a door that skipped
+    /// it would produce an owned program that can never be the subject of a
+    /// memory, which reads as memories being broken rather than as a door
+    /// short a component.
+    pub(crate) fn roster_parts(&mut self) -> (Tamed, Experience, PowerReserve, ProgramId) {
+        let id = {
+            let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
+            let id = counter.0;
+            counter.0 += 1;
+            id
+        };
         (
             Tamed {
                 owner: self.player_entity(),
             },
             Experience::default(),
             PowerReserve::default(),
+            ProgramId(id),
         )
     }
 

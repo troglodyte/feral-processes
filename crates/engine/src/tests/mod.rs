@@ -36,6 +36,7 @@ mod hauling;
 mod inspection;
 mod level_up;
 mod listen;
+mod memories;
 mod message_log;
 mod nemesis;
 mod party;

@@ -1216,6 +1216,23 @@ impl Potential {
     }
 }
 
+/// The stable identity of one program the player owns, minted at
+/// `Game::roster_parts` — the single barrier all four doors into the roster
+/// pass through.
+///
+/// `Entity` cannot do this job: `save.rs` resolves everything by position or
+/// by index precisely because entity ids are not stable across a save round
+/// trip. A memory about one specific program needs a name that is, and this
+/// is it.
+///
+/// Only an owned program carries one. Nothing wild or hostile reaches
+/// `roster_parts`, so the absence of this component is what "not on the
+/// roster" looks like, the same way an absent `Rarity` reads as `Ordinary`.
+/// `0` is the unassigned sentinel a legacy save loads with; real ids start
+/// at 1 and `Game::load` mints one for every program carrying the sentinel.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ProgramId(pub u32);
+
 /// The rare-spawn tier a creature rolled when it was created, if any — see
 /// `Game::roll_rarity`. A creature that rolled ordinary has no such
 /// component at all, which reads as `Ordinary`, so no test fixture or

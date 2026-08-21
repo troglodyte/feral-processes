@@ -112,6 +112,7 @@ impl Game {
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
+        world.insert_resource(crate::resources::NextProgramId::START);
         world.insert_resource(GameRng(StdRng::seed_from_u64(seed as u64)));
         world.insert_resource(MessageLog::default());
         world.insert_resource(BattleTimeline::default());

@@ -1041,6 +1041,24 @@ pub enum Locale {
 #[derive(Resource, Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trace(pub u32);
 
+/// The next `components::ProgramId` to hand out. Advanced by
+/// `Game::roster_parts`, which is the only thing that mints one.
+///
+/// **No `Default`.** A derived default of `0` would hand the first program
+/// the unassigned sentinel, which is the one value that must never belong to
+/// a real program — `START` is 1 and `Game::new` inserts it explicitly.
+///
+/// Saved, because an id that is reused after a reload names two different
+/// programs. `Game::load` sets it past the highest id in the file rather
+/// than trusting the saved counter alone: a hand-edited or savetool-packed
+/// save can carry ids the counter has never seen.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NextProgramId(pub u32);
+
+impl NextProgramId {
+    pub const START: NextProgramId = NextProgramId(1);
+}
+
 /// How many times the party has been goaded into speech (`Game::taunt`),
 /// which is what picks the next line so repeated presses cycle rather than
 /// repeat.

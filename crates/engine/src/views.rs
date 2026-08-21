@@ -189,6 +189,16 @@ pub struct WornDetailView {
     /// The level this copy is priced at — the current zone for one in
     /// cargo, since `Game::equip` locks gear in at the zone it goes on at.
     pub level: u32,
+    /// How well this copy compiled, as a percentage of the item's authored
+    /// bonus — `items::GearCopy::quality`. Carried on the view rather than
+    /// left to the renderer to read off the copy, because
+    /// `GearDetailView`'s promise is that the page is one call: a renderer
+    /// reaching past it for one figure is how each of the four screens that
+    /// rebuilt `copy_bonus` by hand started.
+    ///
+    /// On the *worn* half deliberately: only equipment rolls quality, so a
+    /// consumable's page has nothing to state rather than a defaulted 100.
+    pub quality: u8,
     pub stats: crate::items::EquipmentStats,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you

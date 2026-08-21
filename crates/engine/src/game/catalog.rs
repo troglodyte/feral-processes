@@ -448,6 +448,7 @@ impl Game {
         Some(WornDetailView {
             slot,
             level,
+            quality: copy.quality,
             stats,
             accuracy,
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),

@@ -10,6 +10,7 @@
 use super::support::*;
 use crate::abilities::{AbilityId, AbilityTarget, PassiveTrigger};
 use crate::items::GearCopy;
+use crate::tuning::QUALITY_DEFAULT;
 use crate::*;
 
 /// The Crash Handler's whole point is the routine it grants, and until this
@@ -217,4 +218,44 @@ fn the_effects_list_leaves_the_grant_to_its_own_block() {
         "the listing line still leads with the grant: {full:?}"
     );
     assert_eq!(rest, full[1..], "and the page's list is the remainder");
+}
+
+/// **The inspect page is where two copies get compared**, so it states the
+/// quality outright rather than leaving the player to read it off the name
+/// — including at spec, where the name says nothing. A figure missing from
+/// a detail page reads as *unknown*, not as 100.
+///
+/// It rides `WornDetailView` and so is absent for a consumable or a
+/// currency, which is honest: only equipment rolls quality.
+#[test]
+fn the_inspect_page_states_what_a_copy_compiled_at() {
+    let game = Game::new(4405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    let at_spec = GearCopy::plain(ItemId::from("kinetic_edge"));
+    assert_eq!(
+        game.gear_detail(&at_spec, player)
+            .worn
+            .expect("a weapon is worn")
+            .quality,
+        QUALITY_DEFAULT
+    );
+
+    let off_spec = GearCopy {
+        quality: 115,
+        ..at_spec
+    };
+    assert_eq!(
+        game.gear_detail(&off_spec, player)
+            .worn
+            .expect("a weapon is worn")
+            .quality,
+        115
+    );
+
+    let material = GearCopy::plain(ItemId::from("core_fragment"));
+    assert!(
+        game.gear_detail(&material, player).worn.is_none(),
+        "a material has no slot and so no quality to state"
+    );
 }

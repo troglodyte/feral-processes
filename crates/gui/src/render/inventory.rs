@@ -350,6 +350,10 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
             worn.slot.label(),
             stat_summary(game, worn.stats)
         )));
+        // Under the stats it explains, and unconditional — the name carries
+        // the figure only when it is off spec, so this is the only place a
+        // copy at spec says what it compiled at.
+        rows.push(text_row(format!("Compiled at {}% of spec", worn.quality)));
         // Only for a piece that bears on the swing at all. Armour and most
         // modules carry neither a band nor accuracy, and a hit chance under
         // one reads as a claim about the armour rather than about the body
@@ -550,6 +554,36 @@ mod tests {
         assert!(
             !quotes("deadman_relay"),
             "a mitigation-only module says nothing about landing a swing"
+        );
+    }
+
+    /// The figure reaches the page as a row of its own. `copy_name` puts it
+    /// in the title too, but only off spec — so without this row a copy at
+    /// spec has no statement of its quality anywhere on the one screen built
+    /// for comparing two copies.
+    #[test]
+    fn the_gear_page_carries_a_quality_row() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(43, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let quality_row = |copy: GearCopy| {
+            let inspect = GearInspect {
+                copy,
+                wearer: None,
+                from: Mode::Inventory,
+            };
+            gear_inspect_rows(&game, &inspect).iter().any(|row| {
+                matches!(row, Row::Text(t) | Row::TextColored(t, _) if t.contains("Compiled at 115%"))
+            })
+        };
+
+        assert!(quality_row(GearCopy {
+            quality: 115,
+            ..GearCopy::plain("kinetic_edge".into())
+        }));
+        assert!(
+            !quality_row(GearCopy::plain("kinetic_edge".into())),
+            "a copy at spec must not claim 115%"
         );
     }
 

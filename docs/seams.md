@@ -5000,3 +5000,62 @@ layout constraint before it is a feel one: raising it past what fits means
 giving the page a scroll first, not editing the number. Caught in the
 building — at 12 entries over two rows each the page ran 29 rows into a
 23-row popup, which is why the blurb is on the row rather than under it.
+
+### The one hook is `park_idle_staff`, and it is a third rejection rather than a score
+
+`park_idle_staff` already declines two candidate tiles — one a `Structure`
+stands on, and one `BaseGrid` calls unwalkable — and leaves the body exactly
+where it was standing when it declines. The memory hook is a third rejection
+of that shape:
+
+```
+opinion_of(worker, BaseTile { x, y }) < MEMORY_AVOIDANCE_THRESHOLD
+```
+
+So it opens no new failure mode and needs no fallback. A rejected candidate
+costs the program one beat of standing still, which is already that
+function's documented behaviour, and the ring offers a different tile on the
+next step of `IDLE_STAFF_STEP_TICKS`.
+
+**It is `park_idle_staff` and not `schedule_base_labour`, deliberately.** The
+scheduler is documented as deciding the whole assignment by priority and then
+diffing it, with no sort and no score anywhere in it. A memory term there
+*is* a score, and it would also put a memory in the path of the anti-thrash
+rule and the never-free-a-`Carrying`-holder rule — two rules whose whole
+value is that they are unconditional. "Doesn't want to work" belongs there
+eventually, as content, once the interaction can be designed rather than
+bolted onto a diff.
+
+**`opinion_of` and not `morale`.** The question is what the program holds
+against *one corner of the base*; the sum over everything would keep a
+program that has had a bad run off every tile at once, which reads as the
+parking ring being broken rather than as a grudge. The comparison is signed
+rather than a magnitude, so a tile a program feels nothing about and a tile
+it feels well about both pass — a fondness must never be able to trigger an
+avoidance.
+
+**The loop closes on itself, which is what makes the hook more than
+decoration.** A body is parked on a ring tile, posted to a machine, finds no
+route, and `haul_step_system` marks it `Stranded` where it is standing — on
+the park tile. `note_strandings` writes that tile, and the next time the
+program is free the ring is refused that one candidate. That is the whole
+mechanism: the corner it was left standing in is the corner it will not take.
+
+**`MEMORY_AVOIDANCE_THRESHOLD` is not pinned to `stranded_at`'s valence**,
+even though that def is currently the only thing that can trip it. The hook
+asks whether a program holds anything against a tile, not whether one
+particular memory is in its store, so a second negative `BaseTile` def has to
+reach it without editing the constant. At the shipped def — valence -6.0,
+half-life 3000 — one stranding keeps a program off that tile for exactly one
+half-life.
+
+**The test that nearly shipped hollow.** `a_faded_grudge_stops_keeping_a_program_away`
+advances the clock to fade the memory and then asserts the body parks on the
+tile anyway. Advancing the clock also **moves the ring**, so the first
+version of it was measuring a tile the grudge was never about — a second
+copy of `a_grudge_against_another_tile_does_not_move_a_program`, green
+against a threshold replaced by a bare `< 0.0`. It advances by a whole number
+of ring periods now (`IDLE_STAFF_STEP_TICKS * 8 * IDLE_STAFF_RING_TILES`) and
+asserts the candidate has not moved as a precondition, so a retuned ring
+fails the test rather than quietly emptying it. It was the mutation pass that
+found this, not the suite.

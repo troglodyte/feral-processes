@@ -25,6 +25,11 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             | (Mode::StructureAssign, Mode::Structures)
             | (Mode::Companion, Mode::Manifest)
             | (Mode::Manifest, Mode::Companion)
+            // Same pair as the manifest above, for the same reason: the
+            // memories page indexes nothing with the highlight, so the row
+            // the player was reading down the roster is what Esc returns to.
+            | (Mode::Companion, Mode::CompanionMemories)
+            | (Mode::CompanionMemories, Mode::Companion)
     )
 }
 
@@ -157,6 +162,7 @@ impl App {
             Mode::EraseQuantity => self.handle_erase_quantity_key(key),
             Mode::Companion => self.handle_companion_key(key),
             Mode::CompanionEquip => self.handle_companion_equip_key(key),
+            Mode::CompanionMemories => self.handle_companion_memories_key(key),
             Mode::Fuse => self.handle_fuse_key(key),
             Mode::FuseSecond => self.handle_fuse_second_key(key),
             Mode::FuseName => self.handle_fuse_name_key(key),

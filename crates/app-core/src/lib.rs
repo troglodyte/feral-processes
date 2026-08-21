@@ -939,6 +939,16 @@ pub enum Mode {
     /// picking one opens the *existing* `Mode::EquipSwap` with
     /// `App::pending_swap_target` set.
     CompanionEquip,
+    /// What one program remembers, reached with `R` from `Mode::Companion`.
+    /// The derived Morale figure at the head and one entry per thing it
+    /// holds, all out of `Game::memory_report` and `Game::morale`;
+    /// `App::pending_memory_program` is the subject.
+    ///
+    /// **`R` and not the `M` the spec asked for**: `M` on the roster has
+    /// opened the manifest since well before memories existed. A page, not a
+    /// menu — nothing but Esc is bound, and Esc steps back to the roster
+    /// rather than out to the map, the way `Mode::CompanionEquip` does.
+    CompanionMemories,
     Fuse,
     FuseSecond,
     /// Typing a name (`App::fuse_name_input`) for the program that'll
@@ -1202,6 +1212,7 @@ impl Mode {
             | Mode::EraseQuantity
             | Mode::Companion
             | Mode::CompanionEquip
+            | Mode::CompanionMemories
             | Mode::Fuse
             | Mode::FuseSecond
             | Mode::FuseName
@@ -1496,6 +1507,14 @@ pub struct App {
     /// open, not which program the slot page is about, and
     /// `pending_equip_program` is the field that outlives it.
     pub pending_swap_target: Option<Entity>,
+    /// The program `Mode::CompanionMemories` is showing the memories of,
+    /// picked with `R` on the roster.
+    ///
+    /// Its own field rather than `pending_equip_program` reused, for
+    /// `GearInspect`'s reason: a page whose subject is inherited from
+    /// another page's field is a distinct failure per axis, and the two are
+    /// set by different keys and cleared at different times.
+    pub pending_memory_program: Option<Entity>,
     /// The program `Mode::CompanionEquip` is showing the slots of, picked
     /// with `E` on the roster.
     pub pending_equip_program: Option<Entity>,

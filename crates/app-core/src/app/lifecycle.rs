@@ -68,6 +68,7 @@ impl App {
             pending_swap_slot: None,
             pending_swap_target: None,
             pending_equip_program: None,
+            pending_memory_program: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
             pending_craft: None,

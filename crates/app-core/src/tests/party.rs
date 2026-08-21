@@ -569,3 +569,79 @@ fn paging_onto_the_player_leaves_the_rosters_highlight_alone() {
         "the row M was pressed on is still highlighted"
     );
 }
+
+// --- What a program remembers --------------------------------------------
+
+/// The page is about the program **under the highlight**, so the roster is
+/// opened onto a second one first: read off `owned_pets()[0]` instead, this
+/// passes against a page that always shows the first program on the list.
+#[test]
+fn r_on_the_roster_opens_the_highlighted_programs_memories() {
+    let mut app = app_with_companions_in_the_party(780, 2);
+    let programs = roster(&mut app);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(app.mode, Mode::CompanionMemories);
+    assert_eq!(app.pending_memory_program, Some(programs[1]));
+}
+
+/// Esc backs into the roster and leaves the highlight where it was — the
+/// page never moved it, and the row the player was reading down the list is
+/// what they come back to.
+#[test]
+fn esc_backs_out_of_the_memories_page_and_keeps_the_highlight() {
+    let mut app = app_with_companions_in_the_party(781, 2);
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('R'));
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(app.pending_memory_program, None, "the subject is released");
+    assert_eq!(app.menu_selected, 1, "and the roster is where it was left");
+}
+
+/// `R` with the highlight past the end of the roster has no program to be
+/// about, and must leave the mode alone rather than open a page with no
+/// subject. Reached by writing the highlight rather than by emptying the
+/// roster: with nobody owned the party menu does not offer the row at all,
+/// so there is no way in to test from.
+#[test]
+fn r_with_the_highlight_past_the_roster_opens_nothing() {
+    let mut app = app_with_companions_in_the_party(782, 1);
+    open_roster(&mut app);
+    app.menu_selected = 9;
+
+    app.handle_key(GameKey::Char('R'));
+
+    assert_eq!(app.mode, Mode::Companion);
+    assert_eq!(app.pending_memory_program, None);
+}
+
+/// The two subjects are independent — `GearInspect`'s rule, at the one place
+/// two pages off the same roster could have shared a field. Sharing one, the
+/// second key opened the first page's subject and neither failed to compile.
+#[test]
+fn the_memories_page_and_the_gear_page_hold_separate_subjects() {
+    let mut app = app_with_companions_in_the_party(783, 2);
+    let programs = roster(&mut app);
+    open_roster(&mut app);
+
+    app.handle_key(GameKey::Char('E'));
+    assert_eq!(app.pending_equip_program, Some(programs[0]));
+    assert_eq!(app.pending_memory_program, None, "gear sets only its own");
+    app.handle_key(GameKey::Esc);
+
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('R'));
+    assert_eq!(app.pending_memory_program, Some(programs[1]));
+    assert_eq!(
+        app.pending_equip_program, None,
+        "and the gear page's subject was released by its own Esc"
+    );
+}

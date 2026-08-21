@@ -46,6 +46,10 @@ impl App {
             self.open_companion_manifest();
             return;
         }
+        if key == GameKey::Char('R') {
+            self.open_companion_memories();
+            return;
+        }
 
         let Some(game) = &mut self.game else { return };
         let rows = game.owned_pets().len();
@@ -178,6 +182,34 @@ impl App {
         self.manifest_origin = ManifestOrigin::Roster;
         self.status_line = None;
         self.mode = Mode::Manifest;
+    }
+
+    /// Opens what the highlighted program remembers.
+    ///
+    /// Handled before `selected_index` and bound to an uppercase key for the
+    /// reason `open_companion_equip` gives. Like `open_companion_manifest`
+    /// and unlike that one it **leaves `menu_selected` alone**: the page
+    /// indexes nothing with it, and the parked row is what Esc comes back to.
+    fn open_companion_memories(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some(program) = game.owned_pets().get(row).map(|p| p.entity) else {
+            return;
+        };
+        self.pending_memory_program = Some(program);
+        self.status_line = None;
+        self.mode = Mode::CompanionMemories;
+    }
+
+    /// What `pending_memory_program` remembers. A page and not a menu —
+    /// there is nothing on it to pick, so Esc is the only key it answers,
+    /// the way `Mode::StructureManifest` and `Mode::CellDescribe` do.
+    pub(crate) fn handle_companion_memories_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_memory_program = None;
+            self.status_line = None;
+            self.mode = Mode::Companion;
+        }
     }
 
     /// The slot page for `pending_equip_program`: three rows, each opening

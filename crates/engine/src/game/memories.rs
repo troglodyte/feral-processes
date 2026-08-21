@@ -131,6 +131,56 @@ impl crate::Game {
         Remembered::Written
     }
 
+    /// The signed sum of every memory `who` currently holds — the one figure
+    /// the screen heads its page with, and the closest thing the roster has to
+    /// a mood.
+    ///
+    /// `&self`: it derives. Nothing here evicts, because a read-only screen
+    /// that rewrote the roster it is drawing would make what a program
+    /// remembers depend on whether anyone looked.
+    ///
+    /// A body carrying no `Memories` reads zero rather than panicking, the
+    /// same asymmetry `remember` makes on the write side: hostiles, structures
+    /// and the player are safe here without a branch at the call site.
+    pub(crate) fn morale(&self, who: Entity) -> f32 {
+        self.memory_sum(who, |_| true)
+    }
+
+    /// What `who` thinks of one thing: `morale` restricted to the memories
+    /// about `subject`.
+    ///
+    /// A subject nothing has happened about sums an empty set and answers
+    /// zero, which is a real answer and not a missing one.
+    pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
+        self.memory_sum(who, |m| &m.subject == subject)
+    }
+
+    /// The one fold both readers are, with the restriction handed in.
+    ///
+    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
+    /// description: two folds could disagree about whether an unresolvable def
+    /// counts, and a comment claiming one mirrors the other is the shape that
+    /// has drifted in this repo four times.
+    ///
+    /// **An entry whose def no file defines is skipped**, contributing
+    /// nothing. That is where the empty-database property comes from — with
+    /// `assets/memories/` deleted every entry is unresolvable and every reader
+    /// answers zero, without a load-time purge and without the entries being
+    /// lost if the directory comes back.
+    fn memory_sum(&self, who: Entity, keep: impl Fn(&Memory) -> bool) -> f32 {
+        let Some(store) = self.world.get::<Memories>(who) else {
+            return 0.0;
+        };
+        let db = self.world.resource::<MemoryDb>();
+        let now = self.world.resource::<GameClock>().tick;
+        store
+            .0
+            .iter()
+            .filter(|m| keep(m))
+            .filter_map(|m| Some(m.intensity(db.get(&m.def)?, now)))
+            .sum()
+    }
+
     /// The display name to stamp on a memory of `subject`, resolved at the
     /// write rather than at the read: the program a memory is about can be
     /// destroyed, and the screen still has to say who it was.

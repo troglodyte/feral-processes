@@ -700,3 +700,201 @@ fn every_door_into_the_roster_hands_out_a_memory_store() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: the two readers.
+//
+// `morale` is a signed sum over every memory's *current* intensity, and
+// `opinion_of` is that same sum restricted to one subject. Both are `&self`:
+// they derive, and eviction stays `remember`'s alone, or a read-only screen
+// would rewrite the roster it is drawing.
+// ---------------------------------------------------------------------------
+
+/// Pushes an entry the write door would refuse, so a reader can be asked
+/// about a store the door could never have built — an id no file defines is
+/// the deleted-mod-file state, and `remember` returns `UnknownDef` rather
+/// than writing one.
+fn implant(game: &mut Game, who: Entity, def: &str, subject: MemorySubject) {
+    let now = game.current_tick();
+    game.world
+        .get_mut::<Memories>(who)
+        .expect("an owned program holds a store")
+        .0
+        .push(Memory {
+            def: MemoryId::from(def),
+            subject,
+            subject_name: None,
+            reinforced: now,
+            strikes: 1,
+        });
+}
+
+/// The sum is **signed**, so a fondness and a grudge cancel rather than
+/// compound. Summing magnitudes would make the most miserable program in the
+/// base read exactly like the happiest one.
+#[test]
+fn morale_sums_every_memorys_current_intensity() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 1_000);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    game.remember(
+        program,
+        "mauled_by",
+        MemorySubject::Species("scrapper".to_string()),
+    );
+
+    set_tick(&mut game, 4_000);
+    let morale = game.morale(program);
+
+    // The two figures written out rather than taken from `intensity`: this
+    // test is about the fold, and a sum of whatever the store happens to say
+    // asserts nothing about what was summed.
+    let good = 5.0 * 2f32.powf(-3_000.0 / 5_000.0);
+    let bad = -8.0 * 2f32.powf(-3_000.0 / 6_000.0);
+    assert!(
+        (morale - (good + bad)).abs() < 1e-4,
+        "{morale} against {}",
+        good + bad
+    );
+    assert!(
+        morale < 0.0,
+        "the deeper grudge outweighs the win: {morale}"
+    );
+    assert!(
+        (morale - (good - bad)).abs() > 1.0,
+        "and it is not a sum of magnitudes: {morale}"
+    );
+}
+
+/// Nothing stores what a memory is worth, so morale is a reading of the
+/// clock and not of a field. Two readings of one unchanged store, and the
+/// later one is strictly lower.
+#[test]
+fn morale_falls_as_a_good_memory_fades() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 1_000);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let fresh = game.morale(program);
+    set_tick(&mut game, 6_000);
+    let later = game.morale(program);
+
+    assert!((fresh - 5.0).abs() < 1e-4, "undecayed: {fresh}");
+    assert!(
+        later < fresh,
+        "the same store read later is worth less: {later} against {fresh}"
+    );
+    assert!(later > 0.0, "and it is a fade, not a sign flip: {later}");
+}
+
+/// Identity is the subject, and an opinion is the total of what one program
+/// holds *about that one thing* — not its whole mood, and not one entry.
+#[test]
+fn opinion_of_counts_only_memories_about_that_subject() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 1_000);
+    let scrapper = MemorySubject::Species("scrapper".to_string());
+    game.remember(program, "mauled_by", scrapper.clone());
+    game.remember(
+        program,
+        "mauled_by",
+        MemorySubject::Species("sentinel".to_string()),
+    );
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let opinion = game.opinion_of(program, &scrapper);
+    let morale = game.morale(program);
+
+    assert!((opinion - -8.0).abs() < 1e-4, "one mauling: {opinion}");
+    assert!((morale - -11.0).abs() < 1e-4, "all three: {morale}");
+}
+
+/// A subject nothing has ever happened about is a real answer, not a missing
+/// one: zero, finite, and no panic on a store that has entries in it.
+#[test]
+fn opinion_of_an_unremembered_subject_is_zero() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let opinion = game.opinion_of(program, &MemorySubject::Species("no_such".to_string()));
+
+    assert!(opinion.is_finite(), "not NaN: {opinion}");
+    assert_eq!(opinion, 0.0);
+}
+
+/// Reading a body that holds nothing and reading a body that *cannot* hold
+/// anything are the same answer. Both halves in one test: an empty-store
+/// assertion alone passes against a reader that unwraps the component.
+#[test]
+fn a_program_with_no_memories_has_zero_morale() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let hostile = spawn_wild_on_player_tile(&mut game);
+    let player = game.player_entity();
+    assert!(memories_of(&game, program).is_empty());
+
+    for (what, who) in [
+        ("an owned program with an empty store", program),
+        ("a hostile, which has no store at all", hostile),
+        ("the player, likewise", player),
+    ] {
+        assert_eq!(game.morale(who), 0.0, "{what}");
+        assert_eq!(game.opinion_of(who, &MemorySubject::Nothing), 0.0, "{what}");
+    }
+}
+
+/// A removed mod file leaves entries the catalogue can no longer weigh. They
+/// are kept — restoring the file restores them — so every reader has to skip
+/// what it cannot resolve rather than unwrap it.
+#[test]
+fn a_memory_naming_an_unknown_def_contributes_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let orphan = MemorySubject::Species("scrapper".to_string());
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+    implant(&mut game, program, "no_such_memory", orphan.clone());
+    assert_eq!(memories_of(&game, program).len(), 2, "the entry is kept");
+
+    assert!(
+        (game.morale(program) - 5.0).abs() < 1e-4,
+        "only the resolvable one counts: {}",
+        game.morale(program)
+    );
+    assert_eq!(game.opinion_of(program, &orphan), 0.0);
+}
+
+/// Deleting `assets/memories/` is a supported way to play, and this is that
+/// property at the read end: the store still holds what it held, and every
+/// reader answers zero because nothing can weigh it.
+#[test]
+fn an_empty_database_leaves_every_reader_at_zero() {
+    let dir = scratch_assets_dir("memories_absent");
+    std::fs::create_dir_all(&*dir).unwrap();
+    copy_shipped_assets(&dir, &[]);
+    // Asserted rather than assumed: `copy_shipped_assets` walks a hardcoded
+    // list of subdirectory names, and adding `"memories"` to it later would
+    // invert this test in silence. This is what turns that edit into a
+    // failure instead.
+    assert!(
+        !dir.join("memories").exists(),
+        "this test is about an install with no catalogue at all"
+    );
+
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let subject = MemorySubject::Species("scrapper".to_string());
+    implant(&mut game, program, "mauled_by", subject.clone());
+    implant(&mut game, program, "hard_won", MemorySubject::Nothing);
+
+    assert_eq!(
+        memories_of(&game, program).len(),
+        2,
+        "the store is not the point"
+    );
+    assert_eq!(game.morale(program), 0.0);
+    assert_eq!(game.opinion_of(program, &subject), 0.0);
+}

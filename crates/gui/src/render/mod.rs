@@ -20,8 +20,8 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
-    LogEntry, MESSAGE_LOG_CAP, MessageKind, PetInfo, ProgramSaleOption, RecipeChain, RecipeStep,
-    ResearchState, StructureReport,
+    LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
+    RecipeStep, ResearchState, StructureReport,
 };
 
 mod arena;
@@ -79,8 +79,9 @@ use meta::{
     draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{
-    draw_companion_equip, draw_companion_menu, draw_fuse_menu, draw_fuse_name_menu,
-    draw_fuse_second_menu, draw_refactor, draw_refactor_item, draw_rename_menu,
+    draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
+    draw_fuse_name_menu, draw_fuse_second_menu, draw_refactor, draw_refactor_item,
+    draw_rename_menu,
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu};
@@ -732,6 +733,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::Inventory => draw_inventory(game, selected, painter, m),
         Mode::CompanionEquip => {
             draw_companion_equip(game, app.pending_equip_program, selected, painter, m)
+        }
+        Mode::CompanionMemories => {
+            draw_companion_memories(game, app.pending_memory_program, painter, m)
         }
         Mode::EquipSwap => draw_equip_swap(
             game,

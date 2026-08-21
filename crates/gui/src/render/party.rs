@@ -16,7 +16,7 @@ use super::*;
 /// wielded program fills, because that word starts with the capital letter
 /// the census below forbids anywhere in these lines. That is the constraint
 /// working, not a phrasing accident.
-fn companion_help() -> [String; 5] {
+fn companion_help() -> [String; 6] {
     [
         format!(
             "P adds the highlighted program to your party (max {MAX_PARTY_SIZE}), or stands a member back down."
@@ -28,6 +28,8 @@ fn companion_help() -> [String; 5] {
         "E fits gear to the highlighted program, out of your own cargo."
             .to_string(),
         "M reads the highlighted program's manifest — its full stat sheet."
+            .to_string(),
+        "R reads what the highlighted program remembers, and how it feels about it."
             .to_string(),
     ]
 }
@@ -85,6 +87,113 @@ pub(super) fn draw_companion_equip(
     ));
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
     draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
+}
+
+/// What one program remembers — `R` from the roster.
+///
+/// **Every figure comes out of `Game::memory_report` and `Game::morale`**,
+/// `draw_gear_inspect`'s rule: a renderer that weighed a memory itself would
+/// be the fourth screen in this repo to keep a private copy of a formula the
+/// engine already owns, and the subject of a row cannot be named here at all
+/// — a species needs `SpeciesDb` and a destroyed program needs the name the
+/// record captured when it was written.
+///
+/// The page does not scroll — `draw_popup` pages a `Row::Item` span and
+/// there are none here — so its height is held by
+/// `the_tallest_memory_page_fits_its_popup` rather than by a scrollbar.
+pub(super) fn draw_companion_memories(
+    game: &mut Game,
+    program: Option<Entity>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let name = program.and_then(|p| {
+        game.owned_pets()
+            .into_iter()
+            .find(|row| row.entity == p)
+            .map(|row| row.name)
+    });
+    let (Some(program), Some(name)) = (program, name) else {
+        draw_popup(
+            "Memories",
+            PopupSize::Small,
+            &[text_row("That program is gone.")],
+            painter,
+            m,
+        );
+        return;
+    };
+    let rows = memory_page_rows(&name, game.morale(program), &game.memory_report(program));
+    draw_popup("Memories", PopupSize::Large, &rows, painter, m);
+}
+
+/// The page's rows, out of the two engine calls above rather than out of a
+/// `Game` — the split `fuse_candidate_rows` makes, and for its reason: the
+/// height and width censuses have to measure the page at its **worst** case,
+/// and a store holding `MEMORY_CAP_PER_PROGRAM` of the widest shipped def is
+/// a state a fixture can state and a `Game` would have to be played into.
+pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -> Vec<Row> {
+    let mut rows = vec![
+        Row::TextColored(format!("{name}'s memories"), CYAN),
+        // The one derived figure the whole store adds up to, and the reason
+        // the page has a header at all. Coloured by sign rather than by
+        // band: what a player wants off a glance is whether this program is
+        // carrying more scar than bond, and a five-step scale would be a
+        // claim about magnitude the sum cannot support.
+        Row::TextColored(format!("Morale {morale:+.0}"), morale_color(morale)),
+        text_row(""),
+    ];
+
+    if entries.is_empty() {
+        // Also what an install with `assets/memories/` deleted draws, which
+        // is the supported way to play without this feature at all.
+        rows.push(text_row("Nothing has happened to this one yet."));
+    }
+    // The blurb is a property of the *kind*, so it is said once and the
+    // repeats are left bare: a store holds several entries of one def — three
+    // corners of the base that strand a worker, four species that have nearly
+    // ended it — and printing one sentence of flavour verbatim four times down
+    // a page is worse than not printing it at all. Rows arrive strongest
+    // first, so the copy that keeps it is the one that characterises the
+    // program.
+    let mut said: Vec<&str> = Vec::new();
+    for entry in entries {
+        let subject = match &entry.subject {
+            Some(subject) => format!("{} — {subject}", entry.name),
+            None => entry.name.clone(),
+        };
+        let head = format!("{subject}  ({}, {})", strength(entry.intensity), entry.age);
+        let line = if said.contains(&entry.name.as_str()) {
+            head
+        } else {
+            said.push(&entry.name);
+            format!("{head}  {}", entry.blurb)
+        };
+        rows.push(Row::TextColored(line, morale_color(entry.intensity)));
+    }
+
+    rows.push(text_row(""));
+    rows.push(text_row("Esc to go back"));
+    rows
+}
+
+/// Grudge, bond, or neither. `TEXT` at zero rather than a third hue: a
+/// program with nothing to say about anything is not a state worth a colour.
+fn morale_color(value: f32) -> Color {
+    if value > 0.0 {
+        GREEN
+    } else if value < 0.0 {
+        RED
+    } else {
+        TEXT
+    }
+}
+
+/// A memory's weight, as the row prints it: signed, so a bond and a grudge
+/// of the same size are visibly opposite, and rounded to whole points —
+/// the fractional part is decay, which the age beside it already says.
+fn strength(intensity: f32) -> String {
+    format!("{intensity:+.0}")
 }
 
 /// One program's lines on the roster: the identity and stats, then whichever
@@ -702,6 +811,238 @@ mod tests {
                 assert!(
                     drawn <= room,
                     "a fuse candidate's line overflows the picker by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// A `MemoryRow` differing only in the fields a test cares about.
+    fn memory(name: &str, subject: Option<&str>, intensity: f32) -> MemoryRow {
+        MemoryRow {
+            name: name.to_string(),
+            blurb: "It stayed with me.".to_string(),
+            subject: subject.map(str::to_string),
+            intensity,
+            age: "recently".to_string(),
+        }
+    }
+
+    /// The one derived figure the page exists to head itself with. Two
+    /// programs with opposite stores must not draw the same header — a test
+    /// that only checked a number was *present* passes against a hardcoded
+    /// zero, which is exactly what a header reading `morale` off nothing
+    /// would be.
+    #[test]
+    fn the_page_heads_itself_with_the_morale_figure() {
+        let sour = memory_page_rows(
+            "Kestrel",
+            -14.0,
+            &[memory("Mauled by", Some("Glitch"), -14.0)],
+        );
+        let sweet = memory_page_rows("Kestrel", 9.0, &[memory("Fought beside", Some("Vex"), 9.0)]);
+
+        let header = |rows: &[Row]| match &rows[1] {
+            Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+            _ => panic!("the second row is the header"),
+        };
+        assert!(header(&sour).contains("-14"), "{}", header(&sour));
+        assert!(header(&sweet).contains("+9"), "{}", header(&sweet));
+    }
+
+    /// A row has to say what the memory is *about*, or two maulings by
+    /// different things are one indistinguishable row repeated. The subject
+    /// is the half the renderer cannot derive.
+    #[test]
+    fn a_row_names_its_def_and_its_subject() {
+        let rows = memory_page_rows(
+            "Kestrel",
+            -8.0,
+            &[memory("Mauled by", Some("Zero-Day"), -8.0)],
+        );
+        let text = joined(&rows);
+
+        assert!(text.contains("Mauled by"), "{text}");
+        assert!(text.contains("Zero-Day"), "{text}");
+    }
+
+    /// A memory about nothing in particular names the def alone. The row
+    /// must not print a separator with nothing after it.
+    #[test]
+    fn a_subjectless_row_names_the_def_alone() {
+        let rows = memory_page_rows("Kestrel", 5.0, &[memory("Won against the odds", None, 5.0)]);
+        let entry = match &rows[3] {
+            Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+            _ => panic!("the first entry row is a text row"),
+        };
+
+        assert!(entry.contains("Won against the odds"), "{entry}");
+        assert!(
+            !entry.contains(" — "),
+            "an em-dash with nothing after it is a subject the row does not have: {entry}"
+        );
+    }
+
+    /// `MemoryDef::blurb` is authored, censused for being non-empty, and
+    /// until this page had no reader at all. Without this the field is dead
+    /// content the shipped catalogue is nonetheless held to.
+    #[test]
+    fn the_blurb_reaches_the_page() {
+        let rows = memory_page_rows("Kestrel", 5.0, &[memory("Won against the odds", None, 5.0)]);
+
+        assert!(
+            joined(&rows).contains("It stayed with me."),
+            "{:?}",
+            joined(&rows)
+        );
+    }
+
+    /// An empty store says so. It is also what an install with
+    /// `assets/memories/` deleted draws — the supported way to play without
+    /// this feature — so a blank box would be the whole of what that player
+    /// ever sees of this screen.
+    #[test]
+    fn an_empty_store_says_so_rather_than_drawing_a_blank_box() {
+        let rows = memory_page_rows("Kestrel", 0.0, &[]);
+        let text = joined(&rows);
+
+        assert!(text.contains("Nothing has happened"), "{text}");
+    }
+
+    fn joined(rows: &[Row]) -> String {
+        rows.iter()
+            .filter_map(|r| match r {
+                Row::Text(t) | Row::TextColored(t, _) => Some(t.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// The memories page is the one thing on the roster with no other way
+    /// in: it is not reachable from the party menu, from the map, or from a
+    /// manifest, so a player who never finds this key never sees the
+    /// feature at all.
+    #[test]
+    fn the_companion_screen_names_the_memories_key() {
+        assert!(
+            companion_help().iter().any(|line| line.starts_with("R ")),
+            "the roster must say which key opens a program's memories: {:?}",
+            companion_help()
+        );
+    }
+
+    /// The worst page this screen can ever build, out of the **real**
+    /// catalogue: `MEMORY_CAP_PER_PROGRAM` entries, each as wide as the
+    /// widest shipped def and each carrying its own blurb.
+    ///
+    /// A census and not a fixture — the worst case is a property of the
+    /// assets *and* of how the page packs them, so a def authored longer, a
+    /// subject rendered longer, or a second line added per entry has to fail
+    /// here rather than be caught by eye.
+    ///
+    /// **Every name is distinct** and two characters wider than any real
+    /// one, so the blurb is never deduped away and the row measured is a
+    /// little wider than one the game can build. Over-measuring is the safe
+    /// direction for a fit census; deduped, this would measure eleven rows
+    /// that carry no blurb at all and pass against a page that overflows.
+    fn tallest_memory_page() -> Vec<Row> {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let (db, warnings) =
+            feral_processes_engine::memories::MemoryDb::load_dir(&assets.join("memories"))
+                .expect("the catalogue loads");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let widest = db
+            .all()
+            .max_by_key(|def| def.name.chars().count() + def.blurb.chars().count())
+            .expect("the census must walk a real catalogue");
+
+        let subject = widest_subject(&assets);
+        let entries: Vec<MemoryRow> = (0..feral_processes_engine::tuning::MEMORY_CAP_PER_PROGRAM)
+            .map(|i| MemoryRow {
+                name: format!("{}{i:02}", widest.name),
+                blurb: widest.blurb.clone(),
+                subject: Some(subject.clone()),
+                intensity: -widest.valence.abs() * widest.strike_cap as f32,
+                age: "a while ago".to_string(),
+            })
+            .collect();
+        memory_page_rows(&subject, -99.0, &entries)
+    }
+
+    /// The widest thing a row's subject can be, off the assets.
+    ///
+    /// A `Program` subject is `Game::creature_label`'s output — a rarity
+    /// tier, then a name, then a zone number — and the name is either a
+    /// species' or a custom one at `MAX_CUSTOM_NAME_LEN`. A `Species`
+    /// subject is a display name alone, so the program form dominates it and
+    /// is what this builds.
+    fn widest_subject(assets: &std::path::Path) -> String {
+        let (abilities, _) =
+            feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
+                .expect("the abilities load");
+        let (species, warnings) = feral_processes_engine::species::SpeciesDb::load_dir(
+            &assets.join("species"),
+            &abilities,
+        )
+        .expect("the species load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let longest_species = species
+            .all()
+            .map(|def| def.name.chars().count())
+            .max()
+            .expect("the census must walk a real roster");
+        let name_len = longest_species.max(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
+        // The widest rarity label, and the deepest zone `balance_sim` sweeps
+        // to — the two things `creature_label` wraps a name in.
+        format!("Prismatic {} 10", "M".repeat(name_len))
+    }
+
+    /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span and
+    /// this page has none, so a row past the bottom is dropped in silence —
+    /// the trap `the_tallest_gear_page_fits_its_popup` exists to catch, and
+    /// this is its mirror. Raising `MEMORY_CAP_PER_PROGRAM` past what fits
+    /// means giving the page a scroll first.
+    ///
+    /// Swept rather than measured at one window, for the gear page's reason:
+    /// `ui_metrics` clamps the font at both ends, so below the clamp the box
+    /// keeps shrinking while the line height stops and the tightest window
+    /// is the smallest one.
+    #[test]
+    fn the_tallest_memory_page_fits_its_popup() {
+        let rows = tallest_memory_page().len();
+        for h in (600..=2160).step_by(60) {
+            let m = ui_metrics(h as f32);
+            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            assert!(
+                rows <= cap,
+                "a full store builds a {rows}-row page into a {cap}-row popup at {h}px"
+            );
+        }
+    }
+
+    /// The other axis, and the one nothing clamps at all: `draw_row` clips a
+    /// row vertically and never horizontally, so a line past the right edge
+    /// is simply lost. On this page the tail of a row is the strength and
+    /// the age — the two figures the row is read for.
+    #[test]
+    fn no_memory_row_overflows_its_popup() {
+        let rows = tallest_memory_page();
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in &rows {
+                let line = match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    _ => continue,
+                };
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a memory row overflows the page by {:.0}px \
                      ({drawn:.0} drawn into {room:.0} of room):\n{line}",
                     drawn - room
                 );

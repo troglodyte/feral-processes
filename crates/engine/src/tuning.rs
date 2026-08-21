@@ -2702,7 +2702,10 @@ pub const MEMORY_HALF_LIFE_MULTIPLIER: f32 = 1.0;
 /// giving a `line_height` of 20 and an inset of 6.67 against a body of
 /// `600 * 0.85` — and the memory page spends the rest of that on a title, a
 /// Morale header and their spacing. Raising this past what fits means giving
-/// that page a scroll first, not editing this number.
+/// that page a scroll first, not editing this number —
+/// `the_tallest_memory_page_fits_its_popup` is what says so, and
+/// `no_memory_row_overflows_its_popup` holds the other axis, which nothing
+/// clamps at all.
 pub const MEMORY_CAP_PER_PROGRAM: usize = 12;
 
 /// Intensity **magnitude** below which an entry is dropped at the next

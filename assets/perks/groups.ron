@@ -1,0 +1,29 @@
+// The perk picker's layout: each section's heading, which perks sit under
+// it, and — by a section's position in this list — where it sits on the
+// screen. This is the one statement of all three, so a heading and its
+// contents cannot drift apart.
+//
+// This file is not a perk. Every other `.ron` here is one catalogue entry;
+// this one is read by name and skipped by the loader that reads them.
+//
+// Deleting it restores the flat, ungrouped list the screen drew before
+// headings existed. A perk no section names is still offered, in a trailing
+// unlabelled section, so a typo below costs a heading and never a row.
+[
+    (
+        name: "Combat",
+        perks: [Attacker, Defender, Buffer],
+    ),
+    (
+        name: "Affinities",
+        perks: [DamageAffinity, HealAffinity, BuffAffinity, DebuffAffinity, DrainAffinity],
+    ),
+    (
+        name: "Fieldcraft",
+        perks: [LowPowerMode, ExploitFocus, Obfuscation, Teardown, ProcessPool],
+    ),
+    (
+        name: "Workshop",
+        perks: [KeenScavenger, LeanCompiler, TightenTolerances, Failover],
+    ),
+]

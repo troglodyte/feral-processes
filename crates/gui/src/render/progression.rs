@@ -45,7 +45,7 @@ fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
 /// scrollable_body`.
 pub(super) fn perks_menu_rows(
     points: u32,
-    defs: &[PerkDef],
+    groups: &[(String, Vec<PerkDef>)],
     held: &[Perk],
     selected: usize,
 ) -> Vec<Row> {
@@ -54,25 +54,59 @@ pub(super) fn perks_menu_rows(
         text_row("Pick a row's key to buy another level. Esc to close"),
         text_row(""),
     ];
-    for (i, def) in defs.iter().enumerate() {
-        let level = held.iter().filter(|p| **p == def.id).count();
-        let tag = if level > 0 {
-            format!(" (level {level})")
-        } else {
-            String::new()
-        };
-        rows.push(item_row(
-            format!(
-                "[{}] {} - {} Perk Points{}",
-                menu_shortcut(i),
-                def.name,
-                def.cost,
-                tag
-            ),
-            i == selected,
-        ));
-        rows.extend(description_rows(&def.description));
+    // The shortcut a player types is an index into the *flattened* list,
+    // which is what `App::handle_perks_key` resolves against `perk_defs` —
+    // so it runs across the headings rather than restarting under each.
+    let mut i = 0;
+    for (name, defs) in groups {
+        rows.extend(heading_rows(name, i > 0));
+        for def in defs {
+            let level = held.iter().filter(|p| **p == def.id).count();
+            let tag = if level > 0 {
+                format!(" (level {level})")
+            } else {
+                String::new()
+            };
+            rows.push(item_row(
+                format!(
+                    "[{}] {} - {} Perk Points{}",
+                    menu_shortcut(i),
+                    def.name,
+                    def.cost,
+                    tag
+                ),
+                i == selected,
+            ));
+            rows.extend(description_rows(&def.description));
+            i += 1;
+        }
     }
+    rows
+}
+
+/// A section heading, and the blank line that sets it off from the section
+/// above it. `Row::Item` rather than `Row::TextColored` for
+/// `description_rows`' reason — `popup_layout` cuts the scrollable body at
+/// the last `Row::Item`, so a heading drawn as text would be torn off its
+/// perks and pinned to the foot of the box, where it scrolls with nothing.
+///
+/// Nothing ever selects one: `App` tracks an index into the *perks*, and
+/// `perks_menu_rows` only ever marks a perk row `selected`. So a heading is
+/// an item row that is never an option, which is exactly what a heading is.
+///
+/// An empty name draws nothing at all, not a blank heading. That is the
+/// trailing bucket `PerkDb::grouped` puts an ungrouped perk in, and with no
+/// `groups.ron` at all it is the *only* section — which is how deleting that
+/// file gives back the flat list this screen used to draw.
+fn heading_rows(name: &str, gap_above: bool) -> Vec<Row> {
+    if name.is_empty() {
+        return Vec::new();
+    }
+    let mut rows = Vec::new();
+    if gap_above {
+        rows.push(item_row("", false));
+    }
+    rows.push(colored_item_row(name.to_string(), false, CYAN));
     rows
 }
 
@@ -80,7 +114,7 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
     let status = game.player_status();
     let rows = perks_menu_rows(
         status.perk_points,
-        &game.perk_defs(),
+        &game.perk_groups(),
         &status.unlocked_perks,
         selected,
     );
@@ -332,6 +366,54 @@ mod tests {
         }
     }
 
+    /// The two halves of what grouping the picker had to get right, against
+    /// the shipped layout: every section is headed, and the shortcut a
+    /// player types runs *across* the headings rather than restarting under
+    /// each one. The second is what `App::handle_perks_key` resolves — it
+    /// indexes `perk_defs`, the flattened list — so a per-section counter
+    /// would draw `[a]` three times and buy the wrong perk twice.
+    #[test]
+    fn the_perk_picker_heads_each_section_and_numbers_across_them() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let groups = game.perk_groups();
+        let flat = game.perk_defs();
+        assert!(
+            groups.len() > 1,
+            "the shipped layout ships several sections"
+        );
+
+        let rows = perks_menu_rows(3, &groups, &[], 0);
+        // Headings and perks only: the blank spacer and the wrapped
+        // description lines are the rows this test says nothing about.
+        let drawn: Vec<String> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { text, .. } if !text.is_empty() => Some(text.clone()),
+                _ => None,
+            })
+            .filter(|t| !t.starts_with(DESCRIPTION_INDENT))
+            .collect();
+
+        let mut expected = Vec::new();
+        for (name, defs) in &groups {
+            expected.push(name.clone());
+            for def in defs {
+                let i = flat
+                    .iter()
+                    .position(|d| d.id == def.id)
+                    .expect("every section's perk is in the flattened list");
+                expected.push(format!(
+                    "[{}] {} - {} Perk Points",
+                    menu_shortcut(i),
+                    def.name,
+                    def.cost
+                ));
+            }
+        }
+        assert_eq!(drawn, expected);
+    }
+
     /// `draw_row` clamps a row vertically and nothing clamps it
     /// horizontally, so a row wider than its popup runs off the right edge
     /// in silence. Both pickers print a description under every entry, and
@@ -350,10 +432,10 @@ mod tests {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let nodes = game.research_nodes();
-        let defs = game.perk_defs();
+        let perk_groups = game.perk_groups();
         let status = game.player_status();
         assert!(
-            !nodes.is_empty() && !defs.is_empty(),
+            !nodes.is_empty() && !perk_groups.is_empty(),
             "the shipped assets declare both a research tree and a perk list"
         );
 
@@ -361,7 +443,7 @@ mod tests {
             ("Research", research_menu_rows(40, &nodes, 0)),
             (
                 "Perks",
-                perks_menu_rows(3, &defs, &status.unlocked_perks, 0),
+                perks_menu_rows(3, &perk_groups, &status.unlocked_perks, 0),
             ),
         ];
 

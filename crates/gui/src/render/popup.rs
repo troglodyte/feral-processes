@@ -1309,21 +1309,37 @@ mod tests {
                 "perks",
                 perks_menu_rows(
                     3,
-                    &(0..n)
-                        .map(|i| PerkDef {
-                            // Every shipped perk is a distinct variant, but the
-                            // row shape doesn't read the id beyond counting
-                            // levels, so one variant repeated is enough here.
-                            id: Perk::Attacker,
-                            name: format!("Perk {i}"),
-                            description: format!(
-                                "What perk {i} does, at the length the shipped \
-                                 perks run to: a sentence naming the fantasy, \
-                                 then another one naming the number it moves \
-                                 and roughly how far each level moves it."
-                            ),
-                            cost: 1 + i as u32,
+                    // Split across two headed sections, because the headings
+                    // and the blank line between them are rows too: a
+                    // fixture of one flat section would measure a body
+                    // shorter than the one the screen draws.
+                    &[("Combat", 0..n / 2), ("Workshop", n / 2..n)]
+                        .into_iter()
+                        .map(|(name, range)| {
+                            (
+                                name.to_string(),
+                                range
+                                    .map(|i| PerkDef {
+                                        // Every shipped perk is a distinct
+                                        // variant, but the row shape doesn't
+                                        // read the id beyond counting levels,
+                                        // so one variant repeated is enough.
+                                        id: Perk::Attacker,
+                                        name: format!("Perk {i}"),
+                                        description: format!(
+                                            "What perk {i} does, at the length the shipped \
+                                             perks run to: a sentence naming the fantasy, \
+                                             then another one naming the number it moves \
+                                             and roughly how far each level moves it."
+                                        ),
+                                        cost: 1 + i as u32,
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
                         })
+                        // `PerkDb::grouped` never hands back an empty
+                        // section, so neither may the fixture.
+                        .filter(|(_, defs): &(String, Vec<PerkDef>)| !defs.is_empty())
                         .collect::<Vec<_>>(),
                     &[Perk::Attacker],
                     selected,

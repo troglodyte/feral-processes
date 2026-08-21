@@ -179,9 +179,37 @@ pub struct PerkDef {
     pub cost: u32,
 }
 
+/// One labelled section of the perk picker, and the whole of what the
+/// screen's layout is authored from: the heading, which perks sit under it,
+/// and — by the section's position in `assets/perks/groups.ron` — where it
+/// sits in the list.
+///
+/// One statement rather than a `group:` string repeated across seventeen
+/// files, because membership alone does not order anything: a per-perk label
+/// would need a second rule for which heading comes first, and two authored
+/// halves of one layout drift.
+///
+/// Deliberately *not* `Perk::all()`'s order. That array mirrors the enum's
+/// declaration order, which is save format (bincode encodes a variant
+/// positionally), so it cannot be reshuffled to read better — see
+/// `Perk::all` and `the_original_seven_perks_keep_their_positions`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PerkGroupDef {
+    pub name: String,
+    pub perks: Vec<Perk>,
+}
+
+/// The one file in `assets/perks/` that is not a perk. It shares the
+/// directory and the extension with the catalogue entries, so `load_dir`
+/// skips the name explicitly — exactly as `HelpDb::load_dir` skips
+/// `assets/help/README.md`, and for the same reason: read by the ordinary
+/// loop it would fail to parse and warn on every startup.
+const GROUPS_FILE: &str = "groups.ron";
+
 #[derive(Resource, Default)]
 pub struct PerkDb {
     defs: HashMap<Perk, PerkDef>,
+    groups: Vec<PerkGroupDef>,
 }
 
 impl PerkDb {
@@ -203,6 +231,18 @@ impl PerkDb {
                 continue;
             }
             let text = std::fs::read_to_string(&path)?;
+            if path.file_name().and_then(|n| n.to_str()) == Some(GROUPS_FILE) {
+                match ron::from_str::<Vec<PerkGroupDef>>(&text) {
+                    Ok(groups) => db.groups = groups,
+                    // A broken layout costs the headings and nothing else:
+                    // `grouped` falls back to one unlabelled run, so every
+                    // perk stays buyable.
+                    Err(e) => {
+                        warnings.push(format!("skipped invalid perk group file {path:?}: {e}"))
+                    }
+                }
+                continue;
+            }
             match ron::from_str::<PerkDef>(&text) {
                 Ok(def) => {
                     if def.cost == 0 {
@@ -224,11 +264,50 @@ impl PerkDb {
         self.defs.get(&perk)
     }
 
-    /// Every perk currently on offer, in `Perk::all()` order. Driven by that
-    /// array rather than by `HashMap` iteration so the picker's numbering is
-    /// the authored order and is stable between sessions.
+    /// The picker's sections, in the order `groups.ron` lists them, each
+    /// paired with the defs under it. Anything no group names trails the
+    /// list in a section whose name is empty — a typo in the layout file
+    /// costs a heading, never a row, since a row is what the player spends
+    /// points at.
+    ///
+    /// With no group file at all that trailing section is the *only* one,
+    /// which is the flat list the screen drew before headings existed:
+    /// deleting `groups.ron` restores it exactly.
+    pub fn grouped(&self) -> Vec<(&str, Vec<&PerkDef>)> {
+        let mut sections = Vec::new();
+        let mut placed = Vec::new();
+        for group in &self.groups {
+            let mut defs: Vec<&PerkDef> = Vec::new();
+            for perk in &group.perks {
+                if placed.contains(perk) {
+                    continue;
+                }
+                if let Some(def) = self.defs.get(perk) {
+                    placed.push(*perk);
+                    defs.push(def);
+                }
+            }
+            if !defs.is_empty() {
+                sections.push((group.name.as_str(), defs));
+            }
+        }
+        let rest: Vec<&PerkDef> = Perk::all()
+            .into_iter()
+            .filter(|p| !placed.contains(p))
+            .filter_map(|p| self.defs.get(&p))
+            .collect();
+        if !rest.is_empty() {
+            sections.push(("", rest));
+        }
+        sections
+    }
+
+    /// Every perk currently on offer, in picker order — `grouped` flattened,
+    /// so the numbering a player types against cannot disagree with the
+    /// order the sections drew. Not `HashMap` iteration order, which would
+    /// move between sessions.
     pub fn catalogue(&self) -> impl Iterator<Item = &PerkDef> {
-        Perk::all().into_iter().filter_map(|p| self.defs.get(&p))
+        self.grouped().into_iter().flat_map(|(_, defs)| defs)
     }
 }
 
@@ -238,6 +317,23 @@ mod tests {
 
     fn perk_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/perks")
+    }
+
+    /// A fresh empty directory to build a fixture catalogue in. Named per
+    /// test as well as per process, since several of these run at once.
+    fn scratch_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fp_perk_db_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn write_perk(dir: &Path, file: &str, id: Perk) {
+        std::fs::write(
+            dir.join(file),
+            format!("(id: {id:?}, name: \"{id:?}\", description: \"d\", cost: 2)"),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -256,11 +352,173 @@ mod tests {
         }
     }
 
+    /// The shipped layout has to account for every perk, or one is drawn in
+    /// the trailing unlabelled bucket — which is the graceful *failure*, not
+    /// the shipped shape. An eighteenth perk added to `Perk::all()` and
+    /// forgotten in `groups.ron` fails here rather than appearing under no
+    /// heading in the game.
     #[test]
-    fn catalogue_order_follows_perk_all_not_hashmap_iteration() {
+    fn every_shipped_perk_sits_under_a_heading() {
+        let (db, warnings) = PerkDb::load_dir(&perk_assets_dir()).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        let grouped = db.grouped();
+        assert!(
+            grouped.iter().all(|(name, _)| !name.is_empty()),
+            "a section with no name is the orphan bucket, holding {:?}",
+            grouped
+                .iter()
+                .find(|(name, _)| name.is_empty())
+                .map(|(_, defs)| defs.iter().map(|d| d.id).collect::<Vec<_>>()),
+        );
+        assert_eq!(
+            db.catalogue().count(),
+            Perk::all().len(),
+            "the sections between them list every perk exactly once"
+        );
+    }
+
+    /// The picker's numbering is the layout file's order, and deliberately
+    /// not `Perk::all()`'s — that array mirrors the save format and cannot be
+    /// reshuffled to read better. Not `HashMap` iteration either, which would
+    /// renumber the screen between sessions.
+    #[test]
+    fn catalogue_order_follows_the_group_file() {
         let (db, _) = PerkDb::load_dir(&perk_assets_dir()).unwrap();
         let ids: Vec<Perk> = db.catalogue().map(|d| d.id).collect();
-        assert_eq!(ids, Perk::all().to_vec());
+        let from_sections: Vec<Perk> = db
+            .grouped()
+            .iter()
+            .flat_map(|(_, defs)| defs.iter().map(|d| d.id))
+            .collect();
+        assert_eq!(ids, from_sections);
+        assert_ne!(
+            ids,
+            Perk::all().to_vec(),
+            "the shipped layout reorders the list; if it stops doing so this \
+             test is no longer saying anything"
+        );
+    }
+
+    /// The group file shares the directory and the extension with the
+    /// seventeen catalogue entries, so `load_dir` has to know its name — the
+    /// same explicit skip `HelpDb::load_dir` makes for `assets/help/README.md`.
+    /// Left to the ordinary loop it would fail to parse as a `PerkDef` and
+    /// warn on every startup.
+    #[test]
+    fn the_group_file_is_not_read_as_a_perk() {
+        let dir = scratch_dir("groups_skip");
+        write_perk(&dir, "attacker.ron", Perk::Attacker);
+        std::fs::write(
+            dir.join(GROUPS_FILE),
+            "[(name: \"Combat\", perks: [Attacker])]",
+        )
+        .unwrap();
+
+        let (db, warnings) = PerkDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            warnings.is_empty(),
+            "the group file is catalogue metadata, not a malformed perk: {warnings:?}"
+        );
+        assert_eq!(db.catalogue().count(), 1);
+    }
+
+    /// The whole point of the file: it is the one statement of a section's
+    /// label, its membership and where it sits in the list, so the picker's
+    /// order is the file's order rather than `Perk::all()`'s.
+    #[test]
+    fn the_group_file_decides_the_pickers_order() {
+        let dir = scratch_dir("groups_order");
+        write_perk(&dir, "attacker.ron", Perk::Attacker);
+        write_perk(&dir, "keen.ron", Perk::KeenScavenger);
+        std::fs::write(
+            dir.join(GROUPS_FILE),
+            "[(name: \"Combat\", perks: [Attacker]), \
+             (name: \"Workshop\", perks: [KeenScavenger])]",
+        )
+        .unwrap();
+
+        let (db, _) = PerkDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let labels: Vec<&str> = db.grouped().iter().map(|(name, _)| *name).collect();
+        assert_eq!(labels, vec!["Combat", "Workshop"]);
+        assert_eq!(
+            db.catalogue().map(|d| d.id).collect::<Vec<_>>(),
+            vec![Perk::Attacker, Perk::KeenScavenger],
+            "Attacker sits at index 4 of `Perk::all()` and Keen Scavenger at 0 — \
+             the flattened order has to come from the group file, not from there"
+        );
+    }
+
+    /// A perk no group names is still on offer, in a trailing unlabelled
+    /// bucket. A typo in the group file costs a heading, never a perk: the
+    /// row is what the player spends points at, and dropping it silently is
+    /// the failure worth engineering against.
+    #[test]
+    fn a_perk_no_group_names_trails_the_list_unlabelled() {
+        let dir = scratch_dir("groups_orphan");
+        write_perk(&dir, "attacker.ron", Perk::Attacker);
+        write_perk(&dir, "keen.ron", Perk::KeenScavenger);
+        std::fs::write(
+            dir.join(GROUPS_FILE),
+            "[(name: \"Combat\", perks: [Attacker])]",
+        )
+        .unwrap();
+
+        let (db, _) = PerkDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let grouped = db.grouped();
+        assert_eq!(grouped.len(), 2);
+        assert_eq!(grouped[1].0, "", "an orphan bucket has no heading to draw");
+        assert_eq!(
+            grouped[1].1.iter().map(|d| d.id).collect::<Vec<_>>(),
+            vec![Perk::KeenScavenger]
+        );
+    }
+
+    /// No group file at all is the pre-grouping screen exactly: one
+    /// unlabelled run in `Perk::all()` order. Deleting `groups.ron` restores
+    /// the flat list the same supported way deleting `assets/environment/`
+    /// restores the pre-effects game.
+    #[test]
+    fn no_group_file_leaves_the_catalogue_flat() {
+        let dir = scratch_dir("groups_absent");
+        write_perk(&dir, "attacker.ron", Perk::Attacker);
+        write_perk(&dir, "keen.ron", Perk::KeenScavenger);
+
+        let (db, warnings) = PerkDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let grouped = db.grouped();
+        assert_eq!(grouped.len(), 1);
+        assert_eq!(grouped[0].0, "");
+        assert_eq!(
+            grouped[0].1.iter().map(|d| d.id).collect::<Vec<_>>(),
+            vec![Perk::KeenScavenger, Perk::Attacker],
+            "`Perk::all()` order, which is where the flat list came from"
+        );
+    }
+
+    /// A malformed group file must cost the headings and nothing else —
+    /// every perk stays buyable. `SpeciesDb::load_dir`'s rule, applied to a
+    /// file that is presentation rather than content.
+    #[test]
+    fn a_malformed_group_file_costs_the_headings_and_not_the_perks() {
+        let dir = scratch_dir("groups_broken");
+        write_perk(&dir, "attacker.ron", Perk::Attacker);
+        std::fs::write(dir.join(GROUPS_FILE), "[(name: \"Combat\", perks: [Nope])]").unwrap();
+
+        let (db, warnings) = PerkDb::load_dir(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert_eq!(db.catalogue().count(), 1);
+        assert_eq!(db.grouped()[0].0, "");
     }
 
     #[test]

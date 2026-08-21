@@ -135,3 +135,52 @@ picker and can't be bought. It is not an error, and it is not retroactive —
 a save that already holds levels of that perk keeps them, and keeps the
 bonus, because every effect reads what you've bought rather than this
 catalogue.
+
+## `groups.ron` — the picker's layout
+
+One file here is not a perk. `groups.ron` is a list of the picker's
+sections, in the order they appear on screen, each naming its heading and
+which perks sit under it:
+
+```ron
+[
+    (
+        name: "Combat",
+        perks: [Attacker, Defender, Buffer],
+    ),
+    (
+        name: "Workshop",
+        perks: [KeenScavenger, LeanCompiler, TightenTolerances, Failover],
+    ),
+]
+```
+
+It is read by name and skipped by the loader that reads the catalogue
+entries, so it never has to parse as a perk. Both fields are required.
+
+**It is the one statement of a section's heading, its contents and its
+position**, which is why the grouping is not a `group:` field on each of the
+seventeen catalogue files. Membership alone orders nothing — a per-perk
+label would need a second rule for which heading comes first, and two
+authored halves of one layout drift apart the first time someone edits only
+one of them.
+
+The order here is also, deliberately, not the order the perks are declared
+in `crates/engine/src/perks.rs`. That order is save format — bincode encodes
+an enum variant positionally — so it cannot be reshuffled to read better.
+This file is where the reading order lives instead, and reordering it is
+free.
+
+Three things it does *not* do:
+
+- **A perk no section names is still offered.** It lands in a trailing
+  section with no heading, after everything else. A typo below costs a
+  heading, never a row — the row is what a player spends points at.
+- **A malformed file costs the headings and nothing else.** It's skipped
+  with a warning, the same as a malformed perk, and the picker falls back to
+  one flat unheaded list.
+- **Deleting it restores the flat list** the screen drew before headings
+  existed. That is a supported thing to do.
+
+Naming a perk twice is not an error either; the first section that claims it
+wins, so it appears once.

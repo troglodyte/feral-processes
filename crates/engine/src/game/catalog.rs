@@ -708,15 +708,30 @@ impl Game {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }
 
+    /// The perk picker's sections: a heading and the defs under it, in the
+    /// order `assets/perks/groups.ron` lists them. A heading is the empty
+    /// string for the trailing bucket of anything no section names — see
+    /// `PerkDb::grouped`.
+    pub fn perk_groups(&self) -> Vec<(String, Vec<PerkDef>)> {
+        self.world
+            .resource::<PerkDb>()
+            .grouped()
+            .into_iter()
+            .map(|(name, defs)| (name.to_string(), defs.into_iter().cloned().collect()))
+            .collect()
+    }
+
     /// Every perk currently on offer, in picker order. The renderer's only
     /// route to a perk's name, description and price — those are authored in
     /// `assets/perks/*.ron`, not derivable from the `Perk` variant, and the
     /// index into this list is what `unlock_perk` expects back.
+    ///
+    /// `perk_groups` flattened rather than a second walk of the catalogue, so
+    /// the index a player types against is the one the sections drew.
     pub fn perk_defs(&self) -> Vec<PerkDef> {
-        self.world
-            .resource::<PerkDb>()
-            .catalogue()
-            .cloned()
+        self.perk_groups()
+            .into_iter()
+            .flat_map(|(_, defs)| defs)
             .collect()
     }
 }

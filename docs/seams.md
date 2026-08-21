@@ -2058,6 +2058,62 @@ argument `Rarity::label` and `Game::copy_name` already make; the colour and
 weight stay the renderer's, because a band carrying an emphasis as well as
 a hue is not expressible as a `Color`.
 
+**`Game::roll_quality` is the one formula and the one clamp, and it lives
+beside `roll_gear_rarity`.** A per-copy axis is rolled from more than one
+file — `grant_gear_drop` in `game/combat_rewards.rs`, and crafting in
+`game/crafting.rs` — so the ladder belongs where both callers reach it
+rather than in whichever of them was written first, which is exactly the
+argument `rarity_for_roll` already makes for the tier ladder shared between
+programs and gear. A drop passes the flat `QUALITY_DROP_BASE`; crafting
+passes a floor built out of a bench tier, a perk and the careful toggle.
+The spread is drawn **in steps** of `QUALITY_STEP` rather than drawn fine
+and rounded: rounding a uniform draw onto a lattice gives the two end
+buckets half the width of the others, which biases exactly the ends of the
+band the player is reading for. The sum is taken in `u16` because a
+developed base's floor legitimately exceeds `QUALITY_MAX` and must saturate
+rather than overflow the `u8` the band is expressed in.
+
+**The quality roll is the third roll in `grant_gear_drop`, and last on
+purpose.** For a given seed a dropped copy's rare tier and affix are
+exactly what they were before quality existed, so only what follows the
+drop in the shared stream moves. It sits below the non-equippable early
+return, so a material still spends **no** draw —
+`a_material_drop_spends_no_rarity_roll` is the guard, and every kill in the
+game drops a work resource, so a draw there would shift the stream on
+essentially every fight. `QUALITY_DROP_BASE` is deliberately below the
+crafting floor: leaving drops at a flat `QUALITY_DEFAULT` would let an
+average find beat a bad craft, and giving them the crafting band would mean
+a base conferred no reliability advantage. The world does not make good
+gear; your base does.
+
+**An equipment drop no longer stacks in `Inventory`**, because a rolled
+quality is almost never `QUALITY_DEFAULT` and so `GearCopy::is_plain` goes
+false. That is the fourth `&&` doing its job, and it is the same
+consequence the spec accepts for crafting, arriving on the drop side one
+phase early. `add_copies`, `count_copies` and `take_copies` all route by
+the one predicate and every screen that names gear already lists both
+stores, so nothing is lost — but a **fixture** that drops a weapon and then
+reads `Inventory` is reading the wrong store, and the fix is the fixture.
+
+**The swap row's stat column is a tag, not part of its head, and the
+numbers are why.** At 900px the `PopupSize::Large` body is 1243.2px and a
+UI cell is 10.8438px — 114.65 cells. `wrapped_row_lines` never breaks the
+head, so anything joined into it has to fit at the worst case. The head was
+`[a] {name:<50} {stats:<20}`, which with `draw_row`'s two-space prefix
+measured 111 cells and fitted with 3.7 to spare. `Game::copy_name`'s
+quality figure costs seven of them: the longest name the shipped assets
+build is exactly the 50 cells `SWAP_NAME_COLUMN` was set to, and with
+" (130%)" it is 57 — a 1278.8px head against a 1243.2px body, 35.6px lost
+in silence, since `draw_row` clips vertically only. No shorter format
+rescues it; dropping the parentheses saves two cells and still overflows.
+So the stat column joined the delta as a tag, which sheds onto a
+continuation exactly when it has to. **The trap is the padding**: it lives
+*inside* the tag, because a bare `" {stats}"` would slide the delta out of
+its column on every row, and the unequip row carries a padded **blank**
+rather than an empty string, since `wrapped_row_lines` skips an empty tag
+by design. Ordinary rows are untouched — a 61-cell head plus a 21-cell stat
+tag is 82 against `ROW_WRAP_COLUMNS`' 100.
+
 ### A copy's name is built in exactly one place, `Game::copy_name`
 
 **A copy's name is built in exactly one place, `Game::copy_name`.** It is

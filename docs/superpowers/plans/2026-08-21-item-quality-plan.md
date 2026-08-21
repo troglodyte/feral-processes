@@ -53,7 +53,11 @@ this section.
 - **The engine buckets, the renderer paints:** a pure `items::quality_band`
   owns the thresholds; the colour and weight are the renderer's.
 - **No new module.** `for_quality` and `quality_band` sit in `items.rs`
-  beside their siblings; the roll sits in `game/crafting.rs` beside `craft`.
+  beside their siblings. The roll split in two when Phase 2 landed: the
+  shared spread-and-clamp is `Game::roll_quality` in `game/spawning.rs`
+  beside `roll_gear_rarity`, because two files roll the same axis and the
+  ladder belongs where both reach it; Phase 3's floor assembly out of a
+  `CraftOrder` still sits in `game/crafting.rs` beside `craft`.
 - **`balance_sim` is outside this**, by the same documented exclusion that
   keeps `Rarity` out of it. If its curves move, the exclusion is wrong, not
   the test.
@@ -86,16 +90,19 @@ starts, so no one pays for detail they are not executing yet.
 
 | # | Phase | Deliverable | Plan file |
 | --- | --- | --- | --- |
-| 1 | **The axis** | The field, its default, `for_quality` in the chain, `quality_band`, the save-load guard. Nothing rolls it yet, so no behaviour changes. | `2026-08-21-item-quality-phase-1.md` |
-| 2 | **Drops roll it, and it reads** | `QUALITY_DROP_BASE`, the stepped spread in `grant_gear_drop`, the figure in `copy_name`, the row on the gear inspect page, both popup width tests extended to the new worst case. | phase-2 |
+| 1 | ✅ **The axis** | The field, its default, `for_quality` in the chain, `quality_band`, the save-load guard. Nothing rolls it yet, so no behaviour changes. | `2026-08-21-item-quality-phase-1.md` |
+| 2 | ✅ **Drops roll it, and it reads** | `QUALITY_DROP_BASE`, the stepped spread through `Game::roll_quality`, the figure in `copy_name`, the row on the gear inspect page, and the swap row's stat column lifted out of its un-wrappable head — which the roadmap did not price and measurement forced. | `2026-08-21-item-quality-phase-2.md` |
 | 3 | **Crafting rolls it** | `CraftOrder`, `Game::best_structure_tier`, the bench on `CraftRecipe`, per-unit rolls routed through `add_copies`, the careful-compile toggle through app-core and the Compile screen. | phase-3 |
 | 4 | **The perk term** | One *appended* `Perk` variant, its hook in the roll, its `assets/perks/*.ron`. | phase-4 |
 | 5 | **The tag column** | `Row::Item::tag` as a reserved, painted column; the five hand-formatted tag sites lifted into it; the four-band emphasis ramp; the width tests re-baselined. | phase-5 |
 
 **Why this order.** Phase 1 is inert by construction — every copy is still
 100 — so it can land and be reviewed on the seam alone. Phase 2 makes the
-axis visible with no UI restructuring, because names are already built in
-one place. Phase 3 is the design intent (a base out-produces the world) and
+axis visible, because names are already built in one place. (It was
+expected to need *no* UI restructuring; measurement said otherwise — the
+quality figure's seven cells push the swap row's head 35.6px past its
+popup, so the stat column had to become a shed-able tag. The numbers are
+in that phase's plan and in `docs/seams.md`.) Phase 3 is the design intent (a base out-produces the world) and
 is the phase to play before calling the numbers correct. Phase 4 depends on
 Phase 3's `CraftOrder`. Phase 5 is presentation and touches the most
 renderer sites, so it goes last where a re-baseline cannot mask a

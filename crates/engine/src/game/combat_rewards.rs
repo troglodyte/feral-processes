@@ -281,17 +281,18 @@ impl Game {
     /// fight opened. That is safe for the three stats because a battle
     /// cannot change `max_hp`/`atk`/`def` by any other route — `apply_damage`
     /// moves `hp` alone, and `unequip` refuses while a battle is live.
-    fn announce_player_xp(&mut self, tally: &XpTally) {
+    /// What the player earned, as lines rather than log calls — see
+    /// `announce_xp`.
+    fn player_xp_lines(&self, tally: &XpTally) -> Vec<(MessageKind, String)> {
         if tally.is_empty() {
-            return;
+            return Vec::new();
         }
         let player = self.player_entity();
         let Some(stats) = self.world.get::<Stats>(player).copied() else {
-            return;
+            return Vec::new();
         };
         if tally.gain.levels == 0 {
-            self.log_kind(MessageKind::Outcome, format!("You gain {} XP.", tally.xp));
-            return;
+            return vec![(MessageKind::Outcome, format!("You gain {} XP.", tally.xp))];
         }
         let mut rows = tally.gain.stat_rows(&stats).to_vec();
         if tally.perk_points > 0 {
@@ -319,25 +320,28 @@ impl Game {
             .get::<Experience>(player)
             .map(|e| e.level)
             .unwrap_or(1);
-        self.log_kind(
+        let mut lines = vec![(
             MessageKind::LevelUp,
             format!("You gain {} XP, reaching level {level}.", tally.xp),
+        )];
+        lines.extend(
+            progression::stat_block(&rows)
+                .into_iter()
+                .map(|line| (MessageKind::LevelUp, line)),
         );
-        for line in progression::stat_block(&rows) {
-            self.log_kind(MessageKind::LevelUp, line);
-        }
+        lines
     }
 
     /// A companion's line, and only if it levelled — the same restraint
     /// `award_party_xp` has always shown, for the same reason: a busy fight
     /// with a full roster would otherwise close on a line per member saying
     /// nothing happened.
-    fn announce_companion_xp(&mut self, companion: Entity, tally: &XpTally) {
+    fn companion_xp_lines(&self, companion: Entity, tally: &XpTally) -> Vec<(MessageKind, String)> {
         if tally.gain.levels == 0 {
-            return;
+            return Vec::new();
         }
         let Some(stats) = self.world.get::<Stats>(companion).copied() else {
-            return;
+            return Vec::new();
         };
         let level = self
             .world
@@ -345,18 +349,21 @@ impl Game {
             .map(|e| e.level)
             .unwrap_or(1);
         let name = self.creature_label(companion);
-        self.log_kind(
+        let mut lines = vec![(
             MessageKind::LevelUp,
             format!("{name} gains {} XP, reaching level {level}.", tally.xp),
+        )];
+        lines.extend(
+            progression::stat_block(&tally.gain.stat_rows(&stats))
+                .into_iter()
+                .map(|line| (MessageKind::LevelUp, line)),
         );
-        for line in progression::stat_block(&tally.gain.stat_rows(&stats)) {
-            self.log_kind(MessageKind::LevelUp, line);
-        }
+        lines
     }
 
-    /// Announces what the fight paid: the last decompile verdict if one is
-    /// outstanding, one salvage tally, then one XP line per fighter that
-    /// earned anything.
+    /// Announces how the fight ended and what it paid: the outcome headline,
+    /// the last decompile verdict if one is outstanding, one salvage tally,
+    /// then one XP line per fighter that earned anything.
     ///
     /// Called at the top of `end_battle`, which puts it ahead of two things
     /// deliberately. Ahead of `dissolve_tamed_program`, because a companion
@@ -376,19 +383,58 @@ impl Game {
             };
             std::mem::take(&mut battle.rewards)
         };
+        // First of the results, so it reads directly under the blow that
+        // ended the fight.
+        //
+        // **Won is read off the enemies, never off the player** — the same
+        // one definition `end_battle`'s telemetry takes a few lines later,
+        // and for its reason: a defeat is absorbed inside the round that
+        // lands it by `difficulty::death_handling_system`, so the player's
+        // HP afterwards says nothing about the outcome. `finish_member` only
+        // reaches `end_battle` once `remove_member` has emptied the last
+        // group, which is what makes an empty roster the win.
+        //
+        // Only a win gets a headline, and that is not an omission. The other
+        // two ways out already declare themselves in this exact slot, one
+        // line higher: `battle_flee` logs "You jack out safely." (or the
+        // counter-strike wording) immediately before calling `end_battle`,
+        // and a flatline is announced by `death_handling_system` inside the
+        // round that lands it. A win was the only silent ending.
+        if self.world.resource::<BattleState>().groups.is_empty() {
+            self.log_kind(MessageKind::Outcome, "You won!");
+        }
         // Above the payout, deliberately: it is the answer to what the
         // catalysts were being spent on, and the narration it stands in for
         // ran before any of the kills did.
-        if let Some(verdict) = rewards.decompile_verdict {
+        if let Some(verdict) = rewards.decompile_verdict.take() {
             self.log_kind(MessageKind::Outcome, verdict);
         }
         // Sorted rather than left in the order things fell, so the same haul
         // reads the same way however the kills happened to order it.
         rewards.drops.sort_by(|a, b| a.0.cmp(&b.0));
         self.announce_drops(&rewards.drops);
-        self.announce_player_xp(&rewards.player);
+        self.announce_xp(&rewards);
+    }
+
+    /// The experience block: a header and one indented line per fighter that
+    /// earned something, matching the shape `announce_drops` gives salvage.
+    ///
+    /// The lines are **built before the header is written**, so a header can
+    /// never stand over an empty block. Asking two predicates whether
+    /// anything is about to print would be a second copy of the guards inside
+    /// `player_xp_lines` and `companion_xp_lines`, and the copy that drifts
+    /// is the one nobody runs.
+    fn announce_xp(&mut self, rewards: &BattleRewards) {
+        let mut lines = self.player_xp_lines(&rewards.player);
         for (companion, tally) in &rewards.companions {
-            self.announce_companion_xp(*companion, tally);
+            lines.extend(self.companion_xp_lines(*companion, tally));
+        }
+        if lines.is_empty() {
+            return;
+        }
+        self.log_kind(MessageKind::Outcome, "Experience:");
+        for (kind, line) in lines {
+            self.log_kind(kind, format!("  {line}"));
         }
     }
 
@@ -670,7 +716,11 @@ impl Game {
             .map(|mut b| b.rewards.player.absorb(&tally))
             .is_some();
         if !stored {
-            self.announce_player_xp(&tally);
+            // Unindented and with no `Experience:` header: outside a fight
+            // these are standalone news, not rows in a results block.
+            for (kind, line) in self.player_xp_lines(&tally) {
+                self.log_kind(kind, line);
+            }
         } else if gain.levels > 0 {
             self.log_kind(
                 MessageKind::LevelUp,
@@ -738,7 +788,9 @@ impl Game {
             };
             let stored = self.record_companion_xp(companion, &tally);
             if !stored {
-                self.announce_companion_xp(companion, &tally);
+                for (kind, line) in self.companion_xp_lines(companion, &tally) {
+                    self.log_kind(kind, line);
+                }
             } else if gain.levels > 0 {
                 let name = self.creature_label(companion);
                 self.log_kind(

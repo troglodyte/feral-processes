@@ -1190,8 +1190,11 @@ fn the_xp_line_carries_the_whole_fights_total() {
         "expected one XP line for the whole fight: {lines:#?}"
     );
     assert!(
-        lines.iter().any(|t| *t == format!("You gain {total} XP.")),
-        "expected the three kills summed into one line: {lines:#?}"
+        lines
+            .iter()
+            .any(|t| *t == format!("  You gain {total} XP.")),
+        "expected the three kills summed into one line, indented under the \
+         `Experience:` header: {lines:#?}"
     );
 }
 
@@ -1239,11 +1242,11 @@ fn reaching_a_level_is_announced_while_the_fight_runs() {
     );
     assert!(
         end.iter()
-            .any(|t| *t == format!("You gain {total} XP, reaching level {level}.")),
+            .any(|t| *t == format!("  You gain {total} XP, reaching level {level}.")),
         "expected one XP line summing the fight: {end:#?}"
     );
     assert!(
-        end.iter().any(|t| t.starts_with("  Max HP")),
+        end.iter().any(|t| t.starts_with("    Max HP")),
         "expected the tally to carry the fight's stat block: {end:#?}"
     );
 }
@@ -1657,5 +1660,78 @@ fn leaving_the_results_screen_prunes_the_narration() {
         log.iter().any(|l| l.kind == MessageKind::Loot),
         "the salvage tally should survive the prune: {:#?}",
         log.iter().map(|l| (&l.text, l.kind)).collect::<Vec<_>>()
+    );
+}
+
+/// The win is the one ending that had no line of its own — a jack-out and a
+/// flatline both announce themselves a line higher, at their own sites.
+#[test]
+fn a_won_fight_says_so_between_the_final_blow_and_the_salvage() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    win_a_fight_in_one_round(&mut game);
+
+    let lines = log_texts(&game);
+    let won = lines
+        .iter()
+        .position(|t| t == "You won!")
+        .unwrap_or_else(|| panic!("a won fight never said so: {lines:#?}"));
+    let kill = lines
+        .iter()
+        .position(|t| t.contains("crashes and deletes itself"))
+        .expect("the kill line");
+    let salvage = lines
+        .iter()
+        .position(|t| t == "Salvage:")
+        .expect("the salvage tally");
+    assert!(
+        kill < won && won < salvage,
+        "the headline should sit between the final blow and the salvage: {lines:#?}"
+    );
+}
+
+/// A jack-out is not a win, and nothing may claim otherwise on the way out.
+#[test]
+fn a_jack_out_does_not_claim_a_win() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    flee_until_clear(&mut game);
+
+    let lines = log_texts(&game);
+    assert!(
+        !lines.iter().any(|t| t == "You won!"),
+        "running away reported a win: {lines:#?}"
+    );
+}
+
+/// The experience block is a header and indented rows, the shape salvage
+/// already has.
+#[test]
+fn the_xp_block_is_headed_and_indented() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    win_a_fight_in_one_round(&mut game);
+
+    let lines = log_texts(&game);
+    let header = lines
+        .iter()
+        .position(|t| t == "Experience:")
+        .unwrap_or_else(|| panic!("the XP block lost its header: {lines:#?}"));
+    assert!(
+        lines[header + 1].starts_with("  ") && lines[header + 1].contains("XP"),
+        "the header should be followed by an indented XP row: {lines:#?}"
+    );
+}
+
+/// ...and it is never a header over nothing. A fight the party jacked out of
+/// before landing a kill pays no XP at all.
+#[test]
+fn a_fight_that_paid_no_xp_writes_no_experience_header() {
+    let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    flee_until_clear(&mut game);
+
+    let lines = log_texts(&game);
+    assert!(
+        !lines.iter().any(|t| t == "Experience:"),
+        "a fight that earned nothing still headed an empty block: {lines:#?}"
     );
 }

@@ -4,5 +4,8 @@
     description: "Spent on the research tree. Banked rather than carried, so it never counts against your cargo.",
     value: Some(1),
     role: Some(ResearchCurrency),
+    // "RD" is the derivation, and it is Routine Disk's by rights. A banked
+    // currency reads fine on its initial alone.
+    abbrev: Some("R"),
     banked: true,
 )

@@ -35,9 +35,10 @@ any non-finite `taming_potency`, `consume.power`, or
     // the quantity and nothing else, so two items tagging the same is a
     // readout that lies about which pile is filling. Only items that reach
     // a machine or depot buffer are listed, so a weapon or a consumable
-    // never needs one. Nothing refuses a modded collision — the shipped
-    // set is held unique by its own census, and yours is yours to settle.
-    abbrev: Some("DK"),
+    // never needs one. One or two characters; nothing refuses a modded
+    // collision — the shipped set is held unique by its own census, and
+    // yours is yours to settle.
+    abbrev: Some("R"),
 
     // Optional; can be left out entirely (defaults to false, ordinary cargo).
     // A banked item is a pool rather than something the player carries, and

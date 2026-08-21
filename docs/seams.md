@@ -4786,6 +4786,10 @@ and currencies the derivation collides once, `Research Data` against
 `Routine Disk`, and the strip carries the tag and the quantity and
 nothing else — so a shared tag is a readout that lies about which pile
 is filling, and it fails with both rows drawn and both looking right.
+`Research Data` takes the override and settles for `R`: `RD` reads as
+the disk, a banked currency reads fine on its initial alone, and a tag
+**shorter** than two characters is as legal as the derivation's own
+one-letter fallback.
 
 `no_two_shipped_stock_items_share_a_tag` is the census, and it is a
 census rather than a refusal inside `load_dir` because a collision is a

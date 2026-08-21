@@ -272,6 +272,9 @@ pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity
         decompile_attempts: std::collections::HashMap::new(),
         rewards: BattleRewards::default(),
         lair: None,
+        // A hand-built fight is not weighed: `begin_battle` is what judges a
+        // pack, and a fixture that wants the verdict sets it itself.
+        outmatched: false,
     });
 }
 

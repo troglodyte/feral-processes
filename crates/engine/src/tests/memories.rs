@@ -1253,3 +1253,75 @@ fn a_maul_on_a_body_with_no_store_is_a_no_op() {
     assert!(game.world.get::<Memories>(wild).is_none());
     assert!(game.world.get::<Memories>(player).is_none());
 }
+
+/// Puts `who` in the party. `spawn_tamed` builds a program the player owns;
+/// owning one and fighting beside it are different things.
+fn join_party(game: &mut Game, who: Entity) {
+    game.world.resource_mut::<Party>().0.push(who);
+}
+
+fn power_of(game: &Game, who: Entity) -> i32 {
+    game.world.get::<Stats>(who).unwrap().power()
+}
+
+fn outmatched(game: &Game) -> bool {
+    game.world.resource::<BattleState>().outmatched
+}
+
+/// The verdict `hard_won` is later read off, taken at the bell because by the
+/// time the fight ends the hostiles are dead by definition.
+#[test]
+fn a_fight_records_whether_the_hostiles_outweighed_the_party() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = power_of(&game, game.player_entity());
+
+    let overwhelming = hostile_of(&mut game, "glitch", player * 4);
+    game.start_battle(vec![overwhelming]);
+    assert!(outmatched(&game), "a pack four times the party's weight");
+
+    game.world.remove_resource::<BattleState>();
+    let scrap = hostile_of(&mut game, "glitch", 0);
+    {
+        let mut stats = game.world.get_mut::<Stats>(scrap).unwrap();
+        stats.hp = 1;
+        stats.max_hp = 1;
+    }
+    game.start_battle(vec![scrap]);
+    assert!(!outmatched(&game), "and one that weighs nothing");
+}
+
+/// The party side of the comparison is the player *and* the companions.
+/// `kill_xp` deliberately reads the player alone so recruiting cannot dock
+/// XP; that argument does not transfer to "were we outmatched", and this is
+/// the only fixture that can tell the two readings apart — the hostile
+/// outweighs the companions on their own and is outweighed once the player
+/// is counted.
+#[test]
+fn the_party_side_of_the_comparison_counts_the_player() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 12, 3);
+    join_party(&mut game, companion);
+    let player = power_of(&game, game.player_entity());
+    let escort = power_of(&game, companion);
+    assert!(
+        player > 1,
+        "the fixture needs the player to weigh something"
+    );
+
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    {
+        let mut stats = game.world.get_mut::<Stats>(hostile).unwrap();
+        stats.hp = escort + 1;
+        stats.max_hp = escort + 1;
+    }
+    assert!(
+        power_of(&game, hostile) > escort && power_of(&game, hostile) < escort + player,
+        "the fixture must sit between the two readings"
+    );
+    game.start_battle(vec![hostile]);
+
+    assert!(
+        !outmatched(&game),
+        "a party is not outmatched merely because the player is one body in it"
+    );
+}

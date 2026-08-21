@@ -728,6 +728,7 @@ fn attempts_against_one_group_do_not_help_against_another() {
         decompile_attempts: std::collections::HashMap::new(),
         rewards: BattleRewards::default(),
         lair: None,
+        outmatched: false,
     });
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
 

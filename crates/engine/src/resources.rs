@@ -677,6 +677,22 @@ pub struct BattleState {
     /// battles are never serialised, so this needs no `SAVE_FORMAT_VERSION`
     /// bump.
     pub round_targets: Vec<Vec<Entity>>,
+    /// Whether the hostiles outweighed the party at the opening round, by
+    /// summed `Stats::power()`.
+    ///
+    /// **A snapshot, because the question is unanswerable later.** It is what
+    /// `Game::form_victory_memories` reads to decide whether a win was
+    /// `hard_won`, and by the time a fight is won its hostiles are dead by
+    /// definition — there is nothing left at teardown to weigh. Taken in
+    /// `begin_battle`, so `arena`'s authored compositions are judged by the
+    /// same rule the world's packs are.
+    ///
+    /// It stores the **verdict** rather than the two sums: nothing else has a
+    /// use for the figures, and a stored pair invites a second reader deriving
+    /// its own threshold from them. Same lifetime argument as
+    /// `decompile_attempts` and `lair` — battles are never serialised, so this
+    /// needs no `SAVE_FORMAT_VERSION` bump.
+    pub(crate) outmatched: bool,
 }
 
 /// A fight's payout, accumulated per kill and announced once, by

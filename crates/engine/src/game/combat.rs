@@ -218,6 +218,22 @@ impl Game {
         self.begin_battle(groups);
     }
 
+    /// What one side of a fight weighs, by summed `Stats::power()`.
+    ///
+    /// The player's own arm is not a special case: `Stats::power` is the one
+    /// expression of what a body is worth in a fight, and it reads the same
+    /// component on either side of the line. Widened to `i64` because it sums
+    /// a whole pack — the summands are `i32` and a deep zone's group can carry
+    /// several of them near the top of the range.
+    ///
+    /// A body with no `Stats` weighs nothing rather than being skipped, which
+    /// is the same answer and needs no filter.
+    fn summed_power(&self, who: impl Iterator<Item = Entity>) -> i64 {
+        who.filter_map(|e| self.world.get::<Stats>(e))
+            .map(|s| s.power() as i64)
+            .sum()
+    }
+
     /// Opens a battle around `groups` verbatim. Called by `start_battle`,
     /// which caps its pack first, and by `arena`, which does not.
     pub(crate) fn begin_battle(&mut self, groups: Vec<EnemyGroup>) {
@@ -239,6 +255,14 @@ impl Game {
             .sum::<usize>()
             .saturating_sub(1);
         let slots = self.world.resource::<Party>().0.len() + 1;
+        // Taken before the groups are moved into the resource, and before the
+        // first blow — see `BattleState::outmatched` for why a fight has to
+        // weigh itself at the bell rather than at teardown.
+        let hostile_weight =
+            self.summed_power(groups.iter().flat_map(|g| g.members.iter().copied()));
+        let party_weight = self.summed_power(
+            std::iter::once(player).chain(self.world.resource::<Party>().0.iter().copied()),
+        );
         // Opened before the intercept line below, so that line is the first
         // thing the battle pane shows.
         self.world.resource_mut::<MessageLog>().open_battle();
@@ -253,6 +277,7 @@ impl Game {
             decompile_attempts: HashMap::new(),
             rewards: BattleRewards::default(),
             lair: None,
+            outmatched: hostile_weight > party_weight,
         });
         // After `BattleState` is in place, deliberately: the party slots and
         // the groups are both read back off it, so a record taken earlier

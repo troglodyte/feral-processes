@@ -189,7 +189,7 @@ fn exploit_focus_is_worth_far_less_against_an_already_drained_target() {
 fn lean_compiler_discounts_craft_cost_per_level_but_never_below_one_each() {
     let mut game = Game::new(113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let base_cost = game.craft_cost(&ItemId::from(ids::POWER_CELL));
+    let base_cost = game.craft_cost(&ItemId::from(ids::POWER_CELL), false);
     assert_eq!(
         base_cost,
         vec![(ItemId::from(ids::CORE_FRAGMENT), POWER_CELL_CORE_COST)]
@@ -197,7 +197,7 @@ fn lean_compiler_discounts_craft_cost_per_level_but_never_below_one_each() {
 
     game.world.get_mut::<Perks>(player).unwrap().points = 10;
     game.unlock_perk(Perk::LeanCompiler).unwrap();
-    let discounted = game.craft_cost(&ItemId::from(ids::POWER_CELL));
+    let discounted = game.craft_cost(&ItemId::from(ids::POWER_CELL), false);
     assert_eq!(
         discounted,
         vec![(
@@ -210,7 +210,7 @@ fn lean_compiler_discounts_craft_cost_per_level_but_never_below_one_each() {
         game.world.get_mut::<Perks>(player).unwrap().points = 10;
         let _ = game.unlock_perk(Perk::LeanCompiler);
     }
-    let floored = game.craft_cost(&ItemId::from(ids::POWER_CELL));
+    let floored = game.craft_cost(&ItemId::from(ids::POWER_CELL), false);
     assert_eq!(
         floored,
         vec![(ItemId::from(ids::CORE_FRAGMENT), 1)],
@@ -236,7 +236,7 @@ fn a_quoted_recipe_cost_is_the_price_actually_charged() {
     for recipe in recipes {
         assert_eq!(
             recipe.cost,
-            game.craft_cost(&recipe.result),
+            game.craft_cost(&recipe.result, false),
             "{:?} is quoted at a different price from the one it charges",
             recipe.result
         );

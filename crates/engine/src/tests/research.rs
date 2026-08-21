@@ -362,7 +362,7 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
     game.place_structure("fabricator", 0, 1).unwrap();
 
     assert_eq!(
-        game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE)),
+        game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE), false),
         vec![
             (ItemId::from(ids::PORTAL_FRAGMENT), 6),
             (ItemId::from("cache_grain"), 2),

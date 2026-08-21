@@ -13,7 +13,8 @@ fn craft_consumes_cost_and_grants_the_result() {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), ICE_BREAKER_CORE_COST);
     }
 
-    game.craft(&ItemId::from(ids::ICE_BREAKER), 1).unwrap();
+    game.craft(&ItemId::from(ids::ICE_BREAKER), 1, false)
+        .unwrap();
 
     let inv = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(
@@ -38,7 +39,8 @@ fn craft_multiple_scales_cost_and_result() {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), ICE_BREAKER_CORE_COST * 3);
     }
 
-    game.craft(&ItemId::from(ids::ICE_BREAKER), 3).unwrap();
+    game.craft(&ItemId::from(ids::ICE_BREAKER), 3, false)
+        .unwrap();
 
     let inv = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(
@@ -68,7 +70,10 @@ fn max_craftable_floors_to_the_cheapest_affordable_whole_unit() {
         );
     }
 
-    assert_eq!(game.max_craftable(&ItemId::from(ids::ICE_BREAKER)), 2);
+    assert_eq!(
+        game.max_craftable(&ItemId::from(ids::ICE_BREAKER), false),
+        2
+    );
 }
 
 #[test]
@@ -82,12 +87,12 @@ fn max_craftable_is_zero_with_no_recipe_or_no_resources() {
         .clear();
 
     assert_eq!(
-        game.max_craftable(&ItemId::from(ids::ICE_BREAKER)),
+        game.max_craftable(&ItemId::from(ids::ICE_BREAKER), false),
         0,
         "no resources at all"
     );
     assert_eq!(
-        game.max_craftable(&ItemId::from(ids::CORE_FRAGMENT)),
+        game.max_craftable(&ItemId::from(ids::CORE_FRAGMENT), false),
         0,
         "no recipe exists for this item"
     );
@@ -102,7 +107,10 @@ fn craft_fails_without_enough_of_the_cost() {
         inv.items.clear();
     }
 
-    assert!(game.craft(&ItemId::from(ids::ICE_BREAKER), 1).is_err());
+    assert!(
+        game.craft(&ItemId::from(ids::ICE_BREAKER), 1, false)
+            .is_err()
+    );
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -115,7 +123,10 @@ fn craft_fails_without_enough_of_the_cost() {
 #[test]
 fn craft_rejects_a_result_with_no_recipe() {
     let mut game = Game::new(22, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(game.craft(&ItemId::from(ids::CORE_FRAGMENT), 1).is_err());
+    assert!(
+        game.craft(&ItemId::from(ids::CORE_FRAGMENT), 1, false)
+            .is_err()
+    );
 }
 
 #[test]
@@ -157,7 +168,7 @@ fn the_outlet_is_craftable_from_five_core_fragments_with_no_perks() {
         .expect("outlet.ron should declare a craftable recipe");
     assert_eq!(recipe.cost, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
     assert_eq!(
-        game.craft_cost(&ItemId::from(ids::OUTLET)),
+        game.craft_cost(&ItemId::from(ids::OUTLET), false),
         vec![(ItemId::from(ids::CORE_FRAGMENT), 5)],
         "with no perks unlocked, craft_cost should match the raw recipe"
     );
@@ -325,16 +336,20 @@ fn a_fused_copy_is_not_a_recipe_ingredient() {
         .unwrap()
         .add(armor.clone(), 2);
 
-    assert_eq!(game.max_craftable(&probe), 1, "two spares buy one probe");
+    assert_eq!(
+        game.max_craftable(&probe, false),
+        1,
+        "two spares buy one probe"
+    );
 
     game.fuse_item(&gear(&armor, 0)).unwrap();
 
     assert_eq!(
-        game.max_craftable(&probe),
+        game.max_craftable(&probe, false),
         0,
         "the copies went into a fused one, which no recipe can reach"
     );
-    assert!(game.craft(&probe, 1).is_err());
+    assert!(game.craft(&probe, 1, false).is_err());
     assert_eq!(
         held_at(&game, &armor, 1),
         1,
@@ -457,5 +472,78 @@ fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
         game.roll_quality(floor),
         QUALITY_MAX,
         "however good the bench, the band is the band"
+    );
+}
+
+/// The careful toggle's price: half again of every ingredient line, rounded
+/// up, charged on what the player actually pays rather than on the authored
+/// recipe.
+///
+/// The perk half of this is the ordering assertion. `Perk::LeanCompiler`
+/// floors a line at 1, and a careful compile of a floored line costs 2 — so
+/// the surcharge rides the discounted number. Reversed, a fully perked
+/// recipe would be careful for free.
+#[test]
+fn careful_compiling_costs_half_again_of_the_discounted_price() {
+    let mut game = Game::new(47, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let edge = ItemId::from("kinetic_edge");
+    let fragment = ItemId::from(ids::CORE_FRAGMENT);
+
+    assert_eq!(
+        game.craft_cost(&edge, false),
+        vec![(fragment.clone(), 7)],
+        "the shipped recipe, unchanged"
+    );
+    assert_eq!(
+        game.craft_cost(&edge, true),
+        vec![(fragment.clone(), 11)],
+        "seven and a half, rounded up: being careful is never free"
+    );
+
+    for _ in 0..10 {
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        let _ = game.unlock_perk(Perk::LeanCompiler);
+    }
+    assert_eq!(
+        game.craft_cost(&edge, false),
+        vec![(fragment.clone(), 1)],
+        "the perk floors a line at one"
+    );
+    assert_eq!(
+        game.craft_cost(&edge, true),
+        vec![(fragment, 2)],
+        "and careful is half again of *that*, not of the authored seven"
+    );
+}
+
+/// What the toggle costs the player in units they can actually make, at both
+/// of the two places a price is asked: the screen's "max affordable" and the
+/// compile's own affordability check.
+#[test]
+fn a_careful_batch_is_smaller_and_can_be_refused_outright() {
+    let mut game = Game::new(48, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let edge = ItemId::from("kinetic_edge");
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 21)]);
+
+    assert_eq!(game.max_craftable(&edge, false), 3, "three at seven each");
+    assert_eq!(
+        game.max_craftable(&edge, true),
+        1,
+        "and one at eleven, with change nowhere near a second"
+    );
+
+    assert!(
+        game.craft(&edge, 2, false).is_ok(),
+        "two plain copies are affordable"
+    );
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7)]);
+    assert!(
+        game.craft(&edge, 1, true).is_err(),
+        "exactly one plain copy's worth of material does not buy a careful one"
+    );
+    assert!(
+        game.craft(&edge, 1, false).is_ok(),
+        "and the same material still buys the ordinary compile"
     );
 }

@@ -114,7 +114,7 @@ pub(super) fn draw_craft_quantity(
     rows.push(text_row(""));
     rows.push(text_row(format!(
         "Max affordable right now: {}",
-        game.max_craftable(&result)
+        game.max_craftable(&result, false)
     )));
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));

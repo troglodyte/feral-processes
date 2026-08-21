@@ -85,7 +85,7 @@ fn the_buffer_is_unbounded_so_cargo_actions_never_refuse_for_space() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 10_000);
 
-    game.craft(&ItemId::from(ids::POWER_CELL), 1)
+    game.craft(&ItemId::from(ids::POWER_CELL), 1, false)
         .expect("compiling never runs out of Buffer space now");
     let landed = game.grant_loot(ItemId::from(ids::PORTAL_FRAGMENT), 6);
     assert_eq!(

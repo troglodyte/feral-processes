@@ -3,6 +3,7 @@
 
 use crate::tuning::{
     LEAN_COMPILER_DISCOUNT_PER_LEVEL, QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS,
+    QUALITY_CAREFUL_COST_PERCENT,
 };
 use crate::*;
 
@@ -21,6 +22,16 @@ use crate::*;
 /// The four *terms* are emphatically not an axis. They are addends in
 /// one legible formula, and a trait with an implementor per term would
 /// be the over-engineered reading of this.
+/// One ingredient line's price when the player compiles carefully:
+/// `QUALITY_CAREFUL_COST_PERCENT` more, rounded **up**, so a line already
+/// down at one unit costs two and the toggle is never free.
+///
+/// A free function beside `CraftOrder` rather than a method, because it is
+/// arithmetic on a quantity and knows nothing about a `Game`.
+fn careful_price(qty: u32) -> u32 {
+    qty + (qty * QUALITY_CAREFUL_COST_PERCENT).div_ceil(100)
+}
+
 pub(crate) struct CraftOrder {
     /// The tier of the best bench the recipe's structure is standing at,
     /// or 1 when the recipe names no bench — see
@@ -113,27 +124,46 @@ impl Game {
     }
 
     /// The per-unit cost to compile `result` right now — its `craft_recipes`
-    /// entry, which already carries the `Perk::LeanCompiler` discount. Empty
-    /// if `result` has no recipe.
+    /// entry, which already carries the `Perk::LeanCompiler` discount, plus
+    /// the careful-compile surcharge if `careful`. Empty if `result` has no
+    /// recipe.
     ///
     /// A lookup rather than a second application of the discount: the two
     /// diverged once already, and a screen quoting one while `craft` charges
     /// the other is invisible until a player is told they need three of
-    /// something the game would have taken two of.
-    pub fn craft_cost(&self, result: &ItemId) -> Vec<(ItemId, u32)> {
+    /// something the game would have taken two of. The surcharge is added
+    /// **here and nowhere else** for exactly that reason, which is also why
+    /// `careful` is a parameter of all three price questions rather than a
+    /// flag the caller applies afterwards.
+    ///
+    /// The surcharge is charged on the discounted number, rounded up. The
+    /// order is what makes the perk and the toggle compose the way a player
+    /// would read them: the perk makes a recipe cheaper, and being careful
+    /// costs half again of what they actually pay. Reversed, a fully perked
+    /// recipe — every line floored at 1 — would be careful for free.
+    pub fn craft_cost(&self, result: &ItemId, careful: bool) -> Vec<(ItemId, u32)> {
         self.craft_recipes()
             .into_iter()
             .find(|r| &r.result == result)
-            .map(|r| r.cost)
+            .map(|r| {
+                if !careful {
+                    return r.cost;
+                }
+                r.cost
+                    .into_iter()
+                    .map(|(item, qty)| (item, careful_price(qty)))
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
     /// The most whole units of `result` the player can afford to compile
-    /// right now, given `craft_cost` (already Lean-Compiler-adjusted) and
-    /// their current inventory. 0 if `result` has no recipe or they can't
-    /// afford even one unit yet.
-    pub fn max_craftable(&self, result: &ItemId) -> u32 {
-        let cost = self.craft_cost(result);
+    /// right now, given `craft_cost` (already Lean-Compiler-adjusted, and
+    /// carrying the careful surcharge when `careful`) and their current
+    /// inventory. 0 if `result` has no recipe or they can't afford even one
+    /// unit yet.
+    pub fn max_craftable(&self, result: &ItemId, careful: bool) -> u32 {
+        let cost = self.craft_cost(result, careful);
         if cost.is_empty() {
             return 0;
         }
@@ -180,7 +210,11 @@ impl Game {
     }
 
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
-    pub fn craft(&mut self, result: &ItemId, quantity: u32) -> Result<(), String> {
+    ///
+    /// `careful` spends `QUALITY_CAREFUL_COST_PERCENT` more material for a
+    /// better floor on every unit in the batch — the toggle is the batch's,
+    /// not the unit's.
+    pub fn craft(&mut self, result: &ItemId, quantity: u32, careful: bool) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -191,7 +225,7 @@ impl Game {
             return Err(format!("{} can't be compiled.", self.item_name(result)));
         }
         let player = self.player_entity();
-        let cost = self.craft_cost(result);
+        let cost = self.craft_cost(result, careful);
         {
             let inv = self.world.get::<Inventory>(player).unwrap();
             for (item, qty) in &cost {

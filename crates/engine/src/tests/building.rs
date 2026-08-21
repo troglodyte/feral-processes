@@ -436,7 +436,8 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 6);
     give(&mut game, &ItemId::from("cache_grain"), 2);
-    game.craft(&ItemId::from(ids::FIREWALL_PLATING), 1).unwrap();
+    game.craft(&ItemId::from(ids::FIREWALL_PLATING), 1, false)
+        .unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(game.player_entity())

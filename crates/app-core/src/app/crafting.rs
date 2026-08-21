@@ -52,7 +52,7 @@ impl App {
                     self.mode = Mode::Playing;
                     return;
                 };
-                let max = game.max_craftable(&result);
+                let max = game.max_craftable(&result, false);
                 if max == 0 {
                     let name = game.item_name(&result).to_string();
                     self.status_line = Some(format!("Not enough resources to compile any {name}."));
@@ -88,7 +88,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.craft(&result, quantity) {
+            match game.craft(&result, quantity, false) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }

@@ -884,7 +884,7 @@ fn crafted_gear_is_never_rare() {
             .add(item.clone(), qty * 20);
     }
     for _ in 0..20 {
-        let _ = game.craft(&recipe.result, 1);
+        let _ = game.craft(&recipe.result, 1, false);
     }
 
     assert!(

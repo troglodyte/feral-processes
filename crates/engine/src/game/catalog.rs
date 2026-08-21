@@ -597,6 +597,30 @@ impl Game {
         gates.any(|def| self.is_researched(&def.id))
     }
 
+    /// The best deployed structure of `kind`, as an upgrade tier — `None`
+    /// when the player has never built one.
+    ///
+    /// The bench half of a compiled copy's quality floor (see
+    /// `Game::player_craft_order`). It is the *best* rather than the
+    /// nearest or the first because a bench is a thing the base owns, not
+    /// a thing the player walks to: `craft_recipes` already asks only
+    /// whether one is standing anywhere, and a second, stricter rule here
+    /// would let a recipe be offered and then compile against a bench the
+    /// player was not told about.
+    ///
+    /// A structure carrying no `StructureTier` reads as tier 1, not as
+    /// tier 0. The component is only inserted by `build_structure` for a
+    /// def declaring `upgrade`, so a bench with no upgrade path and a
+    /// bench that has never been upgraded are the same thing to a player,
+    /// and the term above the first tier is what a bench upgrade sells.
+    pub(crate) fn best_structure_tier(&self, kind: &str) -> Option<u32> {
+        self.world
+            .iter_entities()
+            .filter(|e| e.get::<Structure>().is_some_and(|s| s.kind == kind))
+            .map(|e| e.get::<StructureTier>().map(|t| t.0).unwrap_or(1))
+            .max()
+    }
+
     /// The structures the build menu offers: `structure_defs` minus anything
     /// still behind unfinished research. `structure_defs` itself stays
     /// unfiltered — it's the general lookup, not the menu.

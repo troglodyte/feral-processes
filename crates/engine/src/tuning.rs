@@ -1453,6 +1453,42 @@ pub const QUALITY_SPREAD: u8 = 20;
 /// keeps a drop a lottery ticket rather than a disappointment.
 pub const QUALITY_DROP_BASE: u8 = 70;
 
+/// The floor a **compiled** copy rolls off before any of its terms: a bare
+/// tier-1 bench, no perk, not careful, giving 80–100.
+///
+/// Deliberately *below* `QUALITY_DEFAULT`, which is what every craft was
+/// worth before this axis existed — so a fresh player's gear is a little
+/// worse than it used to be and the terms below are what buy it back. The
+/// design intent is that a developed base out-produces the world, and a
+/// base cannot do that if a bare bench already sits at the authored spec.
+pub const QUALITY_BASE: u8 = 80;
+
+/// What one tier of the bench a recipe names is worth, per tier **above
+/// the first** — see `Game::best_structure_tier`, which reads a structure
+/// with no `StructureTier` as tier 1 so the term is 0 for it.
+///
+/// This is the whole of why a compile bench is worth upgrading: tier is
+/// read nowhere else for a structure without a `ResourceNode`, so the
+/// fragments spent on a Fabricator buy better gear and nothing else.
+pub const QUALITY_BENCH_PER_TIER: u8 = 5;
+
+/// What the careful-compile toggle adds to the floor.
+///
+/// One constant and one `bool` rather than a graduated dial: the player is
+/// choosing to spend materials for quality, and a slider would ask them to
+/// price that choice on every compile.
+pub const QUALITY_CAREFUL_BONUS: u8 = 10;
+
+/// What careful compiling costs, as a percentage added to every ingredient
+/// line, rounded **up** — so a one-unit line costs two and the toggle is
+/// never free.
+///
+/// Charged on the discounted cost rather than the authored one (see
+/// `Game::craft_cost`), so `Perk::LeanCompiler` and this compose in the
+/// order the player would expect: the perk makes a recipe cheaper, and
+/// being careful about it costs half again of what they actually pay.
+pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

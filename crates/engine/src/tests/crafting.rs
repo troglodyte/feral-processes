@@ -341,3 +341,47 @@ fn a_fused_copy_is_not_a_recipe_ingredient() {
         "and the refusal left the fused copy alone"
     );
 }
+
+/// The bench half of a compiled copy's quality floor: which deployed
+/// structure of a kind the player gets to compile against.
+///
+/// Three cases in one test because the answer is a single `Option<u32>` and
+/// the interesting part is how the three disagree — a bench that was never
+/// built is not a bench at tier 1, and a bench that predates upgrades is.
+#[test]
+fn best_structure_tier_reads_the_best_deployed_one() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        game.best_structure_tier("fabricator"),
+        None,
+        "a bench nobody built is not a bench at tier 1"
+    );
+
+    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    assert_eq!(
+        game.best_structure_tier("fabricator"),
+        Some(1),
+        "a structure carrying no StructureTier is standing at tier 1"
+    );
+
+    for (x, tier) in [(5, 3), (6, 2)] {
+        game.world.spawn((
+            Structure {
+                kind: "fabricator".to_string(),
+            },
+            Position { x, y: 4 },
+            StructureTier(tier),
+        ));
+    }
+    assert_eq!(
+        game.best_structure_tier("fabricator"),
+        Some(3),
+        "the player compiles at their best bench, not their newest or their worst"
+    );
+    assert_eq!(
+        game.best_structure_tier("armory"),
+        None,
+        "and a different kind is a different bench"
+    );
+}

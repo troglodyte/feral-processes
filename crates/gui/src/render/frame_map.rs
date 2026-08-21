@@ -134,13 +134,13 @@ fn glyph_px(cell: f32) -> u16 {
 /// carries `draw_stack`'s `Facing / Depth / Trace` line, and the map covering
 /// the Trace band would trade the readout this layer's escalation is
 /// explained by for the map that explains the maze.
-fn inset_rect(w: f32, h: f32, m: &Metrics) -> Rect {
+fn inset_rect(pane: Rect, m: &Metrics) -> Rect {
     let top = m.inset + m.font_size as f32 + m.gap;
-    let side = (w * INSET_FRACTION)
-        .min(w - m.inset * 2.0)
-        .min(h - top - m.inset)
+    let side = (pane.w * INSET_FRACTION)
+        .min(pane.w - m.inset * 2.0)
+        .min(pane.h - top - m.inset)
         .max(0.0);
-    Rect::new(m.inset, top, side, side)
+    Rect::new(pane.x + m.inset, pane.y + top, side, side)
 }
 
 /// How many cells either side of the party a zoom level shows, or `None`
@@ -265,11 +265,10 @@ pub(super) fn draw_map_inset(
     view: &FrameMapView,
     zoom: u16,
     painter: &Painter,
-    w: f32,
-    h: f32,
+    pane: Rect,
     m: &Metrics,
 ) {
-    let r = inset_rect(w, h, m);
+    let r = inset_rect(pane, m);
     if r.w <= 0.0 || r.h <= 0.0 {
         return;
     }
@@ -492,7 +491,7 @@ mod tests {
         for (ww, wh) in WINDOWS {
             let m = crate::text::ui_metrics(wh);
             let (w, h) = pane(ww, wh);
-            let r = inset_rect(w, h, &m);
+            let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
             assert!(
                 r.y >= m.inset + m.font_size as f32,
                 "{ww}x{wh}: the inset covers the Facing/Depth/Trace heading"
@@ -516,7 +515,7 @@ mod tests {
         for (ww, wh) in WINDOWS {
             let m = crate::text::ui_metrics(wh);
             let (w, h) = pane(ww, wh);
-            let r = inset_rect(w, h, &m);
+            let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
             let v = view(21, 21);
             let (ox, oy, cell) = layout(&v, r.w, r.h, INSET_FILL);
             assert!(cell > 0.0);
@@ -541,7 +540,7 @@ mod tests {
         let (ww, wh) = WINDOWS[1];
         let m = crate::text::ui_metrics(wh);
         let (w, h) = pane(ww, wh);
-        let r = inset_rect(w, h, &m);
+        let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
         let (_, _, cell) = layout(&view(21, 21), r.w, r.h, INSET_FILL);
         assert!(
             glyph_px(cell) >= MIN_INSET_GLYPH_PX,
@@ -558,9 +557,21 @@ mod tests {
         empty.cells = Vec::new();
         empty.marks = vec![((99, 99), FrameMapMark::Party)];
         crate::paint::with_painter(|p| {
-            draw_map_inset(&view(21, 21), STACK_MAP_MIN_ZOOM, p, w, h, &m);
-            draw_map_inset(&view(31, 11), STACK_MAP_MAX_ZOOM, p, w, h, &m);
-            draw_map_inset(&empty, STACK_MAP_MAX_ZOOM, p, w, h, &m);
+            draw_map_inset(
+                &view(21, 21),
+                STACK_MAP_MIN_ZOOM,
+                p,
+                Rect::new(0.0, 0.0, w, h),
+                &m,
+            );
+            draw_map_inset(
+                &view(31, 11),
+                STACK_MAP_MAX_ZOOM,
+                p,
+                Rect::new(0.0, 0.0, w, h),
+                &m,
+            );
+            draw_map_inset(&empty, STACK_MAP_MAX_ZOOM, p, Rect::new(0.0, 0.0, w, h), &m);
         });
     }
 

@@ -77,11 +77,11 @@ const UNLIT: Color = Color::new(0.03, 0.07, 0.085, 1.0);
 ///
 /// Returned as (left, top, right, bottom). Every slice is centred on the
 /// vanishing point at the pane's middle, so the walls converge there.
-fn slice(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
+fn slice(depth: usize, pane: Rect) -> (f32, f32, f32, f32) {
     let scale = SHRINK.powi(depth as i32);
-    let (cx, cy) = (w / 2.0, h / 2.0);
-    let half_w = w / 2.0 * scale;
-    let half_h = h / 2.0 * CORRIDOR_HEIGHT * scale;
+    let (cx, cy) = (pane.x + pane.w / 2.0, pane.y + pane.h / 2.0);
+    let half_w = pane.w / 2.0 * scale;
+    let half_h = pane.h / 2.0 * CORRIDOR_HEIGHT * scale;
     (cx - half_w, cy - half_h, cx + half_w, cy + half_h)
 }
 
@@ -94,8 +94,8 @@ fn slice(depth: usize, w: f32, h: f32) -> (f32, f32, f32, f32) {
 /// — the right edge of one is the left edge of the next, at every depth —
 /// which in turn is what lets the floor and ceiling of neighbouring cells
 /// meet along a shared edge instead of overlapping or leaving a seam.
-fn column_slice(depth: usize, lateral: i32, w: f32, h: f32) -> (f32, f32, f32, f32) {
-    let (l, t, r, b) = slice(depth, w, h);
+fn column_slice(depth: usize, lateral: i32, pane: Rect) -> (f32, f32, f32, f32) {
+    let (l, t, r, b) = slice(depth, pane);
     let dx = (r - l) * lateral as f32;
     (l + dx, t, r + dx, b)
 }
@@ -175,9 +175,14 @@ fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color
     )
 }
 
-/// Draws the corridor into the pane at the origin, `w` by `h`.
-pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m: &Metrics) {
-    painter.rect(0.0, 0.0, w, h, VOID);
+/// Draws the corridor into `pane`.
+///
+/// The pane takes its origin from the caller rather than sitting at the
+/// window's, because the base stock strip claims a row above it. Every
+/// piece of the projection derives from `slice`, so that origin is stated
+/// once here and the whole corridor follows it.
+pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics) {
+    painter.rect(pane.x, pane.y, pane.w, pane.h, VOID);
 
     // Floored before any geometry, so nothing inside the corridor's own band
     // can come out as hard `VOID`. Two places need it and neither is a bug in
@@ -186,12 +191,12 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
     // recedes has left it for good — which is simply what standing in a room
     // wider than the cone looks like. The band only, so the letterbox above
     // and below the corridor stays void.
-    let (bl, bt, br, bb) = slice(0, w, h);
+    let (bl, bt, br, bb) = slice(0, pane);
     painter.rect(bl, bt, br - bl, bb - bt, UNLIT);
 
     // The columns either side of the party's line of sight overhang the pane
     // — at depth 0 they are entirely off it — so the pane cuts them.
-    painter.clipped(0.0, 0.0, w, h, |painter| {
+    painter.clipped(pane.x, pane.y, pane.w, pane.h, |painter| {
         // Back to front, so nearer geometry paints over further geometry and
         // no depth sorting is needed. That is the whole occlusion rule, and
         // it stays correct now that the whole row is drawn rather than only
@@ -202,12 +207,12 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
         for depth in (0..view.cells.len()).rev() {
             let row = &view.cells[depth];
             for i in 0..row.len() {
-                draw_cell(painter, row, i, depth, w, h, m);
+                draw_cell(painter, row, i, depth, pane, m);
             }
         }
     });
 
-    painter.rect_lines(0.0, 0.0, w, h, 2.0, BORDER);
+    painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
 
     let heading = format!(
         "Facing {}   Depth {} / {}   ({}, {})   Trace: {}",
@@ -215,8 +220,8 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
     );
     painter.ui(
         &heading,
-        m.inset,
-        m.inset + m.font_size as f32,
+        pane.x + m.inset,
+        pane.y + m.inset + m.font_size as f32,
         m.font_size,
         CYAN,
     );
@@ -225,8 +230,8 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, w: f32, h: f32, m:
         let dims = painter.measure_ui(standing, m.font_size);
         painter.ui(
             standing,
-            (w - dims.width) / 2.0,
-            h - m.inset,
+            pane.x + (pane.w - dims.width) / 2.0,
+            pane.y + pane.h - m.inset,
             m.font_size,
             YELLOW,
         );
@@ -248,14 +253,13 @@ fn draw_cell(
     row: &[StackCellView],
     i: usize,
     depth: usize,
-    w: f32,
-    h: f32,
+    pane: Rect,
     m: &Metrics,
 ) {
     let cell = row[i];
     let lateral = i as i32 - (row.len() / 2) as i32;
-    let (nl, nt, nr, nb) = column_slice(depth, lateral, w, h);
-    let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, w, h);
+    let (nl, nt, nr, nb) = column_slice(depth, lateral, pane);
+    let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, pane);
     let s = shade(depth);
 
     let face = draws_as_face(depth, cell);
@@ -386,10 +390,10 @@ mod tests {
 
     #[test]
     fn slices_shrink_monotonically_with_distance() {
-        let (w, h) = (800.0, 600.0);
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
         let mut last_width = f32::MAX;
         for depth in 0..6 {
-            let (l, _, r, _) = slice(depth, w, h);
+            let (l, _, r, _) = slice(depth, pane);
             let width = r - l;
             assert!(
                 width < last_width,
@@ -402,9 +406,10 @@ mod tests {
 
     #[test]
     fn every_slice_is_centred_on_the_vanishing_point() {
-        let (w, h) = (800.0, 600.0);
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
+        let (w, h) = (pane.w, pane.h);
         for depth in 0..6 {
-            let (l, t, r, b) = slice(depth, w, h);
+            let (l, t, r, b) = slice(depth, pane);
             assert!(
                 ((l + r) / 2.0 - w / 2.0).abs() < 0.001,
                 "depth {depth} is off-centre horizontally"
@@ -418,17 +423,17 @@ mod tests {
 
     #[test]
     fn the_nearest_slice_spans_the_full_width_of_the_pane() {
-        let (l, _, r, _) = slice(0, 800.0, 600.0);
+        let (l, _, r, _) = slice(0, Rect::new(0.0, 0.0, 800.0, 600.0));
         assert!((l - 0.0).abs() < 0.001);
         assert!((r - 800.0).abs() < 0.001);
     }
 
     #[test]
     fn slices_nest_strictly_inside_one_another() {
-        let (w, h) = (800.0, 600.0);
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
         for depth in 0..5 {
-            let (nl, nt, nr, nb) = slice(depth, w, h);
-            let (fl, ft, fr, fb) = slice(depth + 1, w, h);
+            let (nl, nt, nr, nb) = slice(depth, pane);
+            let (fl, ft, fr, fb) = slice(depth + 1, pane);
             assert!(fl > nl && fr < nr, "depth {depth} walls cross over");
             assert!(ft > nt && fb < nb, "depth {depth} floor and ceiling cross");
         }
@@ -439,8 +444,8 @@ mod tests {
     fn the_middle_column_is_the_plain_slice() {
         for depth in 0..5 {
             assert_eq!(
-                column_slice(depth, 0, 800.0, 600.0),
-                slice(depth, 800.0, 600.0)
+                column_slice(depth, 0, Rect::new(0.0, 0.0, 800.0, 600.0)),
+                slice(depth, Rect::new(0.0, 0.0, 800.0, 600.0))
             );
         }
     }
@@ -452,11 +457,11 @@ mod tests {
     /// lit surfaces, which is the exact fault this change exists to remove.
     #[test]
     fn neighbouring_columns_share_an_edge() {
-        let (w, h) = (800.0, 600.0);
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
         for depth in 0..5 {
             for lateral in -2..2 {
-                let (_, _, r, _) = column_slice(depth, lateral, w, h);
-                let (l, _, _, _) = column_slice(depth, lateral + 1, w, h);
+                let (_, _, r, _) = column_slice(depth, lateral, pane);
+                let (l, _, _, _) = column_slice(depth, lateral + 1, pane);
                 assert!(
                     (r - l).abs() < 0.001,
                     "depth {depth}: column {lateral} does not meet {}",
@@ -472,13 +477,13 @@ mod tests {
     /// the region that used to be void.
     #[test]
     fn the_column_beside_the_party_swings_into_the_pane() {
-        let (w, h) = (800.0, 600.0);
-        let (l, _, r, _) = column_slice(0, -1, w, h);
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
+        let (l, _, r, _) = column_slice(0, -1, pane);
         assert!(r <= 0.0, "the cell alongside the party is not in frame");
         assert!(l < 0.0);
 
         for depth in 1..4 {
-            let (_, _, r, _) = column_slice(depth, -1, w, h);
+            let (_, _, r, _) = column_slice(depth, -1, pane);
             assert!(
                 r > 0.0,
                 "depth {depth}'s left-hand cell claims nothing inside the pane"
@@ -493,12 +498,15 @@ mod tests {
     /// the frame rather than the world.
     #[test]
     fn every_column_stays_inside_the_band_the_unlit_fill_covers() {
-        let (w, h) = (800.0, 600.0);
-        let (bl, bt, br, bb) = slice(0, w, h);
-        assert!(bl <= 0.0 && br >= w, "the fill does not span the pane");
+        let pane = Rect::new(0.0, 0.0, 800.0, 600.0);
+        let (bl, bt, br, bb) = slice(0, pane);
+        assert!(
+            bl <= pane.x && br >= pane.x + pane.w,
+            "the fill does not span the pane"
+        );
         for depth in 0..6 {
             for lateral in -3..=3 {
-                let (_, t, _, b) = column_slice(depth, lateral, w, h);
+                let (_, t, _, b) = column_slice(depth, lateral, pane);
                 assert!(
                     t >= bt - 0.001 && b <= bb + 0.001,
                     "depth {depth} column {lateral} reaches outside the fill"
@@ -689,7 +697,7 @@ mod tests {
         ];
         crate::paint::with_painter(|p| {
             for case in &cases {
-                draw_stack(case, p, 1000.0, 640.0, &m);
+                draw_stack(case, p, Rect::new(0.0, 0.0, 1000.0, 640.0), &m);
             }
         });
     }
@@ -753,8 +761,8 @@ mod tests {
             standing_on: None,
         };
         crate::paint::with_painter(|p| {
-            draw_stack(&empty, p, 800.0, 600.0, &m);
-            draw_stack(&single, p, 800.0, 600.0, &m);
+            draw_stack(&empty, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m);
+            draw_stack(&single, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m);
         });
     }
 

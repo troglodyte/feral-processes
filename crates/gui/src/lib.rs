@@ -465,6 +465,42 @@ mod tests {
         paint::with_painter(|p| render::draw(app, fx, p));
     }
 
+    /// The stock strip is only worth its row if it is actually on the
+    /// screen. Wired in `draw_playing_base` rather than per mode, so it
+    /// reaches every screen that draws the world behind it — asserted here
+    /// through the real `render::draw` rather than by calling the strip
+    /// itself, which would pass with the call site deleted.
+    #[test]
+    fn the_playing_screen_carries_the_stock_strip() {
+        let mut app = app_in_base(4243);
+        let mut fx = Fx::new();
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert!(
+            paint::painted_text(&shapes)
+                .iter()
+                .any(|t| t.starts_with("Base stock")),
+            "the playing screen draws no stock strip at all"
+        );
+    }
+
+    /// The whole reason the strip sits at the top of the window rather than
+    /// in the log pane: `draw_popup` caps a panel at 85% of the window and
+    /// centres it, so a menu buries the log pane and leaves the strip
+    /// standing. A player deciding what to build is exactly who wants to
+    /// know what the base is holding.
+    #[test]
+    fn the_stock_strip_outlives_a_menu_popup() {
+        let mut app = app_in_base(4244);
+        app.mode = Mode::BaseMenu;
+        let mut fx = Fx::new();
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let painted = paint::painted_text(&shapes);
+        assert!(
+            painted.iter().any(|t| t.starts_with("Base stock")),
+            "a menu buried the strip: {painted:?}"
+        );
+    }
+
     /// A raid's tile flash is a *base-space* cue and must be drawn in base
     /// space alone.
     ///

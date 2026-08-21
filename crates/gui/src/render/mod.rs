@@ -45,6 +45,7 @@ mod progression;
 mod routines;
 mod stack;
 mod stack_market;
+mod stock;
 mod structure_manifest;
 mod talents;
 mod trade;

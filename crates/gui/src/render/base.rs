@@ -509,37 +509,45 @@ pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m
         });
     let Some(game) = &mut app.game else { return };
 
+    // The stock strip claims a row off the top of the window and every pane
+    // below it starts clear of it. Taken out of the map's height rather than
+    // added to the window's, so the log pane below keeps the position it has
+    // always had.
+    let strip_h = stock::strip_height(m);
     let map_w = painter.screen_w() * PANE_W;
-    let map_h = painter.screen_h() * PANE_H;
+    let map_h = painter.screen_h() * PANE_H - strip_h;
+    let stock_rows = game.base_stock();
 
     let status = game.player_status();
     // `Game::active_buffs` needs `&mut self`; fetched here rather than
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
+    let map_pane = Rect::new(0.0, strip_h, map_w, map_h);
     if let Some(view) = game.stack_view() {
-        draw_stack(&view, painter, map_w, map_h, m);
+        draw_stack(&view, painter, map_pane, m);
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
-            draw_map_inset(&map, stack_zoom, painter, map_w, map_h, m);
+            draw_map_inset(&map, stack_zoom, painter, map_pane, m);
         }
     } else {
         draw_surface_map(
-            game, fx, painter, map_w, map_h, tile_px, glyph_px, &status, plan,
+            game, fx, painter, map_pane, tile_px, glyph_px, &status, plan,
         );
     }
 
     draw_status_panel(
-        Rect::new(map_w, 0.0, painter.screen_w() - map_w, map_h),
+        Rect::new(map_w, strip_h, painter.screen_w() - map_w, map_h),
         &status,
         &buffs,
         game,
         painter,
         m,
     );
+    stock::draw_stock_strip(&stock_rows, painter, m);
 
-    let log_y = map_h;
+    let log_y = strip_h + map_h;
     painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
     painter.rect_lines(
         0.0,
@@ -692,8 +700,7 @@ fn draw_surface_map(
     game: &mut Game,
     fx: &mut Fx,
     painter: &Painter,
-    map_w: f32,
-    map_h: f32,
+    pane: Rect,
     tile_px: f32,
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
@@ -706,8 +713,8 @@ fn draw_surface_map(
     // the edge of the walkable world without seeing what is beside it. Every
     // grid-to-world conversion below goes through `hw`/`hh` for that reason —
     // the rings shift the whole grid by two cells.
-    let half_w = ((map_w / tile_px) / 2.0).max(1.0) as i32;
-    let half_h = ((map_h / tile_px) / 2.0).max(1.0) as i32;
+    let half_w = ((pane.w / tile_px) / 2.0).max(1.0) as i32;
+    let half_h = ((pane.h / tile_px) / 2.0).max(1.0) as i32;
     let hw = half_w + RINGS;
     let hh = half_h + RINGS;
 
@@ -774,7 +781,13 @@ fn draw_surface_map(
     // asking per tile would be the same answer several thousand times.
     let hues = game.sector_hues();
 
-    painter.rect(0.0, 0.0, map_w, map_h, Color::new(0.03, 0.03, 0.05, 1.0));
+    painter.rect(
+        pane.x,
+        pane.y,
+        pane.w,
+        pane.h,
+        Color::new(0.03, 0.03, 0.05, 1.0),
+    );
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
             let biome_color = biome_tint(tile.biome, hues);
@@ -786,14 +799,25 @@ fn draw_surface_map(
             let mut color = biome_color;
             let mut bg_source = biome_color;
             let world = (center.0 + rx as i32 - hw, center.1 + ry as i32 - hh);
-            let (px, py) = tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px);
+            let (px, py) = tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            );
             // The fetched rings exist to be *read* — by the camera slide and
             // by `draw_tile_edges` — not to be drawn. Nothing clips this pane,
             // and the log panel below it is drawn at 0.95 alpha, so a row
             // sitting past the bottom edge shows through it as a band of
             // terrain behind the text. Culling here rather than shrinking the
             // grid keeps every visible tile's neighbours in hand.
-            if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
+            if px >= pane.x + pane.w
+                || py >= pane.y + pane.h
+                || px + tile_px <= pane.x
+                || py + tile_px <= pane.y
+            {
                 continue;
             }
             let mut machine_status = None;
@@ -882,10 +906,10 @@ fn draw_surface_map(
             // would muddy a structure's durability read.
             let shade = if occupied { 1.0 } else { tile_shade(world) };
             let vig = vignette(
-                px + tile_px / 2.0 - map_w / 2.0,
-                py + tile_px / 2.0 - map_h / 2.0,
-                map_w / 2.0,
-                map_h / 2.0,
+                px + tile_px / 2.0 - (pane.x + pane.w / 2.0),
+                py + tile_px / 2.0 - (pane.y + pane.h / 2.0),
+                pane.w / 2.0,
+                pane.h / 2.0,
             );
             let dim = shade * vig;
             let mut bg = at_level(bg_source, GROUND_LEVEL * dim);
@@ -1051,10 +1075,18 @@ fn draw_surface_map(
             painter,
             &marked,
             plan,
-            |world| tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px),
+            |world| {
+                tile_origin_px(
+                    world,
+                    center,
+                    (half_w, half_h),
+                    (off_x, off_y),
+                    tile_px,
+                    pane,
+                )
+            },
             tile_px,
-            map_w,
-            map_h,
+            pane,
         );
     }
     // After every tile so debris lands on top of the base rather than under
@@ -1062,10 +1094,17 @@ fn draw_surface_map(
     // edge cannot draw over the frame.
     if show_effects {
         fx.draw_bursts(painter, tile_px, |world| {
-            tile_origin_px(world, center, (half_w, half_h), (off_x, off_y), tile_px)
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
         });
     }
-    painter.rect_lines(0.0, 0.0, map_w, map_h, 2.0, BORDER);
+    painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
 }
 
 /// What the Excavation plan is drawing over the base map: where the cursor
@@ -1095,13 +1134,16 @@ fn draw_excavation_plan(
     plan: Option<PlanCursor>,
     at: impl Fn((i32, i32)) -> (f32, f32),
     tile_px: f32,
-    map_w: f32,
-    map_h: f32,
+    pane: Rect,
 ) {
     let size = tile_px - 1.0;
     let tile = |world: (i32, i32), fill: Option<Color>, outline: Option<(f32, Color)>| {
         let (px, py) = at(world);
-        if px >= map_w || py >= map_h || px + tile_px <= 0.0 || py + tile_px <= 0.0 {
+        if px >= pane.x + pane.w
+            || py >= pane.y + pane.h
+            || px + tile_px <= pane.x
+            || py + tile_px <= pane.y
+        {
             return;
         }
         if let Some(fill) = fill {
@@ -1146,10 +1188,11 @@ fn tile_origin_px(
     half: (i32, i32),
     off: (f32, f32),
     tile_px: f32,
+    pane: Rect,
 ) -> (f32, f32) {
     (
-        ((world.0 - player.0 + half.0) as f32 - off.0) * tile_px,
-        ((world.1 - player.1 + half.1) as f32 - off.1) * tile_px,
+        pane.x + ((world.0 - player.0 + half.0) as f32 - off.0) * tile_px,
+        pane.y + ((world.1 - player.1 + half.1) as f32 - off.1) * tile_px,
     )
 }
 

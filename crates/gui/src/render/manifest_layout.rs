@@ -377,10 +377,20 @@ mod tests {
     /// longer hide an overflow the way it could under the old greedy.
     fn worst_case_player() -> Vec<Section> {
         vec![
-            section("COMBAT", 4, false),
+            // Damage, Attack, Accuracy, Evasion, Mitigation, Power. Sitting
+            // exactly on `MAX_SECTION_ROWS` is safe here in a way it would
+            // not be for SPECIES: COMBAT's row list is fixed-length, so it
+            // cannot grow at runtime and `section_rows` can never trim it
+            // to a "+N more" the player reads as "that's all of them".
+            // Player-only — a program's COMBAT stays at 4, because the
+            // program page's clearance sweep has no room for a fifth row.
+            section("COMBAT", MAX_SECTION_ROWS, false),
             section("PROGRESSION", 4, false),
             section("PERKS", MAX_SECTION_ROWS, false),
             section("PARTY", 5, false),
+            // Credits, Portal Fragments, difficulty, cycle, contracts —
+            // fixed-length like COMBAT, and one row under the cap.
+            section("RUN", 5, false),
             section("EQUIPMENT", 3, false),
             section("ROUTINES", 6, false),
         ]

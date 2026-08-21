@@ -8,7 +8,8 @@ use super::*;
 use feral_processes_engine::components::TaskKind;
 use feral_processes_engine::species::{AffinityClass, MoveDef};
 use feral_processes_engine::{
-    ManifestEquipSlot, ManifestSubject, ManifestView, PlayerManifest, ProgramManifest,
+    DifficultyMode, ManifestEquipSlot, ManifestSubject, ManifestView, PlayerManifest,
+    ProgramManifest,
 };
 
 /// How big the header glyph is drawn, relative to the UI title size — enough
@@ -294,14 +295,29 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
 /// count or a wrong order, and a fixture that omits a box passes every
 /// test while the real page still doesn't fit.
 fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
+    let mut combat = vec![
+        stat("Damage", view.damage.clone()),
+        stat("Attack", view.atk.to_string()),
+    ];
+    // The to-hit half of a fight, on the player's page alone. Not a
+    // judgement that a program's odds matter less — the program page's
+    // worst case clears its footer by 17.3px against a 10px floor, so one
+    // more row anywhere on it overflows at 1280x720. `ManifestView` carries
+    // both figures for both subjects precisely so restoring these two rows
+    // there is a layout change and not a data change.
+    //
+    // One decimal because both are halves: `ACCURACY_PER_LEVEL` is 0.5, so
+    // a level-1 player reads 11.5 and an integer would quote a number the
+    // attack roll does not use.
+    if matches!(&view.subject, ManifestSubject::Player(_)) {
+        combat.push(stat("Accuracy", format!("{:.1}", view.accuracy)));
+        combat.push(stat("Evasion", format!("{:.1}", view.evasion)));
+    }
+    combat.push(stat("Mitigation", format!("{}%", view.mitigation)));
+    combat.push(stat("Power", view.power.to_string()));
     let mut sections = vec![Section {
         title: "COMBAT",
-        rows: section_rows(vec![
-            stat("Damage", view.damage.clone()),
-            stat("Attack", view.atk.to_string()),
-            stat("Mitigation", format!("{}%", view.mitigation)),
-            stat("Power", view.power.to_string()),
-        ]),
+        rows: section_rows(combat),
         full_width: false,
     }];
     match &view.subject {
@@ -374,6 +390,22 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
             full_width: false,
         });
     }
+    // What this run holds, as opposed to what the player *is*. Credits and
+    // Portal Fragments are `ItemDef::banked` pools and so sit outside the
+    // inventory PROGRESSION's cargo row counts — which is why that row said
+    // nothing about either, and why they are here rather than beside it.
+    //
+    // Trace is deliberately absent: `render/stack.rs` already draws it, and
+    // it is underground-only, so a second reading here would be a duplicate
+    // that is blank most of the time.
+    let run = vec![
+        stat("Credits", p.credits.to_string()),
+        stat("Portal Fragments", p.portal_fragments.to_string()),
+        stat("Difficulty", difficulty_label(p.difficulty)),
+        stat("Cycle", p.cycle.to_string()),
+        stat("Contracts", p.active_contracts.to_string()),
+    ];
+
     if !p.party.is_empty() {
         sections.push(Section {
             title: "PARTY",
@@ -393,6 +425,25 @@ fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
             ),
             full_width: false,
         });
+    }
+
+    sections.push(Section {
+        title: "RUN",
+        rows: section_rows(run),
+        full_width: false,
+    });
+}
+
+/// The word the difficulty picker uses, so the sheet and the screen that set
+/// the mode cannot name it two ways.
+///
+/// Exhaustive on purpose: a third mode must decide how it reads here before
+/// it compiles, the argument `render/stack.rs`'s `cell_mark` makes about a
+/// new `CellKind`.
+fn difficulty_label(mode: DifficultyMode) -> String {
+    match mode {
+        DifficultyMode::Permadeath => "Permadeath".to_string(),
+        DifficultyMode::Forgiving => "Forgiving".to_string(),
     }
 }
 
@@ -876,6 +927,8 @@ mod tests {
             mitigation: 5,
             damage: "3–7".to_string(),
             power: 15,
+            accuracy: 12.5,
+            evasion: 9.5,
             status_effect: None,
             routines: vec![feral_processes_engine::RoutineSlotView {
                 index: 0,
@@ -1082,5 +1135,182 @@ mod tests {
                 drawn - room
             );
         });
+    }
+
+    /// A player with nothing optional set — no perks, no party — so a test
+    /// naming a box is naming one this fixture actually produces.
+    fn plain_player() -> PlayerManifest {
+        PlayerManifest {
+            power: 60.0,
+            decompiler: 3,
+            perk_points: 1,
+            perks: Vec::new(),
+            position: (4, 9),
+            zone: 2,
+            pet_count: 1,
+            pet_capacity: 4,
+            cargo_used: 12,
+            party: Vec::new(),
+            credits: 250,
+            portal_fragments: 7,
+            difficulty: DifficultyMode::Permadeath,
+            cycle: 4310,
+            active_contracts: 2,
+        }
+    }
+
+    fn player_view(player: PlayerManifest) -> ManifestView {
+        ManifestView {
+            entity: Entity::PLACEHOLDER,
+            name: "You".to_string(),
+            glyph: '@',
+            color: GlyphColor::White,
+            level: Some(6),
+            xp: Some((40, 100)),
+            hp: 30,
+            max_hp: 40,
+            atk: 9,
+            mitigation: 12,
+            damage: "4–9".to_string(),
+            power: 44,
+            accuracy: 14.0,
+            evasion: 11.5,
+            status_effect: None,
+            routines: Vec::new(),
+            equipment: Vec::new(),
+            subject: ManifestSubject::Player(player),
+        }
+    }
+
+    fn stat_value<'a>(section: &'a Section, label: &str) -> Option<&'a str> {
+        section.rows.iter().find_map(|r| match r {
+            SectionRow::Stat(l, v) if l == label => Some(v.as_str()),
+            _ => None,
+        })
+    }
+
+    fn titled<'a>(sections: &'a [Section], title: &str) -> &'a Section {
+        sections
+            .iter()
+            .find(|s| s.title == title)
+            .unwrap_or_else(|| panic!("the page emits a {title} box"))
+    }
+
+    /// Both halves in one test on purpose. The player half alone passes
+    /// against a version that pushes the two rows unconditionally, and that
+    /// version overflows the program page at 1280x720 — where the fixture in
+    /// `manifest_layout` would catch it only if someone remembered to widen
+    /// `worst_case_program` to match.
+    #[test]
+    fn the_to_hit_pair_is_on_the_player_page_and_not_the_program_page() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            21,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let player = sections_for(&game, &player_view(plain_player()));
+        let combat = titled(&player, "COMBAT");
+        assert_eq!(stat_value(combat, "Accuracy"), Some("14.0"));
+        assert_eq!(
+            stat_value(combat, "Evasion"),
+            Some("11.5"),
+            "one decimal, or a stat sheet quotes a number the attack roll              does not use"
+        );
+        assert_eq!(
+            combat.rows.len(),
+            MAX_SECTION_ROWS,
+            "COMBAT sits exactly on the cap, which is safe only while its              row list stays fixed-length"
+        );
+
+        let program = sections_for(&game, &program_view(plain_program(14, 12), Vec::new()));
+        let combat = titled(&program, "COMBAT");
+        assert_eq!(combat.rows.len(), 4);
+        assert_eq!(stat_value(combat, "Accuracy"), None);
+        assert_eq!(
+            stat_value(combat, "Evasion"),
+            None,
+            "the program page has 17.3px of clearance at 1280x720 against a              10px floor — one more row anywhere on it overflows"
+        );
+    }
+
+    #[test]
+    fn the_run_box_says_what_the_run_holds() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            22,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let sections = sections_for(&game, &player_view(plain_player()));
+        let run = titled(&sections, "RUN");
+        assert_eq!(stat_value(run, "Credits"), Some("250"));
+        assert_eq!(stat_value(run, "Portal Fragments"), Some("7"));
+        assert_eq!(
+            stat_value(run, "Difficulty"),
+            Some("Permadeath"),
+            "the sheet has to use the word the difficulty picker uses"
+        );
+        assert_eq!(stat_value(run, "Cycle"), Some("4310"));
+        assert_eq!(stat_value(run, "Contracts"), Some("2"));
+        assert_eq!(run.rows.len(), 5, "one row under the cap, and no note");
+    }
+
+    /// The player's counterpart to
+    /// `sections_for_emits_moves_before_a_programs_equipment_and_routines`.
+    /// `manifest_layout::tests::worst_case_player` is a hand-written mirror
+    /// of this shape, and a fixture that has drifted from what the renderer
+    /// emits passes the clearance sweep while the real page overflows — the
+    /// exact regression that file exists to catch.
+    #[test]
+    fn the_fullest_player_page_emits_the_boxes_its_layout_fixture_models() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            23,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let mut player = plain_player();
+        player.perks = vec![("Obfuscation".to_string(), 2)];
+        player.party = vec![feral_processes_engine::CompanionInfo {
+            entity: Entity::PLACEHOLDER,
+            name: "Scrapper".to_string(),
+            hp: 10,
+            max_hp: 10,
+            atk: 4,
+            mitigation: 2,
+            power: 12,
+            status: None,
+            ability: "priority_boost".to_string(),
+            gear: String::new(),
+        }];
+        let mut view = player_view(player);
+        view.equipment = vec![worn("Weapon")];
+        view.routines = vec![feral_processes_engine::RoutineSlotView {
+            index: 0,
+            ability: None,
+            name: "(empty)".to_string(),
+            description: String::new(),
+        }];
+
+        let titles: Vec<&str> = sections_for(&game, &view).iter().map(|s| s.title).collect();
+        assert_eq!(
+            titles,
+            vec![
+                "COMBAT",
+                "PROGRESSION",
+                "PERKS",
+                "PARTY",
+                "RUN",
+                "EQUIPMENT",
+                "ROUTINES",
+            ],
+        );
     }
 }

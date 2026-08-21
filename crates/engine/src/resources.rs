@@ -517,6 +517,35 @@ pub struct ActiveContracts {
 #[derive(Resource, Default)]
 pub struct WorkOrders(pub Vec<crate::game::base::work_orders::WorkOrder>);
 
+/// How many posts the queue asked for last tick, against how many staff the
+/// base had to fill them.
+///
+/// **Cached rather than derived on demand**, for `Platform`'s radius reason:
+/// both figures live inside `schedule_base_labour`, which is `&mut self` and
+/// has side effects — `settle_orders` drops a completed order and announces
+/// a stall — so a screen cannot ask for them by calling it. It is written
+/// once a tick, before the cut to `staff.len()`, and read from `&self`.
+///
+/// Not saved: it is rewritten on the next tick either way, and a figure
+/// restored from a save would describe a base that has since changed.
+#[derive(Resource, Default, Clone, Copy)]
+pub struct LabourDemand {
+    /// Posts the queue, the standing jobs and the dig plan asked for
+    /// together — what the scheduler wanted *before* it cut the list to the
+    /// bodies it had.
+    pub wanted: usize,
+    pub staff: usize,
+}
+
+impl LabourDemand {
+    /// How many bodies short the base is, and the one definition of it — the
+    /// screen draws its header off this rather than subtracting the two
+    /// fields itself.
+    pub fn shortfall(&self) -> usize {
+        self.wanted.saturating_sub(self.staff)
+    }
+}
+
 /// Achievements earned since the last time anyone wrote `profile.ron`.
 ///
 /// The engine decides what has been earned and app-core owns the path, so

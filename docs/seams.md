@@ -2965,6 +2965,58 @@ three occasions where a shifted stream silently rewrote a seeded test in an
 unrelated file, and a milling draw taken every tick for every idle program
 would shift it harder than anything else in the game.
 
+### How short of bodies the base is, is a cached figure taken before the cut
+
+**`resources::LabourDemand` holds two `usize`s written once a tick by
+`schedule_base_labour`: how many posts the queue asked for, and how many
+staff there were to fill them.** `Game::labour_demand` reads it back; the
+work order screen draws a header off it, and says nothing when the
+shortfall is zero.
+
+**It is written before `wanted.truncate(staff.len())`, and that is the
+whole seam.** The figure the player needs is the one the cut throws away —
+the posts that fall off the end vanish in silence, which is why a base with
+three running machines and two programs shows "no one" on the third and
+nothing anywhere saying why. Recorded after the truncate the number is
+`staff.len()` by construction and the shortfall is *always* zero, so the
+header never draws and the feature is inert while every test that only
+checks the two figures exist stays green. The test that goes red is
+`a_base_short_of_bodies_reports_the_difference`, and the mutation is one
+line moved.
+
+**Cached rather than derived on demand, for `Platform`'s radius reason.**
+Both figures live inside `schedule_base_labour`, which is `&mut self` and
+has side effects — `settle_orders` drops a completed order and announces a
+stall — so a screen cannot ask for them by calling it, and a
+second walk that rebuilt the want list would be the copy that drifts.
+`record_labour_demand` is the one writer for the same reason: two write
+sites taking the two numbers from different points in the tick is how they
+stop describing the same moment.
+
+**The second write site is the `staff.is_empty()` early return**, which is
+a valid quiet state and the one a player is most likely to have the screen
+open on — a base with no roster at all. Left unwritten there the demand
+reads as no wants rather than no bodies, which is the opposite of what
+happened, and the resource would keep whatever the last staffed tick put
+in it. The two early returns above it are deliberately *not* written: a
+game over or a live battle is not a state this screen is reachable from,
+and a stale figure there says nothing wrong to anybody.
+
+**Not saved.** It is rewritten on the next tick either way, so there is no
+`SAVE_FORMAT_VERSION` question — and a figure restored from a save would
+describe a base that has since been rebuilt. It is inserted at both
+constructor doors like `PowerGrid`, so a screen opened on the frame a game
+loads finds an empty demand rather than a missing resource.
+
+**The header is silent at zero on purpose.** It answers "why is nothing
+happening" from the other direction to the state tag: the tag says which
+order has the base's attention, this says whether the base has anyone to
+give it. A line that shows on every visit is a line nobody reads by the
+third one. `labour_header` is a pure function of the demand for
+`work_order_lines`' reason — it is an unwrapped head line, so it is a row
+that can actually run off the popup body, and the width test measures it
+at three digits.
+
 ### A program's role is derived, and there is no "owned but idle" state
 
 **`Game::program_role` is the one derivation of what a program you own is

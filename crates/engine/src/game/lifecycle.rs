@@ -152,6 +152,11 @@ impl Game {
         world.insert_resource(contract_db);
         world.insert_resource(crate::resources::ActiveContracts::default());
         world.insert_resource(crate::resources::WorkOrders::default());
+        // `PowerGrid`'s reason, and the same shape: a per-tick cache with
+        // nothing in the save to restore it from, inserted at both doors so a
+        // screen opened on the frame a game starts or loads finds an empty
+        // demand rather than a missing resource.
+        world.insert_resource(crate::resources::LabourDemand::default());
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on
@@ -414,6 +419,8 @@ impl Game {
             done: data.contracts_done,
         });
         world.insert_resource(crate::resources::WorkOrders(data.work_orders));
+        // See `Game::new`'s copy: both doors, and nothing restores it.
+        world.insert_resource(crate::resources::LabourDemand::default());
         // Empty on purpose in *both* constructors. What has actually been
         // earned is installed afterwards by `install_profile`, which app-core
         // calls on either path; paying for it is a separate call it makes on

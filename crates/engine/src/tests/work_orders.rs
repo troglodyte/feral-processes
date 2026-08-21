@@ -2339,3 +2339,91 @@ fn a_reloaded_stall_is_announced_again() {
         "a reloaded run is told about the break it walked back into"
     );
 }
+
+// ---------------------------------------------------------------------
+// Work order queue, phase 6: how short of bodies the base is
+// ---------------------------------------------------------------------
+
+/// What the scheduler asked for last tick against who it had to give.
+fn demand(game: &Game) -> resources::LabourDemand {
+    game.labour_demand()
+}
+
+/// The healthy case, and the reason the screen says nothing in it: with a
+/// body for every post there is no shortfall to report, and a header that
+/// always shows is a header nobody reads.
+#[test]
+fn a_base_with_bodies_to_spare_is_short_of_none() {
+    let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, _press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    hire(&mut game, 4);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+
+    game.tick();
+
+    let demand = demand(&game);
+    assert_eq!(
+        demand.wanted, 3,
+        "the whole line is running and wants a body"
+    );
+    assert_eq!(demand.staff, 4);
+    assert_eq!(demand.shortfall(), 0);
+}
+
+/// The case the header exists for. `schedule_base_labour` cuts its want
+/// list to `staff.len()` and the posts that fall off the end vanish
+/// silently — the screen says "no one" per machine but never says how many
+/// bodies short the base actually is.
+#[test]
+fn a_base_short_of_bodies_reports_the_difference() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, _press) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    put_output(&mut game, lathe, "blank_substrate", 6);
+    hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+
+    game.tick();
+
+    let demand = demand(&game);
+    assert_eq!(
+        demand.wanted, 3,
+        "all three machines want a body — the figure is what was asked for, \
+         not what was filled"
+    );
+    assert_eq!(demand.staff, 2);
+    assert_eq!(demand.shortfall(), 1, "the Disk Press goes unstaffed");
+}
+
+/// The quiet state a player is most likely to have the screen open on, and
+/// the one `schedule_base_labour` early-returns out of before it ever
+/// reaches the cut: an empty roster reports the queue's wants against zero
+/// rather than reading as no wants at all.
+#[test]
+fn a_base_with_nobody_in_it_reports_its_wants_against_zero() {
+    let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
+        .unwrap();
+
+    game.tick();
+
+    assert!(
+        game.base_staff().is_empty(),
+        "precondition: nobody is on the roster"
+    );
+    let demand = demand(&game);
+    assert_eq!(
+        demand.wanted, 1,
+        "the top of the line wants a body on an empty base"
+    );
+    assert_eq!(demand.staff, 0);
+    assert_eq!(demand.shortfall(), 1);
+}

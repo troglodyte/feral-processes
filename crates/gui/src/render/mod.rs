@@ -661,7 +661,9 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             painter,
             m,
         ),
-        Mode::WorkOrders => draw_work_orders(&work_orders, selected, painter, m),
+        Mode::WorkOrders => {
+            draw_work_orders(&work_orders, game.labour_demand(), selected, painter, m)
+        }
         Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, painter, m),
         Mode::WorkOrderQuantity => draw_work_order_quantity(
             game,

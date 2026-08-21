@@ -787,6 +787,10 @@ impl Game {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
             // in it, which is a different errand from an order being stuck.
+            // **Recorded on the way out**, because this is the state a
+            // player is most likely to have the screen open on and an
+            // unwritten demand would read as no wants rather than no bodies.
+            self.record_labour_demand(wanted.len(), 0);
             return;
         }
         self.park_idle_staff(&staff);
@@ -814,6 +818,10 @@ impl Game {
         // rule both hold: filling greedily around the postings that already
         // exist would leave a body on a standing job while an order went
         // unworked, because the body was already somewhere "wanted".
+        // **Before the cut, not after.** The whole point of the figure is
+        // the posts that fall off the end here; taken afterwards it is
+        // `staff.len()` by construction and the shortfall is always zero.
+        self.record_labour_demand(wanted.len(), staff.len());
         wanted.truncate(staff.len());
 
         // **The scheduler never takes a body off a post unless it has
@@ -926,6 +934,13 @@ impl Game {
                 TaskKind::Excavate => self.post_digger(worker, post),
             }
         }
+    }
+
+    /// The one writer of `resources::LabourDemand`, so the two figures
+    /// cannot be recorded from different points in the tick.
+    fn record_labour_demand(&mut self, wanted: usize, staff: usize) {
+        *self.world.resource_mut::<resources::LabourDemand>() =
+            resources::LabourDemand { wanted, staff };
     }
 
     /// Whether a program setting off from `from` could actually reach a post
@@ -1392,6 +1407,15 @@ impl Game {
 
     pub fn work_orders(&self) -> &[WorkOrder] {
         &self.world.resource::<resources::WorkOrders>().0
+    }
+
+    /// How many posts the base asked for on the last tick against how many
+    /// staff it had — see `resources::LabourDemand`.
+    ///
+    /// Read rather than derived, because the derivation is
+    /// `schedule_base_labour` itself and a screen must not run it.
+    pub fn labour_demand(&self) -> resources::LabourDemand {
+        *self.world.resource::<resources::LabourDemand>()
     }
 
     /// What every queued order is waiting on, in queue order.

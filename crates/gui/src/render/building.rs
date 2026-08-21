@@ -4,7 +4,7 @@ use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, ProgramRole, WorkOrderRow};
-use feral_processes_engine::{OrderPriority, OrderState, WorkProfile};
+use feral_processes_engine::{LabourDemand, OrderPriority, OrderState, WorkProfile};
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -178,13 +178,18 @@ pub(super) fn draw_staffing_menu(
 /// agree.
 pub(super) fn draw_work_orders(
     rows_in: &[WorkOrderRow],
+    demand: LabourDemand,
     selected: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let mut rows = vec![text_row(
+    let mut rows = Vec::new();
+    if let Some(header) = labour_header(demand) {
+        rows.push(text_row(header));
+    }
+    rows.push(text_row(
         "Enter to queue an order, Backspace to drop one, Esc to close",
-    )];
+    ));
     if rows_in.is_empty() {
         rows.push(text_row("(nothing the base can make yet)"));
     }
@@ -196,6 +201,35 @@ pub(super) fn draw_work_orders(
         rows.extend(lines.map(text_row));
     }
     draw_popup("Work Orders", PopupSize::Large, &rows, painter, m);
+}
+
+/// How many bodies short the base is, or `None` when it has enough.
+///
+/// **Silent when there is no shortfall.** The figure answers "why is
+/// nothing happening" from the other direction to `state_tag`: the tag says
+/// which order has the base's attention, this says whether the base has
+/// anyone to give it. A line that shows on every visit is a line nobody
+/// reads by the third one, and a base with bodies to spare has nothing to
+/// explain.
+///
+/// A pure function of the demand for `work_order_lines`' reason — it is a
+/// head line, which is to say an unwrapped one, so it is the row on this
+/// screen that can actually run off the body.
+fn labour_header(demand: LabourDemand) -> Option<String> {
+    let short = demand.shortfall();
+    if short == 0 {
+        return None;
+    }
+    // **"post", not "machine".** The want list carries standing guard jobs
+    // and dig sites as well as machines, so a shortfall is not always a
+    // machine standing idle and the header must not claim it is.
+    Some(format!(
+        "{} post{} wanted, {} program{} on the base — {short} unfilled",
+        demand.wanted,
+        if demand.wanted == 1 { "" } else { "s" },
+        demand.staff,
+        if demand.staff == 1 { "" } else { "s" },
+    ))
 }
 
 /// One work order's lines: the order itself, then a line per machine in the
@@ -1153,6 +1187,56 @@ mod work_order_tests {
                 );
             }
         }
+
+        // The shortfall header, measured here rather than in its own test
+        // because it is drawn into this same popup and is unwrapped for the
+        // same reason a head line is. Three digits everywhere is past any
+        // base a `max_deployed` roster can field, which is the point: the
+        // row has to fit before anyone finds out where the real ceiling is.
+        let header = labour_header(LabourDemand {
+            wanted: 999,
+            staff: 998,
+        })
+        .expect("a base one body short has something to say");
+        assert!(
+            header.chars().count() <= ROW_WRAP_COLUMNS,
+            "a {} char header runs past the {ROW_WRAP_COLUMNS} column body: {header:?}",
+            header.chars().count()
+        );
+        let wide = labour_header(LabourDemand {
+            wanted: 999,
+            staff: 0,
+        })
+        .expect("a base with nobody in it has something to say");
+        assert!(
+            wide.chars().count() <= ROW_WRAP_COLUMNS,
+            "a {} char header runs past the {ROW_WRAP_COLUMNS} column body: {wide:?}",
+            wide.chars().count()
+        );
+    }
+
+    /// **Silence is the whole design of the header**: it says nothing when
+    /// the base has a body for every post, so a player who never runs short
+    /// never learns to skip a line at the top of this screen. A base with
+    /// no orders and no staff at all is the same answer for the same
+    /// reason — nothing was asked for, so nothing went unfilled.
+    #[test]
+    fn a_base_with_bodies_to_spare_draws_no_shortfall_header() {
+        assert_eq!(
+            labour_header(LabourDemand {
+                wanted: 2,
+                staff: 3
+            }),
+            None
+        );
+        assert_eq!(
+            labour_header(LabourDemand {
+                wanted: 3,
+                staff: 3
+            }),
+            None
+        );
+        assert_eq!(labour_header(LabourDemand::default()), None);
     }
 
     /// The quantity page is prose in a popup with no scroll, and its widest

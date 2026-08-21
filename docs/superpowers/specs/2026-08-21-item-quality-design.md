@@ -279,6 +279,82 @@ current save is at 100, so nothing already on screen gets wider.
 one derivation and every figure on it is a call, so it picks the change up
 through `copy_bonus` for free; only the explicit row is new.
 
+### The category tag carries the quality colour
+
+The `WEP` / `ARM` / `MOD` tag on a list row is painted in a con colour
+derived from the copy's quality. **The tag only** — the rest of the row
+keeps `tier_color`, which already means fusion-then-rarity and must go on
+meaning that.
+
+This is a third colour axis on a row, and it is the one `Row::Item`'s
+`icon` field already argues for: its colour "is deliberately a *second*
+axis from the row's `color`", because the row colour already means
+something else per screen. A tag colour is that same argument for a token
+that is already visually set apart, so the two axes never collide on one
+glyph.
+
+**Direction: the con ramp runs the way it always has.** A green con is
+beneath you and a red con is above you, and an item reads the same way — a
+70% copy is junk you would not stoop for, a 130% copy is above spec.
+Yellow lands on exactly 100, which is what "even con" has always meant.
+
+| Quality | Rung | Reads as |
+| --- | --- | --- |
+| 70–90 | Green | under spec |
+| 95–105 | Yellow | as designed |
+| 110–120 | Orange | above spec |
+| 125–130 | Red | exceptional |
+
+Inverting this — green for good, red for bad — is the other defensible
+choice and is a five-word change to the thresholds if the con reading turns
+out to feel wrong in a session.
+
+Only equipment carries quality, so `USE` / `MAT` / `CUR` tags keep their
+current colour and are unaffected.
+
+**The ladder is shared, not copied.** `game::inspection::difficulty_color`
+spells the four rungs out in an if/else chain today. It and the quality
+read must not each hold their own list of the four `GlyphColor`s — that is
+the "a doc comment claiming to mirror is a call, not a copy" rule, which
+this repo has been bitten by four times. The four rungs become one const
+ladder both index; each keeps its own thresholds, since a power ratio and a
+quality percentage are genuinely different numbers.
+
+The bucketing itself is the engine's, beside `difficulty_color`, returning
+a `GlyphColor` the renderer maps as it already does. Five renderer sites
+build this tag today and an engine-owned rule is what stops them drifting —
+the same argument `Rarity::label` and `Game::copy_name` make.
+
+### The tag becomes a column
+
+Those five sites each `format!` the tag into the middle of the row string
+by hand, e.g.
+
+```rust
+format!("[{shortcut}] {} {}  {}", qty_column(qty), short_label(), copy_name())
+```
+
+so there is no span for a renderer to colour without re-parsing a string it
+just built — which is the anti-pattern this repo avoids everywhere else.
+
+The recommendation is to **lift the tag out of `text` into its own
+`Row::Item` field**, `tag: Option<(String, Color)>`, drawn as a reserved
+column the way `ICON_SLOT` already reserves a slot and paints the glyph
+over it. That turns five hand-formatted insertions into one drawn column,
+which is where the colour can live and is also what makes the width tests
+mean something.
+
+The direct alternative — keep the `format!` and paint over a byte offset
+recorded at build time — was considered and rejected: the offset is only
+knowable at each of the five call sites, so it is the same five-way
+duplication with a subtler failure mode.
+
+**Cost to be paid, not discovered:** the five screens' column layouts shift
+slightly and both popup width tests need re-baselining. `inventory.rs` is
+the awkward one — `inventory_row_lines` returns `Vec<String>` and only its
+head line becomes a `tier_row`, so the tag must be lifted before the wrap
+rather than after it.
+
 ## Balance
 
 `balance_sim` names `Rarity` nowhere, by the documented exclusion that lets
@@ -304,7 +380,10 @@ stream, not a difficulty change.
 - The roll: each term moves the floor in the right direction; the clamp
   holds at both ends; a non-equippable spends no draw.
 - Per-unit rolls: compiling N can produce more than one distinct copy.
-- Both popup width tests, extended to the worst-case name.
+- Both popup width tests, extended to the worst-case name and re-baselined
+  for the tag column.
+- The quality bucketing at every rung boundary, and that 100 lands on the
+  even rung; a non-equipment tag is left uncoloured.
 - Every new test gets the mutation check — delete the fix, watch it fail,
   restore.
 
@@ -316,10 +395,11 @@ stream, not a difficulty change.
 | `engine/game/crafting.rs` | `CraftOrder`, the roll, `craft` signature, `copy_bonus` chain |
 | `engine/game/combat_rewards.rs` | `grant_gear_drop` roll, `copy_name` |
 | `engine/game/catalog.rs` | `best_structure_tier` |
+| `engine/game/inspection.rs` | the shared con ladder + the quality bucketing |
 | `engine/perks.rs` | one appended variant + hook |
 | `engine/tuning.rs` | the band, step, base, spread and per-term constants |
 | `app-core` | the careful-compile keypress and craft dispatch |
-| `gui` | Compile screen row + toggle, gear inspect row, width tests |
+| `gui` | Compile screen row + toggle, gear inspect row, the tag column across five sites, width tests |
 | `assets/perks/` | one new `.ron` |
 
 Two crates plus a save-shape change, so this takes the full spec-and-plan

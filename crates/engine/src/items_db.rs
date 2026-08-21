@@ -89,6 +89,11 @@ pub struct CraftableDef {
     pub requires_structure: Option<StructureId>,
 }
 
+/// How many characters `ItemDef::tag` derives. Two, because the base stock
+/// strip is one row wide and a tag any longer costs a pile off the end of
+/// it — see `Game::base_stock`.
+const TAG_LEN: usize = 2;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemDef {
     pub id: ItemId,
@@ -150,9 +155,44 @@ pub struct ItemDef {
     /// could never fire; see `ItemDb::load_dir`.
     #[serde(default)]
     pub grants: Option<crate::abilities::AbilityId>,
+    /// Overrides the two-letter tag the base stock strip lists this item
+    /// under. `#[serde(default)]` and almost always absent: `ItemDef::tag`
+    /// derives one from the name, so a mod gets a tag for free. Authored
+    /// only where two names would derive the same two letters — the strip
+    /// has room for the tag and nothing else, so two items sharing one is
+    /// a readout that lies about which pile is filling.
+    #[serde(default)]
+    pub abbrev: Option<String>,
 }
 
 impl ItemDef {
+    /// The short tag the base stock strip lists this item under.
+    ///
+    /// Derived rather than authored, for `category`'s reason: a modded item
+    /// gets one without its author adding a field. Initials of the name's
+    /// words, or the first two letters of a one-word name, capped at two
+    /// because the strip's whole point is fitting a base's worth of piles
+    /// on one row. `abbrev` overrides it where a collision needs settling.
+    ///
+    /// Shorter than two letters where the name gives nothing more — a
+    /// one-letter name is a one-letter tag, not a panic.
+    pub fn tag(&self) -> String {
+        if let Some(abbrev) = &self.abbrev {
+            return abbrev.clone();
+        }
+        let mut words = self.name.split_whitespace();
+        let tag: String = match (words.next(), words.next()) {
+            (Some(one), None) => one.chars().take(TAG_LEN).collect(),
+            _ => self
+                .name
+                .split_whitespace()
+                .filter_map(|w| w.chars().next())
+                .take(TAG_LEN)
+                .collect(),
+        };
+        tag.to_uppercase()
+    }
+
     /// Which group this item lists under. Checked in this order because the
     /// first match wins and the one overlap has a right answer: something
     /// both wearable and drinkable belongs in the gear list a player is
@@ -386,6 +426,11 @@ impl ItemDb {
                     // there is nothing for a worn grant to hang off.
                     grants: None,
                     upgrade: None,
+                    // Every disk derives the same family tag, "ED", and that
+                    // is harmless rather than a collision: nothing puts a
+                    // disk into a `Stock`, so no disk can reach the base
+                    // stock strip that tags are for.
+                    abbrev: None,
                 },
             );
         }
@@ -534,6 +579,39 @@ mod tests {
             cat("mat"),
             ItemCategory::Material,
             "an item declaring nothing is salvage, not a panic"
+        );
+    }
+
+    /// The stock strip's tag is derived from the name so a modded item gets
+    /// one without its author adding a field, and authored only where two
+    /// names would derive the same two letters.
+    #[test]
+    fn an_items_tag_is_derived_from_its_name_and_overridable() {
+        let (db, warnings) = load_fixture(&[
+            ("cf.ron", r#"(id: "cf", name: "Core Fragment")"#),
+            ("bip.ron", r#"(id: "bip", name: "Black ICE Pick")"#),
+            ("cr.ron", r#"(id: "cr", name: "Credits")"#),
+            ("x.ron", r#"(id: "x", name: "x")"#),
+            (
+                "rd.ron",
+                r#"(id: "rd", name: "Routine Disk", abbrev: Some("RK"))"#,
+            ),
+        ]);
+        assert!(warnings.is_empty(), "fixtures must load: {warnings:?}");
+
+        let tag = |id: &str| db.get(id).unwrap().tag();
+        assert_eq!(tag("cf"), "CF", "initials of the words");
+        assert_eq!(tag("bip"), "BI", "capped at two letters");
+        assert_eq!(tag("cr"), "CR", "a one-word name takes its first two");
+        assert_eq!(
+            tag("x"),
+            "X",
+            "a one-letter name is one letter, not a panic"
+        );
+        assert_eq!(
+            tag("rd"),
+            "RK",
+            "an authored abbrev wins over the derivation"
         );
     }
 

@@ -1820,3 +1820,58 @@ fn the_manual_binds_the_excavation_plan_key() {
     });
     assert!(says, "no help page binds the m key to the Excavation plan");
 }
+
+/// Two piles cannot share a tag on the base stock strip. The strip is one
+/// row of `[TAG] qty` pairs and carries nothing else — no name, no colour
+/// distinction — so a duplicate tag is a readout that lies about which pile
+/// is filling, and it fails silently: both rows draw, both look right.
+///
+/// `ItemDef::tag` derives from the name, so a collision is a content
+/// accident rather than a code fault, which is why this is a census over the
+/// shipped assets rather than an assertion inside `load_dir`. A mod's own
+/// collision is its author's to settle with `abbrev`; nothing here refuses
+/// their file.
+///
+/// Restricted to what the strip actually lists — `Material` and `Currency`,
+/// the two categories `Game::base_stock` keeps. Etched disks are excluded
+/// through `ItemId::etched_ability`, the existing derivation: every disk
+/// derives the same family tag by construction, and none of them can reach
+/// a `Stock` in the first place.
+#[test]
+fn no_two_shipped_stock_items_share_a_tag() {
+    let game = Game::new(921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::items_db::ItemDb>();
+
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut checked = 0;
+    for def in db.all() {
+        if def.id.etched_ability().is_some() {
+            continue;
+        }
+        if !matches!(
+            def.category(),
+            ItemCategory::Material | ItemCategory::Currency
+        ) {
+            continue;
+        }
+        checked += 1;
+        let tag = def.tag();
+        assert!(
+            !tag.is_empty(),
+            "{} derives an empty stock tag from its name",
+            def.id.as_str()
+        );
+        if let Some(other) = seen.insert(tag.clone(), def.name.clone()) {
+            panic!(
+                "\"{other}\" and \"{}\" both tag as [{tag}] on the stock strip — \
+                 settle it with an `abbrev` on one of them",
+                def.name
+            );
+        }
+    }
+    assert!(
+        checked > 10,
+        "the census walked {checked} stock items, which is too few to be reading \
+         the shipped set at all"
+    );
+}

@@ -24,6 +24,21 @@ any non-finite `taming_potency`, `consume.power`, or
     // to match by hand.
     description: "Restores 25 Power. The staple of staying on the Grid.",
 
+    // Optional; almost always leave it out. The short tag this item is
+    // listed under on the base stock strip, the one-row readout of what the
+    // base's machines and depots are holding. Left out, it is derived from
+    // `name`: the initials of its words, or the first two letters of a
+    // one-word name, uppercased and capped at two characters — "Core
+    // Fragment" becomes `CF`.
+    //
+    // Author one only to settle a collision. The strip carries the tag and
+    // the quantity and nothing else, so two items tagging the same is a
+    // readout that lies about which pile is filling. Only items that reach
+    // a machine or depot buffer are listed, so a weapon or a consumable
+    // never needs one. Nothing refuses a modded collision — the shipped
+    // set is held unique by its own census, and yours is yours to settle.
+    abbrev: Some("DK"),
+
     // Optional; can be left out entirely (defaults to false, ordinary cargo).
     // A banked item is a pool rather than something the player carries, and
     // that one flag carries every consequence:

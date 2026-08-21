@@ -3,5 +3,8 @@
     name: "Routine Disk",
     description: "Blank, and stays blank until you write a routine you know onto it. Installing one burns it for good.",
     value: Some(5),
+    // "RD" derives to Research Data, which is a currency the strip shows far
+    // more often; a disk takes the disk letters instead.
+    abbrev: Some("DK"),
     craftable: Some((cost: [("blank_substrate", 2)], requires_structure: Some("disk_press"))),
 )

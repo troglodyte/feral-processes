@@ -7,6 +7,7 @@
 
 use super::support::*;
 use crate::components::{Memories, Memory, MemorySubject, ProgramId};
+use crate::game::base::work_orders::park_tile;
 use crate::game::memories::Remembered;
 use crate::memories::{MemoryDef, MemoryId, MemorySubjectKind};
 use crate::resources::GameClock;
@@ -1839,7 +1840,7 @@ fn age_is_banded_against_the_defs_own_half_life() {
     // `hard_won` ships a 5,000-tick half-life.
     let half_life = 5_000;
 
-    let mut phrase_at = |game: &mut Game, elapsed: u64| {
+    let phrase_at = |game: &mut Game, elapsed: u64| {
         set_tick(game, 1_000 + elapsed);
         game.memory_report(program)[0].age.clone()
     };
@@ -1980,4 +1981,205 @@ fn reading_the_report_evicts_nothing() {
     assert_eq!(before, 1);
     assert_eq!(after, 1, "the page is a reader, not a sweep");
     assert_eq!(rows.len(), 1, "a faded memory is still one it holds");
+}
+
+// ---------------------------------------------------------------------
+// Phase 5: the one hook
+// ---------------------------------------------------------------------
+
+/// A base with `n` idle programs and a Home to lay the parking ring around,
+/// returned in the order `park_idle_staff` will index them.
+///
+/// Nothing is queued and nothing is deployed but the Home, so every body
+/// here stays idle for as long as the test runs — which is the only state
+/// the parking rejection is ever read in.
+fn a_base_with_idle_staff(game: &mut Game, n: usize) -> (Position, Vec<Entity>) {
+    place_home(game);
+    let mut staff: Vec<Entity> = (0..n).map(|_| spawn_tamed(game, 10, 3)).collect();
+    staff.sort();
+    let home_entity = find_home(game).expect("the fixture just placed one");
+    let home = *game.world.get::<Position>(home_entity).unwrap();
+    (home, staff)
+}
+
+/// Where the body at `index` would be parked on the tick that is about to
+/// run — the clock has not moved yet, and `park_idle_staff` reads it as it
+/// stands.
+fn next_park_tile(game: &Game, home: Position, index: usize) -> Position {
+    park_tile(home, index, game.current_tick())
+}
+
+/// **The hook.** A program that was left stranded on a tile does not get
+/// parked back onto it.
+///
+/// The grudge is implanted at full strength against the very tile the ring
+/// is about to offer, so the only thing standing between the body and that
+/// tile is the rejection.
+#[test]
+fn a_program_is_not_parked_on_a_tile_it_holds_a_grudge_against() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
+    let shunned = next_park_tile(&game, home, 0);
+    implant(
+        &mut game,
+        staff[0],
+        "stranded_at",
+        MemorySubject::BaseTile {
+            x: shunned.x,
+            y: shunned.y,
+        },
+    );
+
+    game.tick();
+
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert_ne!(
+        (pos.x, pos.y),
+        (shunned.x, shunned.y),
+        "the corner it was left standing in is the one corner it will not take"
+    );
+}
+
+/// The control the test above is worthless without: with no grudge the same
+/// fixture parks the same body on the same tile. A rejection that fired on
+/// every candidate — or a `park_idle_staff` broken outright — passes the
+/// first test and fails this one.
+#[test]
+fn a_program_with_no_grudge_is_parked_on_that_same_tile() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_park_tile(&game, home, 0);
+
+    game.tick();
+
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        (candidate.x, candidate.y),
+        "precondition for the sibling test: this is the tile the ring offers"
+    );
+}
+
+/// A grudge against *somewhere else* is not a grudge against here. The
+/// subject is compared, not merely counted — a hook that read `morale`
+/// instead of `opinion_of` would keep the body off every tile in the base
+/// the moment anything bad ever happened to it.
+#[test]
+fn a_grudge_against_another_tile_does_not_move_a_program() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_park_tile(&game, home, 0);
+    implant(
+        &mut game,
+        staff[0],
+        "stranded_at",
+        MemorySubject::BaseTile {
+            x: candidate.x + 40,
+            y: candidate.y + 40,
+        },
+    );
+
+    game.tick();
+
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        (candidate.x, candidate.y),
+        "an avoided tile is one tile, not the whole base"
+    );
+}
+
+/// **It is a threshold and not a flag.** The same memory, faded past
+/// `MEMORY_AVOIDANCE_THRESHOLD`, no longer keeps the body away — which is
+/// the whole of what makes this a grudge that heals rather than a tile
+/// blacklisted for the run.
+///
+/// **The candidate must not move out from under the grudge while it
+/// fades**, or this is a second copy of the wrong-tile test above. The ring
+/// returns to the same tile every `IDLE_STAFF_STEP_TICKS * 8 *
+/// IDLE_STAFF_RING_TILES` ticks, so the clock is advanced by a whole number
+/// of those periods, and the precondition below says so out loud — a
+/// retuned ring or step must fail this test rather than quietly hollow it
+/// out. That is not hypothetical: it *was* hollow, and a mutation swapping
+/// the threshold for a bare `< 0.0` caught it passing.
+#[test]
+fn a_faded_grudge_stops_keeping_a_program_away() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_park_tile(&game, home, 0);
+    let subject = MemorySubject::BaseTile {
+        x: candidate.x,
+        y: candidate.y,
+    };
+    implant(&mut game, staff[0], "stranded_at", subject.clone());
+
+    // Two half-lives, rounded up to a whole ring period. Read off the def
+    // rather than hardcoded: the number that matters is how far the grudge
+    // has decayed, and that is authored in the `.ron`.
+    let half_life = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .get(&MemoryId::from("stranded_at"))
+        .expect("the fixture assets ship it")
+        .half_life;
+    let period =
+        crate::tuning::IDLE_STAFF_STEP_TICKS * 8 * crate::tuning::IDLE_STAFF_RING_TILES as u64;
+    let elapsed = period * (2 * half_life / period + 1);
+    let faded = game.current_tick() + elapsed;
+    set_tick(&mut game, faded);
+
+    assert_eq!(
+        next_park_tile(&game, home, 0),
+        candidate,
+        "precondition: the ring is offering the tile the grudge is about"
+    );
+    let opinion = game.opinion_of(staff[0], &subject);
+    assert!(
+        opinion > crate::tuning::MEMORY_AVOIDANCE_THRESHOLD && opinion < 0.0,
+        "precondition: faded under the threshold but still a live grudge, got {opinion}"
+    );
+
+    game.tick();
+
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        (candidate.x, candidate.y),
+        "a memory this light is not worth walking around"
+    );
+}
+
+/// The deleting-`assets/memories/` property at the hook: the store holds
+/// what it held, nothing can be weighed, and parking behaves exactly as it
+/// did before the feature shipped.
+#[test]
+fn an_empty_database_leaves_the_parking_hook_inert() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_park_tile(&game, home, 0);
+    implant(
+        &mut game,
+        staff[0],
+        "stranded_at",
+        MemorySubject::BaseTile {
+            x: candidate.x,
+            y: candidate.y,
+        },
+    );
+    game.world
+        .insert_resource(crate::memories::MemoryDb::default());
+
+    game.tick();
+
+    assert_eq!(
+        memories_of(&game, staff[0]).len(),
+        1,
+        "the store is intact — nothing purges it"
+    );
+    let pos = *game.world.get::<Position>(staff[0]).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        (candidate.x, candidate.y),
+        "with no catalogue there is no grudge to read"
+    );
 }

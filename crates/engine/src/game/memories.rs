@@ -375,13 +375,6 @@ impl crate::Game {
     ///
     /// A subject nothing has happened about sums an empty set and answers
     /// zero, which is a real answer and not a missing one.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the parking hook that asks this question is phase 5"
-        )
-    )]
     pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
         self.memory_sum(who, |m| &m.subject == subject)
     }

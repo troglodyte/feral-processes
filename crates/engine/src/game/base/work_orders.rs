@@ -29,6 +29,7 @@ use crate::game::base::hauling;
 use crate::game::base::stock;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
+use crate::tuning::MEMORY_AVOIDANCE_THRESHOLD;
 use crate::*;
 
 /// Which band an order was filed in, and so where in the queue it landed.
@@ -1081,6 +1082,31 @@ impl Game {
                 continue;
             }
             if !self.world.resource::<BaseGrid>().walkable(tile.x, tile.y) {
+                continue;
+            }
+            // The third rejection, and the only one that is about the body
+            // rather than about the ground: a program left stranded on a
+            // tile holds it against that tile, and will not be stood back
+            // on it while the grudge is worth anything.
+            //
+            // `opinion_of` and not `morale` — this is a question about one
+            // corner of the base, and the sum over everything would keep a
+            // program that has had a bad run off every tile at once. The
+            // comparison is signed, so a tile it feels nothing about, and a
+            // tile it feels *well* about, both pass.
+            //
+            // Costs nothing when it fires: a skipped candidate leaves the
+            // body exactly where it was standing, which is already what
+            // both rejections above do, and the ring offers a different
+            // tile on the next step.
+            if self.opinion_of(
+                worker,
+                &components::MemorySubject::BaseTile {
+                    x: tile.x,
+                    y: tile.y,
+                },
+            ) < MEMORY_AVOIDANCE_THRESHOLD
+            {
                 continue;
             }
             if let Some(mut pos) = self.world.get_mut::<Position>(worker) {

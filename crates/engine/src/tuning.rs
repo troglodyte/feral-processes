@@ -2729,6 +2729,24 @@ pub const MEMORY_FORGET_THRESHOLD: f32 = 0.5;
 /// that absorbed the blow is armour that stopped the scar.
 pub const MEMORY_MAUL_FRACTION: f32 = 0.35;
 
+/// Opinion of a base tile at or below which an idle program refuses to be
+/// parked there — `park_idle_staff`'s third rejection, beside a tile a
+/// `Structure` stands on and a tile `BaseGrid` calls unwalkable.
+///
+/// **Signed, not a magnitude.** The comparison is `opinion_of(..) <` this,
+/// so a fondness never triggers it and a grudge has to be a real one. It is
+/// deliberately *not* pinned to `stranded_at`'s valence: the question the
+/// hook asks is whether a program holds anything against that corner, not
+/// whether one particular memory is in the store, and a second negative
+/// `BaseTile` def must reach it without editing this line.
+///
+/// At the shipped `stranded_at` — valence -6.0, half-life 3000 — a single
+/// stranding keeps a program off that tile for exactly one half-life, and a
+/// second one inside that window roughly doubles the reach. A rejected
+/// candidate costs nothing: the program holds its ground for that beat and
+/// the ring offers it a different tile on the next step.
+pub const MEMORY_AVOIDANCE_THRESHOLD: f32 = -3.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;

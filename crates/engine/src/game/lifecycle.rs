@@ -77,6 +77,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             environment: environment_db,
+            memories: memory_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -109,6 +110,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
+        world.insert_resource(memory_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -306,6 +308,7 @@ impl Game {
             contracts: contract_db,
             descriptions: description_db,
             environment: environment_db,
+            memories: memory_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -352,6 +355,7 @@ impl Game {
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
+        world.insert_resource(memory_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1532,6 +1536,7 @@ struct AssetDbs {
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
     environment: crate::environment::EnvironmentDb,
+    memories: crate::memories::MemoryDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
     structures: StructureDb,
@@ -1623,6 +1628,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (contracts, contract_warnings) =
         crate::contracts::ContractDb::load_dir(&assets_dir.join("contracts"))?;
     warnings.extend(contract_warnings);
+    // Same absent-is-silent rule again — see `MemoryDb`'s own doc. An empty
+    // catalogue makes `Game::remember` a no-op and every reader zero, which
+    // is the pre-memory game.
+    let (memories, memory_warnings) =
+        crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
+    warnings.extend(memory_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -1654,6 +1665,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         contracts,
         descriptions,
         environment,
+        memories,
         nemesis,
         species,
         structures,

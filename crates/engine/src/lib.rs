@@ -15,6 +15,7 @@ mod game;
 pub mod help;
 pub mod items;
 pub mod items_db;
+pub mod memories;
 pub mod nemesis;
 pub mod perks;
 pub mod policy;

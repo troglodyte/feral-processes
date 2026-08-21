@@ -1,0 +1,11 @@
+// The longest-lived of the four: what nearly ended you is not forgotten in
+// a hurry.
+(
+    id: "mauled_by",
+    name: "Mauled by",
+    blurb: "One hit and there was almost nothing left of me.",
+    valence: -8.0,
+    half_life: 6000,
+    subject: Species,
+    strike_cap: 4,
+)

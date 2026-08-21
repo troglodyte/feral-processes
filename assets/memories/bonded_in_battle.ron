@@ -1,0 +1,10 @@
+// The one memory a program forms about another program.
+(
+    id: "bonded_in_battle",
+    name: "Fought beside",
+    blurb: "We came out the other side of that one together.",
+    valence: 4.0,
+    half_life: 4000,
+    subject: Program,
+    strike_cap: 5,
+)

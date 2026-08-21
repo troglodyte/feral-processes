@@ -1875,3 +1875,57 @@ fn no_two_shipped_stock_items_share_a_tag() {
          the shipped set at all"
     );
 }
+
+/// The memory-catalogue census, over the **real** `assets/memories/` rather
+/// than a fixture. `MemoryDb::load_dir` refuses nothing beyond a file that
+/// will not parse — a mod's def is never turned away for being nonsense — so
+/// this is what holds the shipped catalogue to what a memory has to be for
+/// `Memory::intensity` to mean anything.
+#[test]
+fn every_shipped_memory_def_is_well_formed() {
+    use crate::memories::MemoryDb;
+
+    let dir = test_assets_dir().join("memories");
+    let (db, warnings) = MemoryDb::load_dir(&dir).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "the shipped catalogue must load clean: {warnings:?}"
+    );
+
+    // Against the file count rather than against a set of ids, because the db
+    // is keyed by id: two files claiming one id collapse into a single entry
+    // and nothing else in the load would say so.
+    let files = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("ron"))
+        .count();
+    assert!(
+        files > 0,
+        "the census must actually walk assets/memories, or it passes vacuously"
+    );
+    assert_eq!(
+        db.all().count(),
+        files,
+        "two shipped files claim one memory id, so one of them is unreachable"
+    );
+
+    for def in db.all() {
+        let id = def.id.as_str();
+        assert!(!def.name.is_empty(), "{id} has no name for a screen row");
+        assert!(!def.blurb.is_empty(), "{id} has no blurb");
+        assert!(
+            def.valence.is_finite() && def.valence != 0.0,
+            "{id} has a valence of {}, so remembering it would be worth nothing",
+            def.valence
+        );
+        assert!(
+            def.half_life > 0,
+            "{id} has a half_life of 0, which divides by zero in intensity"
+        );
+        assert!(
+            def.strike_cap >= 1,
+            "{id} has a strike_cap of 0, so every strike of it is worth nothing"
+        );
+    }
+}

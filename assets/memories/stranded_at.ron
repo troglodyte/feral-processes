@@ -1,0 +1,10 @@
+// A grudge against one tile of the base, not against the work.
+(
+    id: "stranded_at",
+    name: "Left stranded here",
+    blurb: "Nothing ever reaches this corner.",
+    valence: -6.0,
+    half_life: 3000,
+    subject: BaseTile,
+    strike_cap: 3,
+)

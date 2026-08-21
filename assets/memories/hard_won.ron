@@ -1,0 +1,10 @@
+// About nothing in particular — the fight itself, not anyone in it.
+(
+    id: "hard_won",
+    name: "Won against the odds",
+    blurb: "We had no business walking away from that.",
+    valence: 5.0,
+    half_life: 5000,
+    subject: Nothing,
+    strike_cap: 3,
+)

@@ -302,6 +302,11 @@ impl Game {
         // lines down — see `mark_nemeses`'s own doc for why that window is
         // narrow rather than a preference.
         self.mark_nemeses();
+        // Beside `mark_nemeses` and inside the same window, because the two
+        // are the same event read from opposite ends: what a fight the party
+        // lost leaves standing, and what a fight it won leaves in the
+        // survivors. Both need `BattleState`, which goes a few lines down.
+        self.form_victory_memories();
         // Deliberately *not* pruned here — see `prune_battle_narration`.
         // The decisive round has not been revealed yet at this point, so
         // deleting it now is deleting it before anyone can read it.

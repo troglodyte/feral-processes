@@ -1325,3 +1325,173 @@ fn the_party_side_of_the_comparison_counts_the_player() {
         "a party is not outmatched merely because the player is one body in it"
     );
 }
+
+/// A fight the party wins, torn down. The groups are emptied by hand because
+/// an emptied roster **is** the engine's definition of a win — the same read
+/// `settle_rewards` and the `FightEnd` record make — and hand-emptying it
+/// states that in one line where playing the fight out would take a seeded
+/// stream and a dozen rounds.
+fn win_the_fight(game: &mut Game) {
+    game.world.resource_mut::<BattleState>().groups.clear();
+    let player = game.player_entity();
+    game.end_battle(player, None);
+}
+
+/// Two companions, in the party, owned through the roster barrier.
+fn two_companions(game: &mut Game) -> (Entity, Entity) {
+    let a = adopt(game, "scrapper", 4);
+    let b = adopt(game, "glitch", 5);
+    join_party(game, a);
+    join_party(game, b);
+    (a, b)
+}
+
+fn bonded_subjects(game: &Game, who: Entity) -> Vec<MemorySubject> {
+    subjects_of(game, who, "bonded_in_battle")
+}
+
+/// Each survivor remembers the *other*, and neither remembers itself.
+#[test]
+fn winning_together_bonds_each_survivor_to_the_others() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (a, b) = two_companions(&mut game);
+    let (id_a, id_b) = (id_of(&game, a), id_of(&game, b));
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![hostile]);
+
+    win_the_fight(&mut game);
+
+    assert_eq!(
+        bonded_subjects(&game, a),
+        vec![MemorySubject::Program(id_b)]
+    );
+    assert_eq!(
+        bonded_subjects(&game, b),
+        vec![MemorySubject::Program(id_a)]
+    );
+}
+
+/// The player is never a subject and never a holder — not by a `Player`
+/// check, but because the player carries no `ProgramId` at all.
+#[test]
+fn the_player_is_neither_bonded_to_nor_bonded_by() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = adopt(&mut game, "scrapper", 4);
+    join_party(&mut game, companion);
+    let player = game.player_entity();
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    insert_battle(&mut game, player, vec![hostile]);
+
+    win_the_fight(&mut game);
+
+    assert!(
+        bonded_subjects(&game, companion).is_empty(),
+        "a lone companion has nobody to have fought beside"
+    );
+    assert!(game.world.get::<Memories>(player).is_none());
+}
+
+/// A companion that died winning is not bonded to: `bonded_in_battle` is
+/// what *surviving* together is worth.
+///
+/// The hook is called directly rather than through `end_battle`, which reaps
+/// the dead out of `Party` a few lines above it — through that door the rule
+/// holds by another function's ordering and the test cannot tell whether this
+/// one states it at all.
+#[test]
+fn a_companion_that_died_winning_is_not_bonded_to() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (survivor, fallen) = two_companions(&mut game);
+    let id_fallen = id_of(&game, fallen);
+    game.world.get_mut::<Stats>(fallen).unwrap().hp = 0;
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![hostile]);
+    game.world.resource_mut::<BattleState>().groups.clear();
+
+    game.form_victory_memories();
+
+    assert!(
+        !bonded_subjects(&game, survivor).contains(&MemorySubject::Program(id_fallen)),
+        "the survivor bonded with a program that did not survive"
+    );
+    assert!(
+        memories_of(&game, fallen).is_empty(),
+        "and the fallen came away with nothing"
+    );
+}
+
+/// Fleeing leaves the groups standing, and that is the whole gate — a hook
+/// without it passes every won-fight test above.
+#[test]
+fn a_fight_the_party_jacks_out_of_forms_nothing() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (a, b) = two_companions(&mut game);
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    let player = game.player_entity();
+    insert_battle(&mut game, player, vec![hostile]);
+    game.world.resource_mut::<BattleState>().outmatched = true;
+
+    game.end_battle(player, None);
+
+    assert!(
+        memories_of(&game, a).is_empty(),
+        "{:?}",
+        memories_of(&game, a)
+    );
+    assert!(memories_of(&game, b).is_empty());
+}
+
+/// Both halves, one test: a win against the odds is worth remembering and an
+/// even one is not. The flag is `begin_battle`'s verdict, set here by hand
+/// because what is under test is the hook that reads it.
+#[test]
+fn a_win_against_the_odds_is_remembered_and_an_even_one_is_not() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = adopt(&mut game, "scrapper", 4);
+    join_party(&mut game, companion);
+    let player = game.player_entity();
+    let hostile = hostile_of(&mut game, "glitch", 0);
+
+    insert_battle(&mut game, player, vec![hostile]);
+    win_the_fight(&mut game);
+    assert!(
+        subjects_of(&game, companion, "hard_won").is_empty(),
+        "an even fight is just a fight"
+    );
+
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    insert_battle(&mut game, player, vec![hostile]);
+    game.world.resource_mut::<BattleState>().outmatched = true;
+    win_the_fight(&mut game);
+
+    assert_eq!(
+        subjects_of(&game, companion, "hard_won"),
+        vec![MemorySubject::Nothing]
+    );
+}
+
+/// A second win beside the same program reinforces the one entry rather than
+/// forking it — `remember`'s rule, reached through the trigger.
+#[test]
+fn winning_twice_together_reinforces_one_bond() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (a, b) = two_companions(&mut game);
+    let player = game.player_entity();
+
+    for _ in 0..2 {
+        let hostile = hostile_of(&mut game, "glitch", 0);
+        insert_battle(&mut game, player, vec![hostile]);
+        win_the_fight(&mut game);
+    }
+
+    let held = memories_of(&game, a);
+    let bonds: Vec<&Memory> = held
+        .iter()
+        .filter(|m| m.def == MemoryId::from("bonded_in_battle"))
+        .collect();
+    assert_eq!(bonds.len(), 1, "one entry, not two: {bonds:?}");
+    assert_eq!(bonds[0].strikes, 2);
+    assert_eq!(bonds[0].subject, MemorySubject::Program(id_of(&game, b)));
+}

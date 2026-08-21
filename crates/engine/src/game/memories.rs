@@ -6,7 +6,7 @@
 
 use crate::components::{Memories, Memory, MemorySubject, ProgramId, Stats};
 use crate::memories::{MemoryDb, MemoryId};
-use crate::resources::GameClock;
+use crate::resources::{BattleState, GameClock, Party};
 use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD};
 use bevy_ecs::prelude::{Entity, Mut};
 
@@ -153,6 +153,57 @@ impl crate::Game {
             return;
         };
         self.remember(defender, "mauled_by", MemorySubject::Species(species));
+    }
+
+    /// What a fight the party **won** leaves in its survivors: a bond with
+    /// everyone who came out of it beside them, and — if the fight was uphill
+    /// at the bell — the fight itself.
+    ///
+    /// The twin of `mark_nemeses`, which is what a fight the party *lost*
+    /// leaves behind, and it sits beside it in `end_battle` for that reason.
+    ///
+    /// **"Won" is an empty `BattleState::groups`**, the same read
+    /// `settle_rewards` and the `FightEnd` telemetry record make, so the three
+    /// cannot come to different conclusions about one fight. A jack-out leaves
+    /// the groups standing and is the whole of what this gate refuses.
+    ///
+    /// The player is neither a holder nor a subject, and that falls out of
+    /// `ProgramId`'s absence rather than out of a `Player` check: the id is
+    /// minted at the roster barrier, and the player does not pass through it.
+    /// The dead are already reaped by the time this runs, which is harmless —
+    /// what a bond is worth is having *survived* together.
+    pub(crate) fn form_victory_memories(&mut self) {
+        let won = self
+            .world
+            .get_resource::<BattleState>()
+            .is_some_and(|b| b.groups.is_empty());
+        if !won {
+            return;
+        }
+        let outmatched = self.world.resource::<BattleState>().outmatched;
+        // Collected before anything is written: `remember` takes `&mut self`,
+        // and the roster it walks must be the one that came out of the fight
+        // rather than one shifting under the loop.
+        let survivors: Vec<(Entity, ProgramId)> = self
+            .world
+            .resource::<Party>()
+            .0
+            .iter()
+            .copied()
+            .filter(|&e| self.creature_alive(e))
+            .filter_map(|e| self.world.get::<ProgramId>(e).map(|id| (e, *id)))
+            .collect();
+        for &(who, _) in &survivors {
+            for &(other, id) in &survivors {
+                if other == who {
+                    continue;
+                }
+                self.remember(who, "bonded_in_battle", MemorySubject::Program(id));
+            }
+            if outmatched {
+                self.remember(who, "hard_won", MemorySubject::Nothing);
+            }
+        }
     }
 
     /// The signed sum of every memory `who` currently holds — the one figure

@@ -1472,6 +1472,17 @@ pub const QUALITY_BASE: u8 = 80;
 /// fragments spent on a Fabricator buy better gear and nothing else.
 pub const QUALITY_BENCH_PER_TIER: u8 = 5;
 
+/// What one level of `Perk::TightenTolerances` adds to a compiled copy's
+/// floor — the player-agency half of the bench term.
+///
+/// Priced at one `QUALITY_STEP`, the same as a bench tier, so the two read
+/// as the same size of investment from opposite directions: one is spent in
+/// fragments on the base, the other in Perk Points on the player. Player
+/// *level* is deliberately not a term of its own — `scaled_for_level`
+/// already scales gear to its wearer, so a level term here would compound
+/// against itself late in a run.
+pub const QUALITY_PERK_PER_LEVEL: u8 = 5;
+
 /// What the careful-compile toggle adds to the floor.
 ///
 /// One constant and one `bool` rather than a graduated dial: the player is

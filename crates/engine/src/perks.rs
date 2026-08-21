@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// hunger-decay multiplier to `taming::capture_chance`'s HP penalty to a
 /// direct `Stats` write, and there is no shared shape to express in data the way
 /// `SpeciesDef` or `ItemDef` have one. So a modder can rename, re-describe
-/// and re-price the sixteen perks, but a new perk is still a new variant here
+/// and re-price the seventeen perks, but a new perk is still a new variant here
 /// plus a hook wherever its effect belongs — see `CLAUDE.md`.
 ///
 /// The catalogue keys off this enum rather than a string id so that a `.ron`
@@ -106,6 +106,16 @@ pub enum Perk {
     /// rate (`Game::total_repair_rate`), which is what a Patch Node
     /// contributes to — so a base with no repairer at all still mends.
     Failover,
+    /// Adds `QUALITY_PERK_PER_LEVEL` per level to the floor a compiled copy
+    /// of gear rolls its quality off (`Game::craft_quality_floor`) — the
+    /// player-agency half of the bench term, and the only input to that
+    /// floor that is not a building.
+    ///
+    /// Read on demand at the compile rather than applied on purchase, unlike
+    /// `Attacker` and its two siblings: what it is worth is a property of
+    /// each copy compiled after it, so gear already carried keeps the
+    /// quality it was compiled at.
+    TightenTolerances,
 }
 
 impl Perk {
@@ -113,7 +123,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 16] {
+    pub fn all() -> [Perk; 17] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -131,11 +141,12 @@ impl Perk {
             Perk::ProcessPool,
             Perk::Teardown,
             Perk::Failover,
+            Perk::TightenTolerances,
         ]
     }
 
     /// Which affinity category this perk multiplies, or `None` for the
-    /// eleven perks that do something else entirely. The one hook all five
+    /// twelve perks that do something else entirely. The one hook all five
     /// affinity perks share — they have a common shape, unlike the perks
     /// above them, so they get a common mapping rather than five bespoke
     /// arms in `unlock_perk`.

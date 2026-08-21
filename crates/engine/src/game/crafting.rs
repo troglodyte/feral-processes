@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     LEAN_COMPILER_DISCOUNT_PER_LEVEL, QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS,
-    QUALITY_CAREFUL_COST_PERCENT,
+    QUALITY_CAREFUL_COST_PERCENT, QUALITY_PERK_PER_LEVEL,
 };
 use crate::*;
 
@@ -38,6 +38,10 @@ pub(crate) struct CraftOrder {
     /// `Game::best_structure_tier` for why a bench that cannot be
     /// upgraded and one that has not been are the same number.
     bench_tier: u32,
+    /// How many levels of `Perk::TightenTolerances` whoever is compiling
+    /// has bought. A program has none of its own, which is why this is
+    /// gathered per crafter rather than read inside the floor.
+    perk_level: u32,
     /// Whether the player chose to spend extra materials on this batch.
     careful: bool,
 }
@@ -186,6 +190,7 @@ impl Game {
                 .as_ref()
                 .and_then(|kind| self.best_structure_tier(kind))
                 .unwrap_or(1),
+            perk_level: self.player_perk_level(Perk::TightenTolerances),
             careful,
         }
     }
@@ -201,12 +206,13 @@ impl Game {
     /// `max_tier` saturates rather than wrapping.
     pub(crate) fn craft_quality_floor(&self, order: &CraftOrder) -> u8 {
         let bench = order.bench_tier.saturating_sub(1) * QUALITY_BENCH_PER_TIER as u32;
+        let perk = order.perk_level * QUALITY_PERK_PER_LEVEL as u32;
         let care = if order.careful {
             QUALITY_CAREFUL_BONUS as u32
         } else {
             0
         };
-        (QUALITY_BASE as u32 + bench + care).min(u8::MAX as u32) as u8
+        (QUALITY_BASE as u32 + bench + perk + care).min(u8::MAX as u32) as u8
     }
 
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.

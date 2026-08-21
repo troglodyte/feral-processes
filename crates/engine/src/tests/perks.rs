@@ -415,7 +415,9 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[13], Perk::ProcessPool);
     assert_eq!(all[14], Perk::Teardown);
     assert_eq!(all[15], Perk::Failover);
-    assert_eq!(all.len(), 16);
+    // And again for the quality perk appended after those.
+    assert_eq!(all[16], Perk::TightenTolerances);
+    assert_eq!(all.len(), 17);
 }
 
 #[test]

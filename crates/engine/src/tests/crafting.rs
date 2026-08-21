@@ -690,3 +690,56 @@ fn only_gear_spends_a_quality_roll() {
         "gear rolls per unit, so five units are five draws"
     );
 }
+
+/// The perk term, the player-agency half of the bench term: every level of
+/// `Perk::TightenTolerances` raises the floor a compiled copy rolls off, and
+/// the spread is the same width above it.
+///
+/// Player *level* is deliberately not a term here — `scaled_for_level`
+/// already scales gear to its wearer, so a level term inside quality would
+/// double-dip on the same input. The perk is the same idea spent as a
+/// choice.
+#[test]
+fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
+    use crate::tuning::{QUALITY_BASE, QUALITY_PERK_PER_LEVEL, QUALITY_SPREAD};
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let edge = ItemId::from("kinetic_edge");
+
+    let recipe = recipe_for(&mut game, "kinetic_edge");
+    let unperked = game.player_craft_order(&recipe, false);
+    assert_eq!(
+        game.craft_quality_floor(&unperked),
+        QUALITY_BASE,
+        "no levels, no term"
+    );
+
+    for _ in 0..2 {
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::TightenTolerances).unwrap();
+    }
+    let perked = game.player_craft_order(&recipe, false);
+    assert_eq!(
+        game.craft_quality_floor(&perked),
+        QUALITY_BASE + 2 * QUALITY_PERK_PER_LEVEL,
+        "two levels, two steps"
+    );
+
+    // And it reaches the compile itself, not just the quoted floor: a bench
+    // the recipe never names cannot be what lifted these.
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 6)]);
+    game.craft(&edge, 6, false).unwrap();
+    let floor = QUALITY_BASE + 2 * QUALITY_PERK_PER_LEVEL;
+    let rolled: Vec<u8> = compiled_copies(&game, "kinetic_edge")
+        .iter()
+        .map(|c| c.quality)
+        .collect();
+    assert_eq!(rolled.len(), 6, "six units, six copies");
+    assert!(
+        rolled
+            .iter()
+            .all(|q| (floor..=floor + QUALITY_SPREAD).contains(q)),
+        "every copy should sit in the perked band {floor}..={}, got {rolled:?}",
+        floor + QUALITY_SPREAD
+    );
+}

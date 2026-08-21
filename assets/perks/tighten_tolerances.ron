@@ -1,0 +1,6 @@
+(
+    id: TightenTolerances,
+    name: "Tighten Tolerances",
+    description: "Nothing leaves your bench a little off. Every piece of gear you compile (c) rolls its quality 5 percentage points higher, per level.",
+    cost: 3,
+)

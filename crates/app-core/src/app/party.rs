@@ -194,6 +194,13 @@ impl App {
             self.mode = Mode::Companion;
             return;
         };
+        // The same three rows the inventory leads with, so they answer `[I]`
+        // the same way — about the program wearing them, not the player.
+        if key == GameKey::Char('I') {
+            let slot = EquipmentSlot::ALL[self.menu_selected.min(EquipmentSlot::ALL.len() - 1)];
+            self.inspect_worn(Some(program), slot, Mode::CompanionEquip);
+            return;
+        }
         let Some(idx) = self.selected_index(key, EquipmentSlot::ALL.len()) else {
             return;
         };

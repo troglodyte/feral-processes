@@ -115,6 +115,30 @@ impl App {
         // per item. Uppercase because `selected_index` reserves it: a key
         // that both moved the selection and spent money would be a bug
         // waiting for a full pack.
+        // Every shelf but the program one names an item, so `[I]` answers
+        // on three of the four sections. A buy row names an id rather than a
+        // copy the player owns — a trader's stock is plain, which is what
+        // `GearCopy::plain` says.
+        if key == GameKey::Char('I') {
+            let row = trade_row(
+                self.menu_selected.min(total.saturating_sub(1)),
+                sell_rows.len(),
+                buy_items.len(),
+                buybacks.len(),
+                programs.len(),
+            );
+            let copy = match row {
+                Some(TradeRow::Sell(i)) => Some(sell_rows[i].clone()),
+                Some(TradeRow::Buy(i)) => Some(GearCopy::plain(buy_items[i].clone())),
+                Some(TradeRow::BuyBack(i)) => Some(buybacks[i].copy.clone()),
+                Some(TradeRow::Program(_)) | None => None,
+            };
+            if let Some(copy) = copy {
+                self.open_gear_inspect(copy, None, Mode::TradeAction);
+            }
+            return;
+        }
+
         if let GameKey::Char(dir @ ('S' | 'B')) = key {
             let selling = dir == 'S';
             let row = trade_row(

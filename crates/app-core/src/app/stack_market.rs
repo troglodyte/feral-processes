@@ -76,6 +76,21 @@ impl App {
             return;
         }
 
+        // Only the sell rows name gear — an offer is a routine disk or a
+        // program, and its own `detail` line already carries what it is.
+        if key == GameKey::Char('I') {
+            let row = market_row(
+                self.menu_selected.min(total.saturating_sub(1)),
+                view.offers.len(),
+                view.sells.len(),
+            );
+            if let Some(MarketRow::Sell(i)) = row {
+                let copy = view.sells[i].copy.clone();
+                self.open_gear_inspect(copy, None, Mode::StackMarket);
+            }
+            return;
+        }
+
         let Some(idx) = self.selected_index(key, total) else {
             return;
         };

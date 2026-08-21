@@ -12,6 +12,7 @@ mod develop;
 mod excavate;
 mod field;
 mod fusion;
+mod gear_inspect;
 mod group_menus;
 mod inventory;
 mod log_filter;

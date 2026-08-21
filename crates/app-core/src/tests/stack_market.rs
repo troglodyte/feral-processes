@@ -237,3 +237,35 @@ fn a_cargo_row_sells_one_on_a_pick_and_the_stack_on_shift() {
         "shift-sell left part of the stack behind"
     );
 }
+
+/// A Stack stall's cargo rows name the player's own gear, so `[I]` answers
+/// there too. The offer rows do not: a routine disk or a program already
+/// carries its own `detail` line, and neither is a `GearCopy`.
+#[test]
+fn a_cargo_row_opens_the_inspect_page_and_an_offer_row_does_not() {
+    let mut app = app_at_a_market(0);
+    app.handle_key(GameKey::Char('t'));
+    assert_eq!(app.mode, Mode::StackMarket);
+    let offers = shelf(&mut app).len();
+
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Char('I'));
+    assert_eq!(
+        app.mode,
+        Mode::StackMarket,
+        "an offer row has no carried copy to describe"
+    );
+    assert!(app.pending_inspect.is_none());
+
+    app.menu_selected = offers;
+    app.handle_key(GameKey::Char('I'));
+    assert_eq!(app.mode, Mode::ItemDescribe);
+    assert!(app.pending_inspect.is_some());
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::StackMarket,
+        "back to the stall it opened from"
+    );
+}

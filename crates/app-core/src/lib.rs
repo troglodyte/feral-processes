@@ -272,6 +272,30 @@ pub struct HelpPageView {
     pub links: Vec<HelpLinkRow>,
 }
 
+/// What the inspect page (`Mode::ItemDescribe`) is looking at.
+///
+/// **One subject field for a page seven screens open**, so no screen can
+/// leave the page reading the item another one picked. `pending_swap_slot`
+/// and `pending_swap_target` follow the same rule for the swap picker, and
+/// for the same reason: the screen a page returns to is the one that opened
+/// it, and it has to get its own highlight back.
+///
+/// Deliberately not `pending_inventory_item`, which stays what the *action
+/// list* is about. That field is the player's pick out of cargo; this one
+/// can name a copy on a trader's shelf, a candidate in a swap picker, or
+/// the piece a program is already wearing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GearInspect {
+    pub copy: GearCopy,
+    /// Who the copy is measured *for* — the accuracy the page quotes and
+    /// the level every granted magnitude is scaled at are the wearer's.
+    /// `None` means the player, matching `pending_swap_target`'s
+    /// convention rather than inventing a second one.
+    pub wearer: Option<Entity>,
+    /// The screen Esc goes back to.
+    pub from: Mode,
+}
+
 /// One row of the gear-swap picker: what it does, and how it draws.
 ///
 /// The handler dispatches `choice` and the renderer draws `label`, both out
@@ -1425,6 +1449,10 @@ pub struct App {
     /// — a fused copy and its ordinary spares are separate rows and every
     /// action on one has to say which it meant.
     pub pending_inventory_item: Option<GearCopy>,
+    /// What `Mode::ItemDescribe` is showing, and where Esc goes — see
+    /// `GearInspect`. Set by every `[I]` and by `[d]` on the action list,
+    /// so the page has one subject however it was reached.
+    pub pending_inspect: Option<GearInspect>,
     /// The equipment slot picked on `Mode::Inventory` or
     /// `Mode::CompanionEquip`, awaiting a replacement (or an unequip) from
     /// `Mode::EquipSwap`.

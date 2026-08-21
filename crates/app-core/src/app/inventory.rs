@@ -3,6 +3,31 @@
 use crate::*;
 
 impl App {
+    /// Opens the inspect page on `copy`, measured for `wearer`, returning to
+    /// `from` on Esc.
+    ///
+    /// **The one way into `Mode::ItemDescribe`.** Seven screens reach it and
+    /// each has to hand over all three: a page that inherited the previous
+    /// screen's subject, wearer or return mode would describe the wrong copy,
+    /// price it for the wrong body, or strand the player a screen out.
+    pub(crate) fn open_gear_inspect(&mut self, copy: GearCopy, wearer: Option<Entity>, from: Mode) {
+        self.pending_inspect = Some(GearInspect { copy, wearer, from });
+        self.mode = Mode::ItemDescribe;
+    }
+
+    /// Inspects whatever `wearer` has in `slot`, or says there is nothing
+    /// there. An empty slot names no item, and a page about no item is worse
+    /// than a line saying so — the same call `open_equip_swap` makes about a
+    /// picker with no rows.
+    pub(crate) fn inspect_worn(&mut self, wearer: Option<Entity>, slot: EquipmentSlot, from: Mode) {
+        let Some(game) = &self.game else { return };
+        let entity = wearer.unwrap_or_else(|| game.player_entity());
+        match game.worn(entity, slot) {
+            Some(worn) => self.open_gear_inspect(worn.copy, wearer, from),
+            None => self.status_line = Some(format!("Nothing in the {} slot.", slot.label())),
+        }
+    }
+
     /// Equipped slots are numbered 1-3 (Weapon/Armor/Module) and open
     /// `Mode::EquipSwap` for that slot; unequipped inventory items start at
     /// 4 and open `Mode::InventoryItemAction` for the selected item.
@@ -39,6 +64,22 @@ impl App {
                     Ok(msg) => msg,
                     Err(e) => e,
                 });
+            }
+            return;
+        }
+
+        // Reads the highlighted row rather than picking one, so it works on
+        // a worn slot and a cargo stack alike. Uppercase for `S`'s reason:
+        // `selected_index` reserves shifted letters for screen actions, so
+        // this cannot also pick a row.
+        if key == GameKey::Char('I') {
+            match self.menu_selected {
+                idx @ 0..=2 => self.inspect_worn(None, EquipmentSlot::ALL[idx], Mode::Inventory),
+                idx => {
+                    if let Some(row) = inventory.get(idx - 3) {
+                        self.open_gear_inspect(row.copy.clone(), None, Mode::Inventory);
+                    }
+                }
             }
             return;
         }
@@ -124,6 +165,22 @@ impl App {
         }
         let Some(game) = &self.game else { return };
         let wearer = target.unwrap_or_else(|| game.player_entity());
+        // The picker is where the question is actually asked — its rows name
+        // candidates the player does not own the consequences of yet. The
+        // unequip row names no item and so opens nothing.
+        if key == GameKey::Char('I') {
+            let row = equip_swap_rows(game, wearer, slot)
+                .into_iter()
+                .nth(self.menu_selected);
+            if let Some(SwapRow {
+                choice: SwapChoice::Equip(copy),
+                ..
+            }) = row
+            {
+                self.open_gear_inspect(copy, target, Mode::EquipSwap);
+            }
+            return;
+        }
         let choices: Vec<SwapChoice> = equip_swap_rows(game, wearer, slot)
             .into_iter()
             .map(|r| r.choice)
@@ -204,10 +261,10 @@ impl App {
             self.begin_sale_from_inventory(copy);
             return;
         }
-        if idx.map(|i| actions[i]) == Some('d') {
-            // `pending_inventory_item` deliberately survives: the describe
-            // page is about that item, and Esc comes back here.
-            self.mode = Mode::ItemDescribe;
+        if idx.map(|i| actions[i]) == Some('d') || key == GameKey::Char('I') {
+            // `pending_inventory_item` deliberately survives: Esc comes back
+            // here, to the action list for this same copy.
+            self.open_gear_inspect(copy, None, Mode::InventoryItemAction);
             return;
         }
         if idx.map(|i| actions[i]) == Some('c') {
@@ -273,7 +330,14 @@ impl App {
 
     /// The describe page is read-only: any key steps back to the actions.
     pub(crate) fn handle_item_describe_key(&mut self, _key: GameKey) {
-        self.mode = Mode::InventoryItemAction;
+        // Back to whichever screen opened it. `pending_inspect` is taken
+        // rather than read, so a later page cannot inherit this one's return
+        // mode the way `pending_swap_target` must not outlive its picker.
+        self.mode = self
+            .pending_inspect
+            .take()
+            .map(|inspect| inspect.from)
+            .unwrap_or(Mode::InventoryItemAction);
     }
 
     /// Second page of the erase flow: how many units of `pending_erase` to

@@ -2057,6 +2057,82 @@ Adding a fifth effect field to `ItemDef` is caught by
 directions — the guard against a field shipping while reaching no screen,
 which is exactly how `power_cost` reached nothing for three releases.
 
+### The inspect page is one derivation, and `[I]` opens it from every list that names gear
+
+**`Game::gear_detail` is the one call behind the gear inspect page.** It
+returns the copy's name, its authored prose, its stat block at the level
+it would go on at, what it does to the wearer's chance of landing a
+swing, the item's other effects, and the granted routine's mechanics.
+Every figure on it is a call rather than a copy: `copy_bonus` for the
+stats, `stat_summary` for their formatting, `battle::hit_chance` for the
+odds, `Game::routine_detail` for the grant.
+
+The reason it is one call is the reason `copy_bonus` is one call, one
+axis further along. Four screens once rebuilt the *gear* scaling chain by
+hand and all four dropped the affix on the day it landed. A routine's
+magnitudes are the same hazard: `AbilityEffect::Damage`'s authored
+`power` is the level-1 figure, so a renderer reading it would quote a
+level-12 player a number no cast of theirs ever uses. `routine_detail`
+scales through the same `abilities::scaled_range` / `scaled_hp_power` /
+`scaled_stat_power` the cast does, at the wearer's level and affinity —
+so a granted passive on a program is priced for the program.
+
+**The mechanics are three exhaustive matches, `cell_mark`'s rule.**
+`PassiveTrigger::phrase`, `AbilityTarget::phrase` and the effect line all
+match every variant with no `_ =>` arm, because as a fallback arm an
+eleventh effect or a sixth targeting mode ships reading as one of the
+ones that already exist — or reading as nothing at all, which is exactly
+how a new `CellKind` once shipped invisible.
+
+**The page draws the grant in full, so `item_effects`' one-line `Grants:`
+row would be the same fact twice.** `item_effects_besides_grant` is a
+*shorter length of the derivation* rather than a trim of its output —
+`item_effects` is now that plus the grant line, exactly as `item_effects`
+is itself a shorter length of `item_grant`. The alternative, string-
+matching `"Grants:"` off a finished list, collides with the first modded
+item whose own effect line starts that way.
+
+**One page and one subject field, reached from seven screens.**
+`app-core`'s `GearInspect` carries the copy, who it is measured for, and
+where Esc goes; `App::open_gear_inspect` is the only thing that writes
+it. Each of the three is a distinct failure if inherited from the screen
+before: the wrong copy described, the right copy priced for the wrong
+body, or the player stranded a screen out from where they were. `[d]` on
+the item-action list lands on the same page rather than a second one, so
+there is no second place a routine's mechanics could be stated
+differently.
+
+**The key is uppercase because `selected_index` reserves shifted
+letters.** A key that both moved the highlight and opened a page cannot
+exist on a screen where the plain letters pick rows — the same rule
+`[S]`/`[B]` quick-trading follows.
+
+**The hit chance is a projection, and both halves of that are
+deliberate.** There is no opponent until a fight starts, so
+`views::NominalHostile` is `balance_sim::median_ordinary_species` — the
+game's own definition of a middling program, the baseline its
+survivability sweeps already assume — at the current zone level with no
+gear. That is what an ambient wild spawn actually fields:
+`ability_user_level` falls back to `ZoneLevel` for a creature with no
+`Experience`, and `evasion_of` reads a species' `base_speed`, which no
+zone multiplier touches. It is deliberately **not** filtered to the
+danger band that can spawn in this zone — that needs a biome and would
+fork `habitat_pools` into a second copy of the band rules — so the line
+names the zone it measured against instead of pretending to be exact.
+The renderer draws it only for a piece carrying a damage band or
+accuracy: the figure is the *wearer's*, so under a mitigation-only module
+it is the player's bare accuracy with an irrelevant item's name above it,
+which reads as a claim about the armour.
+
+**The page has no scroll.** `draw_popup` pages a `Row::Item` span and
+this page is all text rows, so a row past the bottom is dropped by
+`draw_row` in silence — and the rows at risk are the routine's cooldown
+and the line saying how to leave. `the_tallest_gear_page_fits_its_popup`
+is a census over every shipped item, swept across window heights because
+`ui_metrics` clamps the font at both ends and the tightest box is the
+smallest window rather than the one a test happens to run at. The
+tallest shipped page is the Crash Handler's, at 17 rows against 31.
+
 ### An affix is data and its absence is supported
 
 **An affix is data and its absence is supported.** `assets/affixes/*.ron`

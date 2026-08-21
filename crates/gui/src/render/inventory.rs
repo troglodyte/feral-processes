@@ -1,5 +1,6 @@
 //! The inventory list, its per-item action page, and the erase prompt.
 
+use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::views::RoutineDetailView;
 
 use super::popup::*;
@@ -349,15 +350,23 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
             worn.slot.label(),
             stat_summary(game, worn.stats)
         )));
-        // A projection and labelled as one — there is no opponent until a
-        // fight starts, so the page names the one it measured against. See
-        // `views::NominalHostile`.
-        rows.push(text_row(format!(
-            "Accuracy {:.0} — {:.0}% to land a swing on a typical zone-{} program",
-            worn.accuracy,
-            worn.hit_chance * 100.0,
-            worn.nominal.zone
-        )));
+        // Only for a piece that bears on the swing at all. Armour and most
+        // modules carry neither a band nor accuracy, and a hit chance under
+        // one reads as a claim about the armour rather than about the body
+        // wearing it — the figure would be the player's bare accuracy with
+        // an irrelevant item's name above it.
+        //
+        // A projection either way, and labelled as one: there is no opponent
+        // until a fight starts, so the page names the one it measured
+        // against. See `views::NominalHostile`.
+        if worn.stats.damage != DamageRange::default() || worn.stats.accuracy != 0 {
+            rows.push(text_row(format!(
+                "Accuracy {:.0} — {:.0}% to land a swing on a typical zone-{} program",
+                worn.accuracy,
+                worn.hit_chance * 100.0,
+                worn.nominal.zone
+            )));
+        }
     }
 
     if !detail.effects.is_empty() {
@@ -453,6 +462,7 @@ pub(super) fn draw_inventory_item_action(
 mod tests {
     use super::{equipped_summary, gear_inspect_rows, inventory_row_lines};
     use crate::paint::with_painter;
+    use crate::render::Row;
     use crate::render::popup::{PopupSize, popup_max_rows, wrapped_row_lines};
     use crate::text::ui_metrics;
     use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
@@ -513,6 +523,36 @@ mod tests {
     /// screen stacks them, so a wordier item added later has to fail here.
     /// Plain copies are enough — rarity, fusion and an affix all decorate
     /// the name, and none of them adds a row.
+    /// **A hit chance belongs under gear that bears on the swing.**
+    ///
+    /// The figure is the wearer's, not the item's, so under a piece
+    /// carrying neither a damage band nor accuracy it is the player's bare
+    /// accuracy with an irrelevant item's name above it — which reads as a
+    /// claim about the armour. The Deadman Relay is a module with nothing
+    /// but mitigation; the Kinetic Edge is the case the line exists for.
+    #[test]
+    fn only_gear_that_bears_on_the_swing_quotes_a_hit_chance() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(42, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let quotes = |id: &str| {
+            let inspect = GearInspect {
+                copy: GearCopy::plain(id.into()),
+                wearer: None,
+                from: Mode::Inventory,
+            };
+            gear_inspect_rows(&game, &inspect).iter().any(|row| {
+                matches!(row, Row::Text(t) | Row::TextColored(t, _) if t.contains("to land a swing"))
+            })
+        };
+
+        assert!(quotes("kinetic_edge"), "a weapon decides what you hit with");
+        assert!(
+            !quotes("deadman_relay"),
+            "a mitigation-only module says nothing about landing a swing"
+        );
+    }
+
     #[test]
     fn the_tallest_gear_page_fits_its_popup() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));

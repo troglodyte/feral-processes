@@ -890,10 +890,16 @@ pub enum Mode {
     /// the things you might want that slot to become, not a separate errand.
     EquipSwap,
     InventoryItemAction,
-    /// The authored description of `pending_inventory_item`, read out of its
-    /// `.ron` file. Reached with `d` from `Mode::InventoryItemAction`, and
-    /// Esc steps back there rather than out to the inventory — it is a page
-    /// about the item you already picked, not a separate errand.
+    /// The gear inspect page: a copy's full stat block at the level it
+    /// would go on at, what it does to the wearer's chance of landing a
+    /// swing, and — if it grants a routine — what fires that routine, what
+    /// it lands on, what it hits for and what it costs. All of it out of one
+    /// `Game::gear_detail` call; `App::pending_inspect` is the subject.
+    ///
+    /// Reached with `[I]` from every list that names a piece of gear, and
+    /// with `[d]` from `Mode::InventoryItemAction`. Esc steps back to
+    /// whichever of them opened it rather than out to the map — it is a page
+    /// about the copy you were already looking at, not a separate errand.
     ItemDescribe,
     /// Second page of the erase flow: asks how many units of
     /// `pending_erase` to destroy before calling `Game::erase_item`. A

@@ -308,7 +308,7 @@ impl crate::Game {
                     blurb: def.blurb.clone(),
                     subject: self.subject_name(m),
                     intensity: m.intensity(def, now),
-                    age_ticks: now.saturating_sub(m.reinforced),
+                    age: age_phrase(now.saturating_sub(m.reinforced), def.half_life),
                 })
             })
             .collect();
@@ -465,4 +465,27 @@ fn evict(store: &mut Vec<Memory>, db: &MemoryDb, now: u64) {
         }
         store.remove(weakest);
     }
+}
+
+/// How long ago a memory last landed, in the player's words.
+///
+/// **Against the def's own half-life**, never against an absolute tick
+/// count: the game has never shown the player a tick, and a memory whose
+/// half-life is 3,000 is old at an age another's is barely into. Banding it
+/// this way is what makes "recently" mean the same thing on every row —
+/// early in its own decay — rather than the same number of ticks.
+///
+/// Four bands and no more. A fifth would be a distinction the decay curve
+/// cannot support: past two half-lives a memory is under a quarter of what
+/// it was and is close to what `evict` drops, so everything out there is
+/// simply long ago.
+fn age_phrase(elapsed: u64, half_life: u64) -> String {
+    let ratio = elapsed as f64 / half_life.max(1) as f64;
+    match ratio {
+        _ if elapsed == 0 => "just now",
+        _ if ratio < 0.5 => "recently",
+        _ if ratio < 2.0 => "a while ago",
+        _ => "long ago",
+    }
+    .to_string()
 }

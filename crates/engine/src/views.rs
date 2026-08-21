@@ -1817,8 +1817,15 @@ pub struct MemoryRow {
     /// Signed and decayed to the current tick: `components::Memory::
     /// intensity`, projected rather than recomputed.
     pub intensity: f32,
-    /// Ticks since it last landed. The decay measures from the same field,
-    /// so the freshest row on the page is also the strongest one of its
-    /// kind.
-    pub age_ticks: u64,
+    /// How long ago it last landed, in words — and **not** a tick count.
+    /// The game has no player-facing unit of time: nothing in any screen or
+    /// any log line has ever said "tick", so a figure here would be the
+    /// first, and a number the player has no scale for is not an answer.
+    ///
+    /// Banded against the **def's own half-life**, which is the only
+    /// yardstick that makes two memories comparable: 6,000 ticks is fresh
+    /// for a mauling and ancient for a bad shift, and the same phrase on
+    /// both would mean neither. Derived here rather than in the renderer
+    /// because the half-life is on the def, which never reaches the page.
+    pub age: String,
 }

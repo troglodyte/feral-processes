@@ -1822,24 +1822,74 @@ fn a_destroyed_programs_name_still_reaches_the_row() {
     );
 }
 
-/// Age is elapsed ticks since the memory last landed, and reinforcement is
-/// what resets it — the same field the decay measures from, so a row that
-/// says "just now" and a row worth its full valence are the same row.
+/// Age reaches the row **in words, banded against the def's own half-life**
+/// — the game has never shown the player a tick, and a raw count here would
+/// be the first. Reinforcement is what makes a memory new again, so the
+/// phrase and the intensity move together off the one field.
+///
+/// The bands are walked rather than sampled at one point: a test that only
+/// checked "just now" would pass against a function that never says anything
+/// else.
 #[test]
-fn age_is_elapsed_ticks_since_the_last_reinforcement() {
+fn age_is_banded_against_the_defs_own_half_life() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = a_program_with_memories(&mut game);
     set_tick(&mut game, 1_000);
     game.remember(program, "hard_won", MemorySubject::Nothing);
+    // `hard_won` ships a 5,000-tick half-life.
+    let half_life = 5_000;
 
-    set_tick(&mut game, 1_250);
-    assert_eq!(game.memory_report(program)[0].age_ticks, 250);
+    let mut phrase_at = |game: &mut Game, elapsed: u64| {
+        set_tick(game, 1_000 + elapsed);
+        game.memory_report(program)[0].age.clone()
+    };
 
+    assert_eq!(phrase_at(&mut game, 0), "just now");
+    assert_eq!(phrase_at(&mut game, half_life / 4), "recently");
+    assert_eq!(phrase_at(&mut game, half_life), "a while ago");
+    assert_eq!(phrase_at(&mut game, half_life * 3), "long ago");
+
+    // Reinforcing on the far side of that makes it new again.
     game.remember(program, "hard_won", MemorySubject::Nothing);
+    assert_eq!(game.memory_report(program)[0].age, "just now");
+}
+
+/// The band is a *ratio*, so two defs of different half-lives at the same
+/// elapsed ticks say different things. An absolute threshold would call a
+/// scar and a bad shift equally old at the same moment, which is what makes
+/// the yardstick the def's own.
+#[test]
+fn two_defs_of_different_half_lives_age_differently_at_one_moment() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_program_with_memories(&mut game);
+    set_tick(&mut game, 1_000);
+    // `stranded_at` halves in 3,000 ticks, `mauled_by` in 6,000.
+    game.remember(
+        program,
+        "stranded_at",
+        MemorySubject::BaseTile { x: 1, y: 1 },
+    );
+    game.remember(
+        program,
+        "mauled_by",
+        MemorySubject::Species("glitch".to_string()),
+    );
+
+    set_tick(&mut game, 1_000 + 2_000);
+    let rows = game.memory_report(program);
+    let phrase = |name: &str| {
+        rows.iter()
+            .find(|r| r.name == name)
+            .unwrap_or_else(|| panic!("{name} is on the page: {rows:?}"))
+            .age
+            .clone()
+    };
+
+    assert_eq!(phrase("Left stranded here"), "a while ago");
     assert_eq!(
-        game.memory_report(program)[0].age_ticks,
-        0,
-        "reinforcing it makes it new again"
+        phrase("Mauled by"),
+        "recently",
+        "the same 2,000 ticks against a longer half-life is not as old"
     );
 }
 

@@ -29,7 +29,144 @@ pub(super) enum Row {
         /// depending on the screen, and the icon has to keep meaning what it
         /// means on the map or it isn't the same icon.
         icon: Option<(char, Color)>,
+        /// The category column on a row that names an item — see `ItemTag`.
+        /// Set by `with_tag`, for `icon`'s reason: most rows are not an item.
+        ///
+        /// A *third* axis from `color` and `icon` both, and the one the
+        /// column was lifted out of the row text for: it says how well this
+        /// copy was compiled, which nothing else on the row can say.
+        tag: Option<ItemTag>,
     },
+}
+
+/// The category column on a row that names an item — the `WEP` / `ARM` /
+/// `MOD` tag `ItemCategory::short_label` hands out, held as its own piece of
+/// the row rather than formatted into the middle of `text`.
+///
+/// Six screens print it, and each used to `format!` it into a row string, so
+/// there was no span for a renderer to colour without re-parsing a string it
+/// had just built. Held here, the colour and weight are `quality_tag_style`'s
+/// and are decided once.
+pub(super) struct ItemTag {
+    /// The row's text *up to* the column: its shortcut, and the quantity
+    /// where the screen prints one.
+    ///
+    /// It lives on the tag rather than in `text` because the tag sits inside
+    /// the label — what precedes it is what places it. Recording an offset
+    /// into a joined string instead would leave two representations of one
+    /// row to keep in step; these are the pieces, and `item_text` is the
+    /// join.
+    lead: String,
+    text: String,
+    color: Color,
+    bold: bool,
+}
+
+/// What holds a tag apart from the name after it: the two spaces every one of
+/// these rows already carried between the two columns.
+const TAG_GAP: &str = "  ";
+
+/// Gives an `Item` row its category column. A combinator rather than a
+/// parameter on the row constructors, exactly as `with_icon` is, and for the
+/// same reason.
+///
+/// `quality` is the copy's, or `None` where the row names something no copy
+/// exists of yet — a recipe's result, a trader's stock. The band it lands in
+/// is `quality_tag_style`'s call, so no caller carries a palette.
+pub(super) fn with_tag(
+    row: Row,
+    lead: impl Into<String>,
+    text: impl Into<String>,
+    quality: Option<u8>,
+) -> Row {
+    let (color, bold) = quality_tag_style(quality);
+    match row {
+        Row::Item {
+            text: row_text,
+            selected,
+            bold: row_bold,
+            color: row_color,
+            suffix,
+            icon,
+            ..
+        } => Row::Item {
+            text: row_text,
+            selected,
+            bold: row_bold,
+            color: row_color,
+            suffix,
+            icon,
+            tag: Some(ItemTag {
+                lead: lead.into(),
+                text: text.into(),
+                color,
+                bold,
+            }),
+        },
+        // Nothing calls this on a Text row — `with_icon`'s call, for its
+        // reason.
+        other => other,
+    }
+}
+
+/// What precedes a tag column on a row that names an item: the row's
+/// shortcut, and the quantity where the screen prints one.
+///
+/// One definition rather than six, for `qty_column`'s reason — the six
+/// screens that draw a tag have no reason to disagree about the columns in
+/// front of it, and a lead that is one space out puts the tag half a
+/// character off the column it is supposed to form.
+pub(super) fn row_lead(shortcut: char, qty: Option<u32>) -> String {
+    match qty {
+        Some(qty) => format!("[{shortcut}] {} ", qty_column(qty)),
+        None => format!("[{shortcut}] "),
+    }
+}
+
+/// The whole of an `Item` row's text, its tag column included — what the row
+/// reads as on screen, and what it read as before the column was lifted out
+/// of it.
+///
+/// `draw_row` measures this and every width test measures this, so a row that
+/// fits in a test is the row that fits on screen. Drawing takes the pieces
+/// apart again (see `tag_pieces`); the two must join back to exactly this
+/// string, which `a_tagged_rows_pieces_join_back_into_its_text` pins.
+pub(super) fn item_text(text: &str, tag: Option<&ItemTag>) -> String {
+    match tag {
+        Some(t) => tagged_text(&t.lead, &t.text, text),
+        None => text.to_string(),
+    }
+}
+
+/// `item_text` from the pieces a row is about to be built out of, for a
+/// caller that has to know how wide the row will be *before* there is a row —
+/// the two screens that wrap a long row onto continuation lines. The wrap has
+/// to see the column's width, or it budgets for a row narrower than the one
+/// it will draw.
+pub(super) fn tagged_text(lead: &str, tag: &str, text: &str) -> String {
+    format!("{lead}{tag}{TAG_GAP}{text}")
+}
+
+/// `wrapped_row_lines` for a row that carries a tag column: the wrap sees the
+/// whole row, and the head line comes back *without* the column, ready for
+/// `with_tag`.
+///
+/// The alternative — wrapping the joined string and handing that to the row —
+/// would put the tag back inside `text`, which is the five-way `format!` this
+/// column was lifted out of.
+pub(super) fn wrapped_tagged_lines(
+    lead: &str,
+    tag: &str,
+    head: &str,
+    tags: &[String],
+) -> Vec<String> {
+    let prefix = tagged_text(lead, tag, "");
+    let mut lines = wrapped_row_lines(tagged_text(lead, tag, head), tags);
+    lines[0] = lines[0]
+        .strip_prefix(&prefix)
+        .expect("wrapped_row_lines only ever appends to the head line")
+        .to_string();
+    lines
 }
 
 /// What an icon occupies in a row's label: the glyph itself plus the gap
@@ -49,6 +186,7 @@ pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
             bold,
             color: text_color,
             suffix,
+            tag,
             ..
         } => Row::Item {
             text,
@@ -57,6 +195,7 @@ pub(super) fn with_icon(row: Row, glyph: char, color: Color) -> Row {
             color: text_color,
             suffix,
             icon: Some((glyph, color)),
+            tag,
         },
         // Nothing calls this on a Text row; returning it unchanged is a
         // cheaper answer than a panic for a case the type can't rule out.
@@ -76,6 +215,7 @@ pub(super) fn item_row(s: impl Into<String>, selected: bool) -> Row {
         color: TEXT,
         suffix: None,
         icon: None,
+        tag: None,
     }
 }
 
@@ -90,6 +230,7 @@ pub(super) fn spent_item_row(s: impl Into<String>, selected: bool) -> Row {
         color: TEXT_DIM,
         suffix: None,
         icon: None,
+        tag: None,
     }
 }
 
@@ -104,6 +245,7 @@ pub(super) fn critical_item_row(s: impl Into<String>, selected: bool) -> Row {
         color: RED,
         suffix: None,
         icon: None,
+        tag: None,
     }
 }
 
@@ -118,6 +260,7 @@ pub(super) fn colored_item_row(s: impl Into<String>, selected: bool, color: Colo
         color,
         suffix: None,
         icon: None,
+        tag: None,
     }
 }
 
@@ -157,6 +300,7 @@ pub(super) fn annotated_item_row(
         color,
         suffix,
         icon: None,
+        tag: None,
     }
 }
 
@@ -186,6 +330,7 @@ pub(super) fn creature_row(s: impl Into<String>, selected: bool) -> Row {
         color: TEXT,
         suffix: None,
         icon: None,
+        tag: None,
     }
 }
 
@@ -432,6 +577,26 @@ fn row_label(prefix: &str, icon: Option<(char, Color)>, text: &str) -> String {
     }
 }
 
+/// A tagged row's label in the two pieces that sit either side of its
+/// category column, so `draw_row` can hand the painter three runs and let the
+/// tag carry its own colour and weight.
+///
+/// Split out, like `row_label` itself, so a test can hold the pieces to
+/// joining back into exactly the string `draw_row` measures. A tag drawn from
+/// one set of pieces and measured from another is a row whose suffix lands on
+/// top of its own tail.
+fn tag_pieces(
+    prefix: &str,
+    icon: Option<(char, Color)>,
+    text: &str,
+    tag: &ItemTag,
+) -> (String, String) {
+    (
+        row_label(prefix, icon, &tag.lead),
+        format!("{TAG_GAP}{text}"),
+    )
+}
+
 pub(super) fn draw_row(
     row: &Row,
     x: f32,
@@ -458,6 +623,7 @@ pub(super) fn draw_row(
             color,
             suffix,
             icon,
+            tag,
         } => {
             if *selected {
                 // Anchored to the same `m.pad` the row text uses, so the
@@ -479,11 +645,40 @@ pub(super) fn draw_row(
             // row's text starting at the same x — the UI face is monospace, so
             // a space and a glyph take the same advance — and leaves
             // `suffix_x` measuring one string, as it already documents.
-            let label = row_label(prefix, *icon, s);
-            if *selected && *bold {
-                painter.ui_bold(&label, x + m.pad, cy, m.font_size, *color);
-            } else {
-                painter.ui(&label, x + m.pad, cy, m.font_size, *color);
+            let label = row_label(prefix, *icon, &item_text(s, tag.as_ref()));
+            let heavy = *selected && *bold;
+            match tag {
+                // Three runs rather than three draw calls: `ui_runs` lays the
+                // line out in one galley, so the tag's weight cannot shift
+                // the name after it (see
+                // `emphasising_part_of_a_line_does_not_shift_the_rest_of_it`).
+                Some(t) => {
+                    let (head, tail) = tag_pieces(prefix, *icon, s, t);
+                    painter.ui_runs(
+                        &[
+                            TextRun {
+                                text: &head,
+                                bold: heavy,
+                                color: *color,
+                            },
+                            TextRun {
+                                text: &t.text,
+                                bold: t.bold,
+                                color: t.color,
+                            },
+                            TextRun {
+                                text: &tail,
+                                bold: heavy,
+                                color: *color,
+                            },
+                        ],
+                        x + m.pad,
+                        cy,
+                        m.font_size,
+                    );
+                }
+                None if heavy => painter.ui_bold(&label, x + m.pad, cy, m.font_size, *color),
+                None => painter.ui(&label, x + m.pad, cy, m.font_size, *color),
             }
             // Placed by measuring the row's own text rather than padded into
             // it, so the gap is one inset at every font size instead of a
@@ -724,6 +919,137 @@ mod tests {
         assert!(
             iconed.ends_with("Drone Lv3") && iconed.starts_with("  "),
             "the caret still leads and the text still trails: {iconed:?}"
+        );
+    }
+
+    /// The columns in front of the tag, pinned against the hand-formatted
+    /// rows they were lifted out of. Six screens draw this column, and it is
+    /// a column only while every lead is built the same way — one space out
+    /// and a shelf ragged-lefts.
+    ///
+    /// The literals are what the six `format!` calls printed before the lift,
+    /// so this is the assertion that says the screens did not move.
+    #[test]
+    fn a_lifted_tag_row_reads_exactly_as_the_hand_formatted_one_did() {
+        // `"[{}] {} {}  Sell {} ..."` — a trader's shelf, the inventory list
+        // and the Stack market.
+        assert_eq!(
+            tagged_text(&row_lead('a', Some(3)), "WEP", "Sell Arc Lance"),
+            format!(
+                "[{}] {} {}  {}",
+                'a',
+                qty_column(3),
+                "WEP",
+                "Sell Arc Lance"
+            ),
+        );
+        // `"[{}] {}  Buy {} ..."` — a trader's stock, and the Compile screen,
+        // neither of which prints a count.
+        assert_eq!(
+            tagged_text(&row_lead('a', None), "MOD", "Buy Watchdog Tap"),
+            format!("[{}] {}  {}", 'a', "MOD", "Buy Watchdog Tap"),
+        );
+        // A four-digit stack grows the row rather than losing a digit, which
+        // is `qty_column`'s call, not this one's.
+        assert!(row_lead('a', Some(1234)).len() > row_lead('a', Some(3)).len());
+    }
+
+    /// The pieces `draw_row` paints and the string it measures are the same
+    /// row. They are built by different code — three runs for the painter,
+    /// one joined label for `suffix_x` — and a gap between the two is a
+    /// suffix landing on top of the row's own tail, which is exactly the bug
+    /// `suffix_x` was split out to hold off.
+    #[test]
+    fn a_tagged_rows_pieces_join_back_into_its_text() {
+        let Row::Item { text, tag, .. } = with_tag(
+            item_row("Arc Lance (115%)", false),
+            "[a]   3x  ",
+            "WEP",
+            Some(115),
+        ) else {
+            panic!("with_tag returns the Item row it was given")
+        };
+        let tag = tag.expect("with_tag sets the column");
+        assert_eq!(
+            item_text(&text, Some(&tag)),
+            "[a]   3x  WEP  Arc Lance (115%)",
+            "the joined row reads exactly as the hand-formatted one did"
+        );
+        for icon in [None, Some(('o', TEXT))] {
+            let (head, tail) = tag_pieces("  ", icon, &text, &tag);
+            assert_eq!(
+                format!("{head}{}{tail}", tag.text),
+                row_label("  ", icon, &item_text(&text, Some(&tag))),
+                "the drawn pieces and the measured label must be one string"
+            );
+        }
+    }
+
+    /// The column is a *third* axis, beside the row's colour and its icon:
+    /// how well the copy was compiled is not something either of those can
+    /// say. So neither may be disturbed by it, and an untagged row must be
+    /// left byte-identical to what it was before the column existed.
+    #[test]
+    fn a_tag_leaves_the_rows_own_colour_and_text_alone() {
+        let row = with_tag(
+            tier_row("Arc Lance", true, 1, Rarity::Ordinary),
+            "[a] ",
+            "WEP",
+            Some(130),
+        );
+        assert_eq!(
+            row_color(&row),
+            Some(CYAN),
+            "the row keeps its fusion colour"
+        );
+        let Row::Item { text, selected, .. } = &row else {
+            panic!("still an Item row")
+        };
+        assert_eq!(
+            text, "Arc Lance",
+            "the tag is not folded back into the text"
+        );
+        assert!(selected, "the selection survives the combinator");
+        assert_eq!(
+            item_text("Arc Lance", None),
+            "Arc Lance",
+            "an untagged row is exactly the string it always was"
+        );
+    }
+
+    /// What the whole phase is for: the tag carries its band's colour and
+    /// weight while the rest of the row keeps its own. Drawn through the real
+    /// painter, because the runs are only three separate styles once egui has
+    /// laid the job out — `painted_text` would flatten them back to one line
+    /// and report nothing.
+    #[test]
+    fn a_drawn_tag_carries_its_band_and_the_row_keeps_its_own_colour() {
+        let m = Metrics {
+            font_size: 16,
+            line_height: 20.0,
+            pad: 8.0,
+            inset: 4.0,
+            gap: 6.0,
+        };
+        let row = with_tag(
+            colored_item_row("Arc Lance (130%)", false, CYAN),
+            "[a] ",
+            "WEP",
+            Some(130),
+        );
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_row(&row, 0.0, 400.0, 40.0, 400.0, p, &m);
+        });
+        let (gold, bold) = quality_tag_style(Some(130));
+        assert_eq!(
+            crate::paint::painted_runs_in(&shapes, gold, bold),
+            vec!["WEP"],
+            "the exceptional band paints the tag and nothing else"
+        );
+        assert_eq!(
+            crate::paint::painted_runs_in(&shapes, CYAN, false),
+            vec!["  [a] ", "  Arc Lance (130%)"],
+            "the row's own colour still carries everything either side of it"
         );
     }
 

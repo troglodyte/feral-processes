@@ -478,6 +478,45 @@ pub(crate) fn painted_text(shapes: &[egui::epaint::ClippedShape]) -> Vec<String>
         .collect()
 }
 
+/// The text of every styled run `with_painter` recorded in exactly this
+/// colour and weight, in paint order.
+///
+/// `painted_text` flattens a galley to one string, which is the right answer
+/// for *what* was drawn and no answer at all for a span drawn with its own
+/// emphasis inside a line — a popup row's category column, chiefly (see
+/// `Row::Item::tag`). This reads the layout job's sections back out instead.
+///
+/// The comparison is made here rather than in `render/`, for
+/// `painted_rect_fill_count`'s reason: quantisation to egui's 8-bit channels
+/// happens on the way in, so a caller comparing colours itself would have to
+/// round them the same way.
+#[cfg(test)]
+pub(crate) fn painted_runs_in(
+    shapes: &[egui::epaint::ClippedShape],
+    color: Color,
+    bold: bool,
+) -> Vec<String> {
+    let want = to_egui(color);
+    let face = if bold { Face::UiBold } else { Face::Ui };
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Text(t) => Some(&t.galley.job),
+            _ => None,
+        })
+        .flat_map(|job| {
+            job.sections
+                .iter()
+                .filter(move |section| {
+                    section.format.color == want && section.format.font_id.family == face.family()
+                })
+                .map(|section| {
+                    job.text[section.byte_range.start.0..section.byte_range.end.0].to_string()
+                })
+        })
+        .collect()
+}
+
 /// The width of every `Shape::Rect` `with_painter` recorded. `render/`
 /// deliberately never names the graphics library directly (see this file's
 /// module doc) — this stays that boundary's one exception, so a test that

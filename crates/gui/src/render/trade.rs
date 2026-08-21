@@ -81,19 +81,21 @@ pub(super) fn draw_trade_action_menu(
         // that's exactly what you'd want to check before selling. A fused
         // copy is its own row here for the same reason it is there.
         let tag = equip_preview_tag(game, &row.copy, status.zone);
-        rows.push(tier_row(
-            format!(
-                "[{}] {} {}  Sell {}{} ({} {money} each)",
-                menu_shortcut(idx),
-                qty_column(row.qty),
-                game.item_category(&row.copy.item).short_label(),
-                game.copy_name(&row.copy),
-                tag,
-                game.sell_price(structure, &row.copy.item).unwrap_or(0)
+        rows.push(with_tag(
+            tier_row(
+                format!(
+                    "Sell {}{} ({} {money} each)",
+                    game.copy_name(&row.copy),
+                    tag,
+                    game.sell_price(structure, &row.copy.item).unwrap_or(0)
+                ),
+                idx == selected,
+                row.copy.tier,
+                row.copy.rarity,
             ),
-            idx == selected,
-            row.copy.tier,
-            row.copy.rarity,
+            row_lead(menu_shortcut(idx), Some(row.qty)),
+            game.item_category(&row.copy.item).short_label(),
+            Some(row.copy.quality),
         ));
         for line in effect_lines(game, &row.copy.item) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
@@ -106,15 +108,16 @@ pub(super) fn draw_trade_action_menu(
         // Fusion tier 0: stock is unfused, so the tag shows what you'd get
         // buying it, not what some copy in your buffer happens to be.
         let tag = equip_preview_tag(game, &GearCopy::plain(item.clone()), status.zone);
-        rows.push(item_row(
-            format!(
-                "[{}] {}  Buy {}{} ({cost} {money} each)",
-                menu_shortcut(idx),
-                game.item_category(item).short_label(),
-                game.item_name(item),
-                tag
+        rows.push(with_tag(
+            item_row(
+                format!("Buy {}{} ({cost} {money} each)", game.item_name(item), tag),
+                idx == selected,
             ),
-            idx == selected,
+            row_lead(menu_shortcut(idx), None),
+            game.item_category(item).short_label(),
+            // Stock, not a copy: nothing has been compiled yet, so there is
+            // no quality to read and the column draws as it always did.
+            None,
         ));
         rows.extend(effect_lines(game, item).into_iter().map(text_row));
         idx += 1;
@@ -128,17 +131,17 @@ pub(super) fn draw_trade_action_menu(
         rows.push(Row::TextColored("Buy back (your sales):".to_string(), TEXT));
         for row in &buybacks {
             let tag = equip_preview_tag(game, &row.copy, status.zone);
-            rows.push(item_row(
-                format!(
-                    "[{}] {} {}  Buy back {}{} ({} {money} each)",
-                    menu_shortcut(idx),
-                    qty_column(row.qty),
-                    game.item_category(&row.copy.item).short_label(),
-                    row.name,
-                    tag,
-                    row.unit_cost
+            rows.push(with_tag(
+                item_row(
+                    format!(
+                        "Buy back {}{} ({} {money} each)",
+                        row.name, tag, row.unit_cost
+                    ),
+                    idx == selected,
                 ),
-                idx == selected,
+                row_lead(menu_shortcut(idx), Some(row.qty)),
+                game.item_category(&row.copy.item).short_label(),
+                Some(row.copy.quality),
             ));
             rows.extend(effect_lines(game, &row.copy.item).into_iter().map(text_row));
             idx += 1;

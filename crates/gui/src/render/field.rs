@@ -68,6 +68,7 @@ pub(super) fn buff_entries(buffs: &[ActiveBuffView], style: TagStyle) -> Vec<Vec
                 color: TEXT,
                 suffix: Some(b.remaining.clone()),
                 icon: None,
+                tag: None,
             }];
             if let (TagStyle::OwnLine, Some(h)) = (style, b.holder_label.as_deref()) {
                 // Four spaces, not two: `draw_row` gives a `Row::Item` a

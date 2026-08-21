@@ -61,18 +61,16 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
         rows.push(text_row("(nothing they want)"));
     }
     for row in &view.sells {
-        rows.push(tier_row(
-            format!(
-                "[{}] {} {}  Sell {} ({} {money} each)",
-                menu_shortcut(idx),
-                qty_column(row.qty),
-                game.item_category(&row.copy.item).short_label(),
-                row.name,
-                row.unit_price
+        rows.push(with_tag(
+            tier_row(
+                format!("Sell {} ({} {money} each)", row.name, row.unit_price),
+                idx == selected,
+                row.copy.tier,
+                row.copy.rarity,
             ),
-            idx == selected,
-            row.copy.tier,
-            row.copy.rarity,
+            row_lead(menu_shortcut(idx), Some(row.qty)),
+            game.item_category(&row.copy.item).short_label(),
+            Some(row.copy.quality),
         ));
         for line in effect_lines(game, &row.copy.item) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));

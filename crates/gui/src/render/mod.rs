@@ -12,7 +12,7 @@ use feral_processes_app_core::{
     inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
-use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId};
+use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
 use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{
     KERNEL_RING_MAX, MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE,
@@ -216,6 +216,45 @@ pub(super) fn rarity_color(rarity: Rarity) -> Option<Color> {
 /// looks like while sharing the word.
 pub(super) fn tier_color(fusions: u32, rarity: Rarity) -> Option<Color> {
     fusion_color(fusions).or_else(|| rarity_color(rarity))
+}
+
+/// How a row's category tag is painted: the quality band of the copy it
+/// stands for. A row naming something no copy exists of yet — a recipe's
+/// result, a trader's stock — passes `None` and draws exactly as it always
+/// did.
+///
+/// **The ramp is emphasis, not hue.** Only the two extremes spend a colour;
+/// the middle two differ by weight alone, so an ordinary copy is never
+/// painted an alarming colour and the eye is drawn only to what is worth
+/// looking at. A green-to-red con ramp was rejected for that, and because
+/// the row colour beside it is already spending two hues on fusion and
+/// rarity.
+///
+/// **Emphasis is monotone.** Gold at normal weight above a bold band would
+/// read as *less* emphatic than the rung below it, so the top band keeps the
+/// weight the one under it earned and adds the colour.
+///
+/// **The as-designed band is literally no change** — default colour, default
+/// weight. Every copy in every existing save is at `QUALITY_DEFAULT`, so
+/// nothing already on screen is repainted by this.
+///
+/// The thresholds are the engine's (`items::quality_band`) and the palette is
+/// this crate's: six sites draw a tag, and an engine-owned rule is what stops
+/// them drifting, while a band carrying a weight as well as a hue is not
+/// expressible as a `GlyphColor`.
+///
+/// **Known collision, accepted:** `GOLD` is also `rarity_color`'s colour for
+/// `Rarity::Gold`, so an Overclocked exceptional copy shows a gold name and a
+/// gold tag meaning two different things. They are different columns, and
+/// each colour means exactly one thing in its own — the distinction
+/// `Row::Item::icon` already draws.
+pub(super) fn quality_tag_style(quality: Option<u8>) -> (Color, bool) {
+    match quality.map(quality_band) {
+        None | Some(QualityBand::AsDesigned) => (TEXT, false),
+        Some(QualityBand::Under) => (GRAY, false),
+        Some(QualityBand::Above) => (TEXT, true),
+        Some(QualityBand::Exceptional) => (GOLD, true),
+    }
 }
 
 /// How a rare tier reads where a full name will not fit — the battle
@@ -859,6 +898,45 @@ mod tests {
             Some(MAGENTA),
             "a legacy over-ceiling gear tier still reads as maxed"
         );
+    }
+
+    /// The ramp is emphasis and has to be monotone: a band that gave up the
+    /// weight the one below it earned would read as *less* emphatic at the
+    /// top of its own ladder. Only the two extremes spend a colour, and the
+    /// as-designed rung is literally the default treatment — every copy in
+    /// every existing save sits at `QUALITY_DEFAULT`, so this repaints
+    /// nothing already on screen.
+    #[test]
+    fn the_quality_tag_ramp_gains_emphasis_and_never_gives_it_back() {
+        use feral_processes_engine::tuning::{QUALITY_DEFAULT, QUALITY_MAX, QUALITY_MIN};
+
+        let plain = quality_tag_style(None);
+        assert_eq!(
+            plain,
+            (TEXT, false),
+            "an untagged copy draws as it always did"
+        );
+        assert_eq!(
+            quality_tag_style(Some(QUALITY_DEFAULT)),
+            plain,
+            "the as-designed band is no change at all"
+        );
+
+        let mut last = (GRAY, false);
+        for quality in QUALITY_MIN..=QUALITY_MAX {
+            let style = quality_tag_style(Some(quality));
+            assert!(
+                style.1 >= last.1,
+                "emphasis went backwards at {quality}: {last:?} -> {style:?}"
+            );
+            last = style;
+        }
+        assert_eq!(quality_tag_style(Some(QUALITY_MIN)), (GRAY, false));
+        assert_eq!(quality_tag_style(Some(QUALITY_MAX)), (GOLD, true));
+        // The two middle bands differ by weight alone, which is the whole of
+        // why an ordinary copy is never painted an alarming colour.
+        assert_eq!(quality_tag_style(Some(110)).0, TEXT);
+        assert!(quality_tag_style(Some(110)).1);
     }
 
     /// Two permanent properties, one channel. Fusion wins because it is the

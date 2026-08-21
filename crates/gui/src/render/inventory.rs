@@ -85,17 +85,17 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let mut lines =
-            inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone)
-                .into_iter();
+        let (lead, tag, lines) =
+            inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone);
+        let mut lines = lines.into_iter();
         let head = lines
             .next()
             .expect("inventory_row_lines always emits the item's own row");
-        rows.push(tier_row(
-            head,
-            selected == i + 3,
-            row.copy.tier,
-            row.copy.rarity,
+        rows.push(with_tag(
+            tier_row(head, selected == i + 3, row.copy.tier, row.copy.rarity),
+            lead,
+            tag,
+            Some(row.copy.quality),
         ));
         // A continuation carries this row's own tail rather than a second kind
         // of information, so it keeps the tier colour. Only the head is ever
@@ -162,16 +162,17 @@ fn inventory_row_lines(
     copy: &GearCopy,
     qty: u32,
     zone: u32,
-) -> Vec<String> {
-    let head = format!(
-        "[{shortcut}] {} {}  {}",
-        qty_column(qty),
-        game.item_category(&copy.item).short_label(),
-        game.copy_name(copy),
+) -> (String, &'static str, Vec<String>) {
+    let lead = row_lead(shortcut, Some(qty));
+    let tag = game.item_category(&copy.item).short_label();
+    let mut lines = wrapped_tagged_lines(
+        &lead,
+        tag,
+        &game.copy_name(copy),
+        &[equip_preview_tag(game, copy, zone)],
     );
-    let mut lines = wrapped_row_lines(head, &[equip_preview_tag(game, copy, zone)]);
     lines.extend(effect_lines(game, &copy.item));
-    lines
+    (lead, tag, lines)
 }
 
 pub(super) fn equipped_row(
@@ -469,7 +470,7 @@ mod tests {
     use super::{equipped_summary, gear_inspect_rows, inventory_row_lines};
     use crate::paint::with_painter;
     use crate::render::Row;
-    use crate::render::popup::{PopupSize, popup_max_rows, wrapped_row_lines};
+    use crate::render::popup::{PopupSize, popup_max_rows, tagged_text, wrapped_row_lines};
     use crate::text::ui_metrics;
     use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
     use feral_processes_engine::components::Rarity;
@@ -677,7 +678,7 @@ mod tests {
                     // A four-digit count rather than the three the column
                     // reserves: the buffer is unbounded and a long run's
                     // scrap pile reaches it, at which point the row grows.
-                    inventory_row_lines(&game, menu_shortcut(35), &copy, 1234, zone),
+                    drawn_inventory_lines(&game, menu_shortcut(35), &copy, 1234, zone),
                 )
             })
             .collect();
@@ -702,6 +703,24 @@ mod tests {
         });
     }
 
+    /// The lines `draw_inventory` actually draws for a carried copy: its head
+    /// with the tag column joined back on, then its continuations.
+    ///
+    /// The column is a reserved slot in the drawn label, so a width census
+    /// measuring the head as `inventory_row_lines` returns it would be
+    /// measuring a row the screen never draws. `item_text` is the one join.
+    fn drawn_inventory_lines(
+        game: &Game,
+        shortcut: char,
+        copy: &GearCopy,
+        qty: u32,
+        zone: u32,
+    ) -> Vec<String> {
+        let (lead, tag, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
+        lines[0] = tagged_text(&lead, tag, &lines[0]);
+        lines
+    }
+
     /// **An item's extra effects get their own line under it.** The equip
     /// tag answers "what would this do if I put it on"; nothing on a listing
     /// row answered "and what else does it do", so seven shipped modules
@@ -719,7 +738,7 @@ mod tests {
         let effects = game.item_effects(&copy.item);
         assert_eq!(effects.len(), 1, "precondition: {effects:?}");
 
-        let lines = inventory_row_lines(&game, menu_shortcut(3), &copy, 1, 1);
+        let lines = drawn_inventory_lines(&game, menu_shortcut(3), &copy, 1, 1);
 
         assert!(
             lines.len() > 1,
@@ -746,7 +765,7 @@ mod tests {
         assert!(game.item_effects(&copy.item).is_empty(), "precondition");
 
         assert_eq!(
-            inventory_row_lines(&game, menu_shortcut(3), &copy, 1, 1).len(),
+            drawn_inventory_lines(&game, menu_shortcut(3), &copy, 1, 1).len(),
             1
         );
     }
@@ -763,7 +782,7 @@ mod tests {
 
         let plain = GearCopy::plain("kinetic_edge".into());
         assert_eq!(
-            inventory_row_lines(&game, 'a', &plain, 1, 1).len(),
+            drawn_inventory_lines(&game, 'a', &plain, 1, 1).len(),
             1,
             "an ordinary copy keeps its tag on the row it belongs to"
         );
@@ -776,7 +795,7 @@ mod tests {
             affix: Some("of_the_ghost_protocol".into()),
             ..GearCopy::plain("singularity_matrix".into())
         };
-        let lines = inventory_row_lines(&game, 'a', &worst, 1234, 10);
+        let lines = drawn_inventory_lines(&game, 'a', &worst, 1234, 10);
         assert_eq!(lines.len(), 2, "{lines:#?}");
         assert!(
             lines[1].trim_start().starts_with('(') && lines[1].contains("maxed"),

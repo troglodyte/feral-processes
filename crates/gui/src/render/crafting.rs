@@ -12,9 +12,17 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painte
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let mut lines = craft_rows(game, recipe, i, &status.inventory).into_iter();
+        let (lead, tag, lines) = craft_rows(game, recipe, i, &status.inventory);
+        let mut lines = lines.into_iter();
         let head = lines.next().expect("craft_rows always emits the head line");
-        rows.push(item_row(head, i == selected));
+        rows.push(with_tag(
+            item_row(head, i == selected),
+            lead,
+            tag,
+            // A recipe's result, not a copy: what it will compile at is a roll
+            // the player has not made yet.
+            None,
+        ));
         // Dim, unselected continuations, the same shape `draw_recipes` gives a
         // product and its steps: the highlight belongs on the line carrying the
         // shortcut, and the popup's scroll anchor is the *first* selected Item,
@@ -57,31 +65,31 @@ fn craft_rows(
     recipe: &CraftRecipe,
     i: usize,
     inventory: &[InventoryRow],
-) -> Vec<String> {
+) -> (String, &'static str, Vec<String>) {
     let blurb = game
         .item_blurb(&recipe.result)
         .map(|b| format!(" ({b})"))
         .unwrap_or_default();
-    let head = format!(
-        "[{}] {}  {}{}",
-        menu_shortcut(i),
-        game.item_category(&recipe.result).short_label(),
-        game.item_name(&recipe.result),
-        blurb,
-    );
+    let lead = row_lead(menu_shortcut(i), None);
+    let tag = game.item_category(&recipe.result).short_label();
+    let head = format!("{}{}", game.item_name(&recipe.result), blurb);
     let cost = cost_display(game, &recipe.cost, inventory).join(", ");
 
+    // Measured with the tag column joined back on, not without it: the row
+    // that has to fit is the one the screen draws, column and all.
     let one_line = format!("{head} - {cost}");
-    if one_line.chars().count() <= ROW_WRAP_COLUMNS {
-        return vec![one_line];
-    }
-    std::iter::once(head)
-        .chain(
-            wrap_text(&cost, ROW_WRAP_COLUMNS - CRAFT_ROW_INDENT.len())
-                .into_iter()
-                .map(|line| format!("{CRAFT_ROW_INDENT}{line}")),
-        )
-        .collect()
+    let lines = if tagged_text(&lead, tag, &one_line).chars().count() <= ROW_WRAP_COLUMNS {
+        vec![one_line]
+    } else {
+        std::iter::once(head)
+            .chain(
+                wrap_text(&cost, ROW_WRAP_COLUMNS - CRAFT_ROW_INDENT.len())
+                    .into_iter()
+                    .map(|line| format!("{CRAFT_ROW_INDENT}{line}")),
+            )
+            .collect()
+    };
+    (lead, tag, lines)
 }
 
 /// The quantity page's key line, and the widest row that page can draw.
@@ -379,6 +387,24 @@ mod tests {
         });
     }
 
+    /// The lines `draw_craft_menu` actually draws for a recipe: its head with
+    /// the tag column joined back on, then its continuations.
+    ///
+    /// A width test that measured the head as `craft_rows` returns it would
+    /// measure a row the screen never draws — the column is a reserved slot in
+    /// the drawn label, so it counts. `item_text` is the one join, so what
+    /// this measures cannot drift from what `draw_row` paints.
+    fn drawn_craft_lines(
+        game: &Game,
+        recipe: &CraftRecipe,
+        i: usize,
+        inventory: &[InventoryRow],
+    ) -> Vec<String> {
+        let (lead, tag, mut lines) = craft_rows(game, recipe, i, inventory);
+        lines[0] = tagged_text(&lead, tag, &lines[0]);
+        lines
+    }
+
     /// The kind column, and the fact that it comes from the same
     /// `Game::item_category` call the inventory and trade screens print — a
     /// second derivation here is how one screen ends up calling a Module a
@@ -392,7 +418,7 @@ mod tests {
         assert!(!recipes.is_empty(), "a fresh game can compile something");
 
         for (i, recipe) in recipes.iter().enumerate() {
-            let lines = craft_rows(&game, recipe, i, &status.inventory);
+            let lines = drawn_craft_lines(&game, recipe, i, &status.inventory);
             let tag = game.item_category(&recipe.result).short_label();
             assert!(
                 lines[0].contains(&format!("] {tag}  ")),
@@ -501,7 +527,7 @@ mod tests {
     fn a_row_too_wide_for_the_popup_wraps_instead_of_running_off() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
-        let lines = craft_rows(&game, &a_very_wide_recipe(), 0, &[]);
+        let lines = drawn_craft_lines(&game, &a_very_wide_recipe(), 0, &[]);
 
         assert!(
             lines.len() > 1,
@@ -539,7 +565,7 @@ mod tests {
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
         let status = game.player_status();
         for (i, recipe) in game.craft_recipes().iter().enumerate() {
-            let lines = craft_rows(&game, recipe, i, &status.inventory);
+            let lines = drawn_craft_lines(&game, recipe, i, &status.inventory);
             assert_eq!(
                 lines.len(),
                 1,
@@ -567,7 +593,7 @@ mod tests {
             .craft_recipes()
             .iter()
             .enumerate()
-            .flat_map(|(i, r)| craft_rows(&game, r, i, &status.inventory))
+            .flat_map(|(i, r)| drawn_craft_lines(&game, r, i, &status.inventory))
             .map(|line| format!("  {line}"))
             .max_by_key(|line| line.chars().count())
             .expect("the shipped assets declare recipes");

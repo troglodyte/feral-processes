@@ -160,6 +160,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
+            program_id: 0,
             staff: false,
         });
     }
@@ -227,6 +228,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
+        program_id: 0,
         staff: false,
     });
     save::save_to_file(&path, &data).unwrap();
@@ -323,6 +325,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
+        program_id: 0,
         staff: false,
     });
     data.structures.push(save::StructureSave {
@@ -415,6 +418,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
+        program_id: 0,
         staff: false,
     });
     for n in 0..posts {
@@ -615,6 +619,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
+            program_id: 0,
             staff: false,
         });
     }
@@ -695,6 +700,7 @@ pub(crate) fn app_with_companions_and_cargo(
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
+            program_id: 0,
             staff: false,
         });
     }
@@ -926,6 +932,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
+            program_id: 0,
             staff: false,
         });
     }

@@ -71,3 +71,138 @@ fn owned_programs(game: &mut Game) -> Vec<Entity> {
         .iter(&game.world)
         .collect()
 }
+
+/// A **save → load → assert**, not a RON round trip: a round trip cannot
+/// tell a field that fails to reach the file from one that does, which is
+/// exactly what `#[serde(skip)]` looks like from its side.
+#[test]
+fn a_program_id_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("program_id_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = game.adopt_program("scrapper", 4, 4, 1.0).unwrap();
+    let id = game.world.get::<ProgramId>(program).unwrap().0;
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert_eq!(owned_ids(&mut loaded), vec![id], "the id has to travel");
+}
+
+/// A save written before this feature carries the sentinel for everyone, so
+/// the load path mints. Distinct ids, or two programs share an identity for
+/// the rest of the run.
+#[test]
+fn a_legacy_save_mints_an_id_for_every_owned_program() {
+    let dir = scratch_assets_dir("program_id_legacy");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = three_owned_programs(&dir);
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    for c in &mut data.creatures {
+        c.program_id = 0;
+    }
+    data.next_program_id = 0;
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let ids = owned_ids(&mut loaded);
+    assert_eq!(ids.len(), 3, "every program came back");
+    assert!(
+        ids.iter().all(|&id| id != 0),
+        "none kept the sentinel: {ids:?}"
+    );
+    let mut distinct = ids.clone();
+    distinct.dedup();
+    assert_eq!(distinct, ids, "and no two share one: {ids:?}");
+}
+
+/// Minting is for the sentinel alone. An id already in the file is that
+/// program's name and nothing may reissue it.
+#[test]
+fn an_id_already_in_the_file_is_never_minted_again() {
+    let dir = scratch_assets_dir("program_id_mixed");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = three_owned_programs(&dir);
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    let mut kept = Vec::new();
+    for (i, c) in data.creatures.iter_mut().filter(|c| c.tamed).enumerate() {
+        if i == 0 {
+            kept.push(c.program_id);
+        } else {
+            c.program_id = 0;
+        }
+    }
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let ids = owned_ids(&mut loaded);
+    assert!(
+        ids.contains(&kept[0]),
+        "the saved id survives untouched: {ids:?} should hold {kept:?}"
+    );
+    assert_eq!(
+        ids.iter().filter(|&&id| id == kept[0]).count(),
+        1,
+        "and nothing was minted on top of it: {ids:?}"
+    );
+}
+
+/// The counter is restored past the highest id *in the file*, not from the
+/// saved counter alone — a hand-edited or savetool-packed save can carry ids
+/// the counter has never seen, and reissuing one names two programs at once.
+#[test]
+fn the_counter_lands_above_every_id_seen() {
+    let dir = scratch_assets_dir("program_id_counter");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = three_owned_programs(&dir);
+    game.save(&path).unwrap();
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    for c in data.creatures.iter_mut().filter(|c| c.tamed) {
+        c.program_id = 500;
+        break;
+    }
+    data.next_program_id = 1;
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let minted = loaded.adopt_program("scrapper", 7, 7, 1.0).unwrap();
+    let id = loaded.world.get::<ProgramId>(minted).unwrap().0;
+    assert!(
+        id > 500,
+        "the next id must clear every id in the file: {id}"
+    );
+}
+
+/// Three owned programs of shipped species — a fixture species would be
+/// dropped on load, since `Game::load` resolves a creature against
+/// `SpeciesDb` and skips what it cannot name.
+fn three_owned_programs(_dir: &ScratchAssets) -> Game {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for (species, x) in [("scrapper", 4), ("glitch", 5), ("drone", 6)] {
+        game.adopt_program(species, x, 4, 1.0).unwrap();
+    }
+    game
+}
+
+/// Every owned program's id, sorted. `Option` rather than a filter, so a
+/// program that came back with no component at all reads as the sentinel
+/// rather than vanishing from the assertion.
+fn owned_ids(game: &mut Game) -> Vec<u32> {
+    let mut ids: Vec<u32> = game
+        .world
+        .query_filtered::<Option<&ProgramId>, With<crate::components::Tamed>>()
+        .iter(&game.world)
+        .map(|p| p.map_or(0, |p| p.0))
+        .collect();
+    ids.sort_unstable();
+    ids
+}

@@ -1577,6 +1577,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,
+            program_id: 0,
             staff: false,
             equipment: Vec::new(),
         }],
@@ -1600,6 +1601,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         contracts: Vec::new(),
         contracts_done: Vec::new(),
         work_orders: Vec::new(),
+        next_program_id: 0,
     };
     let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));
     save::save_to_file(&path, &data).unwrap();

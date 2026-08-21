@@ -659,6 +659,23 @@ impl Game {
         // — the first wins and any others are ignored — rather than trusting
         // the file, the same way `party_slots` is truncated below.
         let mut wielded: Option<Entity> = None;
+        // Computed before the loop below, which moves `data.creatures`. The
+        // saved counter alone is not enough: a hand-edited or
+        // savetool-packed file can carry ids it never saw, and reissuing one
+        // makes two programs answer to the same name. The `.max(1)` is not
+        // redundant with the sentinel — an empty roster gives 1 on its own,
+        // but a legacy file's `next_program_id` of 0 would otherwise win.
+        let mut next_program_id = data
+            .next_program_id
+            .max(
+                data.creatures
+                    .iter()
+                    .map(|c| c.program_id)
+                    .max()
+                    .unwrap_or(0)
+                    + 1,
+            )
+            .max(1);
         for c in data.creatures {
             let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
                 continue;
@@ -779,7 +796,17 @@ impl Game {
             }
             if c.tamed {
                 let creature_id = entity.id();
+                // Minted here for a file written before ids existed, which
+                // carries the sentinel for everyone. An id already in the
+                // file is that program's name and is never reissued.
+                let program_id = if c.program_id == 0 {
+                    next_program_id += 1;
+                    next_program_id - 1
+                } else {
+                    c.program_id
+                };
                 entity.insert((
+                    ProgramId(program_id),
                     Tamed { owner: player },
                     PowerReserve::new(c.power),
                     Experience {
@@ -829,6 +856,8 @@ impl Game {
                 }
             }
         }
+        game.world
+            .insert_resource(crate::resources::NextProgramId(next_program_id));
         party_slots.sort_by_key(|&(slot, _)| slot);
         let mut party: Vec<Entity> = party_slots.into_iter().map(|(_, e)| e).collect();
         party.truncate(MAX_PARTY_SIZE);
@@ -1006,6 +1035,7 @@ impl Game {
                 Option<&Nemesis>,
                 Option<&PowerReserve>,
                 Option<&Boss>,
+                Option<&ProgramId>,
             ),
         )>();
         for (
@@ -1035,6 +1065,7 @@ impl Game {
                 nemesis,
                 reserve,
                 boss,
+                program_id,
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1108,6 +1139,7 @@ impl Game {
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),
                 rarity: rarity.copied().unwrap_or_default(),
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
+                program_id: program_id.map(|p| p.0).unwrap_or(0),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL
@@ -1313,6 +1345,7 @@ impl Game {
                 .done
                 .clone(),
             work_orders: self.work_orders().to_vec(),
+            next_program_id: self.world.resource::<crate::resources::NextProgramId>().0,
         };
         save::save_to_file(path, &data)
     }

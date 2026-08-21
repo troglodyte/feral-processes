@@ -319,6 +319,18 @@ pub struct CreatureSave {
     /// documents just above.
     #[serde(default)]
     pub nemesis_grudges: u32,
+    /// This program's stable identity — see `components::ProgramId`. Only
+    /// meaningful when `tamed` is true; a wild creature's is written as the
+    /// sentinel and ignored.
+    ///
+    /// `0` is that sentinel, which is exactly what a file written before
+    /// this field existed defaults to: `Game::load` mints a fresh id for
+    /// every owned program carrying it, and sets the counter past the
+    /// highest id it saw. Additive behind `#[serde(default)]`, so it earns
+    /// no `SAVE_FORMAT_VERSION` bump — nothing is removed and no field
+    /// changes meaning under a name it keeps.
+    #[serde(default)]
+    pub program_id: u32,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -651,6 +663,20 @@ pub struct SaveData {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub work_orders: Vec<crate::game::base::work_orders::WorkOrder>,
+    /// The next `components::ProgramId` to hand out — see
+    /// `resources::NextProgramId`. Without it a reload would reissue ids
+    /// already spent, and two programs would answer to one name.
+    ///
+    /// `Game::load` takes the greater of this and one past the highest
+    /// `CreatureSave::program_id` in the file, so a hand-edited or
+    /// savetool-packed save that carries ids this counter never saw still
+    /// loads safely.
+    ///
+    /// `#[serde(default)]`, so a file written before this field existed
+    /// loads it as `0` and costs no `SAVE_FORMAT_VERSION` bump — that
+    /// legacy `0` is exactly the case the `.max` above answers.
+    #[serde(default)]
+    pub next_program_id: u32,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -975,6 +1001,7 @@ mod tests {
             contracts: Vec::new(),
             contracts_done: Vec::new(),
             work_orders: Vec::new(),
+            next_program_id: crate::resources::NextProgramId::START.0,
         }
     }
 
@@ -1016,6 +1043,7 @@ mod tests {
             boss: false,
             nemesis_grudges: 0,
             equipment: Vec::new(),
+            program_id: 1,
             staff: false,
         }
     }

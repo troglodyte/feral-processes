@@ -43,7 +43,7 @@ fast-forwarded and deleted a branch mid-task in this repo before.
   `items::GearCopy::quality: u8`; `items::default_quality() -> u8` (private
   to `items.rs`, named in the `serde` attribute).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `crates/engine/src/tests/equipment.rs` (it already has
 `use super::*;`-style imports at the top — add `crate::tuning::QUALITY_DEFAULT`
@@ -99,12 +99,12 @@ fn an_off_spec_copy_lands_in_the_gear_ledger() {
 }
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `cargo test -p feral-processes-engine an_off_spec_copy`
 Expected: FAIL to compile — `struct GearCopy has no field named quality`.
 
-- [ ] **Step 3: Add the constant**
+- [x] **Step 3: Add the constant**
 
 In `crates/engine/src/tuning.rs`, beside the gear constants:
 
@@ -123,7 +123,7 @@ In `crates/engine/src/tuning.rs`, beside the gear constants:
 pub const QUALITY_DEFAULT: u8 = 100;
 ```
 
-- [ ] **Step 4: Add the field**
+- [x] **Step 4: Add the field**
 
 In `crates/engine/src/items.rs`, add `QUALITY_DEFAULT` to the existing
 `crate::tuning::*` import, then add the field last in `GearCopy`:
@@ -179,7 +179,7 @@ Then `plain` and `is_plain`:
     }
 ```
 
-- [ ] **Step 5: Fix every struct literal**
+- [x] **Step 5: Fix every struct literal**
 
 Run `cargo test --workspace --no-run` and work the compiler's list. There
 are about 30, in three groups — treat them differently:
@@ -213,18 +213,18 @@ break them again:*
 *Renderer fixtures:* `crates/gui/src/render/inventory.rs:625` and `:732`,
 same struct-update shape.
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `cargo test -p feral-processes-engine an_off_spec_copy`
 Expected: PASS, both.
 
-- [ ] **Step 7: Mutation-check**
+- [x] **Step 7: Mutation-check**
 
 Delete the `&& self.quality == QUALITY_DEFAULT` clause, re-run: both tests
 must fail. Restore it and confirm they pass again. Record the result in the
 commit body.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cargo fmt && cargo clippy --workspace
@@ -258,7 +258,7 @@ not** — the save keeps them as flat fields on purpose (see
 each worn slot needs its own additive field. Missing this is invisible
 until someone reloads wearing a copy that is not at 100, which is Phase 2.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 /// A worn copy's quality is four flat save fields rather than a nested
@@ -301,12 +301,12 @@ fn a_worn_off_spec_copy_survives_save_and_load() {
 `Game::worn(wearer, slot) -> Option<EquippedItem>` lives at
 `crates/engine/src/game/party.rs:630` and is already `pub` — do not add a second accessor.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `cargo test -p feral-processes-engine a_worn_off_spec_copy`
 Expected: FAIL — the reloaded copy reads `QUALITY_DEFAULT`, not 115.
 
-- [ ] **Step 3: Add the save fields**
+- [x] **Step 3: Add the save fields**
 
 `EquippedItemSave` gains, after `affix`:
 
@@ -330,7 +330,7 @@ fn default_worn_quality() -> u8 {
 `PlayerSave` gains the same field three times, following its existing
 `weapon_/armor_/module_` naming and each `#[serde(default = "default_worn_quality")]`.
 
-- [ ] **Step 4: Wire both directions**
+- [x] **Step 4: Wire both directions**
 
 `worn_to_save` adds `quality: worn.copy.quality`. `worn_from_save` takes a
 sixth parameter `quality: u8` and sets it on the `GearCopy` it builds. The
@@ -342,17 +342,17 @@ Fix the `PlayerSave` fixture around `save.rs:912`.
 **Do not bump `SAVE_FORMAT_VERSION`.** Every field here is additive and
 defaulted on a named struct, which the save seam says costs no bump.
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `cargo test -p feral-processes-engine a_worn_off_spec_copy`
 Expected: PASS.
 
-- [ ] **Step 6: Mutation-check**
+- [x] **Step 6: Mutation-check**
 
 Change `worn_to_save`'s new line to `quality: QUALITY_DEFAULT`; the test
 must fail. Restore, confirm green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cargo fmt && cargo clippy --workspace
@@ -378,7 +378,7 @@ line (`save.rs:747`), so a pre-quality save is exactly this save with the
 defaulting fault — the standing note on `#[serde(skip)]` is the same trap —
 so the file has to be edited on disk and loaded back.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 /// **A save written before this field loads its gear at 100.** That claim
@@ -442,13 +442,13 @@ test says so. In that case strip with a `replace("quality: 100,", "")` on
 the whole string instead — the assertion is what makes either version
 honest.
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `cargo test -p feral-processes-engine a_pre_quality_save`
 Expected: PASS on the first run — Tasks 1 and 2 already did the work. This
 task's deliverable is the *proof*, so go straight to the mutation check.
 
-- [ ] **Step 3: Mutation-check, both halves**
+- [x] **Step 3: Mutation-check, both halves**
 
 1. Change `GearCopy::quality`'s attribute to a bare `#[serde(default)]` →
    the carried assertion must fail (it loads at 0).
@@ -458,7 +458,7 @@ task's deliverable is the *proof*, so go straight to the mutation check.
 
 Both halves must fail independently, or the test is only covering one route.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/engine/src/tests/equipment.rs
@@ -479,7 +479,7 @@ git commit -m "test(engine): a save written before quality loads gear as designe
 - Consumes: `tuning::QUALITY_DEFAULT`.
 - Produces: `pub(crate) fn for_quality(self, quality: u8) -> EquipmentStats`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
     #[test]
@@ -526,12 +526,12 @@ git commit -m "test(engine): a save written before quality loads gear as designe
     }
 ```
 
-- [ ] **Step 2: Run and watch them fail**
+- [x] **Step 2: Run and watch them fail**
 
 Run: `cargo test -p feral-processes-engine for_quality`
 Expected: FAIL to compile — no method `for_quality`.
 
-- [ ] **Step 3: Implement it**
+- [x] **Step 3: Implement it**
 
 ```rust
     /// This item's bonus scaled for how well *this copy* was compiled
@@ -572,18 +572,18 @@ Expected: FAIL to compile — no method `for_quality`.
     }
 ```
 
-- [ ] **Step 4: Run them**
+- [x] **Step 4: Run them**
 
 Run: `cargo test -p feral-processes-engine for_quality`
 Expected: PASS, both.
 
-- [ ] **Step 5: Mutation-check**
+- [x] **Step 5: Mutation-check**
 
 Replace `scale_range(self.damage, scale)` with `self.damage`; the band
 assertions must fail. Then drop the `if v <= 0` guard; the second test must
 fail. Restore both.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cargo fmt && cargo clippy --workspace
@@ -604,7 +604,7 @@ git commit -m "feat(engine): gear scales by the quality its copy compiled at"
 - Produces: no signature change. `Game::copy_bonus(&self, copy, level)`
   now honours `copy.quality`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 /// **A rare tier's floor is guaranteed against a copy of equal quality**,
@@ -664,13 +664,13 @@ fn quality_moves_a_copys_bonus_at_every_level() {
 }
 ```
 
-- [ ] **Step 2: Run and watch them fail**
+- [x] **Step 2: Run and watch them fail**
 
 Run: `cargo test -p feral-processes-engine quality_moves_a_copys_bonus`
 Expected: FAIL — the two copies price identically, because `copy_bonus`
 does not read `quality` yet.
 
-- [ ] **Step 3: Wire it in**
+- [x] **Step 3: Wire it in**
 
 In `Game::copy_bonus`, the tail becomes:
 
@@ -695,7 +695,7 @@ Add to that function's doc comment, above the existing prose:
     /// floor is worth a rung *against a copy of equal quality*.
 ```
 
-- [ ] **Step 4: Run the whole engine suite**
+- [x] **Step 4: Run the whole engine suite**
 
 Run: `cargo test -p feral-processes-engine`
 Expected: PASS. Everything is still at `QUALITY_DEFAULT`, so no existing
@@ -703,7 +703,7 @@ figure may move. **If a balance or equipment test moves here, stop** — it
 means something is constructing a copy at a quality it did not intend, and
 that is a fault in Task 1's literal sweep, not a number to re-baseline.
 
-- [ ] **Step 5: Mutation-check**
+- [x] **Step 5: Mutation-check**
 
 Remove the `.for_quality(copy.quality)` line; both new tests must fail.
 Then move it to the end of the chain and re-run: `quality_moves_a_copys_bonus`
@@ -711,7 +711,7 @@ should still pass but `a_rarer_copy_beats_an_ordinary_one_of_equal_quality`
 must fail at level 1 — that failure *is* the ordering argument, so confirm
 you see it before restoring.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cargo fmt && cargo clippy --workspace
@@ -744,7 +744,7 @@ argument `Rarity::label` and `Game::copy_name` already make. The renderer
 owns the palette, because a band carrying a *weight* as well as a hue is
 not expressible as a colour.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
     /// Every boundary in the four-band ladder, and the one that matters
@@ -765,12 +765,12 @@ not expressible as a colour.
     }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
 Run: `cargo test -p feral-processes-engine quality_band`
 Expected: FAIL to compile — no `quality_band`, no `QualityBand`.
 
-- [ ] **Step 3: Add the constants**
+- [x] **Step 3: Add the constants**
 
 Beside `QUALITY_DEFAULT` in `tuning.rs`:
 
@@ -793,7 +793,7 @@ pub const QUALITY_SPEC_MAX: u8 = 105;
 pub const QUALITY_ABOVE_MAX: u8 = 120;
 ```
 
-- [ ] **Step 4: Add the band**
+- [x] **Step 4: Add the band**
 
 In `items.rs`, beside `for_quality`:
 
@@ -823,17 +823,17 @@ pub fn quality_band(quality: u8) -> QualityBand {
 
 Add the three new constants to `items.rs`'s `crate::tuning` import.
 
-- [ ] **Step 5: Run it**
+- [x] **Step 5: Run it**
 
 Run: `cargo test -p feral-processes-engine quality_band`
 Expected: PASS.
 
-- [ ] **Step 6: Mutation-check**
+- [x] **Step 6: Mutation-check**
 
 Change `q <= QUALITY_SPEC_MAX` to `q < QUALITY_SPEC_MAX`; the test must
 fail at 105. Restore.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cargo fmt && cargo clippy --workspace
@@ -858,7 +858,7 @@ git commit -m "feat(engine): a copy's quality reads as one of four bands"
 **Do not touch** `docs/manual.md`, root `README.md`, or `TODO.md`.
 `CHANGELOG.md` and the version bump happen at the merge, not here.
 
-- [ ] **Step 1: Write the seam entry**
+- [x] **Step 1: Write the seam entry**
 
 Add to `docs/seams.md`, under the same heading `CLAUDE.md` uses, an entry
 titled **"A copy's quality is the fourth axis, and it is an integer"**
@@ -868,7 +868,7 @@ the chain order puts a floor-free axis third, and the worked
 `Silver`-at-70%-vs-`Ordinary`-at-130% inversion that says it cannot go
 last. Cite the spec by path.
 
-- [ ] **Step 2: Write the rule**
+- [x] **Step 2: Write the rule**
 
 Add to `CLAUDE.md`'s **Items, gear and economy** list, in that file's voice
 — the rule and the trap, no argument:
@@ -886,7 +886,7 @@ Add to `CLAUDE.md`'s **Items, gear and economy** list, in that file's voice
   the rare tiers on a 4-point stat.
 ```
 
-- [ ] **Step 3: Copy the twin**
+- [x] **Step 3: Copy the twin**
 
 ```bash
 cp CLAUDE.md AGENTS.md
@@ -895,7 +895,7 @@ cp CLAUDE.md AGENTS.md
 They are gitignored twins with no tracking to catch drift, so the copy is
 the only thing keeping them in step.
 
-- [ ] **Step 4: The full gate**
+- [x] **Step 4: The full gate**
 
 ```sh
 cargo fmt
@@ -910,7 +910,7 @@ it is untouched: quality sits outside its gate by the same exclusion that
 keeps `Rarity` out, so a moved curve here means something is rolling a
 quality it should not be.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/seams.md CLAUDE.md AGENTS.md

@@ -536,11 +536,18 @@ impl App {
         if let Some(idx) = self.selected_index(key, items.len()) {
             self.pending_order = Some(items[idx].0.clone());
             self.order_quantity_input.clear();
+            // Cleared on the way in rather than on the way out, exactly as
+            // `careful_craft` is: a flag left set would file the next batch
+            // as a level the base holds forever, from a page that had gone
+            // back to saying nothing about it.
+            self.standing_order = false;
             self.mode = Mode::WorkOrderQuantity;
         }
     }
 
-    /// Digits and Enter, the shape `Mode::CraftQuantity` already uses.
+    /// Digits and Enter, the shape `Mode::CraftQuantity` already uses, plus
+    /// `[S]` for a standing order — the careful-compile toggle's shape one
+    /// screen over, cleared on the way in for the same reason.
     pub(crate) fn handle_work_order_quantity_key(&mut self, key: GameKey) {
         match key {
             GameKey::Esc => {
@@ -554,6 +561,9 @@ impl App {
             GameKey::Char(c) if c.is_ascii_digit() && self.order_quantity_input.len() < 4 => {
                 self.order_quantity_input.push(c);
             }
+            GameKey::Char('s') | GameKey::Char('S') => {
+                self.standing_order = !self.standing_order;
+            }
             GameKey::Enter => {
                 let Some(item) = self.pending_order.take() else {
                     self.mode = Mode::WorkOrders;
@@ -562,7 +572,7 @@ impl App {
                 let qty: u32 = self.order_quantity_input.parse().unwrap_or(1).max(1);
                 self.order_quantity_input.clear();
                 if let Some(game) = &mut self.game {
-                    self.status_line = game.queue_work_order(item, qty).err();
+                    self.status_line = game.queue_work_order(item, qty, self.standing_order).err();
                 }
                 self.mode = Mode::WorkOrders;
                 self.menu_selected = 0;

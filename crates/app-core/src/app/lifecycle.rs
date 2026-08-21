@@ -75,6 +75,7 @@ impl App {
             careful_craft: false,
             pending_order: None,
             order_quantity_input: String::new(),
+            standing_order: false,
             pending_trade_structure: None,
             pending_trade_choice: None,
             trade_origin: TradeOrigin::Trader,

@@ -268,11 +268,18 @@ pub(super) fn draw_work_order_pick(
     draw_popup("New Work Order", PopupSize::Large, &rows, painter, m);
 }
 
+const WORK_ORDER_QUANTITY_KEYS: &str = "[S] Standing order   Digits then Enter   Esc to go back";
+
 /// How many of it. The same two-page shape the compile flow uses.
+///
+/// `PopupSize::Large`, as `draw_craft_quantity` is: the sentences on it are
+/// prose rather than menu rows, and the widest already ran 8px past a small
+/// box before this page gained a toggle to explain.
 pub(super) fn draw_work_order_quantity(
     game: &Game,
     item: Option<ItemId>,
     typed: &str,
+    standing: bool,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -281,13 +288,38 @@ pub(super) fn draw_work_order_quantity(
         .map(|i| game.item_name(i).to_string())
         .unwrap_or_default();
     let shown = if typed.is_empty() { "1" } else { typed };
-    let rows = vec![
-        text_row(format!("How many {name} should the base hold?")),
-        text_row(format!("  {shown}")),
-        text_row("Digits then Enter. Esc to go back."),
-        text_row("An order is a target, not a batch — what you already hold counts."),
-    ];
-    draw_popup("Order Quantity", PopupSize::Small, &rows, painter, m);
+    let rows: Vec<Row> = work_order_quantity_lines(&name, shown, standing)
+        .into_iter()
+        .map(text_row)
+        .collect();
+    draw_popup("Order Quantity", PopupSize::Large, &rows, painter, m);
+}
+
+/// The quantity page's lines, pure for `work_order_lines`' reason: a page
+/// built out of text rows has no scroll and `draw_row` never clips one
+/// horizontally, so a sentence that outgrows the popup body is lost in
+/// silence and only a headless measurement catches it.
+fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<String> {
+    vec![
+        format!("How many {name} should the base hold?"),
+        String::new(),
+        format!("Quantity: {shown}"),
+        String::new(),
+        format!(
+            "Standing order: {}",
+            if standing {
+                "on — the base tops this level back up as it drains"
+            } else {
+                "off — one batch, and the order is done with"
+            }
+        ),
+        String::new(),
+        // `base_holding` sums machine and depot buffers only, so a player
+        // carrying forty of the thing still reads 0/20 on the queue screen.
+        "The target is what the base holds. What you are carrying is yours.".to_string(),
+        String::new(),
+        WORK_ORDER_QUANTITY_KEYS.to_string(),
+    ]
 }
 
 /// The roster as the base sees it: every program the player owns, the role
@@ -1051,6 +1083,30 @@ mod work_order_tests {
                 );
             }
         }
+    }
+
+    /// The quantity page is prose in a popup with no scroll, and its widest
+    /// sentence had already outgrown the small box it used to be drawn in.
+    /// Measured in pixels rather than columns because that is the failure —
+    /// a column count is a proxy that was never checked here.
+    #[test]
+    fn no_work_order_quantity_row_runs_past_the_popup_body() {
+        let m = crate::text::ui_metrics(900.0);
+        // Longer than any name the shipped items carry, so a mod naming
+        // something unreasonably has room too.
+        let name = "Recompiled Kernel Substrate Blank";
+        crate::paint::with_painter(|p| {
+            let box_w = p.screen_w() * 0.88;
+            for standing in [true, false] {
+                for line in work_order_quantity_lines(name, "9999", standing) {
+                    let text_w = p.measure_ui_advance(&line, m.font_size);
+                    assert!(
+                        text_w + 2.0 * m.pad < box_w,
+                        "a {text_w}px row runs past the {box_w}px body: {line:?}"
+                    );
+                }
+            }
+        });
     }
 }
 

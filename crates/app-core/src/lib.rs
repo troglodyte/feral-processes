@@ -1523,6 +1523,13 @@ pub struct App {
     pub pending_order: Option<ItemId>,
     /// Digits typed so far on the work-order quantity page.
     pub order_quantity_input: String,
+    /// Whether the pending order is a level the base holds forever rather
+    /// than a batch it makes once — see `WorkOrder::standing`.
+    ///
+    /// Cleared where `careful_craft` is and for its reason: a flag that
+    /// outlived its page would turn the next batch into a standing order on
+    /// a screen that had gone back to saying nothing about it.
+    pub standing_order: bool,
     /// The trading post picked in `Mode::Trade`, awaiting a line-item pick
     /// from `Mode::TradeAction`.
     pub pending_trade_structure: Option<Entity>,

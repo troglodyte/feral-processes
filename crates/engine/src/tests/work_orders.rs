@@ -109,7 +109,7 @@ fn an_item_no_deployed_machine_makes_is_refused_by_name() {
     spawn_machine_at(&mut game, "lathe", 3, 0);
 
     let err = game
-        .queue_work_order(ItemId::from("routine_disk"), 3)
+        .queue_work_order(ItemId::from("routine_disk"), 3, false)
         .expect_err("nothing deployed presses a disk");
 
     assert!(
@@ -130,7 +130,7 @@ fn a_machine_with_no_feeder_beside_it_is_refused_by_link() {
     spawn_machine_at(&mut game, "disk_press", 9, 9);
 
     let err = game
-        .queue_work_order(ItemId::from("routine_disk"), 3)
+        .queue_work_order(ItemId::from("routine_disk"), 3, false)
         .expect_err("a press with no substrate beside it can never run");
 
     assert!(
@@ -157,7 +157,7 @@ fn an_item_nothing_declares_as_a_product_is_refused_as_unmakeable() {
         .id;
 
     let err = game
-        .queue_work_order(unmakeable.clone(), 1)
+        .queue_work_order(unmakeable.clone(), 1, false)
         .expect_err("nothing in the base can make it");
 
     assert!(!err.is_empty());
@@ -185,7 +185,7 @@ fn a_banked_item_is_refused_even_with_its_machine_standing() {
     );
 
     let err = game
-        .queue_work_order(ItemId::from("research_data"), 5)
+        .queue_work_order(ItemId::from("research_data"), 5, false)
         .expect_err("a banked item reaches no output, so no base can hold a stock of it");
 
     assert!(!err.is_empty());
@@ -198,7 +198,7 @@ fn a_whole_line_correctly_laid_out_is_accepted() {
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
 
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .expect("a three-deep line stood up end to end must be orderable");
 
     assert_eq!(game.work_orders().len(), 1);
@@ -215,9 +215,9 @@ fn cancelling_an_order_shifts_the_queue_up_and_unwinds_nothing() {
     let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("core_fragment"), 5)
+    game.queue_work_order(ItemId::from("core_fragment"), 5, false)
         .unwrap();
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     game.cancel_work_order(0).unwrap();
@@ -241,7 +241,7 @@ fn cancelling_an_out_of_range_order_is_refused_rather_than_panicking() {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("core_fragment"), 5)
+    game.queue_work_order(ItemId::from("core_fragment"), 5, false)
         .unwrap();
 
     assert!(game.cancel_work_order(7).is_err());
@@ -253,9 +253,9 @@ fn work_orders_round_trip_through_a_save() {
     let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
-    game.queue_work_order(ItemId::from("core_fragment"), 9)
+    game.queue_work_order(ItemId::from("core_fragment"), 9, false)
         .unwrap();
 
     let path = save_path("orders");
@@ -405,6 +405,7 @@ fn on_an_empty_base_only_the_top_of_the_line_wants_a_body() {
     let order = crate::game::base::work_orders::WorkOrder {
         item: ItemId::from("routine_disk"),
         qty: 3,
+        standing: false,
     };
 
     let order_of: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
@@ -424,6 +425,7 @@ fn wants_orders_a_running_line_upstream_first() {
     let order = crate::game::base::work_orders::WorkOrder {
         item: ItemId::from("routine_disk"),
         qty: 3,
+        standing: false,
     };
 
     let order_of: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
@@ -509,6 +511,7 @@ fn wants_keeps_a_shared_feeder_once_at_its_deepest_position() {
     let order = crate::game::base::work_orders::WorkOrder {
         item: ItemId::from("test_widget"),
         qty: 1,
+        standing: false,
     };
     let list = wants(&game, &order);
     let _ = std::fs::remove_dir_all(&dir);
@@ -587,7 +590,7 @@ fn one_staff_member_is_posted_to_the_top_of_the_line() {
     stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     game.tick();
@@ -609,7 +612,7 @@ fn a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful() {
     stand_in_base(&mut game);
     let (mine, lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
     game.tick();
     assert_eq!(posted_at(&game, staff[0]), Some(mine), "precondition");
@@ -651,7 +654,7 @@ fn three_staff_spread_across_a_running_line_without_doubling_up() {
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
     let staff = hire(&mut game, 3);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
 
     game.tick();
@@ -671,7 +674,7 @@ fn two_staff_take_the_two_deepest_machines() {
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
     let staff = hire(&mut game, 2);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
 
     game.tick();
@@ -699,7 +702,7 @@ fn a_second_machine_making_the_ordered_item_is_staffed_too() {
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
     let staff = hire(&mut game, 2);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
         .unwrap();
 
     game.tick();
@@ -724,7 +727,7 @@ fn the_report_names_every_machine_making_the_ordered_item() {
     place_home(&mut game);
     let first = spawn_machine_at(&mut game, "mining_node", 2, 0);
     let second = spawn_machine_at(&mut game, "mining_node", 2, 2);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
         .unwrap();
 
     let report = game.work_order_report();
@@ -754,7 +757,7 @@ fn a_second_unfed_bench_does_not_refuse_a_line_that_is_whole() {
         "precondition: the unfed twin is the one an arbitrary pick would take"
     );
 
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .expect("one whole line is enough for the order to stand");
 
     assert_eq!(game.work_orders().len(), 1);
@@ -771,7 +774,7 @@ fn an_order_the_base_already_holds_completes_without_staffing_anything() {
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
     put_output(&mut game, depot, "routine_disk", 5);
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     game.tick();
@@ -795,7 +798,7 @@ fn a_posted_worker_is_not_moved_when_an_unrelated_buffer_changes() {
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
     game.tick();
     assert_eq!(posted_at(&game, staff[0]), Some(mine), "precondition");
@@ -825,9 +828,9 @@ fn a_stalled_front_order_does_not_block_the_queue() {
     stand_in_base(&mut game);
     let (mine, _lathe, press) = lay_disk_line(&mut game);
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 30)
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 30, false)
         .unwrap();
 
     game.world.entity_mut(press).despawn();
@@ -850,7 +853,7 @@ fn a_base_with_no_staff_queues_and_reports_without_posting_or_panicking() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     game.tick();
@@ -893,7 +896,7 @@ fn a_standing_job_yields_the_body_to_an_order_and_takes_it_back_after() {
     game.tick();
     assert_eq!(posted_at(&game, staff[0]), Some(node), "precondition");
 
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
     game.tick();
     assert_eq!(
@@ -1129,13 +1132,14 @@ fn the_report_lists_exactly_what_the_scheduler_walks() {
     let (mine, lathe, _press) = lay_disk_line(&mut game);
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     put_output(&mut game, lathe, "blank_substrate", 6);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     let report = game.work_order_report();
     let order = crate::game::base::work_orders::WorkOrder {
         item: ItemId::from("routine_disk"),
         qty: 3,
+        standing: false,
     };
     let walked: Vec<Entity> = wants(&game, &order).into_iter().map(|(e, _)| e).collect();
 
@@ -1152,7 +1156,7 @@ fn the_report_counts_what_the_base_holds_against_the_target() {
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 6, 0);
-    game.queue_work_order(ItemId::from("routine_disk"), 5)
+    game.queue_work_order(ItemId::from("routine_disk"), 5, false)
         .unwrap();
     put_output(&mut game, depot, "routine_disk", 2);
 
@@ -1166,7 +1170,7 @@ fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let (_mine, _lathe, press) = lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     game.world.entity_mut(press).despawn();
@@ -1192,7 +1196,7 @@ fn a_base_with_no_staff_reports_its_orders_normally_rather_than_stalled() {
     let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
 
     let report = game.work_order_report();
@@ -1209,7 +1213,7 @@ fn the_report_names_who_is_posted_on_each_machine() {
     stand_in_base(&mut game);
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
     game.tick();
 
@@ -1236,7 +1240,7 @@ fn a_completed_order_is_announced_as_a_completion() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let (mine, ..) = lay_disk_line(&mut game);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5)
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, false)
         .unwrap();
     // Already satisfied when the scheduler next looks, so the order settles
     // on the first tick without anything having to be produced.
@@ -1292,7 +1296,7 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
     let spare = spawn_machine_at(&mut game, "mining_node", 3, 3);
     game.set_standing_job(spare, true, false).unwrap();
     hire(&mut game, 1);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60)
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
         .unwrap();
     game.tick();
 
@@ -1346,7 +1350,7 @@ fn a_bench_fed_from_the_depot_does_not_staff_its_feeder() {
         .output
         .insert(ItemId::from("blank_substrate"), 10);
     hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
 
     game.tick();
@@ -1380,7 +1384,7 @@ fn the_feeder_is_wanted_again_once_the_shelf_will_not_cover_a_batch() {
     let (mine, ..) = lay_disk_line(&mut game);
     let depot = spawn_machine_at(&mut game, "depot", 3, 1);
     hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
 
     // One on the shelf against a Disk Press batch of two. Deliberately not
@@ -1452,7 +1456,7 @@ fn a_machine_fed_from_a_depot_is_orderable_without_a_neighbour() {
         "precondition: the runtime already reaches the depot's fragments"
     );
 
-    game.queue_work_order(ItemId::from("blank_substrate"), 3)
+    game.queue_work_order(ItemId::from("blank_substrate"), 3, false)
         .expect("a lathe a hauler can feed from the depot must be orderable");
 
     assert!(
@@ -1478,6 +1482,7 @@ fn the_producer_behind_a_depot_route_is_staffed_when_the_shelf_runs_thin() {
         &crate::game::base::work_orders::WorkOrder {
             item: ItemId::from("blank_substrate"),
             qty: 3,
+            standing: false,
         },
     );
     let posts: Vec<Entity> = wanted.into_iter().map(|(e, _)| e).collect();
@@ -1501,6 +1506,7 @@ fn a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it() {
         &crate::game::base::work_orders::WorkOrder {
             item: ItemId::from("blank_substrate"),
             qty: 3,
+            standing: false,
         },
     );
     let posts: Vec<Entity> = wanted.into_iter().map(|(e, _)| e).collect();
@@ -1526,7 +1532,7 @@ fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
     spawn_machine_at(&mut game, "lathe", 0, 0);
 
     let err = game
-        .queue_work_order(ItemId::from("blank_substrate"), 3)
+        .queue_work_order(ItemId::from("blank_substrate"), 3, false)
         .expect_err("no neighbour and no depot is no route");
 
     assert!(
@@ -1563,7 +1569,7 @@ fn a_posted_staff_member_sets_off_from_its_own_tile_and_not_the_player_s() {
     for _ in 0..3 {
         game.tick();
     }
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
     // The decoy the doc comment above explains.
     stand_player_at(&mut game, 5, 5);
@@ -1604,7 +1610,7 @@ fn the_scheduler_still_posts_staff_while_the_player_is_far_from_the_base() {
     for _ in 0..3 {
         game.tick();
     }
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
     // Not just far within the base — out of base space entirely, back on
     // the surface at the decoy tile the sibling test above explains.
@@ -1651,9 +1657,9 @@ fn spare_staff_are_put_on_the_second_order() {
     let (mine, _lathe, _press) = lay_disk_line(&mut game);
     let (scraper, _transcriber) = lay_wafer_line(&mut game);
     let staff = hire(&mut game, 2);
-    game.queue_work_order(ItemId::from("routine_disk"), 3)
+    game.queue_work_order(ItemId::from("routine_disk"), 3, false)
         .unwrap();
-    game.queue_work_order(ItemId::from("logic_wafer"), 3)
+    game.queue_work_order(ItemId::from("logic_wafer"), 3, false)
         .unwrap();
 
     // **The preconditions are the test.** Without them this passes against
@@ -1701,9 +1707,9 @@ fn a_machine_two_orders_want_is_posted_once() {
     // Both lines run off the Mining Node's output, so both orders reach it.
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     let staff = hire(&mut game, 3);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
-    game.queue_work_order(ItemId::from("annealed_core"), 30)
+    game.queue_work_order(ItemId::from("annealed_core"), 30, false)
         .unwrap();
     let orders = game.work_orders().to_vec();
     assert!(
@@ -1743,9 +1749,9 @@ fn the_front_order_still_fills_first_when_staff_are_scarce() {
     // bodies by itself.
     put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
     let staff = hire(&mut game, 2);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
-    game.queue_work_order(ItemId::from("logic_wafer"), 30)
+    game.queue_work_order(ItemId::from("logic_wafer"), 30, false)
         .unwrap();
     let front = game.work_orders()[0].clone();
     assert_eq!(
@@ -1781,7 +1787,7 @@ fn standing_jobs_and_digs_still_come_after_every_order() {
         .dig_site_at(wall.0, wall.1)
         .expect("a marked wall has a dig site");
     let staff = hire(&mut game, 1);
-    game.queue_work_order(ItemId::from("routine_disk"), 30)
+    game.queue_work_order(ItemId::from("routine_disk"), 30, false)
         .unwrap();
 
     game.tick();
@@ -1793,4 +1799,171 @@ fn standing_jobs_and_digs_still_come_after_every_order() {
     );
     assert_eq!(bodies_at(&mut game, node), 0, "the standing job waits");
     assert_eq!(bodies_at(&mut game, site), 0, "and so does the dig site");
+}
+
+// ---------------------------------------------------------------------
+// Work order queue, phase 2: standing orders
+// ---------------------------------------------------------------------
+
+/// An order is a target level, and a level that deletes itself the moment
+/// it is reached is not a level. A standing order sleeps where a one-shot
+/// one is completed and removed.
+#[test]
+fn a_satisfied_standing_order_stays_in_the_queue() {
+    let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, true)
+        .unwrap();
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+    // **The precondition is the test.** Without it this passes against an
+    // order that was never satisfied at all, which is every order on a base
+    // with nothing on its shelves.
+    assert!(
+        base_holding(&game, &ItemId::from(ids::CORE_FRAGMENT)) >= 5,
+        "precondition: the shelf has to actually hold what was asked for"
+    );
+
+    game.tick();
+
+    assert_eq!(
+        game.work_orders().len(),
+        1,
+        "a standing order is a level the base holds, not a batch it makes once"
+    );
+    assert!(
+        game.message_log(30)
+            .iter()
+            .all(|l| !l.text.starts_with("Work order complete")),
+        "and 'complete' is a lie about something that is not complete"
+    );
+}
+
+/// Skipped, not returned — the one correctness point in the phase.
+///
+/// A dormant standing order contributes no wants, and returning those
+/// straight out of `settle_orders` would starve every order behind it for
+/// as long as the shelf stayed full.
+#[test]
+fn an_order_below_a_satisfied_standing_order_is_worked() {
+    let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    let (scraper, _transcriber) = lay_wafer_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, true)
+        .unwrap();
+    game.queue_work_order(ItemId::from("logic_wafer"), 3, false)
+        .unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        game.work_orders().len(),
+        2,
+        "the dormant standing order is still holding its place in the queue"
+    );
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(scraper),
+        "and the order behind it is worked rather than starved"
+    );
+}
+
+/// No hysteresis, and none needed: `collect_adjacent` empties the whole
+/// output buffer, so the drain is a burst rather than a trickle and there
+/// is nothing for a re-arm threshold to oscillate around.
+#[test]
+fn a_standing_order_re_arms_after_the_shelf_drains() {
+    let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+    hire(&mut game, 1);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, true)
+        .unwrap();
+
+    game.tick();
+    assert_eq!(
+        bodies_at(&mut game, mine),
+        0,
+        "precondition: a satisfied standing order asks for nobody"
+    );
+
+    // Beside the machine rather than on the exit cell: collecting reads the
+    // party's *base* cell and takes from its orthogonal neighbours.
+    game.world.insert_resource(Locale::Base { x: 1, y: 0 });
+    assert!(
+        !game.collect_adjacent().is_empty(),
+        "precondition: the shelf actually drained"
+    );
+    game.tick();
+
+    assert_eq!(
+        bodies_at(&mut game, mine),
+        1,
+        "a standing order wakes when the level it holds is broken"
+    );
+}
+
+/// The other half: a one-shot order is still a batch, still announces
+/// itself finished, and still leaves the queue.
+#[test]
+fn a_one_shot_order_still_completes_and_is_removed() {
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, false)
+        .unwrap();
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+
+    game.tick();
+
+    assert!(
+        game.work_orders().is_empty(),
+        "a batch that has been made is done with"
+    );
+    assert!(
+        game.message_log(30)
+            .iter()
+            .any(|l| l.text.starts_with("Work order complete")),
+        "and says so"
+    );
+}
+
+/// A save written before the field existed loads every order as one-shot,
+/// which is the whole of the compatibility story for a `#[serde(default)]`
+/// field on a file-named RON save.
+///
+/// The field is *stripped from the file* rather than round-tripped: a plain
+/// round trip asserts the field survives, which is a different claim and
+/// passes against a default nobody ever exercises. The strip is asserted to
+/// have applied, or a rename would quietly turn this into a round trip.
+#[test]
+fn an_order_saved_before_standing_orders_loads_as_one_shot() {
+    let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    lay_disk_line(&mut game);
+    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 5, true)
+        .unwrap();
+
+    let path = save_path("standing_default");
+    game.save(&path).unwrap();
+    let written = std::fs::read_to_string(&path).unwrap();
+    let older = written.replace("standing: true,", "");
+    assert_ne!(
+        older, written,
+        "the field has to be in the file for removing it to mean anything"
+    );
+    std::fs::write(&path, &older).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let orders = loaded.work_orders();
+    assert_eq!(orders.len(), 1, "the order itself still loads");
+    assert!(
+        !orders[0].standing,
+        "and an order filed before standing ones existed is a batch"
+    );
 }

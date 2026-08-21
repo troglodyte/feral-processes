@@ -42,6 +42,17 @@ use crate::*;
 pub struct WorkOrder {
     pub item: ItemId,
     pub qty: u32,
+    /// A level the base holds rather than a batch it makes once: reaching
+    /// `qty` puts the order to sleep instead of completing it, and the
+    /// shelf draining wakes it again.
+    ///
+    /// The field the module header's "an item and a quantity, nothing else"
+    /// rule now admits, and it is a *label* rather than a plan — nothing
+    /// about which machines run or how far along they are is stored beside
+    /// it. `#[serde(default)]` on field-named RON, so an order filed before
+    /// standing ones existed loads as the batch it was.
+    #[serde(default)]
+    pub standing: bool,
 }
 
 /// **Every** deployed structure whose def puts `item` into an output
@@ -1036,9 +1047,9 @@ impl Game {
         jobs.into_iter().map(|(_, _, e, k)| (e, k)).collect()
     }
 
-    /// Steps 1 and 2: pop every completed order off the front, skip the
-    /// stalled ones, and return the accumulated want list of **every**
-    /// order left, in queue order.
+    /// Steps 1 and 2: pop every completed one-shot order off the queue,
+    /// skip the stalled and the sleeping ones, and return the accumulated
+    /// want list of **every** order left, in queue order.
     ///
     /// The queue is a production policy rather than a to-do list: a base
     /// with more bodies than the front order can use works the one behind
@@ -1061,6 +1072,21 @@ impl Game {
             .cloned()
         {
             if base_holding(self, &order.item) >= order.qty {
+                if order.standing {
+                    // A level the base holds: reaching it puts the order to
+                    // sleep, and the shelf draining wakes it again.
+                    //
+                    // **Skipped, not returned**, which is the one
+                    // correctness point in standing orders — its wants are
+                    // empty, and handing those back would starve every order
+                    // behind it for as long as the shelf stayed full. It
+                    // says nothing either: "complete" is a lie about
+                    // something that is not complete, and detecting the
+                    // moment it fell asleep needs state the order does not
+                    // have. The queue screen carries that news instead.
+                    index += 1;
+                    continue;
+                }
                 let name = self.item_name(&order.item).to_string();
                 let qty = order.qty;
                 self.world
@@ -1102,7 +1128,12 @@ impl Game {
     /// argument `use_symlink` makes about `clear_stack` and
     /// `install_routine` makes about the disk. A refused order leaves the
     /// queue exactly as it was.
-    pub fn queue_work_order(&mut self, item: ItemId, qty: u32) -> Result<(), String> {
+    pub fn queue_work_order(
+        &mut self,
+        item: ItemId,
+        qty: u32,
+        standing: bool,
+    ) -> Result<(), String> {
         if qty == 0 {
             return Err("An order for nothing is not an order.".into());
         }
@@ -1121,8 +1152,19 @@ impl Game {
         self.world
             .resource_mut::<resources::WorkOrders>()
             .0
-            .push(WorkOrder { item, qty });
-        self.log_base(format!("Work order filed: {qty} x {name}."));
+            .push(WorkOrder {
+                item,
+                qty,
+                standing,
+            });
+        // Said differently, because the two are different errands and the
+        // flag has nowhere else to show itself until the queue screen
+        // learns to say which orders are dormant.
+        self.log_base(if standing {
+            format!("Standing work order filed: hold {qty} x {name}.")
+        } else {
+            format!("Work order filed: {qty} x {name}.")
+        });
         Ok(())
     }
 

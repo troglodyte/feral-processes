@@ -2687,9 +2687,11 @@ the structure roster, both now `in_base()` rather than `!is_underground()`.
 `t` (the trader list) is the one left: it still opens on the open grid, and
 every row behind it is a `require_base` call that refuses.
 
-### A work order stores an item and a quantity, and nothing else
+### A work order stores what was asked for, never how it will be done
 
-**A work order stores an item and a quantity, and nothing else.** No
+**A work order stores what was asked for, never how it will be done.** An
+item, a quantity, and a `standing` flag saying whether the quantity is a
+batch or a level — three labels on the request itself. No
 per-machine plan, no unit targets, no progress counters — which machines a
 line needs, in what order, who is on each and how far along it is are all
 recomputed from live world state every time they are asked. This is the
@@ -2821,6 +2823,59 @@ no base term at all, the arena models player combat, and no test can see
 base output against the zone curve. A staffed base is now materially more
 productive and that is a pacing question for play, stated here rather than
 mitigated because there is no instrument to mitigate it with.
+
+### A satisfied standing order is skipped, not removed
+
+**`WorkOrder::standing` makes an order a level the base holds rather than a
+batch it makes once**, and the whole of the mechanism is which branch
+`settle_orders` takes when `base_holding >= qty`: a one-shot order is
+completed, announced and removed; a standing one takes `index += 1`, the
+branch a stalled order already takes, and is re-evaluated next tick like
+everything else.
+
+The gap it closes is that a target level which deletes itself the moment it
+is reached is not a level. `collect_adjacent` moves a machine's whole
+`Stock::output` into the player's `Inventory`, so the shelf empties every
+time the player walks past it — and under one-shot orders alone, the order
+that was meant to keep it full had already been removed. The reconciliation
+loop the module is built around could not close.
+
+**Skipped, not returned, is the one correctness point.** A dormant order
+contributes no wants, and handing those straight back out of `settle_orders`
+would starve every order behind it for as long as the shelf stayed full.
+That is the same failure the concurrency change above exists to prevent, one
+tick later, and `an_order_below_a_satisfied_standing_order_is_worked` is
+what goes red for it.
+
+**No hysteresis, and none is needed.** The instinct is that re-arming at
+exactly `qty` thrashes — one unit leaves, the chain wakes, bodies are pulled
+off the next order to make one unit — and that is a fair worry, because it
+is precisely the failure `schedule_base_labour`'s diff exists to prevent one
+level up. It does not apply here, because the drain is bursty by
+construction: `collect_adjacent` empties the *whole* buffer, so holding goes
+to zero, the order runs the full `qty`, and sleeps. There is nothing to
+oscillate around. The one genuine trickle case is a standing order on an
+intermediate that a downstream assembler eats a batch at a time, and there
+the downstream order's own `wants` walk already staffs that same machine, so
+the bodies land in the same places. No `refill_at` field and no `tuning.rs`
+fraction were added; if play shows oscillation, `qty.saturating_sub(batch)`
+is a one-line change later.
+
+**It says nothing on top-up.** "Work order complete" is a lie about
+something that is not complete, and detecting the moment an order fell
+asleep needs stored state the order deliberately does not have. Filing one
+is announced differently instead — "Standing work order filed: hold N x X" —
+because until the queue screen learns to draw a dormant tag, that log line
+is the only place the flag shows itself.
+
+**`base_holding` counts machine and depot buffers only.** "Hold 20 Cache
+Grain" therefore means 20 on the shelf, and 40 in the player's pocket are
+invisible to it. That is the correct reading — the order is a statement
+about the base — but `0/20` while carrying 40 reads as a bug the first time
+it happens, so the quantity page says which figure it is showing. That page
+also moved from `PopupSize::Small` to `Large` when it gained the toggle: its
+widest sentence already ran 8px past a small box, and `draw_row` never clips
+a row horizontally, so nothing would have said so.
 
 ### `schedule_base_labour` decides the whole assignment by priority and then diffs it against what is posted, and both halves of that are load-bearing
 

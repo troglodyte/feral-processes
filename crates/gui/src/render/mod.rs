@@ -667,6 +667,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             game,
             app.pending_order.clone(),
             &app.order_quantity_input,
+            app.standing_order,
             painter,
             m,
         ),

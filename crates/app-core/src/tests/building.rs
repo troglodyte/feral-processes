@@ -706,3 +706,63 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     );
     assert_eq!(outside.mode, Mode::Playing, "and must open no screen");
 }
+
+/// Opens the work order screen from the base menu and walks it to the
+/// quantity page with the first orderable item pending — the two-page shape
+/// the compile flow uses, one screen over.
+fn open_order_quantity_page(app: &mut App) {
+    open_via_menu(app, 'b', "Work orders");
+    assert_eq!(app.mode, Mode::WorkOrders);
+    // The trailing row is the one that queues another order.
+    let last = app.work_order_rows().len() - 1;
+    app.handle_key(GameKey::Char(menu_shortcut(last)));
+    assert_eq!(app.mode, Mode::WorkOrderPick);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::WorkOrderQuantity);
+}
+
+/// "Make me three" and "always hold three" are different errands, and the
+/// toggle is where the player says which one this is.
+#[test]
+fn the_standing_toggle_files_an_order_that_holds_a_level() {
+    let mut app = app_inside_a_small_base(252, false);
+    open_order_quantity_page(&mut app);
+    assert!(!app.standing_order, "an order is a batch unless asked");
+
+    app.handle_key(GameKey::Char('s'));
+    assert!(app.standing_order, "[S] turns it on");
+    app.handle_key(GameKey::Char('s'));
+    assert!(!app.standing_order, "and off again");
+
+    app.handle_key(GameKey::Char('s'));
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::WorkOrders);
+    let orders = app.game.as_ref().unwrap().work_orders();
+    assert_eq!(orders.len(), 1, "the order is filed");
+    assert_eq!(orders[0].qty, 3);
+    assert!(
+        orders[0].standing,
+        "and carries the flag the page was showing"
+    );
+}
+
+/// The flag is the page's and must not outlive its order. One that survived
+/// would turn the next batch into a level the base holds forever, on a
+/// screen that had gone back to saying nothing about it — the leak
+/// `careful_craft` is guarded against one screen over.
+#[test]
+fn the_standing_flag_does_not_outlive_its_order() {
+    let mut app = app_inside_a_small_base(253, false);
+    open_order_quantity_page(&mut app);
+    app.handle_key(GameKey::Char('s'));
+    assert!(app.standing_order, "precondition: the flag is set");
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::WorkOrderPick, "Esc backs into the picker");
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(app.mode, Mode::WorkOrderQuantity);
+    assert!(!app.standing_order, "and a fresh order opens as a batch");
+}

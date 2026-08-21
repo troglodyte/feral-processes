@@ -100,6 +100,27 @@ pub struct WorkOrder {
     /// decide where in the queue it lands — see `OrderPriority`.
     #[serde(default)]
     pub priority: OrderPriority,
+    /// Whether the break this order is sitting on has already been
+    /// announced.
+    ///
+    /// `DigSite::announced_stuck` one subsystem over, under
+    /// `systems::set_machine_status`' rule: entering a state is news,
+    /// staying in it is not. A stalled order is skipped on every tick for
+    /// the rest of the run, so without the latch the same sentence is
+    /// logged forever — and without the *clear*, the second break is silent
+    /// forever, which is the worse half.
+    ///
+    /// **`#[serde(skip)]`, not a default.** A reload should say it again:
+    /// the run that was told is over. Note that a skipped field is
+    /// invisible to the RON round trip, so the reload case is asserted by
+    /// its own save-then-load test.
+    ///
+    /// The one field that is not part of what the player asked for, and
+    /// `pub(crate)` for that reason — it makes `WorkOrder::batch` and
+    /// `WorkOrder::level` the only way to build an order from outside the
+    /// engine rather than merely the tidiest.
+    #[serde(skip)]
+    pub(crate) announced_stalled: bool,
 }
 
 impl WorkOrder {
@@ -110,6 +131,7 @@ impl WorkOrder {
             qty,
             standing: false,
             priority: OrderPriority::Normal,
+            announced_stalled: false,
         }
     }
 
@@ -1186,7 +1208,17 @@ impl Game {
             .get(index)
             .cloned()
         {
-            match standing_of(self, &order) {
+            let standing = standing_of(self, &order);
+            // **Cleared by anything that is not a stall**, so a break that
+            // is repaired and then recurs is news again. This is the half of
+            // `DigSite::announced_stuck` that gets forgotten, and forgetting
+            // it is worse than never latching at all: the player is told
+            // once about a machine they go and rebuild, and never again
+            // about the one they knock down next.
+            if order.announced_stalled && !matches!(standing, OrderStanding::Stalled) {
+                self.set_stall_announced(index, false);
+            }
+            match standing {
                 OrderStanding::Satisfied if order.standing => {
                     // A level the base holds: reaching it puts the order to
                     // sleep, and the shelf draining wakes it again.
@@ -1218,6 +1250,22 @@ impl Game {
                     // It keeps its place in the queue so the status screen
                     // can say which machine went missing; the player cancels
                     // it or rebuilds.
+                    //
+                    // Announced **on the way in and once**, per
+                    // `set_machine_status`' rule — otherwise the base says
+                    // the same sentence every tick for the rest of the run.
+                    // The headline alone: `chain_break`'s sentences run to
+                    // 158 characters, and app-core's `pane_rows` draws a
+                    // `LogLine` as exactly one row and never wraps it, so
+                    // the reason belongs on the queue screen — where
+                    // `views::WorkOrderReport::blocked_by` already carries
+                    // it, wrapped — and the news belongs here.
+                    if !order.announced_stalled {
+                        self.set_stall_announced(index, true);
+                        let name = self.item_name(&order.item).to_string();
+                        let qty = order.qty;
+                        self.log_base(format!("Work order stalled: {qty} x {name}."));
+                    }
                     index += 1;
                 }
                 OrderStanding::Wants(order_wants) => {
@@ -1235,6 +1283,22 @@ impl Game {
         let mut seen = std::collections::HashSet::new();
         list.retain(|&(machine, _)| seen.insert(machine));
         list
+    }
+
+    /// Writes the stall latch on the order at `index`.
+    ///
+    /// `settle_orders` walks a *clone* of each order — the queue has to stay
+    /// unborrowed while `standing_of` reads the world through it — so the
+    /// latch is written back by position rather than through the clone.
+    fn set_stall_announced(&mut self, index: usize, announced: bool) {
+        if let Some(order) = self
+            .world
+            .resource_mut::<resources::WorkOrders>()
+            .0
+            .get_mut(index)
+        {
+            order.announced_stalled = announced;
+        }
     }
 
     /// Queues `order`, or names why the line for what it asks for can never

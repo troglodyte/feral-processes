@@ -2212,3 +2212,130 @@ fn a_dormant_standing_order_is_not_reported_stalled() {
         "and nothing went missing, so there is nothing to name"
     );
 }
+
+// ---------------------------------------------------------------------
+// Work order queue, phase 5: announce a stall once
+// ---------------------------------------------------------------------
+
+/// Every stall the log has announced, oldest first.
+///
+/// Read off `Game::message_log` rather than the pane, because `condense`
+/// folds adjacent repeats into a `×N` row — a per-tick announcement would
+/// draw as one line there and this is the test that has to see it.
+fn stall_lines(game: &Game) -> Vec<String> {
+    game.message_log(MESSAGE_LOG_CAP)
+        .into_iter()
+        .filter(|l| l.text.starts_with("Work order stalled"))
+        .map(|l| l.text)
+        .collect()
+}
+
+/// A base whose Disk Press has been swept to destruction, with the order
+/// that needed it still queued and already announced once.
+fn stall_a_disk_order(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+    game.world.entity_mut(press).despawn();
+    game.tick();
+    game
+}
+
+/// `set_machine_status`' rule one subsystem over: entering a state is news,
+/// staying in it is not. A stalled order is skipped by `settle_orders` on
+/// every tick for the rest of the run, so an unlatched announcement is the
+/// same sentence forever.
+#[test]
+fn a_stall_is_announced_once_rather_than_every_tick() {
+    let mut game = stall_a_disk_order(89);
+    game.tick();
+    game.tick();
+
+    assert_eq!(
+        state_of(&game, 0),
+        views::OrderState::Stalled,
+        "precondition: the order really is stalled, not merely unstaffed"
+    );
+    let lines = stall_lines(&game);
+    assert_eq!(
+        lines.len(),
+        1,
+        "one announcement, not one a tick: {lines:?}"
+    );
+    assert!(
+        lines[0].contains("30 x Routine Disk"),
+        "and it names the order that stopped, got: {}",
+        lines[0]
+    );
+}
+
+/// The half of `DigSite::announced_stuck` that gets forgotten. Without the
+/// clear, the second break — and every one after it — is silent for the
+/// rest of the run, which is worse than announcing every tick: the player
+/// is told once about a machine they then rebuild, and never again about
+/// the one they knock down next.
+#[test]
+fn a_stall_that_resolves_and_recurs_is_announced_again() {
+    let mut game = stall_a_disk_order(90);
+    assert_eq!(
+        stall_lines(&game).len(),
+        1,
+        "precondition: the first break was announced"
+    );
+
+    let rebuilt = spawn_machine_at(&mut game, "disk_press", 4, 0);
+    game.tick();
+    assert_ne!(
+        state_of(&game, 0),
+        views::OrderState::Stalled,
+        "precondition: rebuilding the press put the order back to work"
+    );
+
+    game.world.entity_mut(rebuilt).despawn();
+    game.tick();
+
+    let lines = stall_lines(&game);
+    assert_eq!(lines.len(), 2, "a second break is news again: {lines:?}");
+}
+
+/// **`#[serde(skip)]`, not a default.** The run that was told the line broke
+/// is over; a player loading back in has no reason to remember it, and the
+/// order will otherwise sit stalled forever without ever saying so.
+///
+/// Its own save-then-load assertion rather than the RON round trip, which
+/// cannot see this field at all — a round trip alone passes just as well
+/// against a latch that was never skipped.
+#[test]
+fn a_reloaded_stall_is_announced_again() {
+    let mut game = stall_a_disk_order(91);
+    assert_eq!(
+        stall_lines(&game).len(),
+        1,
+        "precondition: this run has already been told"
+    );
+
+    let path = save_path("stall_latch");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        state_of(&loaded, 0),
+        views::OrderState::Stalled,
+        "precondition: the break survived the save, so there is something to say"
+    );
+    assert!(
+        stall_lines(&loaded).is_empty(),
+        "precondition: the log itself is not saved"
+    );
+
+    loaded.tick();
+
+    assert_eq!(
+        stall_lines(&loaded).len(),
+        1,
+        "a reloaded run is told about the break it walked back into"
+    );
+}

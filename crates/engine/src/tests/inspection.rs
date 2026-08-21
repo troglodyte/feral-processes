@@ -2257,3 +2257,80 @@ fn entity_label_names_the_anchor_and_a_surface_link_rather_than_falling_through_
     // arms and swallowed the fall-through's real case.
     assert_eq!(game.entity_label(game.player_entity()), "You");
 }
+
+#[test]
+fn a_manifest_carries_the_to_hit_pair_the_fight_actually_rolls() {
+    let game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let view = game.manifest(player).expect("the player has a manifest");
+
+    // Not a second copy of the formula: the sheet has to agree with the roll,
+    // so the assertion calls exactly what `battle::resolve_attack` consults.
+    let gear = game.gear_bonus(player);
+    let level = game.ability_user_level(player);
+    let speed = game.combat_speed(player);
+    assert_eq!(
+        view.accuracy as f64,
+        crate::battle::accuracy_of(speed, level, gear.accuracy),
+        "the manifest's Accuracy must be the one the attack roll uses"
+    );
+    assert_eq!(
+        view.evasion as f64,
+        crate::battle::evasion_of(speed, level, gear.evasion),
+        "the manifest's Evasion must be the one the attack roll uses"
+    );
+}
+
+#[test]
+fn a_program_manifest_carries_the_same_to_hit_pair() {
+    let mut game = Game::new(4402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 20, 5);
+    let view = game.manifest(program).expect("a program has a manifest");
+
+    assert_eq!(
+        view.accuracy as f64,
+        crate::battle::accuracy_of(
+            game.combat_speed(program),
+            game.ability_user_level(program),
+            game.gear_bonus(program).accuracy,
+        ),
+        "a program's sheet is built from the same two calls the player's is, \
+         so buying the program page room later is a layout change and not a \
+         data change"
+    );
+}
+
+#[test]
+fn a_player_manifest_reports_what_the_run_holds() {
+    let mut game = Game::new(4403, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    let before = game.manifest(player).unwrap();
+    let ManifestSubject::Player(p) = before.subject else {
+        panic!("the player is a Player subject");
+    };
+    assert_eq!(p.difficulty, DifficultyMode::Permadeath);
+    assert_eq!(p.credits, game.banked(&items::ids::CREDITS.into()));
+    assert_eq!(
+        p.portal_fragments,
+        game.banked(&items::ids::PORTAL_FRAGMENT.into())
+    );
+    assert_eq!(p.cycle, game.current_tick());
+    assert_eq!(p.active_contracts, game.active_contracts().len());
+
+    // The figures track the run rather than being sampled once at spawn.
+    let credits_before = p.credits;
+    give(&mut game, &items::ids::CREDITS.into(), 7);
+    game.tick();
+
+    let after = game.manifest(player).unwrap();
+    let ManifestSubject::Player(q) = after.subject else {
+        panic!("the player is a Player subject");
+    };
+    assert_eq!(q.credits, credits_before + 7);
+    assert!(
+        q.cycle > p.cycle,
+        "the cycle row has to move with the clock, or it is a spawn-time \
+         snapshot dressed as a run fact"
+    );
+}

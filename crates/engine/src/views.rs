@@ -10,6 +10,7 @@ use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKin
 use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
+use crate::resources::DifficultyMode;
 use crate::species::{AffinityClass, MoveDef};
 use crate::structures::StructureId;
 use crate::world::Biome;
@@ -1477,6 +1478,25 @@ pub struct ManifestView {
     pub damage: String,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
+    /// The to-hit half of a fight, through `battle::accuracy_of` /
+    /// `evasion_of` — **derived, never stored**, so quoting them here is two
+    /// calls and not a cached copy that can drift from what
+    /// `battle::resolve_attack` rolls.
+    ///
+    /// Carried for both subjects even though only the player's are drawn:
+    /// the combat block belongs to one struct, and the program page's
+    /// omission is a row budget it has run out of (see
+    /// `render/manifest_layout`'s clearance sweep), not a fact the engine
+    /// declines to compute. That makes buying it room later a layout change
+    /// rather than a data change.
+    ///
+    /// `f32` rather than `i32` because both constants are halves —
+    /// `ACCURACY_PER_LEVEL` is 0.5 — so a level-1 player rounds from 11.5,
+    /// and a stat sheet that rounds a stat is quoting a number the roll does
+    /// not use.
+    pub accuracy: f32,
+    /// See `accuracy`.
+    pub evasion: f32,
     /// Active battle status condition, e.g. "Bleeding (2)" — see
     /// `Game::status_label`. Always `None` outside an intrusion.
     pub status_effect: Option<String>,
@@ -1524,6 +1544,25 @@ pub struct PlayerManifest {
     pub pet_capacity: usize,
     pub cargo_used: u32,
     pub party: Vec<CompanionInfo>,
+    /// Credits and Portal Fragments — `ItemDef::banked` pools, deliberately
+    /// outside `PlayerStatus::inventory`, which is why the sheet's cargo
+    /// count says nothing about either. Read through `Game::banked` rather
+    /// than from an `Inventory`, since a bank is not something carried.
+    pub credits: u32,
+    pub portal_fragments: u32,
+    /// Which mode this run is being played on. Carried as the mode rather
+    /// than a finished phrase for the reason `ProgramManifest::base_job` is
+    /// — the renderer is where every player-facing word on this screen is
+    /// chosen.
+    pub difficulty: DifficultyMode,
+    /// `Game::current_tick` — how long the run has been going, in the same
+    /// unit the log's cycle counter uses.
+    pub cycle: u64,
+    /// How many contracts the run is currently signed to
+    /// (`Game::active_contracts`). A count and not the rows: the board and
+    /// the contracts screen are where a player reads what they say, and a
+    /// stat sheet quoting objectives would be a third wording of them.
+    pub active_contracts: usize,
 }
 
 /// One worn item and the bonus it is *currently* granting.

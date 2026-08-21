@@ -921,6 +921,8 @@ impl Game {
                 ..*stats
             }
             .power(),
+            accuracy: self.manifest_accuracy(entity),
+            evasion: self.manifest_evasion(entity),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),
@@ -949,8 +951,35 @@ impl Game {
                 pet_capacity: self.pet_capacity(),
                 cargo_used: inv.cargo_used(self.world.resource::<ItemDb>()),
                 party: self.party_info(),
+                credits: self.banked(&crate::items::ids::CREDITS.into()),
+                portal_fragments: self.banked(&crate::items::ids::PORTAL_FRAGMENT.into()),
+                difficulty: *self.world.resource::<DifficultyMode>(),
+                cycle: self.current_tick(),
+                active_contracts: self.active_contracts().len(),
             }),
         })
+    }
+
+    /// The Accuracy this combatant brings to an attack roll, through the
+    /// one derivation `battle::resolve_attack` consults. A call and not a
+    /// copy: the sheet exists to say what the fight will do, so a second
+    /// expression of the formula here is the drift this repo has already
+    /// paid for four times.
+    fn manifest_accuracy(&self, entity: Entity) -> f32 {
+        crate::battle::accuracy_of(
+            self.combat_speed(entity),
+            self.ability_user_level(entity),
+            self.gear_bonus(entity).accuracy,
+        ) as f32
+    }
+
+    /// See `manifest_accuracy`.
+    fn manifest_evasion(&self, entity: Entity) -> f32 {
+        crate::battle::evasion_of(
+            self.combat_speed(entity),
+            self.ability_user_level(entity),
+            self.gear_bonus(entity).evasion,
+        ) as f32
     }
 
     /// Every occupied equipment slot on `wearer`, in `EquipmentSlot::ALL`
@@ -1015,6 +1044,8 @@ impl Game {
             mitigation: stats.mitigation,
             damage: self.damage_range_label(self.natural_range_of(entity)),
             power: stats.power(),
+            accuracy: self.manifest_accuracy(entity),
+            evasion: self.manifest_evasion(entity),
             status_effect: self.status_label(entity),
             routines: self.routine_view(entity),
             equipment: self.worn_slots(entity),

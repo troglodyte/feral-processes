@@ -92,8 +92,8 @@ starts, so no one pays for detail they are not executing yet.
 | --- | --- | --- | --- |
 | 1 | ✅ **The axis** | The field, its default, `for_quality` in the chain, `quality_band`, the save-load guard. Nothing rolls it yet, so no behaviour changes. | `2026-08-21-item-quality-phase-1.md` |
 | 2 | ✅ **Drops roll it, and it reads** | `QUALITY_DROP_BASE`, the stepped spread through `Game::roll_quality`, the figure in `copy_name`, the row on the gear inspect page, and the swap row's stat column lifted out of its un-wrappable head — which the roadmap did not price and measurement forced. | `2026-08-21-item-quality-phase-2.md` |
-| 3 | **Crafting rolls it** | `CraftOrder`, `Game::best_structure_tier`, the bench on `CraftRecipe`, per-unit rolls routed through `add_copies`, the careful-compile toggle through app-core and the Compile screen. | phase-3 |
-| 4 | **The perk term** | One *appended* `Perk` variant, its hook in the roll, its `assets/perks/*.ron`. | phase-4 |
+| 3 | ✅ **Crafting rolls it** | `CraftOrder`, `Game::best_structure_tier`, the bench on `CraftRecipe`, per-unit rolls routed through `add_copies`, the careful-compile toggle through app-core and the Compile screen — plus the upgrade path the two compile benches turned out not to have, without which the bench term was inert on every shipped recipe. | `2026-08-21-item-quality-phase-3.md` |
+| 4 | **The perk term** | One *appended* `Perk` variant, its hook in the roll, its `assets/perks/*.ron`. `CraftOrder` gains its `perk_level` field here — Phase 3 shipped without it rather than carrying a term that was always 0. | phase-4 |
 | 5 | **The tag column** | `Row::Item::tag` as a reserved, painted column; the five hand-formatted tag sites lifted into it; the four-band emphasis ramp; the width tests re-baselined. | phase-5 |
 
 **Why this order.** Phase 1 is inert by construction — every copy is still

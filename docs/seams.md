@@ -2114,6 +2114,81 @@ rather than an empty string, since `wrapped_row_lines` skips an empty tag
 by design. Ordinary rows are untouched — a 61-cell head plus a 21-cell stat
 tag is 82 against `ROW_WRAP_COLUMNS`' 100.
 
+### The crafter is the axis of change, and `CraftOrder` is what captures it
+
+**`CraftOrder` is a struct at a single implementor, deliberately.** The
+direct version — `Game::craft` reading the bench tier and the toggle inline
+— is the null hypothesis and normally wins at one implementor, which is
+what the design-patterns dialog says and what the spec records. It loses
+here for one stated reason: the second gatherer is already named and
+requested — a base-roster program compiling at a bench while the player is
+somewhere else. The named axis of change is *who is compiling, and where*,
+so the crafter is what the type captures, and `Game::craft_quality_floor`
+never learns there is more than one. `Game::player_craft_order` is today's
+gatherer.
+
+**The four terms are emphatically not an axis.** They are addends in one
+legible expression, and a trait with an implementor per term would be the
+over-engineered reading of this. The floor is
+`QUALITY_BASE + bench + care`, summed in `u32` and saturated: a modded
+bench with an absurd `max_tier` otherwise truncates a `u8` to *the bottom
+of the band*, which is the opposite of what it earned. The clamp is not
+here — `Game::roll_quality` holds the one clamp for every source of a copy
+— so the floor may legitimately read above `QUALITY_MAX`.
+
+**`CraftRecipe` carries its bench because the floor cannot go looking for
+it a second time.** The two halves of `craft_recipes` read
+`requires_structure` out of two different databases — an item's own
+`craftable` def and a research file's `unlocks_recipes` — so a second
+lookup would have to know both. `Game::best_structure_tier` answers with
+the *best* deployed structure of a kind rather than the nearest: a bench is
+something the base owns, not something the player walks to, and
+`craft_recipes` already asks only whether one is standing anywhere. A
+structure carrying no `StructureTier` reads as **tier 1**, not tier 0, so a
+bench with no upgrade path and one that has never been upgraded are the
+same thing to a player.
+
+**The bench term was inert on shipped content until the benches gained an
+upgrade path.** All 25 craftable-equipment recipes name the Fabricator or
+the Armory, and neither declared `upgrade`, so neither ever carried a
+`StructureTier` and every recipe read tier 1 — a headline term of the
+feature doing nothing in the shipped game. Both now carry the path the six
+nodes already had. Tier is read nowhere else for a structure with no
+`ResourceNode` (`resolve_gather_cycle` is its only other reader), so
+upgrading a compile bench buys better gear and nothing else, which is the
+purpose the spec wanted a bench upgrade to have.
+`every_upgrade_path_asks_for_a_zone_material` counts eight now, and the
+count is pinned so a path that goes missing cannot drop out of the scan.
+
+**The careful surcharge is applied in `craft_cost` and nowhere else.**
+`craft_cost`, `max_craftable` and `craft` all take `careful`, so a screen
+cannot quote one price while the compile charges another — the bug that
+function's doc already records against the Lean Compiler discount, which is
+the other term in the same expression. The order is discount **then**
+surcharge, rounded up: reversed, a fully perked recipe with every line
+floored at 1 would be careful for free. The quoted maximum takes the flag
+for the same reason — a careful `[M]` sized off the plain price is a batch
+the compile then refuses, which is a mutation the app-core tests caught
+only once they asserted that both sides compiled *something*.
+
+**A compile rolls per unit, and a copy at exactly spec still stacks.**
+Five compiles are five copies to compare rather than a stack of five
+identical ones — the compile-a-batch-and-keep-the-best loop the axis exists
+for. A copy that rolls `QUALITY_DEFAULT` is plain by definition and lands
+in `Inventory`; everything else takes a `GearCopies` row. So a test
+counting a batch has to read **both** stores or it comes back short by
+however many rolled perfectly, and a fixture reading `Inventory` alone
+after compiling gear is the fixture's bug — the same call the drop side
+made one phase earlier. Anything that is not equipment stacks exactly as it
+did and spends **no** `GameRng` draw; `only_gear_spends_a_quality_roll`
+holds that by compiling one unit against five and comparing the stream,
+which works because `craft` ticks once whatever the batch size.
+
+**The toggle is the page's and is cleared when the page opens.** Clearing
+on close would leave the flag alive between two compiles: the next batch
+would quietly pay half again for a floor the player did not ask for, on a
+screen that had gone back to saying nothing about it.
+
 ### A copy's name is built in exactly one place, `Game::copy_name`
 
 **A copy's name is built in exactly one place, `Game::copy_name`.** It is

@@ -1,7 +1,7 @@
 //! Equipping, unequipping, and fusing gear.
 
 use super::support::*;
-use crate::tuning::MAX_FUSIONS;
+use crate::tuning::{MAX_FUSIONS, QUALITY_DEFAULT};
 use crate::*;
 
 #[test]
@@ -1212,10 +1212,10 @@ fn unequipping_a_rare_copy_leaves_no_bonus_behind() {
 
     for rarity in Rarity::ALL {
         let copy = GearCopy {
-            item: weapon.clone(),
             rarity,
             tier: 0,
             affix: None,
+            ..GearCopy::plain(weapon.clone())
         };
         game.add_copies(&copy, 1);
         game.equip(player, &copy).unwrap();
@@ -1253,10 +1253,10 @@ fn a_rare_copy_is_worth_more_worn_than_a_plain_one() {
 
     let atk_at = |game: &mut Game, rarity: Rarity| {
         let copy = GearCopy {
-            item: weapon.clone(),
             rarity,
             tier: 0,
             affix: None,
+            ..GearCopy::plain(weapon.clone())
         };
         game.add_copies(&copy, 1);
         game.equip(player, &copy).unwrap();
@@ -1287,10 +1287,10 @@ fn a_rare_copy_will_not_fuse_with_a_plain_one() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let plain = GearCopy::plain(armor.clone());
     let rare = GearCopy {
-        item: armor,
         rarity: Rarity::Gold,
         tier: 0,
         affix: None,
+        ..GearCopy::plain(armor)
     };
     game.add_copies(&plain, 1);
     game.add_copies(&rare, 1);
@@ -1415,4 +1415,303 @@ fn fusing_all_is_refused_during_a_battle() {
 
     assert!(game.fuse_all_items().is_err());
     assert_eq!(held_at(&game, &armor, 0), 4, "a refusal spends nothing");
+}
+
+/// **Quality is the fourth thing that makes a copy special**, so it joins
+/// `is_plain`'s `&&` and with it the choice of cargo store. A copy that
+/// compiled off spec is not interchangeable with one that did, which is
+/// exactly the question `Inventory`-or-`GearCopies` asks.
+#[test]
+fn an_off_spec_copy_is_not_plain() {
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let plain = GearCopy::plain(whip);
+    assert!(plain.is_plain(), "a copy compiled to spec still stacks");
+    assert_eq!(plain.quality, QUALITY_DEFAULT);
+
+    let off_spec = GearCopy {
+        quality: QUALITY_DEFAULT - 5,
+        ..plain.clone()
+    };
+    assert!(!off_spec.is_plain());
+
+    let over_spec = GearCopy {
+        quality: QUALITY_DEFAULT + 5,
+        ..plain
+    };
+    assert!(!over_spec.is_plain(), "better than spec is special too");
+}
+
+/// The store split follows `is_plain` and nothing else, so an off-spec copy
+/// lands in the ledger that can tell two copies apart rather than stacking
+/// namelessly in `Inventory`.
+#[test]
+fn an_off_spec_copy_lands_in_the_gear_ledger() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(211, DifficultyMode::Forgiving, &assets).unwrap();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let off_spec = GearCopy {
+        quality: QUALITY_DEFAULT + 10,
+        ..GearCopy::plain(whip.clone())
+    };
+
+    game.add_copies(&off_spec, 1);
+
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().count(&whip),
+        0,
+        "an off-spec copy must not stack in the plain-copy store"
+    );
+    assert_eq!(game.count_copies(&off_spec), 1);
+}
+
+/// A worn copy's quality is four flat save fields rather than a nested
+/// `GearCopy`, which is the shape `EquippedItemSave`'s doc argues for — so
+/// it is also four places the field can be forgotten. This is the test that
+/// notices.
+#[test]
+fn a_worn_off_spec_copy_survives_save_and_load() {
+    let assets = test_assets_dir();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let mut game = Game::new(212, DifficultyMode::Forgiving, &assets).unwrap();
+    let copy = GearCopy {
+        quality: QUALITY_DEFAULT + 15,
+        ..GearCopy::plain(whip.clone())
+    };
+    game.add_copies(&copy, 1);
+    game.equip(game.player_entity(), &copy).unwrap();
+    let atk_before = game.player_status().atk;
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_quality_worn_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let worn = loaded
+        .worn(loaded.player_entity(), crate::items::EquipmentSlot::Weapon)
+        .expect("the whip is still on");
+    assert_eq!(worn.copy.quality, QUALITY_DEFAULT + 15);
+    assert_eq!(
+        loaded.player_status().atk,
+        atk_before,
+        "reloading must not change what the worn copy is worth"
+    );
+}
+
+/// **A save written before this field loads its gear at 100.** That claim
+/// is the whole reason the field costs no `SAVE_FORMAT_VERSION` bump, and
+/// it is a claim about a file, so this edits one: a real save with every
+/// `quality:` line stripped is byte-for-byte what the previous release
+/// wrote.
+#[test]
+fn a_pre_quality_save_loads_its_gear_as_designed() {
+    let assets = test_assets_dir();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let plating = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(213, DifficultyMode::Forgiving, &assets).unwrap();
+    // One worn (flat save fields) and one carried (serde'd `GearCopy`),
+    // because they travel by different routes.
+    let worn = GearCopy::plain(whip.clone());
+    game.add_copies(&worn, 2);
+    game.equip(game.player_entity(), &worn).unwrap();
+    // A companion's loadout is the third route: `EquippedItemSave`, with
+    // its own `serde` default to get wrong.
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.equip(companion, &worn).unwrap();
+    let carried = GearCopy {
+        tier: 1,
+        ..GearCopy::plain(plating.clone())
+    };
+    game.add_copies(&carried, 2);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_pre_quality_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    // The three player slots spell the field `weapon_quality:` and the rest
+    // spell it `quality:`, so the filter matches on the tail of the field
+    // name — stripping only the bare form leaves the player's own worn copy
+    // reading a field that is still there, which is a vacuous test.
+    let stripped: String = text
+        .lines()
+        .filter(|line| {
+            !line
+                .trim_start()
+                .split(':')
+                .next()
+                .unwrap_or_default()
+                .ends_with("quality")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("quality"),
+        "every route's field has to be gone, or this proves nothing about that route"
+    );
+    assert!(
+        stripped.len() < text.len(),
+        "the save has to have carried the field, or this proves nothing"
+    );
+    std::fs::write(&path, &stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &assets).expect("an older save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded
+            .worn(loaded.player_entity(), crate::items::EquipmentSlot::Weapon)
+            .expect("still wearing it")
+            .copy
+            .quality,
+        QUALITY_DEFAULT,
+    );
+    let player = loaded.player_entity();
+    let companion_worn: Vec<_> = loaded
+        .world
+        .query::<(Entity, &Equipment)>()
+        .iter(&loaded.world)
+        .filter(|(e, _)| *e != player)
+        .filter_map(|(_, eq)| eq.weapon.clone())
+        .collect();
+    assert_eq!(companion_worn.len(), 1);
+    assert_eq!(companion_worn[0].copy.quality, QUALITY_DEFAULT);
+    assert_eq!(
+        loaded.count_copies(&carried),
+        2,
+        "the carried copy is unchanged"
+    );
+}
+
+/// **A rare tier's floor is guaranteed against a copy of equal quality**,
+/// not globally — which is the honest form of the guarantee and the reason
+/// the two floored axes stay last in the chain. Swept over the whole band
+/// and both ends of the level range.
+#[test]
+fn a_rarer_copy_beats_an_ordinary_one_of_equal_quality() {
+    let assets = test_assets_dir();
+    let game = Game::new(214, DifficultyMode::Forgiving, &assets).unwrap();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+
+    for quality in [70u8, 85, QUALITY_DEFAULT, 115, 130] {
+        for level in [1u32, 10] {
+            let ordinary = GearCopy {
+                quality,
+                ..GearCopy::plain(whip.clone())
+            };
+            let silver = GearCopy {
+                rarity: Rarity::Silver,
+                ..ordinary.clone()
+            };
+            let plain_stats = game.copy_bonus(&ordinary, level).unwrap();
+            let rare_stats = game.copy_bonus(&silver, level).unwrap();
+            assert!(
+                rare_stats.atk > plain_stats.atk,
+                "Silver at {quality}% and level {level} must beat Ordinary at the same quality"
+            );
+            assert!(rare_stats.damage.max >= plain_stats.damage.max);
+        }
+    }
+}
+
+/// Quality lands *after* level scaling, which is what gives it a number
+/// with enough resolution to bite. Applied last instead, a 4-point stat at
+/// level 1 would round the whole band flat.
+#[test]
+fn quality_moves_a_copys_bonus_at_every_level() {
+    let assets = test_assets_dir();
+    let game = Game::new(215, DifficultyMode::Forgiving, &assets).unwrap();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let spec = GearCopy::plain(whip.clone());
+    let good = GearCopy {
+        quality: 130,
+        ..spec.clone()
+    };
+    let poor = GearCopy {
+        quality: 70,
+        ..spec.clone()
+    };
+
+    for level in [1u32, 5, 10] {
+        let at_spec = game.copy_bonus(&spec, level).unwrap().atk;
+        assert!(game.copy_bonus(&good, level).unwrap().atk > at_spec);
+        assert!(game.copy_bonus(&poor, level).unwrap().atk < at_spec);
+    }
+}
+
+/// The *companion* half of the worn route. A program's loadout rides
+/// `EquippedItemSave` rather than `PlayerSave`'s flat fields, so it is a
+/// second place a worn copy's quality can be dropped — and neither
+/// `worn_to_save` nor that struct's `serde` default is exercised by the
+/// player's own gear, which `Game::save` writes field by field.
+#[test]
+fn a_companions_off_spec_copy_survives_save_and_load() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(216, DifficultyMode::Forgiving, &assets).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let copy = GearCopy {
+        quality: QUALITY_DEFAULT + 15,
+        ..GearCopy::plain(ItemId::from(ids::OVERCLOCK_CORE))
+    };
+    game.add_copies(&copy, 1);
+    game.equip(companion, &copy).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_quality_companion_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let player = loaded.player_entity();
+    let worn: Vec<_> = loaded
+        .world
+        .query::<(Entity, &Equipment)>()
+        .iter(&loaded.world)
+        .filter(|(e, _)| *e != player)
+        .filter_map(|(_, eq)| eq.weapon.clone())
+        .collect();
+    assert_eq!(
+        worn.len(),
+        1,
+        "the companion is still wearing exactly one weapon"
+    );
+    assert_eq!(worn[0].copy.quality, QUALITY_DEFAULT + 15);
+}
+
+/// The inversion `EquipmentStats::for_quality` argues from, pinned. With
+/// quality applied *last* a Silver copy at the bottom of the band prices
+/// below an Ordinary one at the top, because the rare ladder's floor is
+/// added and then multiplied away — and a row colour that says "better"
+/// about the worse copy is the failure. Quality third keeps the ladder
+/// standing across the whole band.
+#[test]
+fn the_rare_ladder_survives_the_whole_quality_band() {
+    use crate::tuning::{QUALITY_MAX, QUALITY_MIN};
+    let assets = test_assets_dir();
+    let game = Game::new(217, DifficultyMode::Forgiving, &assets).unwrap();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let poor_silver = GearCopy {
+        rarity: Rarity::Silver,
+        quality: QUALITY_MIN,
+        ..GearCopy::plain(whip.clone())
+    };
+    let good_ordinary = GearCopy {
+        quality: QUALITY_MAX,
+        ..GearCopy::plain(whip.clone())
+    };
+
+    assert!(
+        game.copy_bonus(&poor_silver, 1).unwrap().atk
+            >= game.copy_bonus(&good_ordinary, 1).unwrap().atk,
+        "a Silver copy must never price below an Ordinary one at level 1"
+    );
 }

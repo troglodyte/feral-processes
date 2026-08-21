@@ -819,10 +819,10 @@ pub(crate) fn app_carrying_affixed_gear(seed: u32, item: &str, affix: &str, zone
 /// `gear` above.
 pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
     GearCopy {
-        item: ItemId::from(item),
         rarity: Rarity::Ordinary,
         tier: 0,
         affix: Some(AffixId::from(affix)),
+        ..GearCopy::plain(ItemId::from(item))
     }
 }
 
@@ -962,10 +962,10 @@ pub(crate) fn app_inside_a_small_base_with_programs(
 /// `items::GearCopy`, and almost every test means the plain one.
 pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
     GearCopy {
-        item: item.clone(),
         rarity: Rarity::Ordinary,
         tier,
         affix: None,
+        ..GearCopy::plain(item.clone())
     }
 }
 

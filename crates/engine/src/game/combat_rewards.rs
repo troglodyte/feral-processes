@@ -89,6 +89,7 @@ impl Game {
             rarity,
             tier: 0,
             affix,
+            quality: crate::tuning::QUALITY_DEFAULT,
         };
         self.add_copies(&copy, 1);
         copy

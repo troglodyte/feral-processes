@@ -142,6 +142,9 @@ impl EquipSpec {
             rarity: self.rarity,
             tier: self.tier,
             affix: self.affix.clone(),
+            // A scenario authors no quality, so its numbers stay comparable
+            // to the reports its old runs produced.
+            quality: crate::tuning::QUALITY_DEFAULT,
         }
     }
 }

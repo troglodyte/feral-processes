@@ -623,10 +623,10 @@ mod tests {
                 affixes.iter().flat_map(move |affix| {
                     let def = def.clone();
                     (0..=MAX_FUSIONS).map(move |tier| GearCopy {
-                        item: def.id.clone().into(),
                         rarity: Rarity::Gold,
                         tier,
                         affix: affix.clone(),
+                        ..GearCopy::plain(def.id.clone().into())
                     })
                 })
             })
@@ -730,10 +730,10 @@ mod tests {
         // The measured worst case: Gold, affixed, maxed, at the deepest zone
         // `balance_sim` sweeps to.
         let worst = GearCopy {
-            item: "singularity_matrix".into(),
             rarity: Rarity::Gold,
             tier: MAX_FUSIONS,
             affix: Some("of_the_ghost_protocol".into()),
+            ..GearCopy::plain("singularity_matrix".into())
         };
         let lines = inventory_row_lines(&game, 'a', &worst, 1234, 10);
         assert_eq!(lines.len(), 2, "{lines:#?}");

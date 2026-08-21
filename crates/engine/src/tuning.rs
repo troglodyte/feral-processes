@@ -1393,6 +1393,36 @@ pub const PRISMATIC_STAT_MULT: f32 = 2.15;
 /// and does not hand it a new stat, which is the affix's job.
 pub const GEAR_RARITY_MIN_BONUS_PER_RUNG: i32 = 1;
 
+// ---------------------------------------------------------------------------
+// Item quality
+// ---------------------------------------------------------------------------
+
+/// What a copy compiled exactly to its authored spec is worth, as a
+/// percentage of `ItemDef::equipment`'s numbers — and what every copy in
+/// every save written before the field existed loads as.
+///
+/// It is the identity element of `EquipmentStats::for_quality`, which is
+/// why the whole band is expressed as a percentage of it rather than as a
+/// multiplier: an authored item is the reference, not a floor.
+pub const QUALITY_DEFAULT: u8 = 100;
+
+/// The clamp on a rolled quality. Both ends are reachable — a fresh
+/// player's craft can hit the floor and a developed base's can hit the
+/// ceiling — so they are the band, not guard rails.
+pub const QUALITY_MIN: u8 = 70;
+pub const QUALITY_MAX: u8 = 130;
+
+/// The three cuts in `items::quality_band`'s four-rung ladder: at or below
+/// the first reads as under spec, the middle band as designed, the third as
+/// above spec, and anything higher as exceptional.
+///
+/// The middle band is centred on `QUALITY_DEFAULT` on purpose: every copy
+/// in every existing save sits there, so the ladder repaints nothing that
+/// is already on screen.
+pub const QUALITY_UNDER_MAX: u8 = 90;
+pub const QUALITY_SPEC_MAX: u8 = 105;
+pub const QUALITY_ABOVE_MAX: u8 = 120;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

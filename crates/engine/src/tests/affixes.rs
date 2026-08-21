@@ -217,10 +217,10 @@ fn a_drawback_is_a_trade_at_zone_one_and_a_bigger_one_later() {
 
     let plain = GearCopy::plain(item.clone());
     let dressed = GearCopy {
-        item,
         rarity: Rarity::Ordinary,
         tier: 0,
         affix: Some(affix.id.clone()),
+        ..GearCopy::plain(item)
     };
     // Just the values: the ceilings are the census's business, not this
     // test's.
@@ -277,10 +277,10 @@ fn wearing_and_removing_a_drawback_copy_leaves_no_dent() {
 
     let before = read(&game, player);
     let copy = GearCopy {
-        item,
         rarity: Rarity::Ordinary,
         tier: 0,
         affix: Some(affix.id.clone()),
+        ..GearCopy::plain(item)
     };
 
     game.add_copies(&copy, 1);

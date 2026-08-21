@@ -1207,10 +1207,10 @@ fn selling_a_rare_copy_buys_back_the_same_copy() {
     stand_in_base(&mut game);
     let post = spawn_market_at(&mut game, 1, 0);
     let rare = GearCopy {
-        item: ItemId::from(ids::ABLATIVE_PLATING),
         rarity: Rarity::Prismatic,
         tier: 0,
         affix: None,
+        ..GearCopy::plain(ItemId::from(ids::ABLATIVE_PLATING))
     };
     let plain = GearCopy::plain(rare.item.clone());
     game.add_copies(&rare, 1);

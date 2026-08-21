@@ -277,8 +277,15 @@ impl Game {
     }
 
     /// What one copy of gear is worth at gear level `level`: its authored
-    /// bonus plus its affix, put through all three scaling axes in the
+    /// bonus plus its affix, put through all four scaling axes in the
     /// canonical order.
+    ///
+    /// **The order of the four axes is load-bearing.** The affix is folded
+    /// into the base, then level, then quality, then the two floored axes.
+    /// Quality carries no floor and so cannot go last (see
+    /// `EquipmentStats::for_quality`); keeping fusion and rarity after it is
+    /// what preserves the honest form of their guarantee — a rare tier's
+    /// floor is worth a rung *against a copy of equal quality*.
     ///
     /// **This is the only place that order is written down**, and the order
     /// is load-bearing rather than stylistic — two of the three axes carry a
@@ -328,6 +335,7 @@ impl Game {
         Some(
             affixed
                 .scaled_for_level(level)
+                .for_quality(copy.quality)
                 .fused_for_tier(copy.tier)
                 .for_rarity(copy.rarity),
         )

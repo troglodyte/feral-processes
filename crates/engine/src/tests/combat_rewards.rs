@@ -956,10 +956,10 @@ fn an_affixed_copys_name_carries_both_its_word_and_its_tier() {
 
     let plain = GearCopy::plain(weapon.clone());
     let dressed = GearCopy {
-        item: weapon.clone(),
         rarity: Rarity::Gold,
         tier: 0,
         affix: Some(affix.id.clone()),
+        ..GearCopy::plain(weapon.clone())
     };
 
     let bare = game.copy_name(&plain);
@@ -1017,10 +1017,10 @@ fn an_affix_is_worth_more_than_its_name() {
     let affixed = worn_atk(
         &mut game,
         GearCopy {
-            item: weapon.clone(),
             rarity: Rarity::Ordinary,
             tier: 0,
             affix: Some(affix.id.clone()),
+            ..GearCopy::plain(weapon.clone())
         },
     );
     assert!(
@@ -1315,10 +1315,10 @@ fn a_rare_copy_is_tallied_apart_from_a_plain_one() {
         .expect("at least one equippable item");
     let plain = GearCopy::plain(weapon.clone());
     let rare = GearCopy {
-        item: weapon.clone(),
         rarity: Rarity::Gold,
         tier: 0,
         affix: None,
+        ..GearCopy::plain(weapon.clone())
     };
 
     game.record_drop(plain.clone(), 1);

@@ -1852,10 +1852,10 @@ pub(super) fn held_at(game: &Game, item: &ItemId, tier: u32) -> u32 {
 /// a defaulted parameter.
 pub fn gear(item: &ItemId, tier: u32) -> GearCopy {
     GearCopy {
-        item: item.clone(),
         rarity: Rarity::Ordinary,
         tier,
         affix: None,
+        ..GearCopy::plain(item.clone())
     }
 }
 

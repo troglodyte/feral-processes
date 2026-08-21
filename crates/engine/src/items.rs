@@ -2,7 +2,8 @@ use crate::affixes::AffixId;
 use crate::components::Rarity;
 use crate::tuning::{
     GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, ITEM_FUSION_BONUS_PER_TIER,
-    ITEM_FUSION_MIN_BONUS_PER_TIER,
+    ITEM_FUSION_MIN_BONUS_PER_TIER, QUALITY_ABOVE_MAX, QUALITY_DEFAULT, QUALITY_SPEC_MAX,
+    QUALITY_UNDER_MAX,
 };
 use serde::{Deserialize, Serialize};
 
@@ -200,6 +201,26 @@ pub struct GearCopy {
     /// `recognized_routines` gives a removed ability.
     #[serde(default)]
     pub affix: Option<AffixId>,
+    /// How well this particular copy was compiled, as a percentage of the
+    /// item's authored bonus — see `EquipmentStats::for_quality`.
+    /// `QUALITY_DEFAULT` is "exactly as designed".
+    ///
+    /// **An integer on purpose.** This struct is the key of the
+    /// `components::GearCopies` ledger and of `EquippedItem`; both find
+    /// rows by `==`, so a float would take `Eq` and the keyed-by-value seam
+    /// with it.
+    ///
+    /// `default = "default_quality"` rather than a bare `#[serde(default)]`:
+    /// `u8`'s `Default` is 0, which would load every piece of gear in every
+    /// existing save at 0% of its authored bonus — a total loss of stats
+    /// presenting as a balance bug rather than as a failed load.
+    #[serde(default = "default_quality")]
+    pub quality: u8,
+}
+
+/// `serde`'s default for `GearCopy::quality` — see that field.
+fn default_quality() -> u8 {
+    QUALITY_DEFAULT
 }
 
 impl GearCopy {
@@ -211,6 +232,7 @@ impl GearCopy {
             rarity: Rarity::Ordinary,
             tier: 0,
             affix: None,
+            quality: QUALITY_DEFAULT,
         }
     }
 
@@ -223,7 +245,10 @@ impl GearCopy {
     /// A fourth property added to a copy joins the `&&` here and nowhere
     /// else.
     pub fn is_plain(&self) -> bool {
-        self.rarity == Rarity::Ordinary && self.tier == 0 && self.affix.is_none()
+        self.rarity == Rarity::Ordinary
+            && self.tier == 0
+            && self.affix.is_none()
+            && self.quality == QUALITY_DEFAULT
     }
 }
 
@@ -427,6 +452,65 @@ impl EquipmentStats {
             evasion: scale(self.evasion),
         }
     }
+
+    /// This item's bonus scaled for how well *this copy* was compiled
+    /// (`QUALITY_DEFAULT` = the authored numbers, no scaling) — see
+    /// `items::GearCopy::quality`. Applied on top of `scaled_for_level` and
+    /// underneath the two floored axes; `Game::copy_bonus` owns that order
+    /// and argues for it.
+    ///
+    /// **No per-step floor, unlike its two siblings.** Theirs exist to make
+    /// a *discrete rung* observable at the magnitudes gear ships at; quality
+    /// is continuous and is meant to be a fine gradient, and a floor would
+    /// flatten the whole band onto one number on a 4-point stat.
+    ///
+    /// Being floor-free is also why it cannot go last: a bare percentage on
+    /// an unscaled 4-point stat is eaten by rounding, and worse, it can
+    /// invert the rare tiers — base atk 4 gives a `Silver` copy at 70% the
+    /// same 4 an `Ordinary` copy at 130% rounds up to 5, which makes the row
+    /// colour a lie about which copy is better.
+    ///
+    /// A stat at zero stays at zero and a negative one is left alone, both
+    /// for the reasons `for_rarity` gives.
+    pub(crate) fn for_quality(self, quality: u8) -> EquipmentStats {
+        let factor = quality as f64 / QUALITY_DEFAULT as f64;
+        let scale = |v: i32| {
+            if v <= 0 {
+                return v;
+            }
+            (v as f64 * factor).round() as i32
+        };
+        EquipmentStats {
+            atk: scale(self.atk),
+            mitigation: scale(self.mitigation),
+            decompiler: scale(self.decompiler),
+            damage: scale_range(self.damage, scale),
+            accuracy: scale(self.accuracy),
+            evasion: scale(self.evasion),
+        }
+    }
+}
+
+/// Which of four rungs a copy's quality reads as. The renderer maps this to
+/// a colour and a weight; the thresholds are the engine's so the five sites
+/// that draw a category tag cannot come to disagree about them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QualityBand {
+    Under,
+    AsDesigned,
+    Above,
+    Exceptional,
+}
+
+/// Which band `quality` falls in — see `QualityBand` and
+/// `tuning::QUALITY_UNDER_MAX` and its two siblings.
+pub fn quality_band(quality: u8) -> QualityBand {
+    match quality {
+        q if q <= QUALITY_UNDER_MAX => QualityBand::Under,
+        q if q <= QUALITY_SPEC_MAX => QualityBand::AsDesigned,
+        q if q <= QUALITY_ABOVE_MAX => QualityBand::Above,
+        _ => QualityBand::Exceptional,
+    }
 }
 
 /// Applies an axis's own `scale` to **both ends** of a damage band,
@@ -451,6 +535,69 @@ fn scale_range(
 mod tests {
     use super::*;
     use crate::tuning::MAX_FUSIONS;
+
+    #[test]
+    fn for_quality_is_a_percentage_of_the_authored_bonus() {
+        let base = EquipmentStats {
+            atk: 10,
+            mitigation: 4,
+            damage: crate::battle::DamageRange { min: 5, max: 15 },
+            ..EquipmentStats::default()
+        };
+
+        let same = base.for_quality(QUALITY_DEFAULT);
+        assert_eq!(same.atk, 10, "100% is the identity");
+        assert_eq!(same.damage.min, 5);
+        assert_eq!(same.damage.max, 15);
+
+        let good = base.for_quality(130);
+        assert_eq!(good.atk, 13);
+        assert_eq!(good.mitigation, 5);
+        assert_eq!(
+            (good.damage.min, good.damage.max),
+            (7, 20),
+            "both ends of a band scale, or a high roll collapses it to a point"
+        );
+
+        let poor = base.for_quality(70);
+        assert_eq!(poor.atk, 7);
+        assert_eq!((poor.damage.min, poor.damage.max), (4, 11));
+    }
+
+    /// The two rules `for_rarity` states, reachable here by the same route:
+    /// quality sharpens what an item does rather than handing it a stat it
+    /// never had, and improving a copy never deepens a drawback affix's
+    /// penalty.
+    #[test]
+    fn for_quality_leaves_a_zero_at_zero_and_a_negative_where_it_is() {
+        let base = EquipmentStats {
+            atk: 0,
+            evasion: -3,
+            ..EquipmentStats::default()
+        };
+        for quality in [70u8, QUALITY_DEFAULT, 130] {
+            let scaled = base.for_quality(quality);
+            assert_eq!(scaled.atk, 0, "a stat the item does not have stays absent");
+            assert_eq!(scaled.evasion, -3, "a drawback is never deepened");
+        }
+    }
+
+    /// Every boundary in the four-band ladder, and the one that matters
+    /// most: `QUALITY_DEFAULT` lands in the band that reads as no change,
+    /// so every copy in every existing save is repainted by nothing.
+    #[test]
+    fn quality_band_buckets_the_whole_range() {
+        use crate::tuning::{QUALITY_MAX, QUALITY_MIN};
+        assert_eq!(quality_band(QUALITY_MIN), QualityBand::Under);
+        assert_eq!(quality_band(90), QualityBand::Under);
+        assert_eq!(quality_band(95), QualityBand::AsDesigned);
+        assert_eq!(quality_band(QUALITY_DEFAULT), QualityBand::AsDesigned);
+        assert_eq!(quality_band(105), QualityBand::AsDesigned);
+        assert_eq!(quality_band(110), QualityBand::Above);
+        assert_eq!(quality_band(120), QualityBand::Above);
+        assert_eq!(quality_band(125), QualityBand::Exceptional);
+        assert_eq!(quality_band(QUALITY_MAX), QualityBand::Exceptional);
+    }
 
     #[test]
     fn scaled_for_level_adds_100_percent_of_base_per_level_above_1() {

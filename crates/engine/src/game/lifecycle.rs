@@ -37,6 +37,7 @@ fn worn_from_save(
     fusion_tier: u32,
     rarity: Rarity,
     affix: Option<AffixId>,
+    quality: u8,
 ) -> Option<EquippedItem> {
     Some(EquippedItem {
         copy: GearCopy {
@@ -44,6 +45,7 @@ fn worn_from_save(
             rarity,
             tier: fusion_tier,
             affix,
+            quality,
         },
         level,
     })
@@ -57,6 +59,7 @@ fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
         fusion_tier: worn.copy.tier,
         rarity: worn.copy.rarity,
         affix: worn.copy.affix.clone(),
+        quality: worn.copy.quality,
     }
 }
 
@@ -369,6 +372,9 @@ impl Game {
                                 rarity: Rarity::Ordinary,
                                 tier,
                                 affix: None,
+                                // These copies predate the field by two
+                                // years of releases.
+                                quality: crate::tuning::QUALITY_DEFAULT,
                             },
                             qty,
                         )
@@ -460,6 +466,7 @@ impl Game {
                         data.player.weapon_fusion_tier,
                         data.player.weapon_rarity,
                         data.player.weapon_affix.clone(),
+                        data.player.weapon_quality,
                     ),
                     armor: worn_from_save(
                         data.player.armor,
@@ -467,6 +474,7 @@ impl Game {
                         data.player.armor_fusion_tier,
                         data.player.armor_rarity,
                         data.player.armor_affix.clone(),
+                        data.player.armor_quality,
                     ),
                     module: worn_from_save(
                         data.player.module,
@@ -474,6 +482,7 @@ impl Game {
                         data.player.module_fusion_tier,
                         data.player.module_rarity,
                         data.player.module_affix.clone(),
+                        data.player.module_quality,
                     ),
                 },
                 Inventory {
@@ -504,6 +513,9 @@ impl Game {
                                 rarity: Rarity::Ordinary,
                                 tier,
                                 affix: None,
+                                // These copies predate the field by two
+                                // years of releases.
+                                quality: crate::tuning::QUALITY_DEFAULT,
                             },
                             qty,
                         )
@@ -744,6 +756,7 @@ impl Game {
                         saved.fusion_tier,
                         saved.rarity,
                         saved.affix,
+                        saved.quality,
                     );
                 }
                 entity.insert(worn);
@@ -1188,6 +1201,11 @@ impl Game {
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
                 weapon_affix: equipment.weapon.as_ref().and_then(|e| e.copy.affix.clone()),
+                weapon_quality: equipment
+                    .weapon
+                    .as_ref()
+                    .map(|e| e.copy.quality)
+                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
                 armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
                 armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
                 armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -1197,6 +1215,11 @@ impl Game {
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
                 armor_affix: equipment.armor.as_ref().and_then(|e| e.copy.affix.clone()),
+                armor_quality: equipment
+                    .armor
+                    .as_ref()
+                    .map(|e| e.copy.quality)
+                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
                 module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
                 module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
                 module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
@@ -1206,6 +1229,11 @@ impl Game {
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
                 module_affix: equipment.module.as_ref().and_then(|e| e.copy.affix.clone()),
+                module_quality: equipment
+                    .module
+                    .as_ref()
+                    .map(|e| e.copy.quality)
+                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
                 // The legacy store is never written again — see its doc in
                 // `save.rs`. It is `skip_serializing_if` empty, so a save
                 // from here on carries only `gear_copies`.

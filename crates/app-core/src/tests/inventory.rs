@@ -678,10 +678,10 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
         for rarity in Rarity::ALL {
             for affix in &affixes {
                 let name = game.copy_name(&GearCopy {
-                    item: item.clone(),
                     rarity,
                     tier: 0,
                     affix: affix.clone(),
+                    ..GearCopy::plain(item.clone())
                 });
                 if name.chars().count() > worst.1 {
                     worst = (name.clone(), name.chars().count());
@@ -901,10 +901,10 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
     for item in &equippables {
         for affix in &affixes {
             let copy = GearCopy {
-                item: item.clone(),
                 rarity: Rarity::ALL[Rarity::ALL.len() - 1],
                 tier: MAX_FUSIONS,
                 affix: affix.clone(),
+                ..GearCopy::plain(item.clone())
             };
             let Some(mods) = game.copy_bonus(&copy, 10) else {
                 continue;

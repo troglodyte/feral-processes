@@ -44,6 +44,12 @@ pub struct PlayerSave {
     pub weapon_rarity: Rarity,
     #[serde(default)]
     pub weapon_affix: Option<AffixId>,
+    /// How well the worn copy was compiled — see `items::GearCopy::quality`.
+    /// Additive behind a default of `QUALITY_DEFAULT` rather than `u8`'s own
+    /// `Default` of 0, which would silently strip a worn item of its whole
+    /// bonus on the first reload.
+    #[serde(default = "default_worn_quality")]
+    pub weapon_quality: u8,
     pub armor: Option<ItemId>,
     pub armor_level: u32,
     pub armor_fusion_tier: u32,
@@ -51,6 +57,8 @@ pub struct PlayerSave {
     pub armor_rarity: Rarity,
     #[serde(default)]
     pub armor_affix: Option<AffixId>,
+    #[serde(default = "default_worn_quality")]
+    pub armor_quality: u8,
     pub module: Option<ItemId>,
     pub module_level: u32,
     pub module_fusion_tier: u32,
@@ -58,6 +66,8 @@ pub struct PlayerSave {
     pub module_rarity: Rarity,
     #[serde(default)]
     pub module_affix: Option<AffixId>,
+    #[serde(default = "default_worn_quality")]
+    pub module_quality: u8,
     /// Unspent Perk Points — see `perks::Perk`.
     pub perk_points: u32,
     /// Which perks have been bought, and at what level (see
@@ -350,6 +360,18 @@ pub struct EquippedItemSave {
     /// The affix on the worn copy — additive for the same reason.
     #[serde(default)]
     pub affix: Option<AffixId>,
+    /// How well the worn copy was compiled — see `items::GearCopy::quality`.
+    /// Additive behind a default of `QUALITY_DEFAULT` rather than `u8`'s own
+    /// `Default` of 0, which would silently strip a worn item of its whole
+    /// bonus on the first reload.
+    #[serde(default = "default_worn_quality")]
+    pub quality: u8,
+}
+
+/// `serde`'s default for every worn copy's quality — the four flat save
+/// fields that stand in for a nested `GearCopy`.
+fn default_worn_quality() -> u8 {
+    crate::tuning::QUALITY_DEFAULT
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -912,16 +934,19 @@ mod tests {
                 weapon_fusion_tier: 0,
                 weapon_rarity: Rarity::Ordinary,
                 weapon_affix: None,
+                weapon_quality: crate::tuning::QUALITY_DEFAULT,
                 armor: None,
                 armor_level: 1,
                 armor_fusion_tier: 0,
                 armor_rarity: Rarity::Ordinary,
                 armor_affix: None,
+                armor_quality: crate::tuning::QUALITY_DEFAULT,
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
                 module_rarity: Rarity::Ordinary,
                 module_affix: None,
+                module_quality: crate::tuning::QUALITY_DEFAULT,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
                 perk_points: 0,

@@ -1,8 +1,35 @@
 //! Recipes, crafting, and the equipment the results go into: equip,
 //! unequip, fuse, and erase.
 
-use crate::tuning::LEAN_COMPILER_DISCOUNT_PER_LEVEL;
+use crate::tuning::{
+    LEAN_COMPILER_DISCOUNT_PER_LEVEL, QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS,
+};
 use crate::*;
+
+/// Everything about *who is compiling, and where* that decides how good
+/// a copy comes out — see `Game::craft_quality_floor`, which is the one
+/// expression that turns it into a number.
+///
+/// **A struct at a single implementor, deliberately.** The direct
+/// version — `craft` reading the bench and the toggle inline — would
+/// normally win here and the spec says so; it loses only because the
+/// second gatherer is already named and requested: a base-roster program
+/// compiling at a bench while the player is somewhere else. The named
+/// axis of change is the crafter, so the crafter is what the type
+/// captures, and the roll never learns there is more than one.
+///
+/// The four *terms* are emphatically not an axis. They are addends in
+/// one legible formula, and a trait with an implementor per term would
+/// be the over-engineered reading of this.
+pub(crate) struct CraftOrder {
+    /// The tier of the best bench the recipe's structure is standing at,
+    /// or 1 when the recipe names no bench — see
+    /// `Game::best_structure_tier` for why a bench that cannot be
+    /// upgraded and one that has not been are the same number.
+    bench_tier: u32,
+    /// Whether the player chose to spend extra materials on this batch.
+    careful: bool,
+}
 
 impl Game {
     /// The full list of things the player can compile right now: every item
@@ -42,6 +69,7 @@ impl Game {
                 bench_ready.then(|| CraftRecipe {
                     result: def.id.clone(),
                     cost: charged(&c.cost),
+                    requires_structure: c.requires_structure.clone(),
                 })
             })
             .collect();
@@ -58,6 +86,7 @@ impl Game {
                     recipes.push(CraftRecipe {
                         result: recipe.result.clone(),
                         cost: charged(&recipe.cost),
+                        requires_structure: recipe.requires_structure.clone(),
                     });
                 }
             }
@@ -113,6 +142,41 @@ impl Game {
             .map(|(item, qty)| inv.count(item) / (*qty).max(1))
             .min()
             .unwrap_or(0)
+    }
+
+    /// What the player, standing where they are with the base they have,
+    /// compiles `recipe` at.
+    ///
+    /// One of two gatherers by design (see `CraftOrder`); the other belongs
+    /// to a base-roster program and is not built yet.
+    pub(crate) fn player_craft_order(&self, recipe: &CraftRecipe, careful: bool) -> CraftOrder {
+        CraftOrder {
+            bench_tier: recipe
+                .requires_structure
+                .as_ref()
+                .and_then(|kind| self.best_structure_tier(kind))
+                .unwrap_or(1),
+            careful,
+        }
+    }
+
+    /// The floor a copy compiled under this order rolls off:
+    /// `QUALITY_BASE` plus a term per input the player built toward.
+    ///
+    /// **The one expression of the floor**, so a screen that wants to quote
+    /// what a bench is worth and the compile that charges for it cannot
+    /// disagree. The clamp is not here — `Game::roll_quality` holds the one
+    /// clamp for every source of a copy — so this may legitimately return a
+    /// number above `QUALITY_MAX`, and a modded bench with an absurd
+    /// `max_tier` saturates rather than wrapping.
+    pub(crate) fn craft_quality_floor(&self, order: &CraftOrder) -> u8 {
+        let bench = order.bench_tier.saturating_sub(1) * QUALITY_BENCH_PER_TIER as u32;
+        let care = if order.careful {
+            QUALITY_CAREFUL_BONUS as u32
+        } else {
+            0
+        };
+        (QUALITY_BASE as u32 + bench + care).min(u8::MAX as u32) as u8
     }
 
     /// Compiles `quantity` units of `result` per its `craft_recipes` entry.

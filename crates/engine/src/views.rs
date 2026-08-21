@@ -1124,6 +1124,15 @@ pub struct FrameMapView {
 pub struct CraftRecipe {
     pub result: ItemId,
     pub cost: Vec<(ItemId, u32)>,
+    /// The bench this recipe is compiled at, if it names one — the id of a
+    /// `StructureDef`, already known to be standing or the recipe would not
+    /// be in the list.
+    ///
+    /// Carried rather than looked up again because it decides what a copy
+    /// compiles at (`Game::player_craft_order`), and the two halves of
+    /// `craft_recipes` read it out of two different databases: an item's own
+    /// `craftable` def and a research file's `unlocks_recipes`.
+    pub requires_structure: Option<String>,
 }
 
 /// One ingredient of a `RecipeStep`, and where the player is meant to get it.

@@ -385,3 +385,77 @@ fn best_structure_tier_reads_the_best_deployed_one() {
         "and a different kind is a different bench"
     );
 }
+
+/// The one recipe of `result` the player can compile right now.
+fn recipe_for(game: &mut Game, result: &str) -> CraftRecipe {
+    game.craft_recipes()
+        .into_iter()
+        .find(|r| r.result == ItemId::from(result))
+        .unwrap_or_else(|| panic!("{result} should be compilable in this fixture"))
+}
+
+/// Every term of a compiled copy's floor, each moving it on its own.
+///
+/// Asserted against the constants rather than against literals: the numbers
+/// are a balance decision and are expected to move, while "a better bench
+/// compiles better gear" is the feature.
+#[test]
+fn the_craft_floor_rises_with_the_bench_and_the_careful_toggle() {
+    use crate::tuning::{QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS};
+    let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let benchless = recipe_for(&mut game, "kinetic_edge");
+    let bare = game.player_craft_order(&benchless, false);
+    assert_eq!(
+        game.craft_quality_floor(&bare),
+        QUALITY_BASE,
+        "a recipe naming no bench compiles at the base floor"
+    );
+
+    let careful = game.player_craft_order(&benchless, true);
+    assert_eq!(
+        game.craft_quality_floor(&careful),
+        QUALITY_BASE + QUALITY_CAREFUL_BONUS,
+        "being careful about it raises the floor on its own"
+    );
+
+    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    let benched = recipe_for(&mut game, "arc_lance");
+    let tier_one = game.player_craft_order(&benched, false);
+    assert_eq!(
+        game.craft_quality_floor(&tier_one),
+        QUALITY_BASE,
+        "a bench at its first tier is worth no more than no bench at all"
+    );
+
+    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    game.world.entity_mut(bench).insert(StructureTier(3));
+    let tier_three = game.player_craft_order(&benched, false);
+    assert_eq!(
+        game.craft_quality_floor(&tier_three),
+        QUALITY_BASE + 2 * QUALITY_BENCH_PER_TIER,
+        "two tiers above the first, so two steps"
+    );
+}
+
+/// A modded bench with an absurd `max_tier` must not overflow the floor on
+/// its way to being clamped — `roll_quality` holds the one clamp, so the
+/// floor is allowed to exceed the band but never to wrap.
+#[test]
+fn an_absurd_bench_tier_clamps_rather_than_wrapping() {
+    use crate::tuning::QUALITY_MAX;
+    let mut game = Game::new(46, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "fabricator", 4, 4);
+    let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
+    game.world.entity_mut(bench).insert(StructureTier(9_000));
+
+    let recipe = recipe_for(&mut game, "arc_lance");
+    let order = game.player_craft_order(&recipe, true);
+    let floor = game.craft_quality_floor(&order);
+
+    assert_eq!(
+        game.roll_quality(floor),
+        QUALITY_MAX,
+        "however good the bench, the band is the band"
+    );
+}

@@ -2782,6 +2782,46 @@ and `a_stocked_shelf_still_keeps_the_body_off_the_producer_behind_it` are
 the pair). A base with **no** Depot standing is unchanged: `feeders_for`
 returns nothing, and the refusal still names the missing link.
 
+### Every unsatisfied order is worked at once, and `settle_orders` is where priority lives
+
+**`settle_orders` returns the accumulated wants of every unsatisfied,
+non-stalled order in queue order**, not the want list of the first one that
+has work in it. The queue is a production policy rather than a to-do list: a
+base with more bodies than the front order can use works the one behind it
+too, instead of parking the spare programs beside a line that is already
+fully staffed.
+
+**Priority needed no new code, and that is the point.** The accumulated list
+comes back in queue order and `schedule_base_labour`'s
+`truncate(staff.len())` cuts from the **end** — the same mechanism that
+already made dig wants lowest. Order 1's machines are at the front and get
+first refusal on every body, order 2 fills from what is left, and standing
+jobs and dig sites are still appended after all of them. A sort or a score
+here would be a second ranking rule beside the one the append sites already
+hold, and the two would drift.
+
+**The dedupe is an ordering constraint, not an optimisation, and its failure
+mode is not the one you would guess.** Two orders can want the same feeder.
+Counted twice, the duplicate occupies a second slot in `wanted` — so
+`truncate` drops one want from the bottom to make room for it. The obvious
+symptom, two bodies standing on one machine, never appears:
+`post_worker` calls `displace_task_holder`, so the second posting evicts the
+first and the machine still reads as staffed by exactly one program. What
+actually happens is a program left idle with no post and a want silently
+dropped — on the base that exposed it, the second order's own bench. So a
+test that asserts "one body at the shared feeder" passes with the dedupe
+removed and gates nothing; `a_machine_two_orders_want_is_posted_once`
+asserts that **every** staff member got a post and that the second order's
+bench is one of them, which is what goes red.
+Keeping the **first** occurrence rather than the last is what makes the
+higher-priority order hold the position.
+
+**Nothing in the suite gates the throughput this buys.** `balance_sim` has
+no base term at all, the arena models player combat, and no test can see
+base output against the zone curve. A staffed base is now materially more
+productive and that is a pacing question for play, stated here rather than
+mitigated because there is no instrument to mitigate it with.
+
 ### `schedule_base_labour` decides the whole assignment by priority and then diffs it against what is posted, and both halves of that are load-bearing
 
 **`schedule_base_labour` decides the whole assignment by priority and then

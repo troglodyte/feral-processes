@@ -1619,3 +1619,178 @@ fn the_scheduler_still_posts_staff_while_the_player_is_far_from_the_base() {
         "the base runs itself whether or not you are stood in it"
     );
 }
+
+// ---------------------------------------------------------------------
+// Work order queue, phase 1: orders worked concurrently
+// ---------------------------------------------------------------------
+
+/// A second, independent line: Log Scraper (2,2) → Transcriber (3,2),
+/// which makes Logic Wafers and shares no machine with `lay_disk_line`.
+fn lay_wafer_line(game: &mut Game) -> (Entity, Entity) {
+    let scraper = spawn_machine_at(game, "log_scraper", 2, 2);
+    let transcriber = spawn_machine_at(game, "transcriber", 3, 2);
+    (scraper, transcriber)
+}
+
+/// Every posted body, whoever they belong to, standing at `machine`.
+fn bodies_at(game: &mut Game, machine: Entity) -> usize {
+    let mut query = game.world.query::<&Task>();
+    query
+        .iter(&game.world)
+        .filter(|t| t.target == machine)
+        .count()
+}
+
+/// The queue is a production policy, not a to-do list: a base with more
+/// staff than the front order can use works the one behind it too rather
+/// than parking the spare bodies.
+#[test]
+fn spare_staff_are_put_on_the_second_order() {
+    let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    let (scraper, _transcriber) = lay_wafer_line(&mut game);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(ItemId::from("routine_disk"), 3)
+        .unwrap();
+    game.queue_work_order(ItemId::from("logic_wafer"), 3)
+        .unwrap();
+
+    // **The preconditions are the test.** Without them this passes against
+    // the serial scheduler on any tick where the front order happened to be
+    // satisfied — the spare body would reach the second order by the front
+    // one being popped, not by the two being worked together.
+    let front = game.work_orders()[0].clone();
+    assert!(
+        base_holding(&game, &front.item) < front.qty,
+        "the front order has to still be unsatisfied for this to mean anything"
+    );
+    let front_wants = wants(&game, &front);
+    assert!(
+        front_wants.len() < staff.len(),
+        "and it has to want fewer machines than the base has bodies"
+    );
+
+    game.tick();
+
+    let posts: Vec<Option<Entity>> = staff.iter().map(|&s| posted_at(&game, s)).collect();
+    assert!(
+        posts.contains(&Some(mine)),
+        "the front order still gets its body first"
+    );
+    assert!(
+        posts.contains(&Some(scraper)),
+        "and the spare body works the order behind it rather than parking"
+    );
+}
+
+/// A machine both orders need is one post, not two.
+///
+/// Counted twice, the duplicate eats a staff slot against a job that is
+/// already filled — `post_worker` displaces the body already standing
+/// there, so the base ends up with an idle program and the want the
+/// truncation dropped for it, here the second order's own bench, unstaffed.
+/// The body count at the shared feeder stays 1 either way, which is why the
+/// assertion that discriminates is the one below it.
+#[test]
+fn a_machine_two_orders_want_is_posted_once() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, _press) = lay_disk_line(&mut game);
+    let annealer = spawn_machine_at(&mut game, "annealing_node", 2, 1);
+    // Both lines run off the Mining Node's output, so both orders reach it.
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    let staff = hire(&mut game, 3);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.queue_work_order(ItemId::from("annealed_core"), 30)
+        .unwrap();
+    let orders = game.work_orders().to_vec();
+    assert!(
+        wants(&game, &orders[0]).iter().any(|&(e, _)| e == mine)
+            && wants(&game, &orders[1]).iter().any(|&(e, _)| e == mine),
+        "precondition: the Mining Node is a want of both orders"
+    );
+
+    game.tick();
+
+    assert_eq!(
+        bodies_at(&mut game, mine),
+        1,
+        "one machine is one post however many orders want it"
+    );
+    let posts: Vec<Option<Entity>> = staff.iter().map(|&s| posted_at(&game, s)).collect();
+    assert!(
+        posts.iter().all(|p| p.is_some()),
+        "a duplicated want left a body with nowhere to stand"
+    );
+    assert!(
+        posts.contains(&Some(lathe)) && posts.contains(&Some(annealer)),
+        "and the slot the duplicate would have eaten still reaches the second order's bench"
+    );
+}
+
+/// Concurrency is not fairness. The accumulated list is in queue order and
+/// `truncate(staff.len())` cuts from the end, so a scarce body goes to the
+/// front order and the one behind it waits.
+#[test]
+fn the_front_order_still_fills_first_when_staff_are_scarce() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, lathe, _press) = lay_disk_line(&mut game);
+    let (scraper, transcriber) = lay_wafer_line(&mut game);
+    // Stocked, so the front order wants two machines and can use both
+    // bodies by itself.
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 8);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+    game.queue_work_order(ItemId::from("logic_wafer"), 30)
+        .unwrap();
+    let front = game.work_orders()[0].clone();
+    assert_eq!(
+        wants(&game, &front).len(),
+        staff.len(),
+        "precondition: the front order wants exactly what the base has"
+    );
+
+    game.tick();
+
+    let mut posts: Vec<Entity> = staff.iter().filter_map(|&s| posted_at(&game, s)).collect();
+    posts.sort();
+    let mut expected = vec![mine, lathe];
+    expected.sort();
+    assert_eq!(posts, expected, "both bodies belong to the front order");
+    assert_eq!(bodies_at(&mut game, scraper), 0);
+    assert_eq!(bodies_at(&mut game, transcriber), 0);
+}
+
+/// Orders now occupy more of the list, so the append sites below them are
+/// worth re-asserting: a standing job and a dig site are still filled by a
+/// body no order needs, and never before one.
+#[test]
+fn standing_jobs_and_digs_still_come_after_every_order() {
+    let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, _lathe, _press) = lay_disk_line(&mut game);
+    let node = spawn_machine_at(&mut game, "research_node", 2, 3);
+    game.set_standing_job(node, true, false).unwrap();
+    let wall = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
+    game.toggle_mark_box(wall, wall);
+    let site = game
+        .dig_site_at(wall.0, wall.1)
+        .expect("a marked wall has a dig site");
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(ItemId::from("routine_disk"), 30)
+        .unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "the one body works the order"
+    );
+    assert_eq!(bodies_at(&mut game, node), 0, "the standing job waits");
+    assert_eq!(bodies_at(&mut game, site), 0, "and so does the dig site");
+}

@@ -579,15 +579,23 @@ impl Game {
     ///
     /// The five steps and their order are load-bearing:
     ///
-    /// 1. Take the front order. If base storage already holds its quantity
-    ///    the order is complete — pop it, announce it, take the next.
-    /// 2. Build its wants. If the walk yields nothing the order is
-    ///    **stalled**, not complete: leave it in the queue and take the next
-    ///    instead, so one dead order cannot freeze a base that could still
-    ///    work the three behind it.
+    /// 1. Walk the queue from the front. An order base storage already
+    ///    holds the quantity of is complete — pop it, announce it, carry on
+    ///    to the next.
+    /// 2. Build every surviving order's wants and accumulate them in queue
+    ///    order, keeping a machine two orders both want **once**, at its
+    ///    first position. An order whose walk yields nothing is **stalled**,
+    ///    not complete: it keeps its place in the queue and is skipped, so
+    ///    one dead order cannot freeze a base that could still work the
+    ///    three behind it.
     /// 3. Leave in place any staff already posted where a want still exists.
     /// 4. Unpost any staff whose machine no longer wants a body.
     /// 5. Fill the remaining wants, deepest first, from **idle** staff only.
+    ///
+    /// Step 2 is what makes the queue a production policy rather than a
+    /// to-do list, and it introduces no priority rule of its own: the
+    /// accumulated list is in queue order and `truncate(staff.len())` below
+    /// cuts from the end, so a scarce body still goes to the front order.
     ///
     /// Steps 3 and 5 together are the anti-thrash rule and are not
     /// optional. A scheduler that rebuilt every posting each tick would walk
@@ -602,7 +610,7 @@ impl Game {
             .into_iter()
             .map(|(machine, _)| (machine, TaskKind::GatherResource))
             .collect();
-        // Standing jobs, appended after the worked order and therefore at
+        // Standing jobs, appended after every order and therefore at
         // the lowest priority: a spare body fills one, a needed body does
         // not. A work job is still gated on `can_progress` — a standing
         // instruction says "keep this running", not "stand here regardless"
@@ -1004,7 +1012,7 @@ impl Game {
 
     /// Every standing job in the base, in a stable tile order.
     ///
-    /// Appended **after** whatever order is being worked and at the lowest
+    /// Appended **after** every order in the queue and at the lowest
     /// priority, so a Research Node or a guarded Shield is filled only by a
     /// body no order needs — and gives that body up the moment one does.
     fn standing_wants(&self) -> Vec<(Entity, TaskKind)> {
@@ -1028,25 +1036,30 @@ impl Game {
         jobs.into_iter().map(|(_, _, e, k)| (e, k)).collect()
     }
 
-    /// Steps 1 and 2: pop every completed order off the front, skip a
-    /// stalled one, and return the want list of the first order that has
-    /// work in it.
+    /// Steps 1 and 2: pop every completed order off the front, skip the
+    /// stalled ones, and return the accumulated want list of **every**
+    /// order left, in queue order.
+    ///
+    /// The queue is a production policy rather than a to-do list: a base
+    /// with more bodies than the front order can use works the one behind
+    /// it too. Priority needs no code here — the list comes back in queue
+    /// order and `schedule_base_labour`'s `truncate(staff.len())` cuts from
+    /// the end, so order 1's machines get first refusal on every body and
+    /// order 2 fills from what is left.
     ///
     /// Returns empty when nothing is orderable — which is also what a base
     /// with an empty queue looks like, and the two are the same instruction
     /// to the caller.
     fn settle_orders(&mut self) -> Vec<(Entity, u32)> {
+        let mut list: Vec<(Entity, u32)> = Vec::new();
         let mut index = 0;
-        loop {
-            let Some(order) = self
-                .world
-                .resource::<resources::WorkOrders>()
-                .0
-                .get(index)
-                .cloned()
-            else {
-                return Vec::new();
-            };
+        while let Some(order) = self
+            .world
+            .resource::<resources::WorkOrders>()
+            .0
+            .get(index)
+            .cloned()
+        {
             if base_holding(self, &order.item) >= order.qty {
                 let name = self.item_name(&order.item).to_string();
                 let qty = order.qty;
@@ -1060,16 +1073,26 @@ impl Game {
                 );
                 continue;
             }
-            let list = wants(self, &order);
-            if list.is_empty() {
+            let order_wants = wants(self, &order);
+            if order_wants.is_empty() {
                 // Stalled. It keeps its place in the queue so the status
                 // screen can say which machine went missing; the player
                 // cancels it or rebuilds.
                 index += 1;
                 continue;
             }
-            return list;
+            list.extend(order_wants);
+            index += 1;
         }
+        // **An ordering constraint, not an optimisation.** A feeder two
+        // orders both want would otherwise occupy two slots in the want
+        // list against one post, eating a body the base has nowhere to put
+        // and silently shortening the truncation for everything below it.
+        // The **first** occurrence is kept, so the higher-priority order is
+        // what holds the position.
+        let mut seen = std::collections::HashSet::new();
+        list.retain(|&(machine, _)| seen.insert(machine));
+        list
     }
 
     /// Queues an order for `qty` of `item`, or names why the line for it can

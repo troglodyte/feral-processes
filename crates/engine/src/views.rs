@@ -762,20 +762,54 @@ pub struct WorkOrderReport {
     /// should hold, and what you are carrying is yours.
     pub have: u32,
     pub target: u32,
-    /// Whether the walk found nothing to do at all: a machine demolished or
-    /// swept to destruction since the order was placed. A stalled order is
-    /// skipped rather than blocking the queue, and stays listed so this can
-    /// say so.
-    pub stalled: bool,
-    /// The sentence naming why, when `stalled` — the same one
+    /// What the base is doing about it — see `OrderState`.
+    pub state: OrderState,
+    /// The sentence naming why, when `Stalled` — the same one
     /// `queue_work_order` would have refused the order with, so the screen
     /// and the refusal cannot word the same break differently.
     pub blocked_by: Option<String>,
-    /// The chain, deepest first. **Empty is not the same as stalled**: a
-    /// base with nobody in it reports its orders normally, because "nothing
-    /// is happening because you have no staff" and "nothing is happening
-    /// because a machine is gone" are different errands.
+    /// The chain, deepest first, and empty when the order is asking for
+    /// nobody at all. **Empty is not a state**: a base with nobody in it
+    /// reports a full chain and `Queued`, a dormant order reports an empty
+    /// one, and a stalled order reports an empty one too — which is exactly
+    /// why the state is a field rather than something the screen infers
+    /// from this list.
     pub machines: Vec<WorkOrderMachine>,
+}
+
+/// What the base is doing about one work order.
+///
+/// **Four disjoint states derived from `settle_orders`' own three
+/// questions**, in its order: has the base got what was asked for, does the
+/// walk find anything to do, and — the one thing `settle_orders` cannot
+/// answer because it is the outcome rather than the rule — did a body
+/// actually end up on the chain.
+///
+/// That last question is read off the postings rather than re-derived from
+/// the scheduler's cut, and the difference is not cosmetic. Two machines in
+/// the accumulated want list never get a body: one the base has been built
+/// around, which `can_walk_to_post` skips in silence, and one already held
+/// by a program the scheduler may not move. A re-derived answer calls both
+/// of those `Working` and sends the player off to watch a machine that
+/// nobody is ever going to stand at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderState {
+    /// Somebody is standing on this order's chain right now.
+    Working,
+    /// It wants machines and has nobody on any of them — the queue ran out
+    /// of bodies before it got here, or it was filed since the last tick.
+    /// Not a fault: the line is whole and the base is simply busy.
+    Queued,
+    /// The base already holds what was asked for. A standing order lives
+    /// here — it is the level being held, which is the feature working
+    /// rather than a fault — and a one-shot passes through it for the
+    /// moment between being satisfied and being popped.
+    Dormant,
+    /// The walk found nothing to do at all: a machine demolished or swept
+    /// to destruction since the order was placed. Skipped rather than
+    /// blocking the queue, and stays listed so `blocked_by` can name what
+    /// went missing.
+    Stalled,
 }
 
 /// One machine in a work order's chain — see `WorkOrderReport::machines`.

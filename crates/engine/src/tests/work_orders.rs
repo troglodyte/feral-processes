@@ -1130,7 +1130,7 @@ fn the_report_lists_exactly_what_the_scheduler_walks() {
     assert_eq!(report.len(), 1);
     let listed: Vec<Entity> = report[0].machines.iter().map(|m| m.entity).collect();
     assert_eq!(listed, walked);
-    assert!(!report[0].stalled);
+    assert_ne!(report[0].state, views::OrderState::Stalled);
     assert_eq!(report[0].target, 3);
 }
 
@@ -1160,7 +1160,7 @@ fn a_stalled_order_says_so_and_names_the_machine_that_went_missing() {
     game.world.entity_mut(press).despawn();
     let report = game.work_order_report();
 
-    assert!(report[0].stalled);
+    assert_eq!(report[0].state, views::OrderState::Stalled);
     assert!(
         report[0]
             .blocked_by
@@ -1186,7 +1186,11 @@ fn a_base_with_no_staff_reports_its_orders_normally_rather_than_stalled() {
     let report = game.work_order_report();
 
     assert!(game.base_staff().is_empty(), "precondition");
-    assert!(!report[0].stalled);
+    assert_eq!(
+        report[0].state,
+        views::OrderState::Queued,
+        "a base with nobody in it has its orders queued, not stalled"
+    );
     assert!(report[0].blocked_by.is_none());
     assert!(!report[0].machines.is_empty());
 }
@@ -2085,5 +2089,126 @@ fn an_order_saved_before_priority_loads_as_normal() {
         orders[0].priority,
         OrderPriority::Normal,
         "an order filed before bands existed is an ordinary one"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Work order queue, phase 4: four states on the screen
+// ---------------------------------------------------------------------
+
+/// The state of the order at `index`, which is what the queue screen puts
+/// beside the row.
+fn state_of(game: &Game, index: usize) -> views::OrderState {
+    game.work_order_report()[index].state
+}
+
+/// An order with a body on its chain is the one the base is actually
+/// spending itself on, and the screen's whole job in this phase is to say
+/// which one that is.
+#[test]
+fn an_order_the_base_is_staffing_reports_working() {
+    let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "precondition: the base actually put somebody on this order"
+    );
+    assert_eq!(state_of(&game, 0), views::OrderState::Working);
+}
+
+/// The order behind it, with the body already spent. Not stalled — its
+/// line is whole and it wants machines; there is simply nobody left to
+/// stand on them, which is a different errand for the player and now says
+/// so.
+#[test]
+fn an_order_with_no_body_left_for_it_reports_queued() {
+    let mut game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    lay_disk_line(&mut game);
+    lay_wafer_line(&mut game);
+    hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+    game.queue_work_order(WorkOrder::batch(ItemId::from("logic_wafer"), 30))
+        .unwrap();
+
+    game.tick();
+
+    assert_eq!(
+        state_of(&game, 0),
+        views::OrderState::Working,
+        "precondition: the one body went to the front order"
+    );
+    assert_eq!(state_of(&game, 1), views::OrderState::Queued);
+}
+
+/// A standing order at its level, which is the normal healthy state of a
+/// standing order rather than a fault.
+#[test]
+fn a_standing_order_at_its_level_reports_dormant() {
+    let mut game = Game::new(86, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 5))
+        .unwrap();
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+
+    game.tick();
+
+    assert_eq!(state_of(&game, 0), views::OrderState::Dormant);
+}
+
+/// A line that broke after the order was placed.
+#[test]
+fn an_order_whose_chain_broke_reports_stalled() {
+    let mut game = Game::new(87, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (_mine, _lathe, press) = lay_disk_line(&mut game);
+    hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 30))
+        .unwrap();
+
+    game.world.entity_mut(press).despawn();
+    game.tick();
+
+    assert_eq!(state_of(&game, 0), views::OrderState::Stalled);
+}
+
+/// **The regression the enum exists to prevent.** A dormant standing order
+/// and a stalled one are indistinguishable from the outside: both ask for
+/// nobody, both sit in the queue doing nothing. One is the feature working
+/// and the other is a base that needs rebuilding, and a screen that words
+/// them the same sends the player hunting for a machine that never went
+/// missing.
+#[test]
+fn a_dormant_standing_order_is_not_reported_stalled() {
+    let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 5))
+        .unwrap();
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 5);
+
+    game.tick();
+
+    assert_eq!(
+        bodies_at(&mut game, mine),
+        0,
+        "precondition: it asks for nobody, exactly as a stalled order does"
+    );
+    let report = game.work_order_report();
+    assert_eq!(report[0].state, views::OrderState::Dormant);
+    assert!(
+        report[0].blocked_by.is_none(),
+        "and nothing went missing, so there is nothing to name"
     );
 }

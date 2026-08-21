@@ -452,6 +452,37 @@ pub(crate) fn can_progress(game: &Game, machine: Entity) -> bool {
     })
 }
 
+/// What one order is asking of the base right now.
+///
+/// **The three questions `settle_orders` walks the queue asking**, in its
+/// order, as one call — so the status screen and the scheduler cannot come
+/// to different conclusions about the same order. That is the same argument
+/// `work_order_report` already makes about calling `wants` rather than
+/// walking the chain a second time, one level up: telling a player their
+/// base is doing something it is not is the copy that drifts.
+pub(crate) enum OrderStanding {
+    /// The base already holds what was asked for. A standing order sleeps
+    /// here; a one-shot is popped and announced.
+    Satisfied,
+    /// The walk found nothing to do at all — the line broke after the order
+    /// was placed.
+    Stalled,
+    /// These machines want a body, deepest first.
+    Wants(Vec<(Entity, u32)>),
+}
+
+pub(crate) fn standing_of(game: &Game, order: &WorkOrder) -> OrderStanding {
+    if base_holding(game, &order.item) >= order.qty {
+        return OrderStanding::Satisfied;
+    }
+    let machines = wants(game, order);
+    if machines.is_empty() {
+        OrderStanding::Stalled
+    } else {
+        OrderStanding::Wants(machines)
+    }
+}
+
 /// Which machines this order needs a body on, deepest first.
 ///
 /// Walks the recipe tree from the machine that makes the ordered item.
@@ -1155,8 +1186,8 @@ impl Game {
             .get(index)
             .cloned()
         {
-            if base_holding(self, &order.item) >= order.qty {
-                if order.standing {
+            match standing_of(self, &order) {
+                OrderStanding::Satisfied if order.standing => {
                     // A level the base holds: reaching it puts the order to
                     // sleep, and the shelf draining wakes it again.
                     //
@@ -1167,32 +1198,33 @@ impl Game {
                     // says nothing either: "complete" is a lie about
                     // something that is not complete, and detecting the
                     // moment it fell asleep needs state the order does not
-                    // have. The queue screen carries that news instead.
+                    // have. The queue screen carries that news instead, as
+                    // `views::OrderState::Dormant`.
                     index += 1;
-                    continue;
                 }
-                let name = self.item_name(&order.item).to_string();
-                let qty = order.qty;
-                self.world
-                    .resource_mut::<resources::WorkOrders>()
-                    .0
-                    .remove(index);
-                self.log_base_kind(
-                    MessageKind::Complete,
-                    format!("Work order complete: {qty} x {name}."),
-                );
-                continue;
+                OrderStanding::Satisfied => {
+                    let name = self.item_name(&order.item).to_string();
+                    let qty = order.qty;
+                    self.world
+                        .resource_mut::<resources::WorkOrders>()
+                        .0
+                        .remove(index);
+                    self.log_base_kind(
+                        MessageKind::Complete,
+                        format!("Work order complete: {qty} x {name}."),
+                    );
+                }
+                OrderStanding::Stalled => {
+                    // It keeps its place in the queue so the status screen
+                    // can say which machine went missing; the player cancels
+                    // it or rebuilds.
+                    index += 1;
+                }
+                OrderStanding::Wants(order_wants) => {
+                    list.extend(order_wants);
+                    index += 1;
+                }
             }
-            let order_wants = wants(self, &order);
-            if order_wants.is_empty() {
-                // Stalled. It keeps its place in the queue so the status
-                // screen can say which machine went missing; the player
-                // cancels it or rebuilds.
-                index += 1;
-                continue;
-            }
-            list.extend(order_wants);
-            index += 1;
         }
         // **An ordering constraint, not an optimisation.** A feeder two
         // orders both want would otherwise occupy two slots in the want
@@ -1311,20 +1343,15 @@ impl Game {
         self.work_orders()
             .iter()
             .map(|order| {
-                let machines = wants(self, order);
-                views::WorkOrderReport {
-                    item: order.item.clone(),
-                    label: self.item_name(&order.item).to_string(),
-                    have: base_holding(self, &order.item),
-                    target: order.qty,
-                    stalled: machines.is_empty(),
-                    blocked_by: machines
-                        .is_empty()
-                        .then(|| chain_break(self, &order.item))
-                        .flatten(),
-                    machines: machines
-                        .into_iter()
-                        .map(|(machine, depth)| views::WorkOrderMachine {
+                let standing = standing_of(self, order);
+                let machines: Vec<views::WorkOrderMachine> = match &standing {
+                    // Both ask for nobody, and that is the whole reason the
+                    // state is reported rather than inferred from this list
+                    // being empty.
+                    OrderStanding::Satisfied | OrderStanding::Stalled => Vec::new(),
+                    OrderStanding::Wants(wanted) => wanted
+                        .iter()
+                        .map(|&(machine, depth)| views::WorkOrderMachine {
                             entity: machine,
                             label: self
                                 .world
@@ -1337,6 +1364,33 @@ impl Game {
                             depth,
                         })
                         .collect(),
+                };
+                let state = match standing {
+                    OrderStanding::Satisfied => views::OrderState::Dormant,
+                    OrderStanding::Stalled => views::OrderState::Stalled,
+                    // Read off the postings, not off the scheduler's cut —
+                    // see `views::OrderState`. The worker names are already
+                    // here for the machine lines, so this asks nothing new
+                    // of the world and there is no second copy of the
+                    // priority rule to drift.
+                    OrderStanding::Wants(_) => {
+                        if machines.iter().any(|m| m.worker.is_some()) {
+                            views::OrderState::Working
+                        } else {
+                            views::OrderState::Queued
+                        }
+                    }
+                };
+                views::WorkOrderReport {
+                    item: order.item.clone(),
+                    label: self.item_name(&order.item).to_string(),
+                    have: base_holding(self, &order.item),
+                    target: order.qty,
+                    state,
+                    blocked_by: (state == views::OrderState::Stalled)
+                        .then(|| chain_break(self, &order.item))
+                        .flatten(),
+                    machines,
                 }
             })
             .collect()

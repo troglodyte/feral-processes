@@ -4,7 +4,7 @@ use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, ProgramRole, WorkOrderRow};
-use feral_processes_engine::{OrderPriority, WorkProfile};
+use feral_processes_engine::{OrderPriority, OrderState, WorkProfile};
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -209,7 +209,7 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
     let Some(order) = &row.order else {
         return vec![format!("[{}] New work order...", menu_shortcut(index))];
     };
-    let state = if order.stalled { "  STALLED" } else { "" };
+    let state = state_tag(order.state);
     let mut lines = vec![format!(
         "[{}] {}  {}/{}{state}",
         menu_shortcut(index),
@@ -225,7 +225,13 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
         return lines;
     }
     if order.machines.is_empty() {
-        lines.extend(continuation_lines("waiting — nothing to do here yet"));
+        // Three ways to want nobody, and the tag alone does not say which:
+        // the base is holding the level, the line broke (handled above), or
+        // every machine in it is momentarily busy or clogged.
+        lines.extend(continuation_lines(match order.state {
+            OrderState::Dormant => "holding — the base has this, so nothing is being made",
+            _ => "waiting — nothing to do here yet",
+        }));
     }
     for machine in &order.machines {
         let who = match &machine.worker {
@@ -243,6 +249,22 @@ fn work_order_lines(row: &WorkOrderRow, index: usize, _selected: bool) -> Vec<St
         )));
     }
     lines
+}
+
+/// The token beside an order's row. Every state carries one, including the
+/// healthy ones: the screen's job in a queue several orders deep is to say
+/// which order has the base's attention, and a tag that appears only when
+/// something is wrong cannot answer that.
+/// `HOLDING` rather than the enum's own word, because the sentence that
+/// filed the order already said "hold 5 x Core Fragment" — the player's
+/// word for the state is the one they typed it in with.
+fn state_tag(state: OrderState) -> &'static str {
+    match state {
+        OrderState::Working => "  WORKING",
+        OrderState::Queued => "  QUEUED",
+        OrderState::Dormant => "  HOLDING",
+        OrderState::Stalled => "  STALLED",
+    }
 }
 
 /// What a band means, spelled out rather than named: "Normal" alone says
@@ -1057,14 +1079,24 @@ mod work_order_tests {
     /// stalled order's whole sentence. `draw_row` clamps a row vertically
     /// and **never horizontally**, so a row past the popup body simply runs
     /// off it; two shipped screens already do that because nobody measured.
+    ///
+    /// **Every state is measured, not just the one that used to carry a
+    /// tag.** Before the four states only a stalled order put anything after
+    /// the count, so a head line was the shortest row on the screen and
+    /// nothing here had to think about it; now all four do. The head is
+    /// also the only row on this screen that is *not* wrapped —
+    /// `continuation_lines` bounds every other one — so it is the row a tag
+    /// can actually run off, and it is measured here against the longest
+    /// shipped item name and four-digit counts rather than a convenient
+    /// short one.
     #[test]
     fn no_work_order_row_runs_past_the_popup_body() {
         let report = WorkOrderReport {
-            item: ItemId::from("routine_disk"),
-            label: "Routine Disk".to_string(),
-            have: 2,
-            target: 30,
-            stalled: false,
+            item: ItemId::from("singularity_matrix"),
+            label: "Singularity Matrix".to_string(),
+            have: 9999,
+            target: 9999,
+            state: OrderState::Working,
             blocked_by: None,
             machines: vec![WorkOrderMachine {
                 entity: Entity::PLACEHOLDER,
@@ -1075,7 +1107,7 @@ mod work_order_tests {
             }],
         };
         let stalled = WorkOrderReport {
-            stalled: true,
+            state: OrderState::Stalled,
             blocked_by: Some(
                 "Nothing beside the Annealing Node is making Blank Substrate — a machine can \
                  only take what a neighbour has finished."
@@ -1084,12 +1116,30 @@ mod work_order_tests {
             machines: Vec::new(),
             ..report.clone()
         };
+        // The two states that draw a tag over an empty chain, which is the
+        // combination the sentence under the head has to fit beside.
+        let dormant = WorkOrderReport {
+            state: OrderState::Dormant,
+            blocked_by: None,
+            machines: Vec::new(),
+            ..report.clone()
+        };
+        let queued = WorkOrderReport {
+            state: OrderState::Queued,
+            ..dormant.clone()
+        };
         let rows = [
             WorkOrderRow {
                 order: Some(report),
             },
             WorkOrderRow {
                 order: Some(stalled),
+            },
+            WorkOrderRow {
+                order: Some(dormant),
+            },
+            WorkOrderRow {
+                order: Some(queued),
             },
             WorkOrderRow { order: None },
         ];

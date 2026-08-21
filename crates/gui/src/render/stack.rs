@@ -368,7 +368,7 @@ fn cell_describe_rows(text: Option<&str>) -> Vec<Row> {
 
 /// The environment paragraph reached with `x` + a direction underground.
 ///
-/// The same shape as `inventory::draw_item_describe` — the repo's one
+/// The same shape as `inventory::draw_gear_inspect` — the repo's one
 /// prose-on-screen pattern, and `wrap_text` its only wrap helper.
 pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metrics) {
     draw_popup(

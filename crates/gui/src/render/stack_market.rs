@@ -81,6 +81,9 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
     }
     rows.push(text_row(""));
     rows.push(text_row("[S] sells the whole stack  ·  Esc to walk on"));
+    rows.push(text_row(
+        "[I] inspect — full stats, and what a granted routine actually does",
+    ));
     draw_popup(
         "A stall in the corridor",
         PopupSize::Large,

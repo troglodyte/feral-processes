@@ -1,5 +1,7 @@
 //! The inventory list, its per-item action page, and the erase prompt.
 
+use feral_processes_engine::views::RoutineDetailView;
+
 use super::popup::*;
 use super::*;
 
@@ -105,6 +107,9 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     rows.push(text_row(""));
     rows.push(text_row(
         "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
+    ));
+    rows.push(text_row(
+        "[I] inspect — full stats, and what a granted routine actually does",
     ));
     draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
 }
@@ -270,6 +275,9 @@ pub(super) fn draw_equip_swap(
     rows.push(text_row(
         "Middle column is what you'd get; right column is the change",
     ));
+    rows.push(text_row(
+        "[I] inspect — full stats, and what a granted routine actually does",
+    ));
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
     draw_popup(
         &format!("Replace {}", slot.label()),
@@ -280,20 +288,25 @@ pub(super) fn draw_equip_swap(
     );
 }
 
-/// The read-only description page reached with `d` from the action list.
+/// The gear inspect page — `[I]` from every list that names a piece of
+/// gear, and `[d]` from the item-action list.
 ///
-/// The prose is the item's own authored `.ron` text — see
-/// `Game::item_description` — not `item_blurb`'s derived gloss, so editing
-/// an item's flavour never means touching Rust. The stat tag is still shown
-/// above it, since the two answer different questions.
-pub(super) fn draw_item_describe(
+/// **Every figure on it comes out of one `Game::gear_detail` call.** A
+/// renderer that priced the copy itself is the bug `Game::copy_bonus`'s doc
+/// records four times over; a renderer that read `AbilityEffect::Damage`'s
+/// authored `power` would be the same bug on a second axis, quoting a
+/// routine's level-1 figure to a level-12 player forever.
+///
+/// The page does not scroll — `draw_popup` pages a `Row::Item` span and
+/// there are none here — so its height is held by
+/// `the_tallest_gear_page_fits_its_popup` rather than by a scrollbar.
+pub(super) fn draw_gear_inspect(
     game: &Game,
-    copy: Option<GearCopy>,
-    zone_level: u32,
+    inspect: Option<GearInspect>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some(copy) = copy else {
+    let Some(inspect) = inspect else {
         draw_popup(
             "Item",
             PopupSize::Small,
@@ -303,13 +316,22 @@ pub(super) fn draw_item_describe(
         );
         return;
     };
-    let title = format!(
-        "{}{}",
-        game.copy_name(&copy),
-        equip_preview_tag(game, &copy, zone_level)
-    );
-    let mut rows = vec![Row::TextColored(title, TEXT), text_row("")];
-    match game.item_description(&copy.item) {
+    let rows = gear_inspect_rows(game, &inspect);
+    draw_popup("Item", PopupSize::Large, &rows, painter, m);
+}
+
+/// The page's rows, split out so a height test can count them without a
+/// window — the same split `inventory_row_lines` makes for its width test.
+pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> {
+    let copy = &inspect.copy;
+    let wearer = inspect.wearer.unwrap_or_else(|| game.player_entity());
+    let detail = game.gear_detail(copy, wearer);
+
+    // The title carries the copy's colour for the same reason every list
+    // row does — see `render/mod.rs::tier_color`.
+    let mut rows = vec![tier_row(detail.name.clone(), false, copy.tier, copy.rarity)];
+    rows.push(text_row(""));
+    match &detail.description {
         Some(text) => rows.extend(
             wrap_text(text, DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
@@ -317,21 +339,78 @@ pub(super) fn draw_item_describe(
         ),
         None => rows.push(text_row("(no description)")),
     }
-    // The routine's own name and prose, off `Game::item_grant` — an item's
-    // authored description is free text and may say nothing about what it
-    // grants, or say it about a routine it no longer carries.
-    if let Some((name, effect)) = game.item_grant(&copy.item) {
+
+    if let Some(worn) = &detail.worn {
         rows.push(text_row(""));
-        rows.push(text_row(format!("Grants: {name}")));
+        // Through app-core's one stat formatter, so the page and the row
+        // that opened it cannot quote different numbers.
+        rows.push(text_row(format!(
+            "{}: {}",
+            worn.slot.label(),
+            stat_summary(game, worn.stats)
+        )));
+        // A projection and labelled as one — there is no opponent until a
+        // fight starts, so the page names the one it measured against. See
+        // `views::NominalHostile`.
+        rows.push(text_row(format!(
+            "Accuracy {:.0} — {:.0}% to land a swing on a typical zone-{} program",
+            worn.accuracy,
+            worn.hit_chance * 100.0,
+            worn.nominal.zone
+        )));
+    }
+
+    if !detail.effects.is_empty() {
+        rows.push(text_row(""));
+        rows.extend(detail.effects.iter().map(text_row));
+    }
+
+    if let Some(grant) = &detail.grant {
+        rows.push(text_row(""));
+        rows.push(text_row(format!("Grants: {}", grant.name)));
         rows.extend(
-            wrap_text(effect, DESCRIBE_WRAP_COLUMNS)
+            wrap_text(&grant.description, DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
                 .map(text_row),
         );
+        for line in routine_mechanics(grant) {
+            rows.push(text_row(format!("  {line}")));
+        }
     }
+
     rows.push(text_row(""));
     rows.push(text_row("Any key to go back"));
-    draw_popup("Item", PopupSize::Large, &rows, painter, m);
+    rows
+}
+
+/// The four mechanics lines under a granted routine's prose: when it runs,
+/// what it lands on, what it does, and what it costs.
+///
+/// Every one of them is a field of `views::RoutineDetailView` and none is
+/// derived here — a renderer deciding what a routine does is a second
+/// opinion about the same `.ron` file.
+fn routine_mechanics(grant: &RoutineDetailView) -> Vec<String> {
+    let mut lines = vec![
+        grant.when.clone(),
+        format!("Hits {}", grant.target),
+        match grant.rolls_to_hit {
+            true => format!("{}, and can miss", grant.effect),
+            false => grant.effect.clone(),
+        },
+    ];
+    let mut price = vec![match grant.cooldown {
+        0 => "No cooldown".to_string(),
+        1 => "Cooldown 1 round".to_string(),
+        n => format!("Cooldown {n} rounds"),
+    }];
+    // A free routine says nothing about its price rather than printing a
+    // zero: `power_cost` defaults to 0.0 and most of the roster leaves it
+    // there, so a "Costs 0 Power" row would be noise on nearly every page.
+    if grant.power_cost > 0.0 {
+        price.push(format!("Costs {:.0} Power", grant.power_cost));
+    }
+    lines.push(price.join(" · "));
+    lines
 }
 
 pub(super) fn draw_inventory_item_action(
@@ -372,11 +451,11 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{equipped_summary, inventory_row_lines};
+    use super::{equipped_summary, gear_inspect_rows, inventory_row_lines};
     use crate::paint::with_painter;
-    use crate::render::popup::wrapped_row_lines;
+    use crate::render::popup::{PopupSize, popup_max_rows, wrapped_row_lines};
     use crate::text::ui_metrics;
-    use feral_processes_app_core::menu_shortcut;
+    use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
     use feral_processes_engine::tuning::MAX_FUSIONS;
@@ -418,6 +497,54 @@ mod tests {
             "the panel disagrees with what the player is wearing ({} ATK): {summary}",
             real.atk
         );
+    }
+
+    /// **The tallest page any shipped item can produce fits its popup.**
+    ///
+    /// This page is built entirely out of text rows, and `draw_popup` only
+    /// pages a `Row::Item` span — so there is no scroll here and nothing
+    /// clamps a row back into the box. A page one row too tall silently
+    /// loses its last line, which on this screen is the routine's cooldown
+    /// and price, or the "any key to go back" that says how to leave.
+    ///
+    /// A census over `item_defs` rather than a fixture, for the reason the
+    /// width test above gives: the tallest page is a property of the assets
+    /// (a long description, a long routine description) *and* of how this
+    /// screen stacks them, so a wordier item added later has to fail here.
+    /// Plain copies are enough — rarity, fusion and an affix all decorate
+    /// the name, and none of them adds a row.
+    #[test]
+    fn the_tallest_gear_page_fits_its_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(41, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let mut tallest = (0usize, String::new());
+        for def in game.item_defs() {
+            let inspect = GearInspect {
+                copy: GearCopy::plain(def.id.clone()),
+                wearer: None,
+                from: Mode::Inventory,
+            };
+            let rows = gear_inspect_rows(&game, &inspect).len();
+            if rows > tallest.0 {
+                tallest = (rows, def.name.clone());
+            }
+        }
+
+        // Swept rather than measured at one window, because `ui_metrics`
+        // clamps the font at both ends: below the clamp the box keeps
+        // shrinking while the line height stops, so the tightest window is
+        // the smallest one and not the one a test happens to run at.
+        for h in (600..=2160).step_by(60) {
+            let m = ui_metrics(h as f32);
+            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            assert!(
+                tallest.0 <= cap,
+                "{} builds a {}-row page into a {cap}-row popup at {h}px",
+                tallest.1,
+                tallest.0
+            );
+        }
     }
 
     /// **Every line every shipped item can put on this screen fits inside

@@ -247,6 +247,33 @@ const MIN_POPUP_ROWS: usize = 2;
 /// quotient landed a hair under a whole line, so a list the box had room for
 /// lost a row, which turned scrolling on, which spent two more rows on the
 /// indicators — three rows hidden below a list with blank space under it.
+/// How wide and tall a popup of this size is, as fractions of the window.
+///
+/// One table rather than a match at each reader: `popup_max_rows` and
+/// `draw_popup` have to agree about the height, or a height test passes
+/// against a box the drawing code sizes differently.
+fn popup_fractions(size: PopupSize) -> (f32, f32) {
+    match size {
+        PopupSize::Large => (0.88, 0.85),
+        PopupSize::Small => (0.5, 0.85),
+    }
+}
+
+/// How many rows a popup of `size` draws at `screen_h` before `draw_row`
+/// starts clipping them off the bottom.
+///
+/// **`draw_popup` pages a `Row::Item` span and nothing else**, so a page
+/// built entirely out of text rows — the gear inspect page — has no scroll
+/// and simply loses its tail, in silence. This is what a height test
+/// measures such a page against.
+#[cfg(test)]
+pub(super) fn popup_max_rows(screen_h: f32, size: PopupSize, m: &Metrics) -> usize {
+    let chrome = m.line_height * 2.0 + m.inset;
+    ((screen_h * popup_fractions(size).1 - chrome) / m.line_height)
+        .floor()
+        .max(0.0) as usize
+}
+
 fn popup_layout<'a>(screen_h: f32, pct_h: f32, rows: &'a [Row], m: &Metrics) -> PopupLayout<'a> {
     // Two lines for the title and its divider, plus the bottom inset.
     let chrome = m.line_height * 2.0 + m.inset;
@@ -302,10 +329,7 @@ pub(super) fn draw_popup(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let (pct_w, pct_h) = match size {
-        PopupSize::Large => (0.88, 0.85),
-        PopupSize::Small => (0.5, 0.85),
-    };
+    let (pct_w, pct_h) = popup_fractions(size);
     let layout = popup_layout(painter.screen_h(), pct_h, rows, m);
     let w = painter.screen_w() * pct_w;
     let h = layout.h;

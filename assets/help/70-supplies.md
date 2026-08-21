@@ -17,6 +17,10 @@ a piece moves freely between you and any program you own. Weapons and armour tra
 a narrow damage band with accuracy against a wide band with none, and mitigation against evasion. A
 weapon overrides a natural attack rather than adding to it.
 
+Some pieces grant a routine while they are worn. The cargo list names it under the row; I on the
+highlighted row opens the whole of it — what makes it fire, what it lands on, what it hits for at
+your level, and what it costs.
+
 Two things about a copy of gear are worth knowing before you throw one away.
 
 - Gear locks in the level and zone it was equipped at. The same item equipped after a breach is

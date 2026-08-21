@@ -190,10 +190,6 @@ pub struct WornDetailView {
     /// cargo, since `Game::equip` locks gear in at the zone it goes on at.
     pub level: u32,
     pub stats: crate::items::EquipmentStats,
-    /// The damage band through `Game::damage_range_label`, empty for gear
-    /// that carries none. A string rather than a `DamageRange` so the one
-    /// formatter stays the one formatter.
-    pub damage: String,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you
     /// are wearing reports the accuracy you actually have.

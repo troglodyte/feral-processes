@@ -177,6 +177,9 @@ pub(super) fn draw_trade_action_menu(
     rows.push(text_row(
         "[S] sell one, [B] buy one — no quantity page; Esc to cancel; Up/Down + Enter also work",
     ));
+    rows.push(text_row(
+        "[I] inspect — full stats, and what a granted routine actually does",
+    ));
     draw_popup("Trade", PopupSize::Large, &rows, painter, m);
 }
 

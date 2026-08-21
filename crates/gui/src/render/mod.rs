@@ -7,9 +7,9 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, BattlePane, DevConsoleRow, GroupMenuRow, LogFilter, MENU_SCAN_RADIUS, Mode,
-    Staffing, TradeChoice, equip_preview_tag, equip_swap_rows, inventory_item_actions,
-    item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, LogFilter,
+    MENU_SCAN_RADIUS, Mode, Staffing, TradeChoice, equip_preview_tag, equip_swap_rows,
+    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId};
@@ -69,8 +69,8 @@ use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
 use help::{draw_help_index, draw_help_page};
 use inventory::{
-    draw_equip_swap, draw_erase_quantity, draw_inventory, draw_inventory_item_action,
-    draw_item_describe, effect_lines,
+    draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
+    draw_inventory_item_action, effect_lines,
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
@@ -549,6 +549,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     let pending_field_routine = app.pending_field_routine;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
+    let pending_inspect = app.pending_inspect.clone();
     // Taken off `app` before `app.game` is borrowed below, and through the
     // same methods the handlers pick from. A renderer holding its own copy
     // of the filter would draw a list the handler doesn't index — which is
@@ -699,10 +700,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             let zone = game.player_status().zone;
             draw_inventory_item_action(game, pending_item.clone(), zone, selected, painter, m)
         }
-        Mode::ItemDescribe => {
-            let zone = game.player_status().zone;
-            draw_item_describe(game, pending_item.clone(), zone, painter, m)
-        }
+        Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), painter, m),
         Mode::Companion => draw_companion_menu(game, selected, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, painter, m),
         Mode::FuseSecond => {

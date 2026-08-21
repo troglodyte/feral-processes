@@ -449,10 +449,6 @@ impl Game {
             slot,
             level,
             stats,
-            damage: match stats.damage.max {
-                0 => String::new(),
-                _ => self.damage_range_label(stats.damage),
-            },
             accuracy,
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
             nominal,

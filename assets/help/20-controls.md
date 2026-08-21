@@ -49,6 +49,12 @@ draws the most fire. A routine slot takes an etched disk, never a routine you me
 install page, e burns a blank with something you know to make one. When trading, S sells one and B
 buys one from the highlighted row, with no quantity page in between; S works in your pack too.
 
+I inspects whatever piece of gear is under the highlight, from any list that names one — your pack,
+the swap picker, a program's slots, a trader's shelves, a Stack stall's cargo rows. It reads out the
+full stat block at the level the piece would go on at, your accuracy with it in its slot, and, if the
+piece grants a routine, what fires that routine, what it hits and for how much. See
+[supplies](supplies) for what the numbers on a copy mean.
+
 In the Stack:
 
 - hjkl or the arrow keys — forward, back, turn left, turn right

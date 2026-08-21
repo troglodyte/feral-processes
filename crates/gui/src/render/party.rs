@@ -80,6 +80,9 @@ pub(super) fn draw_companion_equip(
         ));
     }
     rows.push(text_row(""));
+    rows.push(text_row(
+        "[I] inspect — full stats, and what a granted routine actually does",
+    ));
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
     draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
 }

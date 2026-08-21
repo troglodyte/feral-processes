@@ -27,6 +27,105 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.3
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+Gear gained a quality figure, but it is an additive field with a named
+default, so every copy in a file written before it existed loads at exactly
+100% — the numbers that run already had.
+
+### Gear is something you compile, not something you find
+
+Every blade you compiled used to be byte-identical to the last, which put
+the whole "is this one better than mine" question in the hands of the loot
+table. A carried copy now records **how well that particular copy was
+compiled**, as a percentage of what the item was designed to do, and it
+shows in the name: `Overclocked Arc Lance of Static (115%)`. A copy at
+exactly spec says nothing, the way an ordinary tier does not print a word.
+
+**Your base is what makes good gear.** The floor a compile rolls from is
+built out of things you own: the tier of the bench it is compiled at, a
+perk, and whether you asked for a careful job. A fresh player's compile
+lands in 80–100; a developed base's reaches 110–130. **A field drop rolls
+from a poorer floor than any of that** — 70–90 — so the world is a lottery
+ticket and the base is the gearing path. That is a real change to the early
+game: your first compiles are *weaker* than they were, when every craft was
+exactly 100.
+
+**A batch is a spread, not five of one thing.** Each unit rolls its own
+luck, so compiling five gives you five copies to compare and keep the best
+of. A copy that rolls exactly 100 still stacks; the rest each take a row.
+
+**`[C]` on the quantity page toggles a careful compile** — more quality for
+more materials, priced at every figure that page quotes, including the
+max-affordable line. The toggle clears when the page opens, so it can never
+outlive the batch you asked for.
+
+**Both compile benches can be upgraded now.** The Fabricator and the Armory
+had no upgrade path, which meant the bench term did nothing on any shipped
+recipe. Upgrading one buys better gear and nothing else.
+
+**Tighten Tolerances** is the seventeenth perk: a higher floor on everything
+you compile, read at the compile rather than banked at purchase, so gear
+already in your buffer keeps what it was made at.
+
+**The category tag on a list row carries the read.** `WEP`, `ARM`, `MOD` are
+drawn in the copy's own emphasis — dimmed under spec, bold above it, gold at
+the top — while the row's colour goes on meaning fusion and rarity. Only the
+two extremes spend a colour, and a copy at spec is drawn exactly as it
+always was.
+
+### `[I]` inspects a piece of gear from anywhere it is named
+
+Seven screens name gear and none of them could answer "what does that
+actually grant". `[I]` now opens one page from all of them — the cargo list
+and its action page, the swap picker, a program's slot page, a trader's
+three shelves and a Stack stall.
+
+The page draws the whole of a granted routine rather than its name: what
+fires it, what it lands on, what it hits for **at the wearer's level**, its
+cooldown and its price. Plus the stat block at the level the copy would go
+on at, the accuracy it buys, the hit chance that works out to, and what it
+compiled at. A piece carrying neither a damage band nor accuracy quotes no
+hit chance at all, since that figure is the wearer's and printing it under
+armour reads as a claim about the armour.
+
+### The map draws one space, and it is the one you are standing in
+
+Three reports, one cause: the base's coordinates and a zone's spawn point
+are both usually (0, 0), so a tile in one freely aliased a tile in the
+other.
+
+- **Your `@` never moved inside the base.** It does now.
+- **Stack entrances, nests and the anchor drew inside the base.** They
+  carry a glyph and are neither structure nor program, so both existing
+  gates looked straight past them.
+- **Your base roster drew scattered across the open grid.** Idle staff are
+  parked in base coordinates every tick, which is exactly what made them
+  look like programs standing out in the sector.
+
+**A GC Entropy Sweep's flash belongs to the base too.** A sweep landing
+while you were out on the grid washed a tile of open ground and threw
+debris across it — usually the tile you were standing on. The log line and
+the pane's own flash already carry that news without claiming a tile.
+
+### Eight more manual pages
+
+Intrusions, Your companions, Routines and field buffs, Perks, Your base,
+Supplies and salvage, The Stack, and Before you breach — all written
+against the source rather than from memory. The Controls page also listed
+two base rows that stopped existing when work orders replaced manual
+posting, and omitted three party rows; both now match what the menus draw.
+
+### Also
+
+- **`<` and `>` at the anchor read as up and down now**, not in and out.
+  `<` phases up into the base and `>` drops back to the grid — the mirror
+  of what the Stack binds rather than a copy of it.
+- The equip swap row sheds its stat column onto a continuation rather than
+  running it off the edge of the popup. The quality figure costs seven
+  cells, and the widest row had 3.7 to spare.
+
 ## 0.13.2
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

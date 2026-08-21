@@ -2,6 +2,7 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_engine::tuning::{QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT};
 
 pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
     let status = game.player_status();
@@ -83,25 +84,38 @@ fn craft_rows(
         .collect()
 }
 
+/// The quantity page's key line, and the widest row that page can draw.
+///
+/// A named constant so the width test measures the string the screen
+/// actually prints: `draw_row` clips a row vertically and never
+/// horizontally, so a footer past the popup body is lost in silence.
+const CRAFT_QUANTITY_KEYS: &str =
+    "[C] Careful   [F] Compile 5   [M] Compile max affordable   Esc to go back";
+
+/// The quantity prompt, and the careful-compile toggle that decides what
+/// the batch is worth.
+///
+/// Every figure on it is asked *at the price the batch will be charged* —
+/// the cost line and the max-affordable line both take `careful`, because a
+/// screen quoting the plain price beside a careful compile is the exact
+/// disagreement `Game::craft_cost` exists to prevent.
 pub(super) fn draw_craft_quantity(
     game: &mut Game,
     pending: Option<ItemId>,
     quantity_input: &str,
+    careful: bool,
     painter: &Painter,
     m: &Metrics,
 ) {
     let Some(result) = pending else { return };
     let status = game.player_status();
-    let recipe = game
-        .craft_recipes()
-        .into_iter()
-        .find(|r| r.result == result);
+    let cost = game.craft_cost(&result, careful);
     let mut rows = vec![
         text_row(format!("Compile how many {}?", game.item_name(&result))),
         text_row(""),
     ];
-    if let Some(recipe) = &recipe {
-        let cost = cost_display(game, &recipe.cost, &status.inventory);
+    if !cost.is_empty() {
+        let cost = cost_display(game, &cost, &status.inventory);
         rows.push(text_row(format!("Cost per unit: {}", cost.join(", "))));
         rows.push(text_row(""));
     }
@@ -114,13 +128,18 @@ pub(super) fn draw_craft_quantity(
     rows.push(text_row(""));
     rows.push(text_row(format!(
         "Max affordable right now: {}",
-        game.max_craftable(&result, false)
+        game.max_craftable(&result, careful)
+    )));
+    rows.push(text_row(""));
+    rows.push(text_row(format!(
+        "Careful compile: {}  (+{} quality, +{}% materials)",
+        if careful { "on" } else { "off" },
+        QUALITY_CAREFUL_BONUS,
+        QUALITY_CAREFUL_COST_PERCENT
     )));
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));
-    rows.push(text_row(
-        "[F] Compile 5   [M] Compile max affordable   Esc to go back",
-    ));
+    rows.push(text_row(CRAFT_QUANTITY_KEYS));
     draw_popup("Compile", PopupSize::Large, &rows, painter, m);
 }
 
@@ -437,6 +456,23 @@ mod tests {
         });
     }
 
+    /// The quantity page has no wrap and no scroll — every row is a
+    /// `Row::Text` printed as authored — so its widest line has to fit the
+    /// popup body by construction. `[C]` pushed the key line out by a word.
+    #[test]
+    fn the_compile_quantity_keys_fit_their_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(CRAFT_QUANTITY_KEYS, m.font_size);
+            assert!(
+                drawn <= room,
+                "the key line overflows by {:.0}px ({drawn:.0} into {room:.0})",
+                drawn - room
+            );
+        });
+    }
+
     /// A recipe whose cost list runs past `ROW_WRAP_COLUMNS`. Built rather than
     /// named off the shipped assets so it cannot go stale, and so the wrap is
     /// asserted against something wider than anything shipped: the ids resolve
@@ -444,6 +480,7 @@ mod tests {
     /// is exactly the long-name case a mod can produce.
     fn a_very_wide_recipe() -> CraftRecipe {
         CraftRecipe {
+            requires_structure: None,
             result: ItemId::from("singularity_matrix"),
             cost: (0..5)
                 .map(|n| {

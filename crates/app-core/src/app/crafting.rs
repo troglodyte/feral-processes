@@ -13,6 +13,7 @@ impl App {
         if let Some(idx) = self.selected_index(key, recipes.len()) {
             self.pending_craft = Some(recipes[idx].result.clone());
             self.craft_quantity_input.clear();
+            self.careful_craft = false;
             self.mode = Mode::CraftQuantity;
         }
     }
@@ -21,6 +22,10 @@ impl App {
     /// `pending_craft` to make before actually calling `Game::craft`. `[F]`
     /// is a shortcut for 5 at once, `[M]` for the most affordable right now
     /// (see `Game::max_craftable`) — both bypass typing digits and Enter.
+    ///
+    /// `[C]` toggles a careful compile, which is why `[M]` reads the
+    /// maximum *at the price the batch will actually be charged*: a careful
+    /// max quoted off the plain price is a batch the player cannot afford.
     pub(crate) fn handle_craft_quantity_key(&mut self, key: GameKey) {
         match key {
             GameKey::Esc => {
@@ -33,6 +38,9 @@ impl App {
             }
             GameKey::Char(c) if c.is_ascii_digit() && self.craft_quantity_input.len() < 4 => {
                 self.craft_quantity_input.push(c);
+            }
+            GameKey::Char('c') | GameKey::Char('C') => {
+                self.careful_craft = !self.careful_craft;
             }
             GameKey::Char('f') | GameKey::Char('F') => {
                 let Some(result) = self.pending_craft.take() else {
@@ -52,7 +60,7 @@ impl App {
                     self.mode = Mode::Playing;
                     return;
                 };
-                let max = game.max_craftable(&result, false);
+                let max = game.max_craftable(&result, self.careful_craft);
                 if max == 0 {
                     let name = game.item_name(&result).to_string();
                     self.status_line = Some(format!("Not enough resources to compile any {name}."));
@@ -88,7 +96,7 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.craft(&result, quantity, false) {
+            match game.craft(&result, quantity, self.careful_craft) {
                 Ok(()) => self.status_line = None,
                 Err(e) => self.status_line = Some(e),
             }

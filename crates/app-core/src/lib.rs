@@ -1509,6 +1509,14 @@ pub struct App {
     pub pending_craft: Option<ItemId>,
     /// Digits typed so far on the craft-quantity page.
     pub craft_quantity_input: String,
+    /// Whether the pending compile spends extra material for a better
+    /// quality floor — see `Game::craft`.
+    ///
+    /// Cleared when the quantity page opens rather than when it closes, so
+    /// a toggle can never outlive the batch it was set for: the next
+    /// compile would otherwise quietly charge half again for a floor the
+    /// player did not ask for, on a page that had stopped mentioning it.
+    pub careful_craft: bool,
     /// The item picked in `Mode::WorkOrderPick`, awaiting a quantity from
     /// `Mode::WorkOrderQuantity` before `Game::queue_work_order` is called.
     /// The same two-page shape the compile flow uses.

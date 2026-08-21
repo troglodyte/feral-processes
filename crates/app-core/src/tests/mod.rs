@@ -7,6 +7,7 @@ mod arena;
 mod battle;
 mod building;
 mod contracts;
+mod crafting;
 mod dev_console;
 mod develop;
 mod excavate;

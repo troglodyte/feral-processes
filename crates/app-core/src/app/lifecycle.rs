@@ -72,6 +72,7 @@ impl App {
             erase_quantity_input: String::new(),
             pending_craft: None,
             craft_quantity_input: String::new(),
+            careful_craft: false,
             pending_order: None,
             order_quantity_input: String::new(),
             pending_trade_structure: None,

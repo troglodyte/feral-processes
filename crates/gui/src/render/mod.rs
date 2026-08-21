@@ -611,6 +611,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             game,
             app.pending_craft.clone(),
             &app.craft_quantity_input,
+            app.careful_craft,
             painter,
             m,
         ),

@@ -4,7 +4,7 @@
 //! to `Stats::hp`: the single path, so a rule that must see *every* memory has
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
-use crate::components::{Memories, Memory, MemorySubject, ProgramId, Stats};
+use crate::components::{Memories, Memory, MemorySubject, Position, ProgramId, Stats, Stranded};
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{BattleState, GameClock, Party};
 use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD};
@@ -203,6 +203,45 @@ impl crate::Game {
             if outmatched {
                 self.remember(who, "hard_won", MemorySubject::Nothing);
             }
+        }
+    }
+
+    /// Remembers, for every worker whose stranding **began this tick**, the
+    /// corner of the base it was left standing in.
+    ///
+    /// The tile is the worker's own `Position` and not its post: a stranded
+    /// body is stranded precisely because it is *not* at its post, "left
+    /// stranded here" is a claim about where it is standing, and a memory
+    /// keyed to the machine's tile could never be read by the parking hook it
+    /// exists for — `park_idle_staff` already refuses a tile a `Structure`
+    /// stands on. A posted program's `Position` is base space, which is the
+    /// space `MemorySubject::BaseTile` names.
+    ///
+    /// **Edge-triggered, off `Stranded::since`.** `haul_step_system` writes
+    /// the marker on entry only, so this pass runs immediately after the
+    /// schedule — where those commands have just flushed and before the clock
+    /// moves on at the bottom of the tick. One tick later the edge is gone
+    /// and there is nothing left to tell a fresh stranding from a standing
+    /// one; a per-tick write instead would saturate `strike_cap` in three
+    /// ticks and hold the grudge at full intensity for as long as the route
+    /// stayed broken, which makes `strikes` mean nothing.
+    pub(crate) fn note_strandings(&mut self) {
+        let now = self.world.resource::<GameClock>().tick;
+        // Collected before anything is written, for `form_victory_memories`'
+        // reason: `remember` takes `&mut self`.
+        let fresh: Vec<(Entity, Position)> = self
+            .world
+            .query::<(Entity, &Position, &Stranded)>()
+            .iter(&self.world)
+            .filter(|(_, _, stranded)| stranded.since == now)
+            .map(|(e, pos, _)| (e, *pos))
+            .collect();
+        for (worker, pos) in fresh {
+            self.remember(
+                worker,
+                "stranded_at",
+                MemorySubject::BaseTile { x: pos.x, y: pos.y },
+            );
         }
     }
 

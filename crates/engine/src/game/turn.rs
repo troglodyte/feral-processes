@@ -135,6 +135,10 @@ impl Game {
         // `&mut Game` work no bevy system can express.
         self.run_dig_crew();
         self.schedule.run(&mut self.world);
+        // Immediately after the schedule, where `haul_step_system`'s commands
+        // have just flushed and the clock has not yet moved: a stranding is an
+        // *edge*, and one tick later there is nothing left to read it off.
+        self.note_strandings();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system

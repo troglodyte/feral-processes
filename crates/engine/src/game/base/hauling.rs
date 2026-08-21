@@ -310,6 +310,7 @@ type Hauler = (
     &'static mut Position,
     &'static Task,
     Option<&'static Carrying>,
+    Option<&'static Stranded>,
 );
 
 type HaulStructure = (
@@ -328,6 +329,11 @@ type HaulStructure = (
 pub struct HaulLookups<'w> {
     structures: Res<'w, StructureDb>,
     items: Res<'w, ItemDb>,
+    /// Read for one thing only: the tick a stranding *began* on. See
+    /// `components::Stranded`. Bundled here rather than added as a bare
+    /// system parameter for the reason the two def tables are — the argument
+    /// list is already at clippy's threshold.
+    clock: Res<'w, resources::GameClock>,
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
@@ -490,6 +496,7 @@ pub(crate) fn haul_step_system(
     let HaulLookups {
         structures: db,
         items,
+        clock,
     } = defs;
     let blocked = structure_tiles(structures.iter().map(|(_, p, _, _)| *p));
     // What bounds the Dijkstra field a walker rebuilds each tick: how far
@@ -551,16 +558,16 @@ pub(crate) fn haul_step_system(
     // way every run, and bevy's iteration order does not promise that.
     let mut order: Vec<(i32, i32, Entity)> = workers
         .iter()
-        .filter(|(_, _, task, _)| matches!(task.kind, TaskKind::GatherResource))
-        .map(|(e, p, _, _)| (p.x, p.y, e))
+        .filter(|(_, _, task, ..)| matches!(task.kind, TaskKind::GatherResource))
+        .map(|(e, p, ..)| (p.x, p.y, e))
         .collect();
     order.sort_unstable();
 
     for (.., worker) in order {
-        let Ok((_, worker_pos, task, carrying)) = workers.get(worker) else {
+        let Ok((_, worker_pos, task, carrying, stranded)) = workers.get(worker) else {
             continue;
         };
-        let (worker_pos, carrying) = (*worker_pos, carrying.cloned());
+        let (worker_pos, carrying, stranded) = (*worker_pos, carrying.cloned(), stranded.copied());
         let machine = task.target;
 
         // The whole of what this worker is doing with the tick, decided once
@@ -747,12 +754,20 @@ pub(crate) fn haul_step_system(
         // that changed. The worker stands still, and the marker is what turns
         // its machine's status from `Unstaffed` into `Stranded`.
         let Ok(step) = step_to_post(&grid, worker_pos, dest_pos, &blocked, pocket_radius) else {
-            commands.entity(worker).insert(Stranded);
+            // Only on entry: `since` is the start of the episode, and
+            // rewriting it every tick would leave nothing able to tell a
+            // route that has just broken from one broken an hour ago. See
+            // `components::Stranded`.
+            if stranded.is_none() {
+                commands
+                    .entity(worker)
+                    .insert(Stranded { since: clock.tick });
+            }
             continue;
         };
         commands.entity(worker).remove::<Stranded>();
         if let Some(next) = step
-            && let Ok((_, mut pos, _, _)) = workers.get_mut(worker)
+            && let Ok((_, mut pos, ..)) = workers.get_mut(worker)
         {
             *pos = next;
         }

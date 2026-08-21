@@ -621,9 +621,19 @@ pub struct Carrying {
     pub qty: u32,
 }
 
-/// A posted program that found no route to where it is trying to get. Set and
-/// cleared every tick by `game::base::hauling::haul_step_system`, the one system
-/// that walks a field and so the only one that can know.
+/// A posted program that found no route to where it is trying to get, and the
+/// tick it stopped being able to. Written and cleared by
+/// `game::base::hauling::haul_step_system`, the one system that walks a field
+/// and so the only one that can know.
+///
+/// **Written on entry only, so `since` is the start of the episode rather
+/// than the last tick of it.** That is what makes a stranding an *event* a
+/// `&mut Game` pass can find — `Game::note_strandings` reads `since == now`
+/// to remember the ones that began this tick — and it is
+/// `systems::set_machine_status`'s rule in another shape: entering a state is
+/// news, staying in it is not. Re-inserting the marker every tick would leave
+/// nothing to distinguish a route that has just broken from one that has been
+/// broken for an hour.
 ///
 /// A cache of that tick's answer rather than stored state, and not saved for
 /// the same reason `MachineStatus` isn't: the walk that produced it runs
@@ -637,7 +647,10 @@ pub struct Carrying {
 /// price of leaving the chain order alone, which is load-bearing for the
 /// clog/pickup handoff (see `Game::build_schedule`).
 #[derive(Component, Clone, Copy, Debug)]
-pub struct Stranded;
+pub struct Stranded {
+    /// The `GameClock` tick the worker entered the state on.
+    pub since: u64,
+}
 
 /// Why a machine is or isn't producing. Present only on structures that
 /// actually run a job (`StructureDef::work` or `::assembles`) — absence

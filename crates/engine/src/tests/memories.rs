@@ -1495,3 +1495,158 @@ fn winning_twice_together_reinforces_one_bond() {
     assert_eq!(bonds[0].strikes, 2);
     assert_eq!(bonds[0].subject, MemorySubject::Program(id_of(&game, b)));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: a grudge against one corner of the base.
+// ---------------------------------------------------------------------------
+
+/// A base with one machine and one program posted to it — the smallest thing
+/// that can strand a body.
+///
+/// The worker carries far more Integrity than it needs, for the reason
+/// `tests::hauling::hauler` does: a posted program takes `RAID_DEFENDER_DAMAGE`
+/// off every ambient sweep, and a body that dies mid-fixture reads as the
+/// memory never forming rather than as the worker never surviving.
+fn a_posted_worker(game: &mut Game) -> (Entity, Entity) {
+    place_home(game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(crate::items::ids::CORE_FRAGMENT), 500);
+    stand_in_base(game);
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    game.place_structure("mining_node", 1, 0).unwrap();
+    let node = {
+        let mut query = game.world.query::<(Entity, &Position, &Structure)>();
+        query
+            .iter(&game.world)
+            .find(|(_, p, _)| p.x == px + 1 && p.y == py)
+            .map(|(e, ..)| e)
+            .expect("the node was just deployed")
+    };
+    let worker = spawn_tamed(game, 500, 3);
+    game.assign_cronjob(worker, node).unwrap();
+    (worker, node)
+}
+
+/// Puts `who` where no route to its post exists, which is what `Stranded`
+/// names. Well outside any cost field a walk could build.
+fn cut_off(game: &mut Game, who: Entity, x: i32, y: i32) {
+    let mut pos = game.world.get_mut::<Position>(who).unwrap();
+    pos.x = x;
+    pos.y = y;
+}
+
+fn stranded_tiles(game: &Game, who: Entity) -> Vec<MemorySubject> {
+    subjects_of(game, who, "stranded_at")
+}
+
+/// The tile remembered is the worker's **own**, not the machine's. Both
+/// halves matter: a hook keyed to the post would form a memory too, and only
+/// the coordinates can tell the two apart — and a memory about a tile a
+/// `Structure` stands on could never be read by the parking hook it exists
+/// for.
+#[test]
+fn a_stranded_worker_remembers_the_tile_it_is_standing_on() {
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, node) = a_posted_worker(&mut game);
+    let post = *game.world.get::<Position>(node).unwrap();
+    cut_off(&mut game, worker, 400, 400);
+
+    game.tick();
+
+    assert_eq!(
+        stranded_tiles(&game, worker),
+        vec![MemorySubject::BaseTile { x: 400, y: 400 }],
+        "the corner it was left in, not the post it never reached ({post:?})"
+    );
+}
+
+/// The edge rule, and the whole reason `Stranded` carries a tick: a body left
+/// standing there does not earn a fresh strike every tick it waits.
+#[test]
+fn staying_stranded_earns_no_second_strike() {
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, _) = a_posted_worker(&mut game);
+    cut_off(&mut game, worker, 400, 400);
+
+    for _ in 0..8 {
+        game.tick();
+        cut_off(&mut game, worker, 400, 400);
+    }
+
+    let held = memories_of(&game, worker);
+    assert_eq!(held.len(), 1, "one episode, one entry: {held:?}");
+    assert_eq!(held[0].strikes, 1, "and one strike: {held:?}");
+}
+
+/// The other side of that rule: the edge has not simply frozen after the
+/// first episode. A route repaired and broken again is a second stranding and
+/// earns a second strike.
+#[test]
+fn a_second_stranding_earns_a_second_strike() {
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, node) = a_posted_worker(&mut game);
+    let post = *game.world.get::<Position>(node).unwrap();
+    cut_off(&mut game, worker, 400, 400);
+    game.tick();
+
+    // Back on its post: the marker clears, which is what ends the episode.
+    cut_off(&mut game, worker, post.x, post.y);
+    game.tick();
+    assert!(
+        game.world.get::<Stranded>(worker).is_none(),
+        "the marker cleared"
+    );
+
+    cut_off(&mut game, worker, 400, 400);
+    game.tick();
+
+    let held = memories_of(&game, worker);
+    assert_eq!(held.len(), 1, "still one entry: {held:?}");
+    assert_eq!(held[0].strikes, 2, "two episodes, two strikes: {held:?}");
+}
+
+/// A worker merely walking to its post has nothing to hold against the
+/// ground it is walking over.
+#[test]
+fn a_worker_with_a_route_remembers_nothing() {
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, node) = a_posted_worker(&mut game);
+    let post = *game.world.get::<Position>(node).unwrap();
+    cut_off(&mut game, worker, post.x + 2, post.y);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert!(
+        stranded_tiles(&game, worker).is_empty(),
+        "{:?}",
+        memories_of(&game, worker)
+    );
+}
+
+/// The marker is a cache of the tick's answer and stays unsaved, `since` and
+/// all — the walk that produced it runs again on the next tick.
+#[test]
+fn the_stranding_marker_does_not_travel_through_a_save() {
+    let dir = scratch_assets_dir("stranded_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, _) = a_posted_worker(&mut game);
+    let id = id_of(&game, worker);
+    cut_off(&mut game, worker, 400, 400);
+    game.tick();
+    assert!(
+        game.world.get::<Stranded>(worker).is_some(),
+        "the fixture is stranded"
+    );
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let who = by_id(&mut loaded, id);
+    assert!(loaded.world.get::<Stranded>(who).is_none());
+}

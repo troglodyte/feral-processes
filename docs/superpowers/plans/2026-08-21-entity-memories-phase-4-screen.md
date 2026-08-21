@@ -355,3 +355,76 @@ which appends one line to what this task writes.
       Nothing here reaches a figure the simulator models; a moved curve
       means something was changed that shouldn't have been.
 - [ ] The mutation table for tasks 1–4, collected in one place.
+
+---
+
+## Mutation table
+
+Every test below was proved by deleting its fix, running the test, watching
+it fail, and restoring. `M2` is the entry that did **not** hold.
+
+| # | Mutation | Test that failed |
+|---|---|---|
+| M1 | Sort by signed intensity instead of magnitude | `rows_are_ordered_by_magnitude_and_not_by_sign` |
+| M2 | `sort_by` → `sort_unstable_by` | **nothing failed** — see below |
+| M3 | Species subject renders the id, not the display name | `a_species_subject_renders_its_display_name` |
+| M4 | Program subject resolved live instead of off the record | `a_destroyed_programs_name_still_reaches_the_row` |
+| M5 | `age` pinned to one band | `age_is_banded_against_the_defs_own_half_life` |
+| M6 | Intensity quoted undecayed (`valence * strikes`) | `a_rows_intensity_is_the_one_formula_decayed` |
+| M7 | Unresolvable defs kept as rows | `an_empty_database_reports_no_rows` |
+| M8 | The report evicts while it reads | `reading_the_report_evicts_nothing` |
+| M9 | The blurb never reaches the row | `a_row_carries_the_defs_name_and_blurb` |
+| M10 | `Nothing` renders a subject anyway | `a_memory_about_nothing_renders_no_subject` |
+| M11 | A body with no store panics | `a_body_with_no_store_reports_no_rows` |
+| M12 | The page always shows the first program | 3 tests, incl. `r_on_the_roster_opens_the_highlighted_programs_memories` |
+| M13 | Esc leaves the subject standing | `esc_backs_out_of_the_memories_page_and_keeps_the_highlight` |
+| M14 | The `keeps_highlight` pair dropped | same |
+| M15 | `R` reuses `pending_equip_program` | `the_memories_page_and_the_gear_page_hold_separate_subjects` |
+| M16 | The past-the-end guard removed | `r_with_the_highlight_past_the_roster_opens_nothing` |
+| M17 | The age band is absolute ticks, not a ratio | `two_defs_of_different_half_lives_age_differently_at_one_moment` |
+| M18 | Every age reads "just now" | `age_is_banded_against_the_defs_own_half_life` |
+| M19 | The header prints a constant, not morale | `the_page_heads_itself_with_the_morale_figure` |
+| M20 | The subject never reaches the row | `a_row_names_its_def_and_its_subject` |
+| M21 | A subjectless row prints a dangling separator | `a_subjectless_row_names_the_def_alone` |
+| M22 | The blurb never reaches the page | `the_blurb_reaches_the_page` |
+| M23 | An empty store draws a blank box | `an_empty_store_says_so_rather_than_drawing_a_blank_box` |
+| M24 | The help line dropped | `the_companion_screen_names_the_memories_key` |
+| M25 | `MEMORY_CAP_PER_PROGRAM` raised to 20 | `the_tallest_memory_page_fits_its_popup` (25 rows into 23) |
+| M26 | A def's blurb authored twice as long | `no_memory_row_overflows_its_popup` (1701px into 1243px) |
+
+**M2 is the one that failed to bite, and the test was deleted rather than
+kept.** `sort_unstable_by` returns equal keys in insertion order at every
+length a store can reach — measured at 2, 12, 20, 25 and 40, since the
+unstable sort runs insertion sort under 20 and the cap is 12. No fixture can
+distinguish the two calls, so `equal_strength_rows_keep_insertion_order` was
+coverage-shaped and is gone; the guarantee is taken from the standard
+library's contract and stated in `memory_report`'s doc comment instead.
+
+## What the plan got wrong, and what the build settled
+
+1. **Decision 6 was wrong.** The plan had `age_ticks: u64` reaching the row
+   as a number for gui to format. Nothing in any screen or any log line in
+   the game has ever shown the player a tick — checked, not assumed — so the
+   figure would have been the first, and a number with no scale is not an
+   answer. It is a banded phrase now, derived in the engine against the
+   **def's own half-life**, which is the only comparison that makes a scar
+   and a bad shift mean the same thing by "recently".
+
+2. **The page was two rows per entry and did not fit.** The height census
+   caught it in the building: 12 entries over two rows each is 29 rows into a
+   23-row popup at the tightest window. The blurb moved onto the row — the
+   worst-case row measured 1105px into 1243px of room, so the page was
+   overflowing vertically while leaving horizontal room unused — and is now
+   said once per kind, which also fixes the same sentence appearing four
+   times down a page.
+
+3. **`keeps_highlight` was not in the plan and is load-bearing.** The Esc
+   test failed until `(Companion, CompanionMemories)` and its reverse joined
+   the manifest's pair in `input.rs`. Without it the roster's highlight snaps
+   back to the top every time the page is closed.
+
+4. **The row builder takes the view data, not the `Game`.** Written as
+   `memory_page_rows(game, program, name)` it could not be censused: gui
+   cannot call `Game::remember` (`pub(crate)`, correctly), so the worst-case
+   page could not be built. Taking `(&str, f32, &[MemoryRow])` is what makes
+   both censuses measure the real page.

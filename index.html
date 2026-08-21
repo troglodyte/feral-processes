@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feral Processes — tame rogue programs, compile a base, descend the Stack</title>
+<meta name="description" content="A Neuromancer/Tron-flavoured single-player sim in Rust. Tame the rogue programs you fight, compile them into a base that runs itself, and descend the Stack for what the Grid won't give you.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Feral Processes">
+<meta property="og:description" content="Tame rogue programs. Compile a base that runs itself. Descend the Stack.">
+<meta property="og:url" content="https://troglodyte.github.io/feral-processes/">
+<meta property="og:image" content="https://troglodyte.github.io/feral-processes/img/gameplay.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0d12'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' fill='%237c8cff' text-anchor='middle'%3E%26gt;%3C/text%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --ground:#0b0d12;
+  --raise:#11141d;
+  --raise-2:#161a26;
+  --line:#232838;
+  --line-soft:#1a1e2b;
+  --ink:#e7e9f2;
+  --ink-dim:#9aa1b8;
+  --ink-faint:#6b7288;
+  --accent:#7c8cff;
+  --accent-bright:#9aa6ff;
+  --accent-deep:#4a5ae0;
+  --cyan:#4ff0d0;
+  --amber:#ffb648;
+  --maxw:1180px;
+  --radius:14px;
+  --sans:"Space Grotesk",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:17px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+img,video{max-width:100%;height:auto;display:block}
+a{color:var(--accent-bright);text-decoration:none}
+a:hover{text-decoration:underline}
+
+.wrap{width:100%;max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+/* ---------- nav ---------- */
+.nav{
+  position:sticky;top:0;z-index:50;
+  background:rgba(11,13,18,.82);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line-soft);
+}
+.nav-in{display:flex;align-items:center;gap:28px;height:62px}
+.brand{
+  font-family:var(--mono);font-size:15px;font-weight:500;
+  color:var(--ink);letter-spacing:-.01em;white-space:nowrap;
+}
+.brand span{color:var(--accent)}
+.nav-links{display:flex;gap:26px;margin-left:auto;align-items:center}
+.nav-links a{color:var(--ink-dim);font-size:15px;font-weight:500}
+.nav-links a:hover{color:var(--ink);text-decoration:none}
+.nav-cta{
+  border:1px solid var(--line);border-radius:8px;
+  padding:7px 15px;color:var(--ink)!important;
+}
+.nav-cta:hover{border-color:var(--accent-deep);background:var(--raise)}
+@media(max-width:720px){.nav-links a:not(.nav-cta){display:none}}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:104px 0 72px;text-align:center;overflow:hidden}
+.hero::before{
+  content:"";position:absolute;inset:-40% -20% auto -20%;height:820px;
+  background:radial-gradient(ellipse 55% 50% at 50% 40%,rgba(124,140,255,.17),transparent 70%);
+  pointer-events:none;
+}
+.hero::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 60% 55% at 50% 35%,#000,transparent 72%);
+  -webkit-mask-image:radial-gradient(ellipse 60% 55% at 50% 35%,#000,transparent 72%);
+  opacity:.5;
+}
+.hero .wrap{position:relative;z-index:1}
+
+.eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;
+  color:var(--ink-dim);
+  border:1px solid var(--line);border-radius:999px;
+  padding:6px 15px;margin-bottom:28px;
+  background:rgba(22,26,38,.6);
+  white-space:nowrap;
+}
+@media(max-width:430px){
+  .eyebrow{font-size:11.5px;padding:6px 12px;gap:8px}
+  .eyebrow .shed{display:none}
+}
+.eyebrow b{color:var(--cyan);font-weight:500}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--ink-faint)}
+
+h1{
+  font-size:clamp(46px,8.2vw,86px);
+  line-height:1.02;letter-spacing:-.035em;font-weight:700;
+  margin:0 0 22px;
+}
+.lede{
+  font-size:clamp(19px,2.4vw,25px);
+  line-height:1.45;color:var(--ink);
+  max-width:660px;margin:0 auto 20px;font-weight:500;
+  letter-spacing:-.012em;
+}
+.lede em{font-style:normal;color:var(--accent-bright)}
+.sub{
+  font-size:17px;color:var(--ink-dim);
+  max-width:620px;margin:0 auto 36px;
+}
+
+.btns{display:flex;gap:13px;justify-content:center;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  padding:13px 26px;border-radius:10px;
+  font-size:16px;font-weight:600;letter-spacing:-.01em;
+  border:1px solid transparent;transition:.16s;
+}
+.btn:hover{text-decoration:none;transform:translateY(-1px)}
+.btn-primary{
+  background:linear-gradient(180deg,var(--accent) 0%,var(--accent-deep) 100%);
+  color:#fff;box-shadow:0 6px 22px -8px rgba(124,140,255,.75);
+}
+.btn-primary:hover{box-shadow:0 10px 30px -8px rgba(124,140,255,.9)}
+.btn-ghost{border-color:var(--line);color:var(--ink);background:var(--raise)}
+.btn-ghost:hover{border-color:#333c55;background:var(--raise-2)}
+
+/* ---------- shots ---------- */
+.shot{
+  border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;background:var(--raise);
+  box-shadow:0 26px 70px -30px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.02) inset;
+}
+.shot-hero{margin-top:66px;position:relative;z-index:1}
+.shot figcaption{
+  font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);
+  padding:11px 16px;border-top:1px solid var(--line-soft);
+  background:var(--raise);text-align:left;
+}
+
+/* placeholder slots */
+.ph{
+  border:1px dashed #2f3650;border-radius:var(--radius);
+  background:
+    repeating-linear-gradient(135deg,rgba(124,140,255,.035) 0 12px,transparent 12px 24px),
+    var(--raise);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 24px;gap:9px;min-height:210px;
+}
+.ph-icon{
+  width:42px;height:42px;border-radius:11px;
+  border:1px solid var(--line);background:var(--raise-2);
+  display:grid;place-items:center;color:var(--accent);font-size:19px;
+}
+.ph-title{font-weight:600;font-size:16px;color:var(--ink-dim)}
+.ph-note{font-family:var(--mono);font-size:12px;color:var(--ink-faint);max-width:420px}
+.ph-note code{color:var(--cyan);background:none;padding:0;font-size:12px}
+.ph-wide{aspect-ratio:43/18;min-height:0}
+
+/* ---------- sections ---------- */
+section{padding:96px 0;position:relative}
+.rule{border:0;border-top:1px solid var(--line-soft);margin:0}
+
+.sec-head{max-width:680px;margin-bottom:48px}
+.sec-head.center{margin-left:auto;margin-right:auto;text-align:center}
+.kicker{
+  font-family:var(--mono);font-size:12.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px;font-weight:500;
+}
+h2{
+  font-size:clamp(30px,4.4vw,44px);line-height:1.1;
+  letter-spacing:-.028em;font-weight:700;margin:0 0 16px;
+}
+.sec-head p{color:var(--ink-dim);font-size:18px;margin:0}
+
+/* feature grid */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:940px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:620px){.grid{grid-template-columns:1fr}}
+.card{
+  border:1px solid var(--line-soft);border-radius:var(--radius);
+  background:linear-gradient(180deg,var(--raise) 0%,rgba(17,20,29,.4) 100%);
+  padding:28px 26px;transition:.18s;
+}
+.card:hover{border-color:var(--line);background:var(--raise-2);transform:translateY(-2px)}
+.card h3{font-size:18.5px;margin:0 0 10px;letter-spacing:-.015em;font-weight:600}
+.card p{margin:0;color:var(--ink-dim);font-size:15.5px;line-height:1.6}
+.card .ic{
+  font-family:var(--mono);font-size:12px;color:var(--accent);
+  display:block;margin-bottom:14px;letter-spacing:.08em;
+}
+
+/* split */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+@media(max-width:900px){.split{grid-template-columns:1fr;gap:36px}}
+.split ul{margin:22px 0 0;padding:0;list-style:none}
+.split li{
+  padding-left:24px;position:relative;margin-bottom:12px;
+  color:var(--ink-dim);font-size:16px;
+}
+.split li::before{
+  content:"▸";position:absolute;left:0;top:0;color:var(--accent);font-size:13px;
+}
+.split li b{color:var(--ink);font-weight:600}
+
+/* stats */
+.stats{
+  display:grid;grid-template-columns:repeat(6,1fr);
+  border:1px solid var(--line-soft);border-radius:var(--radius);
+  overflow:hidden;background:var(--raise);
+}
+@media(max-width:820px){.stats{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:440px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{padding:26px 16px;text-align:center;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
+.stat:last-child{border-right:0}
+.stat b{
+  display:block;font-size:30px;font-weight:700;letter-spacing:-.03em;
+  color:var(--ink);line-height:1.1;
+}
+.stat span{
+  display:block;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-faint);letter-spacing:.07em;text-transform:uppercase;margin-top:7px;
+}
+
+/* gallery */
+.gallery{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:820px){.gallery{grid-template-columns:1fr}}
+.gallery .full{grid-column:1/-1}
+
+/* code */
+.code{
+  border:1px solid var(--line);border-radius:12px;
+  background:#080a0f;overflow:hidden;
+}
+.code-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:11px 16px;border-bottom:1px solid var(--line-soft);
+  font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+}
+.code-bar i{width:9px;height:9px;border-radius:50%;background:#2a3044;display:block}
+.code pre{
+  margin:0;padding:20px 22px;overflow-x:auto;
+  font-family:var(--mono);font-size:13px;line-height:1.85;color:var(--ink);
+}
+.code .c{color:var(--ink-faint)}
+.code .p{color:var(--cyan);user-select:none}
+.code .k{color:var(--amber)}
+
+.note{
+  border-left:2px solid var(--accent-deep);
+  padding:2px 0 2px 18px;color:var(--ink-dim);
+  font-size:15.5px;margin-top:26px;
+}
+
+/* footer */
+footer{border-top:1px solid var(--line-soft);padding:64px 0 48px;background:#090b10}
+.foot{display:grid;grid-template-columns:2fr 1fr 1fr;gap:40px}
+@media(max-width:760px){.foot{grid-template-columns:1fr 1fr;gap:32px}}
+.foot h4{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint);margin:0 0 16px;font-weight:500;
+}
+.foot ul{list-style:none;margin:0;padding:0}
+.foot li{margin-bottom:10px}
+.foot a{color:var(--ink-dim);font-size:15px}
+.foot a:hover{color:var(--ink);text-decoration:none}
+.foot-about p{color:var(--ink-faint);font-size:14.5px;margin:0;max-width:330px}
+.foot-bottom{
+  margin-top:52px;padding-top:26px;border-top:1px solid var(--line-soft);
+  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-in">
+    <div class="brand">&gt; feral<span>-</span>processes</div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#stack">The Stack</a>
+      <a href="#media">Media</a>
+      <a href="#install">Install</a>
+      <a class="nav-cta" href="https://github.com/troglodyte/feral-processes">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">
+      <b>v0.13.5</b><i class="dot"></i>Rust<i class="dot"></i>Single-player<i class="dot shed"></i><span class="shed">Moddable</span>
+    </div>
+
+    <h1>Feral&nbsp;Processes</h1>
+
+    <p class="lede">
+      Tame the rogue programs you fight. Compile them into a base that
+      <em>runs itself</em>. Then descend the Stack.
+    </p>
+
+    <p class="sub">
+      A Neuromancer/Tron-flavoured simulation of the Grid, blending Pokémon,
+      Palworld and Dwarf Fortress. Built in Rust, with a headless sim that
+      stays fully decoupled from what draws it.
+    </p>
+
+    <div class="btns">
+      <a class="btn btn-primary" href="#install">Get it →</a>
+      <a class="btn btn-ghost" href="https://github.com/troglodyte/feral-processes/blob/main/docs/manual.md">Read the manual</a>
+    </div>
+
+    <figure class="shot shot-hero">
+      <img src="img/gameplay.png" alt="The surface map: the party on the Grid beside their base, with the log pane and status column" width="3440" height="1440">
+      <figcaption>The Grid — your base, your roster, and whatever is walking toward it.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<hr class="rule">
+
+<!-- ============================================================
+     WHAT'S IN IT
+     ============================================================ -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head center">
+      <p class="kicker">What you actually do</p>
+      <h2>Fight it, compile it, put it to work</h2>
+      <p>Everything you beat is a candidate for your roster, and everything on
+         your roster is labour you are not spending yourself.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <span class="ic">01 — COMBAT</span>
+        <h3>Tame and fight</h3>
+        <p>Party-versus-party round battles with grouped enemies, where only the
+           front groups can reach you. Decompile a hostile to add it to your
+           roster; five can fight beside you at once.</p>
+      </div>
+      <div class="card">
+        <span class="ic">02 — ROUTINES</span>
+        <h3>Routines, not spells</h3>
+        <p>Abilities install into level-derived slots and come from species kits,
+           research, wild carriers, or a Compiler's extraction. Some cast straight
+           from the map as run-long buffs.</p>
+      </div>
+      <div class="card">
+        <span class="ic">03 — PRODUCTION</span>
+        <h3>Cronjobs and chains</h3>
+        <p>Post programs to structures and they work tick by tick wherever you
+           are. Machines feed each other by touching, so a production line is a
+           physical line laid across your base.</p>
+      </div>
+      <div class="card">
+        <span class="ic">04 — PROGRESSION</span>
+        <h3>Research and gear</h3>
+        <p>A 23-node tech tree unlocks structures, benches and recipes. Equipment
+           spans three slots, most of it made from what your own lines produce —
+           and gear and programs both fuse, up to three times.</p>
+      </div>
+      <div class="card">
+        <span class="ic">05 — AUTONOMY</span>
+        <h3>A base that runs without you</h3>
+        <p>Needs decay, cronjobs pay out, and GC Entropy Sweeps chip at your
+           buildings while you are four frames underground. File a work order and
+           the base schedules its own labour.</p>
+      </div>
+      <div class="card">
+        <span class="ic">06 — STAKES</span>
+        <h3>Permadeath, or Forgiving</h3>
+        <p>Chosen per run. Achievements are the one thing that outlives a run,
+           and they pay out at the start of the next one.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:56px">
+      <div class="stats">
+        <div class="stat"><b>17</b><span>Species</span></div>
+        <div class="stat"><b>77</b><span>Routines</span></div>
+        <div class="stat"><b>64</b><span>Items</span></div>
+        <div class="stat"><b>26</b><span>Structures</span></div>
+        <div class="stat"><b>30</b><span>Contracts</span></div>
+        <div class="stat"><b>18</b><span>Perks</span></div>
+      </div>
+      <p class="note">
+        Every one of those is a plain <code>.ron</code> file under
+        <code>assets/</code>. Drop another in and it is picked up next run — no
+        recompiling, no engine edits.
+      </p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     THE STACK
+     ============================================================ -->
+<section id="stack">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="kicker">Underground</p>
+        <h2>The place notices what you take from it</h2>
+        <p style="color:var(--ink-dim);font-size:18px;margin:0">
+          Scattered across every zone are links down into <b style="color:var(--ink)">the
+          Stack</b> — procedurally generated frames drawn in first person, where the
+          fights are harder and the returns are better.
+        </p>
+        <ul>
+          <li><b>Doors, sealed vaults and caches</b> — and breakpoints, faults and
+              corrupted ground between them.</li>
+          <li><b>Orphaned programs</b> waiting to be adopted, their species pinned
+              to the frame and their stats to the moment you took them.</li>
+          <li><b>A seeded guardian</b> in the deepest room. Beat it and the stack
+              comes down, taking the way back out with it.</li>
+          <li><b>A Trace meter</b> that rises with everything you take. It is what
+              hunts you.</li>
+        </ul>
+        <p class="note" style="margin-top:28px">
+          Deeper zones double every wild stat, and the only way into one is a
+          portal you fund yourself — with fragments the Stack is the sole source of.
+        </p>
+      </div>
+      <div>
+        <figure class="shot">
+          <img src="img/stack.png" alt="The Stack's first-person corridor view, with the party's map of the frame in the corner" width="3440" height="1440">
+          <figcaption>Depth 3 — the corridor ahead, and the frame you have mapped so far.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     MEDIA GALLERY
+
+     >>> TO ADD A SCREENSHOT OR CLIP <<<
+     1. Drop the file into  img/
+     2. Replace the matching <div class="ph"> ... </div> block below with:
+
+          <figure class="shot">
+            <img src="img/your-file.png" alt="describe it" loading="lazy">
+            <figcaption>Your caption.</figcaption>
+          </figure>
+
+     For a GIF, the same <img> tag works. For an mp4, use:
+
+          <figure class="shot">
+            <video src="img/your-clip.mp4" autoplay muted loop playsinline></video>
+            <figcaption>Your caption.</figcaption>
+          </figure>
+
+     Keep the .full class on a block to make it span both columns.
+     ============================================================ -->
+<section id="media">
+  <div class="wrap">
+    <div class="sec-head center">
+      <p class="kicker">Media</p>
+      <h2>More from the Grid</h2>
+      <p>Battles, base-building and the deep frames — captures land here as they
+         are recorded.</p>
+    </div>
+
+    <div class="gallery">
+
+      <!-- SLOT 1 — hero clip, spans both columns -->
+      <div class="ph ph-wide full">
+        <div class="ph-icon">▶</div>
+        <div class="ph-title">Gameplay clip</div>
+        <div class="ph-note">
+          drop <code>img/gameplay.mp4</code> or <code>img/gameplay.gif</code>
+          and swap this block — see the comment above this section
+        </div>
+      </div>
+
+      <!-- SLOT 2 -->
+      <div class="ph">
+        <div class="ph-icon">▦</div>
+        <div class="ph-title">A battle in progress</div>
+        <div class="ph-note">drop <code>img/battle.png</code></div>
+      </div>
+
+      <!-- SLOT 3 -->
+      <div class="ph">
+        <div class="ph-icon">▦</div>
+        <div class="ph-title">A base running its chains</div>
+        <div class="ph-note">drop <code>img/base.png</code></div>
+      </div>
+
+      <!-- SLOT 4 -->
+      <div class="ph">
+        <div class="ph-icon">▦</div>
+        <div class="ph-title">The roster and its routines</div>
+        <div class="ph-note">drop <code>img/roster.png</code></div>
+      </div>
+
+      <!-- SLOT 5 -->
+      <div class="ph">
+        <div class="ph-icon">▦</div>
+        <div class="ph-title">Research, gear or the work-order board</div>
+        <div class="ph-note">drop <code>img/research.png</code></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     INSTALL
+     ============================================================ -->
+<section id="install">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="kicker">Install</p>
+        <h2>Clone it and run it</h2>
+        <p style="color:var(--ink-dim);font-size:18px;margin:0 0 8px">
+          You need the Rust toolchain. A debug build is a playable build here —
+          <code style="font-family:var(--mono);font-size:15px;color:var(--cyan)">cargo run</code>
+          is how the game is meant to be started.
+        </p>
+        <p class="note">
+          The binary resolves <code>assets/</code>, <code>saves/</code> and your
+          profile relative to the checkout at build time, so the clone needs to
+          stay put — even if you <code>cargo install --path crates/launcher</code>
+          to get it on your <code>PATH</code>.
+        </p>
+        <div class="btns" style="justify-content:flex-start;margin-top:32px">
+          <a class="btn btn-primary" href="https://github.com/troglodyte/feral-processes">View on GitHub →</a>
+          <a class="btn btn-ghost" href="https://github.com/troglodyte/feral-processes/blob/main/CHANGELOG.md">Release notes</a>
+        </div>
+      </div>
+
+      <div>
+        <div class="code">
+          <div class="code-bar"><i></i><i></i><i></i><span style="margin-left:6px">bash</span></div>
+<pre><span class="c"># if you don't have Cargo yet</span>
+<span class="p">$</span> curl --proto <span class="k">'=https'</span> --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+<span class="c"># then</span>
+<span class="p">$</span> git clone https://github.com/troglodyte/feral-processes
+<span class="p">$</span> <span class="k">cd</span> feral-processes
+<span class="p">$</span> cargo run -p feral-processes</pre>
+        </div>
+
+        <div class="code" style="margin-top:18px">
+          <div class="code-bar"><i></i><i></i><i></i><span style="margin-left:6px">first run</span></div>
+<pre><span class="c"># New Game from the main menu, pick a difficulty</span>
+<span class="p">?</span>  the complete control list, in game
+<span class="p">L</span>  every save  <span class="c">(main menu)</span>
+<span class="p">A</span>  your achievements  <span class="c">(main menu)</span>
+
+<span class="c"># autosaves every 50 ticks, into saves/</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============================================================
+     MODDING
+     ============================================================ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head center">
+      <p class="kicker">Moddable by design</p>
+      <h2>Content is a file, not a code change</h2>
+      <p>Species, structures, items, routines, achievements, contracts, talents
+         and research nodes are all plain <code>.ron</code> data. A malformed file
+         is skipped with a warning, never a crash — and a new field is always
+         optional, so nobody's mod stops parsing.</p>
+    </div>
+
+    <div class="code" style="max-width:760px;margin:0 auto">
+      <div class="code-bar"><i></i><i></i><i></i><span style="margin-left:6px">assets/species/my_program.ron</span></div>
+<pre>(
+    id: <span class="k">"my_program"</span>,
+    name: <span class="k">"Null Pointer"</span>,
+    habitats: [StaticField, OpenGrid],
+    growth_multiplier: 1.4,
+    moves: [<span class="k">"pointer_stab"</span>],
+    abilities: [(id: <span class="k">"segfault"</span>, level: 6)],
+)</pre>
+    </div>
+
+    <p class="note" style="max-width:760px;margin:26px auto 0">
+      Difficulty tuning is deliberately <em>not</em> data. Every knob the engine
+      hardcodes — scaling curves, XP, drop rates, raid pressure — is a documented
+      constant in <code>crates/engine/src/tuning.rs</code>. Content is moddable;
+      how hard the game is, is not.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER
+     ============================================================ -->
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-about">
+        <div class="brand" style="margin-bottom:14px">&gt; feral<span>-</span>processes</div>
+        <p>A headless Rust ECS simulation with a Bevy renderer sitting on top of
+           it. Four crates, one game, and a rule that the renderer never touches
+           the world.</p>
+      </div>
+
+      <div>
+        <h4>Documentation</h4>
+        <ul>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/manual.md">The manual</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/roster.md">Species roster</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/items.md">Items &amp; gear</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/abilities.md">Routines</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/structures.md">Structures</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4>Project</h4>
+        <ul>
+          <li><a href="https://github.com/troglodyte/feral-processes">Source</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/research.md">Research tree</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/blob/main/docs/perks.md">Perks</a></li>
+          <li><a href="https://github.com/troglodyte/feral-processes/tree/main/assets">Asset schemas</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="foot-bottom">
+      <span>feral-processes v0.13.5</span>
+      <span>built in Rust · bevy_ecs + bevy · single-player</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

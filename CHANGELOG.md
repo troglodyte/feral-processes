@@ -27,6 +27,66 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.7
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+A save written before this release loads with every program given a fresh
+identity and an empty memory store — the three new fields are additive on
+field-named RON.
+
+### What a program remembers
+
+Programs on your roster now form memories of what happens to them, and hold
+them. Four kinds ship:
+
+- **Fought beside** — a bond with each program that survived a won fight
+  alongside it.
+- **Won against the odds** — a fight the party had no business walking away
+  from.
+- **Mauled by** — the species that took better than a third of a program's
+  health in a single landed blow. The longest-lived of the four.
+- **Left stranded here** — a grudge against one corner of the base, formed
+  when a program is posted somewhere it turns out it cannot reach.
+
+**A memory fades unless something reinforces it.** Intensity is worked out
+from the clock every time it is read rather than being counted down, so
+nothing ticks and nothing drifts; a repeat of the same event resets the
+clock and deepens the mark, up to a limit each kind sets for itself. A
+memory that has faded far enough is dropped the next time that program
+forms one.
+
+**`R` on a roster program opens what it holds** — a page headed by that
+program's Morale, the signed sum of everything it currently remembers, with
+each memory's strength and how long ago it was, in words rather than in
+ticks. Rows arrive strongest first.
+
+### A program will not be parked where it was left stranded
+
+The one place a memory changes behaviour, and it is deliberately quiet: an
+idle program loitering in your base will not be stood on a tile it holds a
+grudge against, and takes a different spot on the ring instead. It costs the
+program one beat of standing still — the same thing already happens when
+the ring offers it a tile a machine is standing on.
+
+The loop closes on itself. A program is parked somewhere, posted to a
+machine, finds no route to it, and is marked stranded *where it is
+standing*. That is the tile it remembers, and that is the tile it will not
+be put back on.
+
+Nothing else about staffing changed. The scheduler still decides the whole
+assignment by priority and then diffs it, with no score anywhere in it.
+
+### Memory kinds are a content directory
+
+`assets/memories/` is a mod directory like species, items and abilities —
+each kind is one file naming its valence, its half-life, what it can be
+about, and how far it compounds. The schema is documented in
+`assets/memories/README.md`. **Deleting the directory gives back the
+pre-memory game exactly**, the same supported way deleting
+`assets/environment/` or `assets/policies/` does: memories already formed
+are kept but weigh nothing, the page draws no rows, and the parking hook
+goes inert.
+
 ## 0.13.6
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

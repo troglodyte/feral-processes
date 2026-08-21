@@ -27,6 +27,60 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.4
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+### The perk screen has sections
+
+Seventeen perks in one undifferentiated column made you read all of them to
+find the three you cared about. They now sit under four headings —
+**Combat**, **Affinities**, **Fieldcraft**, **Workshop** — in that order.
+The shortcut keys still run straight down the list across the headings
+rather than restarting under each one, so nothing about typing a key
+changed except which letter lands where.
+
+**The layout is a file.** `assets/perks/groups.ron` names each section,
+what sits under it, and where it sits, all in one statement — rename a
+heading, reorder the sections, move a perk between them, none of it needs a
+recompile. The format is documented in `assets/perks/README.md`. It is one
+statement rather than a `group:` field on each of the seventeen catalogue
+entries because membership alone orders nothing: a per-perk label would
+need a second rule for which heading came first, and two authored halves of
+one layout drift apart the first time someone edits only one.
+
+Three things it deliberately does not do. Deleting the file gives back the
+flat, unheaded list exactly as it was. A perk no section names is still
+offered, in a trailing unlabelled run at the foot of the screen — a typo
+costs a heading, never a row you can spend points at. And a malformed
+layout is skipped with a warning, costing the headings and none of the
+perks.
+
+### The results screen says you won
+
+A win was the only ending in the game with no line of its own: the screen
+went from the killing blow straight to `Salvage:`. It now heads the results
+with **"You won!"**. A jack-out and a flatline are untouched, since both
+already declare themselves one line higher.
+
+The experience lines gained an `Experience:` header and the same indent the
+salvage rows carry, so the two blocks read as a pair rather than as a list
+and some loose numbers.
+
+### The decisive round's blows outlive the fight
+
+**Fixed:** the final round of a battle was narrated and then deleted before
+the screen had revealed a single line of it, so the results appeared to
+jump from the kill straight to the salvage. The round that decided the
+fight is the one you most want to watch, and it was the one round you never
+saw.
+
+The narration is now pruned when you *leave* the results screen rather than
+when the fight ends. Two consequences worth knowing: the closing roster now
+stands beside the final blows instead of replacing them, and a companion
+detaching after a loss scrolls past on the results screen rather than
+vanishing with everything else.
+
 ## 0.13.3
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

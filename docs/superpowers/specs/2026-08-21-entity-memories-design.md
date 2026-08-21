@@ -381,3 +381,23 @@ Full gate: `cargo test --workspace`, `cargo clippy --workspace`,
 5. **Formation logs nothing.** The screen is the surface.
 6. **The one hook is `park_idle_staff`.** Quiet but real, and it touches
    no balance seam and no scheduler rule.
+
+## Phases
+
+Five phases, each with its own green gate and its own reviewer boundary.
+They are **branch commits, not separate releases** — the version bump, the
+`CHANGELOG.md` section and the tag happen once at the merge, per the
+one-release-per-change rule. Phase 1 therefore lands a `ProgramId` that
+nothing reads yet; that is a phase boundary, not a shipped dead field.
+
+| Phase | Deliverable | Touches |
+|---|---|---|
+| 1 | **Identity** — `ProgramId`, `NextProgramId`, `roster_parts` widening, the two save fields, minting on a legacy load | engine, save |
+| 2 | **Substrate** — `MemoryDb`, `assets/memories/` + README, `Memories`/`Memory`/`MemorySubject`, derived intensity, `remember`, `morale`, `opinion_of`, the tuning section | engine, assets |
+| 3 | **Triggers** — the four shipped defs wired to their four hooks | engine |
+| 4 | **Screen** — `Mode::CompanionMemories`, `views::MemoryRow`, the render page, the popup-fit test | engine, app-core, gui |
+| 5 | **The hook** — `park_idle_staff` avoidance | engine |
+
+Each phase is planned when it is reached rather than all five up front: a
+plan exists to hand context to an executor, and four plans written against
+a substrate that does not exist yet would be written twice.

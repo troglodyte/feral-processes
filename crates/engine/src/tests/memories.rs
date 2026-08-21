@@ -1101,3 +1101,155 @@ fn every_subject_kind_survives_the_round_trip() {
 
     assert_eq!(held, subjects, "every variant, in the order it was written");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: the triggers.
+//
+// Four hooks, each at the one door its event already goes through. Everything
+// below asserts what play writes into a store — the arithmetic of what a
+// memory is *worth* is phase 2's business, above.
+// ---------------------------------------------------------------------------
+
+/// A hostile of `species`, standing off the map and hitting for `atk`.
+///
+/// Hand-built rather than spawned through `spawn_wild_creature`, because what
+/// the maul threshold measures is a ratio between two hand-set numbers and a
+/// rolled stat block cannot state one.
+fn hostile_of(game: &mut Game, species: &str, atk: i32) -> Entity {
+    game.world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Position { x: 40, y: 40 },
+            Stats {
+                hp: 500,
+                max_hp: 500,
+                atk,
+                mitigation: 0,
+            },
+            Hostile,
+        ))
+        .id()
+}
+
+/// One swing from `attacker` at `defender`, forced to land, for `power`.
+///
+/// A zero-spread band, so what lands is `power` cut by mitigation and nothing
+/// else — the maul rule is a comparison against a fraction of max HP, and a
+/// rolled band would make the case the test is pinning a coin flip.
+fn one_landed_swing(game: &mut Game, attacker: Entity, defender: Entity, power: i32) -> i32 {
+    force_the_next_attack_to_land(game);
+    let outcome = game.resolve_and_apply_attack(
+        attacker,
+        defender,
+        crate::battle::DamageRange::centred(power, 0),
+    );
+    outcome.damage_to_defender()
+}
+
+fn subjects_of(game: &Game, who: Entity, def: &str) -> Vec<MemorySubject> {
+    memories_of(game, who)
+        .into_iter()
+        .filter(|m| m.def == MemoryId::from(def))
+        .map(|m| m.subject)
+        .collect()
+}
+
+/// Both halves in one test on purpose: the forming half alone passes against
+/// a hook with no threshold in it at all, which is exactly the hook a
+/// careless implementation writes.
+#[test]
+fn a_hit_above_the_maul_fraction_is_remembered_and_one_below_it_is_not() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let attacker = hostile_of(&mut game, "glitch", 0);
+    let max_hp = game.world.get::<Stats>(program).unwrap().max_hp;
+    let over = (max_hp as f32 * crate::tuning::MEMORY_MAUL_FRACTION).ceil() as i32 + 2;
+    let under = (max_hp as f32 * crate::tuning::MEMORY_MAUL_FRACTION).floor() as i32 - 2;
+    assert!(under > 0, "the fixture needs room under the fraction");
+
+    let landed = one_landed_swing(&mut game, attacker, program, under);
+    assert!(
+        landed > 0 && landed < over,
+        "the light hit landed: {landed}"
+    );
+    assert!(
+        subjects_of(&game, program, "mauled_by").is_empty(),
+        "an ordinary hit is not a mauling"
+    );
+
+    game.restore_hp(program, max_hp);
+    one_landed_swing(&mut game, attacker, program, over);
+
+    assert_eq!(
+        subjects_of(&game, program, "mauled_by"),
+        vec![MemorySubject::Species("glitch".to_string())],
+        "a hit that nearly ended it is remembered, by what swung it"
+    );
+}
+
+/// The subject is the *attacker's* species. A fixture where both sides are
+/// the same species cannot tell the two readings apart, so these differ.
+#[test]
+fn a_maul_names_the_attackers_species_and_not_its_own() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let attacker = hostile_of(&mut game, "zero_day", 0);
+    let max_hp = game.world.get::<Stats>(program).unwrap().max_hp;
+
+    one_landed_swing(&mut game, attacker, program, max_hp);
+
+    assert_eq!(
+        subjects_of(&game, program, "mauled_by"),
+        vec![MemorySubject::Species("zero_day".to_string())]
+    );
+}
+
+/// What the comparison reads is what *landed*, not what was rolled — the
+/// figure `apply_damage` returns after mitigation. Armour heavy enough to
+/// pull a mauling swing under the fraction leaves nothing remembered.
+#[test]
+fn mitigation_can_take_a_swing_under_the_maul_fraction() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = adopt(&mut game, "scrapper", 4);
+    let attacker = hostile_of(&mut game, "glitch", 0);
+    let max_hp = {
+        let mut stats = game.world.get_mut::<Stats>(program).unwrap();
+        stats.mitigation = crate::tuning::MAX_MITIGATION_PERCENT;
+        stats.max_hp
+    };
+    // Over the fraction before mitigation, under it after: the one band where
+    // the two readings disagree.
+    let rolled = (max_hp as f32 * crate::tuning::MEMORY_MAUL_FRACTION).ceil() as i32 + 2;
+
+    let landed = one_landed_swing(&mut game, attacker, program, rolled);
+
+    assert!(
+        (landed as f32) < max_hp as f32 * crate::tuning::MEMORY_MAUL_FRACTION,
+        "the fixture must land under the fraction: {landed} of {max_hp}"
+    );
+    assert!(
+        subjects_of(&game, program, "mauled_by").is_empty(),
+        "armour that absorbed the blow leaves no scar"
+    );
+}
+
+/// The no-op rule, at the trigger rather than at the door: a body with no
+/// store is not a body that panics. Two of them — a wild program mauled by
+/// another, and the player.
+#[test]
+fn a_maul_on_a_body_with_no_store_is_a_no_op() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let attacker = hostile_of(&mut game, "glitch", 0);
+    let wild = hostile_of(&mut game, "zero_day", 0);
+    let player = game.player_entity();
+
+    let wild_hp = game.world.get::<Stats>(wild).unwrap().max_hp;
+    one_landed_swing(&mut game, attacker, wild, wild_hp);
+    let player_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+    one_landed_swing(&mut game, attacker, player, player_hp);
+
+    assert!(game.world.get::<Memories>(wild).is_none());
+    assert!(game.world.get::<Memories>(player).is_none());
+}

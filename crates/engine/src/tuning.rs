@@ -2714,6 +2714,18 @@ pub const MEMORY_CAP_PER_PROGRAM: usize = 12;
 /// single strike.
 pub const MEMORY_FORGET_THRESHOLD: f32 = 0.5;
 
+/// The share of a program's **maximum** HP a single landed hit has to take
+/// before the program remembers what swung it.
+///
+/// Read against `max_hp` rather than against the HP it had left, so what
+/// counts as a mauling is a property of the blow rather than of how worn down
+/// the body already was — a scratch that finishes a program on one point is
+/// not the thing `mauled_by` is about.
+///
+/// The figure compared is what actually *landed*, after mitigation: armour
+/// that absorbed the blow is armour that stopped the scar.
+pub const MEMORY_MAUL_FRACTION: f32 = 0.35;
+
 #[cfg(test)]
 mod tests {
     use super::*;

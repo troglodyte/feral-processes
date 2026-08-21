@@ -183,6 +183,11 @@ impl Game {
         // never took, the same trap `restore_hp` returning its landed figure
         // already closes from the other side.
         let landed = self.apply_damage(defender, rolled);
+        // The one place a creature-versus-creature blow is both landed and
+        // attributable — see `Game::note_maul` for why the memory hooks here
+        // and not inside `apply_damage`. Below the `rolled <= 0` return
+        // above, deliberately: a miss and a fumble are not maulings.
+        self.note_maul(attacker, defender, landed);
         match outcome {
             battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit { dmg: landed },
             battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit { dmg: landed },

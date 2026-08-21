@@ -4,23 +4,7 @@
 //! to `Stats::hp`: the single path, so a rule that must see *every* memory has
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
-// Nothing in play calls `remember` yet — the four triggers that will are the
-// next phase's, and each gets its own reviewer boundary. `expect` rather than
-// `allow` on purpose: the moment a real caller lands this becomes an
-// unfulfilled expectation and says so, which is what gets the attribute
-// deleted instead of quietly outliving its reason. `pub` was considered and
-// refused for `DescriptionDb::subjects`' stated reason — widening visibility
-// to suppress a warning states something untrue about who may call this, and
-// the renderer must never write a memory.
-#![cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "phase 3 wires the first caller; delete this attribute with it"
-    )
-)]
-
-use crate::components::{Memories, Memory, MemorySubject, ProgramId};
+use crate::components::{Memories, Memory, MemorySubject, ProgramId, Stats};
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::GameClock;
 use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD};
@@ -131,6 +115,46 @@ impl crate::Game {
         Remembered::Written
     }
 
+    /// Remembers what nearly ended `defender`, by the species of whatever
+    /// swung it.
+    ///
+    /// **Hooked at `resolve_and_apply_attack` rather than at `apply_damage`.**
+    /// `apply_damage` is the one door that *damages* a creature and is the
+    /// obvious home — except that it does not know who is swinging, and the
+    /// subject here is the attacker's species. Every creature-versus-creature
+    /// attack in the game already funnels through the one function that holds
+    /// both entities and the figure that actually landed. Its five other
+    /// callers are terrain, a thrown item, a raid, a status tick and a fumble
+    /// rung: none has an attacker whose *species* a program could hold a
+    /// grudge against, and a fumble's recoil damages the swinger, which from
+    /// inside `apply_damage` would read as being mauled by one's own kind.
+    ///
+    /// `landed` is what came off after mitigation, never what was rolled —
+    /// armour that absorbed the blow is armour that stopped the scar. It is
+    /// measured against `max_hp` rather than against the HP that was left, so
+    /// a mauling is a property of the blow rather than of how worn down the
+    /// body already was.
+    ///
+    /// An attacker carrying no `Creature` — the player — has no species to be
+    /// remembered by, and a `defender` with no store is `remember`'s own
+    /// no-op. Neither needs a branch at the call site.
+    pub(crate) fn note_maul(&mut self, attacker: Entity, defender: Entity, landed: i32) {
+        let Some(max_hp) = self.world.get::<Stats>(defender).map(|s| s.max_hp) else {
+            return;
+        };
+        if (landed as f32) <= max_hp as f32 * crate::tuning::MEMORY_MAUL_FRACTION {
+            return;
+        }
+        let Some(species) = self
+            .world
+            .get::<crate::components::Creature>(attacker)
+            .map(|c| c.species.clone())
+        else {
+            return;
+        };
+        self.remember(defender, "mauled_by", MemorySubject::Species(species));
+    }
+
     /// The signed sum of every memory `who` currently holds — the one figure
     /// the screen heads its page with, and the closest thing the roster has to
     /// a mood.
@@ -142,6 +166,13 @@ impl crate::Game {
     /// A body carrying no `Memories` reads zero rather than panicking, the
     /// same asymmetry `remember` makes on the write side: hostiles, structures
     /// and the player are safe here without a branch at the call site.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the screen that heads a page with this figure is phase 4"
+        )
+    )]
     pub(crate) fn morale(&self, who: Entity) -> f32 {
         self.memory_sum(who, |_| true)
     }
@@ -151,6 +182,13 @@ impl crate::Game {
     ///
     /// A subject nothing has happened about sums an empty set and answers
     /// zero, which is a real answer and not a missing one.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the parking hook that asks this question is phase 5"
+        )
+    )]
     pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
         self.memory_sum(who, |m| &m.subject == subject)
     }

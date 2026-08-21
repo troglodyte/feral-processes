@@ -1,6 +1,7 @@
 //! Populating a zone with wild programs, nests, and habitat-born
 //! creatures.
 
+use crate::components::Memories;
 use crate::resources::PopulatedChunks;
 use crate::tuning::{
     BOSS_SPAWN_CHANCE, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX,
@@ -324,7 +325,16 @@ impl Game {
     /// it would produce an owned program that can never be the subject of a
     /// memory, which reads as memories being broken rather than as a door
     /// short a component.
-    pub(crate) fn roster_parts(&mut self) -> (Tamed, Experience, PowerReserve, ProgramId) {
+    ///
+    /// The empty `Memories` store is that same argument's other half. A door
+    /// that skipped it would produce an owned program that can never *hold* a
+    /// memory, and `Game::remember` on it is a silent no-op by design — so
+    /// the symptom is one companion whose memory screen is always empty,
+    /// which again reads as the feature being broken rather than as a door
+    /// short a component. Do not hand-write either at a call site.
+    pub(crate) fn roster_parts(
+        &mut self,
+    ) -> (Tamed, Experience, PowerReserve, ProgramId, Memories) {
         let id = {
             let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
             let id = counter.0;
@@ -338,6 +348,7 @@ impl Game {
             Experience::default(),
             PowerReserve::default(),
             ProgramId(id),
+            Memories::default(),
         )
     }
 

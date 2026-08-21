@@ -6,8 +6,11 @@
 //! roster pass through.
 
 use super::support::*;
-use crate::components::{Memory, MemorySubject, ProgramId};
+use crate::components::{Memories, Memory, MemorySubject, ProgramId};
+use crate::game::memories::Remembered;
 use crate::memories::{MemoryDef, MemoryId, MemorySubjectKind};
+use crate::resources::GameClock;
+use crate::tuning::MEMORY_CAP_PER_PROGRAM;
 use crate::*;
 
 /// Minting is per-call, not a constant. Two doors, two programs, two ids —
@@ -346,4 +349,354 @@ fn the_half_life_multiplier_scales_every_grudge_at_once() {
         "`intensity` must be `intensity_with` at the shipped dial, or the dial \
          turns nothing"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: the one door.
+//
+// `Game::remember` is the only writer, on the model of `Game::apply_damage`.
+// Everything below asserts a property of that door: what it forms, what it
+// reinforces, what it evicts, and — as often — what it refuses to touch.
+// ---------------------------------------------------------------------------
+
+/// What `who` is holding. Panics on a missing component, because every test
+/// past the no-op ones is already claiming the store exists.
+fn memories_of(game: &Game, who: Entity) -> Vec<Memory> {
+    game.world
+        .get::<Memories>(who)
+        .expect("an owned program holds a store")
+        .0
+        .clone()
+}
+
+/// Sets the clock directly rather than ticking to it. `Game::tick` runs every
+/// background system — spawns, raids, entropy — and what these tests are
+/// about is arithmetic against the clock, not what else a thousand ticks do.
+fn set_tick(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+fn id_of(game: &Game, who: Entity) -> ProgramId {
+    *game
+        .world
+        .get::<ProgramId>(who)
+        .expect("an owned program carries an id")
+}
+
+/// One `remember` on an empty store is one entry, at full strength, stamped
+/// with the tick it landed on. The clock is moved off zero first, or the
+/// stamp assertion passes against a hardcoded `0`.
+#[test]
+fn a_first_remember_forms_one_entry_at_the_current_tick() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 4_000);
+
+    let outcome = game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    assert_eq!(outcome, Remembered::Written);
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(held[0].def, MemoryId::from("hard_won"));
+    assert_eq!(held[0].strikes, 1);
+    assert_eq!(
+        held[0].reinforced, 4_000,
+        "the stamp is the clock, not tick zero"
+    );
+    assert_eq!(held[0].reinforced, game.current_tick());
+}
+
+/// Reinforcement is the whole reason a memory is keyed rather than appended:
+/// the same thing happening twice is one memory that got worse, not two.
+#[test]
+fn remembering_the_same_thing_again_reinforces_rather_than_forking() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 100);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    set_tick(&mut game, 600);
+    game.remember(program, "hard_won", MemorySubject::Nothing);
+
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), 1, "one memory, not two: {held:?}");
+    assert_eq!(held[0].strikes, 2);
+    assert_eq!(
+        held[0].reinforced, 600,
+        "reinforcement resets the decay's zero point"
+    );
+}
+
+/// Identity is the `(def, subject)` pair, not the def. Being bonded to two
+/// programs is two memories or the second one silently overwrites the first.
+#[test]
+fn two_subjects_of_one_def_are_two_memories() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let holder = spawn_tamed(&mut game, 10, 3);
+    let one = spawn_tamed(&mut game, 10, 3);
+    let two = spawn_tamed(&mut game, 10, 3);
+    let (a, b) = (id_of(&game, one), id_of(&game, two));
+
+    game.remember(holder, "bonded_in_battle", MemorySubject::Program(a));
+    game.remember(holder, "bonded_in_battle", MemorySubject::Program(b));
+
+    let held = memories_of(&game, holder);
+    assert_eq!(held.len(), 2, "one def, two subjects: {held:?}");
+    assert!(held.iter().all(|m| m.strikes == 1), "{held:?}");
+}
+
+/// The remembered name is refreshed, never compared. In the key it would
+/// fork a program's whole history the first time the player renames it.
+#[test]
+fn a_renamed_subject_reinforces_rather_than_forking() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let holder = spawn_tamed(&mut game, 10, 3);
+    let subject = spawn_tamed(&mut game, 10, 3);
+    let id = id_of(&game, subject);
+    game.remember(holder, "bonded_in_battle", MemorySubject::Program(id));
+    let before = memories_of(&game, holder)[0].subject_name.clone();
+    assert!(before.is_some(), "a living program's name is captured");
+
+    game.rename_companion(subject, Some("Kestrel".to_string()))
+        .unwrap();
+    set_tick(&mut game, 50);
+    game.remember(holder, "bonded_in_battle", MemorySubject::Program(id));
+
+    let held = memories_of(&game, holder);
+    assert_eq!(held.len(), 1, "a rename must not fork a history: {held:?}");
+    assert_eq!(held[0].strikes, 2);
+    let after = held[0].subject_name.clone();
+    assert!(
+        after.as_deref().is_some_and(|n| n.contains("Kestrel")),
+        "the name is refreshed at the write, got {after:?}"
+    );
+    assert_ne!(after, before, "and it actually moved");
+}
+
+/// The def's `strike_cap` is where compounding stops, and it binds at the
+/// write rather than only at the read — an uncapped counter would keep
+/// climbing and make the cap invisible in the store.
+#[test]
+fn strikes_saturate_at_the_defs_cap() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    for _ in 0..5 {
+        game.remember(program, "hard_won", MemorySubject::Nothing);
+    }
+
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(
+        held[0].strikes, 3,
+        "`hard_won` caps at three strikes: {held:?}"
+    );
+}
+
+/// Eviction is lazy and this is where it happens — nothing sweeps. The
+/// unrelated memory that triggers it is a *grudge*, so a threshold that
+/// compared the signed value rather than the magnitude would throw the fresh
+/// one away too and leave the store empty.
+#[test]
+fn a_faded_entry_is_dropped_at_the_next_formation() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 1_000);
+    game.remember(
+        program,
+        "stranded_at",
+        MemorySubject::BaseTile { x: 1, y: 1 },
+    );
+    assert_eq!(memories_of(&game, program).len(), 1);
+
+    // Six half-lives of `stranded_at`, which takes |-6.0| under the
+    // forget threshold with room to spare.
+    set_tick(&mut game, 21_000);
+    game.remember(
+        program,
+        "mauled_by",
+        MemorySubject::Species("scrapper".to_string()),
+    );
+
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), 1, "the faded one is gone: {held:?}");
+    assert_eq!(
+        held[0].def,
+        MemoryId::from("mauled_by"),
+        "and the fresh grudge is what survived: {held:?}"
+    );
+}
+
+/// Over the cap the weakest goes. By **magnitude** — under a signed
+/// comparison the deepest grudge in the store is the smallest number in it,
+/// so the strongest memory a program holds would be the first one dropped.
+#[test]
+fn over_the_cap_the_weakest_goes_and_the_strongest_survives() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let strongest = MemorySubject::BaseTile { x: 0, y: 0 };
+    for _ in 0..3 {
+        game.remember(program, "stranded_at", strongest.clone());
+    }
+
+    for tile in 1..=MEMORY_CAP_PER_PROGRAM as i32 {
+        game.remember(
+            program,
+            "stranded_at",
+            MemorySubject::BaseTile { x: tile, y: 0 },
+        );
+    }
+
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), MEMORY_CAP_PER_PROGRAM, "{held:?}");
+    let kept = held.iter().find(|m| m.subject == strongest);
+    assert!(
+        kept.is_some_and(|m| m.strikes == 3),
+        "the three-strike memory is the strongest in the store and must be \
+         the last thing dropped, not the first: {held:?}"
+    );
+}
+
+/// A body with no store is a silent no-op, the same asymmetry `spend_power`
+/// uses for a missing `PowerReserve` — it is what keeps every call site from
+/// needing a branch. All three in one test: the hostile arm alone passes
+/// against a fix that only checks `Hostile`.
+#[test]
+fn remember_is_a_no_op_on_a_hostile_a_structure_and_the_player() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let hostile = spawn_wild_on_player_tile(&mut game);
+    let structure = spawn_machine_at(&mut game, "lathe", 6, 6);
+    let player = game.player_entity();
+
+    for (what, who) in [
+        ("a hostile", hostile),
+        ("a structure", structure),
+        ("the player", player),
+    ] {
+        assert_eq!(
+            game.remember(who, "hard_won", MemorySubject::Nothing),
+            Remembered::NoStore,
+            "{what} holds no memories"
+        );
+        assert!(
+            game.world.get::<Memories>(who).is_none(),
+            "{what} must not acquire a store by being remembered at"
+        );
+    }
+}
+
+/// The def declares what it is about and the write checks the pairing. A
+/// mismatch is a programming error, so it is refused rather than absorbed —
+/// and refused *before* anything is written.
+#[test]
+fn a_subject_of_the_wrong_kind_is_refused() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let outcome = game.remember(
+        program,
+        "stranded_at",
+        MemorySubject::Species("scrapper".to_string()),
+    );
+
+    assert_eq!(outcome, Remembered::WrongSubject);
+    assert!(memories_of(&game, program).is_empty());
+}
+
+/// The deleted-mod-file case, and the empty-database property at the write
+/// end: an id no file defines writes nothing at all.
+#[test]
+fn an_unknown_def_id_is_a_silent_no_op() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+
+    let outcome = game.remember(program, "no_such_memory", MemorySubject::Nothing);
+
+    assert_eq!(outcome, Remembered::UnknownDef);
+    assert!(memories_of(&game, program).is_empty());
+    let log = game.message_log(20);
+    assert!(
+        !log.iter().any(|l| l.text.contains("no_such_memory")),
+        "and it is silent: {:?}",
+        log.iter().map(|l| &l.text).collect::<Vec<_>>()
+    );
+}
+
+/// `remember` draws no RNG at all — not on the written path and not on any
+/// of the three refusals. That is what keeps every seeded test and every
+/// `dev-arenas/` report where they are. Two games from one seed, identically
+/// set up, and the next draw compared: internals are never read.
+#[test]
+fn remember_draws_no_rng() {
+    fn probe(game: &mut Game) -> u64 {
+        game.world.resource_mut::<GameRng>().0.random()
+    }
+    let mut control = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut subject = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let _held = spawn_tamed(&mut control, 10, 3);
+    let program = spawn_tamed(&mut subject, 10, 3);
+
+    for _ in 0..4 {
+        subject.remember(program, "hard_won", MemorySubject::Nothing);
+    }
+    subject.remember(
+        program,
+        "stranded_at",
+        MemorySubject::BaseTile { x: 2, y: 2 },
+    );
+    subject.remember(program, "no_such_memory", MemorySubject::Nothing);
+    subject.remember(program, "mauled_by", MemorySubject::Nothing);
+    subject.remember(subject.player_entity(), "hard_won", MemorySubject::Nothing);
+
+    assert_eq!(
+        probe(&mut subject),
+        probe(&mut control),
+        "a `remember` moved the shared stream"
+    );
+}
+
+/// The store is minted at the roster barrier, so every door hands one out.
+/// `fuse_companions` is the one that assembles its own component list, which
+/// makes it the door a widened tuple can silently skip — and the symptom is
+/// one companion whose screen is always empty, which reads as memories being
+/// broken rather than as a door short a component.
+#[test]
+fn every_door_into_the_roster_hands_out_a_memory_store() {
+    let dir = scratch_assets_with_achievement(
+        "remembering_program",
+        r#"(
+            id: "remembering_program",
+            name: "Remembering Program",
+            description: "d",
+            trigger: ZoneReached(2),
+            reward: StartingProgram("scrapper"),
+        )"#,
+    );
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &dir).unwrap();
+    game.install_profile(super::achievements::profile_of("remembering_program", None));
+    game.grant_profile_rewards();
+
+    let granted = *owned_programs(&mut game)
+        .first()
+        .expect("the profile hands the run a program");
+    let adopted = game.adopt_program("scrapper", 4, 4, 1.0).unwrap();
+    let one = spawn_tamed(&mut game, 20, 10);
+    let two = spawn_tamed(&mut game, 10, 6);
+    let before = owned_programs(&mut game);
+    game.fuse_companions(one, two, None).unwrap();
+    let fused = *owned_programs(&mut game)
+        .iter()
+        .find(|e| !before.contains(e))
+        .expect("fusion leaves a program behind");
+
+    for (door, who) in [
+        ("grant_starting_program", granted),
+        ("adopt_program", adopted),
+        ("fuse_companions", fused),
+    ] {
+        assert!(
+            game.world.get::<Memories>(who).is_some(),
+            "{door} handed out a program that can never hold a memory"
+        );
+    }
 }

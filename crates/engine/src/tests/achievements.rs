@@ -240,7 +240,7 @@ fn an_earned_line_survives_the_end_of_a_battle() {
 
 /// A profile holding exactly `id`, with `rolled_stat` as recorded — the shape
 /// app-core hands `install_profile` after reading `profile.ron`.
-fn profile_of(id: &str, rolled_stat: Option<achievements::MainStat>) -> Profile {
+pub(super) fn profile_of(id: &str, rolled_stat: Option<achievements::MainStat>) -> Profile {
     let mut profile = Profile::default();
     profile.record(achievements::Earned {
         id: AchievementId::from(id),

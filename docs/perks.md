@@ -1,11 +1,11 @@
 # Perk catalogue
 
 Every perk a player can buy, charted from `assets/perks/` and
-`crates/engine/src/tuning.rs`. 16 of them, and there will be 16
+`crates/engine/src/tuning.rs`. 17 of them, and there will be 17
 until someone writes Rust.
 
 **These numbers are a transcription, not a read.** They were copied out on
-2026-08-14 and will drift the moment either source is edited; regenerate the
+2026-08-21 and will drift the moment either source is edited; regenerate the
 page rather than trusting it blind. The Attacker and Defender rows spent a
 release saying +3 against a `tuning.rs` that said 2, which is what this
 warning is about.
@@ -20,11 +20,11 @@ dearer but never stronger.
 
 | | |
 |---|---|
-| perks | 16 |
-| prices | 2 and 3 and 4 Perk Points |
-| one level of everything | 39 points |
+| perks | 17 |
+| prices | 2, 3 and 4 Perk Points |
+| one level of everything | 42 points |
 | points earned | 1 per player level, plus up to 5 from the [achievement ladder](achievements.md) |
-| affinity perks | 5 of 16, sharing two rates |
+| affinity perks | 5 of 17, sharing two rates |
 
 ## The catalogue
 
@@ -50,6 +50,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `ProcessPool` | Process Pool | 3 | +1 tamed program you may own | Game::pet_capacity |
 | `Teardown` | Teardown | 4 | +1 work resource per kill | Game::award_loot |
 | `Failover` | Failover | 2 | +1 Durability per repair interval | Game::total_repair_rate |
+| `TightenTolerances` | Tighten Tolerances | 3 | +5pp on a compiled copy's quality floor | Game::craft_quality_floor |
 
 ## Price
 
@@ -57,24 +58,25 @@ positionally, so this order is load-bearing: append, never reorder.
 PERK POINT PRICE
 
 4  Teardown
-3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool
+3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool, Tighten Tolerances
 2  Keen Scavenger, Low Power Mode, Attacker, Defender, Payload Tuning, Field Medic, Overclocker, Corruption Vector, Siphon Protocol, Failover
 
-one level of all 16: 39 points
+one level of all 17: 42 points
 ```
 
 What the perks at 3 have in common is that they change a *rate* rather than a
 number: Buffer scales with the Integrity you already have, Lean Compiler pays
 out on every craft for the rest of the run, Exploit Focus is worth more the
 healthier the program you are trying to take, Obfuscation is a proportion of
-whatever you were about to spend, and Process Pool raises a ceiling every
-later program is measured against. The ones at 2 are flat.
+whatever you were about to spend, Process Pool raises a ceiling every later
+program is measured against, and Tighten Tolerances moves the band every
+piece of gear you compile from here on rolls inside. The ones at 2 are flat.
 
 Teardown is alone at 4 because it is the steepest thing in the catalogue
 relative to what it modifies: a kill drops 2-4 work resources, so a single
 level is worth between a third and a half again of every fight in the run.
 
-Note what 39 points means against how they arrive. A Perk Point is
+Note what 42 points means against how they arrive. A Perk Point is
 1 per player level and at most 5 more from a fully cleared
 profile, so buying one level of each is most of the first forty levels of a
 run. Perks are not a shopping list to complete; they are a shape to commit
@@ -100,16 +102,17 @@ to.
 | Process Pool | `PROCESS_POOL_SLOTS_PER_LEVEL = 1` |
 | Teardown | `TEARDOWN_SALVAGE_PER_LEVEL = 1` |
 | Failover | `FAILOVER_REPAIR_PER_LEVEL = 1` |
+| Tighten Tolerances | `QUALITY_PERK_PER_LEVEL = 5` |
 
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why a seventeenth perk is a new `Perk` variant plus
+has no `effect:` field and why an eighteenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks
 
-These are the one place the 16 *do* share a shape: each multiplies one
+These are the one place the 17 *do* share a shape: each multiplies one
 `AffinityKind` category — Damage, Heal, Buff, Debuff, Drain — for the player's
 own ability casts. Never a companion's: a companion's affinity is its species'
 business, and a party-wide perk would multiply against it.

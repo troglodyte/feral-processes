@@ -27,6 +27,7 @@ P = [
  ("ProcessPool",    "Process Pool",      3, "+1 tamed program you may own",          "PROCESS_POOL_SLOTS_PER_LEVEL = 1",          "Game::pet_capacity"),
  ("Teardown",       "Teardown",          4, "+1 work resource per kill",             "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::award_loot"),
  ("Failover",       "Failover",          2, "+1 Durability per repair interval",     "FAILOVER_REPAIR_PER_LEVEL = 1",             "Game::total_repair_rate"),
+ ("TightenTolerances", "Tighten Tolerances", 3, "+5pp on a compiled copy's quality floor", "QUALITY_PERK_PER_LEVEL = 5",             "Game::craft_quality_floor"),
 ]
 K = "variant name cost effect const hook".split()
 R = [dict(zip(K, r)) for r in P]
@@ -78,7 +79,7 @@ Every perk a player can buy, charted from `assets/perks/` and
 until someone writes Rust.
 
 **These numbers are a transcription, not a read.** They were copied out on
-2026-08-14 and will drift the moment either source is edited; regenerate the
+2026-08-21 and will drift the moment either source is edited; regenerate the
 page rather than trusting it blind. The Attacker and Defender rows spent a
 release saying +3 against a `tuning.rs` that said 2, which is what this
 warning is about.
@@ -117,8 +118,9 @@ What the perks at 3 have in common is that they change a *rate* rather than a
 number: Buffer scales with the Integrity you already have, Lean Compiler pays
 out on every craft for the rest of the run, Exploit Focus is worth more the
 healthier the program you are trying to take, Obfuscation is a proportion of
-whatever you were about to spend, and Process Pool raises a ceiling every
-later program is measured against. The ones at 2 are flat.
+whatever you were about to spend, Process Pool raises a ceiling every later
+program is measured against, and Tighten Tolerances moves the band every
+piece of gear you compile from here on rolls inside. The ones at 2 are flat.
 
 Teardown is alone at 4 because it is the steepest thing in the catalogue
 relative to what it modifies: a kill drops 2-4 work resources, so a single
@@ -139,7 +141,7 @@ to.
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why a seventeenth perk is a new `Perk` variant plus
+has no `effect:` field and why an eighteenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks

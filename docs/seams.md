@@ -2130,7 +2130,7 @@ gatherer.
 **The four terms are emphatically not an axis.** They are addends in one
 legible expression, and a trait with an implementor per term would be the
 over-engineered reading of this. The floor is
-`QUALITY_BASE + bench + care`, summed in `u32` and saturated: a modded
+`QUALITY_BASE + bench + perk + care`, summed in `u32` and saturated: a modded
 bench with an absurd `max_tier` otherwise truncates a `u8` to *the bottom
 of the band*, which is the opposite of what it earned. The clamp is not
 here — `Game::roll_quality` holds the one clamp for every source of a copy
@@ -2159,6 +2159,29 @@ upgrading a compile bench buys better gear and nothing else, which is the
 purpose the spec wanted a bench upgrade to have.
 `every_upgrade_path_asks_for_a_zone_material` counts eight now, and the
 count is pinned so a path that goes missing cannot drop out of the scan.
+
+**The perk term is gathered per crafter, not read inside the floor.**
+`Perk::TightenTolerances` is the player's, and the second gatherer the
+`CraftOrder` seam exists for is a base-roster program, which has no perks of
+its own — so `player_craft_order` asks `player_perk_level` and
+`craft_quality_floor` never learns whose levels these are. Reading the
+player's perks inside the floor would compile just as well and would quietly
+hand a program the player's investment the moment the second gatherer lands,
+which is the failure the type was built to make impossible.
+
+**It is read at the compile rather than applied at purchase**, unlike
+`Attacker`, `Defender` and `Buffer`, which write straight to `Stats` in
+`unlock_perk` and so need an arm in its match. What a quality perk is worth
+is a property of each copy compiled *after* it, and gear already carried
+keeps the quality it was compiled at — a copy is a record of the moment it
+was made, the same reading that puts an orphan's stats outside its frame
+seed. So the hook is one addend and the `_ => {}` arm covers the purchase.
+Priced at one `QUALITY_STEP`, the same as a bench tier, so the two read as
+the same size of investment from opposite directions: fragments spent on the
+base against Perk Points spent on the player. Player *level* is deliberately
+not a term at all — `scaled_for_level` already scales gear to its wearer, so
+a level term inside quality would double-dip on the same input and compound
+against itself late in a run. The perk is that idea spent as a choice.
 
 **The careful surcharge is applied in `craft_cost` and nowhere else.**
 `craft_cost`, `max_craftable` and `craft` all take `careful`, so a screen

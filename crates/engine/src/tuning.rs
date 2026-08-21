@@ -2677,6 +2677,43 @@ pub const MAX_MITIGATION_PERCENT: i32 = 75;
 pub const PLAYER_UNARMED_DAMAGE: crate::battle::DamageRange =
     crate::battle::DamageRange { min: 3, max: 7 };
 
+// ---------------------------------------------------------------------------
+// Entity memories
+// ---------------------------------------------------------------------------
+
+/// The global stickiness dial: every def's authored `half_life` is multiplied
+/// by this before the decay is taken. One number makes every grudge and every
+/// fondness in the game longer or shorter.
+///
+/// Neutral at 1.0 so an authored `half_life` means the ticks it says. Per-def
+/// half-lives stay in the `.ron`, because a scar outlasting a bad shift is a
+/// content decision about those two memories; how sticky memory is *in
+/// general* is a difficulty decision, and that split is the standing rule that
+/// content is data and how hard the game is, is not.
+pub const MEMORY_HALF_LIFE_MULTIPLIER: f32 = 1.0;
+
+/// Most memories one program may hold at once; past it, `Game::remember`
+/// evicts the weakest by magnitude.
+///
+/// **A layout constraint before it is a feel one.** `draw_popup` pages a
+/// `Row::Item` span and a page with none drops any row past the bottom in
+/// silence. A `PopupSize::Large` popup holds 23 rows at the tightest window
+/// the font ramp allows — at 600px tall the font clamps at `MIN_UI_FONT` 16,
+/// giving a `line_height` of 20 and an inset of 6.67 against a body of
+/// `600 * 0.85` — and the memory page spends the rest of that on a title, a
+/// Morale header and their spacing. Raising this past what fits means giving
+/// that page a scroll first, not editing this number.
+pub const MEMORY_CAP_PER_PROGRAM: usize = 12;
+
+/// Intensity **magnitude** below which an entry is dropped at the next
+/// formation. Eviction is lazy — nothing sweeps — so this is the point at
+/// which a memory stops being worth a row and a comparison rather than the
+/// point at which it stops mattering.
+///
+/// At the shipped half-lives this is a little under four half-lives from a
+/// single strike.
+pub const MEMORY_FORGET_THRESHOLD: f32 = 0.5;
+
 #[cfg(test)]
 mod tests {
     use super::*;

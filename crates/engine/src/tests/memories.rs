@@ -1,12 +1,13 @@
-//! Entity memories — Phase 1: the identity a memory is *about*.
+//! Entity memories: the identity a memory is *about*, and what one is worth.
 //!
 //! `Entity` is written to the save nowhere, because entity ids are not
-//! stable across a round trip. `ProgramId` is what a later phase's memory
-//! names instead, minted at `Game::roster_parts` — the one barrier all four
-//! doors into the roster pass through.
+//! stable across a round trip. `ProgramId` is what a memory names instead,
+//! minted at `Game::roster_parts` — the one barrier all four doors into the
+//! roster pass through.
 
 use super::support::*;
-use crate::components::ProgramId;
+use crate::components::{Memory, MemorySubject, ProgramId};
+use crate::memories::{MemoryDef, MemoryId, MemorySubjectKind};
 use crate::*;
 
 /// Minting is per-call, not a constant. Two doors, two programs, two ids —
@@ -205,4 +206,145 @@ fn owned_ids(game: &mut Game) -> Vec<u32> {
         .collect();
     ids.sort_unstable();
     ids
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: the record, and intensity derived from the clock.
+//
+// Pure arithmetic on hand-built values — no `Game`, no world, no assets. What
+// a memory *is worth right now* is a function of the def, the clock and two
+// integers, and nothing else may be needed to state it.
+// ---------------------------------------------------------------------------
+
+/// A def differing only in the fields a test cares about. Deliberately not a
+/// shipped one: a census-approved `.ron` retuned tomorrow must not move an
+/// arithmetic test.
+fn test_def(valence: f32, half_life: u64, strike_cap: u32) -> MemoryDef {
+    MemoryDef {
+        id: MemoryId::from("fixture"),
+        name: "Fixture".to_string(),
+        blurb: "b".to_string(),
+        valence,
+        half_life,
+        subject: MemorySubjectKind::Nothing,
+        strike_cap,
+    }
+}
+
+fn memory_at(reinforced: u64, strikes: u32) -> Memory {
+    Memory {
+        def: MemoryId::from("fixture"),
+        subject: MemorySubject::Nothing,
+        subject_name: None,
+        reinforced,
+        strikes,
+    }
+}
+
+/// The one test that says the exponent is `(now - reinforced) / half_life`
+/// and not something adjacent to it. Halving is what a half-life *means*, so
+/// this is a definition rather than a sample.
+#[test]
+fn intensity_halves_at_one_half_life_and_quarters_at_two() {
+    let def = test_def(4.0, 100, 5);
+    let m = memory_at(1000, 1);
+
+    let fresh = m.intensity(&def, 1000);
+    let one = m.intensity(&def, 1100);
+    let two = m.intensity(&def, 1200);
+
+    assert!((fresh - 4.0).abs() < 1e-5, "{fresh}");
+    assert!(
+        (one - 2.0).abs() < 1e-5,
+        "one half-life left {one}, wanted 2.0"
+    );
+    assert!(
+        (two - 1.0).abs() < 1e-5,
+        "two half-lives left {two}, wanted 1.0"
+    );
+}
+
+/// The moment it forms is the zero point of the decay, not tick zero. A
+/// memory formed on tick 900 of a long run is worth its full valence, or
+/// every memory a veteran roster forms is born already faded.
+#[test]
+fn intensity_is_undecayed_at_the_moment_it_forms() {
+    let def = test_def(4.0, 100, 5);
+    let now = 900;
+    let m = memory_at(now, 3);
+
+    let at_formation = m.intensity(&def, now);
+
+    assert!(
+        (at_formation - 12.0).abs() < 1e-5,
+        "a memory formed on tick {now} is worth {at_formation}, wanted 12.0 — \
+         the decay's zero point is `reinforced`, not tick 0"
+    );
+}
+
+/// Reinforcement compounds, and the def's cap is where it stops. The two
+/// caps are compared against each other so the test cannot pass by ignoring
+/// `strike_cap` altogether.
+#[test]
+fn strikes_compound_intensity_up_to_the_cap_and_no_further() {
+    let now = 500;
+    let three = memory_at(now, 3);
+    let four = memory_at(now, 4);
+
+    let under = three.intensity(&test_def(4.0, 100, 3), now);
+    let clamped = three.intensity(&test_def(4.0, 100, 2), now);
+    let past = four.intensity(&test_def(4.0, 100, 3), now);
+
+    assert!(
+        (under - 12.0).abs() < 1e-5,
+        "three strikes of three: {under}"
+    );
+    assert!(
+        (clamped - 8.0).abs() < 1e-5,
+        "a cap of 2 must bind the third strike: {clamped}"
+    );
+    assert!(
+        (past - under).abs() < 1e-5,
+        "a fourth strike past a cap of 3 changed the figure: {past} vs {under}"
+    );
+}
+
+/// Decay is a magnitude scale, never a sign flip. `morale` is a signed sum
+/// over exactly this figure, so a grudge that decayed into a fondness would
+/// read as the roster cheering up because it was hurt a while ago.
+#[test]
+fn a_negative_valence_stays_negative_however_it_decays() {
+    let def = test_def(-8.0, 100, 4);
+    let m = memory_at(200, 2);
+
+    for elapsed in [0, 50, 100, 400, 10_000] {
+        let v = m.intensity(&def, 200 + elapsed);
+        assert!(v < 0.0, "a grudge read {v} after {elapsed} ticks");
+    }
+    assert!((m.intensity(&def, 300) + 8.0).abs() < 1e-5);
+}
+
+/// The global stickiness dial has to actually be in the denominator, and at
+/// its shipped neutral value that is invisible in any single figure — so the
+/// test varies the dial and asserts the *ordering*, rather than pinning a
+/// number and stopping the dial being a dial.
+#[test]
+fn the_half_life_multiplier_scales_every_grudge_at_once() {
+    let def = test_def(-8.0, 100, 4);
+    let m = memory_at(0, 1);
+    let dial = crate::tuning::MEMORY_HALF_LIFE_MULTIPLIER;
+
+    let normal = m.intensity_with(&def, 100, dial);
+    let stickier = m.intensity_with(&def, 100, dial * 2.0);
+
+    assert!(
+        stickier.abs() > normal.abs(),
+        "doubling the dial left {stickier} against {normal}; the same elapsed \
+         ticks must cost less intensity when memory is stickier"
+    );
+    assert!(
+        (m.intensity(&def, 100) - normal).abs() < 1e-6,
+        "`intensity` must be `intensity_with` at the shipped dial, or the dial \
+         turns nothing"
+    );
 }

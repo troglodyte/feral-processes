@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
+use crate::game::base::stock;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
 use crate::*;
@@ -387,15 +388,9 @@ fn break_at(
 /// could ever have made.
 pub(crate) fn depot_holding(game: &Game, item: &ItemId) -> u32 {
     let db = game.world.resource::<StructureDb>();
-    game.world
-        .iter_entities()
-        .filter(|e| {
-            e.get::<Structure>()
-                .and_then(|s| db.get(&s.kind))
-                .is_some_and(|d| d.stores)
-        })
-        .filter_map(|e| e.get::<Stock>())
-        .map(|s| s.output.get(item).copied().unwrap_or(0))
+    stock::output_buffers(game)
+        .filter(|(structure, _)| db.get(&structure.kind).is_some_and(|d| d.stores))
+        .map(|(_, s)| s.output.get(item).copied().unwrap_or(0))
         .sum()
 }
 
@@ -669,11 +664,8 @@ pub(crate) fn park_tile(center: Position, index: usize, tick: u64) -> Position {
 /// should hold, and where it holds it does not matter. What you are carrying
 /// is yours.
 pub(crate) fn base_holding(game: &Game, item: &ItemId) -> u32 {
-    game.world
-        .iter_entities()
-        .filter(|e| e.contains::<Structure>())
-        .filter_map(|e| e.get::<Stock>())
-        .map(|s| s.output.get(item).copied().unwrap_or(0))
+    stock::output_buffers(game)
+        .map(|(_, s)| s.output.get(item).copied().unwrap_or(0))
         .sum()
 }
 

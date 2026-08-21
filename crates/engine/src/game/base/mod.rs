@@ -18,5 +18,6 @@ pub(crate) mod collect;
 pub(crate) mod entropy;
 pub(crate) mod hauling;
 pub(crate) mod power;
+pub(crate) mod stock;
 pub(crate) mod upkeep;
 pub(crate) mod work_orders;

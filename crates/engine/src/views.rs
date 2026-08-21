@@ -1774,3 +1774,17 @@ pub struct ContractRow {
     /// one `progress >= target` rule.
     pub target: u32,
 }
+
+/// One pile the base is holding, as the stock strip lists it — see
+/// `Game::base_stock`.
+///
+/// Carries the tag *and* the name: the strip draws the tag alone, and the
+/// name is what a caller with room shows instead of teaching the player a
+/// glossary.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StockRow {
+    pub item: ItemId,
+    pub tag: String,
+    pub name: String,
+    pub qty: u32,
+}

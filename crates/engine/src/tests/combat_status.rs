@@ -300,7 +300,7 @@ fn the_mark_survives_a_log_that_overflows_its_cap() {
 }
 
 #[test]
-fn ending_a_battle_keeps_results_and_drops_narration() {
+fn the_prune_keeps_results_and_drops_narration() {
     let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     start_battle_with_a_wild_program(&mut game);
@@ -309,6 +309,17 @@ fn ending_a_battle_keeps_results_and_drops_narration() {
     game.log_kind(MessageKind::Raid, "A raid hits your base!");
 
     game.end_battle(player, None);
+
+    // The fight is over but the results screen has not been left yet, so the
+    // narration is still there to be revealed — see
+    // `Game::prune_battle_narration`.
+    let held: Vec<String> = game.message_log(100).into_iter().map(|e| e.text).collect();
+    assert!(
+        held.iter().any(|l| l.contains("swings and misses")),
+        "the decisive round should outlive `end_battle`: {held:?}"
+    );
+
+    game.prune_battle_narration();
 
     let after: Vec<String> = game.message_log(100).into_iter().map(|e| e.text).collect();
     assert!(

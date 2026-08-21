@@ -467,11 +467,27 @@ impl App {
     /// overflow its pane: `settle_rewards` puts the salvage tally, a row per
     /// distinct `GearCopy` and an XP line per fighter into the range that the
     /// decisive round's narration is already in.
+    ///
+    /// Leaving is also what prunes the fight's blow-by-blow — see
+    /// `Game::prune_battle_narration`. It is deferred to here rather than run
+    /// at `end_battle` because the decisive round has not been revealed yet
+    /// when the fight ends; pruned there, the results appeared to follow the
+    /// kill with no swings in between.
     pub(crate) fn handle_battle_result_key(&mut self, key: GameKey) {
         if self.scroll_battle_pane(key) {
             return;
         }
+        self.leave_battle_result();
         self.mode = Mode::Playing;
+    }
+
+    /// Drops the finished fight's narration, keeping its results. The one
+    /// thing every exit from `Mode::BattleResult` owes the map, so both of
+    /// them call this rather than the engine directly.
+    pub(crate) fn leave_battle_result(&mut self) {
+        if let Some(game) = &mut self.game {
+            game.prune_battle_narration();
+        }
     }
 
     /// Backs the planning cursor up one slot, so a misclick can be undone.

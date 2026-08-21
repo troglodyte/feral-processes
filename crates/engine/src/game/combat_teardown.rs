@@ -180,6 +180,26 @@ impl Game {
         }
     }
 
+    /// Deletes the finished fight's blow-by-blow, keeping only its results.
+    ///
+    /// **Called when the player leaves the results screen, never from
+    /// `end_battle`.** The prune used to run inside `end_battle`, which runs
+    /// inside `battle_resolve_round` — so the decisive round's narration was
+    /// deleted before a frontend had revealed a single line of it, and the
+    /// fight read as jumping from the kill straight to the salvage. Deferring
+    /// it is what puts the final blows, the outcome, the salvage and the XP
+    /// on screen in that order.
+    ///
+    /// `Mode::BattleResult` has exactly one key handler and nothing ticks
+    /// there, so app-core has one exit to call this from. Miss it and the
+    /// blow-by-blow follows the player onto the map, which is the whole thing
+    /// the prune exists to stop.
+    pub fn prune_battle_narration(&mut self) {
+        self.world
+            .resource_mut::<MessageLog>()
+            .retain_outcomes_since_battle();
+    }
+
     /// Tears the current battle down: every combat-only effect cleared from
     /// both sides, companions killed during the fight finally reaped, and
     /// `BattleState` dropped.
@@ -253,10 +273,12 @@ impl Game {
             .copied()
             .filter(|&e| !self.creature_alive(e))
             .collect();
-        // Before `retain_outcomes_since_battle` below, deliberately: the
-        // detachment lines `dissolve_tamed_program` writes are `Info` kind,
-        // so running the reap first is what prunes them and leaves the
-        // `Outcome` death line to reach the map alone.
+        // The detachment lines `dissolve_tamed_program` writes are `Info`
+        // kind, so `prune_battle_narration` is still what keeps them off the
+        // map and leaves the `Outcome` death line to reach it alone. They do
+        // now scroll past on the results screen, where they used to be
+        // deleted before anything could reveal them — a dead companion
+        // reads its death line and then its detachment.
         for program in dead {
             self.dissolve_tamed_program(program);
         }
@@ -280,15 +302,13 @@ impl Game {
         // lines down — see `mark_nemeses`'s own doc for why that window is
         // narrow rather than a preference.
         self.mark_nemeses();
-        // The blow-by-blow has done its job by now — the battle pane showed
-        // it live. What follows the player onto the map is the results.
-        self.world
-            .resource_mut::<MessageLog>()
-            .retain_outcomes_since_battle();
-        // The prune deletes lines from inside the range the frames are
-        // counted against, so every one of them now points at the wrong
-        // line. There is no roster left to draw them on either — the
-        // screen is gone with `BattleState`.
+        // Deliberately *not* pruned here — see `prune_battle_narration`.
+        // The decisive round has not been revealed yet at this point, so
+        // deleting it now is deleting it before anyone can read it.
+        //
+        // The frames are still dropped: they index a roster that is about to
+        // go with `BattleState`, and `App::battle_view` answers from
+        // `BattleTimeline::closing` for the whole of `Mode::BattleResult`.
         self.world.resource_mut::<BattleTimeline>().frames.clear();
         let lair = self
             .world

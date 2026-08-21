@@ -664,6 +664,12 @@ fn a_capture_leaves_no_refusal_on_the_summary() {
         game.world.get_resource::<BattleState>().is_none(),
         "it was the last group standing, so the fight is over"
     );
+    // Every attempt above was made inside one round, which is what puts the
+    // early refusal in the same `since_round` range as the capture — in play
+    // each attempt is its own round and only the last one's lines are on the
+    // results screen. The prune is what guarantees it either way, and it now
+    // runs when the player leaves that screen rather than at `end_battle`.
+    game.prune_battle_narration();
     let summary = ice_holds_lines(&game);
     assert!(
         summary.is_empty(),

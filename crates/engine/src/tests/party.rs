@@ -1368,6 +1368,10 @@ fn only_the_outcome_death_line_follows_the_player_out_of_the_battle() {
     start_battle_with_a_wild_program(&mut game);
     game.apply_damage(companion, 10);
     flee_until_clear(&mut game);
+    // Leaving the results screen is what prunes now, not `end_battle`: the
+    // departure chatter scrolls past on the results page and is dropped on
+    // the way to the map. See `Game::prune_battle_narration`.
+    game.prune_battle_narration();
 
     let log = game.message_log(40);
     assert!(

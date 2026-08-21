@@ -1597,3 +1597,65 @@ fn a_name_carries_the_quality_only_when_it_is_off_spec() {
         "{name}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The results screen's reading order: the final blows, the outcome, the
+// salvage, the XP.
+//
+// `retain_outcomes_since_battle` runs when the player *leaves* the results
+// screen rather than inside the round that ends the fight — see
+// `Game::prune_battle_narration`. Pruned at `end_battle` the decisive
+// round's blow-by-blow was deleted before a frontend had revealed a line of
+// it, so the fight appeared to jump from the kill straight to the salvage.
+// ---------------------------------------------------------------------------
+
+/// A one-round fight against a single 1-HP program, resolved through the
+/// real round loop so the narration actually exists. `finish_member` on its
+/// own writes the payout without ever opening a round.
+fn win_a_fight_in_one_round(game: &mut Game) {
+    battle_with_a_dropping_pack(game, 1, 1);
+    // `insert_battle` stands a `BattleState` up without going through
+    // `begin_battle`, so the log has no battle mark and the prune would find
+    // nothing to slice against — it would pass by doing nothing at all.
+    game.world.resource_mut::<MessageLog>().open_battle();
+    force_the_next_attack_to_land(game);
+    player_attacks(game);
+    assert!(
+        game.world.get_resource::<BattleState>().is_none(),
+        "the fixture should have finished the fight in one round"
+    );
+}
+
+#[test]
+fn the_decisive_rounds_narration_survives_the_fight() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    win_a_fight_in_one_round(&mut game);
+
+    let log = game.battle_log();
+    assert!(
+        log.iter().any(|l| l.kind == MessageKind::PartyDamage),
+        "the final round's blow-by-blow should still be readable once the \
+         fight is over: {:#?}",
+        log.iter().map(|l| (&l.text, l.kind)).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn leaving_the_results_screen_prunes_the_narration() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    win_a_fight_in_one_round(&mut game);
+
+    game.prune_battle_narration();
+
+    let log = game.battle_log();
+    assert!(
+        !log.iter().any(|l| l.kind == MessageKind::PartyDamage),
+        "the blow-by-blow should not follow the player onto the map: {:#?}",
+        log.iter().map(|l| (&l.text, l.kind)).collect::<Vec<_>>()
+    );
+    assert!(
+        log.iter().any(|l| l.kind == MessageKind::Loot),
+        "the salvage tally should survive the prune: {:#?}",
+        log.iter().map(|l| (&l.text, l.kind)).collect::<Vec<_>>()
+    );
+}

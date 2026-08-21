@@ -938,6 +938,10 @@ fn the_taunt_is_info_kind_and_is_pruned_once_its_battle_ends() {
     );
 
     flee_until_clear(&mut game);
+    // The prune waits for the player to leave the results screen now — see
+    // `Game::prune_battle_narration` — so the taunt outlives `end_battle`
+    // and this is the moment it goes.
+    game.prune_battle_narration();
 
     assert!(
         !game.message_log(50).iter().any(|l| l.text == expected),

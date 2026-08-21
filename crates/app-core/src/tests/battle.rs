@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
 
 /// Scans seeds until one puts a wild program next to the player, then
 /// bumps it to open a battle. Returns the app sitting in `Mode::Battle`
@@ -852,6 +853,56 @@ fn a_key_leaves_the_finished_battle_screen_for_the_map() {
     app.handle_key(GameKey::Char(' '));
 
     assert_eq!(app.mode, Mode::Playing, "the page did not dismiss");
+}
+
+/// The final round's blow-by-blow is what the results screen opens with —
+/// the fight used to jump from the kill straight to the salvage, because the
+/// prune ran inside the round that ended it.
+#[test]
+fn the_results_screen_opens_with_the_final_rounds_blows() {
+    let mut app = app_with_a_finished_fight();
+    app.finish_reveal();
+
+    let kinds: Vec<MessageKind> = app.revealed_battle_log().iter().map(|r| r.kind).collect();
+    assert!(
+        kinds.contains(&MessageKind::PartyDamage),
+        "no swing survived onto the results screen: {:#?}",
+        app.revealed_battle_log()
+            .iter()
+            .map(|r| (r.text.clone(), r.kind))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// ...and leaving the screen is what takes it back off, so the map's pane
+/// still gets the results alone.
+#[test]
+fn leaving_the_results_screen_drops_the_blows_but_keeps_the_results() {
+    let mut app = app_with_a_finished_fight();
+    app.finish_reveal();
+
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(app.mode, Mode::Playing);
+
+    let log = app
+        .game
+        .as_ref()
+        .expect("the run is still live")
+        .message_log(MESSAGE_LOG_CAP);
+    assert!(
+        !log.iter().any(|l| l.kind == MessageKind::PartyDamage),
+        "the blow-by-blow followed the player onto the map: {:#?}",
+        log.iter()
+            .map(|l| (l.text.clone(), l.kind))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        log.iter().any(|l| l.kind == MessageKind::Outcome),
+        "the results were pruned away with the narration: {:#?}",
+        log.iter()
+            .map(|l| (l.text.clone(), l.kind))
+            .collect::<Vec<_>>()
+    );
 }
 
 /// The first key is spent skipping, so loot cannot be dismissed unread.

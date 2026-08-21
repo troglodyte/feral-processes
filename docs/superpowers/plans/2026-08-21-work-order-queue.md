@@ -205,8 +205,23 @@ play. Do not claim it is balanced.
 - Consumes: Task 1's accumulating `settle_orders`.
 - Produces: `WorkOrder { item, qty, standing: bool }` with
   `#[serde(default)]` on the new field, and
-  `Game::queue_work_order(&mut self, item: ItemId, qty: u32, standing: bool)
-  -> Result<(), String>`. Task 3 widens this signature again — expect that.
+  `Game::queue_work_order(&mut self, order: WorkOrder) -> Result<(), String>`.
+
+**Amended after Task 2 shipped.** The signature originally widened to
+`(item, qty, standing)` and Task 3 was to widen it again to four. It takes
+the whole order instead. What an order carries is the axis that keeps
+moving — two fields, then three, then four inside this one plan — so the
+~55 call sites were being edited once per phase, and `(item, 3, false,
+OrderPriority::Normal)` reads as two literals nobody can name. An order is
+built with **two named constructors**, `WorkOrder::batch(item, qty)` and
+`WorkOrder::level(item, qty)`: a batch and a level are different errands
+rather than one errand with a flag on it, and a constructor cannot be
+confused for the other the way a positional `bool` can. Anything that is
+*not* a kind of order goes on as a `with_*` setter. `WorkOrder` is now
+re-exported from the engine root (`pub use game::base::work_orders::
+WorkOrder;`, the shape `game::contracts::{BrokerReach, ContractRefusal}`
+already uses) because `game::base::work_orders` is `pub(crate)` and the
+type was not nameable from app-core at all.
 
 **The one correctness point.** A satisfied standing order is **skipped**
 (`index += 1`, the branch a stalled order already takes at line 1068), not
@@ -293,10 +308,15 @@ red. Record both.
 **Interfaces:**
 - Produces: `pub enum OrderPriority { High, #[default] Normal, Low }` —
   `Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize`,
-  exported from the engine root the way `WorkOrder` is so app-core and gui
-  can name it. `WorkOrder` gains `priority: OrderPriority` with
-  `#[serde(default)]`. `Game::queue_work_order(&mut self, item: ItemId,
-  qty: u32, standing: bool, priority: OrderPriority) -> Result<(), String>`.
+  exported from the engine root the way `WorkOrder` now is so app-core and
+  gui can name it. `WorkOrder` gains `priority: OrderPriority` with
+  `#[serde(default)]` and a consuming setter
+  `WorkOrder::with_priority(self, OrderPriority) -> Self`. **`queue_work_order`'s
+  signature does not change** — it already takes the whole order, so this
+  task edits no existing call site. A `with_*` setter rather than a third
+  constructor because a band is a value on an order, not a kind of order,
+  and rather than a bare `priority()` because that would collide with the
+  field it sets.
 
 **Priority is an insert position, not a second sort.** `queue_work_order`
 inserts after the last order of equal-or-higher priority rather than
@@ -419,7 +439,11 @@ Collapse `Dormant` into `Stalled`, confirm test 5 goes red, restore.
 
 **Interfaces:**
 - Produces: `WorkOrder { .., announced_stalled: bool }` with
-  `#[serde(skip)]`. Engine-internal; no app-core or gui change.
+  `#[serde(skip)]`. Engine-internal; no app-core or gui change. **`pub(crate)`,
+  not `pub`** — it is the one field on the struct that is not part of what
+  the player asked for, and sealing it makes `WorkOrder::batch`/`level` the
+  only way to build an order from outside the engine rather than merely the
+  tidiest.
 
 **Copy `DigSite::announced_stuck`**, whose implementation is in this same
 file at `can_walk_to_dig` (lines 826–860). It has two halves and the

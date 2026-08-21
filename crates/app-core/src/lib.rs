@@ -38,8 +38,8 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, ContractRefusal, ContractRow, DifficultyMode, Entity,
     EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, SlotShift, WorkOrderReport, WorkProfile,
-    condense,
+    MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption, SlotShift, WorkOrder, WorkOrderReport,
+    WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

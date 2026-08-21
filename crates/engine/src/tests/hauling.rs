@@ -117,8 +117,11 @@ fn a_clogged_machine_sends_its_worker_off_with_a_bounded_load() {
     // by it — a filled queue drops the Lathe out of `queue_needs`, which
     // makes it a bystander rather than an attached building and turns this
     // into the deliver-as-you-produce errand instead of the clogged one.
-    game.queue_work_order(ItemId::from("blank_substrate"), lathe_cap + 5, false)
-        .unwrap();
+    game.queue_work_order(WorkOrder::batch(
+        ItemId::from("blank_substrate"),
+        lathe_cap + 5,
+    ))
+    .unwrap();
 
     let cap = capacity_of(&game, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
@@ -834,7 +837,7 @@ fn a_machine_feeding_a_neighbour_keeps_its_buffer() {
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
-    game.queue_work_order(ItemId::from("blank_substrate"), 5, false)
+    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 5))
         .unwrap();
 
     for _ in 0..20 {
@@ -875,7 +878,7 @@ fn a_neighbour_nothing_has_been_ordered_from_is_not_an_attached_building() {
     fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
     // The order is for the *node's own* product, so nothing in the queue's
     // recipe tree names Blank Substrate and the Lathe has no reason to run.
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
 
     tick_until(&mut game, 60, |g| {
@@ -912,7 +915,7 @@ fn an_order_two_links_downstream_still_keeps_the_feeder_hoarding() {
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     fill_output(&mut game, node, ids::CORE_FRAGMENT, 3);
-    game.queue_work_order(ItemId::from("routine_disk"), 5, false)
+    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 5))
         .unwrap();
 
     for _ in 0..20 {

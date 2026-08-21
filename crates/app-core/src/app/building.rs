@@ -571,8 +571,13 @@ impl App {
                 };
                 let qty: u32 = self.order_quantity_input.parse().unwrap_or(1).max(1);
                 self.order_quantity_input.clear();
+                let order = if self.standing_order {
+                    WorkOrder::level(item, qty)
+                } else {
+                    WorkOrder::batch(item, qty)
+                };
                 if let Some(game) = &mut self.game {
-                    self.status_line = game.queue_work_order(item, qty, self.standing_order).err();
+                    self.status_line = game.queue_work_order(order).err();
                 }
                 self.mode = Mode::WorkOrders;
                 self.menu_selected = 0;

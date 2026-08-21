@@ -157,7 +157,7 @@ fn filing_a_work_order_is_a_base_action() {
             spawn_machine_at(game, "lathe", 3, 0);
             spawn_machine_at(game, "disk_press", 4, 0);
         },
-        |game, ()| game.queue_work_order(ItemId::from("routine_disk"), 3, false),
+        |game, ()| game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3)),
     );
 }
 
@@ -2571,7 +2571,7 @@ fn a_crew_floors_a_marked_cell_after_cutting_it() {
 fn a_dig_job_never_takes_a_body_off_a_work_order() {
     let (mut game, staff) = base_with_a_crew(3262, 1);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
     mark(&mut game, WALL);
 
@@ -2588,7 +2588,7 @@ fn a_dig_job_never_takes_a_body_off_a_work_order() {
 fn a_dig_job_is_taken_when_there_is_a_spare_body() {
     let (mut game, staff) = base_with_a_crew(3263, 2);
     let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
-    game.queue_work_order(ItemId::from(ids::CORE_FRAGMENT), 60, false)
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 60))
         .unwrap();
     mark(&mut game, WALL);
 

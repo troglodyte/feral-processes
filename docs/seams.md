@@ -2868,6 +2868,20 @@ is announced differently instead — "Standing work order filed: hold N x X" —
 because until the queue screen learns to draw a dormant tag, that log line
 is the only place the flag shows itself.
 
+**`Game::queue_work_order` takes the whole order, built by
+`WorkOrder::batch` or `WorkOrder::level`.** What an order carries is the
+axis that keeps moving — it went from two fields to three here and takes a
+priority band next — and a signature that spelled the fields out was being
+swept through some fifty call sites once per phase, arriving at
+`(item, 3, false, OrderPriority::Normal)`: two positional literals nobody
+can name. A batch and a level are *different errands* rather than one
+errand with a flag on it, which is why they are two named constructors
+rather than a `standing: bool` parameter; anything that is not a kind of
+order goes on as a `with_*` setter instead. `WorkOrder` is re-exported from
+the engine root for it, the shape `game::contracts::{BrokerReach,
+ContractRefusal}` already uses, since `game::base::work_orders` is
+`pub(crate)` and the type was not nameable from app-core at all.
+
 **`base_holding` counts machine and depot buffers only.** "Hold 20 Cache
 Grain" therefore means 20 on the shelf, and 40 in the player's pocket are
 invisible to it. That is the correct reading — the order is a statement

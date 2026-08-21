@@ -55,6 +55,33 @@ pub struct WorkOrder {
     pub standing: bool,
 }
 
+impl WorkOrder {
+    /// Make `qty` of `item` once, and be done with it.
+    pub fn batch(item: ItemId, qty: u32) -> Self {
+        Self {
+            item,
+            qty,
+            standing: false,
+        }
+    }
+
+    /// Hold `qty` of `item`, forever: reaching it puts the order to sleep
+    /// and the shelf draining wakes it again.
+    ///
+    /// A second constructor rather than a `standing: bool` parameter,
+    /// because the two are different errands rather than one errand with a
+    /// flag on it — the vocabulary the module header already uses for
+    /// them — and a caller reading `batch` or `level` cannot mean the
+    /// other by accident. What is *not* a kind of order goes on as a
+    /// `with_*` setter instead.
+    pub fn level(item: ItemId, qty: u32) -> Self {
+        Self {
+            standing: true,
+            ..Self::batch(item, qty)
+        }
+    }
+}
+
 /// **Every** deployed structure whose def puts `item` into an output
 /// buffer, empty if nothing standing makes it.
 ///
@@ -1121,20 +1148,20 @@ impl Game {
         list
     }
 
-    /// Queues an order for `qty` of `item`, or names why the line for it can
-    /// never move.
+    /// Queues `order`, or names why the line for what it asks for can never
+    /// move.
+    ///
+    /// Takes the whole order rather than its fields: what an order carries
+    /// is the axis that has been moving here, and a caller that builds one
+    /// through `WorkOrder::batch`/`level` does not have to be edited again
+    /// when it carries something else.
     ///
     /// Every refusal runs **before** anything is pushed — the same ordering
     /// argument `use_symlink` makes about `clear_stack` and
     /// `install_routine` makes about the disk. A refused order leaves the
     /// queue exactly as it was.
-    pub fn queue_work_order(
-        &mut self,
-        item: ItemId,
-        qty: u32,
-        standing: bool,
-    ) -> Result<(), String> {
-        if qty == 0 {
+    pub fn queue_work_order(&mut self, order: WorkOrder) -> Result<(), String> {
+        if order.qty == 0 {
             return Err("An order for nothing is not an order.".into());
         }
         // The same `Position` trap `find_target_in_direction` fell into: a
@@ -1145,18 +1172,15 @@ impl Game {
         // out of phase — this reads which machines are standing, and they
         // stand in base space.
         self.require_base()?;
-        if let Some(reason) = chain_break(self, &item) {
+        if let Some(reason) = chain_break(self, &order.item) {
             return Err(reason);
         }
-        let name = self.item_name(&item).to_string();
+        let name = self.item_name(&order.item).to_string();
+        let (qty, standing) = (order.qty, order.standing);
         self.world
             .resource_mut::<resources::WorkOrders>()
             .0
-            .push(WorkOrder {
-                item,
-                qty,
-                standing,
-            });
+            .push(order);
         // Said differently, because the two are different errands and the
         // flag has nowhere else to show itself until the queue screen
         // learns to say which orders are dormant.

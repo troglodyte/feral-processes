@@ -305,19 +305,35 @@ impl Game {
     /// every caller is a renderer that would only turn a `None` back into
     /// the same empty draw.
     pub fn item_effects(&self, id: &ItemId) -> Vec<String> {
-        let Some(def) = self.world.resource::<ItemDb>().get(id.as_str()) else {
-            return Vec::new();
-        };
         let mut lines = Vec::new();
-        // Copied out of the borrow: `item_grant` takes `&self` again, and a
-        // `&ItemDef` held across it would keep the `ItemDb` read alive.
-        let consume = def.consume;
-        let upgrade = def.upgrade;
-        let potency = def.taming_potency;
-
         if let Some((name, _)) = self.item_grant(id) {
             lines.push(format!("Grants: {name}"));
         }
+        lines.extend(self.item_effects_besides_grant(id));
+        lines
+    }
+
+    /// `item_effects` without its `Grants:` line — the list for a screen
+    /// that draws the granted routine in full underneath, where the one-line
+    /// row above would be the same fact twice.
+    ///
+    /// A **shorter length of the same derivation**, not a trimmed copy of
+    /// its output: `item_effects` is this plus the grant line, exactly as
+    /// `item_effects` is itself a shorter length of `item_grant`. Splitting
+    /// it here is what stops the inspect page string-matching `"Grants:"`
+    /// off a finished list, which a modded item's own effect line could
+    /// collide with.
+    pub fn item_effects_besides_grant(&self, id: &ItemId) -> Vec<String> {
+        let Some(def) = self.world.resource::<ItemDb>().get(id.as_str()) else {
+            return Vec::new();
+        };
+        // Copied out of the borrow: the branches below take `&self` again,
+        // and a `&ItemDef` held across one would keep the `ItemDb` read
+        // alive.
+        let consume = def.consume;
+        let upgrade = def.upgrade;
+        let potency = def.taming_potency;
+        let mut lines = Vec::new();
         if let Some(c) = consume {
             let mut parts = Vec::new();
             if c.heal != 0 {
@@ -365,6 +381,82 @@ impl Game {
             lines.push(format!("Decompile: base capture {:.0}%", p * 100.0));
         }
         lines
+    }
+
+    /// Everything the inspect page draws about one carried copy.
+    ///
+    /// **The one derivation behind that page**, for `Game::copy_bonus`'s
+    /// reason: four screens once rebuilt the gear scaling chain by hand and
+    /// all four dropped the affix at once. Every figure here is a call —
+    /// `copy_bonus` for the stats, `damage_range_label` for the band,
+    /// `battle::hit_chance` for the odds, `routine_detail` for the grant.
+    ///
+    /// `wearer` is who the copy is measured *for*: the player, or the
+    /// program whose slots the picker was opened from. It decides the
+    /// accuracy the page quotes and, through `routine_detail`, the level and
+    /// affinity every granted magnitude is scaled at.
+    ///
+    /// An item the current set doesn't define answers with a bare view
+    /// rather than refusing, on `item_effects`' grounds: every caller is a
+    /// renderer that would turn a `None` back into the same empty draw.
+    pub fn gear_detail(&self, copy: &GearCopy, wearer: Entity) -> GearDetailView {
+        GearDetailView {
+            name: self.copy_name(copy),
+            description: self.item_description(&copy.item).map(str::to_string),
+            worn: self.worn_detail(copy, wearer),
+            effects: self.item_effects_besides_grant(&copy.item),
+            grant: self
+                .world
+                .resource::<ItemDb>()
+                .get(copy.item.as_str())
+                .and_then(|def| def.grants.clone())
+                .and_then(|id| self.routine_detail(&id, wearer)),
+        }
+    }
+
+    /// The slot half of `gear_detail`, `None` for anything not wearable.
+    ///
+    /// The candidate is priced at the **current zone level**, because that
+    /// is what `Game::equip` locks a copy in at — the same asymmetry
+    /// `equip_swap_rows` documents, and the reason a spare copy of the
+    /// weapon you already wear is a real upgrade after a breach.
+    fn worn_detail(&self, copy: &GearCopy, wearer: Entity) -> Option<WornDetailView> {
+        let (slot, _) = self.equipment_of(&copy.item)?;
+        let level = self.world.resource::<ZoneLevel>().0;
+        let stats = self.copy_bonus(copy, level)?;
+
+        // What the slot already holds comes back off before the candidate
+        // goes on, or inspecting the piece you are wearing counts it twice.
+        let held = self
+            .worn(wearer, slot)
+            .and_then(|worn| self.worn_bonus(&worn))
+            .unwrap_or_default();
+        let gear_accuracy = self.gear_bonus(wearer).accuracy - held.accuracy + stats.accuracy;
+        let accuracy = crate::battle::accuracy_of(
+            self.combat_speed(wearer),
+            self.ability_user_level(wearer),
+            gear_accuracy,
+        );
+
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let median =
+            crate::balance_sim::median_ordinary_species(self.world.resource::<SpeciesDb>());
+        let nominal = NominalHostile {
+            zone,
+            evasion: crate::battle::evasion_of(median.base_speed, zone, 0),
+        };
+        Some(WornDetailView {
+            slot,
+            level,
+            stats,
+            damage: match stats.damage.max {
+                0 => String::new(),
+                _ => self.damage_range_label(stats.damage),
+            },
+            accuracy,
+            hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
+            nominal,
+        })
     }
 
     /// A two-or-three word gloss of what an item *does*, for menus that list

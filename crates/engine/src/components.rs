@@ -753,6 +753,20 @@ pub enum StatusKind {
     Exposed,
 }
 
+impl StatusKind {
+    /// How the condition reads on a screen. A taxonomy label rather than
+    /// authored content — the same call `Rarity::label` makes — so a
+    /// routine's inspect line and the log that announces the condition
+    /// cannot come to call it two different things.
+    pub fn label(self) -> &'static str {
+        match self {
+            StatusKind::Bleed => "Bleed",
+            StatusKind::Stun => "Stun",
+            StatusKind::Exposed => "Exposed",
+        }
+    }
+}
+
 /// One combatant's currently active status condition, and how long it has
 /// left.
 #[derive(Clone, Copy, Debug)]
@@ -798,6 +812,17 @@ pub enum BuffKind {
     /// Percentage points, the unit `Stats::mitigation` carries — not the
     /// subtractive absorption `Def` named before the combat model changed.
     Mitigation,
+}
+
+impl BuffKind {
+    /// The stat this raises, as a screen names it. `StatusKind::label`'s
+    /// twin, and the word the combat log already uses.
+    pub fn label(self) -> &'static str {
+        match self {
+            BuffKind::Atk => "Attack",
+            BuffKind::Mitigation => "Mitigation",
+        }
+    }
 }
 
 /// One active combat buff, and how long it has left.

@@ -154,6 +154,111 @@ pub struct BuybackOption {
     pub unit_cost: u32,
 }
 
+/// Everything the gear inspect page draws about one carried copy, in one
+/// call — see `Game::gear_detail`.
+///
+/// **One derivation, for `Game::copy_bonus`'s reason.** Four screens once
+/// rebuilt the scaling chain by hand and all four dropped the affix at
+/// once; this page adds a second axis of the same hazard, since a granted
+/// routine's magnitudes are scaled for their caster and a renderer reading
+/// `AbilityEffect::Damage`'s authored `power` would quote the level-1
+/// figure forever.
+pub struct GearDetailView {
+    /// Through `Game::copy_name`, so the page and the row that opened it
+    /// cannot disagree about what this is.
+    pub name: String,
+    /// The item's own authored prose, `None` for one whose file leaves it
+    /// blank — the same answer `Game::item_description` gives.
+    pub description: Option<String>,
+    /// The block that only means something for a wearable copy, `None` for
+    /// a consumable or a currency.
+    pub worn: Option<WornDetailView>,
+    /// What the item does *besides* granting a routine — consuming it,
+    /// refactoring a program with it, what it adds to a decompile. The
+    /// grant is deliberately absent: it has its own block below, and one
+    /// line saying `Grants: X` above the prose describing X is the same
+    /// fact twice. See `Game::item_effects_besides_grant`.
+    pub effects: Vec<String>,
+    pub grant: Option<RoutineDetailView>,
+}
+
+/// What a copy is worth in its slot, and what it does for the wearer's
+/// chance of landing a swing.
+pub struct WornDetailView {
+    pub slot: crate::items::EquipmentSlot,
+    /// The level this copy is priced at — the current zone for one in
+    /// cargo, since `Game::equip` locks gear in at the zone it goes on at.
+    pub level: u32,
+    pub stats: crate::items::EquipmentStats,
+    /// The damage band through `Game::damage_range_label`, empty for gear
+    /// that carries none. A string rather than a `DamageRange` so the one
+    /// formatter stays the one formatter.
+    pub damage: String,
+    /// The wearer's Accuracy **with this copy in its slot** — what the slot
+    /// already holds is taken back off first, so inspecting the piece you
+    /// are wearing reports the accuracy you actually have.
+    pub accuracy: f64,
+    /// ...and their chance to land a swing on `nominal`, through
+    /// `battle::hit_chance`. A call and never a copy: a displayed figure
+    /// that disagrees with what a swing rolls is the hand-rolled-chain bug
+    /// in a new place.
+    pub hit_chance: f64,
+    pub nominal: NominalHostile,
+}
+
+/// The opponent `WornDetailView::hit_chance` is measured against.
+///
+/// **A display heuristic, not a claim** — the honest answer to "what is my
+/// chance to hit" needs an opponent, and there isn't one until a fight
+/// starts. This is the game's own definition of a middling program
+/// (`balance_sim::median_ordinary_species`, the baseline its survivability
+/// sweeps already assume) at the current zone level with no gear, which is
+/// exactly what an ambient wild spawn fields: `Game::ability_user_level`
+/// falls back to `ZoneLevel` for a creature with no `Experience`, and
+/// `battle::evasion_of` reads a species' `base_speed`, which no zone
+/// multiplier touches.
+///
+/// Deliberately **not** filtered to the danger band that can actually spawn
+/// in this zone. That needs a biome and would fork `Game::habitat_pools`
+/// into a second copy of the band rules — the page carries the zone in
+/// `zone` and labels itself a projection instead.
+pub struct NominalHostile {
+    pub zone: u32,
+    pub evasion: f64,
+}
+
+/// One routine's mechanics, as the inspect page draws them — see
+/// `Game::routine_detail`.
+///
+/// Every field bar `name`/`description` is derived rather than authored: an
+/// ability's `.ron` prose is mod-controlled free text and says whatever its
+/// author wanted, which is the same argument `Game::item_grant` makes about
+/// reading the ability rather than the item.
+pub struct RoutineDetailView {
+    pub name: String,
+    pub description: String,
+    /// When it runs — a passive's `PassiveTrigger::phrase`, or the line for
+    /// a routine the player picks.
+    pub when: String,
+    /// What it lands on, through `AbilityTarget::phrase`.
+    pub target: String,
+    /// What it does, with every magnitude scaled for the caster through the
+    /// same `abilities::scaled_range`/`scaled_hp_power`/`scaled_stat_power`
+    /// the cast itself uses.
+    pub effect: String,
+    /// Battle rounds before it can run again. 0 means unthrottled.
+    pub cooldown: u32,
+    /// What running it costs its caster, through
+    /// `abilities::routine_power_cost` — so the page, the refusal and the
+    /// charge cannot quote three different numbers.
+    pub power_cost: f32,
+    /// Whether it resolves through `battle::resolve_attack` and so can
+    /// miss. The two damage effects do; nothing else in the vocabulary
+    /// rolls to hit, which is what makes `hit_chance` worth printing beside
+    /// a weapon at all.
+    pub rolls_to_hit: bool,
+}
+
 /// How many of the player's routine holders one purchase at a Stack market
 /// writes to — see `Game::market_offers`.
 ///

@@ -17,6 +17,152 @@ impl Game {
             .unwrap_or_else(|| id.to_string())
     }
 
+    /// One routine's mechanics for the inspect page — what makes it run,
+    /// what it lands on, what it does, and what it costs.
+    ///
+    /// **`caster` is who would run it, and every magnitude is scaled for
+    /// them.** An ability's authored `power` is its level-1 figure, so a
+    /// screen printing it directly quotes a number the cast never uses.
+    /// Both scaling axes are the cast's own — `abilities::scaled_range` and
+    /// friends for level, `Game::ability_affinity` for the caster's
+    /// category multiplier — which is what keeps this page from becoming a
+    /// third copy of the damage chain.
+    ///
+    /// For gear, the caster is the wearer: a granted passive fires as
+    /// whoever is wearing it.
+    ///
+    /// `None` for an id the current ability set doesn't define, which a save
+    /// naming a since-removed mod routine produces. Every caller is a
+    /// renderer that would turn a refusal back into the same empty draw.
+    pub fn routine_detail(
+        &self,
+        id: &crate::abilities::AbilityId,
+        caster: Entity,
+    ) -> Option<RoutineDetailView> {
+        let def = self.world.resource::<AbilityDb>().get(id)?.clone();
+        let level = self.ability_user_level(caster);
+        let affinity = self.ability_affinity(caster, &def.effect);
+        Some(RoutineDetailView {
+            name: def.name.clone(),
+            description: def.description.clone(),
+            when: match def.triggers {
+                Some(trigger) => trigger.phrase(),
+                // Not "chosen as a Special": the two field-only effects are
+                // never offered in a battle at all, and a page telling a
+                // player to look for Phase on the Special menu sends them
+                // somewhere it can never appear.
+                None if def.effect.field_only() => {
+                    "Cast outside battle from the routine list".to_string()
+                }
+                None => "Chosen as a Special in battle".to_string(),
+            },
+            target: def.target.phrase().to_string(),
+            effect: self.routine_effect_label(&def, level, affinity),
+            cooldown: def.cooldown,
+            power_cost: crate::abilities::routine_power_cost(&def),
+            rolls_to_hit: matches!(
+                def.effect,
+                AbilityEffect::Damage { .. } | AbilityEffect::Drain { .. }
+            ),
+        })
+    }
+
+    /// What a routine does, in one line, with its magnitudes already scaled
+    /// for a caster at `level` with `affinity`.
+    ///
+    /// **Exhaustive on `AbilityEffect`**, the rule `render/stack.rs`'s
+    /// `cell_mark` records: as a `_ =>` arm an eleventh effect would ship
+    /// with the page silently saying nothing about it.
+    fn routine_effect_label(&self, def: &AbilityDef, level: u32, affinity: f32) -> String {
+        use crate::abilities::{scaled_hp_power, scaled_range, scaled_stat_power};
+        match &def.effect {
+            AbilityEffect::Damage {
+                power,
+                spread,
+                status,
+            } => {
+                let band = scaled_range(
+                    crate::battle::DamageRange::centred(*power, *spread),
+                    level,
+                    affinity,
+                );
+                let mut line = format!("Damage {}", self.damage_range_label(band));
+                // The rider's chance is a property of the move and is not
+                // scaled by anything, so it prints as authored.
+                if let Some(status) = status {
+                    line.push_str(&format!(
+                        ", {:.0}% to inflict {}",
+                        status.chance * 100.0,
+                        status.kind.label()
+                    ));
+                }
+                line
+            }
+            AbilityEffect::Heal { power } => {
+                format!(
+                    "Restores {} Integrity",
+                    scaled_hp_power(*power, level, affinity)
+                )
+            }
+            AbilityEffect::Buff {
+                kind,
+                power,
+                duration,
+            } => format!(
+                "{} {:+} for {duration} rounds",
+                kind.label(),
+                scaled_stat_power(*power, level, affinity)
+            ),
+            AbilityEffect::Debuff {
+                kind,
+                power,
+                duration,
+            } => format!(
+                "Inflicts {} ({}) for {duration} rounds",
+                kind.label(),
+                scaled_hp_power(*power, level, affinity)
+            ),
+            AbilityEffect::Drain {
+                power,
+                spread,
+                heal_fraction,
+            } => {
+                let band = scaled_range(
+                    crate::battle::DamageRange::centred(*power, *spread),
+                    level,
+                    affinity,
+                );
+                format!(
+                    "Damage {}, healing the caster {:.0}% of it",
+                    self.damage_range_label(band),
+                    heal_fraction * 100.0
+                )
+            }
+            AbilityEffect::Cleanse => "Clears the recipient's status condition".to_string(),
+            AbilityEffect::Decompile => "Attempts a capture, spending a catalyst".to_string(),
+            AbilityEffect::FieldBuff {
+                kind,
+                power,
+                duration,
+                interval,
+            } => {
+                let magnitude =
+                    kind.magnitude_label(scaled_stat_power(*power, level, affinity), *interval);
+                // A `0` here is an until-rest buff whose count nothing
+                // reads, never a buff that expires the turn it is cast —
+                // see `AbilityEffect::FieldBuff::duration`.
+                match kind.runs_until_rest() {
+                    true => format!("{magnitude} until the party rests"),
+                    false => format!("{magnitude} for {duration} turns"),
+                }
+            }
+            AbilityEffect::Phase => "Steps the party through one solid cell".to_string(),
+            AbilityEffect::Jump => {
+                "Moves the party to a cell you point at, fatally if it is solid".to_string()
+            }
+        }
+    }
+
     /// `entity`'s slots in menu order, filled and empty alike.
     pub fn routine_view(&self, entity: Entity) -> Vec<RoutineSlotView> {
         let db = self.world.resource::<AbilityDb>();

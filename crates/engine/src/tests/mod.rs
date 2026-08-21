@@ -30,6 +30,7 @@ mod environment;
 mod equipment;
 mod exclusive_routines;
 mod field;
+mod gear_detail;
 mod gear_passives;
 mod hauling;
 mod inspection;

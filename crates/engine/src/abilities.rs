@@ -170,6 +170,25 @@ pub enum AbilityTarget {
     AllEnemies,
 }
 
+impl AbilityTarget {
+    /// What this lands on, as the inspect page says it — a taxonomy label
+    /// rather than authored content, so it lives here beside the variants
+    /// and not in a `.ron`. Same call `AffinityKind::label` makes.
+    ///
+    /// **Exhaustive on purpose.** As a `_ =>` arm a sixth targeting mode
+    /// would ship reading as one of the five that already exist, which is
+    /// the trap `render/stack.rs::cell_mark` records.
+    pub fn phrase(self) -> &'static str {
+        match self {
+            AbilityTarget::OneAlly => "one party member",
+            AbilityTarget::WholeParty => "the whole party",
+            AbilityTarget::OneEnemyGroupFront => "the front of one hostile group",
+            AbilityTarget::WholeEnemyGroup => "one whole hostile group",
+            AbilityTarget::AllEnemies => "every hostile",
+        }
+    }
+}
+
 /// The category an ability's magnitude belongs to, for affinity purposes —
 /// one per `AbilityEffect` variant that *has* a magnitude. A caster's
 /// affinity for a category multiplies every magnitude in it (see
@@ -511,6 +530,29 @@ pub enum PassiveTrigger {
     /// holder at all — nothing has to have *happened* — which is what makes
     /// it the one trigger a piece of gear can carry and be worth wearing.
     RoundStart,
+}
+
+impl PassiveTrigger {
+    /// What makes this fire, as the inspect page says it. `AllyWounded`
+    /// quotes `tuning::WOUNDED_INTEGRITY_FRACTION` rather than spelling the
+    /// threshold out in prose, so retuning the crisis point cannot leave the
+    /// page describing the old one — the reason `item_grant` reads the
+    /// ability rather than the item's own text.
+    ///
+    /// Exhaustive for `AbilityTarget::phrase`'s reason.
+    pub fn phrase(self) -> String {
+        match self {
+            PassiveTrigger::AllyDropped => "Fires when a party member is dropped".to_string(),
+            PassiveTrigger::AllyWounded => format!(
+                "Fires when a party member is driven below {:.0}% Integrity",
+                crate::tuning::WOUNDED_INTEGRITY_FRACTION * 100.0
+            ),
+            PassiveTrigger::Afflicted => {
+                "Fires when a status condition lands on the holder".to_string()
+            }
+            PassiveTrigger::RoundStart => "Fires at the start of every round".to_string(),
+        }
+    }
 }
 
 /// What running `def` actually costs its caster: the authored

@@ -167,9 +167,8 @@ fn the_counter_lands_above_every_id_seen() {
     let mut game = three_owned_programs(&dir);
     game.save(&path).unwrap();
     let mut data = crate::save::load_from_file(&path).unwrap();
-    for c in data.creatures.iter_mut().filter(|c| c.tamed) {
+    if let Some(c) = data.creatures.iter_mut().find(|c| c.tamed) {
         c.program_id = 500;
-        break;
     }
     data.next_program_id = 1;
     crate::save::save_to_file(&path, &data).unwrap();

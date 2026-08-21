@@ -1876,6 +1876,64 @@ fn no_two_shipped_stock_items_share_a_tag() {
     );
 }
 
+/// Every memory kind the engine actually writes, against the
+/// `MemorySubjectKind` the trigger that writes it hands in.
+///
+/// The table is spelled out here rather than derived, because there is
+/// nothing to derive it from: the catalogue is data and the triggers are
+/// Rust, which is the seam `perks::Perk` sits on, and `MemoryDef` carries no
+/// `trigger` field on purpose. Keeping the pairing in one census is what
+/// stops a shipped def drifting into content nothing can ever write.
+const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
+    use crate::memories::MemorySubjectKind as K;
+    &[
+        // `Game::note_maul`, off `resolve_and_apply_attack`.
+        ("mauled_by", K::Species),
+        // `Game::form_victory_memories`, off `end_battle`.
+        ("bonded_in_battle", K::Program),
+        ("hard_won", K::Nothing),
+        // `Game::note_strandings`, off `tick_inner`.
+        ("stranded_at", K::BaseTile),
+    ]
+};
+
+/// A def whose declared `subject` no trigger can satisfy is dead content:
+/// every `remember` of it is refused as `WrongSubject`, and nothing else in
+/// the build says so. A def with no trigger at all is worse — it can never be
+/// written, and reads as a memory the player simply never earns.
+///
+/// `MemorySubjectKind::Structure` and `::Activity` ship as variants with no
+/// def and no trigger, deliberately: they are the two subjects future content
+/// most obviously wants, and a variant with no writer costs nothing while an
+/// enum that has to grow costs a migration. So this census walks the *defs*
+/// and not the variants.
+#[test]
+fn every_shipped_memory_def_is_reachable_from_a_trigger() {
+    use crate::memories::MemoryDb;
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    assert!(
+        db.all().count() > 0,
+        "the census must walk a real catalogue"
+    );
+
+    for def in db.all() {
+        let id = def.id.as_str();
+        let (_, writes) = MEMORY_TRIGGERS
+            .iter()
+            .find(|(name, _)| *name == id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{id} ships in assets/memories but nothing in the engine                      writes it — add the trigger, or add it to MEMORY_TRIGGERS                      if this census has fallen behind"
+                )
+            });
+        assert_eq!(
+            def.subject, *writes,
+            "{id} declares a subject its trigger never hands in, so every              write of it is refused"
+        );
+    }
+}
+
 /// The memory-catalogue census, over the **real** `assets/memories/` rather
 /// than a fixture. `MemoryDb::load_dir` refuses nothing beyond a file that
 /// will not parse — a mod's def is never turned away for being nonsense — so

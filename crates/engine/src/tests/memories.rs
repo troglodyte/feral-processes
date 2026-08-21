@@ -1650,3 +1650,44 @@ fn the_stranding_marker_does_not_travel_through_a_save() {
     let who = by_id(&mut loaded, id);
     assert!(loaded.world.get::<Stranded>(who).is_none());
 }
+
+/// Deleting `assets/memories/` is a supported way to play, and phase 2
+/// asserted that of `Game::remember`. This asserts it of the **triggers**,
+/// which is where it can now lapse: a hook that minted a store, logged a
+/// line, or wrote an entry before resolving the def would break the property
+/// while `remember` itself stayed innocent.
+///
+/// All three hooks in one test on purpose — the property is about the feature
+/// being *additive*, and one hook proving it says nothing about the other two.
+#[test]
+fn with_no_catalogue_loaded_every_trigger_is_inert() {
+    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (worker, _) = a_posted_worker(&mut game);
+    let comrade = adopt(&mut game, "glitch", 5);
+    join_party(&mut game, worker);
+    join_party(&mut game, comrade);
+    game.world
+        .insert_resource(crate::memories::MemoryDb::default());
+
+    // A mauling.
+    let attacker = hostile_of(&mut game, "zero_day", 0);
+    let max_hp = game.world.get::<Stats>(worker).unwrap().max_hp;
+    one_landed_swing(&mut game, attacker, worker, max_hp);
+    // A stranding.
+    cut_off(&mut game, worker, 400, 400);
+    game.tick();
+    // A win against the odds.
+    let player = game.player_entity();
+    let hostile = hostile_of(&mut game, "glitch", 0);
+    insert_battle(&mut game, player, vec![hostile]);
+    game.world.resource_mut::<BattleState>().outmatched = true;
+    win_the_fight(&mut game);
+
+    assert!(
+        memories_of(&game, worker).is_empty(),
+        "{:?}",
+        memories_of(&game, worker)
+    );
+    assert!(memories_of(&game, comrade).is_empty());
+    assert_eq!(game.morale(worker), 0.0);
+}

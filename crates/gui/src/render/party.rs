@@ -74,8 +74,8 @@ pub(super) fn draw_companion_equip(
     ];
     for (i, slot) in EquipmentSlot::ALL.into_iter().enumerate() {
         rows.push(equipped_row(
-            i + 1,
-            slot.label(),
+            i,
+            slot,
             game.worn(program, slot),
             i == selected,
             game,

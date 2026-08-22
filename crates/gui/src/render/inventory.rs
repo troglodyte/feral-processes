@@ -65,16 +65,42 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
         text_row(""),
         text_row("Equipped (number to swap or unequip):"),
         // A wielded program and a worn weapon are mutually exclusive, so the
-        // weapon line renders one or the other and never both.
+        // weapon line renders one or the other and never both. It takes the
+        // column through `tagged_text` rather than `with_tag` because it is
+        // not a row you can pick and there is no copy to have a quality: the
+        // column is here so the block reads straight down, not to say
+        // anything about the program standing in the slot.
         match &status.wielded {
-            Some(w) => text_row(format!(
-                "[1] Weapon: {} Lv{} (+{} ATK, +{} DEF)",
-                w.name, w.level, w.bonus.0, w.bonus.1
+            Some(w) => text_row(tagged_text(
+                &row_lead(menu_shortcut(0), None),
+                EquipmentSlot::Weapon.short_label(),
+                &format!(
+                    "{} Lv{} (+{} ATK, +{} DEF)",
+                    w.name, w.level, w.bonus.0, w.bonus.1
+                ),
             )),
-            None => equipped_row(1, "Weapon", status.weapon.clone(), selected == 0, game),
+            None => equipped_row(
+                0,
+                EquipmentSlot::Weapon,
+                status.weapon.clone(),
+                selected == 0,
+                game,
+            ),
         },
-        equipped_row(2, "Armor", status.armor.clone(), selected == 1, game),
-        equipped_row(3, "Module", status.module.clone(), selected == 2, game),
+        equipped_row(
+            1,
+            EquipmentSlot::Armor,
+            status.armor.clone(),
+            selected == 1,
+            game,
+        ),
+        equipped_row(
+            2,
+            EquipmentSlot::Module,
+            status.module.clone(),
+            selected == 2,
+            game,
+        ),
         text_row(""),
         text_row(format!(
             "Inventory - Buffer {} (row key to equip/fuse/erase):",
@@ -175,41 +201,68 @@ fn inventory_row_lines(
     (lead, tag, lines)
 }
 
+/// One slot of an equipment panel: its key, its category column, and what is
+/// worn in it.
+///
+/// **The column is `with_tag`'s, so the worn copy's quality reads here
+/// exactly as it does on the cargo rows below.** That emphasis is the only
+/// thing on either screen saying how well a copy was compiled, and the three
+/// rows naming what the player has actually put on were the ones without it.
+///
+/// It replaces the spelled-out slot rather than sitting beside it — `WEP` and
+/// `Weapon:` say the same thing, and printing both puts one column on a row
+/// twice. Which is also why this takes the `EquipmentSlot` rather than a
+/// label: the word and the token are two forms of one value, and a caller
+/// passing its own string could hand over a pair that disagree.
 pub(super) fn equipped_row(
-    num: usize,
-    label: &str,
+    index: usize,
+    slot: EquipmentSlot,
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     selected: bool,
     game: &Game,
 ) -> Row {
     // The tier the worn copy was equipped at, not the ledger's current one —
-    // the same number `equipped_summary` prints beside it, so the colour and
-    // the text on this row cannot disagree.
+    // the same number `worn_summary` prints beside it, so the colour and the
+    // text on this row cannot disagree.
     let fusions = equipped.as_ref().map(|e| e.copy.tier).unwrap_or(0);
     let rarity = equipped.as_ref().map(|e| e.copy.rarity).unwrap_or_default();
-    tier_row(
-        format!("[{num}] {}", equipped_summary(label, equipped, game)),
-        selected,
-        fusions,
-        rarity,
+    let quality = equipped.as_ref().map(|e| e.copy.quality);
+    with_tag(
+        tier_row(worn_summary(equipped, game), selected, fusions, rarity),
+        row_lead(menu_shortcut(index), None),
+        slot.short_label(),
+        quality,
     )
 }
 
-/// `Weapon: Arc Lance Lv3 T1 (+16 ATK)`, or `Weapon: (empty)`.
+/// `Weapon: Arc Lance Lv3 T1 (+16 ATK)`, or `Weapon: (empty)` — the labelled
+/// form, for the swap picker's heading, where the label is `Wearing` and so
+/// is not a slot's name at all.
+///
+/// A row in an equipment panel takes `worn_summary` instead and puts the slot
+/// in its category column; see `equipped_row`.
+fn equipped_summary(
+    label: &str,
+    equipped: Option<feral_processes_engine::components::EquippedItem>,
+    game: &Game,
+) -> String {
+    format!("{label}: {}", worn_summary(equipped, game))
+}
+
+/// `Arc Lance Lv3 T1 (+16 ATK)`, or `(empty)`.
 ///
 /// The figure comes from `Game::copy_bonus` and is formatted by
 /// `stat_summary`, so the equipped panel, the inventory list's tag and the
 /// swap picker's columns cannot disagree about what an item grants. Sharing
 /// only the formatter is what let them disagree before — see `copy_bonus`.
-fn equipped_summary(
-    label: &str,
+fn worn_summary(
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     game: &Game,
 ) -> String {
     let Some((equipped, mods)) =
         equipped.and_then(|e| game.copy_bonus(&e.copy, e.level).map(|mods| (e, mods)))
     else {
-        return format!("{label}: (empty)");
+        return "(empty)".to_string();
     };
     let mut notes = Vec::new();
     if equipped.level > 1 {
@@ -224,7 +277,7 @@ fn equipped_summary(
         format!(" {}", notes.join(" "))
     };
     format!(
-        "{label}: {}{note} ({})",
+        "{}{note} ({})",
         game.copy_name(&equipped.copy),
         stat_summary(game, mods)
     )
@@ -467,10 +520,12 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{equipped_summary, gear_inspect_rows, inventory_row_lines};
-    use crate::paint::with_painter;
-    use crate::render::Row;
-    use crate::render::popup::{PopupSize, popup_max_rows, tagged_text, wrapped_row_lines};
+    use super::{equipped_row, equipped_summary, gear_inspect_rows, inventory_row_lines};
+    use crate::paint::{painted_runs_in, with_painter};
+    use crate::render::popup::{
+        PopupSize, draw_row, item_text, popup_max_rows, tagged_text, wrapped_row_lines,
+    };
+    use crate::render::{Row, quality_tag_style};
     use crate::text::ui_metrics;
     use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
     use feral_processes_engine::components::Rarity;
@@ -514,6 +569,60 @@ mod tests {
             "the panel disagrees with what the player is wearing ({} ATK): {summary}",
             real.atk
         );
+    }
+
+    /// **The equipped panel carries the same category column the cargo rows
+    /// do**, and with it the only thing on either screen saying how well a
+    /// copy was compiled.
+    ///
+    /// The column's emphasis is `quality_tag_style`'s — dim under spec, bold
+    /// above it, gold at the top — so the three rows naming what the player
+    /// is *actually wearing* were the only gear rows in the game that could
+    /// not answer it. It replaces the spelled-out slot rather than sitting
+    /// beside it: `WEP` and `Weapon:` say the same thing, and printing both
+    /// puts one column on a row twice.
+    ///
+    /// Drawn through the real painter for
+    /// `a_drawn_tag_carries_its_band_and_the_row_keeps_its_own_colour`'s
+    /// reason — the three runs are only three styles once egui has laid the
+    /// job out, and `painted_text` would flatten them back into one.
+    #[test]
+    fn an_equipped_row_draws_its_slot_in_the_worn_copys_quality() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game = Game::new(77, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let path = std::env::temp_dir().join("feral_processes_gui_equipped_column.sav");
+        game.save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.player.weapon = Some("kinetic_edge".into());
+        data.player.weapon_quality = QUALITY_MAX;
+        save::save_to_file(&path, &data).unwrap();
+        let game = Game::load(&path, assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let worn = game
+            .worn(game.player_entity(), EquipmentSlot::Weapon)
+            .expect("wearing it");
+        let m = ui_metrics(1080.0);
+        let row = equipped_row(0, EquipmentSlot::Weapon, Some(worn), false, &game);
+        let (_, shapes) = with_painter(|p| {
+            draw_row(&row, 0.0, 800.0, 40.0, 400.0, p, &m);
+        });
+        let (color, bold) = quality_tag_style(Some(QUALITY_MAX));
+        assert_eq!(
+            painted_runs_in(&shapes, color, bold),
+            vec!["WEP"],
+            "the worn copy's band has to reach the column, or the panel says \
+             nothing about how well the thing was compiled"
+        );
+
+        // An empty slot still names the slot it is empty of, and takes its
+        // key and column from the same two definitions the worn row does.
+        let empty = equipped_row(1, EquipmentSlot::Armor, None, false, &game);
+        let Row::Item { text, tag, .. } = &empty else {
+            panic!("an equipment slot is a row you can pick")
+        };
+        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM  (empty)");
     }
 
     /// **The tallest page any shipped item can produce fits its popup.**

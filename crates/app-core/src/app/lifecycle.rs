@@ -71,6 +71,8 @@ impl App {
             pending_memory_program: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
+            collect_rows: Vec::new(),
+            collect_basket: Vec::new(),
             pending_craft: None,
             craft_quantity_input: String::new(),
             careful_craft: false,

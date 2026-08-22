@@ -1056,3 +1056,44 @@ pub(crate) fn walk_far_from_the_base(app: &mut App) {
     app.game = Game::load(&path, &test_assets_dir()).ok();
     let _ = std::fs::remove_file(&path);
 }
+
+/// A party standing in base space with two stocked machines either side of
+/// them — the fixture the collect picker's tests are all built on.
+///
+/// The machines go in through a save edit rather than through play: the
+/// engine hands app-core no way to write a `Stock`, which is the seam
+/// working rather than a limitation of the test. `mining_node` on both sides
+/// so the pair pools into one row, and the western one is the *lower* tile,
+/// so a take that spans them has an order to be right about.
+pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("collect", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let output: Vec<(feral_processes_engine::items::ItemId, u32)> = stock
+        .iter()
+        .map(|(id, n)| (feral_processes_engine::items::ItemId::from(*id), *n))
+        .collect();
+    for x in [-1, 1] {
+        data.structures.push(save::StructureSave {
+            kind: "mining_node".to_string(),
+            position: (x, 0),
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: output.clone(),
+            standing_work: false,
+            standing_guard: false,
+        });
+    }
+    data.locale = Locale::Base { x: 0, y: 0 };
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    app.mode = Mode::Playing;
+    app
+}

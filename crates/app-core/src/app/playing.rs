@@ -226,6 +226,8 @@ impl App {
         // `acted` false and `after_world_action` returns before it can clear
         // the line that explains why.
         let mut refusal = None;
+        // What the collect picker will open on, if `c` found anything.
+        let mut opening: Option<Vec<(ItemId, u32)>> = None;
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -245,8 +247,21 @@ impl App {
                 // base's buffers are something you walk up to, and the
                 // engine refuses it underground anyway.
                 GameKey::Char('c') => {
-                    game.collect_adjacent();
-                    true
+                    let offer = game.collectable_adjacent();
+                    if offer.is_empty() {
+                        // Straight back through the engine, which speaks
+                        // its own refusal and spends no turn. A
+                        // `status_line` copy of that sentence here would be
+                        // a second home for it, and a copy of an engine
+                        // message reads as the key doing nothing.
+                        game.collect_adjacent();
+                        true
+                    } else {
+                        // Handed out past the `self.game` borrow, the way
+                        // `refusal` is. Opening a screen is not an action.
+                        opening = Some(offer);
+                        false
+                    }
                 }
                 GameKey::Char('r') => {
                     game.rest();
@@ -307,6 +322,9 @@ impl App {
         };
         if refusal.is_some() {
             self.status_line = refusal;
+        }
+        if let Some(offer) = opening {
+            self.open_collect(offer);
         }
         self.after_world_action(acted, is_move_key);
     }

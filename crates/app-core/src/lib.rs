@@ -794,6 +794,15 @@ pub enum Mode {
     /// Load-or-delete choice for the save picked from `Mode::LoadGame`.
     SaveAction,
     Playing,
+    /// The collect picker, opened with `c` beside a stocked machine. One
+    /// row per item on offer (`App::collect_rows`) and a quantity per row
+    /// (`App::collect_basket`); Enter takes exactly that basket.
+    ///
+    /// **This screen cannot use `App::selected_index`.** There a digit picks
+    /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
+    /// through `App::scroll`, so it still drives `menu_selected` and the
+    /// popup's window still follows it — the page scrolls for free.
+    Collect,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -1188,6 +1197,9 @@ impl Mode {
             | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
+            // Opened from the map with `c`, so it never layers over a fight
+            // either — and the engine refuses a collect mid-battle anyway.
+            | Mode::Collect
             | Mode::Craft
             | Mode::CraftQuantity
             | Mode::WorkOrders
@@ -1523,6 +1535,19 @@ pub struct App {
     pub pending_erase: Option<GearCopy>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
+    /// What the adjacent machines are offering, snapshotted when
+    /// `Mode::Collect` opens.
+    ///
+    /// Snapshotted rather than re-derived per keypress, which is the
+    /// opposite of what the trade screen does. The basket below is pending
+    /// state *indexed into this list*, so re-deriving opens a gap where the
+    /// two lengths disagree. Nothing ticks while a menu is open, so the
+    /// snapshot cannot go stale — the commit is the first tick.
+    pub collect_rows: Vec<(ItemId, u32)>,
+    /// How much of each `collect_rows` entry the player has asked for.
+    /// Same length as that list, all zeroes on open. Written with it, so the
+    /// two cannot drift apart.
+    pub collect_basket: Vec<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,

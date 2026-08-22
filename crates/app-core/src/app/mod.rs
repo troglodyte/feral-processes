@@ -6,6 +6,7 @@
 pub(crate) mod arena;
 mod battle;
 pub(crate) mod building;
+mod collect;
 pub(crate) mod contracts;
 mod crafting;
 pub(crate) mod dev_console;

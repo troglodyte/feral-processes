@@ -127,6 +127,7 @@ impl App {
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::DifficultyPick => self.handle_difficulty_key(key),
             Mode::Playing => self.handle_playing_key(key),
+            Mode::Collect => self.handle_collect_key(key),
             Mode::BaseMenu => self.handle_base_menu_key(key),
             Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),

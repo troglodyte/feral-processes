@@ -8,6 +8,74 @@ use crate::*;
 pub(crate) const ORTHOGONAL: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
 
 impl Game {
+    /// The structures a collect can reach, in `(x, y)` order.
+    ///
+    /// The sort is `assembler_system`'s reason in a second place: bevy's
+    /// query iteration order is not stable, and a *partial* take across two
+    /// neighbours holding the same item has to drain them in the same order
+    /// every run, or an identical save answers the same keypress differently
+    /// between two runs. Taking everything could not see this, which is why
+    /// the code went so long without one.
+    ///
+    /// `pub(crate)` solely so `tests/collect.rs` can pin the order directly;
+    /// nothing outside this module calls it.
+    pub(crate) fn adjacent_stock(&self) -> Vec<Entity> {
+        // The party's base cell rather than their `Position`: every machine
+        // with a `Stock` stands in base space, and `Position` is pinned to
+        // the anchor tile on the zone surface while the party is in here.
+        let Some((px, py)) = self.base_pos() else {
+            return Vec::new();
+        };
+        // `iter_entities` rather than a query, for `stock::output_buffers`'
+        // reason: `World::query_filtered` needs `&mut World` to build, and
+        // the offer has to be readable from a screen.
+        let mut found: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let p = e.get::<Position>()?;
+                e.contains::<Stock>().then_some((p.x, p.y, e.id()))
+            })
+            .filter(|(x, y, _)| {
+                ORTHOGONAL
+                    .iter()
+                    .any(|(dx, dy)| (*x, *y) == (px + dx, py + dy))
+            })
+            .collect();
+        found.sort();
+        found.into_iter().map(|(_, _, e)| e).collect()
+    }
+
+    /// What the adjacent structures are offering, pooled across all of them
+    /// and in `ItemId` order — the order `Stock`'s own `BTreeMap` yields and
+    /// the order the collect log already prints in, so the screen and the
+    /// log line cannot disagree about how a haul is ordered.
+    ///
+    /// `&self`: no tick, no log, no RNG. It holds the same guards
+    /// `collect_adjacent` does and answers with an empty offer for each. It
+    /// is a claim about what is beside the party, so like `base_stock` it
+    /// needs no `require_surface` of its own — `require_base` is the
+    /// stronger statement.
+    pub fn collectable_adjacent(&self) -> Vec<(ItemId, u32)> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Vec::new();
+        }
+        if self.require_base().is_err() {
+            return Vec::new();
+        }
+        let mut offer: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
+        for structure in self.adjacent_stock() {
+            let stock = self.world.get::<Stock>(structure).unwrap();
+            for (item, qty) in stock.output.iter() {
+                if *qty == 0 {
+                    continue;
+                }
+                *offer.entry(item.clone()).or_default() += qty;
+            }
+        }
+        offer.into_iter().collect()
+    }
+
     /// Empties the `output` of every structure orthogonally adjacent to the
     /// player into their cargo, and reports what was taken.
     ///

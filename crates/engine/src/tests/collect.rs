@@ -160,3 +160,146 @@ fn a_successful_collect_costs_a_turn() {
     assert!(!game.collect_adjacent().is_empty());
     assert_eq!(game.world.resource::<GameClock>().tick, before + 1);
 }
+
+/// What the base is offering is pooled across the neighbours, not reported
+/// per structure: the screen asks "how much Core Fragment can I have", and
+/// two nodes holding some each is one answer, not two rows the player has to
+/// add up.
+#[test]
+fn what_is_on_offer_is_pooled_across_neighbours_in_item_order() {
+    let mut game = Game::new(946, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x - 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 2)],
+    );
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 3), (ids::POWER_CELL, 1)],
+    );
+
+    let mut expected = vec![
+        (ItemId::from(ids::CORE_FRAGMENT), 5),
+        (ItemId::from(ids::POWER_CELL), 1),
+    ];
+    expected.sort();
+    assert_eq!(
+        game.collectable_adjacent(),
+        expected,
+        "one row per item, summed, in ItemId order"
+    );
+}
+
+/// The neighbour scan is sorted by tile for `assembler_system`'s reason:
+/// bevy's query iteration order is not stable, and a *partial* take across
+/// two neighbours holding the same item has to drain them in the same order
+/// every run. Spawned in the reverse of their tile order, so an unsorted
+/// scan genuinely flips.
+#[test]
+fn the_neighbour_scan_is_sorted_by_tile() {
+    let mut game = Game::new(947, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+
+    let east = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 1)],
+    );
+    let west = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x - 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 1)],
+    );
+    let south = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x,
+        p.y + 1,
+        &[(ids::CORE_FRAGMENT, 1)],
+    );
+    let north = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x,
+        p.y - 1,
+        &[(ids::CORE_FRAGMENT, 1)],
+    );
+
+    assert_eq!(
+        game.adjacent_stock(),
+        vec![west, north, south, east],
+        "(x, y) order, whatever order they were spawned in"
+    );
+}
+
+/// An empty buffer is not a row, and a diagonal neighbour is not in reach —
+/// the offer must name exactly what a commit could take.
+#[test]
+fn an_empty_buffer_and_a_diagonal_neighbour_offer_nothing() {
+    let mut game = Game::new(948, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+
+    stocked_structure(&mut game, "mining_node", p.x + 1, p.y, &[]);
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y + 1,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+
+    assert!(game.collectable_adjacent().is_empty());
+}
+
+/// All four guards in one test: the battle guard alone passes against a bare
+/// early return that swallows the others.
+///
+/// `require_base` and `base_pos` are the same locale condition and so cannot
+/// be separated by state — the surface case exercises both. What tells them
+/// apart is the mutation: removing either leaves the other refusing.
+#[test]
+fn nothing_is_on_offer_while_the_party_cannot_collect() {
+    let mut game = Game::new(949, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 4)],
+    );
+    assert!(
+        !game.collectable_adjacent().is_empty(),
+        "the fixture is offering something to begin with"
+    );
+
+    game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
+    assert!(game.collectable_adjacent().is_empty(), "game over");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let player = game.player_entity();
+    insert_battle(&mut game, player, Vec::new());
+    assert!(game.collectable_adjacent().is_empty(), "in a battle");
+    game.world.remove_resource::<BattleState>();
+
+    *game.world.resource_mut::<Locale>() = Locale::Surface;
+    assert!(
+        game.collectable_adjacent().is_empty(),
+        "out of base space entirely"
+    );
+}

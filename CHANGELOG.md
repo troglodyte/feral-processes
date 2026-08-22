@@ -61,6 +61,20 @@ then committing: one reach rule, one taking path, and one place the
 `hauling::take_from` alone, where the old wholesale path removed the entry
 by hand — correct only because it always took the entry whole.
 
+### The dig crew pays for its tile out of the base's own stores
+
+A crew that had cut a marked cell open floored it only if the *player* was
+personally carrying a Blank Substrate — 12 on the base's shelves and 0 in
+the pack left two marks standing over two finished cuts, and not a word
+about why. The crew now draws from the base's output buffers, in tile
+order and over the same set the stock strip counts, with the player's pack
+as the fallback. `Game::lay_tile` is untouched: a player verb still pays
+the way every player verb does.
+
+The silence was half of it. A crew with nothing to lay now says so once,
+beside the once-only complaint a boxed-in crew already made. Neither latch
+is saved, so a reload says both again.
+
 ## 0.13.8
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

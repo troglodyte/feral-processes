@@ -189,7 +189,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // structure's cost changes with depth.
     // A zone-portal structure is consumed when the player steps onto it: it
     // does not travel to the next zone the way the rest of the base does
-    // (see `enables_rest`/`Game::enter_next_zone`), so every breach costs a
+    // (see `Game::enter_next_zone`), so every breach costs a
     // fresh build.
     // Breaching also clears the player's Currency and CraftCurrency items
     // (the two economy roles in assets/items/*.ron): each zone funds its own
@@ -302,27 +302,11 @@ is skipped with a warning logged in-game rather than crashing startup.
     // player ever meets. Every other shipped structure leaves this at 0.
     max_deployed: 3,
 
-    // Optional; can be left out entirely (defaults to no rest capability).
-    // If set, `Game::rest` (recharge/overnight rest) is only allowed while
-    // the player stands within `radius` tiles of this structure — resting
-    // has no other way to happen. `cost` (optional inside the block,
-    // defaults to an empty list) is spent per rest, checked and taken after
-    // every other gate passes; an empty list means a free rest, same as
-    // before this field existed. The price sits with the structure that
-    // grants rest rather than as a single global rate, so a modded
-    // alternate rest structure can charge differently, or nothing. This is
-    // how Home works: `enables_rest: Some((radius: 10, cost: [("outlet", 1)]))`
-    // — a radius covering the whole of a base rather than a corner of it,
-    // priced at one Power Outlet.
-    enables_rest: Some((radius: 10, cost: [("outlet", 1)])),
-
     // Optional; can be left out entirely (defaults to a permanent
     // structure). If set, this structure automatically collapses once
     // `max_ticks` ordinary game-clock ticks have passed since it was
-    // deployed — no refund, it just disappears. Ticks spent inside a
-    // `Game::rest` cycle don't count toward this, so a structure that also
-    // sets `enables_rest` isn't worn down any faster by actually being
-    // used to rest than by sitting there idle.
+    // deployed — no refund, it just disappears. Resting passes no time, so
+    // a temporary structure is worn down only by turns actually taken.
     temporary: Some((max_ticks: 20)),
 
     // Optional; can be left out entirely (defaults to repairing nothing).

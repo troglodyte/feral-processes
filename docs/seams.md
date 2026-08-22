@@ -66,7 +66,7 @@ each site settled on:
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
 | `game/trade.rs` `buy_item` | `require_base` | same |
-| `game/turn.rs` `rest` | `require_base` | flipped in Task 6 — Home is a deployed `Structure`, so resting reaches it from base space |
+| `game/turn.rs` `rest` | *none* | takes no guard at all now — it **reads** the locale to price itself, see below |
 
 The test for whether a reader needs a guard at all is unchanged — not
 "does it act" but "does it claim something about where the party is". What
@@ -91,20 +91,56 @@ The final review caught it: the system now measures against
 makes, and refuses only the Stack — no supply underground stays a rule
 of its own, not a side effect of the surface-only guard.
 
-**`rest` was the contested row, until Task 6 flipped it.** It briefly kept
-`require_surface`, on the spec's authority
+**`rest` was the contested row twice over, and has now left the table.** It
+first kept `require_surface`, on the spec's authority
 (`docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`), while its
-own code argued the other way: it demands a structure whose def sets
-`enables_rest` within reach of the player's base cell, Home is the only
-shipped one, and Home stands in base space. Once the base's structures
-moved into base-space coordinates, the only tile from which
-`nearby_rest_structure` could legitimately succeed was the locale the
-surface guard refused — and the only way it could have succeeded on the
-surface at all was the coordinate-space collision between a base-space
-structure and a surface `Position`, exactly the class of bug the base
-guard exists to close. Task 6 made the one-line change at `game/turn.rs`
-and added the assertion in `tests/base_space.rs` that this entry once
-described as still pending.
+own code argued the other way: it demanded a structure whose def set
+`enables_rest` within reach of the player's base cell, Home was the only
+shipped one, and Home stands in base space. Once the base's structures moved
+into base-space coordinates, the only tile from which `nearby_rest_structure`
+could legitimately succeed was the locale the surface guard refused — and the
+only way it could have succeeded on the surface at all was the
+coordinate-space collision between a base-space structure and a surface
+`Position`, exactly the class of bug the base guard exists to close. Task 6
+made the one-line change to `require_base`.
+
+Resting is no longer gated by locale at all. It is **priced** by one:
+free inside base space, one unit of an item whose def sets
+`ItemDef::enables_rest` anywhere else, the open grid and the Stack alike.
+`require_base` came out with the structure requirement, and
+`nearby_rest_structure`, `rest_cost` and `RestDef` came out with it — nothing
+about a rest asks where a building stands any more.
+
+**The trap is that `rest` now reads as an unguarded `Position`-adjacent
+action, and it is not one.** A guard added back here does not tighten
+anything; it deletes the field half of the mechanic outright, and it deletes
+it silently, because the base half goes on working and is the half anyone
+testing by hand reaches first. The row above is deliberately kept in the
+table, spelling out *none*, rather than dropped from it: an action missing
+from a guard table reads as an oversight, and an oversight is what gets
+"fixed".
+
+**The second half of the same change is that no rest advances the clock**,
+and the two halves hold each other up. A free rest that ticked could be
+spammed at the base to farm production, raid pressure, need decay and
+`Temporary` wear; a priced rest that ticked was the only bulk time source in
+the game, so removing the price without removing the ticks would have made
+walking home a production exploit. `Game::wait` is now the only way time
+passes without an action, one tick at a time. `REST_TICKS` is gone rather
+than set to zero, so there is no constant left for someone to "restore".
+
+Three consequences worth knowing before touching this. A counted field buff
+now comes out of a rest **unaged** — the until-rest drop is a thing `rest`
+does on purpose, not a side effect of time passing, which is what
+`resting_drops_until_rest_buffs_and_leaves_counted_ones_aged` asserts. A rest
+can no longer be interrupted anywhere, since there are no ticks for
+`nest_aggro_tick` to open a battle on, so the refund path a half-paid rest
+needed went with it: the two gates and the payment run in that order and the
+restore is unconditional from there. And a Stack run is now bounded by
+charges carried rather than by the Power reserve alone —
+`power_regen_system`'s underground guard still holds (a Recharger cannot
+reach four frames down), but the scarcity it protects is purchasable at an
+outlet a heal.
 
 ### Examine names only what the surface map draws, and that rule is one function
 

@@ -354,6 +354,19 @@ any non-finite `taming_potency`, `consume.power`, or
     // its trigger comes round, so taking the item off ends it.
     grants: Some("watchdog"),
 
+    // Optional; defaults to false. Marks this item as a **rest charge**: one
+    // unit is spent by resting anywhere outside the player's base. Inside
+    // the base a rest is free and spends nothing, so this is what makes
+    // powering down possible out on the grid and down in the Stack.
+    //
+    // A flag rather than a price. A rest costs exactly one unit of the first
+    // flagged item in the pack, so what a rest is worth is set through this
+    // item's own `craftable.cost` rather than a quantity here. The shipped
+    // rest charge is the Power Outlet (`outlet.ron`); an install can add
+    // others, or ship none at all — with no flagged item anywhere in the
+    // catalogue, resting simply stops working outside the base.
+    enables_rest: true,
+
 )
 ```
 

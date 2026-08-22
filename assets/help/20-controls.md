@@ -10,7 +10,8 @@ Moving and living:
 - hjkl or the arrow keys — move
 - . — wait a turn
 - e — drain a Power Cell
-- r — recharge: a full night, restoring Integrity and Power
+- r — recharge: restores Integrity and Power for you and every program you own. Free inside your
+  base; anywhere else it burns a Power Outlet. It takes no time either way.
 
 The three menus:
 

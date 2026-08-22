@@ -27,6 +27,25 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.10
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this is an input and text change and nothing about it is written into a run.
+
+### The collect window's arrows are the other way round
+
+Left now adds one to the highlighted row and Right removes one. The window
+shipped a release ago with the conventional mapping and it read backwards in
+play, so the polarity is reversed on this screen alone.
+
+It is the one inverted Left/Right in the game — the manifest pager, the
+arena row editor and every movement handler still step Right positive — so
+the window now says which arrow does which instead of the old
+"Left/Right set the amount", and the base's help page says it in prose too.
+Nothing else about the screen moved: digits and Backspace still type an
+amount, `[A]` and `[N]` still fill and clear every row, Enter still takes
+exactly the basket and Esc still costs nothing.
+
 ## 0.13.9
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

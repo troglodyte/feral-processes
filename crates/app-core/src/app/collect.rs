@@ -24,6 +24,14 @@ impl App {
     /// Those pages have no ceiling to clamp against; this one does, and a
     /// number that cannot exceed what is on the shelf is worth having by
     /// construction rather than by a check at the commit.
+    ///
+    /// **Left adds and Right removes**, inverted against every other
+    /// Left/Right in the game — the manifest pager, the arena row editor and
+    /// all four movement handlers step `Right` positive. It is inverted here
+    /// by request, so the inconsistency is the specification rather than a
+    /// slip: anything "restoring" it fails
+    /// `left_and_right_step_by_one_and_saturate`, which says so in as many
+    /// words.
     pub(crate) fn handle_collect_key(&mut self, key: GameKey) {
         let len = self.collect_rows.len();
         match key {
@@ -50,8 +58,8 @@ impl App {
                 });
             }
             GameKey::Backspace => self.edit_row(|n, _| n / 10),
-            GameKey::Right => self.edit_row(|n, available| (n + 1).min(available)),
-            GameKey::Left => self.edit_row(|n, _| n.saturating_sub(1)),
+            GameKey::Left => self.edit_row(|n, available| (n + 1).min(available)),
+            GameKey::Right => self.edit_row(|n, _| n.saturating_sub(1)),
             _ => {}
         }
     }

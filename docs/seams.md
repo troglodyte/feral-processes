@@ -2618,6 +2618,22 @@ a basket that has gone briefly optimistic hands over what is there.
 which is `apply_damage`'s rule: a log line printing the requested figure
 claims goods the player never received.
 
+**Left adds and Right removes, against every other Left/Right in the game.**
+The manifest pager, the arena row editor and all four movement handlers step
+`Right` positive; the collect picker alone steps it negative. That is a
+deliberate request from the user, made after the screen shipped with the
+conventional mapping, and it is the one thing on this screen that cannot be
+derived from the rest of the UI — which is why the hint line names the two
+arrows explicitly rather than saying "Left/Right set the amount", and why
+`assets/help/60-your-base.md` says it in prose too. A player who guesses
+from any other screen guesses wrong, so the screen has to tell them.
+
+The trap is that it reads exactly like a slip. `handle_collect_key`'s doc
+comment and `left_and_right_step_by_one_and_saturate`'s both say in as many
+words that the inversion is the specification, so a later hand "restoring
+consistency" fails a test that explains itself rather than one that merely
+goes red.
+
 **`require_base` and `base_pos`'s `None` are the same locale condition**, so
 neither can be mutation-proved with the other still standing — removing both
 is the honest mutation, and

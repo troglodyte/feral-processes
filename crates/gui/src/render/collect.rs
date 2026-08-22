@@ -16,6 +16,13 @@ use super::*;
 /// row without its column makes `suffix_x` drop the suffix on the row's own
 /// tail, and a wrap then budgets for a row narrower than it draws.
 ///
+/// **The hint says which arrow does which.** Left adds and Right removes here,
+/// against every other Left/Right in the game, so a player who guesses from
+/// the rest of the UI guesses wrong. The three hint lines stay no wider than
+/// the `[A]`/`[N]` line, which is the widest text the screen has always drawn
+/// — the width census below covers item rows only, and `draw_row` clips
+/// vertically alone.
+///
 /// **The page needs no height census.** The cursor drives `menu_selected` and
 /// `popup_layout` keeps the selected row visible, so a long shelf scrolls —
 /// unlike the memories and gear-inspect pages, whose rows are `Text` and so
@@ -30,7 +37,8 @@ pub(super) fn draw_collect(
     m: &Metrics,
 ) {
     let mut body = vec![
-        text_row("Up/Down pick a row; digits, Backspace and Left/Right set the amount"),
+        text_row("Up/Down pick a row; digits and Backspace type an amount"),
+        text_row("Left adds one, Right removes one"),
         text_row("[A] take everything  [N] take nothing  Enter to collect  Esc to leave"),
         text_row(""),
     ];

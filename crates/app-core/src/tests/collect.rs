@@ -148,23 +148,28 @@ fn backspace_drops_a_digit_and_bottoms_out_at_zero() {
 }
 
 /// Left and Right are the one-at-a-time nudge, saturating at both ends.
+///
+/// **Left adds and Right removes**, which is the opposite of every other
+/// Left/Right in the game and is deliberate — see `handle_collect_key`. This
+/// test is the pin: a later hand reading the arena row editor or the manifest
+/// pager and "restoring consistency" here fails it.
 #[test]
 fn left_and_right_step_by_one_and_saturate() {
     let mut app = picker(977);
 
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.collect_basket[0], 0, "cannot ask for less than none");
 
     for _ in 0..3 {
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Left);
     }
     assert_eq!(app.collect_basket[0], 3);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.collect_basket[0], 2);
 
     app.handle_key(GameKey::Down);
     for _ in 0..9 {
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Left);
     }
     assert_eq!(
         app.collect_basket[1], 4,

@@ -52,9 +52,10 @@ The rest of what a base does:
   chain is a line of machines laid next to each other. A Depot gives a machine with nothing
   downstream somewhere to empty into, and gives a worker somewhere to fetch from.
 - c opens a window listing everything the machines touching you are holding, pooled into one row per
-  item. Set an amount on the rows you want and press Enter to take exactly that; [A] fills every row
-  to its maximum, so taking the lot is still two keys. What you leave stays where the base's own
-  chains can pull it, and leaving with Esc costs nothing.
+  item. Set an amount on the rows you want — type it, or nudge it with the arrow keys, where Left
+  adds and Right removes — then press Enter to take exactly that; [A] fills every row to its
+  maximum, so taking the lot is still two keys. What you leave stays where the base's own chains
+  can pull it, and leaving with Esc costs nothing.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
   structure at its ceiling in zone 1 stays listed and starts moving again after a breach.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent

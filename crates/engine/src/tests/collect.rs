@@ -303,3 +303,227 @@ fn nothing_is_on_offer_while_the_party_cannot_collect() {
         "out of base space entirely"
     );
 }
+
+/// How many `Loot` lines the log holds — the collect summary is one line
+/// whatever the basket's size, so counting them is how the tests below tell
+/// one summary from a line per item.
+fn loot_lines(game: &Game) -> usize {
+    game.message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.kind == MessageKind::Loot)
+        .count()
+}
+
+/// Asking for less than is on the shelf takes exactly that. The remainder
+/// stays where the base's chains can still pull it, which is the whole point
+/// of the change.
+#[test]
+fn asking_for_part_of_a_buffer_leaves_the_rest_in_it() {
+    let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let node = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 10)],
+    );
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let got = game.collect_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+
+    assert_eq!(got, vec![(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+    assert_eq!(count_item(&game, ids::CORE_FRAGMENT) - before, 4);
+    assert_eq!(
+        game.world
+            .get::<Stock>(node)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(6),
+        "the six the player did not ask for are still the base's"
+    );
+}
+
+/// The buffers can only shrink between the screen opening and the commit — a
+/// raid, a hauler, an assembler pull — so an over-ask hands over what is
+/// there rather than refusing the whole basket.
+#[test]
+fn an_over_ask_is_clamped_rather_than_refused() {
+    let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let node = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 3)],
+    );
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let got = game.collect_items(&[(ItemId::from(ids::CORE_FRAGMENT), 99)]);
+
+    assert_eq!(
+        got,
+        vec![(ItemId::from(ids::CORE_FRAGMENT), 3)],
+        "what actually landed, never what was asked for"
+    );
+    assert_eq!(count_item(&game, ids::CORE_FRAGMENT) - before, 3);
+    assert!(
+        game.world.get::<Stock>(node).unwrap().output.is_empty(),
+        "a fully drained buffer is removed, not left holding a zero"
+    );
+}
+
+/// The test the sort exists for. Two neighbours holding the same item and a
+/// request that spans both: the lower `(x, y)` tile is drained first, every
+/// run. Spawned in the reverse of their tile order, so an unsorted scan
+/// genuinely flips which one is left holding the remainder.
+#[test]
+fn a_partial_take_across_two_neighbours_drains_them_in_tile_order() {
+    let mut game = Game::new(952, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let east = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+    let west = stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x - 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+
+    let got = game.collect_items(&[(ItemId::from(ids::CORE_FRAGMENT), 7)]);
+
+    assert_eq!(got, vec![(ItemId::from(ids::CORE_FRAGMENT), 7)]);
+    assert!(
+        game.world.get::<Stock>(west).unwrap().output.is_empty(),
+        "the lower tile empties first"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(east)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(3),
+        "and the higher one holds the remainder"
+    );
+}
+
+/// One commit is one action and one piece of news, whatever the basket
+/// holds — per-item ticking would price a two-item haul at twice a one-item
+/// one, and a line per item would bury the log pane.
+#[test]
+fn a_basket_of_two_items_ticks_once_and_logs_once() {
+    let mut game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 4), (ids::POWER_CELL, 4)],
+    );
+    let ticks = game.world.resource::<GameClock>().tick;
+    let lines = loot_lines(&game);
+
+    game.collect_items(&[
+        (ItemId::from(ids::CORE_FRAGMENT), 2),
+        (ItemId::from(ids::POWER_CELL), 2),
+    ]);
+
+    assert_eq!(game.world.resource::<GameClock>().tick, ticks + 1);
+    assert_eq!(loot_lines(&game) - lines, 1);
+}
+
+/// An empty basket is a refusal, and a refusal has never spent a tick here.
+/// An all-zero basket is the same thing said longhand.
+#[test]
+fn an_empty_or_all_zero_basket_takes_nothing_and_costs_no_turn() {
+    let mut game = Game::new(954, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 4)],
+    );
+    let ticks = game.world.resource::<GameClock>().tick;
+    let lines = loot_lines(&game);
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    assert!(game.collect_items(&[]).is_empty());
+    assert!(
+        game.collect_items(&[
+            (ItemId::from(ids::CORE_FRAGMENT), 0),
+            (ItemId::from(ids::POWER_CELL), 0),
+        ])
+        .is_empty()
+    );
+
+    assert_eq!(count_item(&game, ids::CORE_FRAGMENT), before);
+    assert_eq!(game.world.resource::<GameClock>().tick, ticks);
+    assert_eq!(
+        loot_lines(&game),
+        lines,
+        "nothing happened, so nothing said"
+    );
+}
+
+/// The taking path holds the same guards the offer does. All four in one
+/// test, for the reason the offer's own guard test states.
+#[test]
+fn nothing_is_taken_while_the_party_cannot_collect() {
+    let mut game = Game::new(955, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_structure(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        &[(ids::CORE_FRAGMENT, 4)],
+    );
+    let want = vec![(ItemId::from(ids::CORE_FRAGMENT), 4)];
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
+    assert!(game.collect_items(&want).is_empty(), "game over");
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    let player = game.player_entity();
+    insert_battle(&mut game, player, Vec::new());
+    assert!(game.collect_items(&want).is_empty(), "in a battle");
+    game.world.remove_resource::<BattleState>();
+
+    *game.world.resource_mut::<Locale>() = Locale::Surface;
+    assert!(
+        game.collect_items(&want).is_empty(),
+        "out of base space entirely"
+    );
+    stand_in_base(&mut game);
+
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "not one unit moved while any guard was up"
+    );
+    assert!(
+        !game.collect_items(&want).is_empty(),
+        "and the fixture was collectable all along"
+    );
+}

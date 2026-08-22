@@ -1,5 +1,6 @@
 //! Emptying adjacent structures' output buffers into the player's cargo.
 
+use crate::game::base::hauling;
 use crate::*;
 
 /// The four tiles a machine feeds and the player collects from. Named once
@@ -74,6 +75,75 @@ impl Game {
             }
         }
         offer.into_iter().collect()
+    }
+
+    /// Takes an exact basket off the adjacent structures and reports what
+    /// actually landed.
+    ///
+    /// The one taking path: `collect_adjacent` is this with everything
+    /// asked for, so take-all and take-some cannot drift on clamping,
+    /// logging or the tick. Units leave a buffer through
+    /// `hauling::take_from` alone — its doc comment already names itself the
+    /// one way, and a second remove-or-decrement is how a buffer ends up
+    /// holding a zero entry every reader then has to know to skip.
+    ///
+    /// An over-ask is **clamped, not refused**: the buffers can only shrink
+    /// between a screen opening and the commit — a raid, a hauler, an
+    /// assembler pull — and a basket that has gone briefly optimistic should
+    /// hand over what is there. Reporting what came rather than what was
+    /// asked for is `apply_damage`'s rule: a log line printing the requested
+    /// figure claims goods the player never received.
+    ///
+    /// One tick and one `Loot` line for the whole basket, because one commit
+    /// is one action. An empty or all-zero request is a refusal — nothing
+    /// taken, nothing said, no turn spent. It does not speak the "nothing to
+    /// collect here" sentence either; that belongs to `collect_adjacent`,
+    /// stated once.
+    pub fn collect_items(&mut self, want: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Vec::new();
+        }
+        if self.require_base().is_err() {
+            return Vec::new();
+        }
+        let player = self.player_entity();
+        let neighbours = self.adjacent_stock();
+
+        let mut taken: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
+        for (item, qty) in want {
+            let mut outstanding = *qty;
+            for structure in &neighbours {
+                if outstanding == 0 {
+                    break;
+                }
+                let mut stock = self.world.get_mut::<Stock>(*structure).unwrap();
+                let got = hauling::take_from(&mut stock, item, outstanding);
+                if got == 0 {
+                    continue;
+                }
+                outstanding -= got;
+                // Not `grant_loot`: collecting also has to clear the source
+                // structure's own stock, which a plain inventory grant
+                // doesn't touch.
+                self.world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .add(item.clone(), got);
+                *taken.entry(item.clone()).or_default() += got;
+            }
+        }
+
+        if taken.is_empty() {
+            return Vec::new();
+        }
+        let summary = taken
+            .iter()
+            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
+        self.tick();
+        taken.into_iter().collect()
     }
 
     /// Empties the `output` of every structure orthogonally adjacent to the

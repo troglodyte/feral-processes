@@ -54,3 +54,54 @@ pub(super) fn draw_collect(
 fn collect_suffix(taken: u32, available: u32) -> String {
     format!("{taken} / {available}")
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paint::with_painter;
+    use feral_processes_engine::{DifficultyMode, Game};
+
+    /// **The widest collect row the shipped assets can build still fits.**
+    ///
+    /// `draw_row` clips a row vertically and nothing clips it horizontally, so
+    /// an over-wide row is drawn off the panel in silence — taking the figures
+    /// that say how much is on the shelf with it.
+    ///
+    /// The name comes from the real `ItemDb` rather than a hand-written
+    /// string, which is the difference between a census and a fixture: a
+    /// longer item name dropped into `assets/items/` has to fail here rather
+    /// than be caught by eye. The figures are the widest `u32` can print,
+    /// since nothing bounds what a modded `capacity` may hold.
+    #[test]
+    fn no_collect_row_overflows_its_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(42, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let widest = game
+            .item_defs()
+            .into_iter()
+            .map(|def| game.item_name(&def.id).to_string())
+            .max_by_key(|name| name.chars().count())
+            .expect("the shipped assets define items");
+        let suffix = collect_suffix(u32::MAX, u32::MAX);
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            // What `draw_row` actually lays down: the row's label, then the
+            // suffix one inset past the end of it (see `suffix_x`).
+            let label = p.measure_ui_advance(format!("  {widest}"), m.font_size);
+            let drawn = label + m.inset + p.measure_ui_advance(&suffix, m.font_size);
+            assert!(
+                label > 0.0,
+                "the census measured nothing — the shipped set has to reach here"
+            );
+            assert!(
+                drawn <= room,
+                "the widest collect row overflows by {:.0}px \
+                 ({drawn:.0} into {room:.0}):\n{widest}  {suffix}",
+                drawn - room
+            );
+        });
+    }
+}

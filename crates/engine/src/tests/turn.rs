@@ -146,17 +146,15 @@ fn rest_fully_heals_and_restores_power() {
     assert_eq!(needs.get(), 100.0, "rest should fully restore Power");
 }
 
-/// A rest in base space cannot be interrupted, and that is a property of
-/// where resting now happens rather than of `rest` itself.
+/// No rest can be interrupted, because no rest advances the clock — there
+/// are no ticks for `nest_aggro_tick` to open a battle on.
 ///
-/// `rest` still bails out of its loop on `is_game_over` or an active battle
-/// — see the comment at that loop in `game/turn.rs` — but nothing on the
-/// zone surface can reach a party out of phase: `nest_aggro_tick` refuses to
-/// open a battle on a party in base space, and an ambush is only ever rolled
-/// by a step taken on the surface. Resting used to be interruptible on the
-/// slab's outer ring; it is not, now that the base is somewhere else
-/// entirely, and this is what says so rather than leaving it to be
-/// rediscovered.
+/// Kept pointed at the hardest case rather than retired with the tick loop:
+/// a provoked guardian standing on the party's own pinned tile, which is
+/// where an interruption would have to come from if one could. Resting was
+/// interruptible on the slab's outer ring once, and then unreachable-by-
+/// construction while the base was out of phase; it is now neither, and this
+/// says so rather than leaving it to be rediscovered.
 #[test]
 fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
     let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

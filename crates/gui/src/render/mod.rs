@@ -29,6 +29,7 @@ mod bars;
 mod base;
 mod battle;
 mod building;
+mod collect;
 mod contracts;
 mod crafting;
 mod field;
@@ -63,6 +64,7 @@ use building::{
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
+use collect::draw_collect;
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_cast, draw_field_cast_ally};
@@ -647,6 +649,14 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::BuildDirection => {
             draw_build_direction(game, pending_structure.as_deref(), painter, m)
         }
+        Mode::Collect => draw_collect(
+            game,
+            &app.collect_rows,
+            &app.collect_basket,
+            selected,
+            painter,
+            m,
+        ),
         Mode::Craft => draw_craft_menu(game, selected, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,

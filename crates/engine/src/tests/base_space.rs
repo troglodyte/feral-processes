@@ -2515,6 +2515,10 @@ fn lines_saying(game: &Game, needle: &str) -> usize {
 /// stalls sharing a needle would let either one satisfy the other's test.
 const CUT_OFF: &str = "marked cell at";
 
+/// The fragment of the *other* stall announcement — a crew that has cut its
+/// cell open and has no Blank Substrate anywhere to floor it with.
+const NO_SUBSTRATE: &str = "nothing to floor";
+
 /// The whole claim of the feature: the base grows while you are somewhere
 /// else.
 #[test]
@@ -2562,6 +2566,110 @@ fn a_crew_floors_a_marked_cell_after_cutting_it() {
     assert!(
         game.dig_site_at(WALL.0, WALL.1).is_none(),
         "a finished cell keeps no dig site"
+    );
+}
+
+/// **The crew is base labour and pays out of the base's own stores** — the
+/// same buffers the stock strip counts, and the same ones `base_holding`
+/// reads. Paying out of the player's pack alone left a crew standing on a
+/// cut it had just finished while a Depot four tiles away held the
+/// substrate, and it said nothing about it: the store the base filled was
+/// not the store the crew could spend.
+#[test]
+fn a_crew_pays_for_its_tile_out_of_the_base_stock() {
+    let (mut game, staff) = base_with_a_crew(3280, 1);
+    let depot = spawn_machine_at(&mut game, "depot", 2, 0);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::BLANK_SUBSTRATE), 3);
+    mark(&mut game, WALL);
+
+    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
+    pass(&mut game, wait);
+
+    assert_eq!(
+        cell(&game, WALL),
+        Some(base_grid::BaseCell::Floor),
+        "the crew cut the cell and left it bare with a full shelf beside it"
+    );
+    assert_eq!(
+        game.world.get::<Stock>(depot).unwrap().output[&ItemId::from(ids::BLANK_SUBSTRATE)],
+        2,
+        "a laid tile costs exactly one Blank Substrate, whichever store pays"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        0,
+        "the crew reached into the player's pack for a tile the base could pay for"
+    );
+}
+
+/// The stores are spent before the pack, so what the player is carrying
+/// stays theirs to lay by hand — and the fallback is what keeps a base with
+/// no machine holding any substrate paving at all.
+#[test]
+fn a_crew_falls_back_to_the_player_s_pack() {
+    let (mut game, staff) = base_with_a_crew(3281, 1);
+    let depot = spawn_machine_at(&mut game, "depot", 2, 0);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::BLANK_SUBSTRATE), 1);
+    give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 2);
+    mark(&mut game, WALL);
+
+    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
+    pass(&mut game, wait);
+
+    assert_eq!(
+        cell(&game, WALL),
+        Some(base_grid::BaseCell::Floor),
+        "the crew never floored the cell"
+    );
+    assert!(
+        game.world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::BLANK_SUBSTRATE))
+            .is_none(),
+        "the shelf is spent first — the pack is the fallback, not the other way round"
+    );
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        2,
+        "the player's own substrate was spent while the base still held some"
+    );
+}
+
+/// A crew with nothing to lay says so **once**, under
+/// `systems::set_machine_status`' rule: entering a state is news, staying in
+/// it is not. Silence is what this cost the player — a marked cell, a body
+/// standing on it, and no way to find out that the only thing missing was
+/// stock.
+#[test]
+fn a_crew_with_no_substrate_says_so_once() {
+    let (mut game, staff) = base_with_a_crew(3282, 1);
+    mark(&mut game, WALL);
+
+    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
+    pass(&mut game, wait * 4);
+
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "a cell floored with no substrate anywhere"
+    );
+    assert!(
+        is_marked(&mut game, WALL),
+        "the plan should outlive the shortage — the tile goes down when stock does"
+    );
+    assert_eq!(
+        lines_saying(&game, NO_SUBSTRATE),
+        1,
+        "the crew's shortage is news once, not once a cycle for the rest of the run"
     );
 }
 

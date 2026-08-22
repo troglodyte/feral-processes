@@ -14,8 +14,10 @@
 //! already committed to a machine's hopper is spent from the base's point
 //! of view even though it has not been consumed yet.
 
+use bevy_ecs::prelude::{Entity, With};
+
 use crate::Game;
-use crate::components::{Stock, Structure};
+use crate::components::{Position, Stock, Structure};
 use crate::items::{ItemCategory, ItemId};
 use crate::items_db::ItemDb;
 use crate::views::StockRow;
@@ -28,6 +30,52 @@ pub(crate) fn output_buffers(game: &Game) -> impl Iterator<Item = (&Structure, &
     game.world
         .iter_entities()
         .filter_map(|e| Some((e.get::<Structure>()?, e.get::<Stock>()?)))
+}
+
+/// Takes up to `qty` of `item` out of the base's own stores, and reports how
+/// much it got.
+///
+/// **The spending half of `output_buffers`**, and deliberately the same set:
+/// `work_orders::base_holding` counts these buffers and the stock strip
+/// lists them, so a cost the base pays out of a *narrower* set would make
+/// the strip say the base can afford something it then refuses to buy. The
+/// player's own pack is not in it — that is `Inventory`, and every cost the
+/// *player* incurs is paid from there.
+///
+/// Drained in tile order for `assembler_system`'s reason: bevy's iteration
+/// order is not stable, and two shelves holding the same item would be spent
+/// in a different order between runs, which is a base that saves differently
+/// each time it is played. `hauling::take_from` does the arithmetic rather
+/// than a second copy of it, so a buffer emptied here is *removed* rather
+/// than left holding a zero.
+///
+/// There is one caller today — the dig crew's tile, the first cost the base
+/// incurs on its own initiative rather than at the player's keypress. It
+/// takes an item and a quantity anyway because that is what the arithmetic
+/// needs to be honest about a partial take; a caller that must have all of
+/// it checks the returned figure.
+pub(crate) fn spend_from_base(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
+    let mut shelves: Vec<(i32, i32, Entity)> = {
+        let mut query = game
+            .world
+            .query_filtered::<(Entity, &Position), (With<Structure>, With<Stock>)>();
+        query
+            .iter(&game.world)
+            .map(|(e, p)| (p.x, p.y, e))
+            .collect()
+    };
+    shelves.sort_unstable();
+    let mut taken = 0;
+    for (.., shelf) in shelves {
+        if taken == qty {
+            break;
+        }
+        let Some(mut stock) = game.world.get_mut::<Stock>(shelf) else {
+            continue;
+        };
+        taken += crate::game::base::hauling::take_from(&mut stock, item, qty - taken);
+    }
+    taken
 }
 
 impl Game {

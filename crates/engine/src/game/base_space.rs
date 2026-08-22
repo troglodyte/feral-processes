@@ -379,6 +379,7 @@ impl Game {
                     DigSite {
                         marked: true,
                         announced_stuck: false,
+                        announced_dry: false,
                     },
                     Durability {
                         hp: if solid { max_hp } else { 0 },
@@ -521,36 +522,74 @@ impl Game {
             {
                 self.strike_rock(worker, target.x, target.y);
             } else {
-                self.crew_lays_tile(target.x, target.y);
+                self.crew_lays_tile(site, target.x, target.y);
             }
         }
     }
 
-    /// The crew's half of `Game::lay_tile`: one Blank Substrate out of the
-    /// same store every build is paid from, and the cell is floor.
+    /// The crew's half of `Game::lay_tile`: one Blank Substrate, and the
+    /// cell is floor.
     ///
-    /// **Silent when the store is empty.** The mark stays, the body stays
-    /// posted, and the tile goes down the moment a substrate exists — the
-    /// only thing missing is stock, which the player is already being told
-    /// about by every other thing that wants it. The route stall is
-    /// announced because nothing else in the base reports it.
-    fn crew_lays_tile(&mut self, x: i32, y: i32) {
+    /// **Out of the base's own stores first, the player's pack second.** The
+    /// crew is base labour, and the store it spends from is the one the base
+    /// fills — `stock::spend_from_base` over the same buffers the stock strip
+    /// counts, so a strip reading `BS 12` is a strip saying the crew can
+    /// pave. The pack is the fallback rather than the source: what the player
+    /// is carrying stays theirs to lay by hand, and this is a cost the base
+    /// incurs while the party is somewhere else entirely. `Game::lay_tile` is
+    /// unchanged and still pays from the pack alone — a player verb, paid the
+    /// way every other player verb is.
+    ///
+    /// **Says so once when there is nothing anywhere**, latched on
+    /// `DigSite::announced_dry` under `systems::set_machine_status`' rule.
+    /// Silence was the whole of this bug: the mark stays, the body stays
+    /// posted, the tile goes down the moment a substrate exists — and none
+    /// of that is visible from a cell that simply never becomes floor. There
+    /// is no clearing branch, because the state ends with the site: the tile
+    /// that resolves it despawns the thing holding the latch.
+    fn crew_lays_tile(&mut self, site: Entity, x: i32, y: i32) {
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+        if !self.spend_one_substrate(&substrate) {
+            if !self
+                .world
+                .get::<DigSite>(site)
+                .is_some_and(|d| d.announced_dry)
+            {
+                if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                    dig.announced_dry = true;
+                }
+                let line = format!(
+                    "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {} in store.",
+                    self.item_name(&substrate)
+                );
+                self.log_base(line);
+            }
+            return;
+        }
+        self.floor_cell(x, y);
+        self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
+    }
+
+    /// Spends the one substrate a tile costs, base stores before the
+    /// player's pack, and reports whether it found one.
+    fn spend_one_substrate(&mut self, substrate: &ItemId) -> bool {
+        if crate::game::base::stock::spend_from_base(self, substrate, 1) == 1 {
+            return true;
+        }
         let player = self.player_entity();
         let held = self
             .world
             .get::<Inventory>(player)
-            .map(|inv| inv.count(&substrate))
+            .map(|inv| inv.count(substrate))
             .unwrap_or(0);
         if held == 0 {
-            return;
+            return false;
         }
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(substrate, 1);
-        self.floor_cell(x, y);
-        self.log_base("Your crew lays a VectorStasis Tile, and the cell reads as floor.");
+            .take(substrate.clone(), 1);
+        true
     }
 
     /// One step through base space, reached from `Game::move_player` — the

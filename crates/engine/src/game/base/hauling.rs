@@ -39,7 +39,12 @@ pub(crate) fn take_haul_load(stock: &mut Stock) -> Option<Carrying> {
 /// came. The inverse of `deposit`, and the one way units leave a buffer by
 /// hand — a producer clearing its own and a worker drawing an ingredient
 /// off a shelf differ only in which item they name.
-fn take_from(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
+///
+/// `pub(crate)` for the third caller: `stock::spend_from_base` drains these
+/// same buffers on the base's own behalf, and a second copy of the
+/// remove-or-decrement is how a buffer ends up holding a zero entry that
+/// every reader then has to know to skip.
+pub(crate) fn take_from(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
     let held = stock.output.get(item).copied().unwrap_or(0);
     let taken = qty.min(held);
     if taken == 0 {

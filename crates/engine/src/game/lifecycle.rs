@@ -637,6 +637,7 @@ impl Game {
                     // conversation, not of the world, and a reload is
                     // exactly when the player should be told again.
                     announced_stuck: false,
+                    announced_dry: false,
                 },
                 Durability {
                     // Clamped rather than trusted, the same way a nest's is

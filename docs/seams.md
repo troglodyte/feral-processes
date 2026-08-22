@@ -1478,6 +1478,57 @@ ratio turns the wall into a fragment tap that undercuts the Mining Node,
 and `mining_a_wall_never_pays_more_than_flooring_it_costs` holds it against
 the real assets rather than against a number written in `tuning.rs`.
 
+### A cost the base incurs is paid from the base's stores; a cost the player incurs is paid from their pack
+
+**`stock::spend_from_base` is the base's side of that, and the dig crew's
+tile is its one caller.** The crew cuts a marked cell and floors what it
+opened, and the Blank Substrate it spends comes out of the same buffers
+`work_orders::base_holding` counts and the stock strip lists —
+`stock::output_buffers`, drained in tile order for `assembler_system`'s
+reason. The player's `Inventory` is the **fallback**, tried only when no
+shelf holds one.
+
+It shipped the other way round: `crew_lays_tile` read the player's
+`Inventory` and nothing else, on the argument that a tile costs one
+substrate "out of the same store every build is paid from". That argument
+was true of the code and true of `Game::lay_tile` and `deploy_structure`
+either side of it — and it was still wrong, because the crew is the first
+thing in the game that spends on the *base's* initiative rather than at the
+player's keypress. The base's own Lathe made the substrate, its own hauler
+walked it to its own Depot, and then the base could not spend it.
+
+Found in a real save (2026-08-21), not in a test. A player marked two
+cells, watched the crew cut both through, and watched nothing else happen
+for the rest of the session: 12 Blank Substrate on the shelves, 0 in the
+pack, both marks still standing. Every part of the machinery was working —
+`dig_wants` listed both sites, `schedule_base_labour` posted two bodies,
+`step_to_post` walked one out, `strike_rock` broke both walls — and the
+whole feature was invisibly dead at the last line.
+
+**Which buffers is the load-bearing choice, and it is the widest set on
+purpose.** Depot shelves alone (`depot_holding`, what a hauler may fetch
+from) would keep the crew from raiding a production line — and would leave
+a base with no Depot reading `BS 12` across the top of the screen while
+refusing to pave, which is the same silence in a new place. The strip is
+the player's one statement of what the base has; a cost that cannot spend
+what the strip counts makes the strip a lie. A three-tier rule (Depot,
+then machines, then the pack) buys the line-protection back and was
+rejected for being unreadable: no screen explains why one tile came off the
+shelf and the next out of a Lathe.
+
+**The silence was half the bug and has its own latch.**
+`DigSite::announced_dry` says it once, beside `announced_stuck` and under
+`set_machine_status`' rule — entering a state is news, staying in it is
+not. Two fields rather than one, because the two leave the player different
+errands: no route is a wall to cut, no substrate is a shelf to fill.
+Neither is saved, so a reload says both again. There is no clearing branch
+for the dry latch, unlike the stuck one: the state ends with the site,
+since the tile that resolves it despawns the entity holding the latch.
+
+`Game::lay_tile` is deliberately untouched and still pays from the pack
+alone. It is a player verb, paid the way every other player verb is — the
+asymmetry *is* the rule.
+
 ### `Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a wild program's swing is decided
 
 **`Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a

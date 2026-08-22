@@ -128,6 +128,44 @@ fn collecting_with_nothing_adjacent_takes_nothing_and_costs_no_turn() {
     );
 }
 
+/// The refusal is stated in `collect_adjacent` and nowhere else — app-core
+/// routes its own empty case back through this function rather than keeping
+/// a second copy of the sentence, so the sentence has to actually be here.
+///
+/// The guards are the other half, and they refuse *silently*: a collect
+/// asked for during a battle or from the surface is not the base saying its
+/// shelves are bare.
+#[test]
+fn a_collect_that_finds_nothing_says_so_and_a_refused_one_does_not() {
+    let mut game = Game::new(956, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let refusal = "There is nothing to collect here.";
+    let said = |game: &Game| {
+        game.message_log(usize::MAX)
+            .into_iter()
+            .filter(|e| e.text == refusal)
+            .count()
+    };
+
+    assert!(game.collect_adjacent().is_empty());
+    assert_eq!(said(&game), 1, "an empty shelf says so");
+
+    let player = game.player_entity();
+    insert_battle(&mut game, player, Vec::new());
+    assert!(game.collect_adjacent().is_empty());
+    game.world.remove_resource::<BattleState>();
+
+    *game.world.resource_mut::<Locale>() = Locale::Surface;
+    assert!(game.collect_adjacent().is_empty());
+    stand_in_base(&mut game);
+
+    assert_eq!(
+        said(&game),
+        1,
+        "and a guard refuses without claiming anything about the shelves"
+    );
+}
+
 /// An empty buffer is the same refusal as no buffer at all: the structure
 /// is adjacent, but there is nothing in it.
 #[test]

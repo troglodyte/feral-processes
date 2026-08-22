@@ -146,8 +146,13 @@ impl Game {
         taken.into_iter().collect()
     }
 
-    /// Empties the `output` of every structure orthogonally adjacent to the
-    /// player into their cargo, and reports what was taken.
+    /// Takes everything the adjacent structures are offering, and reports
+    /// what was taken.
+    ///
+    /// Literally "select everything, then commit": the offer through
+    /// `collectable_adjacent`, the take through `collect_items`. There is
+    /// one taking path rather than two that could drift on clamping,
+    /// logging or the tick.
     ///
     /// The player pulls by exactly the rule a machine does, and like a
     /// machine can never reach another's `input` — a chain's directionality
@@ -157,8 +162,14 @@ impl Game {
     /// empties three buildings, standing at the end of a sprawled line
     /// empties one.
     ///
-    /// A collect that takes nothing is a refusal and costs no turn — the
-    /// base ticks on, and a misfired keypress shouldn't spend one.
+    /// A collect that finds nothing is a refusal and costs no turn — the
+    /// base ticks on, and a misfired keypress shouldn't spend one. **The
+    /// refusal is stated here and nowhere else**, which is why app-core
+    /// routes its own empty case back through this function rather than
+    /// growing a second copy of the sentence. The guards come first and
+    /// refuse *silently*, as they always have: an action taken during a
+    /// battle or from the surface is not the base telling you its shelves
+    /// are bare.
     pub fn collect_adjacent(&mut self) -> Vec<(ItemId, u32)> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
@@ -166,67 +177,13 @@ impl Game {
         if self.require_base().is_err() {
             return Vec::new();
         }
-        let player = self.player_entity();
-        // The party's base cell rather than their `Position`: every machine
-        // with a `Stock` stands in base space, and `Position` is pinned to
-        // the anchor tile on the zone surface while the party is in here.
-        let Some((px, py)) = self.base_pos() else {
-            return Vec::new();
-        };
-        let pos = Position { x: px, y: py };
-
-        let neighbours: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &Position), With<Stock>>();
-            query
-                .iter(&self.world)
-                .filter(|(_, p)| {
-                    ORTHOGONAL
-                        .iter()
-                        .any(|(dx, dy)| (p.x, p.y) == (pos.x + dx, pos.y + dy))
-                })
-                .map(|(e, _)| e)
-                .collect()
-        };
-
-        let mut taken: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
-        for structure in neighbours {
-            let offer: Vec<(ItemId, u32)> = {
-                let stock = self.world.get::<Stock>(structure).unwrap();
-                stock.output.iter().map(|(i, n)| (i.clone(), *n)).collect()
-            };
-            for (item, qty) in offer {
-                if qty == 0 {
-                    continue;
-                }
-                // Not `grant_loot`: collecting also has to clear the source
-                // structure's own stock, which a plain inventory grant
-                // doesn't touch.
-                self.world
-                    .get_mut::<Inventory>(player)
-                    .unwrap()
-                    .add(item.clone(), qty);
-                self.world
-                    .get_mut::<Stock>(structure)
-                    .unwrap()
-                    .output
-                    .remove(&item);
-                *taken.entry(item).or_default() += qty;
-            }
-        }
-
-        if taken.is_empty() {
+        // Sequenced into a local: `collect_items(&self.collectable_adjacent())`
+        // borrows `self` both ways at once.
+        let all = self.collectable_adjacent();
+        if all.is_empty() {
             self.log_base("There is nothing to collect here.");
             return Vec::new();
         }
-        let summary = taken
-            .iter()
-            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
-        self.tick();
-        taken.into_iter().collect()
+        self.collect_items(&all)
     }
 }

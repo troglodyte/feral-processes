@@ -744,10 +744,6 @@ fn recharger_node_loads_as_a_permanent_base_wide_power_source() {
         "the Recharger Node should at least cover the base it is first built on"
     );
     assert!(
-        def.enables_rest.is_none(),
-        "resting moved to Home; the Recharger Node is no longer a rest gate"
-    );
-    assert!(
         def.temporary.is_none(),
         "the Recharger Node should be a permanent structure"
     );

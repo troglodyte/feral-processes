@@ -269,86 +269,59 @@ fn buying_an_item_is_a_base_action() {
     );
 }
 
-/// **Controller ruling 7, slice-1 Task 6.** The one site of the eleven that
-/// kept `require_surface` — until the base moved. `rest` demands a structure
-/// whose def sets `enables_rest` within reach and Home is the only shipped
-/// one, so with Home standing in base space the surface guard would leave
-/// resting working only through the anchor-and-origin coordinate collision
-/// at `(0, 0)`, which this repo already records as a vacuous-assertion trap.
+/// **Controller ruling 7, slice-1 Task 6, since superseded.** `rest` was the
+/// one site of the eleven that kept `require_surface`, then became the one
+/// that took `require_base` instead. It now takes neither: a rest is
+/// allowed in all three locales and the locale decides only what it *costs*
+/// — free inside the base, one rest charge anywhere else.
 ///
-/// `rest` logs its refusal rather than returning it, so the probe is whether
-/// the world moved: a rest that runs advances `REST_TICKS` at once, and a
-/// refused one spends nothing at all.
+/// That makes base space the cheap place to power down rather than the only
+/// one, so this is the axis worth pinning here: three runs differing by
+/// locale alone, each asserted on the outlet count rather than on the clock,
+/// since no rest advances the clock any more.
 #[test]
-fn resting_is_a_base_action() {
-    let rested = |at: At| {
+fn resting_is_free_in_base_space_and_priced_outside_it() {
+    let outlets_spent = |at: At| {
         let mut game = game(3110);
-        // Stands the Home *and* puts the party in base space, so the locale
-        // is the only thing the three runs differ by.
         stand_in_base_beside_home(&mut game);
         match at {
             At::Base => {}
             At::Surface => game.world.insert_resource(Locale::Surface),
             At::Stack => descend(&mut game),
         }
-        let before = game.current_tick();
+        let player = game.player_entity();
+        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+        let held = |g: &Game| {
+            g.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(ids::OUTLET))
+        };
+        let before = held(&game);
         game.rest();
-        game.current_tick() > before
+        assert_eq!(
+            game.world.get::<PowerReserve>(player).unwrap().get(),
+            100.0,
+            "the rest has to run in every locale, or the count below is vacuous: {:?}",
+            game.message_log(5)
+        );
+        before - held(&game)
     };
 
-    assert!(
-        rested(At::Base),
-        "resting must work where Home actually stands"
+    assert_eq!(
+        outlets_spent(At::Base),
+        0,
+        "inside the base the walk home is the whole price"
     );
-    assert!(
-        !rested(At::Surface),
-        "resting must be refused on the open grid"
+    assert_eq!(
+        outlets_spent(At::Surface),
+        1,
+        "out on the grid a rest is bought with a carried charge"
     );
-    assert!(!rested(At::Stack), "resting must be refused underground");
-}
-
-/// And the refusals say which guard caught them, so a site left on
-/// `require_surface` could not pass the test above by permitting everywhere.
-#[test]
-fn a_refused_rest_names_the_base_it_wanted() {
-    let mut game = game(3111);
-    stand_in_base_beside_home(&mut game);
-    game.world.insert_resource(Locale::Surface);
-
-    game.rest();
-
-    let said = game
-        .message_log(200)
-        .into_iter()
-        .any(|line| line.text.contains(THE_BASE));
-    assert!(
-        said,
-        "a rest refused on the open grid must name the base guard, log: {:?}",
-        game.message_log(5)
-    );
-}
-
-/// The other half of the flip, and the half a locale guard alone cannot
-/// prove: the reach check has to measure the player's **base** cell against
-/// the structure's base-space `Position`.
-///
-/// The player's surface `Position` is dragged far past Home's `enables_rest`
-/// radius first. A reach still measured on the surface tile fails outright;
-/// one measured in base space is unaffected, because neither the party nor
-/// the Home moved in the space they are both actually in.
-#[test]
-fn rest_measures_its_reach_in_base_space() {
-    let mut game = game(3112);
-    stand_in_base_beside_home(&mut game);
-    stand_player_at(&mut game, 500, 500);
-    let before = game.current_tick();
-
-    game.rest();
-
-    assert!(
-        game.current_tick() > before,
-        "reach is between the party's base cell and Home's, and the surface tile has no say: {:?}",
-        game.message_log(5)
+    assert_eq!(
+        outlets_spent(At::Stack),
+        1,
+        "and underground is field too, at the same price"
     );
 }
 

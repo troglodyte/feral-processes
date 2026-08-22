@@ -155,6 +155,19 @@ pub struct ItemDef {
     /// could never fire; see `ItemDb::load_dir`.
     #[serde(default)]
     pub grants: Option<crate::abilities::AbilityId>,
+    /// Marks this item as a rest charge: one unit is spent by `Game::rest`
+    /// to power down anywhere outside base space. Inside the base a rest is
+    /// free and spends nothing, so this is the field half of the mechanic.
+    ///
+    /// A flag rather than a price, and on the *item* rather than in
+    /// `tuning.rs`, because the cost used to live on a structure's
+    /// `RestDef::cost` precisely so a mod could change it — with no
+    /// structure involved in a field rest it has to stay data somewhere, and
+    /// a modder prices their own charge through its `craftable.cost`.
+    /// `#[serde(default)]` so every existing mod's items keep parsing, as
+    /// ordinary cargo that cannot buy a rest.
+    #[serde(default)]
+    pub enables_rest: bool,
     /// Overrides the two-letter tag the base stock strip lists this item
     /// under. `#[serde(default)]` and almost always absent: `ItemDef::tag`
     /// derives one from the name, so a mod gets a tag for free. Authored
@@ -426,6 +439,8 @@ impl ItemDb {
                     // there is nothing for a worn grant to hang off.
                     grants: None,
                     upgrade: None,
+                    // A disk is installed, not slept against.
+                    enables_rest: false,
                     // Every disk derives the same family tag, "ED", and that
                     // is harmless rather than a collision: nothing puts a
                     // disk into a `Stock`, so no disk can reach the base

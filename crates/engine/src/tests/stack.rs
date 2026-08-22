@@ -622,17 +622,20 @@ fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     );
 }
 
-/// A Home sits at the player's own tile before they descend, so its rest
-/// radius still covers the pinned entrance `Position` once underground —
-/// otherwise `nearby_rest_structure` finds nothing regardless of gate
-/// ordering and the test cannot distinguish `require_surface` refusing the
-/// rest from there being no rest structure to spend against at all.
+/// The Stack no longer refuses a rest — it prices one. An outlet works four
+/// frames down exactly as it does on the surface, so a deep run is bounded
+/// by charges carried rather than by the Power reserve alone.
+///
+/// A Home is stood up and the party put in base space first, then dropped
+/// through the link, so the only thing separating this from a free rest is
+/// the locale.
 #[test]
-fn resting_is_refused_underground() {
+fn resting_underground_is_bought_with_an_outlet() {
     let mut game = game();
     stand_in_base_beside_home(&mut game);
     descend(&mut game);
     let player = game.player_entity();
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
     let outlets_before = game
         .world
         .get::<Inventory>(player)
@@ -642,14 +645,24 @@ fn resting_is_refused_underground() {
 
     game.rest();
 
-    assert_eq!(before, game.current_tick(), "rest should not have run");
     assert_eq!(
-        outlets_before,
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "the rest should run: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        outlets_before - 1,
         game.world
             .get::<Inventory>(player)
             .unwrap()
             .count(&ItemId::from(ids::OUTLET)),
-        "a rest refused by the require_surface gate must spend nothing"
+        "and cost exactly one outlet, the same as the surface"
+    );
+    assert_eq!(
+        before,
+        game.current_tick(),
+        "and pass no time, the same as everywhere else"
     );
 }
 

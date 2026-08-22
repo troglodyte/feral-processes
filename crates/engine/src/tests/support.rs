@@ -524,6 +524,15 @@ pub(super) fn assets_dir_with_environment(tag: &str, files: &[(&str, &str)]) -> 
     dir
 }
 
+/// A scratch install carrying one extra item on top of the shipped
+/// catalogue, for a modded item a shipped file can't stand in for.
+pub(super) fn assets_dir_with_extra_item(tag: &str, name: &str, body: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    std::fs::write(dir.join("items").join(name), body).unwrap();
+    dir
+}
+
 pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);

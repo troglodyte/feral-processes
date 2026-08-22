@@ -89,7 +89,7 @@ pub struct PowerRegenDef {
     /// structure that sets it.
     pub per_tick: f32,
     /// Chebyshev distance (in tiles) the player must be within for this to
-    /// run, same box-radius style as `RestDef::radius`.
+    /// run, a Chebyshev box rather than a circle.
     pub radius: i32,
 }
 
@@ -119,24 +119,6 @@ pub struct TradeDef {
     /// `Some(0)` is treated as `None` rather than dividing by zero.
     #[serde(default)]
     pub program_sell_divisor: Option<u32>,
-}
-
-/// A structure's rest capability — see `StructureDef::enables_rest` and
-/// `Game::rest`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RestDef {
-    /// Chebyshev distance (in tiles) the player must be within to rest
-    /// using this structure.
-    pub radius: i32,
-    /// Items spent per rest, each as `(item, quantity)`, checked and taken
-    /// after every other gate passes and before the rest ticks run (see
-    /// `Game::rest`). Priced on the structure that grants rest rather than
-    /// as a global rate, so a modded alternate rest structure can charge
-    /// differently — or nothing. `#[serde(default)]` so a `RestDef` written
-    /// before this field existed (including a mod's) still parses, as a
-    /// free rest, exactly as before this field existed.
-    #[serde(default)]
-    pub cost: Vec<(ItemId, u32)>,
 }
 
 /// Marks a structure as temporary — see `StructureDef::temporary`.
@@ -320,12 +302,6 @@ pub struct StructureDef {
     /// a number, not by editing the engine.
     #[serde(default)]
     pub max_deployed: u32,
-    /// If set, `Game::rest` is only allowed while the player stands within
-    /// this structure's `radius` — resting has no other way to happen.
-    /// `#[serde(default)]` so existing structure files (including mods)
-    /// without this field don't grant rest capability.
-    #[serde(default)]
-    pub enables_rest: Option<RestDef>,
     /// If set, this structure is temporary: it automatically collapses
     /// once `max_ticks` ordinary game-clock ticks have passed since it was
     /// deployed. `#[serde(default)]` so existing (permanent) structure
@@ -558,16 +534,6 @@ mod tests {
         )
         .expect("an authored capacity must parse");
         assert_eq!(def.capacity, 40);
-    }
-
-    /// The mod-compatibility guarantee: a `RestDef` written before `cost`
-    /// existed (or a modder who never touched it) still parses, and rests
-    /// for free — today's behaviour, preserved by defaulting to empty
-    /// rather than requiring every rest structure to price itself.
-    #[test]
-    fn a_rest_def_without_a_cost_field_defaults_to_a_free_rest() {
-        let def: RestDef = ron::from_str("(radius: 7)").expect("an older RestDef must still parse");
-        assert!(def.cost.is_empty());
     }
 
     #[test]

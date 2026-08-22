@@ -1,7 +1,8 @@
 (
     id: "outlet",
     name: "Power Outlet",
-    description: "Spent by resting. What turns a base's output into your own uptime.",
+    description: "Spent to power down and repair away from your base. At the base, resting is free.",
     value: Some(5),
     craftable: Some((cost: [("core_fragment", 5)])),
+    enables_rest: true,
 )

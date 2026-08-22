@@ -1681,9 +1681,6 @@ pub const NEST_CACHE_EQUIPMENT_ROLLS: u32 = 3;
 // PowerReserve & rest
 // ─────────────────────────────────────────────────────────────────────────
 
-/// How many ticks a full night's recharge cycle advances the clock by.
-pub const REST_TICKS: u32 = 40;
-
 /// Per-tick drain of Power — the one need, see `systems::power_drain_per_tick`.
 /// (`PowerReserve::hunger`; "Power" is the player-facing label.) It is the only
 /// thing that can starve you, so it alone paces a session.

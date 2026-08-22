@@ -287,41 +287,6 @@ impl Game {
             .map(|(_, p)| *p)
     }
 
-    /// Any deployed structure whose def sets `enables_rest` and is within
-    /// its radius of `player_pos` — gates `Game::rest`.
-    pub(crate) fn nearby_rest_structure(&mut self, player_pos: Position) -> Option<Entity> {
-        let mut query = self.world.query::<(Entity, &Structure, &Position)>();
-        let hits: Vec<(Entity, StructureId, Position)> = query
-            .iter(&self.world)
-            .map(|(e, s, p)| (e, s.kind.clone(), *p))
-            .collect();
-        let db = self.world.resource::<StructureDb>();
-        hits.into_iter().find_map(|(entity, kind, pos)| {
-            let radius = db.get(&kind)?.enables_rest.as_ref()?.radius;
-            if (pos.x - player_pos.x).abs() <= radius && (pos.y - player_pos.y).abs() <= radius {
-                Some(entity)
-            } else {
-                None
-            }
-        })
-    }
-
-    /// The `RestDef::cost` of whichever structure `nearby_rest_structure`
-    /// found, resolved to an owned `Vec` so `Game::rest` can drop this
-    /// `StructureDb` borrow before taking a mutable one on the player's
-    /// `Inventory` for the same call. Priced on the structure that actually
-    /// granted the rest, never on Home by id, so a modded alternate rest
-    /// structure can charge differently.
-    pub(crate) fn rest_cost(&self, rest_structure: Entity) -> Vec<(ItemId, u32)> {
-        let kind = &self.world.get::<Structure>(rest_structure).unwrap().kind;
-        self.world
-            .resource::<StructureDb>()
-            .get(kind)
-            .and_then(|def| def.enables_rest.as_ref())
-            .map(|rest| rest.cost.clone())
-            .unwrap_or_default()
-    }
-
     /// Finds a zone-portal structure (`StructureDef::zone_portal`) at
     /// `(x, y)`, if any — checked from `Game::move_in_base` so walking onto
     /// one breaches the zone. `(x, y)` is a base-space coordinate: a Portal

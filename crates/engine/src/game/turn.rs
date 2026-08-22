@@ -6,7 +6,7 @@ use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
-    RANDOM_ENCOUNTER_CHANCE, REST_TICKS,
+    RANDOM_ENCOUNTER_CHANCE,
 };
 use crate::world::NEIGHBOURS;
 use crate::*;
@@ -661,115 +661,51 @@ impl Game {
         }
     }
 
-    /// Power down for the night: many ticks pass at once (power reserves
-    /// drain accordingly, tamed programs keep processing, rogue programs
-    /// keep roaming), then Power and Integrity are both restored to full.
-    /// Requires the player to be standing within the radius of a structure
-    /// that sets `StructureDef::enables_rest` — Home, and only Home, among
-    /// the shipped structures — and, since it grants a free heal otherwise
-    /// unbounded by anything Power can limit, spending that structure's
-    /// `RestDef::cost` (an empty cost is a free rest, unchanged from before
-    /// the field existed). Both gates run before a single tick does; the
-    /// price is resolved and taken here rather than as its own system
-    /// because a refused rest must not spend anything, and a rest that
-    /// *starts* has already bought its ticks — the mid-loop `is_game_over`
-    /// bail below does not refund it. Beyond that, there's no separate
-    /// "rest" system beyond replaying the normal tick loop plus a
-    /// Power/HP reset at the end (via `tick_inner(false)`, so these ticks
-    /// don't age the rest structure itself — see
-    /// `age_temporary_structures`). If Power runs out and you take lethal
-    /// damage mid-rest, the loop bails out via the `is_game_over` check
-    /// before either restore happens.
+    /// Power down: Integrity and Power are restored to full, for the
+    /// player, the party and every tamed program on the roster.
+    ///
+    /// Priced by where the party is standing and nothing else. **Inside
+    /// base space it is free** — the walk home is the cost, and no
+    /// structure has to be in reach. **Anywhere else** — the open grid or
+    /// four frames down the Stack alike — it spends one unit of an item
+    /// whose def sets `ItemDef::enables_rest`, the Power Outlet among the
+    /// shipped items.
+    ///
+    /// **No rest advances the clock**, and that is what makes the free half
+    /// safe to give away: a base rest that ticked could be spammed to farm
+    /// production, raid pressure and need decay. It also means nothing in
+    /// the game fast-forwards any more — `Game::wait` is the only way time
+    /// passes without an action, one tick at a time.
+    ///
+    /// Nothing can fail after the charge is taken, so there is no refund
+    /// path: the two gates and the payment run in that order and the
+    /// restore is unconditional from there.
     pub fn rest(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        // `require_base`, not `require_surface`. Resting needs an
-        // `enables_rest` structure in reach, Home is the only one that sets
-        // it, and Home stands in base space — so the surface guard would
-        // leave resting working only where the anchor tile and base space's
-        // origin happened to carry the same numbers.
-        if let Err(reason) = self.require_base() {
-            self.log(reason);
-            return;
-        }
-        // And the reach is measured in the space the structure is in. The
-        // player's `Position` is pinned to the anchor tile out on the zone
-        // surface the whole time they are in here.
-        let (x, y) = self
-            .base_pos()
-            .expect("require_base passed, so the party is in base space");
-        let player_pos = Position { x, y };
-        let Some(rest_structure) = self.nearby_rest_structure(player_pos) else {
-            self.log("You need to be within your base, near Home, to power down and rest.");
-            return;
-        };
-        let cost = self.rest_cost(rest_structure);
         let player = self.player_entity();
-        let missing = {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            cost.iter()
-                .find(|(item, qty)| inv.count(item) < *qty)
-                .cloned()
-        };
-        if let Some((item, qty)) = missing {
-            self.log(format!(
-                "Resting needs {} {}, and you're short.",
-                qty,
-                self.item_name(&item)
-            ));
-            return;
-        }
-        let taken: Vec<(ItemId, u32)> = {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            cost.iter()
-                .map(|(item, qty)| (item.clone(), inv.take(item.clone(), *qty)))
-                .collect()
-        };
-        // The affordability check above tests each `(item, qty)` pair
-        // independently against the full stack, so a `cost` with a repeated
-        // item id can pass it and still come up short here once an earlier
-        // pair has already spent from the same stack. `take`'s return is
-        // exactly how much came off, so a shortfall is caught rather than
-        // silently treated as paid — refund what was taken, since a rest
-        // that can't fully afford itself must spend nothing.
-        if let Some((item, qty)) = cost
-            .iter()
-            .zip(&taken)
-            .find(|((_, qty), (_, got))| got < qty)
-            .map(|((item, qty), _)| (item.clone(), *qty))
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, got) in taken {
-                if got > 0 {
-                    inv.add(item, got);
-                }
-            }
-            self.log(format!(
-                "Resting needs {} {}, and you're short.",
-                qty,
-                self.item_name(&item)
-            ));
-            return;
-        }
-        self.log("You drop into low-power standby to recharge.");
-        for _ in 0..REST_TICKS {
-            if self.is_game_over().is_some() {
+        let mut spent = None;
+        if !self.in_base() {
+            let Some(charge) = self.rest_charge_in_pack() else {
+                let name = match self.rest_charge_name() {
+                    Some(name) => format!("no {name}"),
+                    None => "nothing".to_string(),
+                };
+                self.log(format!("You have {name} to power down with out here."));
+                return;
+            };
+            if self
+                .world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(charge.clone(), 1)
+                == 0
+            {
                 return;
             }
-            self.tick_inner(false);
-            // `nest_aggro_tick` (inside `tick_inner`) can start a battle on
-            // any of these ticks now that a provoked swarm chases through
-            // rest as it does everywhere else — a swarm catching you here
-            // has to fight the party it actually caught, not the party the
-            // heal below is about to produce. No refund: like the
-            // `is_game_over` bail above, a rest that *started* has already
-            // spent its cost.
-            if self.has_active_battle() {
-                return;
-            }
+            spent = Some(self.item_name(&charge).to_string());
         }
-        let player = self.player_entity();
         {
             let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
             needs.fill();
@@ -778,11 +714,9 @@ impl Game {
             let mut stats = self.world.get_mut::<Stats>(player).unwrap();
             stats.hp = stats.max_hp;
         }
-        // Down here with the heal and the refill rather than up with the
-        // gates, so a rest that never completed clears nothing: a refusal,
-        // the mid-loop game-over bail and a swarm catching you mid-standby
-        // all leave the party's loadout where it was. The walk is player then
-        // `Party` — the same set `tick_field_buffs` ages.
+        // Below the gates rather than beside them, so a refused rest clears
+        // nothing. The walk is player then `Party` — the same set
+        // `tick_field_buffs` ages.
         self.drop_until_rest_buffs_on_party();
         // Every tamed program you own gets fully healed too, not just your
         // active party — including any left behind defending a structure
@@ -803,13 +737,49 @@ impl Game {
             }
             // Rest is the *only* refill for a companion's reserve: nothing
             // restores one passively, and there is no way to hand a program a
-            // Power Cell mid-fight. That gives the party's casting budget the
-            // same base-bound shape as everything else here.
+            // Power Cell mid-fight.
             if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(creature) {
                 reserve.fill();
             }
         }
-        self.log("You come back online, fully recharged and repaired.");
+        match spent {
+            Some(name) => self.log(format!(
+                "You burn a {name} and come back online, fully recharged and repaired."
+            )),
+            None => self.log(
+                "You power down at the base and come back online, fully recharged and repaired.",
+            ),
+        }
+    }
+
+    /// The first item in the player's pack whose def sets
+    /// `ItemDef::enables_rest` — what a field rest is bought with. Mirrors
+    /// `use_power_source`'s scan, which answers the same shape of question
+    /// about Power.
+    fn rest_charge_in_pack(&self) -> Option<ItemId> {
+        let player = self.player_entity();
+        let db = self.world.resource::<ItemDb>();
+        let inv = self.world.get::<Inventory>(player).unwrap();
+        inv.items
+            .iter()
+            .map(|(id, _)| id.clone())
+            .find(|id| db.get(id.as_str()).is_some_and(|d| d.enables_rest))
+    }
+
+    /// What to call a rest charge in a refusal, when the player is holding
+    /// none to name. Read off the catalogue rather than hardcoded, so an
+    /// install that renamed or replaced the Power Outlet still refuses in
+    /// its own vocabulary — and one that ships no rest charge at all says
+    /// so instead of naming an item that does not exist.
+    fn rest_charge_name(&self) -> Option<String> {
+        let db = self.world.resource::<ItemDb>();
+        let mut names: Vec<&str> = db
+            .all()
+            .filter(|d| d.enables_rest)
+            .map(|d| d.name.as_str())
+            .collect();
+        names.sort_unstable();
+        names.first().map(|n| n.to_string())
     }
 
     /// Stand in place for a single tick — lets the world (wander AI,

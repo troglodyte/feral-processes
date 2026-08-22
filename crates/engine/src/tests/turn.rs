@@ -1,7 +1,6 @@
 //! The turn loop: ticking, resting, waiting, and consuming items.
 
 use super::support::*;
-use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, REST_TICKS};
 use crate::*;
 
 #[test]
@@ -252,53 +251,6 @@ fn a_new_game_starts_with_two_power_outlets() {
 }
 
 #[test]
-fn rest_is_refused_with_no_outlet_and_does_not_tick() {
-    let mut game = Game::new(702, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    stand_in_base_beside_home(&mut game);
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(&ItemId::from(ids::OUTLET));
-        inv.take(ItemId::from(ids::OUTLET), held);
-    }
-    let before = game.current_tick();
-
-    game.rest();
-
-    assert_eq!(
-        before,
-        game.current_tick(),
-        "a rest refused for lacking an outlet must not advance the clock — \
-         the ticks are what the outlet buys"
-    );
-    assert!(
-        game.message_log(5)
-            .iter()
-            .any(|e| e.text.to_lowercase().contains("outlet")),
-        "the refusal should say why"
-    );
-}
-
-#[test]
-fn rest_spends_exactly_one_outlet_not_the_whole_stack() {
-    let mut game = Game::new(703, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    stand_in_base_beside_home(&mut game);
-
-    game.rest();
-
-    let remaining = game
-        .world
-        .get::<Inventory>(player)
-        .unwrap()
-        .count(&ItemId::from(ids::OUTLET));
-    assert_eq!(
-        remaining, 1,
-        "a fresh game starts with 2 outlets; one rest should leave exactly 1, not 0"
-    );
-}
-
-#[test]
 fn rest_refused_by_game_over_consumes_no_outlet() {
     let mut game = Game::new(704, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
@@ -333,183 +285,6 @@ fn rest_refused_by_active_battle_consumes_no_outlet() {
             .count(&ItemId::from(ids::OUTLET)),
         2,
         "a rest refused by the active-battle gate must spend nothing"
-    );
-}
-
-#[test]
-fn rest_refused_by_no_nearby_rest_structure_consumes_no_outlet() {
-    let mut game = Game::new(706, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-
-    game.rest();
-
-    assert_eq!(
-        game.world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::OUTLET)),
-        2,
-        "a rest refused for having no rest structure in range must spend nothing"
-    );
-}
-
-const FREE_REST_PAD: &str = r#"(
-    id: "free_rest_pad",
-    name: "Free Rest Pad",
-    description: "Test fixture: a rest structure whose RestDef carries no cost.",
-    glyph: '#',
-    color: White,
-    build_cost: [],
-    work: None,
-    enables_rest: Some((radius: 7)),
-)"#;
-
-/// Guards the wiring, not just the parsing: `structures::tests::a_rest_def_-
-/// without_a_cost_field_defaults_to_a_free_rest` (Task 1) already proves an
-/// old-format `RestDef` parses with an empty `cost`; this proves `Game::rest`
-/// actually treats that empty `cost` as free rather than, say, silently
-/// requiring some other implicit price.
-#[test]
-fn a_rest_structure_with_no_cost_field_still_rests_for_free() {
-    let dir = assets_dir_with_extra_structure("free_rest_pad", "free_rest_pad.ron", FREE_REST_PAD);
-    let mut game = Game::new(707, DifficultyMode::Forgiving, &dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-    let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(&ItemId::from(ids::OUTLET));
-        inv.take(ItemId::from(ids::OUTLET), held);
-    }
-    game.world.spawn((
-        Structure {
-            kind: "free_rest_pad".to_string(),
-        },
-        Position { x: 0, y: 0 },
-    ));
-    stand_in_base(&mut game);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
-
-    game.rest();
-
-    assert_eq!(
-        game.world.get::<PowerReserve>(player).unwrap().get(),
-        100.0,
-        "a rest structure whose def sets no cost should still rest for free, \
-         with zero outlets held"
-    );
-}
-
-const DOUBLE_CHARGE_REST_PAD: &str = r#"(
-    id: "double_charge_rest_pad",
-    name: "Double-Charge Rest Pad",
-    description: "Test fixture: a rest structure whose RestDef repeats one item id in cost.",
-    glyph: '#',
-    color: White,
-    build_cost: [],
-    work: None,
-    enables_rest: Some((radius: 7, cost: [("outlet", 1), ("outlet", 1)])),
-)"#;
-
-/// `cost`'s affordability check (`turn.rs::rest`) tests each `(item, qty)`
-/// pair independently against the *current* stack rather than simulating
-/// depletion across the list, so a repeated item id can pass that check and
-/// still run out partway through the actual `take` loop. With one outlet
-/// held against a cost that names it twice, both pre-check pairs see
-/// `count == 1 >= 1` and pass; the first `take` empties the stack and the
-/// second must come back short. `Inventory::take`'s return is exactly how
-/// much came off, so the fix has to look at it — this proves the loop does,
-/// by proving nothing is spent and the rest is refused instead of running
-/// on half-paid ticks.
-#[test]
-fn rest_refuses_and_refunds_when_a_repeated_cost_item_only_partly_affords() {
-    let dir = assets_dir_with_extra_structure(
-        "double_charge_rest_pad",
-        "double_charge_rest_pad.ron",
-        DOUBLE_CHARGE_REST_PAD,
-    );
-    let mut game = Game::new(708, DifficultyMode::Forgiving, &dir).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
-    let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        let held = inv.count(&ItemId::from(ids::OUTLET));
-        inv.take(ItemId::from(ids::OUTLET), held);
-        inv.add(ItemId::from(ids::OUTLET), 1);
-    }
-    game.world.spawn((
-        Structure {
-            kind: "double_charge_rest_pad".to_string(),
-        },
-        Position { x: 0, y: 0 },
-    ));
-    stand_in_base(&mut game);
-    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
-    let before_tick = game.current_tick();
-
-    game.rest();
-
-    assert_eq!(
-        game.world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::OUTLET)),
-        1,
-        "a rest that can't fully afford a repeated-item cost must refund \
-         whatever it took, not keep the partial payment"
-    );
-    assert_eq!(
-        game.world.get::<PowerReserve>(player).unwrap().get(),
-        10.0,
-        "a refused rest must not run any ticks, so Power is untouched"
-    );
-    assert_eq!(
-        before_tick,
-        game.current_tick(),
-        "a refused rest must not advance the clock"
-    );
-    assert!(
-        game.message_log(5)
-            .iter()
-            .any(|e| e.text.to_lowercase().contains("outlet")),
-        "the refusal should say why"
-    );
-}
-
-#[test]
-fn home_enables_rest_across_the_whole_base_footprint() {
-    let game = Game::new(402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.id == "home")
-        .expect("home.ron should load");
-    assert!(
-        def.enables_rest
-            .as_ref()
-            .expect("Home should be the rest gate")
-            .radius
-            >= MAX_BUILD_DISTANCE_FROM_HOME,
-        "Home's rest radius should at least cover the base it anchors at its \
-         starting size"
-    );
-}
-
-#[test]
-fn rest_is_a_no_op_without_a_nearby_rest_structure() {
-    let mut game = Game::new(401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    {
-        let mut needs = game.world.get_mut::<PowerReserve>(player).unwrap();
-        *needs = PowerReserve::new(10.0);
-    }
-
-    game.rest();
-
-    let needs = *game.world.get::<PowerReserve>(player).unwrap();
-    assert_eq!(
-        needs.get(),
-        10.0,
-        "resting with no Home in range shouldn't restore anything"
     );
 }
 
@@ -612,68 +387,6 @@ fn tick_field_buffs_ages_buffs_on_party_members_too() {
     assert_eq!(remaining, 1, "a companion's field buff should tick too");
 }
 
-/// The regression guard for the ordering constraint in `tick_inner`: a
-/// field buff keeps aging through `rest` while a `Temporary` structure's
-/// lifespan does not. Losing this distinction is exactly the kind of
-/// "tidy up the call site" refactor that would silently make buffs
-/// immortal through every night's rest.
-#[test]
-fn rest_ages_field_buffs_but_not_temporary_structures() {
-    let mut game = Game::new(603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    stand_in_base_beside_home(&mut game);
-    game.arm_field_buff(
-        player,
-        ActiveFieldBuff {
-            kind: FieldBuffKind::Trickle,
-            name: "Power Tap".to_string(),
-            power: 1,
-            remaining: REST_TICKS + 5,
-            interval: 1,
-            source: BuffSource::Routine,
-        },
-    );
-    let pos = *game.world.get::<Position>(player).unwrap();
-    let structure = game
-        .world
-        .spawn((
-            Structure {
-                kind: "test_temp".to_string(),
-            },
-            Position {
-                x: pos.x + 2,
-                y: pos.y,
-            },
-            Temporary {
-                ticks_remaining: 100,
-            },
-        ))
-        .id();
-
-    game.rest();
-
-    let buff_remaining = game
-        .world
-        .get::<FieldBuff>(player)
-        .unwrap()
-        .active
-        .first()
-        .unwrap()
-        .remaining;
-    assert_eq!(
-        buff_remaining, 5,
-        "a field buff should lose exactly REST_TICKS while resting"
-    );
-    assert_eq!(
-        game.world
-            .get::<Temporary>(structure)
-            .unwrap()
-            .ticks_remaining,
-        100,
-        "a Temporary structure must not age while the player rests"
-    );
-}
-
 /// The tick half of the until-rest rule. Not "ages slowly" and not "expires
 /// late" — a routine-armed buff of a read-on-demand kind is not aged at all,
 /// so its `remaining` is still whatever it was armed with after a run's worth
@@ -752,9 +465,11 @@ fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
     );
 }
 
-/// Rest is the expiry event for the until-rest ones, and only for those: a
-/// counted buff comes out of a rest aged by `REST_TICKS`, exactly as it did
-/// before any of this existed.
+/// Rest is the expiry event for the until-rest ones, and only for those. A
+/// counted buff comes out of a rest **unaged** now that no rest advances the
+/// clock — the drop is a thing `rest` does on purpose, not a side effect of
+/// time passing, and that distinction is the whole of why the counted one
+/// survives.
 #[test]
 fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
     let mut game = Game::new(622, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -777,7 +492,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
             kind: FieldBuffKind::Regen,
             name: "Repair Loop Single".to_string(),
             power: 2,
-            remaining: REST_TICKS + 12,
+            remaining: 12,
             interval: 1,
             source: BuffSource::Routine,
         },
@@ -794,7 +509,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
     assert_eq!(active[0].kind, FieldBuffKind::Regen);
     assert_eq!(
         active[0].remaining, 12,
-        "a counted buff still loses exactly REST_TICKS to a rest"
+        "a counted buff is untouched: a rest passes no time to age it with"
     );
     assert!(
         game.message_log(20)
@@ -855,9 +570,12 @@ fn a_refused_rest_keeps_until_rest_buffs() {
         },
     );
 
-    // In the base, but with no Home standing in it: the rest is refused for
-    // want of something to rest at, rather than for want of the base.
-    stand_in_base(&mut game);
+    // Out on the grid with an empty pack: the one refusal a rest still has.
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
     game.rest();
 
     assert_eq!(
@@ -1850,4 +1568,213 @@ fn the_ground_is_named_at_zone_one() {
     game.move_player(1, 0);
 
     assert_eq!(log_names(&game, Biome::Mainframe), 1);
+}
+
+// ---------------------------------------------------------------------
+// Rest: free inside the base, an outlet outside it, instant everywhere
+// ---------------------------------------------------------------------
+
+/// The base half of the flip. Standing inside base space is the whole
+/// price — no structure in reach, no item spent — because the walk home is
+/// what the rest costs.
+#[test]
+fn resting_in_base_space_spends_nothing() {
+    let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    stand_in_base(&mut game);
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "a rest in base space runs with an empty pack: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        0,
+        "and spends no outlet"
+    );
+}
+
+/// The anti-abuse half, and the reason a free rest is safe to give away:
+/// no rest advances the clock, so a base rest cannot be spammed to farm
+/// production, raid pressure or need decay.
+#[test]
+fn a_rest_in_base_space_does_not_advance_the_clock() {
+    let mut game = Game::new(3211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    stand_in_base(&mut game);
+    let before = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "the rest has to run, or the clock assertion below is vacuous"
+    );
+    assert_eq!(
+        before,
+        game.current_tick(),
+        "a rest passes no time anywhere any more"
+    );
+}
+
+/// The field half. Out on the open grid there is no base to stand in, so
+/// the rest is bought with a carried charge instead.
+#[test]
+fn resting_on_the_surface_spends_one_outlet() {
+    let mut game = Game::new(3212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+    let before = game.current_tick();
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "an outlet rests you anywhere: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        1,
+        "a fresh game starts with 2 outlets; one rest should leave exactly 1"
+    );
+    assert_eq!(
+        before,
+        game.current_tick(),
+        "and the field rest passes no time either"
+    );
+}
+
+/// Underground is field too. An outlet is the Stack's rest, which is what
+/// makes a deep run bounded by outlet stock rather than by Power reserve.
+#[test]
+fn resting_underground_spends_one_outlet() {
+    let mut game = Game::new(3213, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    descend(&mut game);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "the Stack no longer refuses a rest outright: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        1,
+        "and it costs the same one outlet the surface does"
+    );
+}
+
+/// The refusal, and the only one the field path has.
+#[test]
+fn resting_outside_the_base_with_no_outlet_is_refused() {
+    let mut game = Game::new(3214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+    }
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        10.0,
+        "a refused rest restores nothing"
+    );
+    assert!(
+        game.message_log(5)
+            .iter()
+            .any(|e| e.text.to_lowercase().contains("outlet")),
+        "and says why: {:?}",
+        game.message_log(5)
+    );
+}
+
+/// What a rest costs in the field is a property of the *item*, not a
+/// hardcoded id — the price used to live on `RestDef::cost` precisely so a
+/// mod could change it, and it must stay data now that no structure is
+/// involved. A modded charge is spent in the shipped outlet's place.
+#[test]
+fn any_item_flagged_enables_rest_can_buy_a_field_rest() {
+    let dir = assets_dir_with_extra_item(
+        "spare_battery",
+        "spare_battery.ron",
+        r#"(
+    id: "spare_battery",
+    name: "Spare Battery",
+    description: "Test fixture: a modded rest charge.",
+    value: Some(5),
+    enables_rest: true,
+)"#,
+    );
+    let mut game = Game::new(3215, DifficultyMode::Forgiving, &dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let player = game.player_entity();
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+        inv.add(ItemId::from("spare_battery"), 1);
+    }
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+
+    game.rest();
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        100.0,
+        "a modded rest charge should rest you: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from("spare_battery")),
+        0,
+        "and be spent doing it"
+    );
+}
+
+/// The shipped half of the rule above: the Power Outlet is what carries the
+/// flag, so deleting the field from `outlet.ron` is a content change rather
+/// than something the engine papers over.
+#[test]
+fn the_power_outlet_is_a_rest_charge() {
+    let game = Game::new(3216, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.item_def(&ItemId::from(ids::OUTLET))
+            .expect("outlet.ron should load")
+            .enables_rest,
+        "the Power Outlet is the shipped rest charge"
+    );
 }

@@ -231,3 +231,87 @@ fn holding_a_digit_key_cannot_overflow() {
 
     assert_eq!(app.collect_basket[0], u32::MAX);
 }
+
+/// Enter takes exactly the basket and nothing else — the whole point of the
+/// change is that the rest stays where the base's chains can still pull it.
+#[test]
+fn enter_takes_exactly_the_basket() {
+    let mut app = picker(981);
+
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Playing);
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        game.collectable_adjacent(),
+        vec![(item("core_fragment"), 9), (item("power_cell"), 3)],
+        "only what was asked for left the shelves"
+    );
+}
+
+/// One commit is one action, whatever the basket holds. Asserted with two
+/// items, since a one-item basket cannot tell one tick from per-item
+/// ticking.
+#[test]
+fn enter_spends_exactly_one_turn_however_big_the_basket() {
+    let mut app = picker(982);
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Char('3'));
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before + 1);
+}
+
+/// Enter on an all-zero basket is the same no-op as Esc: nothing is taken,
+/// no turn is spent, and the screen closes.
+#[test]
+fn enter_on_an_empty_basket_takes_nothing() {
+    let mut app = picker(983);
+    let before = app.game.as_ref().unwrap().current_tick();
+    let offer = app.game.as_ref().unwrap().collectable_adjacent();
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+    assert_eq!(app.game.as_ref().unwrap().collectable_adjacent(), offer);
+}
+
+/// Abandoning the screen takes nothing and costs no turn, the same way a
+/// collect that finds nothing costs no turn today.
+#[test]
+fn esc_takes_nothing_and_spends_no_turn() {
+    let mut app = picker(984);
+    let before = app.game.as_ref().unwrap().current_tick();
+    let offer = app.game.as_ref().unwrap().collectable_adjacent();
+
+    app.handle_key(GameKey::Char('9'));
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+    assert_eq!(app.game.as_ref().unwrap().collectable_adjacent(), offer);
+}
+
+/// Both exits clear the two fields, so a reopened screen can never show a
+/// stale shelf or a basket the player already spent.
+#[test]
+fn both_exits_leave_no_stale_shelf() {
+    for leave in [GameKey::Enter, GameKey::Esc] {
+        let mut app = picker(985);
+        app.handle_key(GameKey::Char('2'));
+        app.handle_key(leave);
+
+        assert!(app.collect_rows.is_empty(), "{leave:?} left rows behind");
+        assert!(
+            app.collect_basket.is_empty(),
+            "{leave:?} left a basket behind"
+        );
+    }
+}

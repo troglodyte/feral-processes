@@ -28,6 +28,7 @@ impl App {
         let len = self.collect_rows.len();
         match key {
             GameKey::Esc => self.leave_collect(),
+            GameKey::Enter => self.commit_collect(),
             GameKey::Up | GameKey::Down => self.scroll(key, len),
             // Uppercase for the two screen actions, matching the reserved
             // uppercase convention. Nothing here picks a row by letter, so
@@ -66,6 +67,29 @@ impl App {
         if let Some(want) = self.collect_basket.get_mut(row) {
             *want = f(*want, available);
         }
+    }
+
+    /// Takes the basket and closes the screen.
+    ///
+    /// An all-zero basket never reaches the engine. `Game::collect_items`
+    /// already makes that request a no-op, so calling through would be
+    /// harmless today — but then two places would both have to keep the
+    /// no-op true.
+    ///
+    /// No `status_line`: the engine has already logged the haul, and the log
+    /// pane is where a haul is reported.
+    fn commit_collect(&mut self) {
+        let want: Vec<(ItemId, u32)> = self
+            .collect_rows
+            .iter()
+            .zip(self.collect_basket.iter())
+            .filter(|(_, n)| **n > 0)
+            .map(|((item, _), n)| (item.clone(), *n))
+            .collect();
+        if let (false, Some(game)) = (want.is_empty(), &mut self.game) {
+            game.collect_items(&want);
+        }
+        self.leave_collect();
     }
 
     /// The one teardown both exits use. Clearing the two fields is what

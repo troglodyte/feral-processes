@@ -27,6 +27,24 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.8
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this is a rendering change and nothing about it is written into a run.
+
+### The equipped panel says what your gear was compiled at
+
+The `WEP` / `ARM` / `MOD` column carries a copy's quality in its emphasis —
+dimmed under spec, bold above it, gold at the top — and the three rows
+naming what you are *actually wearing* were the only gear rows in the game
+without one. The screen showing your loadout could not say how well any of
+it was made.
+
+They carry it now, on the cargo screen and on a program's gear page alike.
+The column replaces the spelled-out slot rather than sitting beside it:
+`WEP` and `Weapon:` say the same thing, and printing both puts one column
+on a row twice. An empty slot still names the slot it is empty of.
+
 ## 0.13.7
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

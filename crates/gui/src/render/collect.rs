@@ -18,10 +18,11 @@ use super::*;
 ///
 /// **The hint says which arrow does which.** Left adds and Right removes here,
 /// against every other Left/Right in the game, so a player who guesses from
-/// the rest of the UI guesses wrong. The three hint lines stay no wider than
-/// the `[A]`/`[N]` line, which is the widest text the screen has always drawn
-/// — the width census below covers item rows only, and `draw_row` clips
-/// vertically alone.
+/// the rest of the UI guesses wrong — and a modifier is invisible until
+/// named, so Shift and Ctrl ride the same line. The three hint lines stay no
+/// wider than the `[A]`/`[N]` line, which is the widest text the screen has
+/// always drawn — the width census below covers item rows only, and
+/// `draw_row` clips vertically alone.
 ///
 /// **The page needs no height census.** The cursor drives `menu_selected` and
 /// `popup_layout` keeps the selected row visible, so a long shelf scrolls —
@@ -38,7 +39,7 @@ pub(super) fn draw_collect(
 ) {
     let mut body = vec![
         text_row("Up/Down pick a row; digits and Backspace type an amount"),
-        text_row("Left adds one, Right removes one"),
+        text_row("Left adds one, Right removes one; Shift for all, Ctrl for half"),
         text_row("[A] take everything  [N] take nothing  Enter to collect  Esc to leave"),
         text_row(""),
     ];

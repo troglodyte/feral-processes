@@ -2634,6 +2634,38 @@ words that the inversion is the specification, so a later hand "restoring
 consistency" fails a test that explains itself rather than one that merely
 goes red.
 
+**A modifier is four `GameKey` variants, and app-core is what makes them
+inert everywhere else.** `GameKey` names physical gestures rather than
+intentions — `Left` is the left arrow, not "west" — so Shift and Ctrl on the
+two horizontal arrows are a fourth pair of variants, `ShiftLeft`/`ShiftRight`
+and `CtrlLeft`/`CtrlRight`. The alternative shape, a payload
+(`Left { shift, ctrl }`), was rejected on cost: it rewrites every
+`GameKey::Left` arm in movement, building, inspection, the arena and the
+Stack, all to serve the one screen that asked for a modifier.
+
+The trap that shape carries is that **every other key handler ends in a
+`_ => {}`**, so promoting a modified arrow to a variant nothing else matches
+makes Shift+Left silently dead on every screen in the game rather than
+failing anywhere. `App::handle_key` folds `ShiftLeft`/`CtrlLeft` back to
+`Left` for every mode but `Mode::Collect`, in one condition, above the
+dispatch. It is deliberately *not* done in the renderer: gui always sends the
+modified form, because what a modifier *means* belongs on the same side of
+the seam as the mode that decides it. `a_modifier_is_stripped_outside_the_collect_picker`
+is the pin, and it is proved by deleting the fold rather than by reading it.
+
+`with_modifiers` in gui promotes the horizontal pair alone. Up and Down move
+a cursor on every screen that reads them and have no second meaning, so a
+modified Up would be a dead key with nothing to catch it —
+`only_the_horizontal_arrows_take_a_modifier` asserts the vertical pair,
+Enter, Esc, Backspace and a letter all survive a held modifier unchanged.
+Shift wins a tie over Ctrl: landing on "all" by accident is the milder
+surprise, being what the screen's own `[A]` already does.
+
+Ctrl is `available.div_ceil(2)` on both arrows, not `/ 2` — a shelf of one
+otherwise has no half — and all three modified keys are **targets rather
+than steps**, so the key repeat that drives the bare arrows makes them
+idempotent rather than runaway.
+
 **`require_base` and `base_pos`'s `None` are the same locale condition**, so
 neither can be mutation-proved with the other still standing — removing both
 is the honest mutation, and

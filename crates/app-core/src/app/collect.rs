@@ -60,6 +60,16 @@ impl App {
             GameKey::Backspace => self.edit_row(|n, _| n / 10),
             GameKey::Left => self.edit_row(|n, available| (n + 1).min(available)),
             GameKey::Right => self.edit_row(|n, _| n.saturating_sub(1)),
+            // Shift and Ctrl name an *amount* rather than a direction, which
+            // is why Ctrl's two arms are the same expression: there is
+            // nowhere for "half the shelf" to differ by which way you
+            // reached it. `div_ceil` rather than `/ 2` so a shelf of one
+            // still has a half.
+            GameKey::ShiftLeft => self.edit_row(|_, available| available),
+            GameKey::ShiftRight => self.edit_row(|_, _| 0),
+            GameKey::CtrlLeft | GameKey::CtrlRight => {
+                self.edit_row(|_, available| available.div_ceil(2))
+            }
             _ => {}
         }
     }

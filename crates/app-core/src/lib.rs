@@ -587,6 +587,23 @@ pub enum GameKey {
     Down,
     Left,
     Right,
+    /// The two horizontal arrows with Shift or Ctrl held.
+    ///
+    /// `GameKey` names physical gestures rather than intentions — `Left` is
+    /// the left arrow, not "west" — so a modified arrow is a fourth pair of
+    /// variants rather than a payload on the existing two. The alternative,
+    /// `Left { shift, ctrl }`, was rejected: it rewrites every
+    /// `GameKey::Left` arm in movement, building, inspection, the arena and
+    /// the Stack to serve the one screen that asked.
+    ///
+    /// Exactly one screen reads them, and `App::handle_key` folds them back
+    /// to bare `Left`/`Right` for every other mode — see the note there. A
+    /// frontend always sends the modified form; deciding what a modifier
+    /// means is app-core's job, not the renderer's.
+    ShiftLeft,
+    ShiftRight,
+    CtrlLeft,
+    CtrlRight,
     Char(char),
     Enter,
     Esc,

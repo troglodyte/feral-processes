@@ -56,6 +56,35 @@ const REPEATING_KEYS: &[KeyCode] = &[
     KeyCode::ArrowRight,
 ];
 
+/// The modifier keys, polled rather than mapped. They are not in
+/// `REPEATING_KEYS` or `SPECIAL_KEYS` and produce no `GameKey` of their own —
+/// holding one is a state the two horizontal arrows are read against, not a
+/// press. Both physical keys of each pair count, so a left-handed Shift is
+/// the same gesture as a right-handed one.
+const SHIFT_KEYS: [KeyCode; 2] = [KeyCode::ShiftLeft, KeyCode::ShiftRight];
+const CTRL_KEYS: [KeyCode; 2] = [KeyCode::ControlLeft, KeyCode::ControlRight];
+
+/// Folds held modifiers into the two horizontal arrows.
+///
+/// Up and Down are deliberately untouched: they move a cursor on every
+/// screen that reads them, and there is no second meaning to give them. The
+/// frontend sends the modified form unconditionally — `App::handle_key`
+/// strips it again for every mode but the collect picker, so this cannot
+/// make a modified arrow dead anywhere.
+///
+/// Shift wins a tie. Holding both is nobody's deliberate gesture, and "all"
+/// is the less surprising of the two to land on by accident, being the one
+/// the screen's own `[A]` already does.
+fn with_modifiers(key: GameKey, shift: bool, ctrl: bool) -> GameKey {
+    match (key, shift, ctrl) {
+        (GameKey::Left, true, _) => GameKey::ShiftLeft,
+        (GameKey::Right, true, _) => GameKey::ShiftRight,
+        (GameKey::Left, false, true) => GameKey::CtrlLeft,
+        (GameKey::Right, false, true) => GameKey::CtrlRight,
+        (key, _, _) => key,
+    }
+}
+
 /// Edge-triggered: these commit or cancel, and a held Escape unwinding
 /// several modes at once is nobody's intent. `ButtonInput` gives that for
 /// free — see the note in `keys.rs` on why the OS auto-repeat doesn't reach
@@ -243,9 +272,11 @@ fn frame(
         .copied()
         .filter(|&key| input.keyboard.pressed(key))
         .collect();
+    let shift = input.keyboard.any_pressed(SHIFT_KEYS);
+    let ctrl = input.keyboard.any_pressed(CTRL_KEYS);
     for key in fe.key_repeat.tick(now, &held) {
         if let Some(game_key) = map_special_key(key) {
-            fe.app.handle_key(game_key);
+            fe.app.handle_key(with_modifiers(game_key, shift, ctrl));
         }
     }
     for &key in SPECIAL_KEYS {
@@ -751,6 +782,45 @@ mod tests {
             assert!(
                 map_special_key(key).is_some(),
                 "{key:?} is polled every frame but maps to nothing"
+            );
+        }
+    }
+
+    /// Shift and Ctrl reach the two horizontal arrows and nothing else.
+    ///
+    /// The vertical pair is the case worth pinning: Up and Down move a cursor
+    /// on every screen that reads them, so promoting a modified Up to a
+    /// variant nothing handles would make Shift+Up dead on all of them. The
+    /// non-arrow arm covers the same hazard for Enter and Esc, which a player
+    /// may well be holding Shift over by accident on the way out of a screen.
+    #[test]
+    fn only_the_horizontal_arrows_take_a_modifier() {
+        for (held, shift, ctrl) in [
+            (GameKey::Left, GameKey::ShiftLeft, GameKey::CtrlLeft),
+            (GameKey::Right, GameKey::ShiftRight, GameKey::CtrlRight),
+        ] {
+            assert_eq!(with_modifiers(held, false, false), held);
+            assert_eq!(with_modifiers(held, true, false), shift);
+            assert_eq!(with_modifiers(held, false, true), ctrl);
+            assert_eq!(
+                with_modifiers(held, true, true),
+                shift,
+                "Shift wins a tie — landing on \"all\" by accident is the \
+                 milder surprise, and the screen already does it with [A]"
+            );
+        }
+        for untouched in [
+            GameKey::Up,
+            GameKey::Down,
+            GameKey::Enter,
+            GameKey::Esc,
+            GameKey::Backspace,
+            GameKey::Char('c'),
+        ] {
+            assert_eq!(
+                with_modifiers(untouched, true, true),
+                untouched,
+                "{untouched:?} must survive a held modifier unchanged"
             );
         }
     }

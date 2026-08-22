@@ -46,6 +46,22 @@ Nothing else about the screen moved: digits and Backspace still type an
 amount, `[A]` and `[N]` still fill and clear every row, Enter still takes
 exactly the basket and Esc still costs nothing.
 
+### Shift and Ctrl on the collect window's arrows
+
+Shift with an arrow is the whole row — Shift+Left fills it to what is on
+the shelf, Shift+Right puts it back to nothing. Ctrl with either arrow is
+half the shelf, rounded up, so a shelf of one still has a half. Ctrl names
+an amount rather than a direction, which is why both arrows land on the
+same number.
+
+These are per row, which is what separates them from `[A]` and `[N]` — those
+are the same two ends across every row at once. Holding a key repeats
+harmlessly: all three are targets rather than steps.
+
+Every other screen is unchanged. A modifier reaches the collect picker and
+nowhere else, so Shift with an arrow still walks, still pages a manifest and
+still moves a building cursor exactly as the bare arrow does.
+
 ## 0.13.9
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -177,6 +177,78 @@ fn left_and_right_step_by_one_and_saturate() {
     );
 }
 
+/// An odd shelf, which the shared fixture cannot build: it stocks two
+/// identical machines and the picker pools them, so every offer it can
+/// produce is even — and on an even shelf `div_ceil(2)` and plain `/ 2` are
+/// the same number. A rounding claim needs an odd one to mean anything.
+fn picker_with_odd_shelf(seed: u32) -> App {
+    let mut app = picker(seed);
+    app.collect_rows = vec![(item(ITEM), 7)];
+    app.collect_basket = vec![0];
+    app.menu_selected = 0;
+    app
+}
+
+/// Shift is the whole row: Left fills it to what is on the shelf, Right puts
+/// it back to nothing. Both are per row, unlike `[A]`/`[N]`, which are the
+/// same two ends across every row at once.
+#[test]
+fn shift_fills_the_highlighted_row_and_empties_it() {
+    let mut app = picker(978);
+
+    app.handle_key(GameKey::ShiftLeft);
+    assert_eq!(app.collect_basket, vec![12, 0], "this row only");
+
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(app.collect_basket, vec![0, 0]);
+
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::ShiftLeft);
+    assert_eq!(
+        app.collect_basket,
+        vec![0, 4],
+        "each row fills to its own shelf, not to a shared maximum"
+    );
+}
+
+/// Ctrl is half the shelf, rounded **up**, and both arrows land on it — the
+/// modifier names the amount rather than a direction, so there is nowhere
+/// for Ctrl+Left and Ctrl+Right to disagree.
+///
+/// Rounding up is what stops a shelf of 1 having no half at all.
+#[test]
+fn ctrl_takes_half_the_shelf_rounded_up() {
+    let mut app = picker_with_odd_shelf(979);
+
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(app.collect_basket, vec![4], "ceil(7/2), not 3");
+
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(
+        app.collect_basket,
+        vec![4],
+        "idempotent — a target, not a step"
+    );
+
+    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::CtrlRight);
+    assert_eq!(
+        app.collect_basket,
+        vec![4],
+        "the other arrow lands on the same half, coming down from full"
+    );
+}
+
+/// Half of an even shelf is exactly half, which is the case the odd fixture
+/// exists to distinguish itself from.
+#[test]
+fn ctrl_on_an_even_shelf_is_exactly_half() {
+    let mut app = picker(980);
+
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(app.collect_basket, vec![6, 0]);
+}
+
 /// `[A]` fills every row to *its own* maximum, not to a shared one — which
 /// is why the fixture's two rows hold different amounts. `[N]` puts them all
 /// back to nothing.

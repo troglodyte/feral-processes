@@ -118,6 +118,19 @@ impl App {
         // through. Restarting the window unconditionally meant that in a
         // battle, where nothing clears a refusal on success and several keys
         // go into planning a round, a refusal never aged out at all.
+        // A modifier reaches exactly one screen. The frontend always sends
+        // the modified form, so folding it away here is what keeps
+        // Shift+Left walking the player west everywhere else — the four
+        // variants are inert outside the picker rather than dead keys. A
+        // second screen wanting a modifier widens this one condition; doing
+        // it in the renderer instead would put "what a modifier means" on
+        // the far side of the seam from the mode that decides it.
+        let key = match key {
+            _ if self.mode == Mode::Collect => key,
+            GameKey::ShiftLeft | GameKey::CtrlLeft => GameKey::Left,
+            GameKey::ShiftRight | GameKey::CtrlRight => GameKey::Right,
+            _ => key,
+        };
         let carried = self.status_line.clone();
         let mode_before = self.mode;
         match self.mode {

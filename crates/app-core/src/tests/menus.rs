@@ -112,6 +112,35 @@ fn the_picker_lists_every_owned_program_after_you() {
     assert_eq!(app.pending_manifest, Some(subjects[1]));
 }
 
+/// A modifier is inert outside the collect picker.
+///
+/// The frontend always sends the modified form, so without the fold in
+/// `handle_key` a player holding Shift would find the arrow keys dead on
+/// every screen in the game — and dead quietly, since every other handler
+/// ends in a `_ => {}`. The manifest pager stands in for all of them: it is
+/// the nearest other Left/Right consumer that reports where it landed.
+#[test]
+fn a_modifier_is_stripped_outside_the_collect_picker() {
+    let mut app = app_owning_distant_programs(74, 2);
+    let subjects = app.manifest_subjects();
+    open_via_menu(&mut app, 'p', "Read a manifest");
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_manifest, Some(subjects[0]));
+
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(
+        app.pending_manifest,
+        Some(subjects[1]),
+        "Shift+Right pages exactly as Right does"
+    );
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(
+        app.pending_manifest,
+        Some(subjects[0]),
+        "and Ctrl+Left exactly as Left"
+    );
+}
+
 #[test]
 fn left_and_right_cycle_the_owned_subjects_and_wrap_at_both_ends() {
     let mut app = app_owning_distant_programs(73, 2);

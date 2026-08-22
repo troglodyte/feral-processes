@@ -2661,10 +2661,22 @@ Enter, Esc, Backspace and a letter all survive a held modifier unchanged.
 Shift wins a tie over Ctrl: landing on "all" by accident is the milder
 surprise, being what the screen's own `[A]` already does.
 
-Ctrl is `available.div_ceil(2)` on both arrows, not `/ 2` — a shelf of one
-otherwise has no half — and all three modified keys are **targets rather
-than steps**, so the key repeat that drives the bare arrows makes them
-idempotent rather than runaway.
+**Shift is a target and Ctrl is a step, and that difference is the reason
+both exist.** Shift names an end of the range and is idempotent under the
+key repeat driving these arrows. Ctrl closes half the gap to the end it is
+heading for — `n + (available - n).div_ceil(2)` going up, `n - n.div_ceil(2)`
+coming down — so a second press halves what is *left* rather than landing on
+the same number twice. That makes Ctrl directional where Shift's two arrows
+are two different ends.
+
+**`div_ceil` on the step is what makes it terminate.** Rounded down, a gap of
+one gives a step of zero and the key goes dead with the row neither full nor
+empty. The claim has its own test on a shelf of **8**, not 7:
+on 8 the ceiling and the floor agree on every step but the last (0, 4, 6, 7,
+then 8 against a stranded 7), so the mutation that proves it reaches the tail
+instead of failing at the first press. On an odd shelf the two diverge
+immediately, which proves rounding matters but says nothing about
+termination.
 
 **`require_base` and `base_pos`'s `None` are the same locale condition**, so
 neither can be mutation-proved with the other still standing — removing both

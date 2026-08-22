@@ -60,16 +60,21 @@ impl App {
             GameKey::Backspace => self.edit_row(|n, _| n / 10),
             GameKey::Left => self.edit_row(|n, available| (n + 1).min(available)),
             GameKey::Right => self.edit_row(|n, _| n.saturating_sub(1)),
-            // Shift and Ctrl name an *amount* rather than a direction, which
-            // is why Ctrl's two arms are the same expression: there is
-            // nowhere for "half the shelf" to differ by which way you
-            // reached it. `div_ceil` rather than `/ 2` so a shelf of one
-            // still has a half.
+            // The two modifiers are different verbs. Shift is a *target* —
+            // an end of the range, idempotent under the key repeat driving
+            // these arrows. Ctrl is a *step*: it closes half the gap to the
+            // end it is heading for, so pressing it again halves what is
+            // left rather than landing on the same number twice.
+            //
+            // `div_ceil` on the step is what makes it terminate. Rounded
+            // down, a gap of one gives a step of zero and the key goes dead
+            // with the row neither full nor empty.
             GameKey::ShiftLeft => self.edit_row(|_, available| available),
             GameKey::ShiftRight => self.edit_row(|_, _| 0),
-            GameKey::CtrlLeft | GameKey::CtrlRight => {
-                self.edit_row(|_, available| available.div_ceil(2))
+            GameKey::CtrlLeft => {
+                self.edit_row(|n, available| n + available.saturating_sub(n).div_ceil(2))
             }
+            GameKey::CtrlRight => self.edit_row(|n, _| n - n.div_ceil(2)),
             _ => {}
         }
     }

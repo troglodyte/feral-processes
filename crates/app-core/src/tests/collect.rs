@@ -177,13 +177,16 @@ fn left_and_right_step_by_one_and_saturate() {
     );
 }
 
-/// An odd shelf, which the shared fixture cannot build: it stocks two
-/// identical machines and the picker pools them, so every offer it can
-/// produce is even — and on an even shelf `div_ceil(2)` and plain `/ 2` are
-/// the same number. A rounding claim needs an odd one to mean anything.
-fn picker_with_odd_shelf(seed: u32) -> App {
+/// The picker over a single row holding exactly `shelf`.
+///
+/// The shared fixture stocks two identical machines and the picker pools
+/// them, so every offer it can build is even — and 7 is the shelf the
+/// rounding tests want. Stating the number here rather than deriving it is
+/// the point: these tests are arithmetic, and a shelf that moved with a
+/// content edit would make them assert something else.
+fn picker_with_shelf(seed: u32, shelf: u32) -> App {
     let mut app = picker(seed);
-    app.collect_rows = vec![(item(ITEM), 7)];
+    app.collect_rows = vec![(item(ITEM), shelf)];
     app.collect_basket = vec![0];
     app.menu_selected = 0;
     app
@@ -211,42 +214,96 @@ fn shift_fills_the_highlighted_row_and_empties_it() {
     );
 }
 
-/// Ctrl is half the shelf, rounded **up**, and both arrows land on it — the
-/// modifier names the amount rather than a direction, so there is nowhere
-/// for Ctrl+Left and Ctrl+Right to disagree.
+/// Ctrl halves the gap to the end it is heading for, and repeats.
 ///
-/// Rounding up is what stops a shelf of 1 having no half at all.
+/// Left closes half the distance to the full shelf, Right half the distance
+/// to nothing — so pressing one twice lands on half of what was *left*
+/// rather than back on the same number. That makes Ctrl directional, unlike
+/// Shift, whose two arrows are two different ends.
+///
+/// **The step is rounded up, and that is what makes it terminate.** Rounding
+/// the step down strands the last unit: from a gap of one, `1 / 2` is zero
+/// and the key stops doing anything with the row neither full nor empty.
+/// Both tails are asserted below for that reason.
 #[test]
-fn ctrl_takes_half_the_shelf_rounded_up() {
-    let mut app = picker_with_odd_shelf(979);
+fn ctrl_halves_the_gap_and_converges_on_the_end_it_is_heading_for() {
+    let mut app = picker_with_shelf(979, 7);
 
     app.handle_key(GameKey::CtrlLeft);
     assert_eq!(app.collect_basket, vec![4], "ceil(7/2), not 3");
-
     app.handle_key(GameKey::CtrlLeft);
     assert_eq!(
         app.collect_basket,
-        vec![4],
-        "idempotent — a target, not a step"
+        vec![6],
+        "half of the three still on offer"
     );
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(
+        app.collect_basket,
+        vec![7],
+        "a gap of one closes rather than stranding the last unit"
+    );
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(app.collect_basket, vec![7], "and stops at the shelf");
 
-    app.handle_key(GameKey::ShiftLeft);
     app.handle_key(GameKey::CtrlRight);
     assert_eq!(
         app.collect_basket,
-        vec![4],
-        "the other arrow lands on the same half, coming down from full"
+        vec![3],
+        "coming down, half of what is held"
     );
+    app.handle_key(GameKey::CtrlRight);
+    assert_eq!(app.collect_basket, vec![1]);
+    app.handle_key(GameKey::CtrlRight);
+    assert_eq!(
+        app.collect_basket,
+        vec![0],
+        "the last unit goes rather than sticking at one"
+    );
+    app.handle_key(GameKey::CtrlRight);
+    assert_eq!(app.collect_basket, vec![0], "and stops at nothing");
 }
 
-/// Half of an even shelf is exactly half, which is the case the odd fixture
-/// exists to distinguish itself from.
+/// The two modifiers are different verbs, not two sizes of one.
+///
+/// Shift is a *target* and so idempotent under the key repeat that drives
+/// these arrows; Ctrl is a *step* and converges. Pressed from the same row
+/// they part company immediately, which is the whole reason both exist.
 #[test]
-fn ctrl_on_an_even_shelf_is_exactly_half() {
-    let mut app = picker(980);
+fn shift_lands_in_one_press_where_ctrl_walks() {
+    let mut shift = picker_with_shelf(981, 7);
+    let mut ctrl = picker_with_shelf(981, 7);
 
-    app.handle_key(GameKey::CtrlLeft);
-    assert_eq!(app.collect_basket, vec![6, 0]);
+    shift.handle_key(GameKey::ShiftLeft);
+    shift.handle_key(GameKey::ShiftLeft);
+    assert_eq!(shift.collect_basket, vec![7], "there in one, and stays");
+
+    ctrl.handle_key(GameKey::CtrlLeft);
+    ctrl.handle_key(GameKey::CtrlLeft);
+    assert_eq!(ctrl.collect_basket, vec![6], "still closing");
+}
+
+/// The last unit closes rather than stranding, and a shelf of 8 is what
+/// isolates that claim.
+///
+/// On 8 the ceiling and the floor agree on every step but the final one:
+/// both walk 0, 4, 6, 7 — and then a gap of one is `ceil` 1 against `floor`
+/// 0, so the rounded-down version sticks at 7 forever with the row neither
+/// full nor empty. Coming back down it sticks at 1 the same way. The odd
+/// shelf above cannot show this: there the two disagree at the very first
+/// press, so a mutation fails before it reaches the tail.
+#[test]
+fn ctrl_closes_the_last_unit_rather_than_stranding_it() {
+    let mut app = picker_with_shelf(982, 8);
+
+    for expected in [4, 6, 7, 8, 8] {
+        app.handle_key(GameKey::CtrlLeft);
+        assert_eq!(app.collect_basket, vec![expected]);
+    }
+    for expected in [4, 2, 1, 0, 0] {
+        app.handle_key(GameKey::CtrlRight);
+        assert_eq!(app.collect_basket, vec![expected]);
+    }
 }
 
 /// `[A]` fills every row to *its own* maximum, not to a shared one — which

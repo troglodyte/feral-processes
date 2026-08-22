@@ -39,7 +39,7 @@ pub(super) fn draw_collect(
 ) {
     let mut body = vec![
         text_row("Up/Down pick a row; digits and Backspace type an amount"),
-        text_row("Left adds one, Right removes one; Shift for all, Ctrl for half"),
+        text_row("Left adds one, Right removes one; Shift for all, Ctrl halves the gap"),
         text_row("[A] take everything  [N] take nothing  Enter to collect  Esc to leave"),
         text_row(""),
     ];

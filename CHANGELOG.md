@@ -48,15 +48,20 @@ exactly the basket and Esc still costs nothing.
 
 ### Shift and Ctrl on the collect window's arrows
 
-Shift with an arrow is the whole row — Shift+Left fills it to what is on
-the shelf, Shift+Right puts it back to nothing. Ctrl with either arrow is
-half the shelf, rounded up, so a shelf of one still has a half. Ctrl names
-an amount rather than a direction, which is why both arrows land on the
-same number.
+The two modifiers are different verbs. **Shift is an end**: Shift+Left
+fills the highlighted row to what is on the shelf, Shift+Right puts it back
+to nothing. **Ctrl is a step that halves the gap** to whichever end it is
+heading for — on a shelf of 7, Ctrl+Left walks 4, 6, 7, and Ctrl+Right
+walks back down 3, 1, 0. Press it again and you get half of what is *left*,
+not the same number twice.
 
-These are per row, which is what separates them from `[A]` and `[N]` — those
-are the same two ends across every row at once. Holding a key repeats
-harmlessly: all three are targets rather than steps.
+The step rounds up, which is what makes it finish: rounded down, a gap of
+one gives a step of nothing and the key would go dead with the row neither
+full nor empty.
+
+Both are per row, which is what separates them from `[A]` and `[N]` — those
+are the same two ends across every row at once. Holding a key is safe either
+way: Shift is already at its end, and Ctrl converges on one.
 
 Every other screen is unchanged. A modifier reaches the collect picker and
 nowhere else, so Shift with an arrow still walks, still pages a manifest and

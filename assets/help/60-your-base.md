@@ -53,7 +53,9 @@ The rest of what a base does:
   downstream somewhere to empty into, and gives a worker somewhere to fetch from.
 - c opens a window listing everything the machines touching you are holding, pooled into one row per
   item. Set an amount on the rows you want — type it, or nudge it with the arrow keys, where Left
-  adds and Right removes. Hold Shift for the whole shelf on that row or Ctrl for half of it. Press
+  adds and Right removes. Hold Shift to jump to one end of that row — all of it, or none. Hold Ctrl
+  to close half the distance to whichever end you are heading for, so pressing it again takes half of
+  what is left. Press
   Enter to take exactly what you have set; [A] fills every row to its maximum, so taking the lot is
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.

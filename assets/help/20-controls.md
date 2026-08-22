@@ -22,7 +22,7 @@ The three menus:
 
 Acting on the world:
 
-- c — collect from adjacent structures
+- c — collect from adjacent structures: opens a window with a row per item, and [A] takes the lot
 - t — trade
 - a — call a routine
 - u — symlink home

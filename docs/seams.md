@@ -59,7 +59,9 @@ each site settled on:
 | `game/base/building.rs` `remove_structure` | `require_base` | same |
 | `game/base/building.rs` `work_structure` | `require_base` | stands the player at a machine's station tile |
 | `game/base/work_orders.rs` `queue_work_order` | `require_base` | reads which machines the base has standing |
-| `game/base/collect.rs` `collect_adjacent` | `require_base` | empties the buffers of the machines around you |
+| `game/base/collect.rs` `collectable_adjacent` | `require_base` | reads the buffers of the machines around you |
+| `game/base/collect.rs` `collect_items` | `require_base` | draws a basket out of those buffers |
+| `game/base/collect.rs` `collect_adjacent` | `require_base` | the same, asking for everything on offer |
 | `game/trade.rs` `sell_item` | `require_base` | a trader is a deployed `Structure` |
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
@@ -2575,6 +2577,54 @@ why `game/collect.rs::ORTHOGONAL` is named once and read by both
 `collect_adjacent` and `assembler_system`'s pull phase. A third reach rule
 that could differ from those two is the signal to re-read this entry.
 
+### A collect is one reach rule and one taking path, and the neighbour scan is sorted for a reason take-all could never see
+
+**A collect is one reach rule and one taking path.** The reach is
+`collect::ORTHOGONAL` through `Game::adjacent_stock`, the one private scan
+both halves of the feature read. The take is `hauling::take_from`, the one
+way units leave a buffer by hand — collect is its fourth caller. Everything
+else is a wrapper: `Game::collectable_adjacent` is the `&self` view of what
+is on offer, `Game::collect_items` takes an exact basket, and
+`Game::collect_adjacent` is literally "select everything, then commit". Two
+taking paths could drift on clamping, on the tick or on the log line, and
+the one that drifts is the one nobody runs.
+
+**The scan is sorted by `(x, y)`, and that is `assembler_system`'s reason in
+a second place.** Bevy's query iteration order is not stable, and with two
+neighbours holding the same item a *partial* take must drain them in the
+same order every run — unsorted, an identical save answers the same keypress
+differently between two runs, leaving a different buffer non-empty each
+time. **Take-all could not see this**, which is why the code went so long
+without a sort and why the test for it
+(`a_partial_take_across_two_neighbours_drains_them_in_tile_order`) has to
+span two structures. A bare `reverse()` is not the mutation that proves it:
+reversing an unsorted vec is arbitrary, so the honest inversion is
+`sort_by(|a, b| b.cmp(a))`.
+
+Three smaller things the shape decides.
+
+**The refusal is stated once.** "There is nothing to collect here." lives in
+`collect_adjacent`, and app-core's `c` arm routes its own empty case back
+through that function rather than setting a `status_line` of its own — a
+`status_line` copy of an engine message reads as the key doing nothing. The
+guards sit *above* the refusal and refuse silently: a collect asked for
+during a battle or from the surface is not the base telling you its shelves
+are bare, and hoisting the refusal over them makes it say so.
+
+**An over-ask is clamped, not refused.** The buffers can only shrink between
+the screen opening and the commit — a raid, a hauler, an assembler pull — so
+a basket that has gone briefly optimistic hands over what is there.
+`collect_items` returns what actually landed rather than what was asked for,
+which is `apply_damage`'s rule: a log line printing the requested figure
+claims goods the player never received.
+
+**`require_base` and `base_pos`'s `None` are the same locale condition**, so
+neither can be mutation-proved with the other still standing — removing both
+is the honest mutation, and
+`nothing_is_on_offer_while_the_party_cannot_collect` says so in its own doc
+comment. `base_pos` is kept beside the guard because it also yields the
+coordinate the scan needs.
+
 ### `assembler_system` sorts machines by `(x, y)` before pulling, and the test for it asserts *which* machine won
 
 **`assembler_system` sorts machines by `(x, y)` before pulling, and the
@@ -2886,7 +2936,8 @@ everything else.
 
 The gap it closes is that a target level which deletes itself the moment it
 is reached is not a level. `collect_adjacent` moves a machine's whole
-`Stock::output` into the player's `Inventory`, so the shelf empties every
+`Stock::output` into the player's `Inventory` — still one keystroke away
+behind the collect picker's `[A]` — so the shelf empties every
 time the player walks past it — and under one-shot orders alone, the order
 that was meant to keep it full had already been removed. The reconciliation
 loop the module is built around could not close.
@@ -2902,10 +2953,15 @@ what goes red for it.
 exactly `qty` thrashes — one unit leaves, the chain wakes, bodies are pulled
 off the next order to make one unit — and that is a fair worry, because it
 is precisely the failure `schedule_base_labour`'s diff exists to prevent one
-level up. It does not apply here, because the drain is bursty by
-construction: `collect_adjacent` empties the *whole* buffer, so holding goes
+level up. It does not apply here, because the drain is bursty in
+practice: `collect_adjacent` empties the *whole* buffer, so holding goes
 to zero, the order runs the full `qty`, and sleeps. There is nothing to
-oscillate around. The one genuine trickle case is a standing order on an
+oscillate around. **The collect picker weakened "by construction" to "in
+practice"** — a player may now take part of a shelf rather than all of it,
+so a trickle is reachable by hand where it used to be impossible. Take-all
+is still two keys (`[A]`, Enter) and is still the common case, so no
+`refill_at` was added; if play shows oscillation, this is the paragraph to
+re-read first. The one genuine trickle case is a standing order on an
 intermediate that a downstream assembler eats a batch at a time, and there
 the downstream order's own `wants` walk already staffs that same machine, so
 the bodies land in the same places. No `refill_at` field and no `tuning.rs`

@@ -27,6 +27,40 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.9
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing about this is written into a run.
+
+### `c` takes what you ask for
+
+`c` beside your base used to empty every output buffer touching you into
+your pack, wholesale. There is no deposit verb — nothing in the game puts
+units back into a base buffer — so a misfired keypress beside a working
+line was not a convenience cost but a permanent one: the ingredients a
+chain was about to pull were now in your pack, and the only route back was
+to make them again.
+
+It now opens a window. One row per item on offer, pooled across every
+machine touching you, and every row starts at **zero**. Up and Down pick a
+row; digits, Backspace and Left/Right set an amount; Enter takes exactly
+that basket, in one action and one turn. `[A]` fills every row to its
+maximum and `[N]` clears them all, so taking everything is still two keys.
+Esc takes nothing and costs nothing, the same way a collect that finds
+nothing has always cost nothing.
+
+An amount clamps as you type it: `50` against 12 on the shelf leaves the
+row reading 12, rather than silently ignoring the second digit. An over-ask
+at the moment you commit is clamped too — a raid or a hauler can empty a
+shelf while the window is open, and a basket that has gone briefly
+optimistic hands over what is there rather than refusing.
+
+Underneath, taking everything is now literally selecting everything and
+then committing: one reach rule, one taking path, and one place the
+"nothing to collect here" refusal is spoken. Units leave a buffer through
+`hauling::take_from` alone, where the old wholesale path removed the entry
+by hand — correct only because it always took the entry whole.
+
 ## 0.13.8
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

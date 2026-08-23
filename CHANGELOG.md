@@ -27,6 +27,55 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.16
+
+The defensive figure reaches the screens you compare programs on, and the
+game settles on one word for it.
+
+### Added
+
+- **Attack and mitigation on the roster and the manifest picker.** Both lists
+  quoted HP and PWR and nothing about a fight: the roster is where you decide
+  which program goes in the party and which one gets the gear, and the picker
+  exists to choose between subjects. Rows now read `ATK 8  MIT 5%` between the
+  two, in the words the fuse picker and the field-cast picker already use. The
+  picker's own row for you is unchanged — it quotes no HP or PWR either, so a
+  lone pair of combat figures would be the only numbers on it.
+- **A width census for the manifest picker**, which had none. At the widest
+  reachable name it now measures 1170px into a 1243px body, making it the
+  tighter of the two lists; the roster's head sits at 986.
+
+### Changed
+
+- **One word and one unit for mitigation, everywhere.** The map's status
+  column said `Defense 12` for the number the manifest sheet has always called
+  `Mitigation 12%`. The rename did not fit where it stood — `Attack 1234
+  Mitigation 75%  Strength 1234` runs 38px past a column that cannot grow
+  horizontally and that nothing clips, so it would have been drawn off the
+  panel in silence. The four figures regroup onto two lines instead, offense
+  on one and mitigation with the decompiler on the other, rather than taking a
+  fifth line out of the buff and inventory lists below.
+- The same word across eight talent descriptions, two companion upgrade items,
+  the Defender perk, the achievements screen, the buff panel's row name, the
+  two battle log lines announcing a boost landing and fading, and five
+  schema-doc lines.
+
+### Fixed
+
+- **Nine ability descriptions were quoting a third of what they do.** The
+  combat model rewrite converted `Buff(kind: Def, power: 4)` into
+  `Buff(kind: Mitigation, power: 12)` and left the prose behind, so `bastion`
+  has read "+4 DEF" against an authored 12 ever since, `acid_wash` "-5 DEF"
+  against -15, and `bastion_shield_v3` "by 7" against 20. They now say what
+  they apply, in the form the two that were already correct use — `long_winter`
+  and `ablative_layer` have read "-25% incoming damage" all along. No
+  magnitude changed; only the claims about them.
+- `no_shipped_description_calls_mitigation_defense` is the gate that was
+  missing. A screen's wording is held by the test that renders it, but nothing
+  compiles a `.ron` description, which is how a rename sweep comes to stop at
+  the code. Lower-case "defense" is deliberately allowed: a research node
+  describing "automated perimeter defense" is using the ordinary word.
+
 ## 0.13.15
 
 Base-space rock stops being one flat number, and walking stops being a way

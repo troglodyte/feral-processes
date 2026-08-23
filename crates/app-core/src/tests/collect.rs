@@ -22,13 +22,13 @@ fn c_opens_the_collect_window_with_an_empty_basket() {
 
     assert_eq!(app.mode, Mode::Collect);
     let offer = app.game.as_ref().unwrap().collectable_adjacent();
-    assert_eq!(app.collect_rows, offer);
+    assert_eq!(app.basket_rows, offer);
     assert_eq!(
-        app.collect_rows,
+        app.basket_rows,
         vec![(item(ITEM), 12)],
         "pooled, both sides"
     );
-    assert_eq!(app.collect_basket, vec![0]);
+    assert_eq!(app.basket_amounts, vec![0]);
 }
 
 /// Opening a screen is not an action, and both halves of that are here.
@@ -64,8 +64,8 @@ fn c_with_nothing_adjacent_opens_no_window() {
     app.handle_key(GameKey::Char('c'));
 
     assert_eq!(app.mode, Mode::Playing);
-    assert!(app.collect_rows.is_empty());
-    assert!(app.collect_basket.is_empty());
+    assert!(app.basket_rows.is_empty());
+    assert!(app.basket_amounts.is_empty());
 }
 
 /// The two items the multi-row fixtures stock, in `ItemId` order — which is
@@ -80,7 +80,7 @@ fn picker(seed: u32) -> App {
     app.handle_key(GameKey::Char('c'));
     assert_eq!(app.mode, Mode::Collect);
     assert_eq!(
-        app.collect_rows,
+        app.basket_rows,
         vec![(item("core_fragment"), 12), (item("power_cell"), 4)]
     );
     app
@@ -111,7 +111,7 @@ fn a_digit_sets_the_highlighted_row_alone() {
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Char('3'));
 
-    assert_eq!(app.collect_basket, vec![0, 3]);
+    assert_eq!(app.basket_amounts, vec![0, 3]);
 }
 
 /// Clamping happens as the digit is typed rather than at commit: `5` then
@@ -123,10 +123,10 @@ fn typing_past_what_is_there_clamps_to_it() {
     let mut app = picker(975);
 
     app.handle_key(GameKey::Char('5'));
-    assert_eq!(app.collect_basket[0], 5);
+    assert_eq!(app.basket_amounts[0], 5);
     app.handle_key(GameKey::Char('0'));
 
-    assert_eq!(app.collect_basket[0], 12, "not 50, and not still 5");
+    assert_eq!(app.basket_amounts[0], 12, "not 50, and not still 5");
 }
 
 /// Backspace drops the last digit, and stops at nothing rather than
@@ -137,20 +137,20 @@ fn backspace_drops_a_digit_and_bottoms_out_at_zero() {
 
     app.handle_key(GameKey::Char('1'));
     app.handle_key(GameKey::Char('2'));
-    assert_eq!(app.collect_basket[0], 12);
+    assert_eq!(app.basket_amounts[0], 12);
 
     app.handle_key(GameKey::Backspace);
-    assert_eq!(app.collect_basket[0], 1);
+    assert_eq!(app.basket_amounts[0], 1);
     app.handle_key(GameKey::Backspace);
-    assert_eq!(app.collect_basket[0], 0);
+    assert_eq!(app.basket_amounts[0], 0);
     app.handle_key(GameKey::Backspace);
-    assert_eq!(app.collect_basket[0], 0, "nothing below nothing");
+    assert_eq!(app.basket_amounts[0], 0, "nothing below nothing");
 }
 
 /// Left and Right are the one-at-a-time nudge, saturating at both ends.
 ///
 /// **Left adds and Right removes**, which is the opposite of every other
-/// Left/Right in the game and is deliberate — see `handle_collect_key`. This
+/// Left/Right in the game and is deliberate — see `handle_basket_key`. This
 /// test is the pin: a later hand reading the arena row editor or the manifest
 /// pager and "restoring consistency" here fails it.
 #[test]
@@ -158,21 +158,21 @@ fn left_and_right_step_by_one_and_saturate() {
     let mut app = picker(977);
 
     app.handle_key(GameKey::Right);
-    assert_eq!(app.collect_basket[0], 0, "cannot ask for less than none");
+    assert_eq!(app.basket_amounts[0], 0, "cannot ask for less than none");
 
     for _ in 0..3 {
         app.handle_key(GameKey::Left);
     }
-    assert_eq!(app.collect_basket[0], 3);
+    assert_eq!(app.basket_amounts[0], 3);
     app.handle_key(GameKey::Right);
-    assert_eq!(app.collect_basket[0], 2);
+    assert_eq!(app.basket_amounts[0], 2);
 
     app.handle_key(GameKey::Down);
     for _ in 0..9 {
         app.handle_key(GameKey::Left);
     }
     assert_eq!(
-        app.collect_basket[1], 4,
+        app.basket_amounts[1], 4,
         "cannot ask for more than is there"
     );
 }
@@ -186,8 +186,8 @@ fn left_and_right_step_by_one_and_saturate() {
 /// content edit would make them assert something else.
 fn picker_with_shelf(seed: u32, shelf: u32) -> App {
     let mut app = picker(seed);
-    app.collect_rows = vec![(item(ITEM), shelf)];
-    app.collect_basket = vec![0];
+    app.basket_rows = vec![(item(ITEM), shelf)];
+    app.basket_amounts = vec![0];
     app.menu_selected = 0;
     app
 }
@@ -200,15 +200,15 @@ fn shift_fills_the_highlighted_row_and_empties_it() {
     let mut app = picker(978);
 
     app.handle_key(GameKey::ShiftLeft);
-    assert_eq!(app.collect_basket, vec![12, 0], "this row only");
+    assert_eq!(app.basket_amounts, vec![12, 0], "this row only");
 
     app.handle_key(GameKey::ShiftRight);
-    assert_eq!(app.collect_basket, vec![0, 0]);
+    assert_eq!(app.basket_amounts, vec![0, 0]);
 
     app.handle_key(GameKey::Down);
     app.handle_key(GameKey::ShiftLeft);
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![0, 4],
         "each row fills to its own shelf, not to a shared maximum"
     );
@@ -230,38 +230,38 @@ fn ctrl_halves_the_gap_and_converges_on_the_end_it_is_heading_for() {
     let mut app = picker_with_shelf(979, 7);
 
     app.handle_key(GameKey::CtrlLeft);
-    assert_eq!(app.collect_basket, vec![4], "ceil(7/2), not 3");
+    assert_eq!(app.basket_amounts, vec![4], "ceil(7/2), not 3");
     app.handle_key(GameKey::CtrlLeft);
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![6],
         "half of the three still on offer"
     );
     app.handle_key(GameKey::CtrlLeft);
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![7],
         "a gap of one closes rather than stranding the last unit"
     );
     app.handle_key(GameKey::CtrlLeft);
-    assert_eq!(app.collect_basket, vec![7], "and stops at the shelf");
+    assert_eq!(app.basket_amounts, vec![7], "and stops at the shelf");
 
     app.handle_key(GameKey::CtrlRight);
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![3],
         "coming down, half of what is held"
     );
     app.handle_key(GameKey::CtrlRight);
-    assert_eq!(app.collect_basket, vec![1]);
+    assert_eq!(app.basket_amounts, vec![1]);
     app.handle_key(GameKey::CtrlRight);
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![0],
         "the last unit goes rather than sticking at one"
     );
     app.handle_key(GameKey::CtrlRight);
-    assert_eq!(app.collect_basket, vec![0], "and stops at nothing");
+    assert_eq!(app.basket_amounts, vec![0], "and stops at nothing");
 }
 
 /// The two modifiers are different verbs, not two sizes of one.
@@ -276,11 +276,11 @@ fn shift_lands_in_one_press_where_ctrl_walks() {
 
     shift.handle_key(GameKey::ShiftLeft);
     shift.handle_key(GameKey::ShiftLeft);
-    assert_eq!(shift.collect_basket, vec![7], "there in one, and stays");
+    assert_eq!(shift.basket_amounts, vec![7], "there in one, and stays");
 
     ctrl.handle_key(GameKey::CtrlLeft);
     ctrl.handle_key(GameKey::CtrlLeft);
-    assert_eq!(ctrl.collect_basket, vec![6], "still closing");
+    assert_eq!(ctrl.basket_amounts, vec![6], "still closing");
 }
 
 /// The last unit closes rather than stranding, and a shelf of 8 is what
@@ -298,11 +298,11 @@ fn ctrl_closes_the_last_unit_rather_than_stranding_it() {
 
     for expected in [4, 6, 7, 8, 8] {
         app.handle_key(GameKey::CtrlLeft);
-        assert_eq!(app.collect_basket, vec![expected]);
+        assert_eq!(app.basket_amounts, vec![expected]);
     }
     for expected in [4, 2, 1, 0, 0] {
         app.handle_key(GameKey::CtrlRight);
-        assert_eq!(app.collect_basket, vec![expected]);
+        assert_eq!(app.basket_amounts, vec![expected]);
     }
 }
 
@@ -314,10 +314,10 @@ fn a_fills_every_row_and_n_clears_them() {
     let mut app = picker(978);
 
     app.handle_key(GameKey::Char('A'));
-    assert_eq!(app.collect_basket, vec![12, 4]);
+    assert_eq!(app.basket_amounts, vec![12, 4]);
 
     app.handle_key(GameKey::Char('N'));
-    assert_eq!(app.collect_basket, vec![0, 0]);
+    assert_eq!(app.basket_amounts, vec![0, 0]);
 }
 
 /// Uppercase is reserved for screen actions across every screen in the game.
@@ -330,12 +330,12 @@ fn lowercase_a_and_n_do_nothing() {
     // clearing cancel out, so a test that presses the pair and looks once
     // passes against a screen that honours them both.
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.collect_basket, vec![0, 0], "lowercase a fills nothing");
+    assert_eq!(app.basket_amounts, vec![0, 0], "lowercase a fills nothing");
 
     app.handle_key(GameKey::Char('A'));
     app.handle_key(GameKey::Char('n'));
     assert_eq!(
-        app.collect_basket,
+        app.basket_amounts,
         vec![12, 4],
         "and lowercase n clears nothing"
     );
@@ -356,14 +356,14 @@ fn lowercase_a_and_n_do_nothing() {
 #[test]
 fn holding_a_digit_key_cannot_overflow() {
     let mut app = picker(980);
-    app.collect_rows = vec![(item(ITEM), u32::MAX)];
-    app.collect_basket = vec![0];
+    app.basket_rows = vec![(item(ITEM), u32::MAX)];
+    app.basket_amounts = vec![0];
 
     for _ in 0..12 {
         app.handle_key(GameKey::Char('9'));
     }
 
-    assert_eq!(app.collect_basket[0], u32::MAX);
+    assert_eq!(app.basket_amounts[0], u32::MAX);
 }
 
 /// Enter takes exactly the basket and nothing else — the whole point of the
@@ -442,9 +442,9 @@ fn both_exits_leave_no_stale_shelf() {
         app.handle_key(GameKey::Char('2'));
         app.handle_key(leave);
 
-        assert!(app.collect_rows.is_empty(), "{leave:?} left rows behind");
+        assert!(app.basket_rows.is_empty(), "{leave:?} left rows behind");
         assert!(
-            app.collect_basket.is_empty(),
+            app.basket_amounts.is_empty(),
             "{leave:?} left a basket behind"
         );
     }

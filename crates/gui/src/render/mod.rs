@@ -651,8 +651,8 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         }
         Mode::Collect => draw_collect(
             game,
-            &app.collect_rows,
-            &app.collect_basket,
+            &app.basket_rows,
+            &app.basket_amounts,
             selected,
             painter,
             m,

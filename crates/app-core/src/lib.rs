@@ -812,8 +812,8 @@ pub enum Mode {
     SaveAction,
     Playing,
     /// The collect picker, opened with `c` beside a stocked machine. One
-    /// row per item on offer (`App::collect_rows`) and a quantity per row
-    /// (`App::collect_basket`); Enter takes exactly that basket.
+    /// row per item on offer (`App::basket_rows`) and a quantity per row
+    /// (`App::basket_amounts`); Enter takes exactly that basket.
     ///
     /// **This screen cannot use `App::selected_index`.** There a digit picks
     /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
@@ -1552,19 +1552,28 @@ pub struct App {
     pub pending_erase: Option<GearCopy>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
-    /// What the adjacent machines are offering, snapshotted when
-    /// `Mode::Collect` opens.
+    /// What is on offer, snapshotted when either basket picker opens — the
+    /// adjacent machines' output for `Mode::Collect`, the player's own pack
+    /// for `Mode::Deposit`.
     ///
     /// Snapshotted rather than re-derived per keypress, which is the
-    /// opposite of what the trade screen does. The basket below is pending
+    /// opposite of what the trade screen does. The amounts below are pending
     /// state *indexed into this list*, so re-deriving opens a gap where the
     /// two lengths disagree. Nothing ticks while a menu is open, so the
     /// snapshot cannot go stale — the commit is the first tick.
-    pub collect_rows: Vec<(ItemId, u32)>,
-    /// How much of each `collect_rows` entry the player has asked for.
+    pub basket_rows: Vec<(ItemId, u32)>,
+    /// How much of each `basket_rows` entry the player has asked for.
     /// Same length as that list, all zeroes on open. Written with it, so the
     /// two cannot drift apart.
-    pub collect_basket: Vec<u32>,
+    pub basket_amounts: Vec<u32>,
+    /// The ceiling the amounts are clamped against, and the only thing that
+    /// separates the two pickers — see `App::basket_available`.
+    ///
+    /// `None` is a shelf: every row's ceiling is its own, because taking one
+    /// item off a machine says nothing about how much of another is there.
+    /// `Some(r)` is a Depot's remaining room: **one budget shared across
+    /// every row**, so filling one lowers all the rest.
+    pub basket_room: Option<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,

@@ -4,6 +4,7 @@
 //! to draw a frame, and these modules only add inherent methods to it.
 
 pub(crate) mod arena;
+mod basket;
 mod battle;
 pub(crate) mod building;
 mod collect;

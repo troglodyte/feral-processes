@@ -27,6 +27,96 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.14
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this moves where saves live, not what is in them.
+
+### The game can be zipped up and played on another machine
+
+Every runtime path used to derive from the absolute path of the machine that
+compiled the binary, which is why `README.md` told players the clone had to
+stay put. The game had no distributable build on any platform as a result.
+
+Nothing else in the codebase was ever Linux-only — there is exactly one
+`cfg(target_os)` in the whole tree, and the dependency graph resolves for
+Windows and macOS without a system library either of them lacks. It was the
+*distribution model* that was tied to a checkout, and only by accident.
+
+`crates/launcher/src/paths.rs` is now the single answer to where the game
+finds anything. It picks an installed layout when an `assets/` directory
+sits beside the executable — or at `../Resources/assets`, which is where a
+macOS `.app` bundle keeps them — and falls back to the repo otherwise.
+Installed-ness is sniffed rather than flagged, because a build flag that can
+be forgotten produces a zip that works only on the machine that made it, and
+nobody finds out until a stranger unzips it.
+
+The deliverable is an executable plus a loose `assets/` tree, never a single
+file. Fonts and the sound cues are embedded, but species, items, structures,
+abilities, talents, perks, achievements and help pages have to stay droppable
+— that is the moddability rule, and it survives the move intact.
+
+### Saves, your profile and the run history move to the OS data directory
+
+`%APPDATA%\feral-processes\` on Windows,
+`~/Library/Application Support/feral-processes/` on macOS, and
+`$XDG_DATA_HOME/feral-processes/` (or `~/.local/share/feral-processes/`) on
+Linux.
+
+This happens in every layout, a development build included. Writing beside
+the executable would leave a copy unzipped under `Program Files` unable to
+save at all, and the failure mode there is a game that appears to save and
+silently doesn't. Making it conditional — data directory when installed,
+repo when developing — would have been two code paths where one will do, and
+would mean a development build could not reproduce a player's report about
+where their saves went.
+
+An existing checkout's `saves/`, `profile.ron` and `run_history.log` are
+moved across once, automatically, on the next launch. It is a move rather
+than a copy, because two save directories that drift apart is worse than one
+that changed address, and it does nothing at all if the destination already
+holds a save — so it cannot fire twice or land on top of something newer.
+The old one-time migration of the pre-`saves/` `save.bin` is folded into it
+rather than left running beside it.
+
+### macOS is covered by the same module
+
+The probe that finds an installed build's assets checks
+`../Resources/assets` after checking beside the executable, which is where a
+macOS `.app` bundle keeps them, and the data directory resolves to
+`~/Library/Application Support/feral-processes/`. Neither needed
+macOS-specific code — the engine and app-core were already portable, and
+this is the whole of what the platform asked for.
+
+The recommendation is to ship a plain binary plus `assets/` in a zip, the
+same layout as Windows, rather than a `.app` bundle. A bundle costs no path
+code but does cost a plist, an icon and a build step, and Gatekeeper is no
+kinder to one. What a bundle would fix is that double-clicking a plain
+binary in Finder opens a Terminal window behind the game — macOS's version
+of the console that `windows_subsystem` suppresses, and the one place the
+two platforms are not symmetric.
+
+`packaging/macos-readme.txt` ships in that zip, covering where saves live,
+how to clear the download quarantine flag Gatekeeper checks, and that a mod
+is a file dropped into `assets/`.
+
+### A release build on Windows opens no console window behind the game
+
+Debug builds keep theirs, which is what anyone developing on Windows would
+want. The cost is that a release build has nowhere to print a startup
+failure, so the two a player can actually reach — a missing `assets/` folder
+and a data directory that cannot be created — now write `startup-error.txt`
+beside the executable as well as to stderr.
+
+### Unverified on Windows and macOS
+
+Neither runtime has been exercised: window creation, wgpu (DX12 and Metal),
+audio, input, the console suppression, SmartScreen and Gatekeeper, or
+whether `%APPDATA%` and `~/Library/Application Support` resolve as expected. Verification for this is manual by choice, and the
+ten-step checklist lives in the spec
+(`docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`).
+The Linux suite being green is not evidence about any of it.
+
 ## 0.13.13
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

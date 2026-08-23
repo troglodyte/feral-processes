@@ -1259,6 +1259,33 @@ fn machine_color(status: MachineStatus) -> Color {
     }
 }
 
+/// The player's own figures in the status column: what they hit for, and
+/// what they take.
+///
+/// Built here rather than inline so their width is measurable without a
+/// window — see `the_stat_lines_fit_the_status_column`. The column cannot
+/// grow horizontally and `Painter::ui` clips nothing, so a line too wide is
+/// drawn off the panel in silence.
+///
+/// `Mitigation`, not `Defense`, and with the percent sign: it is percentage
+/// points (`components::Stats::mitigation`), the manifest sheet has always
+/// called it that, and a bare `Defense 12` beside a `Mitigation 12%` on the
+/// next screen is two words for one number.
+///
+/// **The regrouping is what pays for the longer word.** `Attack 1234
+/// Mitigation 75%  Strength 1234` runs 38px past the column at its widest,
+/// so the three figures no longer share a line and `Decompiler` — which had
+/// a line to itself — takes the second one in. A fifth line was the other
+/// way out and is worse: the column clips vertically against the keybind
+/// footer, so a row added here is a row taken off the buff and inventory
+/// lists below it.
+fn stat_lines(atk: i32, mitigation: i32, strength: i32, decompiler: i32) -> [String; 2] {
+    [
+        format!("Attack {atk}  Strength {strength}"),
+        format!("Mitigation {mitigation}%  Decompiler {decompiler}"),
+    ]
+}
+
 /// One party member's line in the status column, indented under the
 /// `Party: n/m` heading it belongs to.
 ///
@@ -1316,7 +1343,7 @@ fn draw_status_panel(
     );
     cy += m.gap;
 
-    let lines = [
+    let mut lines = vec![
         format!(
             "Level {}  (XP {}/{})  Perk Pts {}",
             status.level, status.xp, status.xp_to_next, status.perk_points
@@ -1330,12 +1357,13 @@ fn draw_status_panel(
             let (x, y) = game.base_pos().unwrap_or(status.position);
             format!("Position: ({x}, {y})")
         },
-        format!(
-            "Attack {}  Defense {}  Strength {}",
-            status.atk, status.mitigation, status.strength
-        ),
-        format!("Decompiler {}", status.decompiler),
     ];
+    lines.extend(stat_lines(
+        status.atk,
+        status.mitigation,
+        status.strength,
+        status.decompiler,
+    ));
     for line in &lines {
         painter.ui(line, x + m.inset, cy, m.font_size, TEXT);
         cy += m.line_height;
@@ -1445,6 +1473,8 @@ fn draw_status_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paint::with_painter;
+    use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
 
     /// Every `Biome` variant, listed the way `species.rs`'s own biome census
@@ -1733,6 +1763,63 @@ mod tests {
             ability: "Rally".to_string(),
             gear: "w|.|.".to_string(),
         }
+    }
+
+    /// One word and one unit for the stat, across every screen that names
+    /// it: the manifest sheet and the two pickers say `Mitigation` /
+    /// `MIT %`, and this column said `Defense 12` for the same number.
+    #[test]
+    fn the_stat_lines_name_mitigation_in_the_unit_it_is_measured_in() {
+        let joined = stat_lines(9, 12, 44, 3).join("\n");
+        assert!(joined.contains("Mitigation 12%"), "{joined}");
+        assert!(
+            !joined.contains("Defense"),
+            "one word for one number: {joined}"
+        );
+    }
+
+    /// The regrouping may not lose a figure: `Decompiler` had a line of its
+    /// own before it took the second half of the mitigation line.
+    #[test]
+    fn the_stat_lines_still_carry_all_four_figures() {
+        let joined = stat_lines(9, 12, 44, 3).join("\n");
+        for figure in ["Attack 9", "Mitigation 12%", "Strength 44", "Decompiler 3"] {
+            assert!(joined.contains(figure), "lost {figure}:\n{joined}");
+        }
+    }
+
+    /// The status column cannot grow horizontally and `Painter::ui` clips
+    /// nothing, so an over-wide line is drawn off the panel in silence —
+    /// which is exactly what a rename that lengthens a label risks. The
+    /// three-figure line this replaced overflowed by 38px at these values.
+    ///
+    /// Nothing caps attack, the strength scalar or the decompiler, so all
+    /// three take four digits here; mitigation is capped by
+    /// `Game::effective_mitigation` at `MAX_MITIGATION_PERCENT`, so that
+    /// constant is its widest reading and not a guess.
+    #[test]
+    fn the_stat_lines_fit_the_status_column() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // The status panel is the window's width less the map pane's
+            // `PANE_W`, drawn one inset in, against the 1440x900 geometry
+            // `ui_metrics` is calibrated for.
+            let room = 1440.0 * (1.0 - PANE_W) - m.inset * 2.0;
+            for line in stat_lines(
+                1234,
+                feral_processes_engine::tuning::MAX_MITIGATION_PERCENT,
+                1234,
+                1234,
+            ) {
+                let drawn = p.measure_ui_advance(line.clone(), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a stat line overflows the status column by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// The panel is the only companion list on screen while you are walking

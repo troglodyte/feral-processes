@@ -3515,6 +3515,56 @@ no-Home fallback. Anything zone-local has to be wiped by name.
 shifts every member behind it into the wrong slot. Deferred removal is why
 `end_battle` exists.
 
+### An initiative order names the party by slot and the wild side by identity
+
+**An initiative order names the party by slot and the wild side by
+identity**, and the asymmetry is the point. `battle::Actor::Party(slot)` is
+an index because `Party` cannot shrink mid-battle (the entry above) and
+because the plan is indexed by slot, so an emptied slot still has to be
+addressable. `battle::Actor::Enemy(Entity)` is an entity because the wild
+side *does* shrink mid-round.
+
+Its doc comment said the opposite for a year — "an index rather than an
+`Entity`, so a resolution walk can survive members dying mid-round" — and
+that is exactly the case it could not survive. `roll_initiative` runs once
+at the top of the round; `remove_member` then drops each dead member and
+drops the group entirely once that empties it, shifting every index behind
+it down one. A stale `Enemy { group, slot }` resolved at its own turn named
+whoever had since slid into its place.
+
+Both halves shipped, and **a count of enemy swings can see neither** — the
+shift conserves the number of actors, since removing one member leaves the
+last index resolving to `None`. What it does not conserve is who:
+
+- the group behind a fallen one swung **twice**, once on its own initiative
+  and again on the dead group's, which is the bug as a player reads it: a
+  kill making the next pack member hit you in the same breath;
+- a group whose index had moved off the end **lost its round in silence**,
+  which reads as the pack going passive the moment something dies.
+
+So `a_group_that_falls_mid_round_neither_lends_nor_steals_a_turn` counts by
+**move name** rather than by line count: each test species carries one named
+move, and the log prints a move's name on every outcome — hit, miss, crit
+and all four fumble rungs alike. It is swept across seeds because the
+player's opening strike is capped at `HIT_CHANCE_MAX` and misses on some of
+them; the punching-bag group has no move at all, so one swing each is the
+answer whether it falls or not, and the sweep needs no branch. The fixture
+installs its species into `SpeciesDb` with speeds of 1 and 100 — far
+outside the shipped roster's 6..14, because the gap has to exceed
+`INITIATIVE_DIE` for the acting order to be a fact rather than a seed's
+opinion — and states its own groups through
+`support::insert_battle_with_groups`, since `group_pack`'s ceiling is a
+zone reading that would collapse them.
+
+**The group index did not become an entity with it.** `wild_retaliate`
+still takes one, because that is *where the program is standing*: it gates
+reach against `ENGAGED_GROUPS` and names the group an own-side routine
+lands on, and `policy.rs`'s back-group tests pass a synthetic index to a
+hostile that is really in group 0. What changed is that the two real
+callers now read it live, off `Game::group_of(entity)`, at the moment the
+program swings — so a group promoted forward by a kill in front of it is
+engaged, rather than swinging from the index it held before anyone died.
+
 ### A log line carries two independent axes, `MessageKind` and `MessageSource`
 
 **A log line carries two independent axes, `MessageKind` and

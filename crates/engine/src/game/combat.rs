@@ -404,21 +404,29 @@ impl Game {
             .sum()
     }
 
-    /// The entity an `Actor` currently refers to, or `None` if that slot is
-    /// empty (a party member stood down, an enemy already despawned).
+    /// The entity an `Actor` currently refers to, or `None` if that party
+    /// slot is empty (a member stood down). A hostile names itself — see
+    /// `battle::Actor` — so it is handed straight back; whether it is still
+    /// standing is `creature_alive`'s question, not this one's.
     pub(crate) fn actor_entity(&self, actor: battle::Actor) -> Option<Entity> {
         match actor {
             battle::Actor::Party(0) => Some(self.player_entity()),
             battle::Actor::Party(i) => self.world.resource::<Party>().0.get(i - 1).copied(),
-            battle::Actor::Enemy { group, slot } => self
-                .world
-                .get_resource::<BattleState>()?
-                .groups
-                .get(group)?
-                .members
-                .get(slot)
-                .copied(),
+            battle::Actor::Enemy(entity) => Some(entity),
         }
+    }
+
+    /// Which group `entity` is standing in *now*. The index is what decides
+    /// whether a hostile can reach the party (`ENGAGED_GROUPS`) and which
+    /// group its own-side routine lands on, and a fallen group in front of
+    /// it moves it up — so it is read at the moment it acts rather than
+    /// carried from the top of the round.
+    pub(crate) fn group_of(&self, entity: Entity) -> Option<usize> {
+        self.world
+            .get_resource::<BattleState>()?
+            .groups
+            .iter()
+            .position(|g| g.members.contains(&entity))
     }
 
     /// `entity`'s species `base_speed`, or the roster default if it has no
@@ -458,10 +466,18 @@ impl Game {
         let Some(battle_state) = self.world.get_resource::<BattleState>() else {
             return Vec::new();
         };
-        let group_sizes: Vec<usize> = battle_state
+        // Named here, while the groups still stand as they did at the top of
+        // the round. Everything after this point is identity — see
+        // `battle::Actor`.
+        let attackers: Vec<Entity> = battle_state
             .groups
             .iter()
-            .map(|g| g.members.len())
+            .flat_map(|g| {
+                g.members
+                    .iter()
+                    .take(battle::attackers_in_group(g.members.len()))
+                    .copied()
+            })
             .collect();
         let party_len = self.world.resource::<Party>().0.len();
 
@@ -469,12 +485,7 @@ impl Game {
         // enemies group-then-slot — so the stable sort below leaves equal
         // initiative rolls in exactly this order.
         let mut actors: Vec<battle::Actor> = (0..=party_len).map(battle::Actor::Party).collect();
-        for (group, size) in group_sizes.into_iter().enumerate() {
-            actors.extend(
-                (0..battle::attackers_in_group(size))
-                    .map(|slot| battle::Actor::Enemy { group, slot }),
-            );
-        }
+        actors.extend(attackers.into_iter().map(battle::Actor::Enemy));
 
         let mut rolled: Vec<(i32, battle::Actor)> = Vec::new();
         for actor in actors {

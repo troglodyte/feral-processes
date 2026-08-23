@@ -3,6 +3,7 @@
 
 use super::support::*;
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind};
+use crate::species::MoveDef;
 use crate::tuning::{DEFEND_MITIGATION_BONUS, FRONT_SLOTS, MAX_PARTY_SIZE};
 use crate::*;
 
@@ -621,4 +622,129 @@ fn the_players_side_targets_exactly_as_it_did() {
         "the player's group attack still hits the group"
     );
     assert!(!recipients.contains(&player));
+}
+
+/// Installs a hostile species cloned from a shipped one, carrying at most
+/// one move and that one named — the log prints a move's name on every
+/// outcome, hit or miss, so a named move is how a swing is attributed to
+/// the program that threw it.
+///
+/// `base_speed` is far outside the shipped roster's 6..14 on purpose: the
+/// gap has to exceed `INITIATIVE_DIE` for the acting order to be a fact
+/// rather than a seed's opinion. `ranged` throughout, so reach is never the
+/// variable under test.
+fn install_test_species(
+    game: &mut Game,
+    id: &str,
+    base_speed: i32,
+    move_name: Option<&str>,
+) -> SpeciesId {
+    let template = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let def = SpeciesDef {
+        id: id.to_string(),
+        base_speed,
+        moves: move_name
+            .map(|name| MoveDef {
+                name: name.to_string(),
+                power: 2,
+                spread: 0,
+                // No rider: a status line is a second log line from one
+                // swing, and the count below is of swings.
+                effect: None,
+                ranged: true,
+            })
+            .into_iter()
+            .collect(),
+        ..template
+    };
+    let id = def.id.clone();
+    game.world.resource_mut::<SpeciesDb>().insert(def);
+    id
+}
+
+fn spawn_hostile(game: &mut Game, species: &SpeciesId, hp: i32) -> Entity {
+    game.world
+        .spawn((
+            Creature {
+                species: species.clone(),
+            },
+            Hostile,
+            Position { x: 0, y: 0 },
+            Stats {
+                hp,
+                max_hp: hp,
+                atk: 0,
+                mitigation: 0,
+            },
+            StatusEffects::default(),
+        ))
+        .id()
+}
+
+/// Initiative is rolled once at the top of a round, and `battle::Actor`
+/// used to name a hostile by *position* — an index into `BattleState::
+/// groups` and into that group's members. A kill mid-round drops the dead
+/// member, and an emptied group drops out of `groups`, so every index
+/// behind it shifted down one and a stale actor resolved to whoever had
+/// moved into its place.
+///
+/// Both halves of that are here, and a count of swings cannot see either:
+/// the shift *conserves* the number of actors, since the last index is the
+/// one left resolving to nothing. What it does not conserve is who. Group C
+/// swings on its own turn, the player's strike then empties group A, and C
+/// slides into B's index — so the attack bleeds from the fallen group into
+/// the one behind it and C swings twice, while B, whose own index has moved
+/// off the end, loses its round in silence. So each program is counted by
+/// the name of the move it threw.
+///
+/// Swept across seeds rather than pinned to one: the player's strike is
+/// capped at `HIT_CHANCE_MAX`, so on the odd seed it misses and group A
+/// survives. A surviving A has no move at all, so one swing each is the
+/// answer either way and the sweep needs no branch.
+#[test]
+fn a_group_that_falls_mid_round_neither_lends_nor_steals_a_turn() {
+    for seed in 1..12u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        // A is the punching bag the player empties; C is faster than the
+        // player and B is slower, so A falls after C has swung and before B
+        // has.
+        let a = install_test_species(&mut game, "test_group_a", 1, None);
+        let b = install_test_species(&mut game, "test_group_b", 1, Some("beta lance"));
+        let c = install_test_species(&mut game, "test_group_c", 100, Some("gamma lance"));
+        let members = [
+            spawn_hostile(&mut game, &a, 1),
+            spawn_hostile(&mut game, &b, 999),
+            spawn_hostile(&mut game, &c, 999),
+        ];
+        let groups = [a, b, c]
+            .into_iter()
+            .zip(members)
+            .map(|(species, member)| crate::battle::EnemyGroup {
+                species,
+                members: vec![member],
+            })
+            .collect();
+        insert_battle_with_groups(&mut game, player, groups);
+
+        game.battle_set_action(0, BattleAction::Attack { group: 0 })
+            .expect("the player can swing at group A");
+        game.battle_resolve_round();
+
+        let lines: Vec<String> = game.message_log(200).into_iter().map(|e| e.text).collect();
+        for move_name in ["beta lance", "gamma lance"] {
+            let swings = lines.iter().filter(|l| l.contains(move_name)).count();
+            assert_eq!(
+                swings, 1,
+                "seed {seed}: {move_name} was thrown {swings} times in one \
+                 round — a group falling mid-round must neither hand its \
+                 initiative turn to the group behind it nor take that \
+                 group's turn away.\nlog: {lines:#?}"
+            );
+        }
+    }
 }

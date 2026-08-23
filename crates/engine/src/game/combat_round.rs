@@ -144,7 +144,14 @@ impl Game {
                         self.resolve_one_action(slot, entity, action.clone(), player);
                     }
                 }
-                battle::Actor::Enemy { group, .. } => self.wild_retaliate(entity, group, player),
+                // The group it is standing in *now*: a group that fell
+                // earlier this round moves everyone behind it up, and reach
+                // is a question about where it stands when it swings.
+                battle::Actor::Enemy(_) => {
+                    if let Some(group) = self.group_of(entity) {
+                        self.wild_retaliate(entity, group, player);
+                    }
+                }
             }
         }
 
@@ -693,15 +700,18 @@ impl Game {
         // a fast pack member lands its hit before a slow one — the party
         // side joins this order in `battle_resolve_round`.
         for actor in self.roll_initiative() {
-            let battle::Actor::Enemy { group, .. } = actor else {
+            let battle::Actor::Enemy(wild) = actor else {
                 continue;
             };
-            let Some(wild) = self.actor_entity(actor) else {
+            if !self.creature_alive(wild) {
                 continue;
-            };
-            if self.creature_alive(wild) {
-                self.wild_retaliate(wild, group, player);
             }
+            // Read per swing, not once: an earlier kill this round may have
+            // moved this one up out of a back group.
+            let Some(group) = self.group_of(wild) else {
+                continue;
+            };
+            self.wild_retaliate(wild, group, player);
         }
     }
 

@@ -321,17 +321,28 @@ pub(crate) fn slot_aggro_weight(slot: usize, defending: bool) -> u32 {
     base + if defending { DEFEND_AGGRO_WEIGHT } else { 0 }
 }
 
-/// One combatant in an initiative order — an index rather than an `Entity`,
-/// so a resolution walk can survive members dying mid-round and can address
-/// a party slot that has since emptied.
+/// One combatant in an initiative order. **The two sides are addressed
+/// differently, and that asymmetry is the whole of it.**
+///
+/// A party slot is an index because `Party` cannot shrink mid-battle — a
+/// member knocked offline keeps its slot until `end_battle` — and because
+/// the plan is indexed by slot, so an emptied slot still has to be
+/// addressable.
+///
+/// A hostile is an `Entity` because the wild side *does* shrink mid-round:
+/// `remove_member` drops a dead member and drops the group entirely once
+/// that empties it, shifting every index behind it down one. Initiative is
+/// rolled once at the top of the round, so a positional hostile resolved at
+/// its turn named whoever had since slid into its place — the group behind
+/// a fallen one swung twice, on its own turn and again on the dead one's,
+/// while a survivor whose index shifted off the end lost its turn in
+/// silence. Identity is what makes the order a list of combatants rather
+/// than of positions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Actor {
     /// Slot 0 is the player; 1.. are party members in roster order.
     Party(usize),
-    Enemy {
-        group: usize,
-        slot: usize,
-    },
+    Enemy(Entity),
 }
 
 /// What a party member is doing this round. Adding a variant here plus an

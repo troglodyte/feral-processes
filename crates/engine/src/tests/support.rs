@@ -260,6 +260,18 @@ pub(super) fn companion_uses_special(
 /// partition, and without the opening log line.
 pub(super) fn insert_battle(game: &mut Game, player: Entity, enemies: Vec<Entity>) {
     let groups = game.group_pack(enemies);
+    insert_battle_with_groups(game, player, groups);
+}
+
+/// `insert_battle` with the partition supplied rather than rolled. The
+/// group *ceiling* is a zone reading, so `group_pack` collapses a
+/// two-species pack to one group wherever the fixture happens to stand —
+/// a test about how groups shift needs to state its own.
+pub(super) fn insert_battle_with_groups(
+    game: &mut Game,
+    player: Entity,
+    groups: Vec<crate::battle::EnemyGroup>,
+) {
     let slots = game.world.resource::<Party>().0.len() + 1;
     game.world.insert_resource(BattleState {
         player,

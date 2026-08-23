@@ -151,6 +151,85 @@ fn layout(exe_dir: Option<&Path>, assets_override: Option<PathBuf>) -> Paths {
     }
 }
 
+/// Moves a repo checkout's player data into the OS data directory, once.
+///
+/// Same shape as the legacy `save.bin` migration this replaces, and for the
+/// same reason: a save that disappears from the load menu reads as data
+/// loss. It is a **move, not a copy** — two save directories that drift is
+/// worse than one that moved.
+///
+/// One-shot with no marker file: a data directory already holding a `.bin`
+/// has been migrated (or was always the address), so there is nothing to do
+/// and, more importantly, nothing that could clobber a newer save.
+///
+/// Returns nothing, and every failure inside is swallowed. A game that
+/// refuses to start because a file could not be moved is a worse outcome
+/// than one that starts with its saves still in the old place.
+pub fn migrate_from_repo(repo_root: &Path, data: &Path) {
+    if holds_a_save(&data.join("saves")) {
+        return;
+    }
+
+    let saves = data.join("saves");
+    for entry in std::fs::read_dir(repo_root.join("saves"))
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "bin")
+            && let Some(name) = path.file_name()
+        {
+            move_file(&path, &saves.join(name));
+        }
+    }
+
+    // The pre-`saves/` single file, kept under its own name. Even from an
+    // incompatible format it is visible in the load list and deletable,
+    // which is what silently vanishing is not.
+    let legacy = repo_root.join("save.bin");
+    if legacy.is_file() {
+        move_file(&legacy, &saves.join("save.bin"));
+    }
+
+    // `profile.ron` carries the achievement ladder's earned rewards, so
+    // leaving it behind resets a player's profile without saying so.
+    for name in ["profile.ron", "run_history.log"] {
+        let src = repo_root.join(name);
+        let dest = data.join(name);
+        if src.is_file() && !dest.exists() {
+            move_file(&src, &dest);
+        }
+    }
+}
+
+fn holds_a_save(dir: &Path) -> bool {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
+}
+
+/// `rename` first, then copy-and-delete. The data directory can sit on a
+/// different filesystem from the repo — entirely possible on Linux — and a
+/// cross-device `rename` fails with `EXDEV` rather than falling back on its
+/// own. A failure of both is swallowed; the game starts either way.
+fn move_file(src: &Path, dest: &Path) {
+    let Some(parent) = dest.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    if std::fs::rename(src, dest).is_ok() {
+        return;
+    }
+    if std::fs::copy(src, dest).is_ok() {
+        let _ = std::fs::remove_file(src);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,5 +381,127 @@ mod tests {
 
         let bare = Scratch::new("data_repo");
         assert_eq!(layout(Some(bare.path()), None).data, data_dir());
+    }
+    /// A repo and a data directory side by side, plus whatever files a test
+    /// wants seeded into them.
+    fn scratch_pair(tag: &str) -> (Scratch, PathBuf, PathBuf) {
+        let scratch = Scratch::new(tag);
+        let repo = scratch.dir("repo");
+        let data = scratch.dir("data");
+        (scratch, repo, data)
+    }
+
+    fn write(path: &Path, contents: &str) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, contents).unwrap();
+    }
+
+    #[test]
+    fn saves_move_into_an_empty_data_dir() {
+        let (_scratch, repo, data) = scratch_pair("migrate_saves");
+        write(&repo.join("saves/save_1.bin"), "one");
+        write(&repo.join("saves/save_2.bin"), "two");
+
+        migrate_from_repo(&repo, &data);
+
+        assert_eq!(
+            std::fs::read_to_string(data.join("saves/save_1.bin")).unwrap(),
+            "one"
+        );
+        assert_eq!(
+            std::fs::read_to_string(data.join("saves/save_2.bin")).unwrap(),
+            "two"
+        );
+        assert!(
+            !repo.join("saves/save_1.bin").exists(),
+            "a move, not a copy — two save directories that drift is worse \
+             than one that moved"
+        );
+        assert!(!repo.join("saves/save_2.bin").exists());
+    }
+
+    /// The test that stops a second run eating a newer save.
+    #[test]
+    fn a_populated_data_dir_is_left_alone() {
+        let (_scratch, repo, data) = scratch_pair("migrate_populated");
+        write(&repo.join("saves/save_1.bin"), "old");
+        write(&data.join("saves/save_9.bin"), "new");
+
+        migrate_from_repo(&repo, &data);
+
+        assert!(
+            repo.join("saves/save_1.bin").exists(),
+            "the repo's saves stay where they are once the data directory \
+             has any of its own"
+        );
+        assert!(!data.join("saves/save_1.bin").exists());
+        assert_eq!(
+            std::fs::read_to_string(data.join("saves/save_9.bin")).unwrap(),
+            "new"
+        );
+    }
+
+    #[test]
+    fn the_legacy_root_save_moves_too() {
+        let (_scratch, repo, data) = scratch_pair("migrate_legacy");
+        write(&repo.join("save.bin"), "legacy");
+
+        migrate_from_repo(&repo, &data);
+
+        assert_eq!(
+            std::fs::read_to_string(data.join("saves/save.bin")).unwrap(),
+            "legacy",
+            "the pre-`saves/` single file keeps its name so it still shows \
+             up in the load list"
+        );
+        assert!(!repo.join("save.bin").exists());
+    }
+
+    #[test]
+    fn the_profile_and_history_move() {
+        let (_scratch, repo, data) = scratch_pair("migrate_profile");
+        write(&repo.join("profile.ron"), "earned");
+        write(&repo.join("run_history.log"), "runs");
+
+        migrate_from_repo(&repo, &data);
+
+        assert_eq!(
+            std::fs::read_to_string(data.join("profile.ron")).unwrap(),
+            "earned",
+            "the profile holds the achievement ladder's earned rewards — \
+             leaving it behind silently resets it"
+        );
+        assert_eq!(
+            std::fs::read_to_string(data.join("run_history.log")).unwrap(),
+            "runs"
+        );
+        assert!(!repo.join("profile.ron").exists());
+    }
+
+    #[test]
+    fn an_existing_profile_is_not_overwritten() {
+        let (_scratch, repo, data) = scratch_pair("migrate_profile_kept");
+        write(&repo.join("profile.ron"), "repo");
+        write(&data.join("profile.ron"), "already here");
+
+        migrate_from_repo(&repo, &data);
+
+        assert_eq!(
+            std::fs::read_to_string(data.join("profile.ron")).unwrap(),
+            "already here"
+        );
+    }
+
+    #[test]
+    fn nothing_to_migrate_is_not_an_error() {
+        let (_scratch, repo, data) = scratch_pair("migrate_empty");
+
+        migrate_from_repo(&repo, &data);
+
+        assert!(
+            std::fs::read_dir(&data).unwrap().next().is_none(),
+            "an empty repo leaves an empty data directory rather than \
+             creating anything speculatively"
+        );
     }
 }

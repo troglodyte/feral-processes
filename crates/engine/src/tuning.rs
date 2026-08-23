@@ -2162,9 +2162,22 @@ pub const PLATFORM_CORNER_CUT: i32 = 2;
 ///
 /// **Never scaled by zone, depth or level.** The rock is the same rock all
 /// run, so the thing that changes is the player: a wall that takes about
-/// three swings at level 1 takes one late, and that is the reward for
+/// three swings at level 1 takes fewer late, and that is the reward for
 /// levelling rather than a curve to tune. A scaled wall would make digging
 /// cost the same forever, which is the one thing it must not do.
+///
+/// It used to take *one* late, and that was written down here as the reward
+/// working. It is the reported bug instead: a wall that falls to an
+/// accidental keypress is not terrain, and a developed player navigating
+/// their own base demolished it a corner at a time.
+/// `BASE_ROCK_MIN_SWINGS` is the floor that closes it without touching the
+/// no-scaling rule above.
+///
+/// **This is now only the *fallback* kind's number.** Every kind in
+/// `assets/rock/` authors its own, and `Game::wall_at` is the one door from
+/// a coordinate to it — reading this constant where the question is about a
+/// particular wall is the mistake to watch for, and it silently caps every
+/// dense wall in the base at 24.
 ///
 /// Priced against a level-1 player's swing — `PLAYER_UNARMED_DAMAGE`'s mean
 /// of 5 plus `PLAYER_BASE_STATS`' atk of 6, so about 11 a hit.

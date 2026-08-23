@@ -642,6 +642,7 @@ impl Game {
         }
 
         for d in data.dig_sites {
+            let wall = game.wall_at(d.position.0, d.position.1);
             game.world.spawn((
                 DigSite {
                     marked: d.marked,
@@ -653,12 +654,20 @@ impl Game {
                 },
                 Durability {
                     // Clamped rather than trusted, the same way a nest's is
-                    // just above: `BASE_ROCK_DURABILITY` is a tuning
-                    // constant and not part of the save format, so lowering
-                    // it must not leave an existing save's wall loading with
-                    // more rock in it than a fresh one has.
-                    hp: d.durability.min(crate::tuning::BASE_ROCK_DURABILITY),
-                    max_hp: crate::tuning::BASE_ROCK_DURABILITY,
+                    // just above: a kind's durability lives in
+                    // `assets/rock/` and not in the save format, so
+                    // softening a kind — or deleting its file — must not
+                    // leave an existing save's wall loading with more rock
+                    // in it than a fresh one has.
+                    //
+                    // **Re-derived from the site's own `Position`**, which
+                    // is why a `DigSite` still saves nothing about what it
+                    // is made of: the kind is a property of the place.
+                    // Clamping against the flat `BASE_ROCK_DURABILITY`
+                    // instead would silently cap every dense wall in the
+                    // base at the fallback's ceiling on the first reload.
+                    hp: d.durability.min(wall.durability),
+                    max_hp: wall.durability,
                 },
                 Position {
                     x: d.position.0,

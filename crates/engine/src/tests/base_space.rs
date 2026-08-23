@@ -1722,6 +1722,21 @@ fn game_at_the_frontier(seed: u32) -> Game {
 }
 
 /// The solid cell east of `game_at_the_frontier`'s standing tile.
+/// How many swings `swinger` needs to cut the cell at `at` — **read off
+/// that cell's own kind**, not off `BASE_ROCK_DURABILITY`.
+///
+/// Since `assets/rock/` gives cells different durabilities and different
+/// swing floors, a fixture budgeting from the fallback constant under-swings
+/// whenever its coordinate happens to fall in a denser seam. The failure
+/// reads as the crew never cutting through rather than as the fixture being
+/// short something, which is why this is one helper and not a line repeated
+/// at each site.
+fn swings_for(game: &Game, swinger: Entity, at: (i32, i32)) -> u32 {
+    let wall = game.wall_at(at.0, at.1);
+    wall.durability
+        .div_ceil(game.swing_damage(swinger).min(wall.swing_cap))
+}
+
 const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
 
 fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
@@ -1736,12 +1751,11 @@ fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
 fn a_wall_opens_after_the_swings_its_durability_implies() {
     let mut game = game_at_the_frontier(3210);
     let player = game.player_entity();
-    let per_swing = game.swing_damage(player);
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(per_swing);
+    let swings = swings_for(&game, player, WALL);
     assert!(
         swings > 1,
         "a wall that opens on the first swing makes this test vacuous — \
-         BASE_ROCK_DURABILITY is below one swing of a level-1 player"
+         the wall's durability is below one swing of a level-1 player"
     );
 
     for swing in 1..swings {
@@ -1814,7 +1828,7 @@ fn identical_swings_at_rock_do_identical_damage() {
 fn an_opened_cell_records_the_tick_it_was_opened() {
     let mut game = game_at_the_frontier(3213);
     let player = game.player_entity();
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+    let swings = swings_for(&game, player, WALL);
 
     for _ in 1..swings {
         game.move_player(1, 0);
@@ -1864,9 +1878,26 @@ fn mining_a_wall_never_undercuts_a_mining_node() {
     // actually stands rather than at a level nobody has reached yet — the
     // rock is the same rock all run, and it is the digger that improves.
     let player = game.player_entity();
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
-    let per_tick_dug = crate::tuning::BASE_MINE_FRAGMENT_CHANCE
-        / (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as f32;
+    // Over **every** kind, not just the fallback: the payout is per cell
+    // while the cost is per tick, so the *fastest* kind to cut is the one
+    // that can undercut the machine. A kind authored soft enough — or a
+    // fallback softened — reopens this hole for itself alone, which one
+    // reading of `BASE_ROCK_DURABILITY` could never see.
+    let per_swing = game.swing_damage(player);
+    let fewest_ticks = game
+        .world
+        .resource::<crate::rock::RockDb>()
+        .defs()
+        .map(|def| {
+            let swings = def
+                .durability
+                .div_ceil(per_swing.min(def.swing_cap()))
+                .max(def.min_swings);
+            swings * crate::tuning::BASE_DIG_TICKS_PER_SWING
+        })
+        .min()
+        .unwrap_or(crate::tuning::BASE_ROCK_DURABILITY.div_ceil(per_swing));
+    let per_tick_dug = crate::tuning::BASE_MINE_FRAGMENT_CHANCE / fewest_ticks as f32;
 
     let structures = game.world.resource::<StructureDb>();
     let work = structures
@@ -2349,7 +2380,7 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
     game.toggle_mark_box(WALL, WALL);
 
     let player = game.player_entity();
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+    let swings = swings_for(&game, player, WALL);
     for _ in 0..swings {
         game.move_player(1, 0);
     }
@@ -2389,7 +2420,7 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
 fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
     let mut game = game_at_the_frontier(3255);
     let player = game.player_entity();
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(player));
+    let swings = swings_for(&game, player, WALL);
 
     for _ in 0..swings {
         game.move_player(1, 0);
@@ -2464,7 +2495,7 @@ fn posted_at(game: &Game, worker: Entity) -> Option<Entity> {
 /// derived from the constants rather than written out: retuning the swing
 /// rate or the rock's durability retunes the wait with it.
 fn ticks_to_cut(game: &Game, worker: Entity) -> usize {
-    let swings = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(game.swing_damage(worker));
+    let swings = swings_for(game, worker, WALL);
     (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE
 }
 
@@ -3256,4 +3287,144 @@ fn deciding_a_walls_kind_draws_no_game_rng() {
     let a = draw(&mut untouched);
     let b = draw(&mut untouched);
     assert_eq!((before, after), (a, b), "kind_at moved the RNG stream");
+}
+
+/// A helper for the hardness tests: how many swings `swinger` needs to open
+/// the cell at `(x, y)`, driven through the real `strike_rock`.
+fn swings_to_open(game: &mut Game, swinger: Entity, x: i32, y: i32) -> u32 {
+    for n in 1..500 {
+        game.strike_rock(swinger, x, y);
+        if !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_solid(x, y)
+        {
+            return n;
+        }
+    }
+    panic!("the cell at ({x}, {y}) never opened");
+}
+
+/// Finds a solid cell of the given kind near the base, so a test can name a
+/// kind rather than a coordinate.
+fn solid_cell_of(game: &Game, kind: &str) -> (i32, i32) {
+    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let db = game.world.resource::<crate::rock::RockDb>();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    for r in 1..60 {
+        for x in -r..=r {
+            for y in -r..=r {
+                if grid.is_solid(x, y) && db.kind_at(seed, x, y).id == kind {
+                    return (x, y);
+                }
+            }
+        }
+    }
+    panic!("no solid {kind} near the base");
+}
+
+/// **The reported bug.** A developed player walked into a wall and the wall
+/// was gone — `swing_damage` grows all run while `BASE_ROCK_DURABILITY` was
+/// one flat number, so past a certain level every cell fell to one bump.
+///
+/// Asserted over *every* shipped kind, because the fix is a per-kind floor
+/// and a kind authored with `min_swings: 1` would reopen the hole for
+/// itself alone.
+#[test]
+fn no_shipped_kind_falls_to_one_swing_however_hard_you_hit() {
+    let mut game = game(7731);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.atk = 5_000;
+    }
+    let kinds: Vec<(String, u32)> = game
+        .world
+        .resource::<crate::rock::RockDb>()
+        .defs()
+        .map(|d| (d.id.clone(), d.min_swings))
+        .collect();
+    for (kind, floor) in kinds {
+        let (x, y) = solid_cell_of(&game, &kind);
+        let swings = swings_to_open(&mut game, player, x, y);
+        assert_eq!(
+            swings, floor,
+            "{kind} fell in {swings} swings to a 5000-atk player, floor is {floor}"
+        );
+    }
+}
+
+/// The other half, and the one that says the floor bit *where the bug was*
+/// and nowhere else: a fresh player's dig rate on ordinary rock has not
+/// moved. At 24 durability and a floor of 2 the cap is 12, and a level-1
+/// swing of ~11 is under it, so nothing about the opening game changes.
+///
+/// Both halves in one file on purpose — the first alone passes against a
+/// game that simply made all rock take four swings, which would be a
+/// different and worse change.
+#[test]
+fn a_fresh_players_dig_rate_on_ordinary_rock_is_unchanged() {
+    let mut game = game(7732);
+    let player = game.player_entity();
+    let per_swing = game.swing_damage(player);
+    let expected = crate::tuning::BASE_ROCK_DURABILITY.div_ceil(per_swing);
+    assert!(
+        expected > crate::tuning::BASE_ROCK_MIN_SWINGS,
+        "the fixture must swing under the cap for this to say anything: \
+         {per_swing} a swing opens ordinary rock in {expected}"
+    );
+    let (x, y) = solid_cell_of(&game, "entropy");
+    assert_eq!(swings_to_open(&mut game, player, x, y), expected);
+}
+
+/// A denser kind is actually denser through the real swing path, not just in
+/// the file.
+#[test]
+fn a_denser_kind_takes_more_swings_than_ordinary_rock() {
+    let mut game = game(7733);
+    let player = game.player_entity();
+    let ordinary = solid_cell_of(&game, "entropy");
+    let fused = solid_cell_of(&game, "fused");
+    let a = swings_to_open(&mut game, player, ordinary.0, ordinary.1);
+    let b = swings_to_open(&mut game, player, fused.0, fused.1);
+    assert!(b > a, "fused took {b} swings, ordinary took {a}");
+}
+
+/// A half-cut wall of a denser kind comes back with that kind's ceiling, not
+/// the fallback's. The load path re-derives from the site's saved
+/// `Position`, so nothing new is written to the save — and clamping against
+/// the flat constant instead would silently cap a Fused wall at 24.
+#[test]
+fn a_half_cut_dense_wall_reloads_with_its_own_ceiling() {
+    let mut game = game(7734);
+    let player = game.player_entity();
+    let (x, y) = solid_cell_of(&game, "fused");
+    game.strike_rock(player, x, y);
+    let before = {
+        let site = game.dig_site_at(x, y).expect("a struck wall has a site");
+        let d = game.world.get::<Durability>(site).unwrap();
+        (d.hp, d.max_hp)
+    };
+    assert!(
+        before.1 > crate::tuning::BASE_ROCK_DURABILITY,
+        "the fixture must pick a kind harder than the fallback"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_dense_wall_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let site = loaded
+        .dig_site_at(x, y)
+        .expect("the site survives the save");
+    let d = loaded.world.get::<Durability>(site).unwrap();
+    assert_eq!(
+        (d.hp, d.max_hp),
+        before,
+        "a dense wall reloaded at the wrong ceiling"
+    );
 }

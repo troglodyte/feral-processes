@@ -191,6 +191,24 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// What the rock at `(x, y)` in base space is: how much it absorbs, the
+    /// most one swing may take off it, and how bright its face is drawn.
+    ///
+    /// The one door from a coordinate to `rock::RockDb`, so the seed a kind
+    /// is derived from is stated once. **It is `BaseGrid`'s seed and never
+    /// `WorldMap::seed()`** — see the field's own doc for why that
+    /// distinction is load-bearing rather than stylistic.
+    ///
+    /// Answers for solid and open cells alike: a kind is a property of the
+    /// place, and the place does not stop being made of something once it
+    /// has been cut.
+    pub(crate) fn wall_at(&self, x: i32, y: i32) -> crate::rock::Wall {
+        let seed = self.world.resource::<BaseGrid>().seed();
+        self.world
+            .resource::<crate::rock::RockDb>()
+            .wall_at(seed, x, y)
+    }
+
     /// One swing at the solid base-space cell `(x, y)`, spawning the
     /// `DigSite` that records the wall's progress if this is the first.
     ///
@@ -215,14 +233,21 @@ impl Game {
     /// digger is the log for the rest of the run.
     pub(crate) fn strike_rock(&mut self, swinger: Entity, x: i32, y: i32) {
         let by_player = swinger == self.player_entity();
-        let dmg = self.swing_damage(swinger);
+        let wall = self.wall_at(x, y);
+        // Capped, and this is the whole of the fix for a developed player
+        // demolishing their own base by clipping a corner. `swing_damage`
+        // grows all run against rock that does not, so uncapped every cell
+        // eventually fell to one bump. The cap is per kind and
+        // level-independent: levelling still cuts the swing count down to
+        // the kind's floor, it simply cannot reach one.
+        let dmg = self.swing_damage(swinger).min(wall.swing_cap);
         let site = self.dig_site_at(x, y).unwrap_or_else(|| {
             self.world
                 .spawn((
                     DigSite::default(),
                     Durability {
-                        hp: crate::tuning::BASE_ROCK_DURABILITY,
-                        max_hp: crate::tuning::BASE_ROCK_DURABILITY,
+                        hp: wall.durability,
+                        max_hp: wall.durability,
                     },
                     Position { x, y },
                 ))
@@ -374,7 +399,7 @@ impl Game {
                 }
             }
             None if marked => {
-                let max_hp = crate::tuning::BASE_ROCK_DURABILITY;
+                let max_hp = self.wall_at(x, y).durability;
                 let site = self.world.spawn((
                     DigSite {
                         marked: true,

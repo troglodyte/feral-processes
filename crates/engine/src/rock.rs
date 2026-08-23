@@ -75,6 +75,24 @@ pub struct RockDef {
     pub shade: f32,
 }
 
+/// What a swing at one cell needs to know, in a `Copy` shape.
+///
+/// A struct rather than a tuple of two numbers, for `SaveData`'s reason
+/// stated the other way round: these are read at three sites that each want
+/// a different pair of them, and a positional tuple is the shape that lets
+/// two of them silently swap. `Copy` because `view_tiles` asks per tile per
+/// frame, where cloning a `RockDef`'s strings would be a per-frame
+/// allocation for a number.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Wall {
+    /// The cell's `Durability::max_hp`.
+    pub durability: u32,
+    /// The most damage one swing at it may land.
+    pub swing_cap: u32,
+    /// How bright its exposed face is drawn. See `SHADE_BAND`.
+    pub shade: f32,
+}
+
 impl RockDef {
     /// The kind base space is made of when `assets/rock/` is empty or holds
     /// nothing loadable.
@@ -100,6 +118,15 @@ impl RockDef {
     /// The most damage one swing at this kind may land.
     pub fn swing_cap(&self) -> u32 {
         self.durability.div_ceil(self.min_swings.max(1))
+    }
+
+    /// This kind's numbers, without its strings.
+    pub fn wall(&self) -> Wall {
+        Wall {
+            durability: self.durability,
+            swing_cap: self.swing_cap(),
+            shade: self.shade,
+        }
     }
 }
 
@@ -181,6 +208,12 @@ impl RockDb {
         // Unreachable while the weights sum to `total`, and cheaper to state
         // than to prove at every call site.
         &self.fallback
+    }
+
+    /// What a swing at `(x, y)` needs to know. `kind_at` without the
+    /// strings, which is what every caller in play actually wants.
+    pub fn wall_at(&self, seed: u32, x: i32, y: i32) -> Wall {
+        self.kind_at(seed, x, y).wall()
     }
 
     /// Every kind in key order — what the asset censuses walk.
@@ -347,7 +380,7 @@ mod tests {
         let dir = crate::tests::support::scratch_assets_dir("rock_shade");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            &dir.join("garish.ron"),
+            dir.join("garish.ron"),
             GOOD.replace("shade: 1.0", "shade: 40.0"),
         )
         .unwrap();

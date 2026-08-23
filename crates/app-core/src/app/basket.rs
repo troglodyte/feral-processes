@@ -46,7 +46,12 @@ impl App {
     /// make every key a no-op the moment the basket reached the budget — the
     /// row could never be lowered and then raised again, because its own
     /// units would already be spending the budget it was asking against.
-    pub(crate) fn basket_available(&self, row: usize) -> u32 {
+    ///
+    /// `pub`, not `pub(crate)`: the deposit screen draws this same figure in
+    /// its suffix column, and recomputing the budget expression in `gui`
+    /// would be a second copy of the rule rather than a call to the one that
+    /// governs the key handling.
+    pub fn basket_available(&self, row: usize) -> u32 {
         let taken: u32 = self.basket_amounts.iter().sum();
         let others = taken.saturating_sub(self.basket_amounts.get(row).copied().unwrap_or(0));
         let budget = self

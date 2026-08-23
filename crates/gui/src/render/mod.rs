@@ -32,6 +32,7 @@ mod building;
 mod collect;
 mod contracts;
 mod crafting;
+mod deposit;
 mod field;
 mod frame_map;
 mod group_menu;
@@ -67,6 +68,7 @@ use building::{
 use collect::draw_collect;
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
+use deposit::draw_deposit;
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
@@ -640,6 +642,22 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
         Mode::BaseStaff => app.base_staff_rows(),
         _ => Vec::new(),
     };
+    // `App::basket_available` takes `&self`, so it has to run before `game`
+    // below takes `&mut app.game` — a method call borrows the whole `App`,
+    // not just the field. Calling it here rather than recomputing the budget
+    // expression in `draw_deposit` keeps the rule stated once, in `basket.rs`.
+    let deposit_entries: Vec<(ItemId, u32, u32)> = match app.mode {
+        Mode::Deposit => app
+            .basket_rows
+            .iter()
+            .enumerate()
+            .map(|(row, (item, _))| {
+                let given = app.basket_amounts.get(row).copied().unwrap_or(0);
+                (item.clone(), given, app.basket_available(row))
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, painter, m),
@@ -653,6 +671,14 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             game,
             &app.basket_rows,
             &app.basket_amounts,
+            selected,
+            painter,
+            m,
+        ),
+        Mode::Deposit => draw_deposit(
+            game,
+            &deposit_entries,
+            app.basket_room.unwrap_or(0),
             selected,
             painter,
             m,

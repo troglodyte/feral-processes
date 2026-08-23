@@ -115,7 +115,7 @@ impl MainStat {
     pub fn label(self) -> &'static str {
         match self {
             MainStat::Atk => "Attack",
-            MainStat::Def => "Defense",
+            MainStat::Def => "Mitigation",
             MainStat::Integrity => "Integrity",
             MainStat::Decompiler => "Decompiler",
         }

@@ -1,7 +1,7 @@
 (
     id: "bastion",
     name: "Bastion Party",
-    description: "+4 DEF to the whole party for 3 rounds",
+    description: "-12% incoming damage to the whole party for 3 rounds",
     target: WholeParty,
     effect: Buff(kind: Mitigation, power: 12, duration: 3),
     cooldown: 3,

@@ -1,7 +1,7 @@
 (
     id: "etch",
     name: "Etch Group",
-    description: "-4 DEF to every member of one group for 3 rounds",
+    description: "+12% damage taken by every member of one group for 3 rounds",
     target: WholeEnemyGroup,
     effect: Buff(kind: Mitigation, power: -12, duration: 3),
     cooldown: 3,

@@ -16,7 +16,7 @@
         ],
         [
             (id: "sab_fault", name: "Hard Fault", description: "Learns Hard Fault — halts the target for two rounds.", node: Ability(id: "hard_fault")),
-            (id: "sab_acid", name: "Acid Wash", description: "Learns Acid Wash — strips the target's Defense.", node: Ability(id: "acid_wash")),
+            (id: "sab_acid", name: "Acid Wash", description: "Learns Acid Wash — strips the target's Mitigation.", node: Ability(id: "acid_wash")),
         ],
         [
             (id: "sab_heap", name: "Heap Corruption", description: "Learns Heap Corruption — a heavy bleed.", node: Ability(id: "heap_corruption")),

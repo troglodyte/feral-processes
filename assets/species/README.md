@@ -506,7 +506,7 @@ and three of the five classes do something:
 | Class | Posted to a structure |
 |---|---|
 | Leech | draws one extra unit from every successful gather cycle |
-| Bastion | its Defense counts twice against a GC Entropy Sweep on that structure |
+| Bastion | its Mitigation counts twice against a GC Entropy Sweep on that structure |
 | Medic | restores 2 Durability to that structure every 20 ticks |
 | Striker | nothing |
 | Saboteur | nothing |

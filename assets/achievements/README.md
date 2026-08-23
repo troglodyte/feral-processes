@@ -82,7 +82,7 @@ riding in on this note.
 
 | Written as | Pays |
 |---|---|
-| `RandomMainStat(1)` | 1 point into one of Attack / Defense / Integrity / Decompiler |
+| `RandomMainStat(1)` | 1 point into one of Attack / Mitigation / Integrity / Decompiler |
 | `PerkPoints(1)` | 1 Perk Point, spent in the perk picker like any other |
 | `StartingProgram("scrapper")` | that species, tamed and owned, at the start of the next run |
 

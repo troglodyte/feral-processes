@@ -1987,3 +1987,75 @@ fn every_shipped_memory_def_is_well_formed() {
         );
     }
 }
+
+/// The game has one word for the defensive stat, and it is not `Defense`.
+///
+/// `Stats::def` became `Stats::mitigation` in the combat model rewrite and
+/// the authored prose did not follow it: ten shipped ability descriptions
+/// still said `DEF`, and nine of those quoted a magnitude the very same
+/// commit had tripled — `bastion` read "+4 DEF" against an authored power
+/// of 12 for months. A screen's wording is held by the test that renders
+/// it; nothing at all compiles a `.ron` description, so this is the half a
+/// rename sweep forgets.
+///
+/// Scoped to authored player text — `description:` lines in every shipped
+/// `.ron`, and the manual's pages, which are prose end to end. A `//`
+/// comment naming the retired field is history and is deliberately left
+/// alone, as is `raid_defense`, which is a structure's own separate stat
+/// and a mod-facing field name besides. So is lower-case "defense": a
+/// research node describing "automated perimeter defense" is using the
+/// ordinary word and is not making a claim about anybody's stat block.
+#[test]
+fn no_shipped_description_calls_mitigation_defense() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("the shipped asset tree is readable") {
+            let path = entry.expect("a readable directory entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&test_assets_dir(), &mut files);
+    assert!(!files.is_empty(), "the shipped asset tree is not empty");
+
+    // The capitalised word and the bare token only. Lower-case "defense" is
+    // ordinary English about a base holding a perimeter — Fortification's
+    // description is exactly that — and reads as the stat to nobody.
+    let stale = |line: &str| {
+        line.contains("Defense")
+            || line.match_indices("DEF").any(|(i, _)| {
+                let before = line[..i].chars().next_back();
+                let after = line[i + 3..].chars().next();
+                let boundary =
+                    |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+                boundary(before) && boundary(after)
+            })
+    };
+    let mut offenders = Vec::new();
+    for path in files {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let is_help = ext == "md" && path.parent().is_some_and(|p| p.ends_with("help"));
+        if ext != "ron" && !is_help {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        for (i, line) in text.lines().enumerate() {
+            let authored = is_help || line.trim_start().starts_with("description:");
+            // `raid_defense` is a structure's own stat and a field name, so a
+            // line carrying one says nothing about this rename.
+            if authored && stale(line) && !line.contains("raid_defense") {
+                offenders.push(format!("{}:{}: {}", path.display(), i + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "shipped player text still calls mitigation Defense/DEF:\n{}",
+        offenders.join("\n")
+    );
+}

@@ -91,7 +91,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
     //                   Integrity counts against the attempt
     //   LeanCompiler    cuts each item a compile recipe requires
     //   Attacker        permanent Attack, applied on purchase
-    //   Defender        permanent Defense, applied on purchase
+    //   Defender        permanent Mitigation, applied on purchase
     //   Buffer          permanent max Integrity, and heals you on purchase
     //   DamageAffinity  raises your own Damage-category ability magnitude
     //   HealAffinity    raises your own Heal-category ability magnitude

@@ -165,7 +165,7 @@ impl Game {
         if remaining == 0 {
             let stat = match active.kind {
                 BuffKind::Atk => "attack",
-                BuffKind::Mitigation => "defense",
+                BuffKind::Mitigation => "mitigation",
             };
             if entity == self.player_entity() {
                 self.log(format!("Your {stat} boost fades."));

@@ -998,7 +998,7 @@ impl Game {
                     );
                     let stat = match kind {
                         BuffKind::Atk => "attack",
-                        BuffKind::Mitigation => "defense",
+                        BuffKind::Mitigation => "mitigation",
                     };
                     self.log(format!(
                         "{name} runs {} on {on}, boosting {stat}!",

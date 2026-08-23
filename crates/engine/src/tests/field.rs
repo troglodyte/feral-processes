@@ -823,7 +823,7 @@ fn active_buffs_includes_a_combat_buff_and_the_map_shows_none_without_one() {
     let buffs = game.active_buffs();
 
     assert_eq!(buffs.len(), 1);
-    assert_eq!(buffs[0].name, "Defense");
+    assert_eq!(buffs[0].name, "Mitigation");
     assert_eq!(buffs[0].remaining, "1t");
     assert_eq!(buffs[0].holder_label, None);
 }

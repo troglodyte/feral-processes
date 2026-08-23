@@ -241,7 +241,8 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `program_sell_divisor` is optional inside the trade block (defaults to
     // None — items only). Set it and this trader also buys the player's
     // tamed programs, paying `power / divisor` Credits rounded down, where
-    // power is the program's max HP + Attack + Defense. The payout never
+    // power is the scalar `Stats::power` derives from its max HP, Attack
+    // and Mitigation. The payout never
     // drops below 1. Selling despawns the program permanently and frees the
     // roster slot it occupied, so this is the player's way out of a full
     // roster; a sold program is destroyed, never shelved for buyback. A
@@ -257,7 +258,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // name for what the code still calls a raid, `Game::raid_check` —
     // before
     // being destroyed. An assigned cronjob worker/guard fights a raid off,
-    // reducing the damage by its Defense stat; an unassigned structure
+    // reducing the damage by its Mitigation stat; an unassigned structure
     // takes the raid's full damage (less any raid_defense below).
     // Damage is permanent unless something with a `repair` field (see below)
     // is standing — structures never heal on their own. Ignored entirely
@@ -279,7 +280,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     // deployed structure, for as long as it's standing — not just itself,
     // and it stacks additively across every deployed structure that sets
     // this (e.g. several Shields). Applied before an assigned worker/guard's
-    // own Defense-based mitigation, so the two stack. This is how the
+    // own Mitigation, so the two stack. This is how the
     // Shield structure works: `raid_defense: 2` with no `work` recipe — one
     // Shield halves an ordinary raid, two absorb it entirely.
     raid_defense: 2,

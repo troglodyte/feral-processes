@@ -1,7 +1,7 @@
 (
     id: "hardened_shell",
     name: "Hardened Shell Single",
-    description: "+4 DEF to one ally until you rest",
+    description: "-12% incoming damage to one ally until you rest",
     target: OneAlly,
     power_cost: 14.0,
     effect: FieldBuff(kind: Mitigation, power: 12),

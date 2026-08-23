@@ -1,7 +1,7 @@
 (
     id: "acid_wash",
     name: "Etch Single",
-    description: "-5 DEF to one target for 3 rounds",
+    description: "+15% damage taken by one target for 3 rounds",
     target: OneEnemyGroupFront,
     effect: Buff(kind: Mitigation, power: -15, duration: 3),
     cooldown: 2,

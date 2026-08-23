@@ -1,7 +1,7 @@
 (
     id: "bastion_shield_v3",
     name: "Bastion Single v3.0",
-    description: "Raise one ally's Defense by 7 for 4 rounds",
+    description: "-20% incoming damage to one ally for 4 rounds",
     target: OneAlly,
     effect: Buff(kind: Mitigation, power: 20, duration: 4),
     cooldown: 2,

@@ -19,7 +19,7 @@
             (id: "medic_checksum", name: "Checksum Repair", description: "Learns Checksum Repair — a heavy single patch.", node: Ability(id: "checksum_repair")),
         ],
         [
-            (id: "medic_frame", name: "Braced Frame", description: "Raises Defense by 10%.", node: Stat(stat: Def, percent: 10.0)),
+            (id: "medic_frame", name: "Braced Frame", description: "Raises Mitigation by 10%.", node: Stat(stat: Def, percent: 10.0)),
             (id: "medic_sync", name: "Redundancy Sync", description: "Learns Redundancy Sync — a steady party patch.", node: Ability(id: "redundancy_sync")),
         ],
         [

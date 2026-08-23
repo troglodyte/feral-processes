@@ -6,12 +6,13 @@
 //! roster pass through.
 
 use super::support::*;
+use crate::components::MachineStatus;
 use crate::components::{Memories, Memory, MemorySubject, ProgramId};
 use crate::game::base::work_orders::park_tile;
 use crate::game::memories::Remembered;
 use crate::memories::{MemoryDef, MemoryId, MemorySubjectKind};
 use crate::resources::GameClock;
-use crate::tuning::MEMORY_CAP_PER_PROGRAM;
+use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_POSTING_PERIOD};
 use crate::*;
 
 /// Minting is per-call, not a constant. Two doors, two programs, two ids —
@@ -2300,5 +2301,209 @@ fn a_sweep_on_an_unstaffed_machine_is_remembered_by_nobody() {
     assert!(
         memories_of(&game, bystander).is_empty(),
         "a program with no posting at the machine has nothing to remember"
+    );
+}
+
+/// A body posted at a machine remembers the machine — but only when the
+/// period comes round.
+///
+/// Both halves in one test on purpose. The formation half alone passes
+/// against a pass with no period at all, which is precisely the shape
+/// `note_strandings` rules out: a per-tick write saturates `strike_cap` in
+/// three ticks and makes `strikes` mean nothing.
+#[test]
+fn a_posted_program_settles_in_on_the_period_and_not_before() {
+    let mut game = Game::new(230, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 1,
+        required: 5,
+    });
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD + 1);
+    game.note_postings();
+    assert!(
+        memories_of(&game, worker).is_empty(),
+        "a tick that is not the period must write nothing, or strikes count ticks"
+    );
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD * 2);
+    game.note_postings();
+
+    let held = memories_of(&game, worker);
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(held[0].def, MemoryId::from("settled_in"));
+    assert_eq!(
+        held[0].subject,
+        MemorySubject::Structure("mining_node".to_string())
+    );
+}
+
+/// The same posting at a machine that is backed up forms the opposite memory,
+/// on the same subject.
+///
+/// Asserted as `jammed_here` **and not** `settled_in`, since a pass that
+/// wrote both would satisfy a test that only looked for the one it expected —
+/// and the two are meant to net against each other over a run, not accumulate
+/// together in a single pass.
+#[test]
+fn a_posting_at_a_clogged_machine_is_remembered_against_it() {
+    let mut game = Game::new(231, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            MachineStatus::Clogged,
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 1,
+        required: 5,
+    });
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_postings();
+
+    let held = memories_of(&game, worker);
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(held[0].def, MemoryId::from("jammed_here"));
+}
+
+/// A digger remembers the *work* and has no machine to remember instead.
+///
+/// The absence is the point, and it is structural rather than a check: a
+/// `DigSite` is the one `Task` target that is not a `Structure`, so the
+/// machine arm has nothing to read. A fixture whose dig target happened to
+/// carry a `Structure` would pass the first assertion and hide that.
+#[test]
+fn a_digger_remembers_the_work_and_has_no_machine_to_remember() {
+    let mut game = Game::new(232, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let site = game.world.spawn(Position { x: 2, y: 2 }).id();
+    let digger = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(digger).insert(Task {
+        kind: TaskKind::Excavate,
+        target: site,
+        progress: 0,
+        required: 4,
+    });
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_postings();
+
+    let held = memories_of(&game, digger);
+    assert_eq!(held.len(), 1, "{held:?}");
+    assert_eq!(held[0].def, MemoryId::from("cutting_rock"));
+    assert_eq!(
+        held[0].subject,
+        MemorySubject::Activity(TaskKind::Excavate),
+        "the memory follows the program, not the hole"
+    );
+}
+
+/// An unposted program remembers nothing from this pass at all.
+#[test]
+fn an_idle_program_takes_nothing_from_the_posting_pass() {
+    let mut game = Game::new(233, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let idle = spawn_tamed(&mut game, 10, 3);
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_postings();
+
+    assert!(memories_of(&game, idle).is_empty());
+}
+
+/// Reinforcement is what a stretch of service *is*, and it stops at the def's
+/// `strike_cap` rather than running away.
+///
+/// This is the property the period exists to make meaningful: without it the
+/// same number of strikes would be bought by a few ticks of standing still.
+#[test]
+fn service_compounds_to_the_cap_and_no_further() {
+    let mut game = Game::new(234, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 1,
+        required: 5,
+    });
+
+    for period in 1..=12 {
+        set_tick(&mut game, MEMORY_POSTING_PERIOD * period);
+        game.note_postings();
+    }
+
+    let held = memories_of(&game, worker);
+    assert_eq!(held.len(), 1, "reinforcement must not add a second entry");
+    let cap = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .get(&MemoryId::from("settled_in"))
+        .expect("the def ships")
+        .strike_cap;
+    assert_eq!(held[0].strikes, cap, "twelve stretches, capped at {cap}");
+}
+
+/// Morale is what the whole pass is for, and this is the end-to-end claim:
+/// service at a machine leaves the body measurably better disposed than one
+/// that has never worked.
+#[test]
+fn service_moves_morale_off_zero() {
+    let mut game = Game::new(235, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structure = game
+        .world
+        .spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+        ))
+        .id();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    let bystander = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: structure,
+        progress: 1,
+        required: 5,
+    });
+
+    set_tick(&mut game, MEMORY_POSTING_PERIOD);
+    game.note_postings();
+
+    assert!(
+        game.morale(worker) > 0.0,
+        "a settled worker should read better than neutral"
+    );
+    assert_eq!(
+        game.morale(bystander),
+        0.0,
+        "and a program that has done nothing is still exactly at the baseline"
     );
 }

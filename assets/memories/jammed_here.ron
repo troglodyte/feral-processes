@@ -1,0 +1,12 @@
+// The mirror of `settled_in`, on the same subject and with the opposite
+// sign — so a machine kind that mostly runs nets out to a mild fondness and
+// one that spends its life clogged nets out to a grudge.
+(
+    id: "jammed_here",
+    name: "Always jammed",
+    blurb: "Nothing ever moves through that machine.",
+    valence: -4.0,
+    half_life: 3000,
+    subject: Structure,
+    strike_cap: 3,
+)

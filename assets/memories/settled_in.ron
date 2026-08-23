@@ -1,0 +1,11 @@
+// The one positive memory a program forms about its work, and the only def
+// that is reinforced simply by nothing going wrong.
+(
+    id: "settled_in",
+    name: "Settled in at",
+    blurb: "This is where I do my best work.",
+    valence: 3.0,
+    half_life: 3000,
+    subject: Structure,
+    strike_cap: 4,
+)

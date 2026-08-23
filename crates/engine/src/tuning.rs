@@ -2810,6 +2810,28 @@ pub const MEMORY_MORALE_PER_POINT: f64 = 0.005;
 /// cap and stops meaning anything.
 pub const MEMORY_MORALE_MAX_SHIFT: f64 = 0.10;
 
+/// How often `Game::note_postings` writes what a posted program is doing —
+/// every this many ticks, read straight off `GameClock`.
+///
+/// **The period is what stands in for an edge.** `Game::note_strandings` is
+/// edge-triggered off `Stranded::since` and its doc comment says why a
+/// per-tick write would be wrong: it "would saturate `strike_cap` in three
+/// ticks and hold the grudge at full intensity for as long as the route
+/// stayed broken, which makes `strikes` mean nothing". A posting has no such
+/// edge — nothing distinguishes the first tick at a machine from the
+/// thousandth — so the period is what makes `strikes` count stretches of
+/// service instead of ticks.
+///
+/// It also keeps eviction lazy. `Game::remember` evicts at the tail of every
+/// write, so a per-tick writer would make eviction effectively eager for any
+/// program holding a posting and lazy for every idle one — a difference in
+/// what a program remembers based on whether it happened to be working.
+///
+/// At the shipped work defs a body reaches `strike_cap` in well under a
+/// half-life, so a full grudge or fondness is a real stretch of the run
+/// rather than a moment of it.
+pub const MEMORY_POSTING_PERIOD: u64 = 250;
+
 #[cfg(test)]
 mod tests {
     use super::*;

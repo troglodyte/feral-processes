@@ -1898,6 +1898,11 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         // that is an edge rather than a stretch of service, because a sweep
         // is an event and a posting is a standing state.
         ("swept_here", K::Structure),
+        // `Game::note_postings`, off `tick_inner` on a period. Two subjects,
+        // because a posting is both a place and a kind of work.
+        ("settled_in", K::Structure),
+        ("jammed_here", K::Structure),
+        ("cutting_rock", K::Activity),
     ]
 };
 

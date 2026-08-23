@@ -139,6 +139,11 @@ impl Game {
         // have just flushed and the clock has not yet moved: a stranding is an
         // *edge*, and one tick later there is nothing left to read it off.
         self.note_strandings();
+        // Beside `note_strandings` and for the same reason — the base
+        // systems' commands have just flushed and the clock has not moved on
+        // — but on a period rather than on an edge: a stranding *has* one and
+        // a posting does not. See `MEMORY_POSTING_PERIOD`.
+        self.note_postings();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system

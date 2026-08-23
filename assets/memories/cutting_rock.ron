@@ -1,0 +1,12 @@
+// The first def about a kind of work rather than a place or a thing. A
+// digger's Task targets a DigSite, which is not a Structure, so cutting rock
+// is the one posting with no machine to remember instead.
+(
+    id: "cutting_rock",
+    name: "Cutting rock",
+    blurb: "Nothing but stone, shift after shift.",
+    valence: -3.0,
+    half_life: 4000,
+    subject: Activity,
+    strike_cap: 4,
+)

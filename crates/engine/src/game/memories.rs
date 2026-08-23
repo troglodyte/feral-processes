@@ -4,10 +4,13 @@
 //! to `Stats::hp`: the single path, so a rule that must see *every* memory has
 //! one place to go. Nothing else in the engine pushes a `Memory`.
 
-use crate::components::{Memories, Memory, MemorySubject, Position, ProgramId, Stats, Stranded};
+use crate::components::{
+    MachineStatus, Memories, Memory, MemorySubject, Position, ProgramId, Stats, Stranded,
+    Structure, Task, TaskKind,
+};
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{BattleState, GameClock, Party};
-use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD};
+use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD, MEMORY_POSTING_PERIOD};
 use bevy_ecs::prelude::{Entity, Mut};
 
 /// What one `Game::remember` did.
@@ -241,6 +244,72 @@ impl crate::Game {
                 worker,
                 "stranded_at",
                 MemorySubject::BaseTile { x: pos.x, y: pos.y },
+            );
+        }
+    }
+
+    /// Remembers, every `MEMORY_POSTING_PERIOD` ticks, what each posted
+    /// program is doing and where.
+    ///
+    /// Runs from `tick_inner` immediately after the schedule, beside
+    /// `note_strandings` and for that call's stated reason: the base systems'
+    /// commands have just flushed and the clock has not moved on yet.
+    ///
+    /// **On a period rather than every tick, and rather than on an edge.**
+    /// `note_strandings` is edge-triggered because `Stranded::since` gives it
+    /// an edge to read; a posting gives none — nothing tells the first tick at
+    /// a machine from the thousandth. See `MEMORY_POSTING_PERIOD` for what a
+    /// per-tick write would do to `strikes` and to eviction. It is also why
+    /// this does not fire on a completed cycle instead: that would make
+    /// `strikes` a cycle count, so the same length of service would mean
+    /// different things at a fast machine and a slow one.
+    ///
+    /// **Two memories, on two axes**, because a posting is both a place and a
+    /// kind of work:
+    ///
+    /// - the machine, as a `Structure` — `settled_in` normally, `jammed_here`
+    ///   while it is `Clogged`. Same subject, opposite signs, so a machine
+    ///   kind that mostly runs nets out to a mild fondness and one that spends
+    ///   its life backed up nets out to a grudge.
+    /// - the work, as an `Activity` — `cutting_rock` for a digger, which is
+    ///   the one posting with no machine to remember: a `DigSite` is the one
+    ///   `Task` target that is not a `Structure`, so that arm is skipped for
+    ///   free rather than by a check.
+    ///
+    /// **The player needs no exclusion here** even though the player can hold
+    /// a `Task`. `remember` is a no-op on a body with no `Memories`, and the
+    /// store is minted at `roster_parts` and nowhere else — so "not on the
+    /// roster" refuses this without a branch, exactly as it does at the four
+    /// triggers that came before.
+    pub(crate) fn note_postings(&mut self) {
+        let now = self.world.resource::<GameClock>().tick;
+        if !now.is_multiple_of(MEMORY_POSTING_PERIOD) {
+            return;
+        }
+        // Collected before anything is written, for `note_strandings`' and
+        // `form_victory_memories`' reason: `remember` takes `&mut self`.
+        let posted: Vec<(Entity, TaskKind, Entity)> = self
+            .world
+            .query::<(Entity, &Task)>()
+            .iter(&self.world)
+            .map(|(e, t)| (e, t.kind, t.target))
+            .collect();
+        for (worker, kind, target) in posted {
+            if kind == TaskKind::Excavate {
+                self.remember(
+                    worker,
+                    "cutting_rock",
+                    MemorySubject::Activity(TaskKind::Excavate),
+                );
+            }
+            let Some(machine) = self.world.get::<Structure>(target).map(|s| s.kind.clone()) else {
+                continue;
+            };
+            let clogged = self.world.get::<MachineStatus>(target) == Some(&MachineStatus::Clogged);
+            self.remember(
+                worker,
+                if clogged { "jammed_here" } else { "settled_in" },
+                MemorySubject::Structure(machine),
             );
         }
     }

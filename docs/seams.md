@@ -1475,6 +1475,28 @@ iteration order is not stable, and two diggers whose swings land in a
 different order between runs would make the same base save differently.
 `run_dig_crew` sorts its diggers the same way and for the same reason.
 
+**A cell with no exposed face is not a want, and that exception is what
+makes the truncation safe.** The rest of the scheduler tests reachability
+*below* the cut — `can_walk_to_dig` refuses a boxed-in site silently and by
+design, because the interior of any marked block is boxed in and resolves
+itself as the shell comes down. Listed as wants, though, those interiors are
+what the budget is spent on: they sort first in tile order, `continue` costs
+no body, and the rim — the one or two cells a program could actually have
+been sent to — is cut off the end of the list. A player's real save was
+found in exactly that state on 2026-08-22: a 36-cell room marked out in open
+rock, one cell of it reachable, six idle programs, and not a swing taken at
+it in the rest of the run. Nothing was logged, because the only refusal
+involved is the one deliberately kept quiet.
+
+`hauling::has_station` is the shared predicate rather than a second reading
+of what a face is. It is the half of `NoPost::BoxedIn` that does not depend
+on who is asking — `from` ranks a target's faces and never adds or removes
+one — which is why it can be answered before the bodies are counted, and it
+costs four grid lookups rather than a walk. `NoPost::NoRoute` stays below the
+cut where it was: a site with a face and no route is the player's errand and
+says so once, so it is visible when it starves something, which a silent
+refusal never is.
+
 ### Mining does not go through `battle::resolve_attack`
 
 **Rock is hit, not rolled against.** `Game::strike_rock` takes

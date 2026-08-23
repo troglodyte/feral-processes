@@ -1036,15 +1036,36 @@ impl Game {
     /// One want per site whichever half of the verb it is on: a marked solid
     /// cell wants cutting, a marked `Open` one wants flooring, and the same
     /// body does both because the mark outlives the cut.
+    ///
+    /// **A cell with no exposed face is not a want**, and that is the one
+    /// thing here that is not simply "the player marked it". Any block
+    /// marked out in open rock is boxed in everywhere but its rim, and
+    /// `can_walk_to_dig` refuses those *silently* and by design — but the
+    /// refusal happens below `truncate(staff.len())`, so listed they spend
+    /// the whole dig budget and the rim gets cut off the end of the list.
+    /// A thirty-six cell room then never has a single swing taken at it.
+    /// Dropped here instead, the budget goes to cells a body can be sent
+    /// to, and the interior arrives as a want the moment the shell in front
+    /// of it comes down. `hauling::has_station` is the shared predicate, not
+    /// a second reading of what a face is, and it is the half of
+    /// `NoPost::BoxedIn` that does not depend on which body is asking —
+    /// which is why it can be answered before the bodies are counted.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
-        let mut sites: Vec<(i32, i32, Entity)> = {
+        let blocked = self.structure_tiles();
+        let marked: Vec<(Position, Entity)> = {
             let mut query = self.world.query::<(Entity, &DigSite, &Position)>();
             query
                 .iter(&self.world)
                 .filter(|(_, dig, _)| dig.marked)
-                .map(|(e, _, p)| (p.x, p.y, e))
+                .map(|(e, _, p)| (*p, e))
                 .collect()
         };
+        let grid = self.world.resource::<BaseGrid>();
+        let mut sites: Vec<(i32, i32, Entity)> = marked
+            .into_iter()
+            .filter(|(p, _)| hauling::has_station(grid, *p, &blocked))
+            .map(|(p, e)| (p.x, p.y, e))
+            .collect();
         sites.sort_unstable();
         sites
             .into_iter()

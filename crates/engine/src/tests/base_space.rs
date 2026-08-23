@@ -3109,3 +3109,43 @@ fn a_post_with_no_reachable_face_is_still_refused() {
         "nothing can stand beside it at all, which is a digging problem"
     );
 }
+
+/// The interior of a marked block must not spend the crew's budget.
+///
+/// `dig_wants` lists every marked cell in tile order and
+/// `schedule_base_labour` truncates that list to the number of bodies —
+/// **before** anything asks whether a body could be sent. A block marked
+/// out in open rock is boxed in everywhere but its face, so the sites that
+/// sort first are the ones nothing can stand beside, and they are refused
+/// *silently*. Ahead of the fix the whole dig budget went to them and the
+/// one cell a body could actually have cut was cut off the end of the list.
+#[test]
+fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
+    let (mut game, staff) = base_with_a_crew(3264, 1);
+    // Three cells in open rock, far enough out that nothing walkable
+    // touches any of them, and every one of them sorts before `WALL`.
+    let buried = [
+        (-crate::tuning::STARTING_POCKET_RADIUS - 3, -1),
+        (-crate::tuning::STARTING_POCKET_RADIUS - 3, 0),
+        (-crate::tuning::STARTING_POCKET_RADIUS - 3, 1),
+    ];
+    for cell in buried {
+        mark(&mut game, cell);
+    }
+    mark(&mut game, WALL);
+    assert!(
+        game.marked_cells().first() != Some(&WALL),
+        "precondition: the buried cells must sort ahead of the reachable one"
+    );
+
+    game.tick();
+
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("marking a wall spawns its dig site");
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(site),
+        "the one body must dig the one cell it can reach"
+    );
+}

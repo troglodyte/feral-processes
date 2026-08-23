@@ -169,16 +169,42 @@ fn station_tiles(
     from: Position,
     blocked: &HashSet<(i32, i32)>,
 ) -> Vec<Position> {
-    let mut tiles: Vec<Position> = ORTHOGONAL
+    let mut tiles = station_candidates(grid, structure, blocked);
+    tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
+    tiles
+}
+
+/// The same tiles unranked — what `station_tiles` sorts and what
+/// `has_station` counts.
+fn station_candidates(
+    grid: &BaseGrid,
+    structure: Position,
+    blocked: &HashSet<(i32, i32)>,
+) -> Vec<Position> {
+    ORTHOGONAL
         .iter()
         .map(|(dx, dy)| Position {
             x: structure.x + dx,
             y: structure.y + dy,
         })
         .filter(|p| grid.walkable(p.x, p.y) && !blocked.contains(&(p.x, p.y)))
-        .collect();
-    tiles.sort_by_key(|p| (chebyshev(*p, from), p.x, p.y));
-    tiles
+        .collect()
+}
+
+/// Whether anything could stand beside `structure` at all — `NoPost::BoxedIn`
+/// asked without a worker, and therefore without a walk.
+///
+/// The existence half of `station_tiles` is the only half that does not
+/// depend on who is asking: `from` ranks the faces and never adds or removes
+/// one. That is what lets `dig_wants` drop the interior of a marked block
+/// before the scheduler budgets for it, sharing this predicate rather than
+/// keeping a second copy of what a face is.
+pub(crate) fn has_station(
+    grid: &BaseGrid,
+    structure: Position,
+    blocked: &HashSet<(i32, i32)>,
+) -> bool {
+    !station_candidates(grid, structure, blocked).is_empty()
 }
 
 /// A route to a post: the walk field, and the worker's own cost in it.

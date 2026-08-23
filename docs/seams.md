@@ -5537,9 +5537,43 @@ be created — write `startup-error.txt` beside the executable *and*
 nobody would maintain, and a message box is a dependency bought for two
 error strings.
 
+**macOS falls out of the same module, and that was the point of the
+`../Resources/assets` probe.** It is three lines, it went in from the start
+rather than as a later special case, and it is the entire `.app` provision —
+inside a bundle the executable sits at `Contents/MacOS/` and its resources at
+`Contents/Resources/`. It is checked *after* the beside-the-exe probe, and
+`a_mac_bundle_finds_its_assets_in_resources` is what says so on a Linux
+runner. `dirs::data_dir()` gives `~/Library/Application Support/` with no
+work at all.
+
+The probe uses `parent()` rather than `join("..")`. The `..` form resolves
+identically for `is_dir()`, but the resulting path is handed to the asset
+loader and then printed in a startup error, and a reader should recognise
+what it is looking at.
+
+**The recommendation is a plain binary, not a bundle**, until the game is
+handed to someone who will not open a Terminal. A bundle costs no path code
+now, but it costs a plist, an icon and a build step, and Gatekeeper's
+click-through is no better on one than the `xattr -dr com.apple.quarantine`
+a plain zip can document. What a bundle *would* fix is that double-clicking
+a plain binary in Finder opens a Terminal window behind the game — macOS's
+version of the console that `windows_subsystem` suppresses, and the one
+place the two platforms are not symmetric.
+
+Verified 2026-08-23 against the current tree, not carried over from the
+spec's audit: `cargo check -p feral-processes-app-core --target
+aarch64-apple-darwin` passes, and so do `dirs` and `dirs-sys`, which the
+audit predated. The graph then fails at `blake3`'s build script handing the
+host `cc` `-arch arm64 -mmacosx-version-min=11.0` — a missing macOS
+toolchain, not a portability defect. Cross-compiling is deliberately not
+supported: a Mac is needed for the manual checklist anyway.
+
 **What is unverified.** Everything about the Windows runtime: window
 creation, DX12 through wgpu, WASAPI audio, keyboard input, the console
-suppression, SmartScreen, and whether `%APPDATA%` resolves as expected.
+suppression, SmartScreen, and whether `%APPDATA%` resolves as expected. The
+macOS runtime is unverified in exactly the same way and for the same reason
+— Metal through wgpu, CoreAudio, Gatekeeper, and whether
+`~/Library/Application Support` resolves as expected.
 Verification is manual by choice — there is no CI — so the ten-step
 checklist in
 `docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`

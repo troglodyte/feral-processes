@@ -5429,3 +5429,119 @@ of ring periods now (`IDLE_STAFF_STEP_TICKS * 8 * IDLE_STAFF_RING_TILES`) and
 asserts the candidate has not moved as a precondition, so a retuned ring
 fails the test rather than quietly emptying it. It was the mutation pass that
 found this, not the suite.
+
+### There is one place a runtime path is decided
+
+**There is one place a runtime path is decided,
+`crates/launcher/src/paths.rs`**, and `main` reads nothing else. It answers
+three questions and no more: where the loose asset tree is, where player
+data goes, and whether this build has a repo behind it.
+
+Before this, every runtime path derived from `dev_template::repo_root()`,
+which is `env!("CARGO_MANIFEST_DIR")` — the absolute path of the machine
+that compiled the binary. That is why `README.md` told players the clone had
+to stay put, and why the game had no distributable build on *any* platform.
+Windows is what makes it unavoidable rather than merely untidy: nothing else
+in the tree is Linux-only. Measured 2026-08-19, there is exactly one
+`cfg(target_os)` in the whole codebase, the dependency graph resolves for
+`x86_64-pc-windows-msvc` and `aarch64-apple-darwin` without a `-sys` crate
+needing pkg-config, and Linux is the fussy target rather than the portable
+one. The code was already portable; the *distribution model* was not.
+
+**The trap is a second site resolving a path against `CARGO_MANIFEST_DIR`
+because it is convenient in a dev build.** Such a site works on the build
+machine, works nowhere else, and nothing about it fails to compile — so the
+failure is invisible until a stranger unzips the game. There is no compiler
+barrier here the way `Game`'s private `world` field is one; what holds this
+is that `main` has a `Paths` in scope and no reason to reach past it.
+
+The four dev bins keep `repo_root()` on purpose, and it still lives in this
+module so the dependency runs `dev_template -> paths` and never the other
+way — `data_dir`'s no-`HOME` fallback would otherwise be a cycle. A tool
+that is only ever run out of a checkout should find its material in the
+checkout. So "one place" is a claim about the *game's* paths, not about
+every path in the workspace.
+
+**Installed-ness is sniffed, not flagged.** `resolve()` asks whether an
+`assets/` directory sits beside `current_exe()`, then whether one sits at
+`../Resources/assets` (a macOS bundle), and falls back to the repo. A
+shipped build cannot run without its assets, so the probe tests something
+required to be true. A `--features bundled` flag was rejected: forgetting it
+produces a zip that works only on the build machine, and with verification
+manual by choice, a footgun only a stranger can trip is the worst available
+shape. A `build.rs` copying `assets/` into `target/debug/` was rejected
+outright — it duplicates ~200 files per build and puts a stale copy between
+the developer and an asset edit, which is hostile in a game whose content
+lives in those files.
+
+**Player data goes to the OS data directory in every layout, a repo build
+included.** Writing beside the executable was rejected because a build
+unzipped under `Program Files` cannot write there, and the failure mode is a
+game that appears to save and silently doesn't. A split rule — data
+directory when installed, repo when developing — was rejected as two code
+paths where one will do, and because it would mean a dev build cannot
+reproduce a player's report about where their saves went. The cost of
+uniformity is that `cargo run` and a shipped build share one save directory,
+which for a single-developer game is a feature.
+
+`dev` is `Some` **iff** the repo layout was chosen: the two are one decision,
+not two. An installed build hands `App::new` dev paths under the data
+directory that will never exist, and that is not a special case — the arena
+and template rows are gated behind `FERAL_DEV_ARENA`, and both
+`dev_template::list` and the arena catalog already read a missing directory
+as nothing to offer.
+
+**`resolve()` is infallible, and that is a constraint rather than a
+preference.** The spec sketched a `Result`, but `dev_template::working_copy`
+must also learn the saves directory, and it is called from
+`dev_template::resolve`, which app-core holds as a bare `fn` pointer in
+`DevTemplates`. A fallible lookup would ripple through that signature and
+force an app-core change, which is exactly what this being a launcher-only
+change buys. So `data_dir()` falls back to `repo_root()` with no `HOME` and
+`resolve()` falls back to the repo layout when `current_exe()` fails.
+Whether the resolved assets directory *exists* is then `main`'s check, which
+is where that error belonged anyway.
+
+**The migration is a move, not a copy, and one-shot without a marker file.**
+`migrate_from_repo` does nothing at all when the data directory already
+holds a `.bin` — that is what stops a second run eating a newer save, and it
+needs no state of its own to be true. It subsumes the inline legacy
+`save.bin` migration that used to sit in `main`, which was deleted rather
+than left beside it: two things moving the same file is worse than either.
+`profile.ron` moves too, though the spec's decisions section named only
+saves — it carries the achievement ladder's earned rewards, and leaving it
+behind silently resets a player's profile. Each move is
+rename-then-copy-and-delete, since a cross-device `rename` fails with
+`EXDEV` and the two directories can easily sit on different filesystems, and
+every failure is swallowed: a game that refuses to start because a file
+could not be moved is worse than one that starts with its saves in the old
+place.
+
+**`FERAL_ASSETS_DIR` is the one override, and a second per-path override is
+refused.** A modder can point a build at an alternative asset tree without
+disturbing the install, and it is the natural switch for testing a shipped
+build against repo assets. A matrix of per-path overrides is how "one module
+decides every path" stops being true. An empty value reads as unset,
+matching `dev_console::dev_flag`'s rule for the `FERAL_DEV_*` flags — its
+`!= "0"` half does not carry over, since `0` is a legitimate directory name
+and this is a path rather than a boolean.
+
+**The console window goes away in release builds only**, via
+`#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`.
+A debug build keeps stderr, which is what a developer on Windows would want.
+The consequence is that the `eprintln!`-then-exit paths go silent in a
+release build: three are dev/CLI paths a player cannot reach, and the two
+that remain — a missing assets directory and a saves directory that cannot
+be created — write `startup-error.txt` beside the executable *and*
+`eprintln!`, unconditionally both. Branching on which is which is a `cfg`
+nobody would maintain, and a message box is a dependency bought for two
+error strings.
+
+**What is unverified.** Everything about the Windows runtime: window
+creation, DX12 through wgpu, WASAPI audio, keyboard input, the console
+suppression, SmartScreen, and whether `%APPDATA%` resolves as expected.
+Verification is manual by choice — there is no CI — so the ten-step
+checklist in
+`docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`
+is the honest statement of what ships untested until someone runs it on a
+Windows machine. A green Linux suite is not evidence that any of it works.

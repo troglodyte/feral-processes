@@ -2635,6 +2635,101 @@ why `game/collect.rs::ORTHOGONAL` is named once and read by both
 `collect_adjacent` and `assembler_system`'s pull phase. A third reach rule
 that could differ from those two is the signal to re-read this entry.
 
+### Putting cargo into a Depot mirrors the collect trio, and the one place the mirror does not hold is the ceiling
+
+A Depot was the only structure the player could take *out* of and never put
+*into*. `game/base/deposit.rs` is the other half, and it is deliberately a
+reflection of `collect.rs` function for function: `adjacent_depots`,
+`depositable`, `deposit_items`, `deposit_adjacent` against `adjacent_stock`,
+`collectable_adjacent`, `collect_items`, `collect_adjacent`. Two modules that
+read as reflections of each other are two modules a reader can check against
+one another, and every rule collect states about ordering, clamping, ticking
+and refusing has a twin here rather than a second argument.
+
+**It goes into `Stock::output`, and that is the feature rather than an
+implementation detail.** `base_holding` and `work_orders::feeders_for`
+already count depot buffers, so a deposit is not a stash — it is handing the
+base your materials. A work order that stalls for want of an ingredient the
+player is personally carrying was a real and otherwise unfixable state. A
+third buffer on `Stock` for a pure stash was considered and dropped for
+exactly that reason: it would keep the goods away from the systems the verb
+exists to feed, and every reader of `output` would grow a second case.
+
+**A Depot, not any `Stock`.** Mirroring collect exactly and accepting every
+adjacent buffer is the simplest code and is wrong: it lets the player push
+Cache Grain into a Mining Node's output, and *a unit pushed into a machine's
+output reads as something that machine produced* — the same objection that
+already keeps the dig crew's put-back depot-only. `StructureDef::stores` is
+the filter, and it is the field the hauling system already uses to know a
+Depot.
+
+**Plain copies only, and banked items excluded.** `Stock` keys by `ItemId`
+alone, so a rare or fused or high-quality copy put into one comes back out
+ordinary. `Inventory` is by definition the plain-copy store and `GearCopies`
+holds everything else, which is why "nothing puts a player's copy into a
+`Stock`" is a standing seam — the production chain has no rarity rule
+because it can never meet a special copy. Reading `Inventory` and never
+`GearCopies` keeps that true by construction rather than by a check.
+`ItemDef::banked` is filtered for a different reason: a bank is not cargo,
+and Research Data in a depot would be a second bank the base could spend.
+`PlayerStatus::inventory` already filters it, and this list is the second
+reader that has to.
+
+**The trap is that a Depot's room is one budget shared across every row.**
+This is the only place the mirror does not hold. A shelf gives each row an
+independent ceiling — what that item is sitting on the machine — while a
+Depot has one `output_room()` across every item, so filling one row lowers
+all the rest. It is enforced at both ends and for different reasons. In the
+picker, because `handle_basket_key` deliberately has the property that *a
+number that cannot exceed what is available is worth having by construction
+rather than by a check at the commit*. In the engine, because
+`deposit_items` is `pub` and the picker is not its only possible caller —
+the clamp is what lets the function state its contract without reference to
+who called it.
+
+`App::basket_available` is that axis, and it subtracts only the *other*
+rows. Counting the highlighted row against its own budget makes every key a
+no-op the moment the basket fills: the row can be lowered but never raised
+again, because its own units are already spending the budget it is asking
+against.
+
+**The two pickers share one key table rather than keeping two copies.**
+`app/basket.rs`, with the ceiling carried as `App::basket_room:
+Option<u32>` — `None` for a shelf, `Some(r)` for a shared budget. The table
+is sixty lines of deliberately subtle semantics: an inverted Left/Right that
+is *specified* to be inverted, a `div_ceil` that is what makes the Ctrl step
+terminate, and a saturating digit accumulation that lets a held key reach
+the clamp rather than overflow. Two copies would drift, and the inversion is
+precisely what a later reader "restores" — only one copy would be under the
+test that says so in as many words. A Take/Put toggle inside one mode was
+the alternative and was rejected: the mode would then branch on a direction
+flag through every handler and the whole renderer, and the two directions
+genuinely differ. **Two modes sharing a key table is the smaller seam than
+one mode carrying an axis.**
+
+**In the fill loop, room is read before anything leaves the pack.**
+`Inventory::take(item, outstanding.min(room))`, never `take` then clamp —
+the latter silently eats the player's cargo into a full Depot. `take`
+already clamps to what is held and drops a slot that reaches zero, so its
+return value *is* the pack-side clamp rather than a second check in front of
+it. Capacity is never exceeded, which is `hauling::deposit`'s rule: an
+over-capacity write would make that field a suggestion, and a full Depot is
+a decided failure mode rather than an exception to one.
+
+**Both refusal sentences live in `deposit_adjacent` and nowhere else** — no
+adjacent Depot versus nothing to put away, distinct because they leave the
+player different errands. app-core routes an empty offer straight back
+through the engine rather than keeping a copy, exactly as `c` does. The test
+for that must assert the **log**: a `status_line` copy of the sentence is
+wiped by `after_world_action` before anything can read it, so asserting
+`status_line == None` passes against a deliberate copy and proves nothing.
+That test shipped vacuous in its first draft and was caught by deleting the
+`deposit_adjacent()` call and watching it *not* fail.
+
+The key is `P`, uppercase because every mnemonic lowercase letter is taken —
+`p` is the party menu, `d` demolish, `s` save — and the four free ones
+(`n`, `w`, `y`, `z`) name nothing.
+
 ### A collect is one reach rule and one taking path, and the neighbour scan is sorted for a reason take-all could never see
 
 **A collect is one reach rule and one taking path.** The reach is

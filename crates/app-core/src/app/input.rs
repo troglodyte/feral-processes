@@ -124,9 +124,11 @@ impl App {
         // variants are inert outside the picker rather than dead keys. A
         // second screen wanting a modifier widens this one condition; doing
         // it in the renderer instead would put "what a modifier means" on
-        // the far side of the seam from the mode that decides it.
+        // the far side of the seam from the mode that decides it. The
+        // deposit picker is that second screen, and it shares the collect
+        // picker's key table rather than copying it — see `app/basket.rs`.
         let key = match key {
-            _ if self.mode == Mode::Collect => key,
+            _ if matches!(self.mode, Mode::Collect | Mode::Deposit) => key,
             GameKey::ShiftLeft | GameKey::CtrlLeft => GameKey::Left,
             GameKey::ShiftRight | GameKey::CtrlRight => GameKey::Right,
             _ => key,
@@ -140,7 +142,7 @@ impl App {
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::DifficultyPick => self.handle_difficulty_key(key),
             Mode::Playing => self.handle_playing_key(key),
-            Mode::Collect => self.handle_basket_key(key),
+            Mode::Collect | Mode::Deposit => self.handle_basket_key(key),
             Mode::BaseMenu => self.handle_base_menu_key(key),
             Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),

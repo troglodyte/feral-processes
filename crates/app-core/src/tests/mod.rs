@@ -9,6 +9,7 @@ mod building;
 mod collect;
 mod contracts;
 mod crafting;
+mod deposit;
 mod dev_console;
 mod develop;
 mod excavate;

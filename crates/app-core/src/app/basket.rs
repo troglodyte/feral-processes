@@ -81,8 +81,13 @@ impl App {
         match key {
             GameKey::Esc => self.leave_basket(),
             // Which screen this is decides where the basket goes, and that is
-            // the one place the two diverge after the keys.
-            GameKey::Enter => self.commit_collect(),
+            // the one place the two diverge after the keys. Two arms rather
+            // than a stored callback: the commit is a different verb on a
+            // different engine door, not a parameter of the same one.
+            GameKey::Enter => match self.mode {
+                Mode::Deposit => self.commit_deposit(),
+                _ => self.commit_collect(),
+            },
             GameKey::Up | GameKey::Down => self.scroll(key, len),
             // Uppercase for the two screen actions, matching the reserved
             // uppercase convention. Nothing here picks a row by letter, so

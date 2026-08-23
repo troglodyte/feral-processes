@@ -228,6 +228,11 @@ impl App {
         let mut refusal = None;
         // What the collect picker will open on, if `c` found anything.
         let mut opening: Option<Vec<(ItemId, u32)>> = None;
+        // The deposit screen's own handoff. A second local rather than an
+        // enum over the two: only one key runs per press, so they are
+        // mutually exclusive by construction, and the room has nowhere to
+        // ride on `opening`.
+        let mut putting: Option<(Vec<(ItemId, u32)>, u32)> = None;
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
@@ -260,6 +265,32 @@ impl App {
                         // Handed out past the `self.game` borrow, the way
                         // `refusal` is. Opening a screen is not an action.
                         opening = Some(offer);
+                        false
+                    }
+                }
+                // The other half of `c`, and bound beside it for the same
+                // reason: a Depot is something you walk up to, and the
+                // engine refuses a deposit underground anyway.
+                //
+                // Uppercase because every mnemonic lowercase letter is
+                // already spoken for — `p` is the party menu, `d` demolish,
+                // `s` save — and the free ones name nothing. A shift-slip
+                // from `p` opens the party menu, which costs an Esc.
+                GameKey::Char('P') => {
+                    let offer = game.depositable();
+                    if offer.is_empty() {
+                        // Straight back through the engine, exactly as `c`
+                        // does: it holds both refusal sentences (nowhere to
+                        // put anything, versus nothing to put away) and a
+                        // copy of either here would be a second home for it.
+                        game.deposit_adjacent();
+                        true
+                    } else {
+                        // The room travels with the offer. It is the
+                        // screen's ceiling and a Depot's is shared across
+                        // every row, so the picker cannot derive it from the
+                        // rows the way the collect screen can.
+                        putting = Some((offer, game.deposit_room()));
                         false
                     }
                 }
@@ -325,6 +356,9 @@ impl App {
         }
         if let Some(offer) = opening {
             self.open_collect(offer);
+        }
+        if let Some((offer, room)) = putting {
+            self.open_deposit(offer, room);
         }
         self.after_world_action(acted, is_move_key);
     }

@@ -1065,6 +1065,55 @@ pub(crate) fn walk_far_from_the_base(app: &mut App) {
 /// working rather than a limitation of the test. `mining_node` on both sides
 /// so the pair pools into one row, and the western one is the *lower* tile,
 /// so a take that spans them has an order to be right about.
+/// The party in base space beside `depots` Depots, each already holding
+/// `filled` units so the room left is a figure the test chose, and carrying
+/// exactly `pack`.
+///
+/// The pack is **set**, not added to: `Game::new` seeds a starting kit, so a
+/// fixture that adds would be measuring the kit as well as its own rows.
+pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&str, u32)]) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("deposit", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let ballast = if filled > 0 {
+        vec![(
+            feral_processes_engine::items::ItemId::from("core_fragment"),
+            filled,
+        )]
+    } else {
+        Vec::new()
+    };
+    for x in 0..depots {
+        data.structures.push(save::StructureSave {
+            kind: "depot".to_string(),
+            // Orthogonal to the party's base cell, which is what a collect
+            // and a deposit both reach by — see `collect::ORTHOGONAL`.
+            position: (if x == 0 { 1 } else { -1 }, 0),
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: ballast.clone(),
+            standing_work: false,
+            standing_guard: false,
+        });
+    }
+    data.player.inventory = pack
+        .iter()
+        .map(|(id, n)| (feral_processes_engine::items::ItemId::from(*id), *n))
+        .collect();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    app.mode = Mode::Playing;
+    app
+}
+
 pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);

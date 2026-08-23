@@ -820,6 +820,16 @@ pub enum Mode {
     /// through `App::scroll`, so it still drives `menu_selected` and the
     /// popup's window still follows it — the page scrolls for free.
     Collect,
+    /// The deposit picker, opened with `P` beside a Depot. The mirror of
+    /// `Mode::Collect` and built from the same `app/basket.rs` key table —
+    /// the rows are the player's own pack rather than a machine's output,
+    /// and Enter puts exactly that basket into the base's hands.
+    ///
+    /// **Its ceiling is shared where the collect screen's is per row.** A
+    /// Depot has one `output_room()` across every item, so filling one row
+    /// lowers the rest — carried as `App::basket_room`, and the one place
+    /// the mirror of the collect screen does not hold.
+    Deposit,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -1214,9 +1224,11 @@ impl Mode {
             | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
-            // Opened from the map with `c`, so it never layers over a fight
-            // either — and the engine refuses a collect mid-battle anyway.
+            // Opened from the map with `c` and `P`, so neither layers over a
+            // fight — and the engine refuses a collect or a deposit
+            // mid-battle anyway.
             | Mode::Collect
+            | Mode::Deposit
             | Mode::Craft
             | Mode::CraftQuantity
             | Mode::WorkOrders

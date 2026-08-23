@@ -673,6 +673,39 @@ fn roll_readout(roll: f32) -> String {
     format!("{roll:.2}  {tier}")
 }
 
+/// One row on the manifest picker.
+///
+/// Returned rather than drawn so its width is measurable without a window —
+/// see `no_manifest_pick_row_overflows_its_popup`. The shortcut is passed in
+/// for `companion_row_lines`' reason: it is the row's position in the list,
+/// which a `ManifestView` has no idea about.
+///
+/// A program's row carries `ATK` and `MIT` because the picker is a screen for
+/// choosing between subjects, and those are what the choice turns on. **The
+/// player's row deliberately carries neither**: it quotes no HP and no PWR
+/// either, so a lone pair of combat figures would be the only numbers on it
+/// and would read as a comparison the row cannot complete.
+fn manifest_pick_label(shortcut: char, view: &ManifestView) -> String {
+    let body = match &view.subject {
+        ManifestSubject::Player(_) => format!("You - Lv{}", view.level.unwrap_or(1)),
+        ManifestSubject::Program(p) => format!(
+            "{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}{}",
+            view.name,
+            view.level.unwrap_or(1),
+            view.hp,
+            view.max_hp,
+            view.atk,
+            view.mitigation,
+            view.power,
+            p.activity
+                .as_ref()
+                .map(|a| activity_tag(a))
+                .unwrap_or_default()
+        ),
+    };
+    format!("[{shortcut}] {body}")
+}
+
 pub(super) fn draw_manifest_pick(
     game: &mut Game,
     subjects: &[Entity],
@@ -684,25 +717,12 @@ pub(super) fn draw_manifest_pick(
     for (i, &entity) in subjects.iter().enumerate() {
         let view = game.manifest(entity);
         let icon = view.as_ref().map(|v| (v.glyph, glyph_color(v.color)));
+        let shortcut = menu_shortcut(i);
         let label = match view {
-            Some(v) => match &v.subject {
-                ManifestSubject::Player(_) => format!("You - Lv{}", v.level.unwrap_or(1)),
-                ManifestSubject::Program(p) => format!(
-                    "{} Lv{} - HP {}/{}  PWR {}{}",
-                    v.name,
-                    v.level.unwrap_or(1),
-                    v.hp,
-                    v.max_hp,
-                    v.power,
-                    p.activity
-                        .as_ref()
-                        .map(|a| activity_tag(a))
-                        .unwrap_or_default()
-                ),
-            },
-            None => "(gone)".to_string(),
+            Some(v) => manifest_pick_label(shortcut, &v),
+            None => format!("[{shortcut}] (gone)"),
         };
-        let row = creature_row(format!("[{}] {label}", menu_shortcut(i)), i == selected);
+        let row = creature_row(label, i == selected);
         // A despawned subject has no glyph left to draw, and its row already
         // says "(gone)" — the slot stays reserved so the list keeps its
         // column.
@@ -939,6 +959,73 @@ mod tests {
             equipment,
             subject: ManifestSubject::Program(Box::new(program)),
         }
+    }
+
+    /// The widest manifest-picker row the game can put on screen, as
+    /// `(label, why)`.
+    ///
+    /// The ingredients are the roster census's, for the reason `test_pet` is
+    /// shared: the two lists name the same programs, so a picker census with
+    /// a shorter name would be measuring a row the roster has already proved
+    /// reachable.
+    fn widest_manifest_pick_rows() -> Vec<(String, String)> {
+        let name = format!(
+            "Overclocked {} 10",
+            "M".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN)
+        );
+        let mut program = plain_program(14, 12);
+        program.activity = Some("guarding Contract Broker".to_string());
+        let mut view = program_view(program, Vec::new());
+        view.name = name;
+        view.level = Some(6);
+        view.hp = 1;
+        view.max_hp = 1234;
+        view.atk = 1234;
+        view.mitigation = feral_processes_engine::tuning::MAX_MITIGATION_PERCENT;
+        view.power = 1234;
+        vec![(
+            manifest_pick_label('a', &view),
+            "a posted program with a renamed, overclocked, zone-tagged name".to_string(),
+        )]
+    }
+
+    /// The picker exists to choose between subjects, so its rows carry the
+    /// two figures that choice turns on — in the same words and the same
+    /// unit the roster and the fuse picker already use.
+    #[test]
+    fn a_manifest_pick_row_carries_the_combat_figures() {
+        let mut view = program_view(plain_program(14, 12), Vec::new());
+        view.name = "Kestrel".to_string();
+        view.level = Some(4);
+        view.atk = 8;
+        view.mitigation = 5;
+        let label = manifest_pick_label('a', &view);
+        assert!(label.contains("ATK 8"), "{label}");
+        assert!(label.contains("MIT 5%"), "{label}");
+    }
+
+    /// Nothing clamps a popup row horizontally, and a picker row does not
+    /// wrap the way a roster row does — it has no tags to shed — so the
+    /// whole label has to fit or its tail leaves the screen.
+    #[test]
+    fn no_manifest_pick_row_overflows_its_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for (label, why) in widest_manifest_pick_rows() {
+                // Every row draws through `with_icon`, so it carries the
+                // selection prefix and the glyph's reserved slot.
+                let drawn = p.measure_ui_advance(format!("     {label}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the widest manifest picker row ({why}) overflows its \
+                     popup by {:.0}px ({drawn:.0} into {room:.0}):\n{label}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     fn worn(slot: &str) -> ManifestEquipSlot {

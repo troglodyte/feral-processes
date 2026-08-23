@@ -57,11 +57,11 @@ pub fn dir() -> PathBuf {
 
 /// The `.bin` a template is generated into. Shared by `savetool template`
 /// and the game's `--template` flag so that generating with one and picking
-/// it out of the load menu after the other lands on the same file.
+/// it out of the load menu after the other lands on the same file. That
+/// reason is unchanged; the address now comes from `paths`, which is where
+/// the game's saves live rather than in the checkout.
 pub fn working_copy(name: &str) -> PathBuf {
-    repo_root()
-        .join("saves")
-        .join(format!("{WORKING_COPY_PREFIX}{name}.bin"))
+    crate::paths::saves_dir().join(format!("{WORKING_COPY_PREFIX}{name}.bin"))
 }
 
 /// Every template name available, alphabetically. A missing directory reads
@@ -400,6 +400,6 @@ mod tests {
     fn a_working_copy_lands_in_saves_under_the_dev_prefix() {
         let path = working_copy("extraction");
         assert_eq!(path.file_name().unwrap(), "dev_extraction.bin");
-        assert_eq!(path.parent().unwrap(), repo_root().join("saves"));
+        assert_eq!(path.parent().unwrap(), crate::paths::saves_dir());
     }
 }

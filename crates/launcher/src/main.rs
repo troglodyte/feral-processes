@@ -1,3 +1,9 @@
+// A release build on Windows opens without a console window behind the game.
+// Debug keeps stderr, which is what a developer on Windows would want — the
+// cost is that the `eprintln!`-then-exit paths go silent in release, which
+// is why the two a player can actually reach also write `startup-error.txt`.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 //! The `feral-processes` binary. Resolves the game's on-disk paths and hands
 //! off to the graphical frontend (`feral-processes-gui`) — this crate itself
 //! draws nothing and knows nothing about game rules.
@@ -7,9 +13,7 @@
 //! cargo run -- --template extraction # ...starting from a known world
 //! ```
 
-use std::io;
-
-use feral_processes::dev_template;
+use feral_processes::{dev_template, paths};
 use feral_processes_app_core::{App, DevTemplates};
 
 const USAGE: &str = "\
@@ -17,7 +21,7 @@ usage:
   feral-processes                   play
   feral-processes --template <name> regenerate a dev-saves/ world and play it";
 
-fn main() -> io::Result<()> {
+fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let template = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         [] => None,
@@ -34,39 +38,52 @@ fn main() -> io::Result<()> {
         }
     };
 
-    let repo_root = dev_template::repo_root();
-    let assets_dir = repo_root.join("assets");
-    let saves_dir = repo_root.join("saves");
-    std::fs::create_dir_all(&saves_dir)?;
-    // One-time migration: earlier builds kept a single save at
-    // `save.bin`. Move it into the new saves directory (under its old
-    // name) so it still shows up in the load list instead of silently
-    // disappearing — even if it turns out to be from an incompatible
-    // save version, it's still visible there and deletable.
-    let legacy_save = repo_root.join("save.bin");
-    if legacy_save.exists() {
-        let _ = std::fs::rename(&legacy_save, saves_dir.join("save.bin"));
+    let paths = paths::resolve();
+    if !paths.assets.is_dir() {
+        fatal(&format!(
+            "no assets directory at {}\n\
+             The game needs its `assets` folder beside the executable, \
+             or FERAL_ASSETS_DIR pointing at one.",
+            paths.assets.display()
+        ));
     }
-    let history_path = repo_root.join("run_history.log");
+    let saves_dir = paths.data.join("saves");
+    if let Err(e) = std::fs::create_dir_all(&saves_dir) {
+        fatal(&format!("cannot create {}: {e}", saves_dir.display()));
+    }
+    paths::migrate_from_repo(&paths::repo_root(), &paths.data);
+    let history_path = paths.data.join("run_history.log");
     // Beside the history log, not in `saves/`: both span runs rather than
     // belonging to one, and `App::list_saves` filters on `.bin` so neither
     // can turn up in the save picker.
-    let profile_path = repo_root.join("profile.ron");
+    let profile_path = paths.data.join("profile.ron");
+    // An installed build has no repo to find dev material in, so these two
+    // point at directories that will never exist. That is not a special
+    // case: the arena and template rows are gated behind `FERAL_DEV_ARENA`,
+    // and both `dev_template::list` and the arena catalog already read a
+    // missing directory as nothing to offer.
+    let (arena_dir, battle_log) = match &paths.dev {
+        Some(dev) => (dev.arenas.clone(), dev.battle_log.clone()),
+        None => (
+            paths.data.join("dev-arenas"),
+            paths.data.join("dev-logs").join("battles.jsonl"),
+        ),
+    };
 
     if !graphics_available() {
         eprintln!("No display detected; feral-processes needs a graphical display.");
         std::process::exit(1);
     }
     let mut app = App::new(
-        assets_dir,
+        paths.assets,
         saves_dir,
         history_path,
         profile_path,
-        repo_root.join("dev-arenas"),
+        arena_dir,
         // Beside `dev-saves/`, `dev-arenas/` and `dev-training/`, and
         // gitignored: written only when `FERAL_DEV_LOG` is set, and never
         // reachable in a player's build. See `dev-logs/README.md`.
-        repo_root.join("dev-logs").join("battles.jsonl"),
+        battle_log,
     );
     // Unconditionally, not behind `FERAL_DEV_ARENA`: the gate decides
     // whether the arena is *visible*, and a launcher that installed only
@@ -88,7 +105,22 @@ fn main() -> io::Result<()> {
         app.load_game(working_copy);
     }
     feral_processes_gui::run(app);
-    Ok(())
+}
+
+/// The two startup failures a player can actually reach, said in both
+/// places at once: stderr for a developer watching a terminal, and
+/// `startup-error.txt` beside the executable for a player whose release
+/// build has no console. Both unconditionally — branching on which is which
+/// is a `cfg` nobody would maintain, and a message box is a dependency
+/// bought for two error strings.
+fn fatal(message: &str) -> ! {
+    eprintln!("{message}");
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let _ = std::fs::write(dir.join("startup-error.txt"), format!("{message}\n"));
+    }
+    std::process::exit(1);
 }
 
 /// Best-effort preflight check: on Linux there's no windowing system to

@@ -27,6 +27,59 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.15
+
+Base-space rock stops being one flat number, and walking stops being a way
+to demolish your own base.
+
+### Fixed
+
+- **A swing can never take a whole wall.** `Game::swing_damage` grows all run
+  against a rock durability that did not, so past a level every cell fell to
+  one bump and navigating a developed base took its corners out a keypress at
+  a time. `Game::strike_rock` now caps one swing at `durability / min_swings`
+  for the cell's kind. Level-independent on purpose: scaling durability with
+  the player would make digging cost the same forever. Levelling still cuts
+  the swing count down to the kind's floor, it just cannot reach one — and at
+  ordinary rock's 24 with a floor of 2 the cap is 12, above a level-1 swing,
+  so the opening game's dig rate is unchanged.
+
+### Added
+
+- **Rock kinds, in `assets/rock/`.** One `.ron` per kind carrying a
+  durability, a swing floor, a spawn weight and a brightness. Which kind a
+  cell is, is *derived* from base space's own seed and the block the
+  coordinate falls in — nothing is stored, so `BaseGrid` stays sparse and a
+  wall nobody has touched still knows what it is. Kinds come in patches with
+  an inside rather than as pepper, and an ore later is a file drop.
+  `assets/rock/README.md` is the schema. An empty directory is supported and
+  gives uniform rock — though not one-swing walls, since the swing floor is a
+  fix and not content.
+- **Mining is a tool you take out.** `n` in base space arms the player's own
+  bump; disarmed, a step into rock is refused for free — no damage, no dig
+  site, no turn. Off when a run starts, and off for an existing save, which
+  never expressed a preference. A posted crew is unaffected: a mark is an
+  instruction the base was already given, and putting your own tools away
+  says nothing about it.
+- **An exposed rock face shows what it is made of.** A wall with air
+  orthogonally against it is drawn brighter for its kind and named by
+  examine; rock behind a face stays anonymous. So exposing a face is the act
+  of prospecting rather than reading a map of everything you will ever dig —
+  cut a cell and its four neighbours light up, let entropy take it back and
+  they go dark. Seeing a kind is a display rule only: a swing at unseen rock
+  meets that kind's real durability.
+
+### Notes
+
+- The save gains a `mining` flag and base space gains a seed, both additive
+  behind `#[serde(default)]`, so **existing saves load unchanged** and
+  `SAVE_FORMAT_VERSION` does not move. A save from before this release lays
+  its seams out from seed 0 — a valid layout, not a special case.
+- The durability values, the swing floors and the vein block size are
+  **unmeasured**, like every other knob in this slice. The design and what is
+  open are in
+  `docs/superpowers/specs/2026-08-23-rock-kinds-and-mining-mode-design.md`.
+
 ## 0.13.14
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

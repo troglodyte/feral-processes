@@ -1095,6 +1095,138 @@ been. The call has to be made deliberately, against what space the
 resource actually lives in, not against which pattern is already sitting
 in `enter_next_zone` to copy.
 
+### Base space carries its own seed, because base space travels
+
+**Base space carries its own seed, and it is not `WorldMap::seed()`.**
+
+`rock::RockDb::kind_at` decides what any base-space coordinate is made of by
+folding a seed with the block the coordinate falls in. The obvious seed to
+fold is the world's, and it is wrong.
+
+`WorldMap::seed()` reads like the run's identity. It is not:
+`enter_next_zone` mints the next zone's map from
+`seed().wrapping_add(0x9E37_79B9)`, so the world seed is a *zone's* identity
+and is different in every one of them. `BaseGrid`, meanwhile, is among the
+handful of things that survive a breach intact — the base is what a run
+carries between zones.
+
+Salted off the world seed, therefore, every seam in the base would reshuffle
+the moment the player portalled. A player who had spent a zone learning where
+the hard rock in their base was would come back to a different base. Worse,
+and quieter: a wall left half-cut keeps its `Durability` across the breach,
+so it would come back as a *different kind* with a different ceiling under an
+already-spent meter — a Fused wall reloading as ordinary rock at 24 max_hp
+with 90 points of progress on it.
+
+So `BaseGrid` mints its own `seed: u32` at `Game::new` and saves it with the
+grid. `#[serde(default)]`, so a save written before kinds existed loads at
+seed 0 — a valid deterministic layout rather than a special case — and
+additive, so no `SAVE_FORMAT_VERSION` bump.
+
+`base_spaces_seed_and_its_seams_survive_a_breach` is the test, and it asserts
+**both** halves in one function: that the world seed moved, and that the base
+seed and its seams did not. The first assertion is what makes the second mean
+anything — without it the test passes against a game in which neither seed
+ever changes, which is exactly the state a refactor could leave it in.
+
+### A rock kind is a brightness, never a hue
+
+**A rock kind authors a `shade`, and the reason it cannot author a hue or a
+colour is the map's oldest rule.**
+
+`sectors.rs`'s `SectorPalette` states it: hue answers "can I walk here", and
+the spread *within* a band is what tells terrain apart. `render/base.rs`
+records the consequence for anything told apart inside one band — "brightness
+rather than hue, since hue is already spoken for". Rock is a hole in the map
+and shares the hot family with `DataVoid` and `BlackIce`.
+
+A free RGB on `RockDef` would let the first mod ship a green wall, which
+reads to a player as crossable ground. An authored *hue* is no better and is
+worse in one specific way: `biome_tint` rotates every biome's hue by however
+far the current sector's anchor has moved, so an authored hue would fight
+that rotation and a seam the player had learned to recognise would change
+appearance on a breach — the same failure the base seed above exists to
+prevent, arriving through the palette instead.
+
+So a kind carries a brightness factor against `Biome::Entropy`'s own colour,
+`RockDb::load_dir` refuses a file outside `SHADE_BAND`, and the renderer
+scales *before* `biome_tint`'s rotation. A dense seam is a brighter patch of
+the hole it is part of, which is the same axis `Excavated` and `Entropy` are
+already separated on, and it stays inside the impassable band under every
+sector palette.
+
+The band's lower bound is 1.0 rather than 0.0 for a reason worth keeping: an
+exposed face darker than the wall around it would be *harder* to see than
+anonymous rock, which inverts the whole feature.
+
+### Seeing a rock kind is a display rule and never a gameplay one
+
+**A wall's kind decides what a swing meets, whether or not the player can see
+it.**
+
+Only an exposed face — solid rock with air orthogonally against it — is drawn
+in its kind's brightness or named by examine. That asymmetry is the feature:
+colouring every wall would hand the player a map of everything they will ever
+dig, so exposing a face is the act of prospecting.
+
+The trap is that the asymmetry looks like an inconsistency, and the tempting
+"fix" is to make unseen rock *resolve* to the default kind so the two halves
+agree. That would delete the point. `Game::strike_rock` resolves the true
+kind through `wall_at` regardless of exposure, so swinging blind into deep
+rock meets a Fused wall's real 120 and its real floor of four, and finding
+that out the hard way is what makes prospecting worth doing.
+`a_swing_at_unseen_rock_meets_its_real_kind` is the test standing in front of
+that fix.
+
+The other half of the same rule runs the other way: **the map and the examine
+ray must never disagree about a wall they can both see.** If the map hid a
+kind while `x` named it, the hiding would be decorative. Here the agreement
+happens to be structural — the ray stops at the first solid cell, whose
+predecessor is walkable by construction, so every cell it can reach is
+already a face — but "by construction" is precisely the kind of claim that
+stops being true when someone lets the ray run one cell further.
+`the_map_and_the_examine_ray_agree_about_a_wall` asserts the two readers
+against **each other** rather than against a hardcoded string, so they cannot
+drift apart.
+
+`is_exposed` is derived per lookup and never cached, for `Platform`'s radius
+reason turned inside out: three separate verbs move it. Cutting a cell
+exposes four neighbours, flooring one changes nothing, and
+`base_entropy_system` re-knitting a cell un-exposes them again — a cached
+flag would need keeping in step with all three, and the one that would be
+forgotten is entropy's, because it fires on a timer rather than on a
+keypress.
+
+### Mining is a tool the player takes out, and the crew never reads it
+
+**`resources::MiningMode` governs the player's own bump and nothing else.**
+
+Slice 1 refused a step into base-space rock for free. Slice 2 made cutting
+the point and turned that refusal into a swing, on the grounds that the wall
+is a thing you attack. What that did not cost was the interaction with
+`swing_damage` growing all run: at a developed level, walking a corridor in
+your own base destroyed the corridor's corners, and the player's bump became
+the one gesture in the game that destroys terrain without being asked twice.
+
+The toggle is off when a run starts and off for any save that never expressed
+a preference — arming a terrain-destroying tool on behalf of a player who
+never asked is the wrong default in both directions.
+
+**The crew must never read it.** A mark is an instruction the base was
+already given through the excavation plan; putting your own tools away says
+nothing about a job already posted. Wired into `run_dig_crew`, disarming the
+bump would stall every dig job in the base at once, and the symptom — bodies
+walking to marked cells and standing there — reads as the crew being broken
+rather than as a toggle doing something nobody asked it to.
+`a_posted_crew_cuts_a_marked_cell_with_the_players_mining_off` is the test.
+
+The cost of the gate is paid entirely in test fixtures: eleven of them dug by
+walking into a wall. They arm the tool through the named
+`game_at_the_frontier_cutting` rather than a line repeated at each site,
+because the failure mode of forgetting it is that the wall simply never comes
+down — which reads as the dig being broken rather than as the fixture being
+short something, exactly like `work_node_parts()` and `park_at_post()`.
+
 ### The base's footprint is `BaseGrid::is_floor` and nothing else
 
 **The base's footprint is `BaseGrid::is_floor` and nothing else.**

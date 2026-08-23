@@ -473,7 +473,7 @@ fn all_five_affinity_perks_are_on_offer_in_the_picker() {
 /// working the node passes `DEFAULT_BASE_INT`, being the baseline by
 /// definition; a posted program passes its own species'.
 fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i32) {
-    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int))
+    let levels = ((1.0 - crate::systems::mining_success_chance(1, 0, base_int, 0.0))
         / KEEN_SCAVENGER_BONUS_PER_LEVEL)
         .ceil() as usize;
     let player = game.player_entity();

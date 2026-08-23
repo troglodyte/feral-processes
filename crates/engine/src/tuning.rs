@@ -2776,6 +2776,40 @@ pub const MEMORY_MAUL_FRACTION: f32 = 0.35;
 /// the ring offers it a different tile on the next step.
 pub const MEMORY_AVOIDANCE_THRESHOLD: f32 = -3.0;
 
+/// How far one point of `Game::morale` shifts a worker's extraction
+/// reliability, in `systems::mining_success_chance`.
+///
+/// **Signed around a baseline of zero**, exactly like `base_int`'s term in
+/// the same formula and `base_speed`'s in `work_ticks_at_speed`. A program
+/// with no memories, the player working a node themselves, and an
+/// `assets/memories/` that has been deleted all contribute precisely
+/// nothing, so the shipped extraction rates mean what they have always
+/// meant. Making it absolute would silently re-rate every node by wiring
+/// alone.
+///
+/// Symmetric: a program that remembers good things extracts more reliably
+/// and one that remembers bad things fizzles more. A catalogue where only
+/// grudges bite makes every memory a liability and leaves the positive
+/// kinds with nothing to do here.
+pub const MEMORY_MORALE_PER_POINT: f64 = 0.005;
+
+/// The most morale may shift extraction reliability in either direction,
+/// as a fraction of the roll.
+///
+/// **A cap on the contribution, not on the result.**
+/// `mining_success_chance` already clamps what it returns to `0.0..=1.0`,
+/// because `GameRng::random_bool` panics outside it — that is a different
+/// job. `Game::morale` is a signed sum of up to `MEMORY_CAP_PER_PROGRAM`
+/// entries and is unbounded at both ends, so without this a bad run drives
+/// a node's reliability to zero and the base stops producing, which reads
+/// as the base being broken rather than as a program being unhappy.
+///
+/// This is what keeps morale a texture rather than a difficulty knob keyed
+/// to run history. Like `MAX_MITIGATION_PERCENT`, it is **never** scaled by
+/// level, zone or depth: a term that grows with the player approaches the
+/// cap and stops meaning anything.
+pub const MEMORY_MORALE_MAX_SHIFT: f64 = 0.10;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -395,14 +395,12 @@ impl crate::Game {
         let Some(store) = self.world.get::<Memories>(who) else {
             return 0.0;
         };
-        let db = self.world.resource::<MemoryDb>();
-        let now = self.world.resource::<GameClock>().tick;
-        store
-            .0
-            .iter()
-            .filter(|m| keep(m))
-            .filter_map(|m| Some(m.intensity(db.get(&m.def)?, now)))
-            .sum()
+        crate::memories::sum_intensity(
+            store,
+            self.world.resource::<MemoryDb>(),
+            self.world.resource::<GameClock>().tick,
+            keep,
+        )
     }
 
     /// The display name to stamp on a memory of `subject`, resolved at the

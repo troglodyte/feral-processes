@@ -3,23 +3,24 @@ use bevy_ecs::system::SystemParam;
 use rand::RngExt;
 
 use crate::components::{
-    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Nest,
-    NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve, Pursuing,
+    Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
+    Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve, Pursuing,
     ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
     WanderAi, field_buff_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
+use crate::memories::MemoryDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
-use crate::resources::{GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
+use crate::resources::{GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
     DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEECH_YIELD_BONUS,
-    MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS,
-    NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
+    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
+    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE};
 use crate::world::WorldMap;
@@ -139,15 +140,47 @@ pub(crate) fn node_payout(tier: u32, zone: ZoneLevel) -> u32 {
 /// it absolute would silently re-rate every existing species and every mod
 /// by wiring alone, which is a change nobody asked for and nobody would see.
 ///
+/// `morale` is `Game::morale` for whoever is standing there — the signed sum
+/// of everything that program remembers. It reads as a **deviation from
+/// zero**, the same way `base_int` reads as one from `DEFAULT_BASE_INT`, and
+/// that is what buys three properties at once and none of them by a branch:
+/// a program with no memories contributes nothing, the player contributes
+/// nothing because the player has no `Memories` at all, and an
+/// `assets/memories/` that has been deleted contributes nothing because
+/// `memory_sum` skips every entry whose def no file defines.
+///
+/// **Its own contribution is capped**, `MEMORY_MORALE_MAX_SHIFT`, which is
+/// not the same job as the outer clamp: morale is an unbounded sum of up to
+/// `MEMORY_CAP_PER_PROGRAM` entries, and uncapped it would drive a node to
+/// never yielding, which reads as the base being broken rather than as a
+/// program being unhappy.
+///
 /// Clamped at both ends because `GameRng::random_bool` panics outside
 /// 0..=1 — the low end matters, since nothing stops a mod authoring a
 /// deeply negative `base_int`.
-pub(crate) fn mining_success_chance(level: u32, keen_scavenger_level: u32, base_int: i32) -> f64 {
+pub(crate) fn mining_success_chance(
+    level: u32,
+    keen_scavenger_level: u32,
+    base_int: i32,
+    morale: f32,
+) -> f64 {
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
         + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
-        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
-        .clamp(0.0, 1.0)
+        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT
+        + morale_shift(morale))
+    .clamp(0.0, 1.0)
+}
+
+/// What `morale` is worth to a gather cycle, priced and capped in one place.
+///
+/// Split out rather than inlined so the cap is a thing a test can reach
+/// directly: the property that matters is that it saturates, and asserting
+/// that through `mining_success_chance` alone cannot tell a working cap
+/// apart from the outer `clamp(0.0, 1.0)` swallowing the overshoot.
+pub(crate) fn morale_shift(morale: f32) -> f64 {
+    (morale as f64 * MEMORY_MORALE_PER_POINT)
+        .clamp(-MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_MAX_SHIFT)
 }
 
 /// How many ticks one work cycle costs a worker of `speed` at a machine
@@ -192,6 +225,18 @@ pub(crate) struct CycleModifiers {
     /// db has never heard of, and for anything outside the class system —
     /// all of which take the ordinary payout.
     pub class: Option<AffinityClass>,
+    /// `Game::morale` for whoever is standing at the machine: the signed sum
+    /// of everything that program remembers.
+    ///
+    /// Beside `base_int` rather than beside the perk, because it is the same
+    /// shape of thing — it belongs to the body doing the work rather than to
+    /// the player, and it decides whether the cycle lands rather than what a
+    /// landed cycle is worth. **`0.0` is the baseline and not a missing
+    /// value**: the player has no `Memories`, a fresh program remembers
+    /// nothing, and a deleted `assets/memories/` makes every entry
+    /// unresolvable — all three want the shipped rate back untouched, and all
+    /// three get it without a branch here or at the call site.
+    pub morale: f32,
 }
 
 /// Whether the structure `node_entity` belongs to declares
@@ -241,6 +286,7 @@ pub(crate) fn resolve_gather_cycle(
             level,
             worker.keen_scavenger_level,
             worker.base_int,
+            worker.morale,
         ))
     {
         return None;
@@ -493,6 +539,7 @@ type CronjobWorker = (
     &'static Position,
     Option<&'static Carrying>,
     Option<&'static Stranded>,
+    Option<&'static Memories>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -511,6 +558,12 @@ pub struct CronjobLookups<'w> {
     /// reason the other three are: it is immutable reference data for the
     /// tick, and the parameter list is already at clippy's threshold.
     power: Res<'w, PowerGrid>,
+    /// The two halves of pricing a worker's morale, which is derived from the
+    /// clock on every read and never stored. Neither is a *new* resource —
+    /// both are already registered and already saved — so this adds a read
+    /// where there was none rather than shifting what the world holds.
+    memories: Res<'w, MemoryDb>,
+    clock: Res<'w, GameClock>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -552,6 +605,8 @@ pub fn task_progress_system(
         structures: structure_db,
         zone,
         power: grid,
+        memories: memory_db,
+        clock,
     } = db;
     // Both of these are the player's, not the worker's: `XpBoost` is
     // `FieldScope::Run`, so every worker's cronjob XP rides the same running
@@ -570,8 +625,17 @@ pub fn task_progress_system(
         ),
         None => (0, 0, None),
     };
-    for (mut task, creature, potential, mut exp, mut stats, worker_pos, carrying, stranded) in
-        &mut tasks
+    for (
+        mut task,
+        creature,
+        potential,
+        mut exp,
+        mut stats,
+        worker_pos,
+        carrying,
+        stranded,
+        memories,
+    ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -646,6 +710,13 @@ pub fn task_progress_system(
                 keen_scavenger_level,
                 base_int: worker_int,
                 class: worker_def.and_then(|d| d.affinity_class()),
+                // The same fold `Game::morale` is, through the shared free
+                // function rather than a copy of it: a worker with no
+                // `Memories` sums nothing and reads exactly `0.0`, which is
+                // the baseline and not a missing value.
+                morale: memories
+                    .map(|m| crate::memories::sum_intensity(m, &memory_db, clock.tick, |_| true))
+                    .unwrap_or(0.0),
             },
             &item_db,
             &mut rng,
@@ -818,6 +889,13 @@ pub fn player_gather_system(
                 // class, so working a node yourself pays the ordinary curve
                 // and a Leech is a reason to hand the job over.
                 class: None,
+                // And the same again, but by construction rather than by
+                // decision: the player has no `Memories` at all — the store is
+                // minted at `Game::roster_parts` and nowhere else — so there is
+                // no morale to read here and the baseline is the only honest
+                // figure. A player who could be demoralised into mining badly
+                // is a different game.
+                morale: 0.0,
             },
             &item_db,
             &mut rng,
@@ -1202,6 +1280,7 @@ mod tests {
                 keen_scavenger_level: 0,
                 base_int: DEFAULT_BASE_INT,
                 class,
+                morale: 0.0,
             },
             &shipped_items(),
             &mut rng,
@@ -1584,10 +1663,85 @@ mod tests {
         assert_eq!(reserve.get(), POWER_MIN);
     }
 
+    /// The whole no-regression argument for the morale term, stated as a
+    /// property rather than left implicit in the ten tests above that now
+    /// pass `0.0`: a worker with nothing to remember is a worker the formula
+    /// has never heard of.
+    ///
+    /// Swept across levels, perk levels and aptitudes, because the term is an
+    /// addend and an addend that failed to be zero would show up at every
+    /// combination rather than at one.
+    #[test]
+    fn a_worker_with_no_memories_extracts_at_the_shipped_rate() {
+        for level in [1, 2, 5, 12] {
+            for keen in [0, 1, 4] {
+                for int_offset in [-4, 0, 3] {
+                    let base_int = DEFAULT_BASE_INT + int_offset;
+                    let with_morale = mining_success_chance(level, keen, base_int, 0.0);
+                    let without = (MINING_SUCCESS_BASE
+                        + level as f64 * MINING_SUCCESS_PER_LEVEL
+                        + keen as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
+                        + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
+                        .clamp(0.0, 1.0);
+                    assert_eq!(
+                        with_morale, without,
+                        "morale 0.0 moved the rate at level {level}, keen {keen}, int {base_int}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Signed and symmetric, which is what gives the positive memory kinds
+    /// something to do rather than making every memory a liability.
+    ///
+    /// Asserted about equal *and opposite* morale rather than about a
+    /// direction, since a term that only ever helped would pass a
+    /// rises-with-morale test just as well.
+    #[test]
+    fn morale_moves_the_rate_both_ways_and_by_the_same_amount() {
+        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0);
+        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0);
+        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0);
+        assert!(
+            content > baseline,
+            "a program that remembers good things should extract more reliably"
+        );
+        assert!(
+            miserable < baseline,
+            "a program that remembers bad things should fizzle more"
+        );
+        assert!(
+            ((content - baseline) - (baseline - miserable)).abs() < 1e-9,
+            "the term is an addend, so equal and opposite morale must move it equally"
+        );
+    }
+
+    /// The guardrail that keeps this a texture rather than a difficulty knob.
+    ///
+    /// Asserted against `morale_shift` and **not** through
+    /// `mining_success_chance`, which is the whole reason that function was
+    /// split out: the outer `clamp(0.0, 1.0)` would swallow an uncapped
+    /// overshoot at the low end and a test reading the finished chance could
+    /// not tell a working cap from a missing one. `Game::morale` is an
+    /// unbounded sum, so the figures here are deliberately past anything the
+    /// shipped catalogue can build.
+    #[test]
+    fn the_morale_term_saturates_at_its_cap() {
+        assert_eq!(morale_shift(10_000.0), MEMORY_MORALE_MAX_SHIFT);
+        assert_eq!(morale_shift(-10_000.0), -MEMORY_MORALE_MAX_SHIFT);
+        assert_eq!(morale_shift(0.0), 0.0);
+        // And the finished chance stays inside what `random_bool` accepts,
+        // which is the outer clamp's job and is asserted here so the two
+        // cannot both be assumed.
+        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0);
+        assert!((0.0..=1.0).contains(&floored));
+    }
+
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT);
-        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT);
+        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
+        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -1597,7 +1751,7 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100, 0, DEFAULT_BASE_INT),
+            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0),
             1.0,
             "chance should never exceed a sure thing"
         );
@@ -1605,15 +1759,15 @@ mod tests {
 
     #[test]
     fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
-        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT);
-        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT);
+        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
+        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0);
         assert!(
             (boosted - (plain + 3.0 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL)).abs()
                 < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(
-            mining_success_chance(1, 1000, DEFAULT_BASE_INT),
+            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0),
             1.0,
             "the perk must not push the roll past a sure thing either"
         );
@@ -1631,7 +1785,8 @@ mod tests {
             let expected = crate::tuning::MINING_SUCCESS_BASE
                 + level as f64 * crate::tuning::MINING_SUCCESS_PER_LEVEL;
             assert!(
-                (mining_success_chance(level, 0, DEFAULT_BASE_INT) - expected).abs() < f64::EPSILON,
+                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0) - expected).abs()
+                    < f64::EPSILON,
                 "a baseline worker must contribute exactly nothing at level {level}"
             );
         }
@@ -1639,9 +1794,9 @@ mod tests {
 
     #[test]
     fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
-        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT);
-        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4);
-        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4);
+        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
+        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0);
+        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0);
         assert!(
             (sharp - (baseline + 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
             "each point above the baseline should add exactly its tuning constant"
@@ -1658,12 +1813,12 @@ mod tests {
     #[test]
     fn base_int_cannot_push_the_roll_outside_a_probability() {
         assert_eq!(
-            mining_success_chance(1, 0, 10_000),
+            mining_success_chance(1, 0, 10_000, 0.0),
             1.0,
             "aptitude must not push the roll past a sure thing"
         );
         assert_eq!(
-            mining_success_chance(4, 0, -10_000),
+            mining_success_chance(4, 0, -10_000, 0.0),
             0.0,
             "nor below an impossibility, which would panic the roll"
         );

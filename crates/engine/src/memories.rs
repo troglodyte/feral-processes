@@ -17,6 +17,7 @@
 //! Kernel Ring buys is spent in one of those trees. Do not "fix" this one to
 //! match that neighbour.
 
+use crate::components::{Memories, Memory};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -142,6 +143,35 @@ impl MemoryDb {
     pub fn all(&self) -> impl Iterator<Item = &MemoryDef> {
         self.defs.values()
     }
+}
+
+/// The signed sum of what `store` holds, restricted by `keep` — the one fold
+/// behind `Game::morale` and `Game::opinion_of`, lifted out of `Game` so a
+/// bevy system can ask the same question.
+///
+/// **A free function for `party::role_of`'s reason.** `task_progress_system`
+/// has no `Game` to ask and must not hold a second copy of the rule: two
+/// folds could disagree about whether an unresolvable def counts, and a doc
+/// comment claiming one mirrors the other is the shape that has drifted in
+/// this repo four times.
+///
+/// **An entry whose def no file defines is skipped**, contributing nothing.
+/// That is where the empty-database property comes from — with
+/// `assets/memories/` deleted every entry is unresolvable and every reader
+/// answers zero, without a load-time purge and without the entries being
+/// lost if the directory comes back.
+pub(crate) fn sum_intensity(
+    store: &Memories,
+    db: &MemoryDb,
+    now: u64,
+    keep: impl Fn(&Memory) -> bool,
+) -> f32 {
+    store
+        .0
+        .iter()
+        .filter(|m| keep(m))
+        .filter_map(|m| Some(m.intensity(db.get(&m.def)?, now)))
+        .sum()
 }
 
 #[cfg(test)]

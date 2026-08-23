@@ -1,0 +1,12 @@
+// The one memory formed by something happening *to* the base rather than by
+// the work itself — and the only one of the four work memories that is an
+// edge, since a sweep is an event and a posting is a standing state.
+(
+    id: "swept_here",
+    name: "Swept while working",
+    blurb: "The sweep found me at that machine.",
+    valence: -5.0,
+    half_life: 3500,
+    subject: Structure,
+    strike_cap: 3,
+)

@@ -1,6 +1,7 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
+use crate::components::MemorySubject;
 use crate::species::AffinityClass;
 use crate::tuning::{
     BASTION_DEF_MULTIPLIER, FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL,
@@ -432,19 +433,40 @@ impl Game {
                 EffectKind::Hit
             },
         );
+        // Both hoisted above the branch, and both for the destroyed side's
+        // sake: it despawns the structure the kind is read off, and the
+        // surviving side never looked at who was standing here at all.
+        let kind = self
+            .world
+            .get::<Structure>(structure)
+            .map(|s| s.kind.clone());
+        let workers: Vec<Entity> = {
+            let mut query = self.world.query::<(Entity, &Task)>();
+            query
+                .iter(&self.world)
+                .filter(|(_, t)| t.target == structure)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        // A sweep is remembered by whoever was posted at what it hit, on
+        // **both** branches: being caught at a machine that survived and
+        // being caught at one that did not are the same thing to the body
+        // standing there, and only the second was ever visible here.
+        //
+        // The subject is the machine's *kind* and not the entity, so the
+        // memory outlives the structure — which is what lets it be formed on
+        // the branch that is about to despawn it, and what makes a rebuilt
+        // Lathe the same Lathe to a program that was hurt at one.
+        if let Some(kind) = kind {
+            for &w in &workers {
+                self.remember(w, "swept_here", MemorySubject::Structure(kind.clone()));
+            }
+        }
         if destroyed {
             self.log_base_kind(
                 MessageKind::Raid,
                 format!("{label} is destroyed in a GC Entropy Sweep!"),
             );
-            let workers: Vec<Entity> = {
-                let mut query = self.world.query::<(Entity, &Task)>();
-                query
-                    .iter(&self.world)
-                    .filter(|(_, t)| t.target == structure)
-                    .map(|(e, _)| e)
-                    .collect()
-            };
             for w in workers {
                 // See `remove_structure`: the load has to go with the task,
                 // and this is the second of the two destruction paths.

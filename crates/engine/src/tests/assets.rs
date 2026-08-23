@@ -1894,6 +1894,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         ("hard_won", K::Nothing),
         // `Game::note_strandings`, off `tick_inner`.
         ("stranded_at", K::BaseTile),
+        // `Game::damage_structure`, on both branches. The one work memory
+        // that is an edge rather than a stretch of service, because a sweep
+        // is an event and a posting is a standing state.
+        ("swept_here", K::Structure),
     ]
 };
 
@@ -1902,11 +1906,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
 /// the build says so. A def with no trigger at all is worse — it can never be
 /// written, and reads as a memory the player simply never earns.
 ///
+/// This census walks the *defs* and not the variants, which is what let
 /// `MemorySubjectKind::Structure` and `::Activity` ship as variants with no
-/// def and no trigger, deliberately: they are the two subjects future content
-/// most obviously wants, and a variant with no writer costs nothing while an
-/// enum that has to grow costs a migration. So this census walks the *defs*
-/// and not the variants.
+/// def and no trigger at all — a variant with no writer costs nothing, while
+/// an enum that has to grow costs a migration.
 #[test]
 fn every_shipped_memory_def_is_reachable_from_a_trigger() {
     use crate::memories::MemoryDb;

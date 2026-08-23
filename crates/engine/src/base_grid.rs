@@ -46,12 +46,55 @@ pub enum BaseCell {
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BaseGrid {
     cells: BTreeMap<(i32, i32), BaseCell>,
+    /// Base space's own seed, which `rock::RockDb::kind_at` folds to decide
+    /// what any coordinate is made of.
+    ///
+    /// **Its own, and deliberately not `WorldMap::seed()`.** The world seed
+    /// changes on every breach — `enter_next_zone` mints the next zone from
+    /// `wrapping_add(0x9E37_79B9)` — while this grid *travels* with the run.
+    /// Salted off the world seed, every seam in the base would reshuffle
+    /// each time the player portalled, and a half-cut wall would come back a
+    /// different kind under its already-saved `Durability`.
+    ///
+    /// `#[serde(default)]`, so a save written before rock kinds existed
+    /// loads at 0 — a valid, deterministic layout rather than a special
+    /// case, and additive, so this costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    seed: u32,
 }
 
 impl BaseGrid {
     /// The cell at `(x, y)`, or `None` for solid rock.
     pub fn cell(&self, x: i32, y: i32) -> Option<BaseCell> {
         self.cells.get(&(x, y)).copied()
+    }
+
+    /// Mints base space's seed. `Game::new` is the one caller — a base has
+    /// one layout for the whole run, and re-seeding it mid-run would move
+    /// the seams under a base already dug into them.
+    pub(crate) fn set_seed(&mut self, seed: u32) {
+        self.seed = seed;
+    }
+
+    /// The seed `rock::RockDb::kind_at` folds. See the field.
+    pub fn seed(&self) -> u32 {
+        self.seed
+    }
+
+    /// Whether `(x, y)` is a rock face with air against it: solid, with at
+    /// least one **orthogonal** walkable neighbour.
+    ///
+    /// Orthogonal rather than 8-way — a diagonal neighbour does not expose a
+    /// face. Derived per lookup and never cached, and
+    /// `base::entropy::base_entropy_system` is the argument for that: a
+    /// re-knitting cell changes the exposure of its four neighbours, and a
+    /// cached flag would need keeping in step with every open, floor and
+    /// revert.
+    pub fn is_exposed(&self, x: i32, y: i32) -> bool {
+        self.is_solid(x, y)
+            && [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .iter()
+                .any(|(dx, dy)| self.walkable(x + dx, y + dy))
     }
 
     /// Whether `(x, y)` is laid floor. `Open` does not count — mined rock

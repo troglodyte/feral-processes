@@ -22,6 +22,7 @@ pub mod policy;
 pub mod progression;
 pub mod research;
 pub mod resources;
+pub mod rock;
 pub mod save;
 pub mod sectors;
 pub mod species;

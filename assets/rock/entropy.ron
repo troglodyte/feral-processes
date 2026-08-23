@@ -1,0 +1,10 @@
+(
+    id: "entropy",
+    name: "Entropy",
+    // The bulk of base space. Weighted so a base is mostly ordinary rock
+    // and a denser seam is something you notice.
+    weight: 70,
+    durability: 24,
+    min_swings: 2,
+    shade: 1.0,
+)

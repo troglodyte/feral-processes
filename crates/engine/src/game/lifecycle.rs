@@ -78,6 +78,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            rock: rock_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -111,6 +112,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock::default());
@@ -135,7 +137,15 @@ impl Game {
         ));
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(ZoneLevel::default());
-        world.insert_resource(crate::base_grid::BaseGrid::default());
+        world.insert_resource({
+            // Base space's seed is minted once, here, from the run's own
+            // seed — not tracked off `WorldMap::seed()`, which changes on
+            // every breach while this grid travels with the run. See
+            // `BaseGrid::seed`.
+            let mut grid = crate::base_grid::BaseGrid::default();
+            grid.set_seed(seed);
+            grid
+        });
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -309,6 +319,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            rock: rock_db,
             nemesis: nemesis_db,
             species: species_db,
             structures: structure_db,
@@ -356,6 +367,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
         world.insert_resource(GameClock { tick: data.tick });
@@ -1575,6 +1587,7 @@ struct AssetDbs {
     species: SpeciesDb,
     structures: StructureDb,
     research: ResearchDb,
+    rock: crate::rock::RockDb,
     items: ItemDb,
     perks: PerkDb,
     talents: crate::talents::TalentDb,
@@ -1668,6 +1681,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (memories, memory_warnings) =
         crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
     warnings.extend(memory_warnings);
+    // Same absent-is-silent rule a third time. An empty catalogue makes base
+    // space one uniform kind of rock — the pre-kinds game — while keeping
+    // the swing floor, which is a bug fix and not content.
+    let (rock, rock_warnings) = crate::rock::RockDb::load_dir(&assets_dir.join("rock"))?;
+    warnings.extend(rock_warnings);
     let missing = items.missing_roles();
     if !missing.is_empty() {
         return Err(std::io::Error::new(
@@ -1704,6 +1722,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         species,
         structures,
         research,
+        rock,
         items,
         perks,
         affixes,

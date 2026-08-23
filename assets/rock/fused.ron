@@ -1,0 +1,10 @@
+(
+    id: "fused",
+    name: "Fused Entropy",
+    weight: 8,
+    // The kind a player routes around early and cuts through late. Five
+    // times ordinary rock, and never in fewer than four swings.
+    durability: 120,
+    min_swings: 4,
+    shade: 3.0,
+)

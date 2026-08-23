@@ -2170,6 +2170,25 @@ pub const PLATFORM_CORNER_CUT: i32 = 2;
 /// of 5 plus `PLAYER_BASE_STATS`' atk of 6, so about 11 a hit.
 pub const BASE_ROCK_DURABILITY: u32 = 24;
 
+/// The fewest swings a cell of the fallback rock kind can ever be opened in.
+///
+/// `Game::strike_rock` caps one swing at `durability.div_ceil(min_swings)`,
+/// so this is what stops a developed player demolishing a wall by clipping
+/// a corner of their own base. **Level-independent on purpose**: scaling
+/// durability with the player instead would make digging cost the same
+/// forever, which is the one thing it must not do. Levelling still speeds
+/// digging — three swings at level 1 down to this floor — it simply cannot
+/// reach one.
+///
+/// At `BASE_ROCK_DURABILITY` of 24 the cap is 12, and a level-1 player's
+/// ~11 a swing is under it, so the opening game's dig rate does not move at
+/// all: the floor bites exactly where the bug was reported and nowhere else.
+///
+/// Every kind in `assets/rock/` authors its own; this is the one the
+/// built-in fallback carries, which is why an empty `assets/rock/` restores
+/// *uniform* rock and not the one-shot.
+pub const BASE_ROCK_MIN_SWINGS: u32 = 2;
+
 /// Chance, 0.0-1.0, that opening a cell of rock yields one Core Fragment.
 ///
 /// **Bounded above by the Mining Node's rate**, and that bound is the whole

@@ -1,0 +1,10 @@
+(
+    id: "compacted",
+    name: "Compacted Entropy",
+    weight: 22,
+    // Roughly two and a half times ordinary rock, so a seam is a detour
+    // rather than a wall.
+    durability: 60,
+    min_swings: 3,
+    shade: 1.9,
+)

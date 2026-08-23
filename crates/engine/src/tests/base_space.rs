@@ -3149,3 +3149,111 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
         "the one body must dig the one cell it can reach"
     );
 }
+
+/// **The trap this feature was designed around.** `WorldMap::seed()` looks
+/// like the run's identity and is not — `enter_next_zone` mints the next
+/// zone from `wrapping_add(0x9E37_79B9)` — while `BaseGrid` travels with the
+/// run. Salted off the world seed, every seam in the base would reshuffle on
+/// every breach, and a wall left half-cut would come back a different kind
+/// under its already-saved `Durability`.
+///
+/// Asserts both halves in one function on purpose: that the world seed
+/// *moved* is what makes the second assertion mean anything. Without it the
+/// test passes against a game in which neither seed ever changes.
+#[test]
+fn base_spaces_seed_and_its_seams_survive_a_breach() {
+    let mut game = game(4471);
+    let before_world = game.world.resource::<crate::world::WorldMap>().seed();
+    let before_base = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let sample: Vec<String> = (-6..6)
+        .flat_map(|x| (-6..6).map(move |y| (x, y)))
+        .map(|(x, y)| {
+            game.world
+                .resource::<crate::rock::RockDb>()
+                .kind_at(before_base, x, y)
+                .id
+                .clone()
+        })
+        .collect();
+
+    game.enter_next_zone();
+
+    let after_world = game.world.resource::<crate::world::WorldMap>().seed();
+    let after_base = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    assert_ne!(
+        before_world, after_world,
+        "the fixture must actually breach, or the seam assertion below is vacuous"
+    );
+    assert_eq!(
+        before_base, after_base,
+        "base space's seed tracked the world seed across a breach — every seam \
+         in the base just moved"
+    );
+    let after: Vec<String> = (-6..6)
+        .flat_map(|x| (-6..6).map(move |y| (x, y)))
+        .map(|(x, y)| {
+            game.world
+                .resource::<crate::rock::RockDb>()
+                .kind_at(after_base, x, y)
+                .id
+                .clone()
+        })
+        .collect();
+    assert_eq!(sample, after, "the base's seams moved on a breach");
+}
+
+/// Base space's seed is saved, so the seams a player has learned are the
+/// seams they come back to.
+#[test]
+fn base_spaces_seed_survives_a_real_save_and_load() {
+    let mut game = game(5528);
+    let before = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    assert_ne!(
+        before, 0,
+        "the fixture must mint a non-zero seed to be a real test"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_base_seed_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.world.resource::<crate::base_grid::BaseGrid>().seed(),
+        before
+    );
+}
+
+/// Deciding what a wall is made of must not touch `GameRng`: a draw from the
+/// shared stream does not survive a save/load, so the same wall would be a
+/// different kind after a reload, and it would shift every later roll in the
+/// run.
+#[test]
+fn deciding_a_walls_kind_draws_no_game_rng() {
+    fn draw(g: &mut Game) -> u64 {
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random::<u64>()
+    }
+    let mut probed = game(6612);
+    let before = draw(&mut probed);
+    let seed = probed.world.resource::<crate::base_grid::BaseGrid>().seed();
+    for x in -20..20 {
+        for y in -20..20 {
+            let _ = probed
+                .world
+                .resource::<crate::rock::RockDb>()
+                .kind_at(seed, x, y);
+        }
+    }
+    let after = draw(&mut probed);
+
+    let mut untouched = game(6612);
+    let a = draw(&mut untouched);
+    let b = draw(&mut untouched);
+    assert_eq!((before, after), (a, b), "kind_at moved the RNG stream");
+}

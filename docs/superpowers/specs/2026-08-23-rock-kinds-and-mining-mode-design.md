@@ -109,27 +109,34 @@ deterministic layout, not a special case — and this costs **no
 ### Kinds are content and live in `assets/rock/`
 
 A rock kind is a name, a hardness, a swing floor, a spawn weight and a
-hue. Every one of those is content by the project's own rule, and an ore is
+brightness. Every one of those is content by the project's own rule, and an ore is
 a rock kind plus a drop — so putting the kinds in `tuning.rs` would make the
 ore feature a Rust change for something the moddability rule says must be a
 file drop.
 
-**A hue, and not a colour.** `sectors.rs`'s `SectorPalette` states the
-renderer's one rule: hue says whether ground can be crossed, and the spread
-*within* each band is what tells terrain apart. `Biome::Entropy` is a hole
-in the map and sits in the hot family with `DataVoid` and `BlackIce`, so a
-rock kind may only move within that band. Authored as a free RGB, the first
-mod to ship a green wall breaks the rule the entire map is read by — a seam
-that looks crossable. `RockDb::load_dir` validates the hue against the band
-and rejects the file with a warning if it falls outside, exactly as
-`SectorDef` already validates its own palette.
+**A brightness, and neither a colour nor a hue.** The map's one colour
+rule is that hue answers "can I walk here"; `render/base.rs:209` already
+records the consequence for anything that has to be told apart *within* a
+band — "brightness rather than hue, since hue is already spoken for". A
+free RGB would let the first mod ship a green wall that reads as crossable.
+An authored *hue* is no better: `biome_tint` rotates every biome's hue by
+however far the sector's own anchor has moved, so an authored hue would
+fight that rotation and a seam would change kind as the player breached.
+
+So `RockDef` authors a `shade` — a brightness factor against
+`Biome::Entropy`'s own colour, ordinary rock at 1.0 and denser kinds above
+it. Hue is untouched, the sector rotation still applies on top, and a dense
+seam is a brighter patch of the same hole in the map, which is the same axis
+`Excavated` and `Entropy` are already told apart on. `RockDb::load_dir`
+validates the factor against a band and rejects the file with a warning if
+it falls outside, exactly as `SectorDef` validates its own palette.
 
 `RockDb::load_dir` follows `ItemDb::load_dir` exactly: one `.ron` per kind,
 a malformed file skipped with a logged warning rather than a panic, and
 `assets/rock/README.md` written in the same change as the schema.
 
 **An empty directory is a supported install.** With no files at all the db
-falls back to a single built-in kind carrying today's durability and hue, so
+falls back to a single built-in kind carrying today's durability and shade, so
 deleting `assets/rock/` restores *uniform* base-space rock the same
 supported way deleting `assets/environment/` or `assets/policies/` does.
 
@@ -145,8 +152,8 @@ non-empty, which is how that property comes to hold by accident at one site
 and lapse at another.
 
 Three kinds ship. Ordinary rock keeps today's 24 and a floor of 2; two
-denser kinds sit above it at lower weights, darker within the same band so
-density reads as depth rather than as a different material. Ores are deliberately **not**
+denser kinds sit above it at lower weights, brighter against the same hue so
+density reads as something in the rock rather than as a different material. Ores are deliberately **not**
 part of this: an ore is a drop plus a use plus an economy, and `RockDef`
 gains its `drops` field when that feature is designed, additively and for
 free.
@@ -244,8 +251,8 @@ rock channel for exposed solid cells only; examine names the kind under the
 same predicate.
 
 **`crates/engine/src/world.rs`.** `Tile` gains the rock channel — an
-`Option<f32>` hue, `None` everywhere on the zone surface and on every base
-cell that is not an exposed face. `Biome::Entropy`, `Biome::walkable` and
+`Option<f32>` brightness factor, `None` everywhere on the zone surface and
+on every base cell that is not an exposed face. `Biome::Entropy`, `Biome::walkable` and
 `rim` are untouched, so the map's shoreline logic does not move — which is
 the reason the channel is a second field rather than a `Biome` variant per
 kind. (A variant per kind is in any case impossible once kinds are data: the
@@ -266,11 +273,11 @@ over-wide row is drawn off the panel in silence.
 
 ### gui
 
-`render/base.rs` paints an exposed face at its kind's hue where the tile
-carries one and falls through to today's flat `Biome::Entropy` colour where
-it does not. The hue goes through the same band machinery every other tile's
-does, so a face is a shade of the hole it is part of rather than a new
-visual vocabulary. No new key binding work beyond `n` reaching `GameKey::Char`.
+`render/base.rs` scales `Biome::Entropy`'s colour by the tile's factor where
+it carries one and falls through to the flat colour where it does not. The
+scaling happens *before* `biome_tint`'s hue rotation, so a face stays inside
+the impassable band under every sector palette and is a brighter patch of
+the hole it is part of rather than a new visual vocabulary. No new key binding work beyond `n` reaching `GameKey::Char`.
 
 ## Testing
 
@@ -305,10 +312,10 @@ display-filter-only rule stated as a test.
 **Assets.** An empty `assets/rock/` loads and plays, *and* a wall still
 takes two swings with the directory gone — the half of that property that
 the obvious reading gets backwards. A malformed file is skipped with the
-rest of the directory intact, and so is one whose hue falls outside the
-impassable band. A census over the real assets: every shipped kind has a
-positive weight, a `min_swings` of at least 2, a durability at or above the
-fallback's, and a hue inside the band.
+rest of the directory intact, and so is one whose `shade` falls outside its
+band. A census over the real assets: every shipped kind has a positive
+weight, a `min_swings` of at least 2, a durability at or above the
+fallback's, and a `shade` inside the band.
 
 **The widened census.** `mining_a_wall_never_undercuts_a_mining_node`
 (`tests/base_space.rs:1861`) currently holds one wall's fragment rate per

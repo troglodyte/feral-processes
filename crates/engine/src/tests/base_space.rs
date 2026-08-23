@@ -3474,10 +3474,7 @@ fn with_mining_off_a_step_into_rock_costs_nothing_at_all() {
 
     game.move_player(1, 0);
 
-    assert!(
-        matches!(cell(&game, WALL), None),
-        "a disarmed bump cut the wall"
-    );
+    assert!(cell(&game, WALL).is_none(), "a disarmed bump cut the wall");
     assert_eq!(
         game.world.resource::<GameClock>().tick,
         before_tick,

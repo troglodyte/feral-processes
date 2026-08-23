@@ -27,6 +27,41 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.12
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing new is persisted. `Stock` and `Inventory` are untouched.
+
+### Put your cargo into a Depot
+
+A Depot was the only structure you could take *out* of and never put *into*.
+`P` beside one now opens a window over your pack — a row per item, a quantity
+per row, and Enter puts exactly that basket into the base's hands. It is the
+collect window's mirror and shares its keys, `[A]`/`[N]` and the Shift and
+Ctrl arrows included.
+
+The goods go into the Depot's output buffer, which is the point rather than
+an implementation detail: that is the same buffer `base_holding` sums and the
+same one a work order's feeders draw from. A production line stalled for want
+of an ingredient you were personally carrying had no fix before this.
+
+What may go in is plain, ordinary cargo. Fused, rare and high-quality copies
+stay on you — a Depot stores items by name and has nowhere to record what
+made a copy special, so one put away would come back out ordinary. Banked
+Research Data stays out for a different reason: a bank is not cargo.
+
+A Depot's room is one budget shared across every row, so filling one row
+lowers what the rest may reach, and the window says how much is left. An
+over-ask is clamped rather than refused, and a Depot with no room left takes
+nothing and costs no time.
+
+### Also
+
+The collect and deposit windows are now one key table rather than two copies
+of one. Nothing about the collect window changed — but the inverted Left/Right
+that window specifies, and the Ctrl step that halves the gap, now exist once
+instead of twice, where they cannot drift apart.
+
 ## 0.13.11
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

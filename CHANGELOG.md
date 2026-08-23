@@ -27,6 +27,57 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.17
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+Nothing here is stored: the new memories go into a store every program
+already carries, and the figure they move is derived on every read.
+
+Programs remember their working life, and how a program feels about its work
+finally does something.
+
+### Added
+
+- **A program remembers the machine it works and the work it does.** Until
+  now the roster remembered fights and strandings and nothing else — a body
+  could spend a whole run at one node and hold no opinion of it. Four new
+  memory kinds cover a program's working life: settling in at a machine that
+  runs, resenting one that is always backed up, the grind of cutting rock,
+  and being caught at a machine when a GC Entropy Sweep comes through.
+- **Morale changes how reliably a program extracts.** The memories screen has
+  headed itself with a Morale figure since 0.13.7 and nothing read it. A
+  contented program now works a node a shade more reliably and a miserable one
+  fizzles cycles more often. It is a small effect with a hard ceiling, and it
+  is **symmetric** — the positive memory kinds are worth something now, rather
+  than every memory being a liability.
+- Both effects are as quiet as the parking hook that came before them. Nothing
+  is logged, no number appears on the base screens, and the memories page
+  (`R` from the roster) stays the one place that explains why a program is
+  working the way it is.
+
+### Changed
+
+- **`MemorySubject::Structure` and `::Activity` have writers.** Both shipped
+  with the substrate in 0.13.7 as subject kinds nothing could ever be written
+  about. All six are live now.
+- A memory about a machine names the machine's **kind**, not that particular
+  machine, so it survives the machine being destroyed and a rebuilt one is
+  remembered as the same thing. Settling in and resenting share that subject
+  and pull opposite ways, so a machine kind that mostly runs nets out to a
+  mild fondness over a run and one that spends its life clogged nets out to a
+  grudge.
+- A digger remembers cutting rock as a *kind of work* and has no machine to
+  remember instead — a dig site is not a structure — so the memory follows the
+  program rather than the hole.
+- `assets/memories/README.md` documents the four new kinds and the axis that
+  divides them, which is not their sign: a sweep is an **edge**, remembered
+  the moment it lands, while the other three are **stretches of service**
+  written on a period. A half-life authored for a stretch is not comparable to
+  one authored for `mauled_by`.
+- **Deleting `assets/memories/` still gives back the pre-memory game
+  exactly**, extraction rates included. That property now holds at a third
+  site and cost no code to keep there.
+
 ## 0.13.16
 
 The defensive figure reaches the screens you compare programs on, and the

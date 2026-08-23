@@ -130,7 +130,32 @@ but not what makes a program remember.
 | `hard_won` | + | `Nothing` | winning a fight the party was outmatched in |
 | `mauled_by` | − | `Species` | taking a single hit worth a large share of maximum Integrity |
 | `stranded_at` | − | `BaseTile` | being posted somewhere nothing can reach |
+| `settled_in` | + | `Structure` | a stretch of service at a machine that is running |
+| `jammed_here` | − | `Structure` | a stretch of service at a machine that is backed up |
+| `cutting_rock` | − | `Activity` | a stretch of service on the dig crew |
+| `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 
-They are chosen to cover both valences and every subject kind that has a
-trigger — not because these four are the interesting content. `Structure` and
-`Activity` ship as subject kinds with nothing writing them yet.
+They are chosen to cover both valences and every subject kind, not because
+these eight are the interesting content. `Nothing`, `Program`, `Species` and
+`BaseTile` are written by the four fight-and-staffing triggers; `Structure`
+and `Activity` by the four about a program's working life.
+
+**The four work kinds divide on one axis, and it is not valence.**
+`swept_here` is an **edge** — a sweep is an event, and it is remembered the
+moment it lands. The other three are **stretches of service**: nothing
+distinguishes the first tick at a machine from the thousandth, so they are
+written on a period, and a memory reaching its `strike_cap` means a real
+stretch of the run rather than a moment of it. That is why a `half_life`
+authored for one of these is not comparable to one authored for `mauled_by`:
+a stretch memory is topped up as long as the posting lasts, and starts
+fading only once the body moves on.
+
+A `Structure` memory names the machine's **kind**, not the machine, so it
+outlives a machine that is destroyed and remembers a rebuilt one as the same
+thing. `settled_in` and `jammed_here` share that subject and oppose in sign,
+so a machine kind that mostly runs nets out to a mild fondness over a run and
+one that spends its life clogged nets out to a grudge.
+
+A digger is the one posting with no machine to remember instead — its `Task`
+targets a dig site, which is not a structure — so cutting rock is remembered
+as a kind of work and follows the program rather than the hole.

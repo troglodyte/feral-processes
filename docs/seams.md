@@ -5503,7 +5503,7 @@ giving the page a scroll first, not editing the number. Caught in the
 building — at 12 entries over two rows each the page ran 29 rows into a
 23-row popup, which is why the blurb is on the row rather than under it.
 
-### The one hook is `park_idle_staff`, and it is a third rejection rather than a score
+### The first hook is `park_idle_staff`, and it is a third rejection rather than a score
 
 `park_idle_staff` already declines two candidate tiles — one a `Structure`
 stands on, and one `BaseGrid` calls unwalkable — and leaves the body exactly
@@ -5561,6 +5561,142 @@ of ring periods now (`IDLE_STAFF_STEP_TICKS * 8 * IDLE_STAFF_RING_TILES`) and
 asserts the candidate has not moved as a precondition, so a retuned ring
 fails the test rather than quietly emptying it. It was the mutation pass that
 found this, not the suite.
+
+### The second hook is morale, and it is one capped addend in one formula
+
+`Game::morale` shipped with no reader outside the screen that printed it. The
+memories page headed itself with a figure that changed nothing, which made the
+whole page a readout of a simulation nobody was running. This is the reader:
+`CycleModifiers::morale`, into `systems::mining_success_chance`.
+
+**Why extraction and not something broader.** The base has three work paths
+and no single dial reaches all three — extractors price a cycle through
+`resolve_gather_cycle`, assemblers through `Task::required`, diggers through
+`swing_damage`. `work_ticks_for` was the tempting one because it already
+branches on `work` versus `assembles` and so reaches two of the three in one
+place, but it writes `Task::required` **once, when the job is assigned**, so
+the figure freezes at post time. Morale is a slow quantity and a posting can
+outlast several half-lives, so that version would have been stale exactly
+where it mattered. `CycleModifiers` was the other candidate and won on being
+live per cycle and on being the struct's stated job: "what the *worker* brings
+to a gather cycle, as opposed to what the node is."
+
+**Signed around a baseline of zero**, which is `base_int`'s idiom in the very
+same expression and `base_speed`'s in `work_ticks_at_speed`. That is not
+tidiness — it is what buys three properties at once, none of them by a branch:
+
+- a program with no memories sums nothing and contributes `0.0`;
+- the player contributes `0.0` because the player has no `Memories` at all,
+  the store being minted at `roster_parts` and nowhere else;
+- a deleted `assets/memories/` contributes `0.0` because `sum_intensity`
+  skips every entry whose def no file defines.
+
+That third one is the empty-catalogue property holding at a site nobody wrote
+a line of code for. It is worth noticing how cheap that was: the property was
+established once, at the fold, and every later reader inherits it.
+
+**The term needs its own cap, and the outer clamp is not it.**
+`mining_success_chance` already ends in `clamp(0.0, 1.0)`, but that clamp
+exists because `GameRng::random_bool` panics outside the range — a different
+job. `morale` is a signed sum of up to `MEMORY_CAP_PER_PROGRAM` entries and
+is unbounded at both ends, so without `MEMORY_MORALE_MAX_SHIFT` a bad run
+drives a node to never yielding and the base stops producing, which reads as
+the base being broken rather than as a program being unhappy. The subtle part
+is that the outer clamp would **hide** the missing cap: a test reading the
+finished chance cannot tell a working cap from an overshoot the clamp
+swallowed at the low end. `morale_shift` is split out so the cap is reachable
+directly, and that is the whole reason it is a function rather than an inline
+expression.
+
+Never scaled by level, zone or depth, for `effective_mitigation`'s reason: a
+term that grows with the player approaches its cap and stops meaning anything.
+
+**`morale` here and `opinion_of` at the parking hook**, which is the mirror of
+that seam's choice and deliberate at both ends. Parking asks about one corner
+of the base, so the sum over everything would keep a program that has had a
+bad run off *every* tile at once. This asks about the body, so the restriction
+would make it a per-machine preference — and the moment anything acts on a
+per-machine preference it wants to be in the posting decision, which is
+`schedule_base_labour` and the seam this feature is under orders to stay out
+of.
+
+**Nothing gates it numerically.** `balance_sim` models no base production at
+all — no `node_payout`, no `resolve_gather_cycle`, no cycle length — so the
+balance regression suite is blind to this in both directions. The evidence
+that the economy has not moved is the morale-zero sweep and the cap, not a
+curve. The ten pre-existing `mining_success_chance` tests, passed `0.0` and
+staying green, are most of it; a new sweep states it as a property rather
+than leaving it implicit across ten call sites.
+
+### A work memory is either an edge or a stretch, and the period is what a stretch has instead
+
+`Game::note_postings` runs from `tick_inner` immediately after the schedule,
+beside `note_strandings` and for that call's stated reason — the base systems'
+commands have just flushed and the clock has not moved on. What it does
+differently is fire on a period rather than on an edge, and that difference is
+the whole design.
+
+`note_strandings` can be edge-triggered because `Stranded::since` gives it an
+edge to read. A posting gives none: nothing distinguishes the first tick at a
+machine from the thousandth. Three shapes were available and two are wrong.
+
+**A per-tick write** is wrong, and `note_strandings`' own doc comment had
+already written the argument down before this feature existed — it "would
+saturate `strike_cap` in three ticks and hold the grudge at full intensity for
+as long as the route stayed broken, which makes `strikes` mean nothing".
+There is a second cost it does not name: `remember` evicts at the tail of
+every write, so a per-tick writer makes eviction effectively **eager** for any
+program holding a posting and lazy for every idle one. What a program
+remembers would then depend on whether it happened to be working, which
+nothing in the design wants.
+
+**Firing on a completed cycle** is wrong for a related reason. It makes
+`strikes` a cycle count, which saturates in seconds at a fast machine and
+never at a slow one — so the same length of service would mean different
+things at different machines, and the memory claims to be about service.
+
+**A period** measures time served. `MEMORY_POSTING_PERIOD` is derived off
+`GameClock`, so there is no counter, no field on `Task`, and nothing to save —
+`Platform`'s radius, a program's role, a Broker's board and a Stack
+description all follow the same instinct.
+
+A first draft of this had the two bevy-side triggers pushing onto a
+`RunFeats`-style per-tick drain queue, because `task_progress_system` and
+`set_machine_status` have no `Game` to call `remember` on. The post-schedule
+pass makes the queue unnecessary, and not building it also sidesteps a known
+trap: registering a new `Resource` shifts bevy's query iteration order and has
+surfaced latent unsorted-query failures in this repo before.
+
+**`swept_here` is the one edge**, in `damage_structure`, because a sweep *is*
+an event. The trap there was that the function already collected the workers
+posted at its target — but only on the destroyed branch, to clear their
+cronjobs — so the surviving branch had never looked at who was standing there
+at all. A trigger written only where the query already was would have covered
+half the cases and passed a test written on the same half. Both the kind
+lookup and the worker query are hoisted above the branch, since the destroyed
+side despawns the structure the kind is read off.
+
+**A `Structure` memory names the kind, not the entity.** That is what makes it
+sound to form one on the branch that is about to despawn the machine, and it
+is the right fiction for a base whose structures are demolished and
+re-deployed: a rebuilt Lathe is the same Lathe to a program that was hurt at
+one. `settled_in` and `jammed_here` share that subject and oppose in sign, so
+a machine kind that mostly runs nets out to a mild fondness over a run and one
+that spends its life backed up nets out to a grudge.
+
+Two exclusions are structural rather than checked, which is the point of both.
+A digger gets the `Activity` memory and no `Structure` one because a `DigSite`
+is the one `Task` target that is not a structure, so that arm has nothing to
+read. And the player needs no exclusion despite being able to hold a `Task`,
+because `remember` is a no-op on a body with no `Memories` — the same
+asymmetry that keeps hostiles and structures safe at the four triggers that
+came before.
+
+**`MEMORY_TRIGGERS` in `tests/assets.rs` caught the first of these before the
+suite did.** A def that ships with nothing writing it fails the build, and the
+table is spelled out rather than derived because there is nothing to derive it
+from: the catalogue is data, the triggers are Rust, and `MemoryDef` carries no
+`trigger` field on purpose.
 
 ### There is one place a runtime path is decided
 

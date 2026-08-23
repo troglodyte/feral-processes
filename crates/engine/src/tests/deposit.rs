@@ -207,3 +207,280 @@ fn deposit_room_sums_across_depots_and_drops_as_one_fills() {
         .insert(ItemId::from(ids::CORE_FRAGMENT), 4);
     assert_eq!(game.deposit_room(), 11, "the filled Depot has 4 less room");
 }
+
+/// The point of the feature, asserted end to end rather than by inspecting
+/// the buffer directly: a deposit is not a stash, it is handing the base
+/// your materials, and `base_stock` (what `base_holding` feeds) and
+/// `collectable_adjacent` are the two readers that make that true.
+#[test]
+fn deposited_goods_land_in_output_and_are_visible_to_base_holding_and_collect() {
+    let mut game = Game::new(970, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+    let landed = game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(landed, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+
+    let row = game
+        .base_stock()
+        .into_iter()
+        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT));
+    assert_eq!(row.map(|r| r.qty), Some(5), "base_holding sees the deposit");
+    assert_eq!(
+        game.collectable_adjacent(),
+        vec![(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        "and a collect could take it straight back out"
+    );
+}
+
+/// Reporting what landed rather than what was asked for is `apply_damage`'s
+/// rule: a log line printing the requested figure claims goods the base
+/// never received.
+#[test]
+fn an_over_ask_against_the_pack_is_clamped_to_what_is_held() {
+    let mut game = Game::new(971, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 3)]);
+
+    let landed = game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 50)]);
+    assert_eq!(
+        landed,
+        vec![(ItemId::from(ids::CORE_FRAGMENT), 3)],
+        "reports what landed, not what was asked for"
+    );
+    assert_eq!(count_item(&game, ids::CORE_FRAGMENT), 0);
+}
+
+/// Never past `capacity`: an over-capacity write would make that field a
+/// suggestion, and a full Depot is a decided failure mode rather than an
+/// exception to one.
+#[test]
+fn an_over_ask_against_room_is_clamped_to_what_fits() {
+    let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let depot = stocked_depot(&mut game, p.x + 1, p.y, 5, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 50)]);
+
+    let landed = game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 50)]);
+    assert_eq!(landed, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    let stock = game.world.get::<Stock>(depot).unwrap();
+    assert_eq!(stock.output_used(), 5);
+    assert!(stock.output_used() <= stock.capacity, "never past capacity");
+}
+
+/// The sort carries collect's reason unchanged, in the giving direction: a
+/// basket larger than the first Depot's room has to spill into the second in
+/// the same `(x, y)` order every run. Spawned in the reverse of their tile
+/// order, `assembler_system`'s test's trick.
+#[test]
+fn a_basket_larger_than_the_first_depots_room_spills_into_the_second_in_x_y_order() {
+    let mut game = Game::new(973, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+
+    let east = stocked_depot(&mut game, p.x + 1, p.y, 10, &[]);
+    let west = stocked_depot(&mut game, p.x - 1, p.y, 3, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+    let landed = game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(landed, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+
+    let in_output = |e: Entity| {
+        game.world
+            .get::<Stock>(e)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+    };
+    assert_eq!(
+        in_output(west),
+        3,
+        "west fills first and takes all its room"
+    );
+    assert_eq!(
+        in_output(east),
+        2,
+        "the remaining 2 spill into the next Depot east"
+    );
+}
+
+/// A full Depot is a decided failure mode: nothing moves, nothing is said,
+/// and no turn is spent — the same shape as an empty shelf is for collect.
+#[test]
+fn a_full_depot_takes_nothing_and_spends_no_tick() {
+    let mut game = Game::new(974, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 3, &[(ids::CORE_FRAGMENT, 3)]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 2)]);
+    let before = game.world.resource::<GameClock>().tick;
+
+    let landed = game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 2)]);
+    assert!(landed.is_empty());
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        2,
+        "nothing left the pack"
+    );
+    assert_eq!(game.world.resource::<GameClock>().tick, before);
+}
+
+/// One commit is one action: an empty or all-zero basket is a no-op, and a
+/// basket that actually moves something spends exactly one tick.
+#[test]
+fn a_successful_deposit_costs_one_tick_an_empty_or_all_zero_basket_costs_none() {
+    let mut game = Game::new(975, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+    let before = game.world.resource::<GameClock>().tick;
+
+    assert!(game.deposit_items(&[]).is_empty());
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        before,
+        "an empty basket spends nothing"
+    );
+
+    assert!(
+        game.deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 0)])
+            .is_empty()
+    );
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        before,
+        "an all-zero basket spends nothing"
+    );
+
+    assert!(
+        !game
+            .deposit_items(&[(ItemId::from(ids::CORE_FRAGMENT), 5)])
+            .is_empty()
+    );
+    assert_eq!(game.world.resource::<GameClock>().tick, before + 1);
+}
+
+/// One line for the whole basket, whatever its size, naming what actually
+/// landed — the mirror of collect's `Loot` line, though this is base news
+/// rather than something looted.
+#[test]
+fn a_commit_logs_exactly_one_line_naming_what_landed() {
+    let mut game = Game::new(976, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 3), (ids::POWER_CELL, 2)]);
+    let core_name = game
+        .item_name(&ItemId::from(ids::CORE_FRAGMENT))
+        .to_string();
+    let cell_name = game.item_name(&ItemId::from(ids::POWER_CELL)).to_string();
+
+    game.deposit_items(&[
+        (ItemId::from(ids::CORE_FRAGMENT), 3),
+        (ItemId::from(ids::POWER_CELL), 2),
+    ]);
+
+    let lines: Vec<_> = game
+        .message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text.starts_with("You put away"))
+        .collect();
+    assert_eq!(lines.len(), 1, "one line for the whole basket");
+    assert!(
+        lines[0].text.contains(&format!("3 {core_name}"))
+            && lines[0].text.contains(&format!("2 {cell_name}")),
+        "names what actually landed: {}",
+        lines[0].text
+    );
+}
+
+/// The refusal is stated here and nowhere else — app-core routes its own
+/// empty case back through this function rather than keeping a second copy
+/// of the sentence.
+#[test]
+fn deposit_adjacent_with_no_depot_says_so_and_spends_no_tick() {
+    let mut game = Game::new(977, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let before = game.world.resource::<GameClock>().tick;
+
+    assert!(game.deposit_adjacent().is_empty());
+    assert_eq!(game.world.resource::<GameClock>().tick, before);
+
+    let said = game
+        .message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text == "There is nowhere here to put anything.")
+        .count();
+    assert_eq!(said, 1);
+}
+
+/// A Depot but nothing to put in it is a different errand than no Depot at
+/// all, so it gets its own sentence.
+#[test]
+fn deposit_adjacent_beside_a_depot_with_an_empty_pack_says_so_and_spends_no_tick() {
+    let mut game = Game::new(978, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked_depot(&mut game, p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[]);
+    let before = game.world.resource::<GameClock>().tick;
+
+    assert!(game.deposit_adjacent().is_empty());
+    assert_eq!(game.world.resource::<GameClock>().tick, before);
+
+    let said = game
+        .message_log(usize::MAX)
+        .into_iter()
+        .filter(|e| e.text == "You have nothing to put away.")
+        .count();
+    assert_eq!(said, 1);
+}
+
+/// The guards refuse *silently*, as they always have: an action taken during
+/// a battle, on game over, or off `require_base`'s locale is not the base
+/// telling the player it has nowhere to put anything.
+#[test]
+fn deposit_adjacent_refuses_silently_off_locale_in_battle_and_on_game_over() {
+    let mut game = Game::new(979, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let refusal = "There is nowhere here to put anything.";
+    let said = |game: &Game| {
+        game.message_log(usize::MAX)
+            .into_iter()
+            .filter(|e| e.text == refusal)
+            .count()
+    };
+
+    assert!(game.deposit_adjacent().is_empty());
+    assert_eq!(said(&game), 1, "an empty base says so");
+
+    let player = game.player_entity();
+    insert_battle(&mut game, player, Vec::new());
+    assert!(game.deposit_adjacent().is_empty());
+    game.world.remove_resource::<BattleState>();
+
+    game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
+    assert!(game.deposit_adjacent().is_empty());
+    game.world.resource_mut::<GameOver>().reason = None;
+
+    *game.world.resource_mut::<Locale>() = Locale::Surface;
+    assert!(game.deposit_adjacent().is_empty());
+    stand_in_base(&mut game);
+
+    descend(&mut game);
+    assert!(game.deposit_adjacent().is_empty());
+
+    assert_eq!(
+        said(&game),
+        1,
+        "a guard refuses without claiming anything about the base"
+    );
+}

@@ -88,4 +88,118 @@ impl Game {
             .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
             .sum()
     }
+
+    /// Gives an exact basket to the adjacent Depots and reports what
+    /// actually landed.
+    ///
+    /// The one giving path: `deposit_adjacent` is this with everything
+    /// offered, so put-all and put-some cannot drift on clamping, logging
+    /// or the tick.
+    ///
+    /// Clamped **twice**, and neither clamp is a refusal: against what the
+    /// player actually holds, and against `output_room()`, per Depot, as
+    /// the fill walks them in `(x, y)` order. Room is checked **before**
+    /// anything leaves the pack — taking from the pack first and clamping
+    /// the write after would let a full base silently eat cargo the player
+    /// never got back. Never past `capacity`, the same ceiling
+    /// `hauling::deposit` writes under: an over-capacity write would make
+    /// that field a suggestion, and a full Depot is a decided failure mode
+    /// rather than an exception to one.
+    ///
+    /// Units leave the pack through `Inventory::take` alone, never a second
+    /// decrement — it already clamps to what is held and drops a slot that
+    /// reaches zero, so its return value *is* the pack-side clamp. Reporting
+    /// what landed rather than what was asked for is `apply_damage`'s rule:
+    /// a log line printing the requested figure claims goods the base never
+    /// received.
+    ///
+    /// One tick and one log line for the whole basket, because one commit
+    /// is one action. An empty or all-zero request is a no-op — nothing
+    /// moved, nothing said, no turn spent. It does not speak either refusal
+    /// sentence; those belong to `deposit_adjacent`, stated once.
+    pub fn deposit_items(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Vec::new();
+        }
+        if self.require_base().is_err() {
+            return Vec::new();
+        }
+        let player = self.player_entity();
+        let depots = self.adjacent_depots();
+
+        let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
+        for (item, qty) in give {
+            let mut outstanding = *qty;
+            for depot in &depots {
+                if outstanding == 0 {
+                    break;
+                }
+                let room = self.world.get::<Stock>(*depot).unwrap().output_room();
+                if room == 0 {
+                    continue;
+                }
+                let moved = self
+                    .world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .take(item.clone(), outstanding.min(room));
+                if moved == 0 {
+                    continue;
+                }
+                outstanding -= moved;
+                *self
+                    .world
+                    .get_mut::<Stock>(*depot)
+                    .unwrap()
+                    .output
+                    .entry(item.clone())
+                    .or_default() += moved;
+                *given.entry(item.clone()).or_default() += moved;
+            }
+        }
+
+        if given.is_empty() {
+            return Vec::new();
+        }
+        let summary = given
+            .iter()
+            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.log_base(format!("You put away {summary}."));
+        self.tick();
+        given.into_iter().collect()
+    }
+
+    /// Gives everything the pack is offering, and reports what was taken.
+    ///
+    /// The offer through `depositable`, the give through `deposit_items` —
+    /// one giving path rather than two that could drift on clamping,
+    /// logging or the tick.
+    ///
+    /// **The two refusals live here and nowhere else**, because they leave
+    /// the player different errands: no adjacent Depot at all, or a Depot
+    /// with nothing in the pack to put in it. A Depot with no *room* is not
+    /// a refusal — `deposit_items` clamps to zero and its log line already
+    /// says nothing landed. The guards come first and refuse *silently*, as
+    /// they always have: an action taken during a battle or from the
+    /// surface is not the base telling you its shelves are full.
+    pub fn deposit_adjacent(&mut self) -> Vec<(ItemId, u32)> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Vec::new();
+        }
+        if self.require_base().is_err() {
+            return Vec::new();
+        }
+        if self.adjacent_depots().is_empty() {
+            self.log_base("There is nowhere here to put anything.");
+            return Vec::new();
+        }
+        let offer = self.depositable();
+        if offer.is_empty() {
+            self.log_base("You have nothing to put away.");
+            return Vec::new();
+        }
+        self.deposit_items(&offer)
+    }
 }

@@ -36,13 +36,12 @@ const WORKING_COPY_PREFIX: &str = "dev_";
 /// Resolved from this crate's location rather than the current directory, so
 /// the tool and the game find the same `dev-saves/` no matter where they are
 /// invoked from. Both are only ever run out of the repo.
+///
+/// The body lives in `paths`, which is the one module that decides where
+/// anything is. The dependency runs `dev_template -> paths` and never the
+/// other way, or `paths::data_dir`'s fallback would be a cycle.
 pub fn repo_root() -> PathBuf {
-    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate_dir
-        .parent()
-        .and_then(|p| p.parent())
-        .map(Path::to_path_buf)
-        .unwrap_or(crate_dir)
+    crate::paths::repo_root()
 }
 
 pub fn assets_dir() -> PathBuf {

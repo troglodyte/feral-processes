@@ -50,3 +50,10 @@ feral-processes-gui = { workspace = true }
 rand = "0.10.2"
 ron = "0.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
+# The OS data directory, for `paths::data_dir`. Reading `%APPDATA%` by hand
+# misses folder redirection; `dirs` calls `SHGetKnownFolderPath`, which does
+# not. It belongs here and in no other crate — the engine and app-core are
+# *handed* their paths, and that is the discipline keeping this change to one
+# crate. `directories` was rejected as a larger surface for the same answer:
+# this game needs one directory, not a qualified triple.
+dirs = "6"

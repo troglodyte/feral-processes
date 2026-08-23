@@ -13,4 +13,5 @@
 
 pub mod cem;
 pub mod dev_template;
+pub mod paths;
 pub mod tuner;

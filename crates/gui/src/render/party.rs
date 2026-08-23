@@ -222,8 +222,8 @@ fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
         .map(|s| format!("#{} ", s + 1))
         .unwrap_or_default();
     let head = format!(
-        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  PWR {}  {}",
-        p.name, p.level, p.hp, p.max_hp, p.power, p.gear,
+        "[{shortcut}] {slot}{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}  {}",
+        p.name, p.level, p.hp, p.max_hp, p.atk, p.mitigation, p.power, p.gear,
     );
     let tags = [
         p.quality
@@ -623,6 +623,13 @@ mod tests {
             p.hp = 1;
             p.max_hp = 1234;
             p.power = 1234;
+            // Nothing caps attack, so it takes the same four digits the bar
+            // and the power scalar do. Mitigation is capped by
+            // `Game::effective_mitigation` at `MAX_MITIGATION_PERCENT`, so
+            // its widest reachable reading is that constant and not a
+            // guess.
+            p.atk = 1234;
+            p.mitigation = feral_processes_engine::tuning::MAX_MITIGATION_PERCENT;
             out.push((companion_row_lines('a', &p), why.to_string()));
         }
         out
@@ -681,6 +688,21 @@ mod tests {
     /// the player is deciding which one to fit next — and the list is the
     /// only screen that can answer "which of these is still bare" without
     /// three keypresses per program.
+    /// The roster is the screen a player compares programs on — which one
+    /// goes in the party, which one gets the gear — so it carries the two
+    /// figures a fight turns on and not only the two meters. `MIT` is
+    /// percentage points, the same unit and the same word the fuse picker
+    /// and the field-cast picker already use for it.
+    #[test]
+    fn a_roster_row_carries_the_combat_figures() {
+        let mut p = pet("Kestrel", "w|a|m");
+        p.atk = 8;
+        p.mitigation = 5;
+        let head = companion_row_lines('a', &p).remove(0);
+        assert!(head.contains("ATK 8"), "{head}");
+        assert!(head.contains("MIT 5%"), "{head}");
+    }
+
     #[test]
     fn a_roster_row_carries_the_loadout_cell() {
         let head = |p: &PetInfo| companion_row_lines('a', p).remove(0);

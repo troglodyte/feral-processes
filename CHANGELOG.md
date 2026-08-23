@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.13
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing here is persisted.
+
+### A defeated group no longer hands its turn to the pack behind it
+
+Kill the last program in a group and the group behind it got to hit you
+twice in the same round: once on its own initiative, and again on the dead
+group's. The quieter half of the same fault ran the other way — a group
+whose place in the order had shifted lost its round in silence, which reads
+as a pack going passive the moment anything dies.
+
+Initiative is rolled once at the top of a round, but a hostile was named in
+that order by its *position* — which group, which member. A kill drops the
+dead member, and drops the group entirely once that empties it, so every
+position behind the casualty shifts down one and the order ends up pointing
+at whoever moved into the gap. The order now names each hostile outright,
+so what acts on a program's turn is that program or nothing.
+
+A group promoted forward by a kill in front of it is also properly engaged
+now, rather than swinging from the rank it held before anyone died.
+
+The party side is untouched: a party slot stays a slot, because nobody
+leaves the party mid-battle and the round's plan is written against those
+slots. Aiming a strike at a group that falls before your turn still spends
+the turn rather than redirecting it, exactly as it has since 0.2.
+
 ## 0.13.12
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

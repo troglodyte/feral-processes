@@ -15,6 +15,7 @@
 
 pub(crate) mod building;
 pub(crate) mod collect;
+pub(crate) mod deposit;
 pub(crate) mod entropy;
 pub(crate) mod hauling;
 pub(crate) mod power;

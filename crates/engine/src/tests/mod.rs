@@ -24,6 +24,7 @@ mod combat_status;
 mod combat_targeting;
 mod contracts;
 mod crafting;
+mod deposit;
 mod descriptions;
 mod easter_eggs;
 mod environment;

@@ -578,6 +578,15 @@ pub struct SaveData {
     /// empty (fully solid) base rather than needing a hand recapture.
     #[serde(default)]
     pub base_grid: crate::base_grid::BaseGrid,
+    /// Whether the player's own bump into rock cuts it —
+    /// `resources::MiningMode`.
+    ///
+    /// Additive behind a default, so a save written before the toggle
+    /// existed loads with mining **off**. That is the safe reading twice
+    /// over: it is the new default, and a save that never expressed a
+    /// preference should not arm a tool that destroys terrain.
+    #[serde(default)]
+    pub mining: bool,
     /// The anchor's tile on the zone surface — see `components::BaseAnchor`.
     /// Persisted rather than derived from `spawn_point` on load: the two
     /// agree today (the anchor is auto-placed at each zone's spawn point and
@@ -1022,6 +1031,7 @@ mod tests {
             dig_sites: Vec::new(),
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
+            mining: false,
             anchor: None,
             zone: 1,
             spawn_point: (0, 0),
@@ -1167,6 +1177,28 @@ mod tests {
             &text[..text.len().min(120)]
         );
         assert_eq!(loaded.seed, sample_data().seed);
+    }
+
+    /// A save written before the mining toggle existed carries no `mining`
+    /// field at all, and must load with the player's bump **disarmed** —
+    /// both because that is the new default and because a save that never
+    /// expressed a preference must not arm a tool that destroys terrain.
+    ///
+    /// Deleting the line rather than trusting the derive: `#[serde(default)]`
+    /// on a `bool` is exactly the shape that reads as obviously right and
+    /// silently isn't if the attribute is ever dropped in a refactor.
+    #[test]
+    fn a_save_without_the_mining_field_loads_disarmed() {
+        let mut data = sample_data();
+        data.mining = true;
+        let text = to_ron(&data).unwrap();
+        assert!(
+            text.contains("mining: true"),
+            "the fixture must actually write the field to be a real test"
+        );
+        let older = text.replace("mining: true,", "");
+        let loaded = from_ron(&older).expect("an absent field must still parse");
+        assert!(!loaded.mining);
     }
 
     /// The whole point of the format. A field added behind

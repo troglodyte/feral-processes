@@ -191,6 +191,28 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// Whether the player's step into solid rock cuts it. See
+    /// `resources::MiningMode`.
+    pub fn mining(&self) -> bool {
+        self.world.resource::<crate::resources::MiningMode>().0
+    }
+
+    /// Arms or disarms the player's own bump, and returns what it now is.
+    ///
+    /// Costs no turn and draws nothing: picking a tool up is not an action,
+    /// and the caller `return`s rather than falling through to the tick.
+    pub fn toggle_mining(&mut self) -> bool {
+        let mut mode = self.world.resource_mut::<crate::resources::MiningMode>();
+        mode.0 = !mode.0;
+        let armed = mode.0;
+        if armed {
+            self.log("Cutting tools out. Walking into entropy will cut it.");
+        } else {
+            self.log("Cutting tools away. Walking into entropy will not cut it.");
+        }
+        armed
+    }
+
     /// What the rock at `(x, y)` in base space is: how much it absorbs, the
     /// most one swing may take off it, and how bright its face is drawn.
     ///
@@ -657,6 +679,18 @@ impl Game {
         // wall is a thing you attack, and a swing costs the turn a step
         // would have. There is no new key and no direction prompt.
         if self.world.resource::<BaseGrid>().is_solid(nx, ny) {
+            // Armed first, and this is the whole of the toggle. Slice 2 made
+            // every bump a swing, which meant walking a corridor at a
+            // developed level took the corridor's corners out with you. A
+            // disarmed bump is refused for exactly as slice 1 refused it —
+            // free, no tick, nothing damaged — so the cost of the safety is
+            // a keypress and not a turn.
+            if !self.mining() {
+                self.log(
+                    "You put a shoulder to the entropy and stop short.                      (Press n to cut.)",
+                );
+                return;
+            }
             let player = self.player_entity();
             self.strike_rock(player, nx, ny);
             self.tick();

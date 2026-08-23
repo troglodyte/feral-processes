@@ -663,6 +663,12 @@ fn v_lays_a_tile_in_base_space_and_does_nothing_on_the_surface() {
     let cut = (STARTING_POCKET_RADIUS + 1, 0);
     stand_in_base_at(&mut app, edge.0, edge.1);
 
+    // The bump only cuts once the tool is armed — `MiningMode` starts off so
+    // that navigating a base cannot demolish it. Without this the loop below
+    // bounces off the wall twenty times and the failure reads as the dig
+    // being broken.
+    app.handle_key(GameKey::Char('n'));
+
     // However many swings the rock's durability implies, and then the step
     // onto what they opened. Bounded rather than counted: what this test is
     // about is the key, not the wall.

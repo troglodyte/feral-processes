@@ -819,6 +819,9 @@ fn the_way_out_is_only_at_the_exit_cell() {
 fn swinging_at_solid_rock_moves_nothing_in_either_space() {
     let mut game = game_with_a_base(3126);
     game.enter_base().unwrap();
+    // Tools out: a disarmed bump is refused before it can swing, which is a
+    // different code path from the one this test is about.
+    game.toggle_mining();
     // The pocket's north edge, so the step north leaves it.
     let edge = (0, -crate::tuning::STARTING_POCKET_RADIUS);
     stand_in_base_at(&mut game, edge.0, edge.1);
@@ -900,6 +903,9 @@ fn swinging_at_solid_rock_still_breaks_off_a_job() {
     let edge = (0, -crate::tuning::STARTING_POCKET_RADIUS);
     let node = spawn_mining_node(&mut game, edge.0 + 1, edge.1);
     game.enter_base().unwrap();
+    // Tools out: a disarmed bump is refused before it can swing, which is a
+    // different code path from the one this test is about.
+    game.toggle_mining();
     stand_in_base_at(&mut game, edge.0, edge.1);
     game.work_structure(node).expect("standing beside the node");
     let player = game.player_entity();
@@ -1737,6 +1743,21 @@ fn swings_for(game: &Game, swinger: Entity, at: (i32, i32)) -> u32 {
         .div_ceil(game.swing_damage(swinger).min(wall.swing_cap))
 }
 
+/// `game_at_the_frontier` with the player's cutting tools out.
+///
+/// `resources::MiningMode` starts **off**: a bump into solid rock is refused
+/// for free, so a developed player cannot demolish their own base by
+/// clipping a corner of it. Any fixture that digs by *walking* therefore has
+/// to arm it first. Omitted, the wall simply never comes down, and the
+/// failure reads as the dig being broken rather than as the fixture being
+/// short something — which is why this is a named fixture and not a line
+/// repeated at nine call sites.
+fn game_at_the_frontier_cutting(seed: u32) -> Game {
+    let mut game = game_at_the_frontier(seed);
+    game.toggle_mining();
+    game
+}
+
 const WALL: (i32, i32) = (crate::tuning::STARTING_POCKET_RADIUS + 1, 0);
 
 fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
@@ -1749,7 +1770,7 @@ fn cell(game: &Game, (x, y): (i32, i32)) -> Option<base_grid::BaseCell> {
 /// implies*, not that it takes three.
 #[test]
 fn a_wall_opens_after_the_swings_its_durability_implies() {
-    let mut game = game_at_the_frontier(3210);
+    let mut game = game_at_the_frontier_cutting(3210);
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
     assert!(
@@ -1826,7 +1847,7 @@ fn identical_swings_at_rock_do_identical_damage() {
 /// tick a cell was opened on has to be the tick the swing landed on.
 #[test]
 fn an_opened_cell_records_the_tick_it_was_opened() {
-    let mut game = game_at_the_frontier(3213);
+    let mut game = game_at_the_frontier_cutting(3213);
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
 
@@ -1848,7 +1869,7 @@ fn an_opened_cell_records_the_tick_it_was_opened() {
 
 #[test]
 fn a_swing_costs_a_turn() {
-    let mut game = game_at_the_frontier(3214);
+    let mut game = game_at_the_frontier_cutting(3214);
     let before = game.world.resource::<GameClock>().tick;
 
     game.move_player(1, 0);
@@ -2215,7 +2236,7 @@ fn a_cell_reverts_only_after_the_window_not_on_the_tick_it_hits_it() {
 /// reload is a bug the first play session would hit.
 #[test]
 fn a_half_cut_wall_survives_a_save_round_trip() {
-    let mut game = game_at_the_frontier(3240);
+    let mut game = game_at_the_frontier_cutting(3240);
     game.move_player(1, 0);
     let site = game
         .dig_site_at(WALL.0, WALL.1)
@@ -2250,7 +2271,7 @@ fn a_half_cut_wall_survives_a_save_round_trip() {
 /// losing.
 #[test]
 fn a_mark_survives_a_save_round_trip() {
-    let mut game = game_at_the_frontier(3241);
+    let mut game = game_at_the_frontier_cutting(3241);
     game.move_player(1, 0);
     let site = game.dig_site_at(WALL.0, WALL.1).unwrap();
     game.world.get_mut::<DigSite>(site).unwrap().marked = true;
@@ -2376,7 +2397,7 @@ fn marking_an_open_cell_marks_it_for_flooring() {
 /// rather than needing a second erase.
 #[test]
 fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
-    let mut game = game_at_the_frontier(3254);
+    let mut game = game_at_the_frontier_cutting(3254);
     game.toggle_mark_box(WALL, WALL);
 
     let player = game.player_entity();
@@ -2418,7 +2439,7 @@ fn a_mark_survives_the_cut_and_clears_when_the_cell_is_floored() {
 /// past the cut, or every wall the player ever hit stays in the world.
 #[test]
 fn an_unmarked_wall_leaves_no_entity_behind_when_it_is_cut() {
-    let mut game = game_at_the_frontier(3255);
+    let mut game = game_at_the_frontier_cutting(3255);
     let player = game.player_entity();
     let swings = swings_for(&game, player, WALL);
 
@@ -3427,4 +3448,111 @@ fn a_half_cut_dense_wall_reloads_with_its_own_ceiling() {
         before,
         "a dense wall reloaded at the wrong ceiling"
     );
+}
+
+/// Mining is off when a run starts — the bump has to be armed before it
+/// destroys terrain.
+#[test]
+fn mining_is_off_when_a_run_starts() {
+    assert!(!game(8801).mining());
+}
+
+/// **The reported bug's other half.** With mining disarmed a step into rock
+/// is refused for free: no damage, no dig site, and — the part that makes it
+/// a refusal rather than a wasted turn — no tick.
+///
+/// All three asserted together on purpose. Damage alone passes against a
+/// gate that swallowed the swing but still spent the turn, which would be a
+/// silent tax on walking into your own walls.
+#[test]
+fn with_mining_off_a_step_into_rock_costs_nothing_at_all() {
+    let mut game = game_at_the_frontier(8802);
+    assert!(!game.mining());
+    let before_tick = game.world.resource::<GameClock>().tick;
+    let before_sites = dig_site_count(&mut game);
+
+    game.move_player(1, 0);
+
+    assert!(
+        matches!(cell(&game, WALL), None),
+        "a disarmed bump cut the wall"
+    );
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        before_tick,
+        "a refusal spent a turn"
+    );
+    assert_eq!(
+        dig_site_count(&mut game),
+        before_sites,
+        "a refusal left a dig site behind"
+    );
+}
+
+/// Armed, the bump is the swing it has always been — the toggle adds a gate
+/// and changes nothing behind it.
+#[test]
+fn with_mining_on_a_step_into_rock_swings_exactly_as_before() {
+    let mut game = game_at_the_frontier(8803);
+    game.toggle_mining();
+    assert!(game.mining());
+    let player = game.player_entity();
+    let swings = swings_for(&game, player, WALL);
+
+    for _ in 0..swings {
+        game.move_player(1, 0);
+    }
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "an armed bump did not cut the wall"
+    );
+}
+
+/// The toggle survives a save, and a save written before it existed loads
+/// with mining off.
+#[test]
+fn mining_mode_survives_a_real_save_and_load() {
+    let mut game = game(8804);
+    game.toggle_mining();
+    assert!(game.mining(), "the fixture must arm it to be a real test");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_mining_mode_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(loaded.mining(), "the toggle did not survive the save");
+}
+
+/// **The separation the toggle depends on.** A mark is an instruction the
+/// base was already given; putting your own tools away says nothing about
+/// it. `run_dig_crew` must never read `MiningMode`, or disarming the bump
+/// silently stalls every dig job in the base and reads as the crew being
+/// broken.
+#[test]
+fn a_posted_crew_cuts_a_marked_cell_with_the_players_mining_off() {
+    let (mut game, staff) = base_with_a_crew(8805, 1);
+    assert!(!game.mining(), "the fixture must leave mining disarmed");
+    mark(&mut game, WALL);
+    let ticks = ticks_to_cut(&game, staff[0]);
+    pass(&mut game, ticks);
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the crew stopped digging because the player put their own tools away"
+    );
+}
+
+/// Arming the bump is not an action. `handle_playing_key` `return`s on `n`
+/// rather than falling through to the tick, and this is the engine half of
+/// that promise.
+#[test]
+fn arming_the_bump_spends_no_turn() {
+    let mut game = game(8806);
+    let before = game.world.resource::<GameClock>().tick;
+    game.toggle_mining();
+    game.toggle_mining();
+    assert_eq!(game.world.resource::<GameClock>().tick, before);
 }

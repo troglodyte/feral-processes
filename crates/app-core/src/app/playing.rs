@@ -155,6 +155,27 @@ impl App {
                 self.mode = Mode::Trade;
                 return;
             }
+            // Arms the player's own bump into base-space rock. A `return`
+            // rather than a fallthrough for `f`'s reason: picking a tool up
+            // is not an action and must not cost a turn.
+            //
+            // Refused out here rather than in the engine for the reason `d`
+            // and `m` are: outside base space there is no rock to cut, and
+            // arming a tool against ground that has none is a keypress with
+            // nothing to show for it.
+            GameKey::Char('n') => {
+                match self.game.as_mut() {
+                    Some(game) if game.in_base() => {
+                        game.toggle_mining();
+                    }
+                    _ => {
+                        self.status_line = Some(
+                            "Nothing to cut out here — the rock is through the anchor.".to_string(),
+                        )
+                    }
+                }
+                return;
+            }
             GameKey::Char('L') => {
                 self.mode = Mode::History;
                 return;

@@ -186,6 +186,10 @@ fn a_swing_at_rock_in_base_space_is_an_action() {
         0,
         -feral_processes_engine::tuning::STARTING_POCKET_RADIUS,
     );
+    // Armed first: a disarmed bump is refused for free, which is the whole
+    // of `MiningMode`. What this test is about is that an *armed* swing is
+    // an action.
+    inside.handle_key(GameKey::Char('n'));
     inside.status_line = Some("an earlier refusal".to_string());
     let _ = inside.take_sounds();
     let tick = inside.game.as_ref().unwrap().current_tick();
@@ -222,5 +226,50 @@ fn a_swing_at_rock_in_base_space_is_an_action() {
         outside.take_sounds().len(),
         1,
         "and still plays exactly one sound"
+    );
+}
+
+/// `n` arms and disarms the player's own bump into rock, and costs no turn
+/// doing it: picking a tool up is not an action, so the handler `return`s
+/// rather than falling through to the tick.
+#[test]
+fn n_toggles_the_players_bump_and_spends_no_turn() {
+    let mut app = test_app(9101);
+    stand_in_base(&mut app);
+    let tick = app.game.as_ref().unwrap().current_tick();
+    assert!(!app.game.as_ref().unwrap().mining());
+
+    app.handle_key(GameKey::Char('n'));
+    assert!(app.game.as_ref().unwrap().mining(), "n did not arm mining");
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        tick,
+        "arming a tool spent a turn"
+    );
+
+    app.handle_key(GameKey::Char('n'));
+    assert!(
+        !app.game.as_ref().unwrap().mining(),
+        "n did not disarm mining"
+    );
+}
+
+/// Out on the surface there is no rock to cut, so `n` says so rather than
+/// arming a tool that can never fire — the same refusal `d` and `m` make,
+/// and for the same reason.
+#[test]
+fn n_is_refused_outside_base_space() {
+    let mut app = test_app(9102);
+    assert!(!app.game.as_ref().unwrap().in_base());
+
+    app.handle_key(GameKey::Char('n'));
+
+    assert!(!app.game.as_ref().unwrap().mining());
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("through the anchor")),
+        "no refusal shown: {:?}",
+        app.status_line
     );
 }

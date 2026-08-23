@@ -1318,6 +1318,22 @@ fn draw_status_panel(
         painter.ui(line, x + m.inset, cy, m.font_size, TEXT);
         cy += m.line_height;
     }
+    // Base space only: out on the surface there is no rock to cut, so the
+    // row would be a mode readout for a mode that cannot fire. Eleven cells
+    // at its widest, well inside the column's ceiling — the status column
+    // cannot grow horizontally and an over-wide row is drawn off the panel
+    // in silence.
+    if game.in_base() {
+        let armed = game.mining();
+        painter.ui(
+            format!("Mining: {}", if armed { "on" } else { "off" }),
+            x + m.inset,
+            cy,
+            m.font_size,
+            if armed { GREEN } else { TEXT_DIM },
+        );
+        cy += m.line_height;
+    }
     painter.ui(
         format!(
             "Party: {}/{}",
@@ -1355,7 +1371,7 @@ fn draw_status_panel(
     // inventory can.
     let keys = [
         "hjkl/arrows move  . wait  e drain  r recharge",
-        "b base menu   p party menu   i pack",
+        "b base menu   p party menu   i pack   n mine",
         "c collect  t trade  a routine  u symlink  x examine  v tile",
         "L history  f filter  s save  q main menu  ? help  +/- zoom",
     ];

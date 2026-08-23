@@ -19,6 +19,28 @@ pub struct GameClock {
     pub tick: u64,
 }
 
+/// Whether the player's own step into solid base-space rock is a swing or a
+/// refusal.
+///
+/// **Off when a run starts.** A step into rock used to be a swing
+/// unconditionally, which meant a developed player navigating their own base
+/// demolished it a corner at a time — you clip a wall on the way past and the
+/// wall is gone. The excavation plan (`m`) already exists for deliberate
+/// digging, so this is the player's own bump asking to be armed first.
+///
+/// **It governs the player's bump and nothing else.** `Game::run_dig_crew`
+/// never reads it: a marked cell is dug by whoever is posted to it whether
+/// the player's mining is armed or not, because the mark *is* the
+/// instruction and disarming a tool you are holding says nothing about a job
+/// the base was already given.
+///
+/// Saved behind a `#[serde(default)]`, so an existing save loads with mining
+/// off — which is both the new default and the safe reading of a save that
+/// never expressed a preference. Additive, so it costs no
+/// `SAVE_FORMAT_VERSION` bump.
+#[derive(Resource, Default, Clone, Copy, Serialize, Deserialize)]
+pub struct MiningMode(pub bool);
+
 #[derive(Resource)]
 pub struct GameRng(pub StdRng);
 

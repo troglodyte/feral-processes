@@ -1481,6 +1481,7 @@ fn ground_step(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) -> (i
         Tile {
             biome: from,
             walkable: true,
+            rock_shade: None,
         },
     );
     map.set_override(
@@ -1489,6 +1490,7 @@ fn ground_step(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) -> (i
         Tile {
             biome: to,
             walkable: to_walkable,
+            rock_shade: None,
         },
     );
     (nx, ny)

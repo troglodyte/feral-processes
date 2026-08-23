@@ -159,6 +159,7 @@ fn a_guardian_outside_its_tether_walks_back_toward_its_nest() {
                 Tile {
                     biome: Biome::OpenGrid,
                     walkable: true,
+                    rock_shade: None,
                 },
             );
         }
@@ -383,6 +384,7 @@ fn a_ring_biome_with_nothing_gentle_fields_only_its_gentlest_species() {
         Tile {
             biome: Biome::Deadlock,
             walkable: true,
+            rock_shade: None,
         },
     );
 
@@ -1925,6 +1927,7 @@ fn the_dev_console_ignores_the_density_target() {
                 Tile {
                     biome: Biome::OpenGrid,
                     walkable: true,
+                    rock_shade: None,
                 },
             );
         }
@@ -2129,6 +2132,7 @@ fn open_tile_in_a_sealed_box(game: &mut Game, cx: i32, cy: i32, half: i32) {
                         Biome::DataVoid
                     },
                     walkable: open,
+                    rock_shade: None,
                 },
             );
         }

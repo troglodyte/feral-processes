@@ -1044,6 +1044,7 @@ fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1261,6 +1262,7 @@ fn a_pursuer_closes_on_the_player_each_tick() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1303,6 +1305,7 @@ fn a_pursuer_that_reaches_the_player_starts_a_battle() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1341,6 +1344,7 @@ fn the_battle_a_pursuer_starts_includes_its_packmates() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1398,6 +1402,7 @@ fn a_pursuer_beyond_the_leash_gives_up() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1463,6 +1468,7 @@ fn pursuers_never_step_onto_the_base_platform() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1487,6 +1493,7 @@ fn pursuers_never_step_onto_the_base_platform() {
                     Tile {
                         biome: Biome::Platform,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1511,6 +1518,7 @@ fn pursuers_never_step_onto_the_base_platform() {
                     Tile {
                         biome: Biome::DataVoid,
                         walkable: false,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1577,6 +1585,7 @@ fn nest_aggro_tick_is_a_no_op_during_a_battle() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1675,6 +1684,7 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -1696,6 +1706,7 @@ fn standing_inside_the_base_slab_strips_pursuing_from_a_reachable_guardian() {
                     Tile {
                         biome: Biome::Platform,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }

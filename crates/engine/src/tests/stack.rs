@@ -2054,6 +2054,7 @@ fn with_nowhere_to_put_a_new_link_the_stack_does_not_collapse() {
                     Tile {
                         biome: Biome::BlackIce,
                         walkable: false,
+                        rock_shade: None,
                     },
                 );
             }

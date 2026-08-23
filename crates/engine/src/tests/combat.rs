@@ -187,6 +187,7 @@ fn a_successful_jack_out_does_not_shake_a_pursuer_outside_the_battle() {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }

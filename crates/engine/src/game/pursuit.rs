@@ -93,6 +93,7 @@ mod tests {
         Tile {
             biome: Biome::OpenGrid,
             walkable: true,
+            rock_shade: None,
         }
     }
 
@@ -100,6 +101,7 @@ mod tests {
         Tile {
             biome: Biome::DataVoid,
             walkable: false,
+            rock_shade: None,
         }
     }
 
@@ -107,6 +109,7 @@ mod tests {
         Tile {
             biome: Biome::Platform,
             walkable: true,
+            rock_shade: None,
         }
     }
 

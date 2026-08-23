@@ -1109,6 +1109,7 @@ mod tests {
             Tile {
                 biome: crate::world::Biome::Platform,
                 walkable: true,
+                rock_shade: None,
             },
         )];
         data.zone = 3;
@@ -1290,6 +1291,7 @@ mod tests {
             Tile {
                 biome: crate::world::Biome::Deadlock,
                 walkable: true,
+                rock_shade: None,
             },
         )];
         save_to_file(&path, &data).unwrap();

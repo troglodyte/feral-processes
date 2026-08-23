@@ -91,6 +91,22 @@ impl Biome {
 pub struct Tile {
     pub biome: Biome,
     pub walkable: bool,
+    /// How bright this cell's rock face is drawn, for a base-space cell that
+    /// is an *exposed* face — solid, with air orthogonally against it. `None`
+    /// everywhere on the zone surface, and on every base cell that is walked
+    /// on or buried behind another.
+    ///
+    /// **Deliberately `#[serde(skip)]`.** `Tile` lands in the save through
+    /// `SaveData::tile_overrides`, and this is a derived display value
+    /// recomputed every frame from `rock::RockDb::wall_at` — storing it would
+    /// let a save disagree with the world it came from, and would put a
+    /// renderer's concern in the save format.
+    ///
+    /// The rule it exists to serve: colouring every wall would hand the
+    /// player a map of everything they will ever dig, so only faces they can
+    /// actually see carry a kind. Exposing a face is the act of prospecting.
+    #[serde(skip)]
+    pub rock_shade: Option<f32>,
 }
 
 impl Tile {
@@ -249,6 +265,7 @@ impl WorldMap {
         Tile {
             biome,
             walkable: biome.walkable(),
+            rock_shade: None,
         }
     }
 
@@ -435,6 +452,7 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
             Tile {
                 biome: Biome::DataVoid,
                 walkable: false,
+                rock_shade: None,
             },
         );
         let tile = map.tile(3, 3);

@@ -1195,6 +1195,7 @@ fn clear_ground_around_the_player(game: &mut Game, half: i32) {
                     Tile {
                         biome: Biome::OpenGrid,
                         walkable: true,
+                        rock_shade: None,
                     },
                 );
             }
@@ -3555,4 +3556,160 @@ fn arming_the_bump_spends_no_turn() {
     game.toggle_mining();
     game.toggle_mining();
     assert_eq!(game.world.resource::<GameClock>().tick, before);
+}
+
+/// A face is solid rock with air orthogonally against it. Diagonal does not
+/// count — a diagonal neighbour does not expose a face — and neither does
+/// walkable ground itself.
+#[test]
+fn a_face_is_solid_rock_with_air_orthogonally_beside_it() {
+    let game = game_at_the_frontier(9201);
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let r = crate::tuning::STARTING_POCKET_RADIUS;
+
+    assert!(
+        grid.is_exposed(WALL.0, WALL.1),
+        "the frontier wall is a face"
+    );
+    assert!(
+        !grid.is_exposed(WALL.0 + 1, WALL.1),
+        "rock behind a face is not itself a face"
+    );
+    assert!(
+        !grid.is_exposed(0, 0),
+        "walkable ground is not a face — the predicate must require solid"
+    );
+    // The pocket is a diamond, so the cell diagonally off its corner touches
+    // walkable ground at a corner and nowhere else.
+    let diagonal = (r, r);
+    if grid.is_solid(diagonal.0, diagonal.1) {
+        let orthogonal_air = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .iter()
+            .any(|(dx, dy)| grid.walkable(diagonal.0 + dx, diagonal.1 + dy));
+        assert_eq!(
+            grid.is_exposed(diagonal.0, diagonal.1),
+            orthogonal_air,
+            "exposure must be decided orthogonally, never diagonally"
+        );
+    }
+}
+
+/// Cutting a cell lights up its neighbours, and entropy taking it back puts
+/// them out again. The reason `is_exposed` is derived per lookup rather than
+/// cached: three different verbs move it.
+#[test]
+fn cutting_a_cell_exposes_its_neighbours_and_entropy_un_exposes_them() {
+    let mut game = game_at_the_frontier_cutting(9202);
+    let beyond = (WALL.0 + 1, WALL.1);
+    assert!(
+        !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_exposed(beyond.0, beyond.1),
+        "the cell behind the wall must start buried"
+    );
+
+    let player = game.player_entity();
+    for _ in 0..swings_for(&game, player, WALL) {
+        game.move_player(1, 0);
+    }
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_exposed(beyond.0, beyond.1),
+        "cutting a cell did not expose what was behind it"
+    );
+
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .revert(WALL.0, WALL.1);
+    assert!(
+        !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_exposed(beyond.0, beyond.1),
+        "rock re-knitting over a cell left its neighbour still lit"
+    );
+}
+
+/// **The trap the visibility rule exists to avoid.** If the map hides a
+/// kind while `x` names it, the hiding is decorative and prospecting is dead
+/// on arrival. Asserted as an agreement between the two readers rather than
+/// against a hardcoded string, so they cannot drift apart.
+#[test]
+fn the_map_and_the_examine_ray_agree_about_a_wall() {
+    let mut game = game_at_the_frontier(9203);
+    let (cx, cy) = game.base_pos().expect("the fixture stands in base space");
+    let named = game
+        .describe_base_rock(1, 0, crate::tuning::EXAMINE_RANGE_TILES)
+        .expect("the ray must find the frontier wall");
+
+    let half = 8;
+    let tiles = game.view_tiles(half, half);
+    let seen = tiles[(WALL.1 - cy + half) as usize][(WALL.0 - cx + half) as usize];
+    assert!(
+        seen.rock_shade.is_some(),
+        "the ray named a wall the map drew as anonymous rock"
+    );
+
+    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let kind = game
+        .world
+        .resource::<crate::rock::RockDb>()
+        .kind_at(seed, WALL.0, WALL.1);
+    assert!(
+        named.starts_with(&kind.name),
+        "{named:?} is not {}",
+        kind.name
+    );
+    assert_eq!(seen.rock_shade, Some(kind.shade));
+}
+
+/// Deep rock is anonymous on the map, and that is the whole mechanic: a
+/// coloured wall three cells into solid ground would be an arrow rather than
+/// something you found.
+#[test]
+fn rock_behind_a_face_is_drawn_anonymous() {
+    let mut game = game_at_the_frontier(9204);
+    let (cx, cy) = game.base_pos().unwrap();
+    let half = 8;
+    let tiles = game.view_tiles(half, half);
+    let deep = (WALL.0 + 2, WALL.1);
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_solid(deep.0, deep.1),
+        "the fixture must name buried rock"
+    );
+    assert_eq!(
+        tiles[(deep.1 - cy + half) as usize][(deep.0 - cx + half) as usize].rock_shade,
+        None,
+        "buried rock advertised its kind"
+    );
+}
+
+/// **Visibility is a display filter and never a gameplay one.** A swing at
+/// rock the player cannot see meets that kind's real durability and real
+/// floor — finding that out the hard way is the point. The regression to
+/// head off is a later "fix" that resolves unseen rock to the default kind
+/// to make the two halves agree.
+#[test]
+fn a_swing_at_unseen_rock_meets_its_real_kind() {
+    let game = game(9205);
+    let seed = game.world.resource::<crate::base_grid::BaseGrid>().seed();
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    let db = game.world.resource::<crate::rock::RockDb>();
+    let hard = db
+        .defs()
+        .max_by_key(|d| d.durability)
+        .expect("the shipped roster is not empty");
+    // A buried cell of the hardest kind: unseen on the map, and still that
+    // kind to anything that hits it.
+    let buried = (-40..40)
+        .flat_map(|x| (-40..40).map(move |y| (x, y)))
+        .find(|&(x, y)| {
+            grid.is_solid(x, y) && !grid.is_exposed(x, y) && db.kind_at(seed, x, y).id == hard.id
+        })
+        .expect("a buried cell of the hardest kind");
+    assert_eq!(game.wall_at(buried.0, buried.1).durability, hard.durability);
 }

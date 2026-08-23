@@ -145,6 +145,20 @@ fn biome_tint(biome: Biome, hues: (f32, f32)) -> Color {
     rotate_hue(base, authored - anchor)
 }
 
+/// `c` scaled toward white by `factor`, hue untouched.
+///
+/// Clamped at 1.0 so a channel cannot wrap, and applied to the *biome's own*
+/// colour rather than to a fixed value, so a rock face brightens whatever
+/// the sector palette has done to the hole around it.
+fn brighten(c: Color, factor: f32) -> Color {
+    Color::new(
+        (c.r * factor).min(1.0),
+        (c.g * factor).min(1.0),
+        (c.b * factor).min(1.0),
+        c.a,
+    )
+}
+
 /// `c` with its hue moved `degrees` around the wheel, saturation and value
 /// untouched.
 ///
@@ -790,7 +804,15 @@ fn draw_surface_map(
     );
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
-            let biome_color = biome_tint(tile.biome, hues);
+            // An exposed rock face is brighter than the hole it is part of,
+            // and *only* brighter: scaled before `biome_tint`'s hue
+            // rotation, so a seam stays inside the impassable band under
+            // every sector palette. Hue is already spoken for by
+            // passability, which is why a kind cannot author one.
+            let biome_color = match tile.rock_shade {
+                Some(shade) => brighten(biome_tint(tile.biome, hues), shade),
+                None => biome_tint(tile.biome, hues),
+            };
             // Terrain no longer carries a glyph — the biome is drawn as
             // geometry — so this stays `None` unless something is standing
             // here. That is the whole division of labour on this map:

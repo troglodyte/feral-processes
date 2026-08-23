@@ -52,10 +52,22 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::StructureManifest;
             }
-            None => {
-                self.status_line = Some("Nothing in that direction.".to_string());
-                self.mode = Mode::Playing;
-            }
+            // Nothing standing there — but in base space the ray may still
+            // have run into a wall, and a wall is now something with a name.
+            // Asked only after the creature and structure arms, because a
+            // program standing in front of a seam is the more interesting
+            // answer.
+            None => match game.describe_base_rock(dx, dy, EXAMINE_RANGE_TILES) {
+                Some(text) => {
+                    self.pending_description = Some(text);
+                    self.status_line = None;
+                    self.mode = Mode::CellDescribe;
+                }
+                None => {
+                    self.status_line = Some("Nothing in that direction.".to_string());
+                    self.mode = Mode::Playing;
+                }
+            },
         }
     }
 

@@ -214,6 +214,7 @@ fn game_standing_on(tag: &str, files: &[(&str, &str)], zone: u32, biome: Biome) 
         Tile {
             biome,
             walkable: true,
+            rock_shade: None,
         },
     );
     game
@@ -295,6 +296,7 @@ fn step_from_onto(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) {
         Tile {
             biome: from,
             walkable: true,
+            rock_shade: None,
         },
     );
     map.set_override(
@@ -303,6 +305,7 @@ fn step_from_onto(game: &mut Game, from: Biome, to: Biome, to_walkable: bool) {
         Tile {
             biome: to,
             walkable: to_walkable,
+            rock_shade: None,
         },
     );
 }

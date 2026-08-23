@@ -191,6 +191,39 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// What the first wall the player can see in `(dx, dy)` is made of, out
+    /// to `range` — the examine ray's base-space answer.
+    ///
+    /// **Reads the same faces the map colours, and that is the point.** If
+    /// the map hid a kind while `x` named it, the hiding would be decorative
+    /// and prospecting would be dead on arrival. Here the agreement is
+    /// structural rather than a shared predicate: the ray stops at the
+    /// *first* solid cell, whose predecessor is walkable by construction, so
+    /// every cell this can reach is an exposed face already.
+    /// `the_map_and_the_examine_ray_agree_about_a_wall` pins it anyway,
+    /// because "by construction" is exactly the kind of claim that stops
+    /// being true when someone lets the ray run through rock.
+    pub fn describe_base_rock(&self, dx: i32, dy: i32, range: i32) -> Option<String> {
+        let (mut x, mut y) = self.base_pos()?;
+        let seed = self.world.resource::<BaseGrid>().seed();
+        for _ in 0..range {
+            x += dx;
+            y += dy;
+            let grid = self.world.resource::<BaseGrid>();
+            if grid.is_solid(x, y) {
+                let def = self
+                    .world
+                    .resource::<crate::rock::RockDb>()
+                    .kind_at(seed, x, y);
+                return Some(format!(
+                    "{}. It takes at least {} swings to cut through.",
+                    def.name, def.min_swings
+                ));
+            }
+        }
+        None
+    }
+
     /// Whether the player's step into solid rock cuts it. See
     /// `resources::MiningMode`.
     pub fn mining(&self) -> bool {

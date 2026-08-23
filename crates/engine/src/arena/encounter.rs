@@ -40,6 +40,7 @@ pub(crate) fn roll(game: &mut Game, encounter: &Encounter) -> Result<Vec<EnemyGr
         Tile {
             biome,
             walkable: biome.walkable(),
+            rock_shade: None,
         },
     );
 

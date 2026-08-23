@@ -66,11 +66,17 @@ impl Game {
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
         if let Some((cx, cy)) = self.base_pos() {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
+            // Hoisted out of the loop: this runs per tile per frame, and a
+            // resource lookup per cell for a value that cannot change inside
+            // one call is a cost with nothing to show for it.
+            let seed = grid.seed();
+            let rock = self.world.resource::<crate::rock::RockDb>();
             let mut rows = Vec::new();
             for ty in -half_h..=half_h {
                 let mut row = Vec::new();
                 for tx in -half_w..=half_w {
-                    let biome = match grid.cell(cx + tx, cy + ty) {
+                    let (x, y) = (cx + tx, cy + ty);
+                    let biome = match grid.cell(x, y) {
                         Some(crate::base_grid::BaseCell::Floor) => Biome::Platform,
                         Some(crate::base_grid::BaseCell::Open { .. }) => Biome::Excavated,
                         None => Biome::Entropy,
@@ -78,6 +84,15 @@ impl Game {
                     row.push(Tile {
                         biome,
                         walkable: biome.walkable(),
+                        // **Exposed faces only.** Colouring every wall would
+                        // hand the player a map of everything they will ever
+                        // dig; colouring the faces with air against them
+                        // makes exposing one the act of prospecting. Rock
+                        // deeper than a face draws as the flat hole it has
+                        // always been.
+                        rock_shade: grid
+                            .is_exposed(x, y)
+                            .then(|| rock.wall_at(seed, x, y).shade),
                     });
                 }
                 rows.push(row);

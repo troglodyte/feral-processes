@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.11
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+`ItemDef::enables_rest` is an additive, defaulted asset field, and the two
+retired structure fields were never written into a run.
+
+### Resting is priced by where you are, and never costs time
+
+Rest no longer needs a structure standing in reach, and **no rest advances
+the clock**. Inside base space it is free: the walk home is the whole of the
+price. Anywhere else — the open grid, or four frames down the Stack — it
+spends one unit of an item whose def carries the new `enables_rest`, and the
+Power Outlet is the one shipped item that does.
+
+The two halves hold each other up. A base rest that ticked could be spammed
+to farm production, raid pressure and need decay; a priced rest that ticked
+was the game's only bulk source of time. Neither is true now, and
+`Game::wait` is the only thing left that passes time without an action.
+
+`RestDef`, `StructureDef::enables_rest`, `nearby_rest_structure`,
+`rest_cost` and `REST_TICKS` are gone, none of them with a reader left. The
+two help pages that called a recharge a full night now say what it is: free
+at the base, an outlet in the field, instant either way.
+
+### A marked room your crew would never touch
+
+Marking a block of rock out in the open and leaving idle programs standing
+in the base got you nothing at all — no swing, no walk, and no line in the
+log saying why.
+
+Every cell of such a block is boxed in but its rim, and a boxed-in cell is
+refused *silently* on purpose: it is the ordinary interior of any plan and
+it resolves itself as the shell in front of it comes down. But the refusal
+happened after the crew's work had already been budgeted, so the interiors —
+which sort first — spent the whole budget, and the rim was cut off the end
+of the list before anyone looked at it. A thirty-six cell room with one
+reachable cell and six spare programs sat untouched for the rest of a run.
+
+A cell nothing can stand beside is no longer a job at all. The budget goes
+to cells a program can be sent to, and each cell behind them becomes a job
+the moment the rock in front of it opens — so a room now unpeels from its
+face inward, with the crew fanning out as it widens. A marked cell that has
+a face and no route to it is unchanged: that one is your errand, and it
+still says so once.
+
 ## 0.13.10
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -145,9 +145,12 @@ impl Game {
     /// of how many rolls happened first, so leaving and coming back cannot
     /// reroll it into something easier.
     ///
-    /// Not every biome fields a boss — no shipped Deadlock species does
-    /// — and there the lair falls back to the toughest ordinary program the
-    /// biome has, which at the bottom of a deep stack is no small thing.
+    /// A biome shipping no apex species falls back to the ordinary pool,
+    /// still marked a boss. Both shipped apex species (`overseer`,
+    /// `wintermute`) list every biome, so that branch is reachable only by
+    /// a mod that removes them — it is supported, not exercised. An older
+    /// version of this comment named Deadlock as the biome without one,
+    /// which the assets have since stopped being true.
     ///
     /// A lair is not gated by `APEX_ENTRY_STEP` the way an ambush or a
     /// wild spawn is — see `pick_lair_species`.

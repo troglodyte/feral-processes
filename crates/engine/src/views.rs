@@ -180,6 +180,11 @@ pub struct GearDetailView {
     /// line saying `Grants: X` above the prose describing X is the same
     /// fact twice. See `Game::item_effects_besides_grant`.
     pub effects: Vec<String>,
+    /// What this copy's affixes add, one line per **distinct** one with
+    /// duplicates folded as `of Static ×3` and trade-offs first — see
+    /// `Game::affix_lines`. Formatted in the engine for `copy_name`'s
+    /// reason, and because the stats go through the one `stat_summary`.
+    pub affixes: Vec<String>,
     pub grant: Option<RoutineDetailView>,
 }
 

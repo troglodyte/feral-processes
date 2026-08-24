@@ -86,17 +86,18 @@ pub(super) fn buff_entries(buffs: &[ActiveBuffView], style: TagStyle) -> Vec<Vec
 }
 
 /// Caps `entries` at `limit` drawn rows, trading the last row for a
-/// "N more" indicator when the list doesn't fit. Shared by both panels — a
-/// fixed display cap for the battle box, however many lines are left in the
+/// "N more" indicator when the list doesn't fit. Shared by both buff panels
+/// and by the gear inspect page's affix block — a fixed display cap for the
+/// battle box and for the gear page, however many lines are left in the
 /// status column for the map panel — so a truncated list reads as one
-/// feature in either place rather than two different-looking cutoffs.
+/// feature everywhere rather than three different-looking cutoffs.
 ///
 /// Counts in **entries and rows at once**, which is why it does not take a
 /// flat row list: under `TagStyle::OwnLine` a companion's buff is two rows,
 /// so a flat cap would both split a tag off the name it belongs to and
 /// report "+2 more" for one hidden routine. An entry is kept whole or not
 /// at all, and the indicator counts routines.
-fn cap_entries(entries: Vec<Vec<Row>>, limit: usize) -> Vec<Row> {
+pub(super) fn cap_entries(entries: Vec<Vec<Row>>, limit: usize) -> Vec<Row> {
     let total: usize = entries.iter().map(Vec::len).sum();
     if total <= limit {
         return entries.into_iter().flatten().collect();

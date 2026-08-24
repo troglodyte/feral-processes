@@ -405,6 +405,7 @@ impl Game {
             description: self.item_description(&copy.item).map(str::to_string),
             worn: self.worn_detail(copy, wearer),
             effects: self.item_effects_besides_grant(&copy.item),
+            affixes: self.affix_lines(copy),
             grant: self
                 .world
                 .resource::<ItemDb>()
@@ -412,6 +413,55 @@ impl Game {
                 .and_then(|def| def.grants.clone())
                 .and_then(|id| self.routine_detail(&id, wearer)),
         }
+    }
+
+    /// The affix half of `gear_detail`: one line per **distinct** affix,
+    /// saying what it is and what it adds.
+    ///
+    /// Folded rather than listed one per copy, because fusion keeps
+    /// duplicates and eight drawn from a pool of nine is usually three or
+    /// four distinct ones — so the common worst case collapses to a handful
+    /// of rows on a page that has no scroll. The count is what the entry
+    /// carries instead, and the stats are the affix's own authored delta
+    /// **times that count**, since that is what `copy_bonus` folds in.
+    ///
+    /// **Trade-offs lead** — any affix with a negative component. The
+    /// renderer caps this block by what fits, so an affix sorting last can
+    /// be the line that falls off, and a drawback the player cannot see is
+    /// exactly what this block exists to end. After that the order is the
+    /// copy's own sorted one, which makes it total.
+    ///
+    /// An id the build cannot resolve contributes no entry, `affixes_of`'s
+    /// rule: a save naming a deleted affix reads as one fewer effect.
+    fn affix_lines(&self, copy: &GearCopy) -> Vec<String> {
+        let mut folded: Vec<(&crate::affixes::AffixDef, u32)> = Vec::new();
+        for affix in self.affixes_of(copy) {
+            match folded.iter_mut().find(|(seen, _)| seen.id == affix.id) {
+                Some((_, count)) => *count += 1,
+                None => folded.push((affix, 1)),
+            }
+        }
+        folded.sort_by_key(|(affix, _)| (!charges_for_itself(affix), affix.id.clone()));
+        folded
+            .into_iter()
+            .map(|(affix, count)| {
+                let word = affix
+                    .prefix
+                    .clone()
+                    .or_else(|| affix.suffix.clone())
+                    .unwrap_or_else(|| affix.id.as_str().to_string());
+                let stacked = scale_stats(affix.stats, count);
+                let head = if count > 1 {
+                    format!("{word} ×{count}")
+                } else {
+                    word
+                };
+                match self.stat_summary(stacked) {
+                    summary if summary.is_empty() => head,
+                    summary => format!("{head}: {summary}"),
+                }
+            })
+            .collect()
     }
 
     /// The slot half of `gear_detail`, `None` for anything not wearable.
@@ -454,6 +504,42 @@ impl Game {
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
             nominal,
         })
+    }
+
+    /// A signed one-line summary of a gear bonus — `"14–21 DMG +3 ATK"`,
+    /// empty when every stat is zero. Signed throughout, so it reads a
+    /// *change* as naturally as a total.
+    ///
+    /// **One formatter**, and in the engine because the affix block on the
+    /// inspect page needs it too — a second copy beside app-core's is the
+    /// mistake `copy_bonus` is written to prevent, one level down. The
+    /// inventory list's equip tag, the equipped panel, the swap picker's two
+    /// stat columns and `gear_detail`'s affix lines all print exactly this,
+    /// over figures that all come from `copy_bonus`.
+    ///
+    /// The damage band **leads**, because on a weapon it is the headline
+    /// number — what the thing hits for is what two weapons are compared on,
+    /// and ATK is the smaller flat term added on top of it. It goes through
+    /// `damage_range_label` rather than being formatted here, so a range
+    /// printed on any screen cannot disagree with a range printed on
+    /// another.
+    pub fn stat_summary(&self, mods: crate::items::EquipmentStats) -> String {
+        let mut parts = Vec::new();
+        if mods.damage != crate::battle::DamageRange::default() {
+            parts.push(format!("{} DMG", self.damage_range_label(mods.damage)));
+        }
+        for (value, name) in [
+            (mods.atk, "ATK"),
+            (mods.mitigation, "MIT"),
+            (mods.accuracy, "ACC"),
+            (mods.evasion, "EVA"),
+            (mods.decompiler, "DECOMP"),
+        ] {
+            if value != 0 {
+                parts.push(format!("{value:+} {name}"));
+            }
+        }
+        parts.join(" ")
     }
 
     /// A two-or-three word gloss of what an item *does*, for menus that list
@@ -733,5 +819,41 @@ impl Game {
             .into_iter()
             .flat_map(|(_, defs)| defs)
             .collect()
+    }
+}
+
+/// Whether an affix charges for what it pays — any negative component in
+/// its `stats`. A shipped affix shape, and the reason `affix_lines` sorts
+/// the way it does; see `assets/affixes/README.md`.
+fn charges_for_itself(affix: &crate::affixes::AffixDef) -> bool {
+    let s = affix.stats;
+    [
+        s.atk,
+        s.mitigation,
+        s.decompiler,
+        s.accuracy,
+        s.evasion,
+        s.damage.min,
+        s.damage.max,
+    ]
+    .iter()
+    .any(|v| *v < 0)
+}
+
+/// An affix's authored delta times how many of it a copy carries — what
+/// `Game::copy_bonus` folds in for a stacked affix, said once so the page
+/// and the total cannot disagree about a duplicate.
+fn scale_stats(stats: crate::items::EquipmentStats, count: u32) -> crate::items::EquipmentStats {
+    let n = count as i32;
+    crate::items::EquipmentStats {
+        atk: stats.atk * n,
+        mitigation: stats.mitigation * n,
+        decompiler: stats.decompiler * n,
+        damage: crate::battle::DamageRange {
+            min: stats.damage.min * n,
+            max: stats.damage.max * n,
+        },
+        accuracy: stats.accuracy * n,
+        evasion: stats.evasion * n,
     }
 }

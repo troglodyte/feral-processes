@@ -259,3 +259,159 @@ fn the_inspect_page_states_what_a_copy_compiled_at() {
         "a material has no slot and so no quality to state"
     );
 }
+
+/// A shipped affix that charges for what it pays, and one that does not —
+/// with the **trade-off's id sorting after** the ordinary one's.
+///
+/// That ordering is the whole point of the fixture. A copy's affix list is
+/// sorted by `GearCopy::with_affixes`, so handing the two over in either
+/// order produces the same list; picking a trade-off that already sorts
+/// first would make an ordering test pass against no rule at all.
+///
+/// Both picks come off a sorted list, so the fixture cannot name a
+/// different affix from one run to the next.
+fn trade_off_and_ordinary(game: &Game) -> (crate::affixes::AffixDef, crate::affixes::AffixDef) {
+    let defs = game.affix_defs();
+    let trade_off = defs
+        .iter()
+        .rfind(|a| charges_for_itself(a))
+        .expect("the shipped set carries a drawback affix")
+        .clone();
+    let ordinary = defs
+        .iter()
+        .find(|a| !charges_for_itself(a) && a.id < trade_off.id)
+        .expect("and one that only pays, sorting ahead of it")
+        .clone();
+    (trade_off, ordinary)
+}
+
+/// The census's own copy of the predicate `Game::affix_lines` sorts on. Kept
+/// here rather than shared, because a test asserting an ordering against the
+/// production function that decides it would pass whatever that function
+/// said.
+fn charges_for_itself(a: &crate::affixes::AffixDef) -> bool {
+    [
+        a.stats.atk,
+        a.stats.mitigation,
+        a.stats.decompiler,
+        a.stats.accuracy,
+        a.stats.evasion,
+        a.stats.damage.min,
+        a.stats.damage.max,
+    ]
+    .iter()
+    .any(|v| *v < 0)
+}
+
+/// Fusion stacks affixes and keeps duplicates, so eight drawn from a pool of
+/// nine is usually three or four distinct ones. The page folds them: one
+/// entry per distinct affix, carrying how many of it the copy holds.
+#[test]
+fn the_gear_page_folds_a_repeated_affix_into_one_entry() {
+    let game = Game::new(4310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, ordinary) = trade_off_and_ordinary(&game);
+    let copy = GearCopy::with_affixes(
+        ItemId::from("kinetic_edge"),
+        Rarity::Ordinary,
+        0,
+        vec![ordinary.id.clone(); 3],
+        QUALITY_DEFAULT,
+    );
+
+    let detail = game.gear_detail(&copy, game.player_entity());
+    assert_eq!(
+        detail.affixes.len(),
+        1,
+        "three of one affix is one entry: {:?}",
+        detail.affixes
+    );
+    assert!(
+        detail.affixes[0].contains("×3"),
+        "the entry must say how many: {:?}",
+        detail.affixes
+    );
+}
+
+/// An affix may charge for what it pays, and the page is the only screen
+/// that can tell the player so. The block is capped by what fits, so a
+/// drawback sorting last could be the line that falls off — which is
+/// exactly the hidden cost this page exists to end. Trade-offs sort first.
+#[test]
+fn the_gear_page_lists_a_trade_off_affix_first() {
+    let game = Game::new(4311, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (trade_off, ordinary) = trade_off_and_ordinary(&game);
+    let word = |a: &crate::affixes::AffixDef| {
+        a.prefix
+            .clone()
+            .or_else(|| a.suffix.clone())
+            .expect("a loaded affix has one or the other")
+    };
+
+    // The fixture guarantees the drawback's id sorts *after* the ordinary
+    // one's, so the copy's own sorted order would put it second. Only the
+    // trade-off-first rule can bring it to the front, which is what makes
+    // this test able to fail.
+    assert!(
+        ordinary.id < trade_off.id,
+        "the fixture must hand over a pair the plain id order would reverse"
+    );
+    let copy = GearCopy::with_affixes(
+        ItemId::from("kinetic_edge"),
+        Rarity::Ordinary,
+        0,
+        vec![ordinary.id.clone(), trade_off.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    let detail = game.gear_detail(&copy, game.player_entity());
+    assert_eq!(detail.affixes.len(), 2, "{:?}", detail.affixes);
+    assert!(
+        detail.affixes[0].contains(&word(&trade_off)),
+        "the drawback must lead: {:?}",
+        detail.affixes
+    );
+    assert!(
+        detail.affixes[1].contains(&word(&ordinary)),
+        "{:?}",
+        detail.affixes
+    );
+}
+
+/// The empty-catalogue property, at this seam: a save naming an affix the
+/// build no longer has reads as a copy with one fewer effect, so the page
+/// skips what it cannot resolve and still draws the rest.
+#[test]
+fn the_gear_page_skips_an_affix_the_build_does_not_know() {
+    let game = Game::new(4312, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, ordinary) = trade_off_and_ordinary(&game);
+    let copy = GearCopy::with_affixes(
+        ItemId::from("kinetic_edge"),
+        Rarity::Ordinary,
+        0,
+        vec![
+            ordinary.id.clone(),
+            crate::affixes::AffixId::from("a_mod_that_was_uninstalled"),
+        ],
+        QUALITY_DEFAULT,
+    );
+
+    let detail = game.gear_detail(&copy, game.player_entity());
+    assert_eq!(
+        detail.affixes.len(),
+        1,
+        "the unresolvable id contributes nothing, and the rest still draws: {:?}",
+        detail.affixes
+    );
+    // And it contributes nothing to the *count* either. Resolving an unknown
+    // id to some placeholder would leave one entry too, reading `×2` — so
+    // asserting the length alone passes against that.
+    let word = ordinary
+        .prefix
+        .clone()
+        .or_else(|| ordinary.suffix.clone())
+        .expect("a loaded affix has one or the other");
+    assert!(
+        detail.affixes[0].contains(&word) && !detail.affixes[0].contains('×'),
+        "the entry must be the known affix, held once: {:?}",
+        detail.affixes
+    );
+}

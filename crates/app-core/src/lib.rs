@@ -218,26 +218,13 @@ pub fn item_fusion_note(tier: u32) -> String {
 /// it is handed in step; only a shared source of them can.
 /// The damage band **leads**, because on a weapon it is the headline number
 /// — what the thing hits for is what two weapons are compared on, and ATK is
-/// the smaller flat term added on top of it. It is formatted through
-/// `Game::damage_range_label` rather than here, so a range printed on any
-/// screen cannot disagree with a range printed on another.
+/// the smaller flat term added on top of it.
+///
+/// A call to `Game::stat_summary` and not a copy of it. The formatter moved
+/// into the engine when the gear inspect page's affix block needed the same
+/// one; this stays as the name six call sites already spell.
 pub fn stat_summary(game: &Game, mods: EquipmentStats) -> String {
-    let mut parts = Vec::new();
-    if mods.damage != DamageRange::default() {
-        parts.push(format!("{} DMG", game.damage_range_label(mods.damage)));
-    }
-    for (value, name) in [
-        (mods.atk, "ATK"),
-        (mods.mitigation, "MIT"),
-        (mods.accuracy, "ACC"),
-        (mods.evasion, "EVA"),
-        (mods.decompiler, "DECOMP"),
-    ] {
-        if value != 0 {
-            parts.push(format!("{value:+} {name}"));
-        }
-    }
-    parts.join(" ")
+    game.stat_summary(mods)
 }
 
 /// What one row of the `Mode::EquipSwap` picker does when chosen.

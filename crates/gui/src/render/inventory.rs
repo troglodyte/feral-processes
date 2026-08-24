@@ -3,6 +3,7 @@
 use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::views::RoutineDetailView;
 
+use super::field::cap_entries;
 use super::popup::*;
 use super::*;
 
@@ -389,6 +390,20 @@ pub(super) fn draw_gear_inspect(
     draw_popup("Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
+/// How many rows the gear page will spend on affixes before it starts
+/// counting them instead.
+///
+/// **A layout constraint, not a design one.** Fusion stacks affixes with no
+/// ceiling but the fusion ladder, and the page has no scroll — `draw_popup`
+/// pages a `Row::Item` span and this page has none, so a row past the bottom
+/// is dropped in silence. What fits is the tallest page (the Crash Handler's,
+/// which carries a granted routine's whole mechanics block) plus a refusal,
+/// inside the smallest window the census sweeps. Raising this means giving
+/// the page a scroll; `the_tallest_gear_page_fits_its_popup` is what says so.
+///
+/// The storage is deliberately not capped with it — only the drawing.
+const GEAR_AFFIX_ROW_CAP: usize = 3;
+
 /// The page's rows, split out so a height test can count them without a
 /// window — the same split `inventory_row_lines` makes for its width test.
 pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> {
@@ -438,6 +453,20 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
                 worn.hit_chance * 100.0,
                 worn.nominal.zone
             )));
+        }
+        // Indented under the stats they are folded into, and with no blank
+        // line above them: this page has no scroll, and a separator here
+        // would cost a row the cap below cannot spare. Only equipment rolls
+        // an affix, so the block belongs inside the worn half anyway.
+        if !detail.affixes.is_empty() {
+            rows.extend(cap_entries(
+                detail
+                    .affixes
+                    .iter()
+                    .map(|line| vec![text_row(format!("  {line}"))])
+                    .collect(),
+                GEAR_AFFIX_ROW_CAP,
+            ));
         }
     }
 
@@ -545,7 +574,7 @@ mod tests {
     use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
-    use feral_processes_engine::tuning::{MAX_FUSIONS, QUALITY_MAX};
+    use feral_processes_engine::tuning::{ITEM_FUSION_COST, MAX_FUSIONS, QUALITY_MAX};
     use feral_processes_engine::{DifficultyMode, Game, save};
 
     /// **The equipped panel prints what the player is actually wearing.**
@@ -714,21 +743,40 @@ mod tests {
         );
     }
 
+    /// **The page has no scroll**, so a row past the bottom is dropped in
+    /// silence — `draw_popup` pages a `Row::Item` span and this page has
+    /// none. Every shipped item's page has to fit the smallest window the
+    /// sweep reaches, with room for a refusal standing over it.
+    ///
+    /// Swept over the affix count as well as the items, because affixes
+    /// stack: `GearCopy::plain` carries none and so measures nothing about
+    /// that block. The worst case is every distinct affix the game ships on
+    /// one copy — more than the fusion ladder can actually reach, which is
+    /// the right side to be wrong on for a bound.
     #[test]
     fn the_tallest_gear_page_fits_its_popup() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(41, DifficultyMode::Forgiving, assets).expect("shipped assets");
 
+        let every_affix: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
         let mut tallest = (0usize, String::new());
         for def in game.item_defs() {
-            let inspect = GearInspect {
-                copy: GearCopy::plain(def.id.clone()),
-                wearer: None,
-                from: Mode::Inventory,
-            };
-            let rows = gear_inspect_rows(&game, &inspect).len();
-            if rows > tallest.0 {
-                tallest = (rows, def.name.clone());
+            for affixes in [Vec::new(), every_affix.clone()] {
+                let inspect = GearInspect {
+                    copy: GearCopy::with_affixes(
+                        def.id.clone(),
+                        Rarity::Ordinary,
+                        0,
+                        affixes,
+                        QUALITY_MAX,
+                    ),
+                    wearer: None,
+                    from: Mode::Inventory,
+                };
+                let rows = gear_inspect_rows(&game, &inspect).len();
+                if rows > tallest.0 {
+                    tallest = (rows, def.name.clone());
+                }
             }
         }
 
@@ -749,6 +797,76 @@ mod tests {
                 tallest.0
             );
         }
+    }
+
+    /// The other axis of the gear page, and the one nothing clamps at all:
+    /// `draw_row` clips a row vertically and never horizontally, so a line
+    /// past the right edge is simply lost. Here that is the affix block —
+    /// the only unbounded-width thing the page draws, since a stacked affix
+    /// puts a `×N` and a scaled stat line on a row that already carries the
+    /// affix's own word.
+    ///
+    /// The same shape as `no_memory_row_overflows_its_popup`, and measured
+    /// against real text through `with_painter` for its reason: counting
+    /// characters is what missed the swap picker's column.
+    #[test]
+    fn no_gear_row_overflows_its_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(44, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        // Every distinct affix at once, on the deepest fusion tier and the
+        // widest quality — the widest each affix line can be drawn, since
+        // `Game::affix_lines` scales an affix's stats by how many of it the
+        // copy holds.
+        let every_affix: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
+        let mut rows: Vec<Row> = Vec::new();
+        for def in game.item_defs() {
+            for affixes in [
+                every_affix.clone(),
+                // And the deepest stack of a single one, which is where the
+                // `×N` and the multiplied figures are widest.
+                vec![
+                    every_affix
+                        .first()
+                        .cloned()
+                        .expect("the shipped set has affixes");
+                    (ITEM_FUSION_COST as usize).pow(MAX_FUSIONS)
+                ],
+            ] {
+                let inspect = GearInspect {
+                    copy: GearCopy::with_affixes(
+                        def.id.clone(),
+                        Rarity::Prismatic,
+                        MAX_FUSIONS,
+                        affixes,
+                        QUALITY_MAX,
+                    ),
+                    wearer: None,
+                    from: Mode::Inventory,
+                };
+                rows.extend(gear_inspect_rows(&game, &inspect));
+            }
+        }
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in &rows {
+                let line = match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    _ => continue,
+                };
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a gear page row overflows by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// **Every line every shipped item can put on this screen fits inside

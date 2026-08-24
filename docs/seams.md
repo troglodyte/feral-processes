@@ -5880,3 +5880,76 @@ checklist in
 `docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`
 is the honest statement of what ships untested until someone runs it on a
 Windows machine. A green Linux suite is not evidence that any of it works.
+
+### A refusal is one sentence on two surfaces, and `App::refuse` is the one door
+
+**A refusal is one sentence on two surfaces, and `App::refuse` is the one
+door.** It sets `App::status_line` and calls `Game::note_refusal`, which
+pushes a `MessageKind::Refusal` line. The popup the player typed into draws
+the first; the message log keeps the second.
+
+The bug this closed was reported as "the message is only in the log, under
+the pop up screen." Half of that was wrong and the half that was wrong is
+the interesting half. Refusals never reached the log at all: every one is an
+`Err(String)` the engine returns, app-core parked it in `status_line`, and
+`render/mod.rs::draw_status_banner` painted it as a red strip **along the
+bottom edge of the window**. It was on screen, four seconds at a time, the
+whole time — a full window's height away from the centred popup the player
+was reading. A message nobody looks at and a message that was never written
+are the same message, and the fix has to answer the first reading rather than
+the second.
+
+**So the refusal moved inside the popup**, under the title, above the rows.
+`draw_popup` takes it as an argument rather than reading it off anything,
+which is what made all 83 call sites fail to compile until each had decided.
+That was the point of threading it: a new screen cannot silently omit it,
+because the parameter has no default.
+
+It is **counted by `popup_layout` but is not a `Row`.** `popup_layout` splits
+its rows into a header, the `Row::Item` span the body pages through, and a
+footer; a refusal added as a `Row` would sit in the header and be harmless
+today, and would be a renumbering hazard the moment anyone builds the status
+into a row list that already has items. The count is what the layout needs —
+the panel grows a line rather than covering one, and the body's capacity
+drops by one so nothing falls off the bottom.
+
+**`draw` is the one place that knows which surface is on top**, so it is
+where the message is handed out. Where an arm draws two things — the main
+menu under the quit confirmation, the map under a mode overlay, the arena
+builder under the save prompt — the underlying one takes `None`. Two of
+those were found by the census rather than by reading: `Mode::Playing` fell
+into the arm that hands the map `None` and so showed the refusal *nowhere*,
+and `Mode::ArenaSave` drew it twice.
+
+**`needs_status_banner` inverted.** It used to mean "everything except the
+four screens that show the line themselves"; it now names the four that draw
+no popup at all — `Battle`, `BattleResult`, `FrameMap`, `FieldCastCell`.
+`Battle` is the load-bearing one, for the reason below.
+
+**`Game::note_refusal` is silent while a battle is open, and that is the one
+rule with teeth.** `MessageLog::since_round` slices the battle pane by
+*position*, and `App::advance_reveal` paces the reveal by counting **raw**
+lines. A line pushed from a battle submenu therefore lands inside the round's
+range: drawn as narration with no round header to explain it, and swallowing
+one keypress' worth of reveal on the way past. This is the same trap
+`MessageLog::round_start` records one section up. The refusal still reaches
+the player — the battle screen's strip is what carries it — which is why
+`Battle` had to stay in `needs_status_banner`.
+
+**Not every `status_line` write is a refusal.** "Game saved.", a fuse's
+receipt, and the save-system's IO failures keep assigning the field directly.
+The log is a record of the game saying *no*; routing a confirmation through
+`refuse` would put "Game saved." in the history a player scrolls back through
+looking for why nothing happened. `App::report` is the verdict form the 28
+`Ok(())`/`Err(e)` call sites collapse into, and it takes the finished
+`Result` rather than a closure so the `&mut self.game` borrow every caller
+holds ends before `refuse` needs the whole of `self`.
+
+**The census is `every_screen_draws_a_refusal_exactly_once`.** It drives all
+86 `Mode`s through `draw` and counts what `paint::painted_text` actually
+recorded. Both halves have caught a real defect — a screen that showed it
+nowhere and a screen that showed it twice — and neither is visible to a test
+that only checks a draw call did not panic. Nineteen modes need pending state
+a fresh run has not got (a chosen trade, a program picked to fuse) and draw
+nothing at all; they are listed as such rather than quietly excluded, and the
+census still asserts they draw it **zero** times.

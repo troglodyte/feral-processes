@@ -36,10 +36,10 @@ use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
 use feral_processes_engine::{
-    AchievementRow, BattleView, BrokerReach, ContractRefusal, ContractRow, DifficultyMode, Entity,
-    EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift, WorkOrder,
-    WorkOrderReport, WorkProfile, condense,
+    AchievementRow, BattleView, BrokerReach, CaravanReach, ContractRefusal, ContractRow,
+    DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game,
+    LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift,
+    WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1092,6 +1092,16 @@ pub enum Mode {
     /// resolved by `market_row`. There is no buyback section, because there
     /// is no buyback: what is sold here is gone.
     StackMarket,
+    /// The counter a visiting caravan sets out — see `Game::caravan_view`.
+    /// Reached from the base menu, and only while one is actually docked.
+    ///
+    /// One list with two sections, the wagon's stock then cargo it will
+    /// take, resolved by `caravan_row`. There is no buyback section, because
+    /// there is no buyback: a caravan rolls away.
+    Caravan,
+    /// How many of the picked stack to sell into the wagon. Digits and
+    /// Enter, like `Mode::TradeQuantity`, whose input buffer it shares.
+    CaravanQuantity,
     /// Confirming the sale of the program picked in `Mode::TradeAction`.
     /// Programs take a confirmation where items don't: the sale is
     /// irreversible, and it silently cancels whatever the program was doing,
@@ -1274,6 +1284,8 @@ impl Mode {
             | Mode::TradeQuantity
             | Mode::TradeProgramConfirm
             | Mode::StackMarket
+            | Mode::Caravan
+            | Mode::CaravanQuantity
             | Mode::Perks
             | Mode::Research
             | Mode::Contracts
@@ -1618,6 +1630,11 @@ pub struct App {
     /// The sell/buy line item picked in `Mode::TradeAction`, awaiting a
     /// quantity from `Mode::TradeQuantity` before `Game::sell_item`/
     /// `Game::buy_item` is actually called.
+    /// Which stack of cargo `Mode::CaravanQuantity` is asking a quantity
+    /// for. Its own field rather than `pending_trade_choice`: that one
+    /// carries a trading-post `Entity` alongside the choice, and a caravan
+    /// has none.
+    pub pending_caravan_sale: Option<GearCopy>,
     pub pending_trade_choice: Option<TradeChoice>,
     /// Which screen the in-flight trade was started from — see
     /// `TradeOrigin`. Set when a trade begins, read when it ends.

@@ -34,7 +34,7 @@ pub(crate) fn arenas_dir() -> PathBuf {
 /// A counter rather than a timestamp or a random suffix, deliberately: it is
 /// unique across the process without making the run depend on a clock or on
 /// RNG nobody seeded.
-fn scratch_path(fixture: &str, seed: u32) -> PathBuf {
+pub(crate) fn scratch_path(fixture: &str, seed: u32) -> PathBuf {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let unique = NEXT.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(

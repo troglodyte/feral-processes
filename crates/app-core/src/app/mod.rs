@@ -7,6 +7,7 @@ pub(crate) mod arena;
 mod basket;
 mod battle;
 pub(crate) mod building;
+pub(crate) mod caravan;
 mod collect;
 pub(crate) mod contracts;
 mod crafting;

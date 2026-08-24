@@ -483,7 +483,14 @@ impl Game {
             // yet is one to start. The `visit` check is what stops a trader
             // that gave up, or was seen off by a breach, from reappearing
             // for the rest of its own window.
-            if let Some(visit) = open {
+            // Only once per visit, however it ended. Without this a trader
+            // that gave up on the way in — or simply left — is spawned again
+            // on the very next tick, and again for the rest of its window.
+            let walked = self
+                .world
+                .resource::<crate::resources::CaravanMemory>()
+                .visit;
+            if let Some(visit) = open.filter(|v| walked != Some(v.visit)) {
                 self.spawn_caravan(&visit);
             }
             return;
@@ -533,9 +540,31 @@ impl Game {
         else {
             return;
         };
+        // Mark the visit walked before anything else can fail, so every
+        // early return below is still "this visit has had its trader".
+        {
+            let mut memory = self.world.resource_mut::<crate::resources::CaravanMemory>();
+            memory.visit = Some(visit.visit);
+            memory.bought.clear();
+        }
         let (dx, dy) = BEARINGS[visit.bearing as usize % BEARINGS.len()];
-        let reach = crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES;
-        let tile = (anchor.0 + dx * reach, anchor.1 + dy * reach);
+        // Inward along the bearing to the first tile it can actually stand
+        // on. The straight-line distance is where a trader would *like* to
+        // appear; the zone map is generated and has no obligation to put
+        // open ground there, and a caravan spawned inside a wall has no cell
+        // in its own walk field and gives up on its first step.
+        let Some(tile) = (1..=crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES)
+            .rev()
+            .map(|reach| (anchor.0 + dx * reach, anchor.1 + dy * reach))
+            .find(|&(x, y)| {
+                self.world
+                    .resource_mut::<crate::world::WorldMap>()
+                    .tile(x, y)
+                    .walkable
+            })
+        else {
+            return;
+        };
         self.world.spawn((
             Caravan {
                 stage: CaravanStage::Approaching,
@@ -879,7 +908,7 @@ impl Game {
     /// trader can never arrive already sold out.
     pub(crate) fn caravan_spent(&self, visit: u64) -> std::collections::BTreeSet<usize> {
         let memory = self.world.resource::<crate::resources::CaravanMemory>();
-        if memory.visit == visit {
+        if memory.visit == Some(visit) {
             memory.bought.clone()
         } else {
             Default::default()
@@ -1022,8 +1051,8 @@ impl Game {
             return;
         };
         let mut memory = self.world.resource_mut::<crate::resources::CaravanMemory>();
-        if memory.visit != visit {
-            memory.visit = visit;
+        if memory.visit != Some(visit) {
+            memory.visit = Some(visit);
             memory.bought.clear();
         }
         memory.bought.insert(index);

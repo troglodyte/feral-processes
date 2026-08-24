@@ -202,6 +202,8 @@ impl App {
             Mode::TradeAction => self.handle_trade_action_key(key),
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
             Mode::StackMarket => self.handle_stack_market_key(key),
+            Mode::Caravan => self.handle_caravan_key(key),
+            Mode::CaravanQuantity => self.handle_caravan_quantity_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
             Mode::Contracts => self.handle_contracts_key(key),

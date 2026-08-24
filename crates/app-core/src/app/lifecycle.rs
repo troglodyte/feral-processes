@@ -82,6 +82,7 @@ impl App {
             standing_order: false,
             order_priority: OrderPriority::default(),
             pending_trade_structure: None,
+            pending_caravan_sale: None,
             pending_trade_choice: None,
             trade_origin: TradeOrigin::Trader,
             pending_trade_program: None,

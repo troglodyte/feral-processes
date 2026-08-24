@@ -515,7 +515,7 @@ pub struct CaravanSave {
 /// visit.
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct CaravanMemorySave {
-    pub visit: u64,
+    pub visit: Option<u64>,
     pub bought: Vec<usize>,
 }
 

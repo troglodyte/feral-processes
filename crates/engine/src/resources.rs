@@ -964,7 +964,15 @@ pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(GearCopy, u32)>>);
 /// `BuybackLedger` and `StackMemory`.
 #[derive(Resource, Default, Clone, Debug, PartialEq, Eq)]
 pub struct CaravanMemory {
-    pub visit: u64,
+    /// The visit this memory is about, or `None` before any trader has been
+    /// walked in this sector.
+    ///
+    /// An `Option` rather than a bare `u64` because it carries **two** facts
+    /// and zero is a real visit index: which visit `bought` belongs to, and
+    /// that this visit has already been walked at all. The second is what
+    /// stops a trader that gave up on the way in from being spawned again on
+    /// the next tick, and again for the rest of its window.
+    pub visit: Option<u64>,
     pub bought: BTreeSet<usize>,
 }
 

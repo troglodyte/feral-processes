@@ -67,6 +67,7 @@ use components::{
     StructureTier, SurfaceLink, Talents, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::base::work_orders::{OrderPriority, WorkOrder};
+pub use game::caravan::CaravanReach;
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::party::ProgramRole;
 pub use game::stack_view::ExamineDir;

@@ -186,6 +186,26 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Not `Locality::Base`, and the row is not `surface_only` either:
+        // `caravan_reach` already measures base space, so a second locality
+        // clause here would be the same fact read twice and the redundant
+        // half is the one that rots.
+        //
+        // `caravan_reach` rather than `caravan_view`, which is the trap the
+        // Contracts row above records: this closure runs every frame the menu
+        // is open, and the view rolls a whole shelf — gear copies, affixes
+        // and all — before it can answer a question about where the player is
+        // standing.
+        label: "Caravan",
+        target: Mode::Caravan,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| g.caravan_reach() == CaravanReach::AtCaravan)
+        },
+    },
+    GroupEntry {
         // Not base-only: the chains come off the loaded assets, not off a
         // scan around the player, so this one row means the same thing four
         // frames down as it does standing in the base.

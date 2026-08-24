@@ -22,10 +22,8 @@ impl App {
         };
         if let Some(idx) = self.selected_index(key, perks.len()) {
             let Some(game) = &mut self.game else { return };
-            match game.unlock_perk(perks[idx]) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.unlock_perk(perks[idx]);
+            self.report(outcome);
         }
     }
 
@@ -50,10 +48,8 @@ impl App {
         if let Some(idx) = self.selected_index(key, ids.len()) {
             let id = ids[idx].clone();
             let Some(game) = &mut self.game else { return };
-            match game.unlock_research(&id) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.unlock_research(&id);
+            self.report(outcome);
         }
     }
 }

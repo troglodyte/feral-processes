@@ -87,7 +87,7 @@ impl App {
             return;
         };
         if let Some(reason) = option.unavailable {
-            self.status_line = Some(format!("Can't do that — {reason}."));
+            self.refuse(format!("Can't do that — {reason}."));
             return;
         }
         match option.target {
@@ -163,7 +163,7 @@ impl App {
     fn plan_every_slot(&mut self, action: BattleAction) {
         let Some(game) = &mut self.game else { return };
         if let Err(reason) = game.battle_plan_remaining(action) {
-            self.status_line = Some(reason);
+            self.refuse(reason);
             return;
         }
         if !game.battle_round_ready() {
@@ -291,7 +291,8 @@ impl App {
         // the picker took the press and asked for a target for a routine that
         // could only be discarded once committed.
         if let Some(reason) = &chosen.unavailable {
-            self.status_line = Some(format!("Can't use {} — {reason}.", chosen.name));
+            let line = format!("Can't use {} — {reason}.", chosen.name);
+            self.refuse(line);
             return;
         }
         // Which picker comes next is the ability's own business, read off the
@@ -385,7 +386,7 @@ impl App {
             if let (Some(item), Some(game)) = (thrown, self.game.as_mut())
                 && let Err(reason) = game.throw_item(&item)
             {
-                self.status_line = Some(reason);
+                self.refuse(reason);
             }
             return;
         }
@@ -414,7 +415,7 @@ impl App {
     pub(crate) fn commit_battle_action(&mut self, slot: usize, action: BattleAction) {
         let Some(game) = &mut self.game else { return };
         if let Err(reason) = game.battle_set_action(slot, action) {
-            self.status_line = Some(reason);
+            self.refuse(reason);
             // Back to the roster even on failure. Whichever picker led here
             // cleared its pending action before calling, so leaving the
             // popup up strands the player: every row bails on the missing
@@ -499,7 +500,7 @@ impl App {
             return;
         };
         if slot == 0 {
-            self.status_line = Some("Nothing to undo — pick an action, or [j]ack out.".to_string());
+            self.refuse("Nothing to undo — pick an action, or [j]ack out.");
             return;
         }
         game.battle_clear_action(slot - 1);

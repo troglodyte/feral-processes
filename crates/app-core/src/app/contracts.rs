@@ -91,10 +91,8 @@ impl App {
             Some(ContractScreenRow::Offer(row)) => {
                 let id = offers[row].id.clone();
                 let Some(game) = &mut self.game else { return };
-                match game.accept_contract(&id) {
-                    Ok(()) => self.status_line = None,
-                    Err(why) => self.status_line = Some(refusal_line(why)),
-                }
+                let outcome = game.accept_contract(&id).map_err(refusal_line);
+                self.report(outcome);
             }
             // Picking one you already hold hands over a delivery. Nothing
             // else on this screen is an action a held contract needs: the
@@ -102,14 +100,16 @@ impl App {
             Some(ContractScreenRow::Active(row)) => {
                 let id = active[row].id.clone();
                 let Some(game) = &mut self.game else { return };
-                match game.deliver_to_contract(&id) {
-                    Ok(_) => self.status_line = None,
-                    Err(ContractRefusal::NotOffered) => {
-                        self.status_line =
-                            Some("That one finishes itself — just go and do it.".to_string())
-                    }
-                    Err(why) => self.status_line = Some(refusal_line(why)),
-                }
+                let outcome = game
+                    .deliver_to_contract(&id)
+                    .map(|_| ())
+                    .map_err(|why| match why {
+                        ContractRefusal::NotOffered => {
+                            "That one finishes itself — just go and do it.".to_string()
+                        }
+                        why => refusal_line(why),
+                    });
+                self.report(outcome);
             }
             None => {}
         }

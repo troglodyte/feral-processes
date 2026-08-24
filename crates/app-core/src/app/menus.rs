@@ -275,11 +275,11 @@ impl App {
         // reads fine from anywhere, which is why it carries no `base_only`
         // flag in `BASE_ROWS`.
         if self.game.as_ref().is_some_and(|g| !g.in_base()) {
-            self.status_line = Some("Not from out here — that's back at the base.".into());
+            self.refuse("Not from out here — that's back at the base.");
             return;
         }
         if !report[idx].workable {
-            self.status_line = Some("Nothing can be posted to that.".into());
+            self.refuse("Nothing can be posted to that.");
             return;
         }
         self.pending_post_structure = Some(report[idx].entity);

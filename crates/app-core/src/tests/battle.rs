@@ -1433,3 +1433,33 @@ fn any_other_key_still_dismisses_the_results_page() {
         "the results page stopped being dismissable"
     );
 }
+
+/// A refusal raised inside a fight reaches the player on the status line
+/// and stops there. `MessageLog::since_round` slices the battle pane by
+/// position and the reveal paces it by counting raw lines, so logging one
+/// mid-fight would draw it as narration and swallow a keypress —
+/// `Game::note_refusal` owns that rule and `App::refuse` inherits it.
+#[test]
+fn a_refusal_inside_a_fight_stays_off_the_log() {
+    let mut app = battling_app();
+    let before = app
+        .game
+        .as_ref()
+        .unwrap()
+        .message_log(crate::MESSAGE_LOG_CAP)
+        .len();
+
+    // Esc on the first slot has nothing to back up to, so it refuses.
+    app.handle_key(GameKey::Esc);
+
+    assert!(app.status_line.is_some(), "the refusal reached the player");
+    assert_eq!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .message_log(crate::MESSAGE_LOG_CAP)
+            .len(),
+        before,
+        "a refusal must not enter the log mid-fight"
+    );
+}

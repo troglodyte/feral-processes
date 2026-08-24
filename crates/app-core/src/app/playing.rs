@@ -76,9 +76,8 @@ impl App {
                 if self.game.as_ref().is_some_and(|g| g.in_base()) {
                     self.mode = Mode::RemoveDirection;
                 } else {
-                    self.status_line = Some(
-                        "Nothing of yours to demolish here — the base is through the anchor."
-                            .to_string(),
+                    self.refuse(
+                        "Nothing of yours to demolish here — the base is through the anchor.",
                     );
                 }
                 return;
@@ -103,12 +102,8 @@ impl App {
                         self.excavate_anchor = None;
                         self.mode = Mode::Excavate;
                     }
-                    None => {
-                        self.status_line = Some(
-                            "Nothing to excavate out here — the rock is through the anchor."
-                                .to_string(),
-                        )
-                    }
+                    None => self
+                        .refuse("Nothing to excavate out here — the rock is through the anchor."),
                 }
                 return;
             }
@@ -129,7 +124,7 @@ impl App {
                     return;
                 }
                 if self.game.as_ref().is_some_and(|g| g.is_underground()) {
-                    self.status_line = Some("There's nobody selling anything here.".to_string());
+                    self.refuse("There's nobody selling anything here.");
                     return;
                 }
                 // Closed the same way `d` above is: `Game::view_entities`
@@ -142,10 +137,7 @@ impl App {
                 // having already returned above, so `in_base` cannot collide
                 // with the Stack case handled there.
                 if !self.game.as_ref().is_some_and(|g| g.in_base()) {
-                    self.status_line = Some(
-                        "Nobody's selling out here — the traders are through the anchor."
-                            .to_string(),
-                    );
+                    self.refuse("Nobody's selling out here — the traders are through the anchor.");
                     return;
                 }
                 // Opening the trader list from the map is a fresh visit, not
@@ -168,11 +160,7 @@ impl App {
                     Some(game) if game.in_base() => {
                         game.toggle_mining();
                     }
-                    _ => {
-                        self.status_line = Some(
-                            "Nothing to cut out here — the rock is through the anchor.".to_string(),
-                        )
-                    }
+                    _ => self.refuse("Nothing to cut out here — the rock is through the anchor."),
                 }
                 return;
             }

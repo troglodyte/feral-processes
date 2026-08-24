@@ -37,10 +37,8 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         if slots[idx].ability.is_some() {
-            match game.uninstall_routine(entity, idx) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.uninstall_routine(entity, idx);
+            self.report(outcome);
             return;
         }
         self.mode = Mode::RoutineInstall;
@@ -74,10 +72,8 @@ impl App {
         if let Some(idx) = self.selected_index(key, disks.len()) {
             let ability = disks[idx].ability.clone();
             let Some(game) = &mut self.game else { return };
-            match game.install_disk(entity, &ability) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.install_disk(entity, &ability);
+            self.report(outcome);
             self.mode = Mode::Routines;
         }
     }
@@ -107,10 +103,8 @@ impl App {
         if let Some(idx) = self.selected_index(key, known.len()) {
             let ability = known[idx].ability.clone();
             let Some(game) = &mut self.game else { return };
-            match game.etch_disk(&ability) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.etch_disk(&ability);
+            self.report(outcome);
         }
     }
 
@@ -163,9 +157,7 @@ impl App {
         self.pending_extract_index = None;
         self.mode = Mode::Playing;
         let Some(game) = &mut self.game else { return };
-        match game.extract_routine(program, index) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.extract_routine(program, index);
+        self.report(outcome);
     }
 }

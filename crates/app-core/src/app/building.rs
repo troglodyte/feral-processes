@@ -258,10 +258,8 @@ impl App {
             return;
         };
         if let Some(game) = &mut self.game {
-            match game.place_structure(&id, dx, dy) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.place_structure(&id, dx, dy);
+            self.report(outcome);
         }
         self.mode = Mode::Playing;
     }
@@ -277,10 +275,8 @@ impl App {
         let structures = self.workable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let Some(game) = &mut self.game else { return };
-            match game.work_structure(structures[idx].entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.work_structure(structures[idx].entity);
+            self.report(outcome);
             self.mode = Mode::Playing;
         }
     }
@@ -300,10 +296,8 @@ impl App {
                 return;
             }
             let Some(game) = &mut self.game else { return };
-            match game.remove_structure(picked_entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.remove_structure(picked_entity);
+            self.report(outcome);
             self.mode = Mode::Playing;
         }
     }
@@ -330,7 +324,7 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
-            self.status_line = Some("Nothing to demolish that way.".to_string());
+            self.refuse("Nothing to demolish that way.");
             self.mode = Mode::Playing;
             return;
         };
@@ -339,10 +333,8 @@ impl App {
             self.mode = Mode::RemoveConfirm;
             return;
         }
-        match game.remove_structure(found.entity) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.remove_structure(found.entity);
+        self.report(outcome);
         self.mode = Mode::Playing;
     }
 
@@ -355,10 +347,8 @@ impl App {
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let picked = structures[idx].entity;
             let Some(game) = &mut self.game else { return };
-            match game.upgrade_structure(picked) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.upgrade_structure(picked);
+            self.report(outcome);
             self.mode = Mode::Playing;
         }
     }
@@ -380,10 +370,8 @@ impl App {
             Some('y') => {
                 if let Some(structure) = self.pending_remove_structure.take() {
                     let Some(game) = &mut self.game else { return };
-                    match game.remove_structure(structure) {
-                        Ok(()) => self.status_line = None,
-                        Err(e) => self.status_line = Some(e),
-                    }
+                    let outcome = game.remove_structure(structure);
+                    self.report(outcome);
                 }
                 self.mode = Mode::Playing;
             }
@@ -407,10 +395,8 @@ impl App {
         let targets = game.symlink_targets();
         if let Some(idx) = self.selected_index(key, targets.len()) {
             let Some(game) = &mut self.game else { return };
-            match game.use_symlink(targets[idx].entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.use_symlink(targets[idx].entity);
+            self.report(outcome);
             self.mode = Mode::Playing;
         }
     }

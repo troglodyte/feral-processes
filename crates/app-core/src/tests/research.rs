@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::MessageKind;
 
 /// Exercises the exact key sequence a player drives at the keyboard —
 /// `b` to open Build, a number to pick a structure, then a direction to
@@ -42,4 +43,24 @@ fn picking_an_unaffordable_research_node_reports_why_and_stays_open() {
         "got: {:?}",
         app.status_line
     );
+}
+
+/// The refusal reaches the message log as well as the status line, so a
+/// player who looks away and misses the banner can still find out why
+/// nothing happened. `App::refuse` is the one door that writes both.
+#[test]
+fn a_refused_research_node_is_written_to_the_log_too() {
+    let mut app = test_app(502);
+    open_via_menu(&mut app, 'b', "Research");
+    app.handle_key(GameKey::Char('1'));
+
+    let banner = app.status_line.clone().expect("a refusal was reported");
+    let logged = app
+        .game
+        .as_ref()
+        .unwrap()
+        .message_log(crate::MESSAGE_LOG_CAP);
+    let last = logged.last().expect("the log is not empty");
+    assert_eq!(last.text, banner, "the banner and the log must agree");
+    assert_eq!(last.kind, MessageKind::Refusal);
 }

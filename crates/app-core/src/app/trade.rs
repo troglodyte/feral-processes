@@ -171,16 +171,11 @@ impl App {
                 // A row is a sell or a buy, never both, so the other key is
                 // a mis-hit. Say which one this row wants rather than
                 // guessing at a transaction.
-                Some(_) => {
-                    self.status_line = Some(
-                        if selling {
-                            "That's the trader's — [B] buys one."
-                        } else {
-                            "That's yours — [S] sells one."
-                        }
-                        .to_string(),
-                    )
-                }
+                Some(_) => self.refuse(if selling {
+                    "That's the trader's — [B] buys one."
+                } else {
+                    "That's yours — [S] sells one."
+                }),
                 None => {}
             }
             return;
@@ -227,10 +222,8 @@ impl App {
             TradeChoice::Buy(item) => game.buy_item(structure, item, qty),
             TradeChoice::BuyBack(copy) => game.buy_back(structure, copy, qty),
         };
-        match result {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = result;
+        self.report(outcome);
     }
 
     /// Confirms or abandons the program sale picked in `Mode::TradeAction`.
@@ -255,10 +248,8 @@ impl App {
             return;
         };
         if let Some(game) = &mut self.game {
-            match game.sell_companion(structure, option.entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.sell_companion(structure, option.entity);
+            self.report(outcome);
         }
         self.return_to_trade_list();
     }

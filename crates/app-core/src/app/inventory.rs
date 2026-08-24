@@ -24,7 +24,10 @@ impl App {
         let entity = wearer.unwrap_or_else(|| game.player_entity());
         match game.worn(entity, slot) {
             Some(worn) => self.open_gear_inspect(worn.copy, wearer, from),
-            None => self.status_line = Some(format!("Nothing in the {} slot.", slot.label())),
+            None => {
+                let line = format!("Nothing in the {} slot.", slot.label());
+                self.refuse(line);
+            }
         }
     }
 
@@ -60,10 +63,13 @@ impl App {
         // this cannot also pick a row.
         if key == GameKey::Char('U') {
             if let Some(game) = &mut self.game {
-                self.status_line = Some(match game.fuse_all_items() {
-                    Ok(msg) => msg,
-                    Err(e) => e,
-                });
+                match game.fuse_all_items() {
+                    // A confirmation, not a refusal: it says what the key
+                    // did, and nothing else visible from behind this popup
+                    // says it. Only the `Err` half is history.
+                    Ok(msg) => self.status_line = Some(msg),
+                    Err(e) => self.refuse(e),
+                }
             }
             return;
         }
@@ -123,7 +129,8 @@ impl App {
         let Some(game) = &self.game else { return };
         let wearer = game.player_entity();
         if equip_swap_rows(game, wearer, slot).is_empty() {
-            self.status_line = Some(format!("Nothing in cargo fits your {} slot.", slot.label()));
+            let line = format!("Nothing in cargo fits your {} slot.", slot.label());
+            self.refuse(line);
             return;
         }
         self.pending_swap_slot = Some(slot);
@@ -190,10 +197,10 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         let outcome = match &choices[idx] {
-            SwapChoice::Equip(copy) => game.equip(wearer, copy).err(),
-            SwapChoice::Unequip => game.unequip(wearer, slot).err(),
+            SwapChoice::Equip(copy) => game.equip(wearer, copy),
+            SwapChoice::Unequip => game.unequip(wearer, slot),
         };
-        self.status_line = outcome;
+        self.report(outcome);
         done(self);
     }
 
@@ -281,16 +288,18 @@ impl App {
         // changes nothing else visible from behind the inventory popup. Both
         // report a refusal on the status line.
         let wearer = game.player_entity();
+        // `Ok(None)` clears the line, `Ok(Some)` confirms, `Err` refuses.
+        // Taken as one value while the `game` borrow is live and acted on
+        // once it has ended, because `refuse` wants the whole of `self`.
         let outcome = match idx.map(|i| actions[i]) {
-            Some('e') => Some(game.equip(wearer, &copy).err()),
-            Some('u') => Some(match game.fuse_item(&copy) {
-                Ok(msg) => Some(msg),
-                Err(e) => Some(e),
-            }),
-            _ => None,
+            Some('e') => game.equip(wearer, &copy).map(|()| None),
+            Some('u') => game.fuse_item(&copy).map(Some),
+            _ => return,
         };
-        let Some(outcome) = outcome else { return };
-        self.status_line = outcome;
+        match outcome {
+            Ok(msg) => self.status_line = msg,
+            Err(e) => self.refuse(e),
+        }
         self.pending_inventory_item = None;
         self.mode = Mode::Inventory;
     }
@@ -398,10 +407,8 @@ impl App {
             return;
         }
         if let Some(game) = &mut self.game {
-            match game.erase_item(&copy, quantity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.erase_item(&copy, quantity);
+            self.report(outcome);
         }
     }
 }

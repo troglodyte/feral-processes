@@ -41,7 +41,8 @@ impl App {
         // need a routine spends or whether it needs open grid — see
         // `FieldRoutineView::unavailable`.
         if let Some(reason) = &row.unavailable {
-            self.status_line = Some(format!("Can't run {} — {reason}.", row.name));
+            let line = format!("Can't run {} — {reason}.", row.name);
+            self.refuse(line);
             return;
         }
         match row.second_pick {
@@ -62,10 +63,8 @@ impl App {
             FieldCastPick::None => {}
         }
         let Some(game) = &mut self.game else { return };
-        match game.cast_field_routine(idx, FieldCastTarget::None) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.cast_field_routine(idx, FieldCastTarget::None);
+        self.report(outcome);
         self.mode = Mode::Playing;
     }
 
@@ -105,10 +104,8 @@ impl App {
                     return;
                 };
                 self.field_cursor = None;
-                match game.cast_field_routine(index, FieldCastTarget::Cell(cx, cy)) {
-                    Ok(()) => self.status_line = None,
-                    Err(e) => self.status_line = Some(e),
-                }
+                let outcome = game.cast_field_routine(index, FieldCastTarget::Cell(cx, cy));
+                self.report(outcome);
                 self.mode = Mode::Playing;
                 return;
             }
@@ -137,10 +134,8 @@ impl App {
         let target = targets[idx].entity;
         self.pending_field_routine = None;
         let Some(game) = &mut self.game else { return };
-        match game.cast_field_routine(index, FieldCastTarget::Ally(target)) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.cast_field_routine(index, FieldCastTarget::Ally(target));
+        self.report(outcome);
         self.mode = Mode::Playing;
     }
 }

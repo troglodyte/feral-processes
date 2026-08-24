@@ -139,10 +139,8 @@ impl App {
             game.remove_companion(entity);
             self.status_line = None;
         } else {
-            match game.add_companion(entity) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.add_companion(entity);
+            self.report(outcome);
         }
     }
 
@@ -181,10 +179,8 @@ impl App {
                 // Always `Some`, even when empty: the engine reads a blank
                 // as "drop the override", which is the only way back to the
                 // species name. `None` here would mean "leave it alone".
-                match game.rename_companion(entity, Some(name)) {
-                    Ok(()) => self.status_line = None,
-                    Err(e) => self.status_line = Some(e),
-                }
+                let outcome = game.rename_companion(entity, Some(name));
+                self.report(outcome);
                 self.mode = Mode::Companion;
             }
             _ => {}
@@ -303,10 +299,8 @@ impl App {
         // only arises for a bare slot with nothing in cargo that fits — a
         // dead end, reported here the way the player's own picker reports it.
         if equip_swap_rows(game, program, slot).is_empty() {
-            self.status_line = Some(format!(
-                "Nothing in cargo fits {name}'s {} slot.",
-                slot.label()
-            ));
+            let line = format!("Nothing in cargo fits {name}'s {} slot.", slot.label());
+            self.refuse(line);
             return;
         }
         self.pending_swap_slot = Some(slot);
@@ -425,10 +419,8 @@ impl App {
         };
         if matches!(key, GameKey::Char('r') | GameKey::Char('R')) {
             let Some(game) = &mut self.game else { return };
-            match game.open_kernel_ring(target) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.open_kernel_ring(target);
+            self.report(outcome);
             return;
         }
         // The ladder's numbered rows are the next untaken tier's choices —
@@ -453,10 +445,8 @@ impl App {
             .collect();
         if let Some(idx) = self.selected_index(key, offered.len()) {
             let Some(game) = &mut self.game else { return };
-            match game.take_talent(target, &offered[idx]) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.take_talent(target, &offered[idx]);
+            self.report(outcome);
             // The list the highlight was drawn against just moved on to the
             // next tier, and the mode has not changed, so `handle_key`'s own
             // reset never fires — the same trap `handle_refactor_item_key`
@@ -501,10 +491,8 @@ impl App {
         if let Some(idx) = self.selected_index(key, offered.len()) {
             let item = offered[idx].item.clone();
             let Some(game) = &mut self.game else { return };
-            match game.refactor_companion(target, &item) {
-                Ok(()) => self.status_line = None,
-                Err(e) => self.status_line = Some(e),
-            }
+            let outcome = game.refactor_companion(target, &item);
+            self.report(outcome);
             let left = self
                 .game
                 .as_ref()
@@ -589,10 +577,8 @@ impl App {
                 let name = (!self.fuse_name_input.is_empty()).then(|| self.fuse_name_input.clone());
                 self.fuse_name_input.clear();
                 let Some(game) = &mut self.game else { return };
-                match game.fuse_companions(first, second, name) {
-                    Ok(()) => self.status_line = None,
-                    Err(e) => self.status_line = Some(e),
-                }
+                let outcome = game.fuse_companions(first, second, name);
+                self.report(outcome);
                 self.mode = Mode::Playing;
             }
             _ => {}

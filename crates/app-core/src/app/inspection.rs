@@ -57,17 +57,23 @@ impl App {
             // Asked only after the creature and structure arms, because a
             // program standing in front of a seam is the more interesting
             // answer.
-            None => match game.describe_base_rock(dx, dy, EXAMINE_RANGE_TILES) {
-                Some(text) => {
-                    self.pending_description = Some(text);
-                    self.status_line = None;
-                    self.mode = Mode::CellDescribe;
+            // Bound before the match rather than matched on directly:
+            // `App::refuse` wants the whole of `self`, so the `game` borrow
+            // has to have ended by the time the empty arm reports.
+            None => {
+                let described = game.describe_base_rock(dx, dy, EXAMINE_RANGE_TILES);
+                match described {
+                    Some(text) => {
+                        self.pending_description = Some(text);
+                        self.status_line = None;
+                        self.mode = Mode::CellDescribe;
+                    }
+                    None => {
+                        self.refuse("Nothing in that direction.");
+                        self.mode = Mode::Playing;
+                    }
                 }
-                None => {
-                    self.status_line = Some("Nothing in that direction.".to_string());
-                    self.mode = Mode::Playing;
-                }
-            },
+            }
         }
     }
 

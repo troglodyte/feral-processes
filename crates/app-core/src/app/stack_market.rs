@@ -68,9 +68,7 @@ impl App {
                     let row = &view.sells[i];
                     self.sell_to_market(row.copy.clone(), row.qty);
                 }
-                Some(MarketRow::Offer(_)) => {
-                    self.status_line = Some("That's theirs — pick it to buy it.".to_string())
-                }
+                Some(MarketRow::Offer(_)) => self.refuse("That's theirs — pick it to buy it."),
                 None => {}
             }
             return;
@@ -119,19 +117,15 @@ impl App {
     /// does for the surface — this only reports the answer.
     fn buy_market_offer(&mut self, index: usize) {
         let Some(game) = &mut self.game else { return };
-        match game.buy_market_offer(index) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.buy_market_offer(index);
+        self.report(outcome);
         self.close_if_bought_out();
     }
 
     fn sell_to_market(&mut self, copy: GearCopy, qty: u32) {
         let Some(game) = &mut self.game else { return };
-        match game.sell_to_market(copy, qty) {
-            Ok(()) => self.status_line = None,
-            Err(e) => self.status_line = Some(e),
-        }
+        let outcome = game.sell_to_market(copy, qty);
+        self.report(outcome);
         self.close_if_bought_out();
     }
 

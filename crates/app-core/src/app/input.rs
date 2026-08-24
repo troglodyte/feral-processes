@@ -279,6 +279,42 @@ impl App {
         }
     }
 
+    /// Says why the player's last action was refused, on both surfaces at
+    /// once: `status_line`, which the screen they typed into draws at the
+    /// top of its popup, and the message log, which is where they find it
+    /// again after the banner has aged out.
+    ///
+    /// **The one door**, so the sentence the popup shows and the sentence
+    /// the history screen keeps cannot drift. It holds no rule about when a
+    /// refusal is worth keeping — `Game::note_refusal` owns that, chiefly
+    /// the mid-fight silence — so a caller here never has to know its mode.
+    ///
+    /// Deliberately not used for a *confirmation* ("Game saved.") or for an
+    /// IO failure the run cannot answer for: those set `status_line`
+    /// directly, since the log the player scrolls back through is a record
+    /// of refusals and not of everything the banner has ever said.
+    pub(crate) fn refuse(&mut self, msg: impl Into<String>) {
+        let msg = msg.into();
+        if let Some(game) = &mut self.game {
+            game.note_refusal(msg.clone());
+        }
+        self.status_line = Some(msg);
+    }
+
+    /// Reports an action's verdict: a refusal through `refuse`, an `Ok` by
+    /// clearing the line so the last refusal stops standing over a screen
+    /// that has since done what was asked.
+    ///
+    /// Takes the finished `Result` rather than a closure so the `&mut
+    /// self.game` borrow every caller is holding ends before `refuse` needs
+    /// the whole of `self`.
+    pub(crate) fn report(&mut self, outcome: Result<(), String>) {
+        match outcome {
+            Ok(()) => self.status_line = None,
+            Err(e) => self.refuse(e),
+        }
+    }
+
     /// Ages the status line out after `STATUS_LINE_SECONDS`, so a refusal
     /// stops covering the action bar it was drawn over. A frontend calls
     /// this once a frame alongside `advance_reveal`, and for the same

@@ -124,11 +124,12 @@ pub struct EquipSpec {
     pub tier: u32,
     #[serde(default)]
     pub rarity: Rarity,
-    /// An affix by id, or none. Authorable for the same reason `rarity` is:
-    /// an affix is rolled on a *drop*, and a staged fight drops nothing, so
-    /// this is the only way to measure what one is worth.
+    /// Affixes by id, in any order — the spec canonicalises. Authorable for
+    /// the same reason `rarity` is: an affix is rolled on a *drop*, and a
+    /// staged fight drops nothing, so this is the only way to measure what
+    /// one is worth. Repeat an id to stack it, which is what fusion does.
     #[serde(default)]
-    pub affix: Option<AffixId>,
+    pub affixes: Vec<AffixId>,
 }
 
 impl EquipSpec {
@@ -137,15 +138,15 @@ impl EquipSpec {
     /// `GearCopy` — the headless bin and the in-game arena screen cannot
     /// disagree about what a scenario asked for.
     pub fn copy(&self) -> GearCopy {
-        GearCopy {
-            item: self.item.clone(),
-            rarity: self.rarity,
-            tier: self.tier,
-            affix: self.affix.clone(),
+        GearCopy::with_affixes(
+            self.item.clone(),
+            self.rarity,
+            self.tier,
+            self.affixes.clone(),
             // A scenario authors no quality, so its numbers stay comparable
             // to the reports its old runs produced.
-            quality: crate::tuning::QUALITY_DEFAULT,
-        }
+            crate::tuning::QUALITY_DEFAULT,
+        )
     }
 }
 

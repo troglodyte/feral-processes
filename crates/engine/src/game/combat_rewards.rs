@@ -92,13 +92,7 @@ impl Game {
         let rarity = self.roll_gear_rarity().max(floor);
         let affix = self.roll_affix(&item);
         let quality = self.roll_quality(crate::tuning::QUALITY_DROP_BASE);
-        let copy = GearCopy {
-            item,
-            rarity,
-            tier: 0,
-            affix,
-            quality,
-        };
+        let copy = GearCopy::with_affixes(item, rarity, 0, affix.into_iter().collect(), quality);
         self.add_copies(&copy, 1);
         copy
     }
@@ -153,16 +147,17 @@ impl Game {
         None
     }
 
-    /// What `affix` is, if the copy has one and the build still knows it.
+    /// What this copy's affixes are, in its own (sorted) order, skipping
+    /// any the build no longer knows.
     ///
-    /// The `and_then` is the whole compatibility story for a removed affix:
-    /// a save naming one the build no longer has reads as unaffixed rather
-    /// than failing to load, the same shape `recognized_routines` gives a
-    /// removed ability. Every reader goes through here.
-    pub(crate) fn affix_of(&self, copy: &GearCopy) -> Option<&crate::affixes::AffixDef> {
-        copy.affix
-            .as_ref()
-            .and_then(|id| self.world.resource::<AffixDb>().get(id))
+    /// The skip is the whole compatibility story for a removed affix: a
+    /// save naming one the build no longer has reads as a copy with one
+    /// fewer effect rather than failing to load, the same shape
+    /// `recognized_routines` gives a removed ability. Every reader goes
+    /// through here.
+    pub(crate) fn affixes_of(&self, copy: &GearCopy) -> Vec<&crate::affixes::AffixDef> {
+        let db = self.world.resource::<AffixDb>();
+        copy.affixes.iter().filter_map(|id| db.get(id)).collect()
     }
 
     /// What this copy is called: its affix's decoration of the item name,
@@ -183,7 +178,7 @@ impl Game {
     /// stat column out of the row's un-wrappable head.
     pub fn copy_name(&self, copy: &GearCopy) -> String {
         let base = self.item_name(&copy.item);
-        let named = match self.affix_of(copy) {
+        let named = match self.affixes_of(copy).first() {
             Some(affix) => affix.decorate(base),
             None => base.to_string(),
         };

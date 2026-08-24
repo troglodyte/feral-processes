@@ -901,7 +901,7 @@ fn crafted_gear_is_never_rare() {
         ledger
             .copies
             .iter()
-            .all(|(copy, _)| copy.rarity == Rarity::Ordinary && copy.affix.is_none()),
+            .all(|(copy, _)| copy.rarity == Rarity::Ordinary && copy.affixes.is_empty()),
         "crafting must never produce a rare or affixed copy — the ledger rows \
          a compile writes are there for its quality alone"
     );
@@ -937,11 +937,11 @@ fn a_dropped_weapon_can_roll_an_affix_without_a_rare_tier() {
     assert!(
         copies
             .iter()
-            .any(|c| c.affix.is_some() && c.rarity == Rarity::Ordinary),
+            .any(|c| !c.affixes.is_empty() && c.rarity == Rarity::Ordinary),
         "an affix must be reachable without a rare tier: {copies:?}"
     );
     assert!(
-        copies.iter().filter(|c| c.affix.is_some()).count() > 1,
+        copies.iter().filter(|c| !c.affixes.is_empty()).count() > 1,
         "400 drops at GEAR_AFFIX_CHANCE should yield several affixes"
     );
 }
@@ -965,7 +965,7 @@ fn an_affixed_copys_name_carries_both_its_word_and_its_tier() {
     let dressed = GearCopy {
         rarity: Rarity::Gold,
         tier: 0,
-        affix: Some(affix.id.clone()),
+        affixes: vec![affix.id.clone()],
         ..GearCopy::plain(weapon.clone())
     };
 
@@ -1026,7 +1026,7 @@ fn an_affix_is_worth_more_than_its_name() {
         GearCopy {
             rarity: Rarity::Ordinary,
             tier: 0,
-            affix: Some(affix.id.clone()),
+            affixes: vec![affix.id.clone()],
             ..GearCopy::plain(weapon.clone())
         },
     );
@@ -1327,7 +1327,7 @@ fn a_rare_copy_is_tallied_apart_from_a_plain_one() {
     let rare = GearCopy {
         rarity: Rarity::Gold,
         tier: 0,
-        affix: None,
+        affixes: Vec::new(),
         ..GearCopy::plain(weapon.clone())
     };
 

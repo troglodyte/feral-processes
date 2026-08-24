@@ -219,7 +219,7 @@ fn a_drawback_is_a_trade_at_zone_one_and_a_bigger_one_later() {
     let dressed = GearCopy {
         rarity: Rarity::Ordinary,
         tier: 0,
-        affix: Some(affix.id.clone()),
+        affixes: vec![affix.id.clone()],
         ..GearCopy::plain(item)
     };
     // Just the values: the ceilings are the census's business, not this
@@ -279,7 +279,7 @@ fn wearing_and_removing_a_drawback_copy_leaves_no_dent() {
     let copy = GearCopy {
         rarity: Rarity::Ordinary,
         tier: 0,
-        affix: Some(affix.id.clone()),
+        affixes: vec![affix.id.clone()],
         ..GearCopy::plain(item)
     };
 

@@ -818,7 +818,17 @@ pub(crate) fn app_carrying_affixed_gear(seed: u32, item: &str, affix: &str, zone
 
     let mut data = save::load_from_file(&path).unwrap();
     data.zone = zone;
-    data.player.gear_copies = vec![(affixed_gear(item, affix), 1)];
+    data.player.gear_copies = vec![(
+        save::GearCopySave {
+            item: ItemId::from(item),
+            rarity: Rarity::Ordinary,
+            tier: 0,
+            affix: None,
+            affixes: vec![AffixId::from(affix)],
+            quality: feral_processes_engine::tuning::QUALITY_DEFAULT,
+        },
+        1,
+    )];
     save::save_to_file(&path, &data).unwrap();
 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
@@ -833,7 +843,7 @@ pub(crate) fn affixed_gear(item: &str, affix: &str) -> GearCopy {
     GearCopy {
         rarity: Rarity::Ordinary,
         tier: 0,
-        affix: Some(AffixId::from(affix)),
+        affixes: vec![AffixId::from(affix)],
         ..GearCopy::plain(ItemId::from(item))
     }
 }
@@ -978,7 +988,7 @@ pub(crate) fn gear(item: &ItemId, tier: u32) -> GearCopy {
     GearCopy {
         rarity: Rarity::Ordinary,
         tier,
-        affix: None,
+        affixes: Vec::new(),
         ..GearCopy::plain(item.clone())
     }
 }

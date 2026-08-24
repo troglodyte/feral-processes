@@ -441,26 +441,30 @@ impl Game {
     /// a since-removed mod item produces.
     pub fn copy_bonus(&self, copy: &GearCopy, level: u32) -> Option<items::EquipmentStats> {
         let (_, base) = self.equipment_of(&copy.item)?;
-        // The affix is added to the *base* before any scaling, so it grows
+        // Affixes are added to the *base* before any scaling, so they grow
         // with gear level and both tiers exactly as the item's own bonus
         // does. Added after would make an affix worth steadily less as a run
         // goes on, which is the opposite of what a rolled property is for —
         // and would make a scavenged weapon with a good affix worthless
         // after one breach.
-        let affixed = match self.affix_of(copy) {
-            Some(affix) => items::EquipmentStats {
-                atk: base.atk + affix.stats.atk,
-                mitigation: base.mitigation + affix.stats.mitigation,
-                decompiler: base.decompiler + affix.stats.decompiler,
-                damage: crate::battle::DamageRange {
-                    min: base.damage.min + affix.stats.damage.min,
-                    max: base.damage.max + affix.stats.damage.max,
-                },
-                accuracy: base.accuracy + affix.stats.accuracy,
-                evasion: base.evasion + affix.stats.evasion,
-            },
-            None => base,
-        };
+        //
+        // Every affix is summed, so a copy fused from two carrying the same
+        // one is worth it twice — the duplicate is the feature, not a row
+        // to dedupe.
+        let affixed =
+            self.affixes_of(copy)
+                .into_iter()
+                .fold(base, |acc, affix| items::EquipmentStats {
+                    atk: acc.atk + affix.stats.atk,
+                    mitigation: acc.mitigation + affix.stats.mitigation,
+                    decompiler: acc.decompiler + affix.stats.decompiler,
+                    damage: crate::battle::DamageRange {
+                        min: acc.damage.min + affix.stats.damage.min,
+                        max: acc.damage.max + affix.stats.damage.max,
+                    },
+                    accuracy: acc.accuracy + affix.stats.accuracy,
+                    evasion: acc.evasion + affix.stats.evasion,
+                });
         Some(
             affixed
                 .scaled_for_level(level)

@@ -590,7 +590,7 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
         Rarity::Ordinary,
         "crafting is not a chase"
     );
-    assert!(copies[0].affix.is_none(), "and it rolls no affix either");
+    assert!(copies[0].affixes.is_empty(), "and it rolls no affix either");
     assert!(
         (QUALITY_BASE..=QUALITY_BASE + QUALITY_SPREAD).contains(&copies[0].quality),
         "a bare bench compiles inside its band, got {}",

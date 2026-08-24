@@ -31,35 +31,66 @@ fn recognized_routines(ids: &[AbilityId], db: &AbilityDb) -> (Vec<AbilityId>, Ve
 /// are the whole cost of that, and having them named is what stops the
 /// conversion being open-coded at the four sites that need it — three player
 /// slots and every program's loadout.
+#[allow(clippy::too_many_arguments)]
 fn worn_from_save(
     item: Option<ItemId>,
     level: u32,
     fusion_tier: u32,
     rarity: Rarity,
     affix: Option<AffixId>,
+    affixes: Vec<AffixId>,
     quality: u8,
 ) -> Option<EquippedItem> {
     Some(EquippedItem {
-        copy: GearCopy {
-            item: item?,
+        copy: GearCopy::with_affixes(
+            item?,
             rarity,
-            tier: fusion_tier,
-            affix,
+            fusion_tier,
+            save::affixes_from_save(affix, affixes),
             quality,
-        },
+        ),
         level,
     })
 }
 
-/// The inverse of `worn_from_save`, for the write side.
+/// The inverse of `worn_from_save`, for the write side. The legacy singular
+/// affix field is left empty here and read on load only — see
+/// `save::affixes_from_save`.
 fn worn_to_save(worn: &EquippedItem) -> save::EquippedItemSave {
     save::EquippedItemSave {
         item: worn.copy.item.clone(),
         level: worn.level,
         fusion_tier: worn.copy.tier,
         rarity: worn.copy.rarity,
-        affix: worn.copy.affix.clone(),
+        affix: None,
+        affixes: worn.copy.affixes.clone(),
         quality: worn.copy.quality,
+    }
+}
+
+/// A carried copy off disk, with the pre-stacking singular affix lifted.
+/// Named beside `worn_from_save`/`worn_to_save` for that pair's stated
+/// reason: the conversion is open-coded nowhere, so no site can drop the
+/// legacy field and strip an affix off a reloaded save in silence.
+fn copy_from_save(saved: save::GearCopySave) -> GearCopy {
+    GearCopy::with_affixes(
+        saved.item,
+        saved.rarity,
+        saved.tier,
+        save::affixes_from_save(saved.affix, saved.affixes),
+        saved.quality,
+    )
+}
+
+/// The inverse of `copy_from_save`, for the write side.
+fn copy_to_save(copy: &GearCopy) -> save::GearCopySave {
+    save::GearCopySave {
+        item: copy.item.clone(),
+        rarity: copy.rarity,
+        tier: copy.tier,
+        affix: None,
+        affixes: copy.affixes.clone(),
+        quality: copy.quality,
     }
 }
 
@@ -392,13 +423,13 @@ impl Game {
                     .into_iter()
                     .map(|(item, tier, qty)| {
                         (
+                            // These copies predate both the affix and the
+                            // quality fields by two years of releases.
                             GearCopy {
                                 item,
                                 rarity: Rarity::Ordinary,
                                 tier,
-                                affix: None,
-                                // These copies predate the field by two
-                                // years of releases.
+                                affixes: Vec::new(),
                                 quality: crate::tuning::QUALITY_DEFAULT,
                             },
                             qty,
@@ -408,11 +439,13 @@ impl Game {
                 ((kind, tile), rows)
             });
             legacy
-                .chain(
-                    data.buyback_shelves
+                .chain(data.buyback_shelves.into_iter().map(|(kind, tile, shelf)| {
+                    let rows = shelf
                         .into_iter()
-                        .map(|(kind, tile, shelf)| ((kind, tile), shelf)),
-                )
+                        .map(|(copy, qty)| (copy_from_save(copy), qty))
+                        .collect();
+                    ((kind, tile), rows)
+                }))
                 .collect()
         }));
         world.insert_resource(ZoneLevel(data.zone));
@@ -494,6 +527,7 @@ impl Game {
                         data.player.weapon_fusion_tier,
                         data.player.weapon_rarity,
                         data.player.weapon_affix.clone(),
+                        data.player.weapon_affixes.clone(),
                         data.player.weapon_quality,
                     ),
                     armor: worn_from_save(
@@ -502,6 +536,7 @@ impl Game {
                         data.player.armor_fusion_tier,
                         data.player.armor_rarity,
                         data.player.armor_affix.clone(),
+                        data.player.armor_affixes.clone(),
                         data.player.armor_quality,
                     ),
                     module: worn_from_save(
@@ -510,6 +545,7 @@ impl Game {
                         data.player.module_fusion_tier,
                         data.player.module_rarity,
                         data.player.module_affix.clone(),
+                        data.player.module_affixes.clone(),
                         data.player.module_quality,
                     ),
                 },
@@ -536,19 +572,24 @@ impl Game {
                     let mut carried = GearCopies::default();
                     let legacy = data.player.fused_gear.into_iter().map(|(item, tier, qty)| {
                         (
+                            // These copies predate both the affix and the
+                            // quality fields by two years of releases.
                             GearCopy {
                                 item,
                                 rarity: Rarity::Ordinary,
                                 tier,
-                                affix: None,
-                                // These copies predate the field by two
-                                // years of releases.
+                                affixes: Vec::new(),
                                 quality: crate::tuning::QUALITY_DEFAULT,
                             },
                             qty,
                         )
                     });
-                    for (copy, qty) in legacy.chain(data.player.gear_copies) {
+                    let saved = data
+                        .player
+                        .gear_copies
+                        .into_iter()
+                        .map(|(copy, qty)| (copy_from_save(copy), qty));
+                    for (copy, qty) in legacy.chain(saved) {
                         carried.add(
                             GearCopy {
                                 tier: copy.tier.min(crate::tuning::MAX_FUSIONS),
@@ -811,6 +852,7 @@ impl Game {
                         saved.fusion_tier,
                         saved.rarity,
                         saved.affix,
+                        saved.affixes,
                         saved.quality,
                     );
                 }
@@ -1031,7 +1073,12 @@ impl Game {
         let gear_copies = self
             .world
             .get::<GearCopies>(player)
-            .map(|f| f.copies.clone())
+            .map(|f| {
+                f.copies
+                    .iter()
+                    .map(|(copy, qty)| (copy_to_save(copy), *qty))
+                    .collect()
+            })
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let routines = self
@@ -1303,7 +1350,12 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
-                weapon_affix: equipment.weapon.as_ref().and_then(|e| e.copy.affix.clone()),
+                weapon_affix: None,
+                weapon_affixes: equipment
+                    .weapon
+                    .as_ref()
+                    .map(|e| e.copy.affixes.clone())
+                    .unwrap_or_default(),
                 weapon_quality: equipment
                     .weapon
                     .as_ref()
@@ -1317,7 +1369,12 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
-                armor_affix: equipment.armor.as_ref().and_then(|e| e.copy.affix.clone()),
+                armor_affix: None,
+                armor_affixes: equipment
+                    .armor
+                    .as_ref()
+                    .map(|e| e.copy.affixes.clone())
+                    .unwrap_or_default(),
                 armor_quality: equipment
                     .armor
                     .as_ref()
@@ -1331,7 +1388,12 @@ impl Game {
                     .as_ref()
                     .map(|e| e.copy.rarity)
                     .unwrap_or_default(),
-                module_affix: equipment.module.as_ref().and_then(|e| e.copy.affix.clone()),
+                module_affix: None,
+                module_affixes: equipment
+                    .module
+                    .as_ref()
+                    .map(|e| e.copy.affixes.clone())
+                    .unwrap_or_default(),
                 module_quality: equipment
                     .module
                     .as_ref()
@@ -1367,7 +1429,13 @@ impl Game {
                 .resource::<BuybackLedger>()
                 .0
                 .iter()
-                .map(|((kind, tile), shelf)| (kind.clone(), *tile, shelf.clone()))
+                .map(|((kind, tile), shelf)| {
+                    let rows = shelf
+                        .iter()
+                        .map(|(copy, qty)| (copy_to_save(copy), *qty))
+                        .collect();
+                    (kind.clone(), *tile, rows)
+                })
                 .collect(),
             researched: {
                 let mut ids: Vec<ResearchId> = self

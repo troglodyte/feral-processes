@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::affixes::AffixId;
 use crate::components::{ActiveFieldBuff, Rarity};
-use crate::items::GearCopy;
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
@@ -42,8 +41,15 @@ pub struct PlayerSave {
     /// what it had.
     #[serde(default)]
     pub weapon_rarity: Rarity,
+    /// **Legacy, load-only.** The one affix a worn copy could carry before
+    /// affixes stacked; lifted into `weapon_affixes` by
+    /// `affixes_from_save`. Written by nothing — `PlayerSave::fused_gear`
+    /// is the precedent, and `Experience::xp_to_next` the shape.
     #[serde(default)]
     pub weapon_affix: Option<AffixId>,
+    /// Every affix on the worn weapon — see `items::GearCopy::affixes`.
+    #[serde(default)]
+    pub weapon_affixes: Vec<AffixId>,
     /// How well the worn copy was compiled — see `items::GearCopy::quality`.
     /// Additive behind a default of `QUALITY_DEFAULT` rather than `u8`'s own
     /// `Default` of 0, which would silently strip a worn item of its whole
@@ -55,8 +61,11 @@ pub struct PlayerSave {
     pub armor_fusion_tier: u32,
     #[serde(default)]
     pub armor_rarity: Rarity,
+    /// **Legacy, load-only** — see `weapon_affix`.
     #[serde(default)]
     pub armor_affix: Option<AffixId>,
+    #[serde(default)]
+    pub armor_affixes: Vec<AffixId>,
     #[serde(default = "default_worn_quality")]
     pub armor_quality: u8,
     pub module: Option<ItemId>,
@@ -64,8 +73,11 @@ pub struct PlayerSave {
     pub module_fusion_tier: u32,
     #[serde(default)]
     pub module_rarity: Rarity,
+    /// **Legacy, load-only** — see `weapon_affix`.
     #[serde(default)]
     pub module_affix: Option<AffixId>,
+    #[serde(default)]
+    pub module_affixes: Vec<AffixId>,
     #[serde(default = "default_worn_quality")]
     pub module_quality: u8,
     /// Unspent Perk Points — see `perks::Perk`.
@@ -96,7 +108,7 @@ pub struct PlayerSave {
     /// one, as `(copy, qty)` — see `components::GearCopies`. Plain copies
     /// are in `inventory`, which is the plain-copy store.
     #[serde(default)]
-    pub gear_copies: Vec<(GearCopy, u32)>,
+    pub gear_copies: Vec<(GearCopySave, u32)>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -381,9 +393,14 @@ pub struct EquippedItemSave {
     /// tiers loads with every worn copy ordinary, which is what it was.
     #[serde(default)]
     pub rarity: Rarity,
-    /// The affix on the worn copy — additive for the same reason.
+    /// **Legacy, load-only.** The one affix a worn copy could carry before
+    /// affixes stacked, lifted into `affixes` by `affixes_from_save`.
     #[serde(default)]
     pub affix: Option<AffixId>,
+    /// Every affix on the worn copy — see `items::GearCopy::affixes`.
+    /// Additive for the same reason `rarity` is.
+    #[serde(default)]
+    pub affixes: Vec<AffixId>,
     /// How well the worn copy was compiled — see `items::GearCopy::quality`.
     /// Additive behind a default of `QUALITY_DEFAULT` rather than `u8`'s own
     /// `Default` of 0, which would silently strip a worn item of its whole
@@ -396,6 +413,49 @@ pub struct EquippedItemSave {
 /// fields that stand in for a nested `GearCopy`.
 fn default_worn_quality() -> u8 {
     crate::tuning::QUALITY_DEFAULT
+}
+
+/// A carried copy of gear on disk — `items::GearCopy`'s save shape, flat and
+/// field-named with the same field names plus the pre-stacking `affix`.
+///
+/// It exists so the compatibility shim lives entirely on the save side.
+/// A legacy field on `GearCopy` itself would join its `Eq` and split the
+/// three `==`-keyed stores that type exists to hold together, which is the
+/// failure its own doc comment is written to prevent.
+///
+/// RON absorbs the widening because the tuple's first element is still a
+/// field-named struct with the same field names and one new defaulted field
+/// — `EquippedItemSave`'s own trick, applied for its own stated reason.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GearCopySave {
+    pub item: ItemId,
+    #[serde(default)]
+    pub rarity: Rarity,
+    #[serde(default)]
+    pub tier: u32,
+    /// **Legacy, load-only** — see `EquippedItemSave::affix`.
+    #[serde(default)]
+    pub affix: Option<AffixId>,
+    #[serde(default)]
+    pub affixes: Vec<AffixId>,
+    #[serde(default = "default_worn_quality")]
+    pub quality: u8,
+}
+
+/// A save's affixes, taking the list when it has one and lifting the
+/// pre-stacking singular field when it does not.
+///
+/// Load-only: the write side fills `affixes` and leaves `affix` empty. One
+/// shared helper because four save sites do this lift — the three flat
+/// `PlayerSave` slots, `EquippedItemSave` and `GearCopySave` — and four
+/// hand-written copies is four chances for one to drop the legacy field and
+/// strip an affix off a reloaded save in silence.
+pub fn affixes_from_save(affix: Option<AffixId>, affixes: Vec<AffixId>) -> Vec<AffixId> {
+    if affixes.is_empty() {
+        affix.into_iter().collect()
+    } else {
+        affixes
+    }
 }
 
 /// A nest's state on disk: its species, position, remaining `Durability`,
@@ -517,7 +577,7 @@ pub struct StructureSave {
 pub type BuybackShelfSave = (
     crate::structures::StructureId,
     (i32, i32),
-    Vec<(GearCopy, u32)>,
+    Vec<(GearCopySave, u32)>,
 );
 
 /// The pre-0.8.9 shelf shape, whose rows are positional `(item, tier, qty)`
@@ -898,6 +958,59 @@ pub fn append_run_history(path: &Path, summary: &str) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    /// A pre-stacking save wrote one optional `affix`; this build writes a
+    /// list. The singular field is kept, load-only, and lifted — so a save
+    /// written before affixes stacked keeps the one it had without a
+    /// `SAVE_FORMAT_VERSION` bump.
+    ///
+    /// Parsed as a RON fragment rather than round-tripped through a whole
+    /// save for `a_v29_save_still_loads_its_gear_after_the_new_field_lands`'
+    /// reason: the fragment is what an old file on disk actually contains,
+    /// and building one by hand is the only way to have a file this build
+    /// never wrote.
+    #[test]
+    fn a_pre_stacking_save_lifts_its_singular_affix() {
+        let old: GearCopySave = ron::from_str(
+            r#"(item: "kinetic_edge", tier: 1, rarity: Silver, affix: Some("of_static"))"#,
+        )
+        .expect("a pre-stacking row must still load");
+        assert_eq!(
+            affixes_from_save(old.affix, old.affixes),
+            vec![AffixId::from("of_static")],
+            "the singular field must be lifted into the list"
+        );
+    }
+
+    /// The write side fills `affixes` and leaves the legacy field empty, so
+    /// this is the shape every save from here on carries.
+    #[test]
+    fn a_stacked_save_loads_every_affix_it_names() {
+        let new: GearCopySave =
+            ron::from_str(r#"(item: "kinetic_edge", tier: 1, affixes: ["hardened", "of_static"])"#)
+                .expect("the stacked row shape must load");
+        assert!(
+            new.affix.is_none(),
+            "a save written by this build carries no singular field"
+        );
+        assert_eq!(
+            affixes_from_save(new.affix, new.affixes),
+            vec![AffixId::from("hardened"), AffixId::from("of_static")],
+            "both affixes must survive the load"
+        );
+    }
+
+    /// Neither key: every copy in every save written before affixes existed
+    /// at all. Both fields default, and the copy reads as unaffixed.
+    #[test]
+    fn a_pre_affix_save_loads_unaffixed() {
+        let ancient: GearCopySave =
+            ron::from_str(r#"(item: "shim_blade", tier: 0)"#).expect("a pre-affix row must load");
+        assert!(
+            affixes_from_save(ancient.affix, ancient.affixes).is_empty(),
+            "a copy that never had an affix must load with none"
+        );
+    }
+
     /// The one save surface gear rarity cannot widen in place.
     /// `PlayerSave::fused_gear` ships as a positional 3-tuple
     /// (`dev-saves/extraction.ron:63` is literally `("scrap_ward", 3, 1)`),
@@ -1005,18 +1118,21 @@ mod tests {
                 weapon_fusion_tier: 0,
                 weapon_rarity: Rarity::Ordinary,
                 weapon_affix: None,
+                weapon_affixes: Vec::new(),
                 weapon_quality: crate::tuning::QUALITY_DEFAULT,
                 armor: None,
                 armor_level: 1,
                 armor_fusion_tier: 0,
                 armor_rarity: Rarity::Ordinary,
                 armor_affix: None,
+                armor_affixes: Vec::new(),
                 armor_quality: crate::tuning::QUALITY_DEFAULT,
                 module: None,
                 module_level: 1,
                 module_fusion_tier: 0,
                 module_rarity: Rarity::Ordinary,
                 module_affix: None,
+                module_affixes: Vec::new(),
                 module_quality: crate::tuning::QUALITY_DEFAULT,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),

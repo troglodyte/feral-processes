@@ -670,8 +670,8 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
         "the shipped set has equippable gear"
     );
 
-    let affixes: Vec<Option<AffixId>> = std::iter::once(None)
-        .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+    let affixes: Vec<Vec<AffixId>> = std::iter::once(Vec::new())
+        .chain(game.affix_defs().into_iter().map(|a| vec![a.id]))
         .collect();
 
     let mut worst = (String::new(), 0usize);
@@ -682,13 +682,13 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
                 // of the band name the widest one, so three values cover
                 // every width `copy_name` can produce on this axis.
                 for quality in [QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX] {
-                    let name = game.copy_name(&GearCopy {
+                    let name = game.copy_name(&GearCopy::with_affixes(
+                        item.clone(),
                         rarity,
-                        tier: 0,
-                        affix: affix.clone(),
+                        0,
+                        affix.clone(),
                         quality,
-                        ..GearCopy::plain(item.clone())
-                    });
+                    ));
                     if name.chars().count() > worst.1 {
                         worst = (name.clone(), name.chars().count());
                     }
@@ -728,7 +728,7 @@ fn an_affixed_swap_row_prices_the_affix_it_names() {
 
     let row = equip_swap_rows(game, player, EquipmentSlot::Weapon)
         .into_iter()
-        .find(|r| matches!(&r.choice, SwapChoice::Equip(c) if c.affix.is_some()))
+        .find(|r| matches!(&r.choice, SwapChoice::Equip(c) if !c.affixes.is_empty()))
         .expect("the affixed copy is offered");
     assert!(
         row.label.contains("Overdriven"),
@@ -900,8 +900,8 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
         .filter(|d| d.equipment.is_some())
         .map(|d| d.id)
         .collect();
-    let affixes: Vec<Option<AffixId>> = std::iter::once(None)
-        .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+    let affixes: Vec<Vec<AffixId>> = std::iter::once(Vec::new())
+        .chain(game.affix_defs().into_iter().map(|a| vec![a.id]))
         .collect();
 
     let mut worst = (String::new(), 0usize);
@@ -910,13 +910,13 @@ fn no_shipped_gear_summary_outgrows_the_swap_stats_column() {
             // A copy at `QUALITY_MAX` prices 30% higher through
             // `copy_bonus`, which is where a stat figure could gain a digit.
             for quality in [QUALITY_DEFAULT, QUALITY_MAX] {
-                let copy = GearCopy {
-                    rarity: Rarity::ALL[Rarity::ALL.len() - 1],
-                    tier: MAX_FUSIONS,
-                    affix: affix.clone(),
+                let copy = GearCopy::with_affixes(
+                    item.clone(),
+                    Rarity::ALL[Rarity::ALL.len() - 1],
+                    MAX_FUSIONS,
+                    affix.clone(),
                     quality,
-                    ..GearCopy::plain(item.clone())
-                };
+                );
                 let Some(mods) = game.copy_bonus(&copy, 10) else {
                     continue;
                 };

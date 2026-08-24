@@ -1878,7 +1878,7 @@ pub fn gear(item: &ItemId, tier: u32) -> GearCopy {
     GearCopy {
         rarity: Rarity::Ordinary,
         tier,
-        affix: None,
+        affixes: Vec::new(),
         ..GearCopy::plain(item.clone())
     }
 }

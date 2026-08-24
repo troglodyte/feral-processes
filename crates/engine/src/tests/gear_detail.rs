@@ -86,7 +86,7 @@ fn the_worn_block_prices_the_whole_copy() {
     let decorated = GearCopy {
         rarity: components::Rarity::Gold,
         tier: 2,
-        affix: Some("honed".into()),
+        affixes: vec!["honed".into()],
         ..plain.clone()
     };
 

@@ -1209,7 +1209,7 @@ fn selling_a_rare_copy_buys_back_the_same_copy() {
     let rare = GearCopy {
         rarity: Rarity::Prismatic,
         tier: 0,
-        affix: None,
+        affixes: Vec::new(),
         ..GearCopy::plain(ItemId::from(ids::ABLATIVE_PLATING))
     };
     let plain = GearCopy::plain(rare.item.clone());

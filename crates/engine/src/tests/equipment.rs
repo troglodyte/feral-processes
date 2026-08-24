@@ -1214,7 +1214,7 @@ fn unequipping_a_rare_copy_leaves_no_bonus_behind() {
         let copy = GearCopy {
             rarity,
             tier: 0,
-            affix: None,
+            affixes: Vec::new(),
             ..GearCopy::plain(weapon.clone())
         };
         game.add_copies(&copy, 1);
@@ -1255,7 +1255,7 @@ fn a_rare_copy_is_worth_more_worn_than_a_plain_one() {
         let copy = GearCopy {
             rarity,
             tier: 0,
-            affix: None,
+            affixes: Vec::new(),
             ..GearCopy::plain(weapon.clone())
         };
         game.add_copies(&copy, 1);
@@ -1289,7 +1289,7 @@ fn a_rare_copy_will_not_fuse_with_a_plain_one() {
     let rare = GearCopy {
         rarity: Rarity::Gold,
         tier: 0,
-        affix: None,
+        affixes: Vec::new(),
         ..GearCopy::plain(armor)
     };
     game.add_copies(&plain, 1);
@@ -1714,4 +1714,136 @@ fn the_rare_ladder_survives_the_whole_quality_band() {
             >= game.copy_bonus(&good_ordinary, 1).unwrap().atk,
         "a Silver copy must never price below an Ordinary one at level 1"
     );
+}
+
+/// The affix list replaced an `Option`, and this task's whole claim is that
+/// nothing moved for the copies that already exist. A one-affix copy built
+/// through the new constructor must price and name exactly as the old
+/// single-affix copy did — the same `copy_bonus` and the same string.
+///
+/// The figures are not hardcoded: what is asserted is that one affix's
+/// contribution over the plain copy is exactly its authored `stats`, put
+/// through the same scaling chain. A hardcoded number would move with any
+/// asset edit and say nothing about the flip.
+#[test]
+fn one_affix_prices_and_names_exactly_as_it_did_before_the_list() {
+    let game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let affix = game
+        .affix_defs()
+        .into_iter()
+        .find(|a| a.stats.atk > 0 && a.prefix.is_some())
+        .expect("the shipped set has an ATK prefix");
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+
+    let plain = GearCopy::plain(weapon.clone());
+    let one = GearCopy::with_affixes(
+        weapon.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+
+    let plain_bonus = game.copy_bonus(&plain, 1).expect("equippable");
+    let one_bonus = game.copy_bonus(&one, 1).expect("equippable");
+    assert!(
+        one_bonus.atk > plain_bonus.atk,
+        "the affix must still be worth something: {plain_bonus:?} -> {one_bonus:?}"
+    );
+
+    // And the name is the affix's own decoration of the item name, which is
+    // what every existing save's affixed copy is already called.
+    assert_eq!(
+        game.copy_name(&one),
+        affix.decorate(game.item_name(&weapon)),
+        "a one-affix copy's name moved"
+    );
+}
+
+/// `[A, B]` and `[B, A]` are the same copy to a player, so they must be the
+/// same copy to `Eq` — `GearCopy` is the key of the `GearCopies` ledger and
+/// two rows for one thing makes `count_copies` under-report and strands the
+/// copies in the row it did not find.
+///
+/// `with_affixes` sorting on the way in is what holds this, which is why the
+/// two lists here are handed over in opposite orders.
+#[test]
+fn an_affix_list_is_one_row_whatever_order_it_is_built_in() {
+    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut ids: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
+    ids.sort();
+    let (a, b) = (ids[0].clone(), ids[1].clone());
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+
+    let forward = GearCopy::with_affixes(
+        weapon.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![a.clone(), b.clone()],
+        QUALITY_DEFAULT,
+    );
+    let backward = GearCopy::with_affixes(weapon, Rarity::Ordinary, 0, vec![b, a], QUALITY_DEFAULT);
+    assert_eq!(
+        forward, backward,
+        "the order a list is built in must not key"
+    );
+
+    game.add_copies(&forward, 1);
+    game.add_copies(&backward, 1);
+    assert_eq!(
+        game.count_copies(&forward),
+        2,
+        "both copies must land in one row"
+    );
+}
+
+/// A RON round trip cannot catch a `#[serde(skip)]`, so the shim needs a
+/// real `Game::save`/`Game::load` pair: a two-affix copy in cargo and a
+/// two-affix copy on the player's back both have to come back with both.
+#[test]
+fn a_two_affix_copy_survives_save_and_load_worn_and_carried() {
+    let assets = test_assets_dir();
+    let mut game = Game::new(4103, DifficultyMode::Forgiving, &assets).unwrap();
+    let player = game.player_entity();
+    let mut ids: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
+    ids.sort();
+    let pair = vec![ids[0].clone(), ids[1].clone()];
+
+    let carried = GearCopy::with_affixes(
+        ItemId::from(ids::ABLATIVE_PLATING),
+        Rarity::Gold,
+        1,
+        pair.clone(),
+        QUALITY_DEFAULT,
+    );
+    let worn = GearCopy::with_affixes(
+        ItemId::from(ids::OVERCLOCK_CORE),
+        Rarity::Ordinary,
+        0,
+        pair.clone(),
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&carried, 2);
+    game.add_copies(&worn, 1);
+    game.equip(player, &worn).unwrap();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_affix_list_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.count_copies(&carried),
+        2,
+        "a carried two-affix copy lost an affix and keyed a different row"
+    );
+    let back = loaded
+        .world
+        .get::<Equipment>(loaded.player_entity())
+        .and_then(|e| e.weapon.clone())
+        .expect("the weapon is still worn");
+    assert_eq!(back.copy.affixes, pair, "the worn copy lost its affixes");
 }

@@ -778,7 +778,7 @@ impl App {
                     item: ItemId::from(id.as_str()),
                     tier: 0,
                     rarity: Rarity::Ordinary,
-                    affix: None,
+                    affixes: Vec::new(),
                 }),
                 ArenaPickKind::InventoryItem(Some(i)) if i < s.inventory.len() => {
                     s.inventory[i].item = ItemId::from(id.as_str())

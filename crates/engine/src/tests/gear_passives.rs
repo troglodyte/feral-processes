@@ -628,7 +628,7 @@ fn a_rare_fused_affixed_copy_grants_the_same_routine() {
     let decorated = crate::items::GearCopy {
         rarity: Rarity::Gold,
         tier: 2,
-        affix: Some("honed".into()),
+        affixes: vec!["honed".into()],
         ..plain.clone()
     };
 
@@ -655,7 +655,7 @@ fn an_affixed_copy_fires_its_grant_and_the_affix_reaches_the_damage() {
         battle_with_a_passive_holder_prepared(&dir, 9207, None, |g| {
             let player = g.player_entity();
             let copy = crate::items::GearCopy {
-                affix: Some("honed".into()),
+                affixes: vec!["honed".into()],
                 ..crate::items::GearCopy::plain(ItemId("test_grant_weapon".into()))
             };
             g.add_copies(&copy, 1);

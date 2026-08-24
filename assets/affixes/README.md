@@ -4,6 +4,10 @@ An affix is a rolled modifier on a dropped piece of gear: it gives the copy a
 generated name — "Overclocked Arc Lance **of Static**" — and a small extra
 stat bonus on top of the item's own.
 
+A copy carries a **list** of them, not one. A drop still rolls at most one;
+fusing two copies is what stacks them, and it keeps duplicates — a copy fused
+from two "of Static" ones is worth that affix twice. See "Stacking" below.
+
 Drop a `.ron` file in this directory and it's picked up automatically the next
 time a game session starts — no recompiling required. A malformed or unusable
 file is skipped with a warning logged in-game rather than crashing startup.
@@ -90,6 +94,23 @@ complaint the feature exists to answer.
 
 Both are rolled by `Game::grant_gear_drop`, so both come only from **found**
 gear. Crafting and buying never roll either — made gear is deliberately plain.
+
+## Stacking
+
+A copy's affixes are a sorted list, and fusion is the only thing that grows
+one: `Game::fuse_item` unions the two parents' lists, duplicates kept. Nothing
+else in the game produces a copy with more than one, so an affix's ceiling is
+the fusion ladder — `ITEM_FUSION_COST` to the power of `MAX_FUSIONS` source
+copies, so eight affixes at the top.
+
+Every affix in the list is summed onto the item's **base** bonus before any
+scaling, so a duplicate counts twice and both grow with gear level, quality,
+fusion tier and rare tier together. Author the ceiling in the calibration
+table below with that in mind.
+
+An id the build no longer knows is skipped rather than refused, so deleting an
+affix file leaves every copy naming it one effect lighter instead of breaking
+the save.
 
 ## Calibration
 

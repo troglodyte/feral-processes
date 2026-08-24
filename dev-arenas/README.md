@@ -140,20 +140,30 @@ party: [(species: "scrapper", level: 12)],   // level defaults to 1
 // or Prismatic. Defaults to Ordinary.
 equip: [(item: "arc_lance", rarity: Gold)],
 
+// ...and any number of affixes by id, in any order. Repeat one to stack
+// it, which is what fusing two copies carrying the same affix does.
+equip: [(item: "arc_lance", affixes: ["honed", "honed", "of_static"])],
+
 // A companion takes the same `equip` rows the player does:
 party: [(species: "scrapper", level: 12, equip: [(item: "arc_lance")])],
 ```
 
-`tier` and `rarity` are the two things that make one *copy* of an item
-different from another, and neither is decoration: gear fuses per physical
-copy and drops at a rolled rare tier, so a tier-2 Gold weapon is a different
-weapon from a plain one of the same name. Both default, so a scenario written
-before either existed still describes exactly the copy it always did.
+`tier`, `rarity` and `affixes` are what make one *copy* of an item different
+from another, and none is decoration: gear fuses per physical copy and drops
+at a rolled rare tier with a rolled affix, so a tier-2 Gold weapon with three
+affixes is a different weapon from a plain one of the same name. All default,
+so a scenario written before any of them existed still describes exactly the
+copy it always did.
 
-**A rare tier cannot be reached by playing to it in an arena** — rarity is
-rolled by `Game::grant_gear_drop` when gear *drops*, and a staged fight
-drops nothing. So authoring it here is the only way to measure what one is
-worth, which is the whole reason the field exists.
+**None of the three can be reached by playing to it in an arena** — rarity and
+affixes are rolled by `Game::grant_gear_drop` when gear *drops*, and a staged
+fight drops nothing. So authoring them here is the only way to measure what
+they are worth, which is the whole reason the fields exist.
+
+`affixes` was a singular `affix: Option<AffixId>` until affixes stacked. It was
+renamed outright rather than accepting both spellings: a scenario field that is
+silently ignored reads as the feature doing nothing, which has cost a
+measurement here before.
 
 `equip` is applied *after* the zone is set, because gear locks in the zone
 level it was equipped at and grows by `GEAR_LEVEL_STEP` per level.

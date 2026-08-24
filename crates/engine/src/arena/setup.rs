@@ -210,7 +210,7 @@ mod tests {
             item: item.clone(),
             tier: 2,
             rarity: Rarity::Ordinary,
-            affix: None,
+            affixes: Vec::new(),
         }];
 
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -273,7 +273,7 @@ mod tests {
                 item: item.clone(),
                 tier: 0,
                 rarity: Rarity::Ordinary,
-                affix: None,
+                affixes: Vec::new(),
             }],
         }];
 
@@ -316,7 +316,7 @@ mod tests {
             item,
             tier: 0,
             rarity: Rarity::Ordinary,
-            affix: None,
+            affixes: Vec::new(),
         }]);
         assert_eq!((no_bonus.atk, no_bonus.mitigation), (0, 0));
         // A zero-bonus item would make the deltas below trivially equal.
@@ -338,7 +338,7 @@ mod tests {
                 item: ItemId("not_an_item".into()),
                 tier: 0,
                 rarity: Rarity::Ordinary,
-                affix: None,
+                affixes: Vec::new(),
             }],
         }];
 
@@ -375,7 +375,7 @@ mod tests {
             item: ItemId("not_an_item".into()),
             tier: 0,
             rarity: Rarity::Ordinary,
-            affix: None,
+            affixes: Vec::new(),
         }];
         let err = build_player(&s, &test_assets_dir())
             .err()

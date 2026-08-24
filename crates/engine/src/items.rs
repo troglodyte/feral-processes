@@ -189,18 +189,29 @@ pub struct GearCopy {
     /// How many times this copy has been fused — see `Game::fuse_item`.
     #[serde(default)]
     pub tier: u32,
-    /// The affix this copy rolled when it dropped, if any — see
-    /// `affixes::AffixDef` and `Game::grant_gear_drop`. It decides both the
-    /// generated name and an extra flat stat bonus.
+    /// The affixes this copy carries — one from the drop that rolled it,
+    /// and one more for every copy fused into it. See `affixes::AffixDef`,
+    /// `Game::grant_gear_drop` and `Game::fuse_item`. They decide both the
+    /// generated name and an extra flat stat bonus, and duplicates count
+    /// twice.
+    ///
+    /// **Always sorted.** This struct is the key of the
+    /// `components::GearCopies` ledger, of `EquippedItem` and of a trader's
+    /// buyback shelf, and all three find rows by `==`. `[A, B]` and
+    /// `[B, A]` are the same copy to a player and must be the same copy to
+    /// `Eq`, or one is written to a row and looked up at another — which
+    /// reads as gear vanishing out of cargo, the failure this type's own
+    /// doc is written to prevent. `GearCopy::with_affixes` is the one
+    /// canonicalising constructor; nothing else builds a non-empty list.
     ///
     /// `#[serde(default)]` on a field of a *named* struct, so it is purely
     /// additive: a save written before affixes existed loads with every copy
     /// unaffixed, which is what it had. An id naming an affix the build no
-    /// longer has is not an error either — `Game::affix_of` simply finds
-    /// nothing and the copy reads as unaffixed, the same shape
-    /// `recognized_routines` gives a removed ability.
+    /// longer has is not an error either — `Game::affixes_of` simply finds
+    /// nothing for it and skips it, the same shape `recognized_routines`
+    /// gives a removed ability.
     #[serde(default)]
-    pub affix: Option<AffixId>,
+    pub affixes: Vec<AffixId>,
     /// How well this particular copy was compiled, as a percentage of the
     /// item's authored bonus — see `EquipmentStats::for_quality`.
     /// `QUALITY_DEFAULT` is "exactly as designed".
@@ -231,8 +242,32 @@ impl GearCopy {
             item,
             rarity: Rarity::Ordinary,
             tier: 0,
-            affix: None,
+            affixes: Vec::new(),
             quality: QUALITY_DEFAULT,
+        }
+    }
+
+    /// A copy carrying `affixes`, canonicalised. **The only way a non-empty
+    /// affix list is built** — see that field for why the sort is the
+    /// invariant rather than a tidiness.
+    pub fn with_affixes(
+        item: ItemId,
+        rarity: Rarity,
+        tier: u32,
+        mut affixes: Vec<AffixId>,
+        quality: u8,
+    ) -> Self {
+        // Sorted, not deduped: `[A, B]` and `[B, A]` are the same copy to a
+        // player and must be the same copy to `Eq`. Duplicates are the
+        // feature — a copy fused from two carrying the same affix is worth
+        // it twice.
+        affixes.sort();
+        Self {
+            item,
+            rarity,
+            tier,
+            affixes,
+            quality,
         }
     }
 
@@ -247,8 +282,24 @@ impl GearCopy {
     pub fn is_plain(&self) -> bool {
         self.rarity == Rarity::Ordinary
             && self.tier == 0
-            && self.affix.is_none()
+            && self.affixes.is_empty()
             && self.quality == QUALITY_DEFAULT
+    }
+
+    /// Whether two copies may be fused into one — **the single definition**
+    /// of what fusion requires to match, read by `Game::fuse_item` and by
+    /// the partner search it runs.
+    ///
+    /// Deliberately narrower than `==`. Quality and affixes go free, which
+    /// is the whole feature: quality is thirteen buckets and affixes a
+    /// fifth axis, so two field-found copies of one item almost never match
+    /// as whole values and fusion stopped firing for anything not crafted
+    /// or bought. Rarity stays matched because there is no midpoint rare
+    /// tier for a Gold-plus-Ordinary fuse to land on, so either parent's
+    /// tier would be laundered into or out of the result depending on which
+    /// one won.
+    pub fn fusable_with(&self, other: &Self) -> bool {
+        self.item == other.item && self.rarity == other.rarity && self.tier == other.tier
     }
 }
 

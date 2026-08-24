@@ -777,8 +777,8 @@ mod tests {
         // The deepest zone `balance_sim` sweeps to, which is where the stat
         // figures in the tag are widest, on the rarest copy.
         let zone = 10;
-        let affixes: Vec<Option<_>> = std::iter::once(None)
-            .chain(game.affix_defs().into_iter().map(|a| Some(a.id)))
+        let affixes: Vec<Vec<_>> = std::iter::once(Vec::new())
+            .chain(game.affix_defs().into_iter().map(|a| vec![a.id]))
             .collect();
         let rows: Vec<(String, Vec<String>)> = game
             .item_defs()
@@ -786,16 +786,18 @@ mod tests {
             .flat_map(|def| {
                 affixes.iter().flat_map(move |affix| {
                     let def = def.clone();
-                    (0..=MAX_FUSIONS).map(move |tier| GearCopy {
-                        rarity: Rarity::Gold,
-                        tier,
-                        affix: affix.clone(),
-                        // The widest a copy gets on the quality axis: the
-                        // figure is three digits and the stats it prices are
-                        // 30% higher, so a figure that gained a digit would
-                        // show up here.
-                        quality: QUALITY_MAX,
-                        ..GearCopy::plain(def.id.clone().into())
+                    (0..=MAX_FUSIONS).map(move |tier| {
+                        GearCopy::with_affixes(
+                            def.id.clone(),
+                            Rarity::Gold,
+                            tier,
+                            affix.clone(),
+                            // The widest a copy gets on the quality axis: the
+                            // figure is three digits and the stats it prices
+                            // are 30% higher, so a figure that gained a digit
+                            // would show up here.
+                            QUALITY_MAX,
+                        )
                     })
                 })
             })
@@ -916,12 +918,13 @@ mod tests {
 
         // The measured worst case: Gold, affixed, maxed, at the deepest zone
         // `balance_sim` sweeps to.
-        let worst = GearCopy {
-            rarity: Rarity::Gold,
-            tier: MAX_FUSIONS,
-            affix: Some("of_the_ghost_protocol".into()),
-            ..GearCopy::plain("singularity_matrix".into())
-        };
+        let worst = GearCopy::with_affixes(
+            "singularity_matrix".into(),
+            Rarity::Gold,
+            MAX_FUSIONS,
+            vec!["of_the_ghost_protocol".into()],
+            feral_processes_engine::tuning::QUALITY_DEFAULT,
+        );
         let lines = drawn_inventory_lines(&game, 'a', &worst, 1234, 10);
         assert_eq!(lines.len(), 2, "{lines:#?}");
         assert!(

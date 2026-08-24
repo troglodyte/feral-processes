@@ -9,6 +9,7 @@ use feral_processes_engine::views::{
 pub(super) fn draw_routine_target(
     game: &mut Game,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -31,7 +32,7 @@ pub(super) fn draw_routine_target(
             glyph_color(h.color),
         ));
     }
-    draw_popup("Routines", PopupSize::Large, &rows, painter, m);
+    draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// A routine's own text, indented under the row it belongs to.
@@ -69,12 +70,13 @@ pub(super) fn draw_routines(
     game: &Game,
     holder: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let Some(holder) = holder else { return };
     let rows = routine_slot_rows(&game.routine_view(holder), selected);
-    draw_popup("Routines", PopupSize::Large, &rows, painter, m);
+    draw_popup("Routines", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The install picker's rows. The two trailing rows are a deliberate footer —
@@ -111,9 +113,22 @@ pub(super) fn routine_install_rows(
     rows
 }
 
-pub(super) fn draw_routine_install(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_routine_install(
+    game: &Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = routine_install_rows(&game.etched_disks_held(), game.blank_disks_held(), selected);
-    draw_popup("Install Routine", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Install Routine",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// The etch picker's rows.
@@ -149,9 +164,15 @@ pub(super) fn routine_etch_rows(
     rows
 }
 
-pub(super) fn draw_routine_etch(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_routine_etch(
+    game: &Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = routine_etch_rows(&game.etchable_routines(), game.blank_disks_held(), selected);
-    draw_popup("Etch Disk", PopupSize::Large, &rows, painter, m);
+    draw_popup("Etch Disk", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// One extraction candidate's lines: the row its shortcut selects, then the
@@ -219,7 +240,13 @@ fn push_extract_candidate(
     }
 }
 
-pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_extract(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let programs = game.owned_pets();
     let mut rows = vec![text_row(
         "Break down which program? Extraction destroys it and teaches you one of its routines.",
@@ -231,7 +258,7 @@ pub(super) fn draw_extract(game: &mut Game, selected: usize, painter: &Painter, 
         let routines = game.extractable_routines(p.entity);
         push_extract_candidate(&mut rows, &routines, i, p, i == selected);
     }
-    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
+    draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn extract_pick_rows(offered: &[ExtractableRoutineView], selected: usize) -> Vec<Row> {
@@ -251,18 +278,20 @@ pub(super) fn draw_extract_pick(
     game: &Game,
     program: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let Some(program) = program else { return };
     let rows = extract_pick_rows(&game.extractable_routines(program), selected);
-    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
+    draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_extract_confirm(
     game: &Game,
     program: Option<Entity>,
     index: Option<usize>,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -287,7 +316,7 @@ pub(super) fn draw_extract_confirm(
         rows.push(text_row(format!("This loses: {}.", lost.join(", "))));
     }
     rows.push(text_row("Enter to confirm, Esc to back out."));
-    draw_popup("Extract", PopupSize::Large, &rows, painter, m);
+    draw_popup("Extract", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

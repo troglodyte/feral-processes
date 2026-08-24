@@ -34,6 +34,7 @@ pub(super) fn draw_collect(
     rows: &[(ItemId, u32)],
     basket: &[u32],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -52,7 +53,7 @@ pub(super) fn draw_collect(
             TEXT,
         ));
     }
-    draw_popup("Collect", PopupSize::Large, &body, painter, m);
+    draw_popup("Collect", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// What a row's suffix column reads: how much has been asked for, out of how

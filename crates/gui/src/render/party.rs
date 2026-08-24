@@ -55,6 +55,7 @@ pub(super) fn draw_companion_equip(
     game: &mut Game,
     program: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -69,6 +70,7 @@ pub(super) fn draw_companion_equip(
             "Program Gear",
             PopupSize::Small,
             &[text_row("That program is gone.")],
+            refusal,
             painter,
             m,
         );
@@ -94,7 +96,7 @@ pub(super) fn draw_companion_equip(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
     rows.push(text_row("Esc to go back; Up/Down + Enter also work"));
-    draw_popup("Program Gear", PopupSize::Large, &rows, painter, m);
+    draw_popup("Program Gear", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// What one program remembers — `R` from the roster.
@@ -112,6 +114,7 @@ pub(super) fn draw_companion_equip(
 pub(super) fn draw_companion_memories(
     game: &mut Game,
     program: Option<Entity>,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -126,13 +129,14 @@ pub(super) fn draw_companion_memories(
             "Memories",
             PopupSize::Small,
             &[text_row("That program is gone.")],
+            refusal,
             painter,
             m,
         );
         return;
     };
     let rows = memory_page_rows(&name, game.morale(program), &game.memory_report(program));
-    draw_popup("Memories", PopupSize::Large, &rows, painter, m);
+    draw_popup("Memories", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The page's rows, out of the two engine calls above rather than out of a
@@ -254,6 +258,7 @@ fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
 pub(super) fn draw_companion_menu(
     game: &mut Game,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -296,7 +301,7 @@ pub(super) fn draw_companion_menu(
             rows.push(colored(line, false));
         }
     }
-    draw_popup("Party", PopupSize::Large, &rows, painter, m);
+    draw_popup("Party", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Formats one fuse-candidate row with the full stat line a fusion
@@ -366,7 +371,13 @@ fn push_fuse_candidate(rows: &mut Vec<Row>, game: &Game, i: usize, p: &PetInfo, 
     }
 }
 
-pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_fuse_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let candidates = game.owned_pets();
     let mut rows = vec![text_row("Fuse which program? Pick the first of two.")];
     if candidates.is_empty() {
@@ -375,13 +386,14 @@ pub(super) fn draw_fuse_menu(game: &mut Game, selected: usize, painter: &Painter
     for (i, p) in candidates.iter().enumerate() {
         push_fuse_candidate(&mut rows, game, i, p, i == selected);
     }
-    draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
+    draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_fuse_second_menu(
     game: &mut Game,
     first: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -402,7 +414,7 @@ pub(super) fn draw_fuse_second_menu(
     for (i, p) in candidates.iter().enumerate() {
         push_fuse_candidate(&mut rows, game, i, p, i == selected);
     }
-    draw_popup("Fuse", PopupSize::Large, &rows, painter, m);
+    draw_popup("Fuse", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Free-text naming page shown after both fuse candidates are picked.
@@ -412,6 +424,7 @@ pub(super) fn draw_fuse_name_menu(
     first: Option<Entity>,
     second: Option<Entity>,
     name_input: &str,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -458,7 +471,7 @@ pub(super) fn draw_fuse_name_menu(
         "Type a name, Enter to fuse (blank keeps the default name)",
     ));
     rows.push(text_row("Esc to go back and re-pick the second program"));
-    draw_popup("Fuse", PopupSize::Small, &rows, painter, m);
+    draw_popup("Fuse", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 /// The rename page's two footer lines, extracted so
@@ -479,6 +492,7 @@ pub(super) fn draw_rename_menu(
     game: &mut Game,
     target: Option<Entity>,
     name_input: &str,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -504,7 +518,7 @@ pub(super) fn draw_rename_menu(
         text_row(""),
     ];
     rows.extend(rename_help().into_iter().map(text_row));
-    draw_popup("Rename", PopupSize::Small, &rows, painter, m);
+    draw_popup("Rename", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]
@@ -1119,7 +1133,13 @@ mod tests {
 /// `Game::creature_label`, which is exactly the number this screen is about —
 /// so a player choosing between two programs can see which one is behind
 /// without opening a manifest for each.
-pub(super) fn draw_refactor(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_refactor(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let zone = game.player_status().zone;
     let programs = game.owned_pets();
     let mut rows = vec![
@@ -1145,7 +1165,7 @@ pub(super) fn draw_refactor(game: &mut Game, selected: usize, painter: &Painter,
             glyph_color(p.color),
         ));
     }
-    draw_popup("Refactor", PopupSize::Large, &rows, painter, m);
+    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Page two: what to spend on it.
@@ -1158,6 +1178,7 @@ pub(super) fn draw_refactor_item(
     game: &mut Game,
     target: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -1191,5 +1212,5 @@ pub(super) fn draw_refactor_item(
         ));
         rows.push(text_row(format!("    {}", u.description)));
     }
-    draw_popup("Refactor", PopupSize::Large, &rows, painter, m);
+    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
 }

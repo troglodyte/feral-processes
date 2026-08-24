@@ -15,6 +15,7 @@ use super::*;
 pub(super) fn draw_structure_manifest(
     game: &mut Game,
     entity: Option<Entity>,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -26,6 +27,7 @@ pub(super) fn draw_structure_manifest(
             "Structure",
             PopupSize::Small,
             &[text_row("That structure is gone. Esc to go back.")],
+            refusal,
             painter,
             m,
         );
@@ -50,5 +52,5 @@ pub(super) fn draw_structure_manifest(
     rows.push(text_row(""));
     rows.push(text_row("Any key to close."));
 
-    draw_popup("Structure", PopupSize::Small, &rows, painter, m);
+    draw_popup("Structure", PopupSize::Small, &rows, refusal, painter, m);
 }

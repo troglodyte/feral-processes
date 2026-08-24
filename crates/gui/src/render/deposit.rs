@@ -27,6 +27,7 @@ pub(super) fn draw_deposit(
     entries: &[(ItemId, u32, u32)],
     room: u32,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -47,7 +48,7 @@ pub(super) fn draw_deposit(
             TEXT,
         ));
     }
-    draw_popup("Deposit", PopupSize::Large, &body, painter, m);
+    draw_popup("Deposit", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// What a row's suffix column reads: how much has been given, out of how

@@ -10,6 +10,7 @@ pub(super) fn draw_erase_quantity(
     game: &mut Game,
     pending: Option<GearCopy>,
     quantity_input: &str,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -49,10 +50,16 @@ pub(super) fn draw_erase_quantity(
         text_row("Type digits, Enter to erase"),
         text_row("[A] Erase all   Esc to go back"),
     ];
-    draw_popup("Erase", PopupSize::Large, &rows, painter, m);
+    draw_popup("Erase", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_inventory(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let mut rows = vec![
         Row::TextColored(
@@ -138,7 +145,7 @@ pub(super) fn draw_inventory(game: &mut Game, selected: usize, painter: &Painter
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
-    draw_popup("Inventory", PopupSize::Large, &rows, painter, m);
+    draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The indented lines an item's extra effects contribute under its row,
@@ -294,6 +301,7 @@ pub(super) fn draw_equip_swap(
     slot: Option<EquipmentSlot>,
     target: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -302,6 +310,7 @@ pub(super) fn draw_equip_swap(
             "Gear",
             PopupSize::Small,
             &[text_row("No slot selected.")],
+            refusal,
             painter,
             m,
         );
@@ -340,6 +349,7 @@ pub(super) fn draw_equip_swap(
         &format!("Replace {}", slot.label()),
         PopupSize::Large,
         &rows,
+        refusal,
         painter,
         m,
     );
@@ -360,6 +370,7 @@ pub(super) fn draw_equip_swap(
 pub(super) fn draw_gear_inspect(
     game: &Game,
     inspect: Option<GearInspect>,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -368,13 +379,14 @@ pub(super) fn draw_gear_inspect(
             "Item",
             PopupSize::Small,
             &[text_row("Nothing selected.")],
+            refusal,
             painter,
             m,
         );
         return;
     };
     let rows = gear_inspect_rows(game, &inspect);
-    draw_popup("Item", PopupSize::Large, &rows, painter, m);
+    draw_popup("Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The page's rows, split out so a height test can count them without a
@@ -487,6 +499,7 @@ pub(super) fn draw_inventory_item_action(
     copy: Option<GearCopy>,
     zone_level: u32,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -495,6 +508,7 @@ pub(super) fn draw_inventory_item_action(
             "Item",
             PopupSize::Small,
             &[text_row("Nothing selected.")],
+            refusal,
             painter,
             m,
         );
@@ -515,7 +529,7 @@ pub(super) fn draw_inventory_item_action(
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel; Up/Down + Enter also work"));
-    draw_popup("Item", PopupSize::Large, &rows, painter, m);
+    draw_popup("Item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

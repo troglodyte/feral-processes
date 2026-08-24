@@ -4,7 +4,13 @@ use super::popup::*;
 use super::*;
 use feral_processes_engine::tuning::{QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT};
 
-pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_craft_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let recipes = game.craft_recipes();
     let mut rows = vec![
@@ -31,7 +37,7 @@ pub(super) fn draw_craft_menu(game: &mut Game, selected: usize, painter: &Painte
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
-    draw_popup("Compile", PopupSize::Large, &rows, painter, m);
+    draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// What a wrapped cost line is indented by: the width of `"[x] MOD  "`, so the
@@ -112,6 +118,7 @@ pub(super) fn draw_craft_quantity(
     pending: Option<ItemId>,
     quantity_input: &str,
     careful: bool,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -148,7 +155,7 @@ pub(super) fn draw_craft_quantity(
     rows.push(text_row(""));
     rows.push(text_row("Type digits, Enter to compile"));
     rows.push(text_row(CRAFT_QUANTITY_KEYS));
-    draw_popup("Compile", PopupSize::Large, &rows, painter, m);
+    draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The recipe chains, read-only — every conversion a structure runs, walked
@@ -161,7 +168,13 @@ pub(super) fn draw_craft_quantity(
 /// popup body ends at the *last* Item and pins whatever follows as a footer,
 /// so a step drawn as Text would stay on screen while the list scrolled past
 /// the product it belongs to.
-pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_recipes(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let chains = game.recipe_chains();
     let mut rows = vec![
         text_row(format!(
@@ -183,7 +196,7 @@ pub(super) fn draw_recipes(game: &mut Game, selected: usize, painter: &Painter, 
         rows.push(colored_item_row("", false, TEXT_DIM));
     }
     rows.push(text_row("Up/Down to scroll, Esc to close."));
-    draw_popup("Recipes", PopupSize::Large, &rows, painter, m);
+    draw_popup("Recipes", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// One chain's sub-rows: what the product is *for*, then how it is made.

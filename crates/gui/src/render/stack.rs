@@ -374,11 +374,17 @@ fn cell_describe_rows(text: Option<&str>) -> Vec<Row> {
 ///
 /// The same shape as `inventory::draw_gear_inspect` — the repo's one
 /// prose-on-screen pattern, and `wrap_text` its only wrap helper.
-pub(super) fn draw_cell_describe(text: Option<&str>, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_cell_describe(
+    text: Option<&str>,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     draw_popup(
         "You look",
         PopupSize::Large,
         &cell_describe_rows(text),
+        refusal,
         painter,
         m,
     );
@@ -851,8 +857,8 @@ mod tests {
     fn drawing_the_cell_description_does_not_panic() {
         let m = crate::text::ui_metrics(900.0);
         crate::paint::with_painter(|p| {
-            draw_cell_describe(Some("A doorway, still framed."), p, &m);
-            draw_cell_describe(None, p, &m);
+            draw_cell_describe(Some("A doorway, still framed."), None, p, &m);
+            draw_cell_describe(None, None, p, &m);
         });
     }
 
@@ -878,7 +884,7 @@ mod tests {
         const SCREEN_W: f32 = 1440.0; // the fixed geometry `with_painter` sets up
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| {
-            draw_cell_describe(Some("A doorway, still framed."), p, &m);
+            draw_cell_describe(Some("A doorway, still framed."), None, p, &m);
         });
 
         let text = crate::paint::painted_text(&shapes);

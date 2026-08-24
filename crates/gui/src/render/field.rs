@@ -240,7 +240,13 @@ pub(super) fn draw_battle_buffs(
 /// program you own, cast outside battle. Reached with `a` from
 /// `Mode::Playing`; rows come straight from `Game::field_routines`, same
 /// contract the battle action bar holds to.
-pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_field_cast(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let routines = game.field_routines();
     let mut rows = vec![text_row("Run which routine?")];
     if routines.is_empty() {
@@ -269,7 +275,14 @@ pub(super) fn draw_field_cast(game: &mut Game, selected: usize, painter: &Painte
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
         });
     }
-    draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Run a Routine",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// Who a `OneAlly` field routine picked in `Mode::FieldCast` lands on: you,
@@ -283,6 +296,7 @@ pub(super) fn draw_field_cast_ally(
     game: &mut Game,
     pending: Option<usize>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -306,7 +320,14 @@ pub(super) fn draw_field_cast_ally(
             rows.push(colored_item_row(line, false, TEXT_DIM));
         }
     }
-    draw_popup("Run a Routine", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Run a Routine",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// One ally-picker target's lines: the row its shortcut selects, priced with

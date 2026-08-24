@@ -110,7 +110,13 @@ fn heading_rows(name: &str, gap_above: bool) -> Vec<Row> {
     rows
 }
 
-pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_perks_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let rows = perks_menu_rows(
         status.perk_points,
@@ -118,7 +124,7 @@ pub(super) fn draw_perks_menu(game: &mut Game, selected: usize, painter: &Painte
         &status.unlocked_perks,
         selected,
     );
-    draw_popup("Perks", PopupSize::Large, &rows, painter, m);
+    draw_popup("Perks", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The two colours a locked research row can take, dimmed well below `TEXT`
@@ -204,12 +210,18 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
     rows
 }
 
-pub(super) fn draw_research_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_research_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let research_currency = game.research_currency();
     let held = game.banked(&research_currency);
     let nodes = game.research_nodes();
     let rows = research_menu_rows(held, &nodes, selected);
-    draw_popup("Research", PopupSize::Large, &rows, painter, m);
+    draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

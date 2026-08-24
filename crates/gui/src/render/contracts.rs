@@ -26,6 +26,7 @@ pub(super) fn draw_contracts(
     offers: &[ContractRow],
     reach: BrokerReach,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -58,7 +59,7 @@ pub(super) fn draw_contracts(
         "Pick an offer's key to take it, a held contract's to hand over its \
          cargo. [A] gives back the highlighted one. Esc to close",
     ));
-    draw_popup("Contracts", PopupSize::Large, &rows, painter, m);
+    draw_popup("Contracts", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// One contract's headline row. A held one shows its progress; an offer has

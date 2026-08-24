@@ -19,6 +19,7 @@ use super::*;
 pub(super) fn draw_dev_console(
     rows: &[DevConsoleRow],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -29,13 +30,14 @@ pub(super) fn draw_dev_console(
             i == selected,
         ));
     }
-    draw_popup("Dev Console", PopupSize::Large, &out, painter, m);
+    draw_popup("Dev Console", PopupSize::Large, &out, refusal, painter, m);
 }
 
 pub(super) fn draw_group_menu(
     rows: &[GroupMenuRow],
     title: &str,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -49,5 +51,5 @@ pub(super) fn draw_group_menu(
             i == selected,
         ));
     }
-    draw_popup(title, PopupSize::Large, &out, painter, m);
+    draw_popup(title, PopupSize::Large, &out, refusal, painter, m);
 }

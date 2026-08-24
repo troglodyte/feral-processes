@@ -16,6 +16,7 @@ use super::*;
 pub(super) fn draw_arena_builder(
     rows: &[ArenaRow],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -27,21 +28,40 @@ pub(super) fn draw_arena_builder(
     body.push(text_row(""));
     body.push(text_row("Left/Right adjust  Enter pick  Backspace remove"));
     body.push(text_row("[F]ight  [L]oad  [S]ave  Esc back"));
-    draw_popup("Arena", PopupSize::Large, &body, painter, m);
+    draw_popup("Arena", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// Species or items, whichever opened it — see `App::arena_pick_rows`.
-pub(super) fn draw_arena_pick(rows: &[String], selected: usize, painter: &Painter, m: &Metrics) {
-    draw_id_list("Pick", rows, selected, painter, m);
+pub(super) fn draw_arena_pick(
+    rows: &[String],
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    draw_id_list("Pick", rows, selected, refusal, painter, m);
 }
 
-pub(super) fn draw_arena_load(rows: &[String], selected: usize, painter: &Painter, m: &Metrics) {
-    draw_id_list("Load Scenario", rows, selected, painter, m);
+pub(super) fn draw_arena_load(
+    rows: &[String],
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    draw_id_list("Load Scenario", rows, selected, refusal, painter, m);
 }
 
 /// The two id lists differ only in their title, so they are one function
 /// rather than two copies of the same nine lines.
-fn draw_id_list(title: &str, rows: &[String], selected: usize, painter: &Painter, m: &Metrics) {
+fn draw_id_list(
+    title: &str,
+    rows: &[String],
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let mut body: Vec<Row> = Vec::new();
     if rows.is_empty() {
         body.push(text_row("Nothing to choose from."));
@@ -54,13 +74,13 @@ fn draw_id_list(title: &str, rows: &[String], selected: usize, painter: &Painter
     }
     body.push(text_row(""));
     body.push(text_row("Enter to choose, Esc to go back."));
-    draw_popup(title, PopupSize::Large, &body, painter, m);
+    draw_popup(title, PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// Drawn over the builder, the way the fuse-naming page is drawn over the
 /// party screen — the scenario you are about to write stays visible behind
 /// the name you are giving it.
-pub(super) fn draw_arena_save(input: &str, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_arena_save(input: &str, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let body = vec![
         text_row("Write this scenario to dev-arenas/ as:"),
         text_row(""),
@@ -69,16 +89,26 @@ pub(super) fn draw_arena_save(input: &str, painter: &Painter, m: &Metrics) {
         text_row("An existing file of that name is overwritten."),
         text_row("Enter to write, Esc to cancel."),
     ];
-    draw_popup("Save Scenario", PopupSize::Small, &body, painter, m);
+    draw_popup(
+        "Save Scenario",
+        PopupSize::Small,
+        &body,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// What the fight cost, above the blow-by-blow it cost it in.
+/// Eight because the refusal is threaded like every other popup's.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_arena_result(
     record: Option<&RepRecord>,
     warnings: &[String],
     seed: u64,
     transcript: &[String],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -106,7 +136,7 @@ pub(super) fn draw_arena_result(
     body.push(text_row(
         "[R]efight this seed  [N]ext seed  Up/Down scroll  Esc back",
     ));
-    draw_popup("Arena Result", PopupSize::Large, &body, painter, m);
+    draw_popup("Arena Result", PopupSize::Large, &body, refusal, painter, m);
 }
 
 /// What was fielded, or `None` for a fight that was never staged. Split out
@@ -176,6 +206,7 @@ mod tests {
                 3,
                 &record(false).transcript,
                 0,
+                None,
                 p,
                 &m,
             );
@@ -190,7 +221,7 @@ mod tests {
         r.composition = vec![("glitch".to_string(), 3)];
         with_painter(|p| {
             let m = ui_metrics(900.0);
-            draw_arena_result(Some(&r), &[], 7, &r.transcript, 0, p, &m);
+            draw_arena_result(Some(&r), &[], 7, &r.transcript, 0, None, p, &m);
         });
         let line = composition_line(&r).expect("a fought composition draws a line");
         assert!(line.contains("glitch"), "{line}");
@@ -216,24 +247,25 @@ mod tests {
         let ids = vec!["glitch".to_string(), "sprite".to_string()];
         with_painter(|p| {
             let m = ui_metrics(900.0);
-            draw_arena_builder(&rows, 0, p, &m);
-            draw_arena_pick(&ids, 1, p, &m);
-            draw_arena_load(&ids, 0, p, &m);
-            draw_arena_save("my-fight", p, &m);
+            draw_arena_builder(&rows, 0, None, p, &m);
+            draw_arena_pick(&ids, 1, None, p, &m);
+            draw_arena_load(&ids, 0, None, p, &m);
+            draw_arena_save("my-fight", None, p, &m);
             draw_arena_result(
                 Some(&record(true)),
                 &[],
                 7,
                 &["a line".to_string()],
                 0,
+                None,
                 p,
                 &m,
             );
             // The empty states are reachable: an unopened session, and a
             // checkout with no `dev-arenas/` at all.
-            draw_arena_builder(&[], 0, p, &m);
-            draw_arena_load(&[], 0, p, &m);
-            draw_arena_result(None, &[], 0, &[], 0, p, &m);
+            draw_arena_builder(&[], 0, None, p, &m);
+            draw_arena_load(&[], 0, None, p, &m);
+            draw_arena_result(None, &[], 0, &[], 0, None, p, &m);
         });
     }
 

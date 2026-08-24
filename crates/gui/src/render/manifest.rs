@@ -36,6 +36,7 @@ pub(super) fn draw_manifest(
     game: &mut Game,
     entity: Option<Entity>,
     nav: ManifestNav,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -44,6 +45,7 @@ pub(super) fn draw_manifest(
             "Manifest",
             PopupSize::Small,
             &[text_row("That program is gone. Esc to go back.")],
+            refusal,
             painter,
             m,
         );
@@ -710,6 +712,7 @@ pub(super) fn draw_manifest_pick(
     game: &mut Game,
     subjects: &[Entity],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -733,7 +736,7 @@ pub(super) fn draw_manifest_pick(
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to cancel"));
-    draw_popup("Manifest", PopupSize::Large, &rows, painter, m);
+    draw_popup("Manifest", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use super::*;
 
 /// The topic list. An ordinary numbered menu, so it draws exactly like
 /// every other one.
-pub(super) fn draw_help_index(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_help_index(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let rows = app.help_index_rows();
     let mut out = vec![text_row("The manual. Pick a topic."), text_row("")];
     if rows.is_empty() {
@@ -25,18 +25,18 @@ pub(super) fn draw_help_index(app: &App, painter: &Painter, m: &Metrics) {
     out.push(text_row(
         "Up/Down + Enter or a row's key to read, Esc to close.",
     ));
-    draw_popup("Help", PopupSize::Large, &out, painter, m);
+    draw_popup("Help", PopupSize::Large, &out, refusal, painter, m);
 }
 
 /// One page. The prose is the scrollable body — every row an `Item` so
 /// `popup_layout` scrolls it, with the highlight standing for the scroll
 /// position exactly as the history screen's does. Further reading is pinned
 /// below it, typed rather than selected.
-pub(super) fn draw_help_page(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_help_page(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let Some(view) = app.help_page_view() else {
         // The trail points at a page that is not loaded, which a modder
         // deleting a file mid-session can do. The index is still there.
-        draw_help_index(app, painter, m);
+        draw_help_index(app, refusal, painter, m);
         return;
     };
     let mut rows: Vec<Row> = view
@@ -56,7 +56,7 @@ pub(super) fn draw_help_page(app: &App, painter: &Painter, m: &Metrics) {
     rows.push(text_row(
         "Up/Down to scroll, a topic's key to read on, Esc to go back.",
     ));
-    draw_popup(&view.title, PopupSize::Large, &rows, painter, m);
+    draw_popup(&view.title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

@@ -501,7 +501,12 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
 
 /// Which of the acting member's abilities does the Special spend? Rows come
 /// from the engine, same contract as the action bar.
-pub(super) fn draw_battle_special_menu(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_battle_special_menu(
+    app: &mut App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let Some(slot) = game.battle_active_slot() else {
@@ -518,7 +523,14 @@ pub(super) fn draw_battle_special_menu(app: &mut App, painter: &Painter, m: &Met
             None => creature_row(label, i == selected),
         });
     }
-    draw_popup("Pick a special", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Pick a special",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// One row of that picker: the routine, how many rounds spending it locks it
@@ -549,7 +561,12 @@ fn special_row(index: usize, option: &SpecialOption) -> String {
 
 /// Who does this buff or heal land on? Lists you and every standing
 /// companion — the whole point of aiming one.
-pub(super) fn draw_battle_ally_menu(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_battle_ally_menu(
+    app: &mut App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let selected = app.menu_selected;
     let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
@@ -560,13 +577,18 @@ pub(super) fn draw_battle_ally_menu(app: &mut App, painter: &Painter, m: &Metric
             i == selected,
         ));
     }
-    draw_popup(&title, PopupSize::Large, &rows, painter, m);
+    draw_popup(&title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Which group does the pending action hit? Shows per-group decompile odds,
 /// since that's the one action where the choice of target is a real gamble
 /// rather than a preference.
-pub(super) fn draw_battle_target_menu(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_battle_target_menu(
+    app: &mut App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let selected = app.menu_selected;
     let title = app.battle_target_title();
     let Some(game) = &mut app.game else { return };
@@ -596,12 +618,17 @@ pub(super) fn draw_battle_target_menu(app: &mut App, painter: &Painter, m: &Metr
             i == selected,
         ));
     }
-    draw_popup(&title, PopupSize::Large, &rows, painter, m);
+    draw_popup(&title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Which consumable does this slot spend? Lists only what's actually
 /// usable — the action is greyed out with a reason before it gets here.
-pub(super) fn draw_battle_item_menu(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_battle_item_menu(
+    app: &mut App,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let selected = app.menu_selected;
     let Some(game) = &mut app.game else { return };
     let items = game.battle_usable_items();
@@ -614,7 +641,7 @@ pub(super) fn draw_battle_item_menu(app: &mut App, painter: &Painter, m: &Metric
             i == selected,
         ));
     }
-    draw_popup("Use an item", PopupSize::Large, &rows, painter, m);
+    draw_popup("Use an item", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

@@ -500,9 +500,20 @@ fn draw_shards(painter: &Painter, r: Rect, ink: Color, h: u32) {
 
 /// The world grid, status panel, and message feed — the base layer shown
 /// under `Mode::Playing` and every menu popup, same as `ui.rs::render_playing`.
-pub(super) fn draw_playing_base(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Metrics) {
+/// The map screen and everything ambient around it. `status` is the
+/// player's last refusal, and it is `Some` only when this *is* the screen —
+/// every mode that draws a popup over the map shows the refusal inside that
+/// popup instead, and drawing it here as well would put the same sentence
+/// on screen twice.
+pub(super) fn draw_playing_base(
+    app: &mut App,
+    fx: &mut Fx,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
-    let status_line = app.status_line.clone();
+    let status_line = refusal.map(str::to_string);
     // Read before the `game` borrow, like `status_line` above.
     let stack_zoom = app.stack_zoom;
     // The pane's rows, chosen by app-core (see `pane_rows`), and the header
@@ -666,7 +677,13 @@ fn log_pane_header(filter: LogFilter, filtered_out: usize) -> Vec<HeaderPiece> {
 /// repeats are folded into one row apiece, and
 /// `MessageLog::retain_outcomes_since_battle` drops a finished intrusion's
 /// blow-by-blow, so an old fight reads as its results.
-pub(super) fn draw_history(game: &Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_history(
+    game: &Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let entries = game.message_history(MESSAGE_LOG_CAP);
     let mut rows = history_rows(&entries, selected);
     rows.push(text_row(""));
@@ -674,7 +691,7 @@ pub(super) fn draw_history(game: &Game, selected: usize, painter: &Painter, m: &
         "The last {MESSAGE_LOG_CAP} lines, repeats folded. A finished intrusion keeps its results, not its blow-by-blow."
     )));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
-    draw_popup("History", PopupSize::Large, &rows, painter, m);
+    draw_popup("History", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The scrollable body of the history screen: one row per folded entry (see

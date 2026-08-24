@@ -11,7 +11,13 @@ use super::*;
 use feral_processes_engine::TalentOption;
 
 /// Page one: which program.
-pub(super) fn draw_develop(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_develop(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let programs = game.owned_pets();
     let held = game.privilege_rings_held();
     let mut rows = vec![
@@ -37,7 +43,7 @@ pub(super) fn draw_develop(game: &mut Game, selected: usize, painter: &Painter, 
             glyph_color(p.color),
         ));
     }
-    draw_popup("Develop", PopupSize::Large, &rows, painter, m);
+    draw_popup("Develop", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Page two: what this program has, and what can be spent on it.
@@ -49,6 +55,7 @@ pub(super) fn draw_develop_program(
     game: &mut Game,
     target: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -133,7 +140,7 @@ pub(super) fn draw_develop_program(
             rows.push(text_row(format!("  - {} ({})", option.name, option.tag)));
         }
     }
-    draw_popup("Develop", PopupSize::Large, &rows, painter, m);
+    draw_popup("Develop", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Whether `tier` is the one a point would be spent in next — the first with

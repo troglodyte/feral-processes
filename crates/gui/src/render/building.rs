@@ -66,7 +66,13 @@ pub(super) fn build_menu_rows(entries: &[BuildEntry], selected: usize) -> Vec<Ro
     rows
 }
 
-pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_build_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let defs = game.buildable_structure_defs();
     let entries: Vec<BuildEntry> = defs
@@ -82,7 +88,7 @@ pub(super) fn draw_build_menu(game: &mut Game, selected: usize, painter: &Painte
         })
         .collect();
     let rows = build_menu_rows(&entries, selected);
-    draw_popup("Deploy", PopupSize::Large, &rows, painter, m);
+    draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The deploy prompt's rows: what is about to be placed, before the compass
@@ -111,6 +117,7 @@ const DIRECTION_PROMPT: &str = "Choose a direction to deploy (arrows/hjkl), Esc 
 pub(super) fn draw_build_direction(
     game: &mut Game,
     pending: Option<&str>,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -129,7 +136,14 @@ pub(super) fn draw_build_direction(
         }
         None => vec![text_row(DIRECTION_PROMPT)],
     };
-    draw_popup("Deploy Direction", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Deploy Direction",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// The roster's standing-instruction toggles for the structure highlighted
@@ -142,6 +156,7 @@ pub(super) fn draw_build_direction(
 pub(super) fn draw_staffing_menu(
     staffing: &Staffing,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -166,7 +181,14 @@ pub(super) fn draw_staffing_menu(
     rows.push(text_row(
         "A standing job is filled only by a program no work order needs.",
     ));
-    draw_popup("Standing Orders", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Standing Orders",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// The work order queue and its status: what the base has been told to
@@ -180,6 +202,7 @@ pub(super) fn draw_work_orders(
     rows_in: &[WorkOrderRow],
     demand: LabourDemand,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -200,7 +223,7 @@ pub(super) fn draw_work_orders(
         }
         rows.extend(lines.map(text_row));
     }
-    draw_popup("Work Orders", PopupSize::Large, &rows, painter, m);
+    draw_popup("Work Orders", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// How many bodies short the base is, or `None` when it has enough.
@@ -317,6 +340,7 @@ fn priority_line(priority: OrderPriority) -> &'static str {
 pub(super) fn draw_work_order_pick(
     items: &[(ItemId, String)],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -332,7 +356,14 @@ pub(super) fn draw_work_order_pick(
             i == selected,
         ));
     }
-    draw_popup("New Work Order", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "New Work Order",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 const WORK_ORDER_QUANTITY_KEYS: &str =
@@ -343,12 +374,16 @@ const WORK_ORDER_QUANTITY_KEYS: &str =
 /// `PopupSize::Large`, as `draw_craft_quantity` is: the sentences on it are
 /// prose rather than menu rows, and the widest already ran 8px past a small
 /// box before this page gained a toggle to explain.
+/// Eight for `draw_arena_result`'s reason: the refusal is a parameter,
+/// not something a draw function reaches for.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_work_order_quantity(
     game: &Game,
     item: Option<ItemId>,
     typed: &str,
     standing: bool,
     priority: OrderPriority,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -361,7 +396,14 @@ pub(super) fn draw_work_order_quantity(
         .into_iter()
         .map(text_row)
         .collect();
-    draw_popup("Order Quantity", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Order Quantity",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// The quantity page's lines, pure for `work_order_lines`' reason: a page
@@ -409,12 +451,13 @@ pub(super) fn draw_base_staff(
     game: &mut Game,
     staff_rows: &[BaseStaffRow],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let pets = game.owned_pets();
     let rows = base_staff_menu_rows(staff_rows, &pets, selected);
-    draw_popup("Base Staff", PopupSize::Large, &rows, painter, m);
+    draw_popup("Base Staff", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// What a program is worth at a post, as the staff row says it.
@@ -510,6 +553,7 @@ pub(super) fn draw_structure_menu(
     title: &str,
     prompt: &str,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -546,12 +590,13 @@ pub(super) fn draw_structure_menu(
             glyph_color(s.color),
         ));
     }
-    draw_popup(title, PopupSize::Large, &rows, painter, m);
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_remove_menu(
     structures: &[EntityView],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -584,7 +629,14 @@ pub(super) fn draw_remove_menu(
             glyph_color(s.color),
         ));
     }
-    draw_popup("Demolish Structure", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Demolish Structure",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// The bracketed tier tag on an upgrade-menu row.
@@ -609,6 +661,7 @@ fn tier_tag(s: &EntityView) -> String {
 pub(super) fn draw_upgrade_menu(
     structures: &[EntityView],
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -635,10 +688,22 @@ pub(super) fn draw_upgrade_menu(
             glyph_color(s.color),
         ));
     }
-    draw_popup("Upgrade Structure", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Upgrade Structure",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
-pub(super) fn draw_remove_confirm(selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_remove_confirm(
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = vec![
         Row::TextColored(
             "Removing Home destroys every other structure in this base and refunds".to_string(),
@@ -652,10 +717,23 @@ pub(super) fn draw_remove_confirm(selected: usize, painter: &Painter, m: &Metric
         item_row("[y] Yes, demolish everything", selected == 0),
         item_row("[n] No, cancel", selected == 1),
     ];
-    draw_popup("Confirm Demolish Home", PopupSize::Small, &rows, painter, m);
+    draw_popup(
+        "Confirm Demolish Home",
+        PopupSize::Small,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
-pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_symlink_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let status = game.player_status();
     let targets = game.symlink_targets();
     let mut rows = vec![text_row(
@@ -688,7 +766,7 @@ pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, painter: &Pain
             glyph_color(t.color),
         ));
     }
-    draw_popup("Symlink", PopupSize::Large, &rows, painter, m);
+    draw_popup("Symlink", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The structure roster: everything standing in the zone and every program
@@ -702,7 +780,13 @@ pub(super) fn draw_symlink_menu(game: &mut Game, selected: usize, painter: &Pain
 /// An idle workable structure is drawn in yellow and says so in words: it is
 /// the only thing on this screen the player can act on, and the point of
 /// looking is usually to find it.
-pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_structures(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let report = game.structure_report();
     let assigned: usize = report.iter().map(|s| s.assignees.len()).sum();
     let idle = report
@@ -748,7 +832,7 @@ pub(super) fn draw_structures(game: &mut Game, selected: usize, painter: &Painte
     } else {
         "Up/Down to scroll, Enter to staff, Esc to close."
     }));
-    draw_popup("Structures", PopupSize::Large, &rows, painter, m);
+    draw_popup("Structures", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The roster's second header row: the base's grid, red when it is short.

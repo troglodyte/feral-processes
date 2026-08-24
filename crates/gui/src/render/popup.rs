@@ -419,13 +419,24 @@ pub(super) fn popup_max_rows(screen_h: f32, size: PopupSize, m: &Metrics) -> usi
         .max(0.0) as usize
 }
 
-fn popup_layout<'a>(screen_h: f32, pct_h: f32, rows: &'a [Row], m: &Metrics) -> PopupLayout<'a> {
+/// `status` is how many lines a refusal drawn under the title takes up.
+/// Counted here rather than prepended to `rows` because `Row` is not
+/// `Clone` and `rows` is borrowed — and because it must not join the
+/// `Row::Item` span the body pages through, or a refusal appearing would
+/// move the rows `App::selected_index` resolves a keypress against.
+fn popup_layout<'a>(
+    screen_h: f32,
+    pct_h: f32,
+    rows: &'a [Row],
+    status: usize,
+    m: &Metrics,
+) -> PopupLayout<'a> {
     // Two lines for the title and its divider, plus the bottom inset.
     let chrome = m.line_height * 2.0 + m.inset;
     let max_rows = ((screen_h * pct_h - chrome) / m.line_height)
         .floor()
         .max(0.0) as usize;
-    let rows_shown = rows.len().min(max_rows).max(MIN_POPUP_ROWS);
+    let rows_shown = (rows.len() + status).min(max_rows).max(MIN_POPUP_ROWS);
     let h = rows_shown as f32 * m.line_height + chrome;
 
     let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
@@ -435,7 +446,7 @@ fn popup_layout<'a>(screen_h: f32, pct_h: f32, rows: &'a [Row], m: &Metrics) -> 
         _ => (rows, &[], &[]),
     };
 
-    let raw_capacity = rows_shown.saturating_sub(header.len() + footer.len());
+    let raw_capacity = rows_shown.saturating_sub(header.len() + footer.len() + status);
     let scrolling = body.len() > raw_capacity;
     // Scrolling reserves one line above and below for "N more" indicators,
     // so the item rows themselves never get a partial cut-off line.
@@ -467,15 +478,37 @@ fn popup_layout<'a>(screen_h: f32, pct_h: f32, rows: &'a [Row], m: &Metrics) -> 
     }
 }
 
+/// Draws a bordered popup: `title`, a `status` line if the player's last
+/// action was refused, then `rows`.
+///
+/// **Every caller passes a `status`, and the topmost popup on screen is the
+/// one that passes `Some`.** A refusal is drawn where the player is already
+/// looking — inside the panel they typed into — rather than on the strip
+/// `draw_status_banner` paints along the bottom edge, which is what the
+/// message used to have to compete with a centred popup from. That strip
+/// survives only for the modes that draw no popup at all; see
+/// `needs_status_banner`.
+///
+/// The refusal sits between the title and the rows as its own lines rather
+/// than as a `Row`, so it never lands in the `Row::Item` span the body
+/// pages through: a refusal appearing must not renumber the options a
+/// keypress resolves against.
 pub(super) fn draw_popup(
     title: &str,
     size: PopupSize,
     rows: &[Row],
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let (pct_w, pct_h) = popup_fractions(size);
-    let layout = popup_layout(painter.screen_h(), pct_h, rows, m);
+    let status_lines: Vec<Row> = refusal
+        .map(|s| wrap_text(s, status_wrap_columns(size)))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|line| Row::TextColored(line, RED))
+        .collect();
+    let layout = popup_layout(painter.screen_h(), pct_h, rows, status_lines.len(), m);
     let w = painter.screen_w() * pct_w;
     let h = layout.h;
     let x = (painter.screen_w() - w) / 2.0;
@@ -505,6 +538,9 @@ pub(super) fn draw_popup(
 
     let mut cy = y + m.line_height * 2.0;
     let max_y = y + h - m.inset;
+    for row in &status_lines {
+        cy = draw_row(row, x, w, cy, max_y, painter, m);
+    }
     for row in layout.header {
         cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
@@ -736,6 +772,20 @@ pub(super) const DESCRIBE_WRAP_COLUMNS: usize = 72;
 /// windows the popup's percentage width produces without splitting rows that
 /// would have been fine.
 pub(super) const ROW_WRAP_COLUMNS: usize = 100;
+
+/// How wide a refusal may run inside a popup of `size` before it wraps.
+///
+/// Derived from `ROW_WRAP_COLUMNS` and the popup's own width fraction
+/// rather than authored per size: the two fractions are what actually
+/// decide how many cells there are, so a `PopupSize::Small` panel — half a
+/// `Large` one — gets half the budget without anyone maintaining a second
+/// number. Nothing clamps a row horizontally (see `wrapped_row_lines`), so
+/// an over-wide refusal would be drawn off the panel in silence.
+fn status_wrap_columns(size: PopupSize) -> usize {
+    let (pct_w, _) = popup_fractions(size);
+    let (large_w, _) = popup_fractions(PopupSize::Large);
+    ((ROW_WRAP_COLUMNS as f32) * pct_w / large_w) as usize
+}
 
 /// What a continuation line is indented by: the glyph slot `with_icon`
 /// reserves inside the row above, plus the width of its `[x] ` shortcut, so
@@ -1134,7 +1184,7 @@ mod tests {
             for structures in 1..14 {
                 for selected in [0, structures - 1] {
                     let rows = build_menu_rows_fixture(structures, selected);
-                    let l = popup_layout(window_h, 0.85, &rows, &m);
+                    let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                     assert!(
                         l.footer.is_empty(),
                         "at {window_h}px a {structures}-structure build menu pinned {} \
@@ -1157,7 +1207,7 @@ mod tests {
             for structures in 1..14 {
                 for selected in 0..structures {
                     let rows = build_menu_rows_fixture(structures, selected);
-                    let l = popup_layout(window_h, 0.85, &rows, &m);
+                    let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                     let idx = l
                         .body
                         .iter()
@@ -1275,7 +1325,7 @@ mod tests {
             for n in 1..14 {
                 for selected in [0, n - 1] {
                     for (screen, rows, legend) in routine_rows_fixtures(n, selected) {
-                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                         assert_eq!(
                             l.footer.len(),
                             legend,
@@ -1391,7 +1441,7 @@ mod tests {
             for n in 1..20 {
                 for selected in [0, n - 1] {
                     for (screen, rows) in progression_rows_fixtures(n, selected) {
-                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                         assert!(
                             l.footer.is_empty(),
                             "at {window_h}px the {screen} picker with {n} rows pinned {} \
@@ -1415,7 +1465,7 @@ mod tests {
             for n in 1..20 {
                 for selected in 0..n {
                     for (screen, rows) in progression_rows_fixtures(n, selected) {
-                        let l = popup_layout(window_h, 0.85, &rows, &m);
+                        let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                         let idx = l
                             .body
                             .iter()
@@ -1449,7 +1499,7 @@ mod tests {
             let m = ui_metrics(window_h);
             for items in 0..10 {
                 let rows = inventory_rows(items, 0);
-                let l = popup_layout(window_h, 0.85, &rows, &m);
+                let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                 let needed = rows.len() as f32 * m.line_height + m.line_height * 2.0 + m.inset;
                 assert!(
                     l.h >= needed - 0.5,
@@ -1477,7 +1527,7 @@ mod tests {
             let items = 60;
             for selected in 0..3 + items {
                 let rows = inventory_rows(items, selected);
-                let l = popup_layout(window_h, 0.85, &rows, &m);
+                let l = popup_layout(window_h, 0.85, &rows, 0, &m);
                 assert!(
                     l.scrolling,
                     "a {items}-item inventory has to scroll at {window_h}px"
@@ -1506,7 +1556,7 @@ mod tests {
         for window_h in WINDOW_HEIGHTS {
             let m = ui_metrics(window_h);
             let rows = inventory_rows(60, 0);
-            let l = popup_layout(window_h, 0.85, &rows, &m);
+            let l = popup_layout(window_h, 0.85, &rows, 0, &m);
             let drawn = l.header.len() + 1 + l.capacity + 1 + l.footer.len();
             let needed = drawn as f32 * m.line_height + m.line_height * 2.0 + m.inset;
             assert!(

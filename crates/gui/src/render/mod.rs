@@ -426,20 +426,22 @@ fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Me
     }
 }
 
-/// Whether `mode` needs `App::status_line` redrawn on top of whatever it
-/// just drew. `Playing` already shows it in the log pane, and the main-menu
-/// and save popups carry it as a row inside the panel; every other mode
-/// covers the log pane with a popup, which would otherwise bury the one
-/// message explaining why a menu pick was refused.
+/// Whether `mode` needs `App::status_line` on a strip along the bottom
+/// edge, because it draws nothing that can carry the message itself.
 ///
-/// `QuitAppConfirm` is exempt because it draws the main menu underneath it,
-/// which shows the line itself. `QuitRunConfirm` is not: the banner is how a
-/// failed save-and-quit reaches the player, and it is the reason that screen
-/// keeps them there instead of leaving anyway.
+/// **This is now the exception rather than the rule.** Every mode that
+/// draws a popup shows a refusal inside it, under the title, where the
+/// player is already looking — see `draw_popup`. What is left is the three
+/// surfaces that are not popups: the map, which draws it over its log pane,
+/// and the two full-pane frame maps, which draw nothing else at all.
+///
+/// `Battle` and `BattleResult` are not here: a refusal raised in a fight is
+/// the only one the log never keeps (`Game::note_refusal`), so the strip is
+/// the whole of how it reaches the player.
 fn needs_status_banner(mode: Mode) -> bool {
-    !matches!(
+    matches!(
         mode,
-        Mode::Playing | Mode::MainMenu | Mode::SaveAction | Mode::QuitAppConfirm
+        Mode::Battle | Mode::BattleResult | Mode::FrameMap | Mode::FieldCastCell
     )
 }
 
@@ -462,43 +464,50 @@ fn draw_status_banner(status: &str, painter: &Painter, m: &Metrics) {
 pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
     let m = ui_metrics(painter.screen_h());
     painter.clear(Color::new(0.02, 0.02, 0.03, 1.0));
+    // Cloned rather than borrowed because most of the arms below want `app`
+    // mutably, and threaded down as a parameter rather than read off `app`
+    // where it is wanted: **this match is the one place that knows which
+    // surface is on top**, and a refusal belongs on that one and no other.
+    // Where an arm draws two things, the underlying one takes `None`.
+    let held = app.status_line.clone();
+    let refusal = held.as_deref();
     match app.mode {
-        Mode::MainMenu => draw_main_menu(app, painter, &m),
+        Mode::MainMenu => draw_main_menu(app, refusal, painter, &m),
         // Drawn over the menu it was opened from, so the row `q` was pressed
         // on stays visible behind the question.
         Mode::QuitAppConfirm => {
-            draw_main_menu(app, painter, &m);
-            draw_quit_app_confirm(app.menu_selected, painter, &m);
+            draw_main_menu(app, None, painter, &m);
+            draw_quit_app_confirm(app.menu_selected, refusal, painter, &m);
         }
-        Mode::Achievements => draw_achievements(app, painter, &m),
-        Mode::LoadGame => draw_load_game(app, painter, &m),
-        Mode::SaveAction => draw_save_action(app, painter, &m),
-        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, painter, &m),
-        Mode::GameOver => draw_game_over(app, painter, &m),
+        Mode::Achievements => draw_achievements(app, refusal, painter, &m),
+        Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
+        Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
+        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, refusal, painter, &m),
+        Mode::GameOver => draw_game_over(app, refusal, painter, &m),
         Mode::Battle => draw_battle(app, fx, painter, &m),
         Mode::BattleTarget => {
             draw_battle(app, fx, painter, &m);
-            draw_battle_target_menu(app, painter, &m);
+            draw_battle_target_menu(app, refusal, painter, &m);
         }
         Mode::BattleItem => {
             draw_battle(app, fx, painter, &m);
-            draw_battle_item_menu(app, painter, &m);
+            draw_battle_item_menu(app, refusal, painter, &m);
         }
         Mode::BattleSpecial => {
             draw_battle(app, fx, painter, &m);
-            draw_battle_special_menu(app, painter, &m);
+            draw_battle_special_menu(app, refusal, painter, &m);
         }
         Mode::BattleAlly => {
             draw_battle(app, fx, painter, &m);
-            draw_battle_ally_menu(app, painter, &m);
+            draw_battle_ally_menu(app, refusal, painter, &m);
         }
         Mode::Help => {
-            draw_playing_base(app, fx, painter, &m);
-            draw_help_index(app, painter, &m);
+            draw_playing_base(app, fx, None, painter, &m);
+            draw_help_index(app, refusal, painter, &m);
         }
         Mode::HelpPage => {
-            draw_playing_base(app, fx, painter, &m);
-            draw_help_page(app, painter, &m);
+            draw_playing_base(app, fx, None, painter, &m);
+            draw_help_page(app, refusal, painter, &m);
         }
         // Full-pane rather than a popup over the corridor: the whole point
         // is seeing the frame's shape at once, and a map you have to peer
@@ -509,9 +518,13 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             }
             // Surfacing with the map open, which the engine allows: fall
             // back to the map screen rather than to a blank pane.
+            // `None` on the way down: `needs_status_banner` answers per
+            // mode, and this mode's other arm draws no popup at all — so the
+            // banner is what says it here too, rather than the two arms of
+            // one mode disagreeing about where a refusal appears.
             None => {
-                draw_playing_base(app, fx, painter, &m);
-                draw_mode_overlay(app, painter, &m);
+                draw_playing_base(app, fx, None, painter, &m);
+                draw_mode_overlay(app, None, painter, &m);
             }
         },
         // Full-pane for the same reason `Mode::FrameMap` is, and doubly so:
@@ -531,37 +544,71 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
                     &m,
                 ),
                 // Surfacing mid-pick, the same fallback the map screen makes.
+                // `None` for `Mode::FrameMap`'s reason, one arm up.
                 _ => {
-                    draw_playing_base(app, fx, painter, &m);
-                    draw_mode_overlay(app, painter, &m);
+                    draw_playing_base(app, fx, None, painter, &m);
+                    draw_mode_overlay(app, None, painter, &m);
                 }
             }
         }
         // Their own arms rather than `draw_mode_overlay`'s, because the
         // arena hangs off the main menu: `app.game` is `None` on every one
         // of these, and the map underneath a mode overlay needs a run.
-        Mode::ArenaBuilder => {
-            draw_arena_builder(&app.arena_builder_rows(), app.menu_selected, painter, &m)
-        }
+        Mode::ArenaBuilder => draw_arena_builder(
+            &app.arena_builder_rows(),
+            app.menu_selected,
+            refusal,
+            painter,
+            &m,
+        ),
         Mode::ArenaSave => {
-            draw_arena_builder(&app.arena_builder_rows(), app.menu_selected, painter, &m);
-            draw_arena_save(&app.arena_save_input, painter, &m);
+            // The builder is underneath the name prompt; the prompt says it.
+            draw_arena_builder(
+                &app.arena_builder_rows(),
+                app.menu_selected,
+                None,
+                painter,
+                &m,
+            );
+            draw_arena_save(&app.arena_save_input, refusal, painter, &m);
         }
-        Mode::ArenaPick => draw_arena_pick(&app.arena_pick_rows(), app.menu_selected, painter, &m),
-        Mode::ArenaLoad => draw_arena_load(&app.arena_load_rows(), app.menu_selected, painter, &m),
+        Mode::ArenaPick => draw_arena_pick(
+            &app.arena_pick_rows(),
+            app.menu_selected,
+            refusal,
+            painter,
+            &m,
+        ),
+        Mode::ArenaLoad => draw_arena_load(
+            &app.arena_load_rows(),
+            app.menu_selected,
+            refusal,
+            painter,
+            &m,
+        ),
         Mode::ArenaResult => draw_arena_result(
             app.arena_outcome(),
             app.arena_warnings(),
             app.arena_seed(),
             app.arena_transcript(),
             app.menu_selected,
+            refusal,
             painter,
             &m,
         ),
         Mode::BattleResult => draw_battle(app, fx, painter, &m),
         _ => {
-            draw_playing_base(app, fx, painter, &m);
-            draw_mode_overlay(app, painter, &m);
+            // The map is the one surface that is not a popup and still has
+            // somewhere to put a refusal: its own log pane. So it takes the
+            // message when it *is* the screen, and `None` when one of the
+            // ~60 modes below is about to draw a popup over it.
+            let on_the_map = if app.mode == Mode::Playing {
+                refusal
+            } else {
+                None
+            };
+            draw_playing_base(app, fx, on_the_map, painter, &m);
+            draw_mode_overlay(app, refusal, painter, &m);
         }
     }
     if let Some(status) = &app.status_line
@@ -592,7 +639,7 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow])
 
 /// The cargo row `Mode::InventoryItemAction` and `Mode::ItemDescribe` are
 /// about, as the `(item, tier)` pair both their screens take.
-fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
+fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
@@ -665,18 +712,21 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
     };
     let Some(game) = &mut app.game else { return };
     match app.mode {
-        Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, painter, m),
-        Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, painter, m),
-        Mode::DevConsole => draw_dev_console(App::dev_console_rows(), selected, painter, m),
-        Mode::Build => draw_build_menu(game, selected, painter, m),
+        Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, refusal, painter, m),
+        Mode::PartyMenu => draw_group_menu(&group_rows, "Party", selected, refusal, painter, m),
+        Mode::DevConsole => {
+            draw_dev_console(App::dev_console_rows(), selected, refusal, painter, m)
+        }
+        Mode::Build => draw_build_menu(game, selected, refusal, painter, m),
         Mode::BuildDirection => {
-            draw_build_direction(game, pending_structure.as_deref(), painter, m)
+            draw_build_direction(game, pending_structure.as_deref(), refusal, painter, m)
         }
         Mode::Collect => draw_collect(
             game,
             &app.basket_rows,
             &app.basket_amounts,
             selected,
+            refusal,
             painter,
             m,
         ),
@@ -685,15 +735,17 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             &deposit_entries,
             app.basket_room.unwrap_or(0),
             selected,
+            refusal,
             painter,
             m,
         ),
-        Mode::Craft => draw_craft_menu(game, selected, painter, m),
+        Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
             app.pending_craft.clone(),
             &app.craft_quantity_input,
             app.careful_craft,
+            refusal,
             painter,
             m,
         ),
@@ -701,38 +753,47 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             game,
             app.pending_erase.clone(),
             &app.erase_quantity_input,
+            refusal,
             painter,
             m,
         ),
-        Mode::WorkOrders => {
-            draw_work_orders(&work_orders, game.labour_demand(), selected, painter, m)
-        }
-        Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, painter, m),
+        Mode::WorkOrders => draw_work_orders(
+            &work_orders,
+            game.labour_demand(),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::WorkOrderPick => draw_work_order_pick(&orderable, selected, refusal, painter, m),
         Mode::WorkOrderQuantity => draw_work_order_quantity(
             game,
             app.pending_order.clone(),
             &app.order_quantity_input,
             app.standing_order,
             app.order_priority,
+            refusal,
             painter,
             m,
         ),
-        Mode::BaseStaff => draw_base_staff(game, &base_staff, selected, painter, m),
+        Mode::BaseStaff => draw_base_staff(game, &base_staff, selected, refusal, painter, m),
         Mode::WorkStructure => draw_structure_menu(
             &scanned,
             "Work",
             "Work which structure yourself?",
             selected,
+            refusal,
             painter,
             m,
         ),
-        Mode::Remove => draw_remove_menu(&scanned, selected, painter, m),
-        Mode::RemoveConfirm => draw_remove_confirm(selected, painter, m),
-        Mode::Upgrade => draw_upgrade_menu(&scanned, selected, painter, m),
-        Mode::Symlink => draw_symlink_menu(game, selected, painter, m),
+        Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
+        Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
+        Mode::Upgrade => draw_upgrade_menu(&scanned, selected, refusal, painter, m),
+        Mode::Symlink => draw_symlink_menu(game, selected, refusal, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
+            refusal,
             painter,
             m,
         ),
@@ -743,6 +804,7 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
             "Demolish Direction",
             "Demolish which neighbour? Removing Home destroys the whole base. \
              (arrows/hjkl, Esc to cancel)",
+            refusal,
             painter,
             m,
         ),
@@ -756,126 +818,196 @@ fn draw_mode_overlay(app: &mut App, painter: &Painter, m: &Metrics) {
                     && pending_manifest.is_some_and(|e| subjects.contains(&e)),
                 back_to_list: manifest_origin.returns_to_list(),
             };
-            draw_manifest(game, pending_manifest, nav, painter, m)
+            draw_manifest(game, pending_manifest, nav, refusal, painter, m)
         }
         Mode::ManifestPick => {
             let subjects = game.manifest_subjects();
-            draw_manifest_pick(game, &subjects, selected, painter, m)
+            draw_manifest_pick(game, &subjects, selected, refusal, painter, m)
         }
         Mode::StructureManifest => structure_manifest::draw_structure_manifest(
             game,
             app.pending_structure_manifest,
+            refusal,
             painter,
             m,
         ),
         Mode::CellDescribe => {
-            stack::draw_cell_describe(app.pending_description.as_deref(), painter, m)
+            stack::draw_cell_describe(app.pending_description.as_deref(), refusal, painter, m)
         }
-        Mode::Inventory => draw_inventory(game, selected, painter, m),
-        Mode::CompanionEquip => {
-            draw_companion_equip(game, app.pending_equip_program, selected, painter, m)
-        }
+        Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
+        Mode::CompanionEquip => draw_companion_equip(
+            game,
+            app.pending_equip_program,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::CompanionMemories => {
-            draw_companion_memories(game, app.pending_memory_program, painter, m)
+            draw_companion_memories(game, app.pending_memory_program, refusal, painter, m)
         }
         Mode::EquipSwap => draw_equip_swap(
             game,
             app.pending_swap_slot,
             app.pending_swap_target,
             selected,
+            refusal,
             painter,
             m,
         ),
         Mode::InventoryItemAction => {
             let zone = game.player_status().zone;
-            draw_inventory_item_action(game, pending_item.clone(), zone, selected, painter, m)
+            draw_inventory_item_action(
+                game,
+                pending_item.clone(),
+                zone,
+                selected,
+                refusal,
+                painter,
+                m,
+            )
         }
-        Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), painter, m),
-        Mode::Companion => draw_companion_menu(game, selected, painter, m),
-        Mode::Fuse => draw_fuse_menu(game, selected, painter, m),
+        Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
+        Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
+        Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
         Mode::FuseSecond => {
-            draw_fuse_second_menu(game, app.pending_fuse_first, selected, painter, m)
+            draw_fuse_second_menu(game, app.pending_fuse_first, selected, refusal, painter, m)
         }
         Mode::FuseName => draw_fuse_name_menu(
             game,
             app.pending_fuse_first,
             app.pending_fuse_second,
             &app.fuse_name_input,
+            refusal,
             painter,
             m,
         ),
-        Mode::RenamePet => {
-            draw_rename_menu(game, app.pending_rename, &app.rename_input, painter, m)
-        }
-        Mode::FieldCast => draw_field_cast(game, selected, painter, m),
+        Mode::RenamePet => draw_rename_menu(
+            game,
+            app.pending_rename,
+            &app.rename_input,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::FieldCast => draw_field_cast(game, selected, refusal, painter, m),
         Mode::FieldCastAlly => {
-            draw_field_cast_ally(game, pending_field_routine, selected, painter, m)
+            draw_field_cast_ally(game, pending_field_routine, selected, refusal, painter, m)
         }
-        Mode::RoutineTarget => draw_routine_target(game, selected, painter, m),
-        Mode::Routines => draw_routines(game, app.pending_routine_holder, selected, painter, m),
-        Mode::RoutineInstall => draw_routine_install(game, selected, painter, m),
-        Mode::RoutineEtch => draw_routine_etch(game, selected, painter, m),
-        Mode::Refactor => draw_refactor(game, selected, painter, m),
-        Mode::Develop => draw_develop(game, selected, painter, m),
-        Mode::DevelopProgram => {
-            draw_develop_program(game, app.pending_develop_target, selected, painter, m)
-        }
-        Mode::RefactorItem => {
-            draw_refactor_item(game, app.pending_refactor_target, selected, painter, m)
-        }
-        Mode::Extract => draw_extract(game, selected, painter, m),
-        Mode::ExtractPick => {
-            draw_extract_pick(game, app.pending_extract_program, selected, painter, m)
-        }
+        Mode::RoutineTarget => draw_routine_target(game, selected, refusal, painter, m),
+        Mode::Routines => draw_routines(
+            game,
+            app.pending_routine_holder,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::RoutineInstall => draw_routine_install(game, selected, refusal, painter, m),
+        Mode::RoutineEtch => draw_routine_etch(game, selected, refusal, painter, m),
+        Mode::Refactor => draw_refactor(game, selected, refusal, painter, m),
+        Mode::Develop => draw_develop(game, selected, refusal, painter, m),
+        Mode::DevelopProgram => draw_develop_program(
+            game,
+            app.pending_develop_target,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::RefactorItem => draw_refactor_item(
+            game,
+            app.pending_refactor_target,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::Extract => draw_extract(game, selected, refusal, painter, m),
+        Mode::ExtractPick => draw_extract_pick(
+            game,
+            app.pending_extract_program,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::ExtractConfirm => draw_extract_confirm(
             game,
             app.pending_extract_program,
             app.pending_extract_index,
+            refusal,
             painter,
             m,
         ),
-        Mode::StackMarket => draw_stack_market(game, selected, painter, m),
-        Mode::Trade => draw_trade_menu(game, selected, painter, m),
-        Mode::TradeAction => {
-            draw_trade_action_menu(game, app.pending_trade_structure, selected, painter, m)
-        }
+        Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
+        Mode::Trade => draw_trade_menu(game, selected, refusal, painter, m),
+        Mode::TradeAction => draw_trade_action_menu(
+            game,
+            app.pending_trade_structure,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::TradeQuantity => draw_trade_quantity_menu(
             game,
             app.pending_trade_structure,
             app.pending_trade_choice.clone(),
             &app.trade_quantity_input,
+            refusal,
             painter,
             m,
         ),
         Mode::TradeProgramConfirm => {
             let money = game.item_name(&game.trade_currency()).to_string();
-            draw_trade_program_confirm(app.pending_trade_program.as_ref(), &money, painter, m)
+            draw_trade_program_confirm(
+                app.pending_trade_program.as_ref(),
+                &money,
+                refusal,
+                painter,
+                m,
+            )
         }
-        Mode::Perks => draw_perks_menu(game, selected, painter, m),
-        Mode::Research => draw_research_menu(game, selected, painter, m),
+        Mode::Perks => draw_perks_menu(game, selected, refusal, painter, m),
+        Mode::Research => draw_research_menu(game, selected, refusal, painter, m),
         Mode::Contracts => draw_contracts(
             &contract_active,
             &contract_offers,
             contract_reach,
             selected,
+            refusal,
             painter,
             m,
         ),
-        Mode::History => draw_history(game, selected, painter, m),
-        Mode::Structures => draw_structures(game, selected, painter, m),
+        Mode::History => draw_history(game, selected, refusal, painter, m),
+        Mode::Structures => draw_structures(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
             if let Some(staffing) = &staffing {
-                draw_staffing_menu(staffing, selected, painter, m);
+                draw_staffing_menu(staffing, selected, refusal, painter, m);
             }
         }
-        Mode::Recipes => draw_recipes(game, selected, painter, m),
-        Mode::QuitRunConfirm => draw_quit_run_confirm(selected, painter, m),
+        Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
+        Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         _ => {}
     }
 }
 
-fn draw_direction_prompt(title: &str, body: &str, painter: &Painter, m: &Metrics) {
-    draw_popup(title, PopupSize::Small, &[text_row(body)], painter, m);
+fn draw_direction_prompt(
+    title: &str,
+    body: &str,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    draw_popup(
+        title,
+        PopupSize::Small,
+        &[text_row(body)],
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// A program's current activity as a bracketed suffix — `" (in party)"`,
@@ -919,6 +1051,232 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every `Mode`, as the status-line census below drives them.
+    const ALL_MODES: [Mode; 86] = [
+        Mode::MainMenu,
+        Mode::DifficultyPick,
+        Mode::LoadGame,
+        Mode::SaveAction,
+        Mode::Playing,
+        Mode::Collect,
+        Mode::Deposit,
+        Mode::BaseMenu,
+        Mode::PartyMenu,
+        Mode::Battle,
+        Mode::BattleTarget,
+        Mode::BattleItem,
+        Mode::BattleSpecial,
+        Mode::BattleAlly,
+        Mode::BattleResult,
+        Mode::Build,
+        Mode::BuildDirection,
+        Mode::DevConsole,
+        Mode::Craft,
+        Mode::CraftQuantity,
+        Mode::WorkOrders,
+        Mode::WorkOrderPick,
+        Mode::WorkOrderQuantity,
+        Mode::BaseStaff,
+        Mode::WorkStructure,
+        Mode::Remove,
+        Mode::RemoveConfirm,
+        Mode::RemoveDirection,
+        Mode::Upgrade,
+        Mode::Symlink,
+        Mode::InspectDirection,
+        Mode::FrameMap,
+        Mode::Manifest,
+        Mode::ManifestPick,
+        Mode::StructureManifest,
+        Mode::CellDescribe,
+        Mode::Inventory,
+        Mode::EquipSwap,
+        Mode::InventoryItemAction,
+        Mode::ItemDescribe,
+        Mode::EraseQuantity,
+        Mode::Companion,
+        Mode::CompanionEquip,
+        Mode::CompanionMemories,
+        Mode::Fuse,
+        Mode::FuseSecond,
+        Mode::FuseName,
+        Mode::RenamePet,
+        Mode::RoutineTarget,
+        Mode::Routines,
+        Mode::RoutineInstall,
+        Mode::RoutineEtch,
+        Mode::FieldCast,
+        Mode::FieldCastAlly,
+        Mode::FieldCastCell,
+        Mode::Excavate,
+        Mode::Refactor,
+        Mode::RefactorItem,
+        Mode::Develop,
+        Mode::DevelopProgram,
+        Mode::Extract,
+        Mode::ExtractPick,
+        Mode::ExtractConfirm,
+        Mode::Trade,
+        Mode::TradeAction,
+        Mode::TradeQuantity,
+        Mode::StackMarket,
+        Mode::TradeProgramConfirm,
+        Mode::Perks,
+        Mode::Research,
+        Mode::Contracts,
+        Mode::History,
+        Mode::Structures,
+        Mode::StructureAssign,
+        Mode::Recipes,
+        Mode::Achievements,
+        Mode::Help,
+        Mode::HelpPage,
+        Mode::GameOver,
+        Mode::QuitRunConfirm,
+        Mode::QuitAppConfirm,
+        Mode::ArenaBuilder,
+        Mode::ArenaLoad,
+        Mode::ArenaSave,
+        Mode::ArenaPick,
+        Mode::ArenaResult,
+    ];
+
+    const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
+
+    fn census_app() -> feral_processes_app_core::App {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp = std::env::temp_dir().join(format!("fp_gui_census_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut app = feral_processes_app_core::App::new(
+            root.join("assets"),
+            tmp.join("saves"),
+            tmp.join("history.log"),
+            tmp.join("profile.ron"),
+            root.join("dev-arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        // The keys a player presses: [N] new game, then [F] Forgiving.
+        app.handle_key(feral_processes_app_core::GameKey::Char('n'));
+        app.handle_key(feral_processes_app_core::GameKey::Char('f'));
+        app
+    }
+
+    /// The modes whose screen needs state a fresh run has not got — a
+    /// pending trade, a program picked to fuse, a routine chosen to extract.
+    /// Each draws nothing at all here, so the census can say where a refusal
+    /// must *not* appear on them but not where it must. Their `draw_popup`
+    /// calls are threaded the same way every other one is.
+    const NEEDS_PENDING_STATE: [Mode; 19] = [
+        Mode::BattleTarget,
+        Mode::BattleSpecial,
+        Mode::CraftQuantity,
+        Mode::EraseQuantity,
+        Mode::FuseSecond,
+        Mode::FuseName,
+        Mode::RenamePet,
+        Mode::Routines,
+        Mode::FieldCastAlly,
+        Mode::Excavate,
+        Mode::RefactorItem,
+        Mode::DevelopProgram,
+        Mode::ExtractPick,
+        Mode::ExtractConfirm,
+        Mode::TradeAction,
+        Mode::TradeQuantity,
+        Mode::StackMarket,
+        Mode::TradeProgramConfirm,
+        Mode::StructureAssign,
+    ];
+
+    /// How many times `mode` paints `CENSUS_REFUSAL` with it set.
+    fn refusals_drawn(app: &mut feral_processes_app_core::App, fx: &mut Fx, mode: Mode) -> usize {
+        app.mode = mode;
+        app.status_line = Some(CENSUS_REFUSAL.to_string());
+        let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p));
+        crate::paint::painted_text(&shapes)
+            .iter()
+            .filter(|t| t.contains(CENSUS_REFUSAL))
+            .count()
+    }
+
+    /// **The census this whole change rests on.** `draw_popup` takes its
+    /// refusal as an argument, so a *new* call site cannot forget it — it
+    /// will not compile without one — but nothing stops a caller passing
+    /// `None`, and nothing stops two stacked popups both passing `Some`.
+    /// This drives every `Mode` through `draw` and counts what was actually
+    /// painted, which is the only way to tell either apart from a screen
+    /// that simply looks right.
+    ///
+    /// Both halves matter and both have caught a real defect: `Playing`
+    /// fell into the arm that hands the map `None` and showed the message
+    /// nowhere, and `ArenaSave` drew it on the prompt *and* on the builder
+    /// underneath it.
+    #[test]
+    fn every_screen_draws_a_refusal_exactly_once() {
+        let mut app = census_app();
+        let mut fx = Fx::new();
+        for mode in ALL_MODES {
+            let drawn = refusals_drawn(&mut app, &mut fx, mode);
+            if NEEDS_PENDING_STATE.contains(&mode) {
+                assert_eq!(drawn, 0, "{mode:?} draws nothing here, so it cannot say it");
+            } else {
+                assert_eq!(
+                    drawn, 1,
+                    "{mode:?} painted the refusal {drawn} times, not once"
+                );
+            }
+        }
+    }
+
+    /// **Where** it lands, which is the whole point: under the title and
+    /// above the first row, not on a strip along an edge the player is not
+    /// looking at. `painted_text` comes back in paint order, so the row
+    /// order on screen is the order in that list.
+    #[test]
+    fn a_refusal_sits_between_the_title_and_the_first_row() {
+        let mut app = census_app();
+        let mut fx = Fx::new();
+        app.mode = Mode::Research;
+        app.status_line = Some(CENSUS_REFUSAL.to_string());
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let drawn = crate::paint::painted_text(&shapes);
+
+        let at = |want: &str| drawn.iter().position(|t| t.contains(want));
+        let title = at("Research").expect("the popup drew its title");
+        let refusal = at(CENSUS_REFUSAL).expect("the popup drew the refusal");
+        let first_row = drawn
+            .iter()
+            .position(|t| t.starts_with("  ["))
+            .expect("the popup drew a numbered option");
+
+        assert!(title < refusal, "the refusal was drawn above the title");
+        assert!(
+            refusal < first_row,
+            "the refusal was drawn below the first option instead of over it"
+        );
+    }
+
+    /// Nothing is drawn where nothing was refused — the popup grows a line
+    /// only when there is one, so a screen's layout is unchanged the rest of
+    /// the time.
+    #[test]
+    fn a_screen_with_nothing_refused_draws_no_refusal() {
+        let mut app = census_app();
+        let mut fx = Fx::new();
+        for mode in [Mode::Playing, Mode::Research, Mode::Inventory, Mode::Battle] {
+            app.mode = mode;
+            app.status_line = None;
+            let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+            assert!(
+                !crate::paint::painted_text(&shapes)
+                    .iter()
+                    .any(|t| t.contains(CENSUS_REFUSAL)),
+                "{mode:?} painted a refusal that was never raised"
+            );
+        }
+    }
 
     #[test]
     fn hp_critical_triggers_at_exactly_a_third_and_not_a_point_above() {
@@ -1087,26 +1445,21 @@ mod tests {
         );
     }
 
+    /// The strip is the fallback for the screens that are not popups and
+    /// have no log pane of their own. `Battle` is the load-bearing one: a
+    /// refusal raised in a fight is deliberately never logged, so the strip
+    /// is the whole of how it reaches the player.
     #[test]
-    fn every_mode_that_covers_the_log_pane_gets_the_status_banner() {
+    fn only_the_screens_with_nowhere_else_to_put_it_use_the_banner() {
         for mode in [
-            Mode::Research,
-            Mode::Build,
-            Mode::Craft,
-            Mode::Trade,
-            Mode::Inventory,
             Mode::Battle,
-            Mode::BattleTarget,
-            Mode::BattleItem,
-            Mode::Help,
-            Mode::LoadGame,
-            // Where "Save failed: ..." has to land, or save-and-quit refuses
-            // to leave for a reason the player can't see.
-            Mode::QuitRunConfirm,
+            Mode::BattleResult,
+            Mode::FrameMap,
+            Mode::FieldCastCell,
         ] {
             assert!(
                 needs_status_banner(mode),
-                "{mode:?} draws over the log pane, so its refusals need the banner"
+                "{mode:?} draws no popup, so its refusals need the banner"
             );
         }
     }
@@ -1230,6 +1583,9 @@ mod tests {
             Mode::MainMenu,
             Mode::SaveAction,
             Mode::QuitAppConfirm,
+            Mode::Research,
+            Mode::Inventory,
+            Mode::Trade,
         ] {
             assert!(
                 !needs_status_banner(mode),

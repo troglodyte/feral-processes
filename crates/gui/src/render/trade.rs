@@ -3,7 +3,13 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_trade_menu(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_trade_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let structures: Vec<_> = game
         .view_entities(MENU_SCAN_RADIUS, MENU_SCAN_RADIUS)
         .into_iter()
@@ -30,13 +36,14 @@ pub(super) fn draw_trade_menu(game: &mut Game, selected: usize, painter: &Painte
             i == selected,
         ));
     }
-    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
+    draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_trade_action_menu(
     game: &mut Game,
     structure: Option<Entity>,
     selected: usize,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -183,7 +190,7 @@ pub(super) fn draw_trade_action_menu(
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
-    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
+    draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Confirms a program sale. The only screen that says what else the sale
@@ -192,6 +199,7 @@ pub(super) fn draw_trade_action_menu(
 pub(super) fn draw_trade_program_confirm(
     option: Option<&ProgramSaleOption>,
     money: &str,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -214,7 +222,7 @@ pub(super) fn draw_trade_program_confirm(
     }
     rows.push(text_row(""));
     rows.push(text_row("[y] sell    [n] keep it    Esc to cancel"));
-    draw_popup("Confirm sale", PopupSize::Small, &rows, painter, m);
+    draw_popup("Confirm sale", PopupSize::Small, &rows, refusal, painter, m);
 }
 
 pub(super) fn draw_trade_quantity_menu(
@@ -222,6 +230,7 @@ pub(super) fn draw_trade_quantity_menu(
     structure: Option<Entity>,
     choice: Option<TradeChoice>,
     quantity_input: &str,
+    refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -278,5 +287,5 @@ pub(super) fn draw_trade_quantity_menu(
             verb.to_lowercase()
         )),
     ];
-    draw_popup("Trade", PopupSize::Large, &rows, painter, m);
+    draw_popup("Trade", PopupSize::Large, &rows, refusal, painter, m);
 }

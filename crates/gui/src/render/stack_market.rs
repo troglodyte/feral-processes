@@ -11,7 +11,13 @@ use super::*;
 /// the drawn rows and the handler's rows disagreeing about which row number
 /// is which. A renderer that rebuilt either list itself would be right
 /// until the first purchase.
-pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_stack_market(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let Some(view) = game.stack_market() else {
         return;
     };
@@ -86,6 +92,7 @@ pub(super) fn draw_stack_market(game: &mut Game, selected: usize, painter: &Pain
         "A stall in the corridor",
         PopupSize::Large,
         &rows,
+        refusal,
         painter,
         m,
     );

@@ -4,7 +4,7 @@
 use super::popup::*;
 use super::*;
 
-pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let options = main_menu_options(!app.list_saves().is_empty(), app.arena_enabled());
     let mut rows = vec![
         Row::TextColored("feral-processes".to_string(), TEXT),
@@ -14,11 +14,7 @@ pub(super) fn draw_main_menu(app: &App, painter: &Painter, m: &Metrics) {
     for (i, opt) in options.iter().enumerate() {
         rows.push(item_row(opt.clone(), i == app.menu_selected));
     }
-    if let Some(s) = &app.status_line {
-        rows.push(text_row(""));
-        rows.push(Row::TextColored(s.clone(), RED));
-    }
-    draw_popup("Main Menu", PopupSize::Large, &rows, painter, m);
+    draw_popup("Main Menu", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The main menu's rows, in the order `App::handle_main_menu_key` builds
@@ -48,7 +44,7 @@ fn main_menu_options(has_saves: bool, arena: bool) -> Vec<String> {
 ///
 /// Two `Row::Item`s per rung would break that count, so each rung is one
 /// selectable row with its description folded into the same line.
-pub(super) fn draw_achievements(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_achievements(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let entries = app.achievement_rows();
     let earned = entries.iter().filter(|r| r.earned.is_some()).count();
     let mut rows = vec![
@@ -89,10 +85,10 @@ pub(super) fn draw_achievements(app: &App, painter: &Painter, m: &Metrics) {
     }
     rows.push(text_row(""));
     rows.push(text_row("Up/Down to scroll, Esc to close."));
-    draw_popup("Achievements", PopupSize::Large, &rows, painter, m);
+    draw_popup("Achievements", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_load_game(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_load_game(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let saves = app.list_saves();
     let mut rows = vec![text_row(
         "Pick a save (Esc to cancel; Up/Down + Enter also work)",
@@ -110,17 +106,17 @@ pub(super) fn draw_load_game(app: &App, painter: &Painter, m: &Metrics) {
             i == app.menu_selected,
         ));
     }
-    draw_popup("Load Game", PopupSize::Large, &rows, painter, m);
+    draw_popup("Load Game", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_save_action(app: &App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let name = app
         .pending_save
         .as_ref()
         .and_then(|p| p.file_stem())
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "(unknown save)".to_string());
-    let mut rows = vec![
+    let rows = vec![
         Row::TextColored(name, TEXT),
         text_row(""),
         item_row("[L]oad".to_string(), app.menu_selected == 0),
@@ -128,14 +124,15 @@ pub(super) fn draw_save_action(app: &App, painter: &Painter, m: &Metrics) {
         text_row(""),
         text_row("Esc to cancel; Up/Down + Enter also work"),
     ];
-    if let Some(s) = &app.status_line {
-        rows.push(text_row(""));
-        rows.push(Row::TextColored(s.clone(), RED));
-    }
-    draw_popup("Save", PopupSize::Large, &rows, painter, m);
+    draw_popup("Save", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_difficulty_pick(selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_difficulty_pick(
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = vec![
         item_row(
             "[P] Permadeath - flatlining is final; the session is archived to a log".to_string(),
@@ -148,10 +145,10 @@ pub(super) fn draw_difficulty_pick(selected: usize, painter: &Painter, m: &Metri
         text_row(""),
         text_row("Esc to go back; Up/Down + Enter also work"),
     ];
-    draw_popup("New Game", PopupSize::Large, &rows, painter, m);
+    draw_popup("New Game", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_game_over(app: &mut App, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let summary = app
         .game
         .as_mut()
@@ -164,13 +161,25 @@ pub(super) fn draw_game_over(app: &mut App, painter: &Painter, m: &Metrics) {
         text_row(""),
         text_row("Press any key to return to the main menu"),
     ];
-    draw_popup("Session Terminated", PopupSize::Large, &rows, painter, m);
+    draw_popup(
+        "Session Terminated",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }
 
 /// Confirms abandoning the run. Spells out what leaving costs rather than
 /// asking a bare "are you sure?" — the answer depends on how long ago the
 /// last autosave was, which is not something the player can see.
-pub(super) fn draw_quit_run_confirm(selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_quit_run_confirm(
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = vec![
         text_row("Leave this run?"),
         text_row(""),
@@ -181,12 +190,17 @@ pub(super) fn draw_quit_run_confirm(selected: usize, painter: &Painter, m: &Metr
         text_row("Quitting without saving drops progress since the last autosave."),
         text_row("Esc to cancel; Up/Down + Enter also work"),
     ];
-    draw_popup("Quit to Menu", PopupSize::Large, &rows, painter, m);
+    draw_popup("Quit to Menu", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Confirms ending the process from the main menu. No run is loaded, so
 /// this guards a misaimed keypress rather than any progress.
-pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metrics) {
+pub(super) fn draw_quit_app_confirm(
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let rows = vec![
         text_row("Close feral-processes?"),
         text_row(""),
@@ -195,7 +209,7 @@ pub(super) fn draw_quit_app_confirm(selected: usize, painter: &Painter, m: &Metr
         text_row(""),
         text_row("Esc to cancel; Up/Down + Enter also work"),
     ];
-    draw_popup("Quit", PopupSize::Large, &rows, painter, m);
+    draw_popup("Quit", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 #[cfg(test)]

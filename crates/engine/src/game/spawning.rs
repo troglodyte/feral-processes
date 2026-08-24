@@ -600,17 +600,27 @@ impl Game {
     /// curves take, so the two halves of the pack ceiling cannot disagree
     /// about how dangerous a place is.
     ///
-    /// On the surface that is the zone; in the Stack it is `depth`. Both are
+    /// On the surface that is the zone step alone. Both zone and depth are
     /// commitments the player made — funding a Portal, descending a link —
     /// which is the whole point: this used to be distance from the danger
     /// origin, so which direction you wandered decided how hard the game
     /// was, and a zone had no consistent difficulty of its own.
     ///
-    /// Depth *replaces* the zone step underground rather than adding to it.
-    /// The party's `Position` is pinned to the entrance tile they walked in
-    /// through, so there is no underground tile to read, and a stack should
+    /// Underground the depth step is **added** to the zone step rather than
+    /// replacing it. It used to replace it — the party's `Position` stays
+    /// pinned to the entrance tile they walked in through, so there is no
+    /// underground tile to read, and the reasoning was that a stack should
     /// escalate by how far down it goes rather than inheriting whatever its
-    /// entrance sat at.
+    /// entrance sat at. That made every zone's first frame identical: a
+    /// depth-1 stack under zone 5 fielded the same lone program a depth-1
+    /// stack under zone 1 did, because depth alone decided the step and
+    /// depth 1 is always step 0. The zone is itself a commitment already
+    /// made by the time the party is standing on that entrance, so a deep
+    /// zone's stack should not read as quiet as zone 1's. Each term is
+    /// divided down by its own step size (`GROUP_SIZE_STEP_ZONES` /
+    /// `GROUP_SIZE_STEP_FRAMES`) before the two are summed, and the sum is
+    /// clamped to `MAX_GROUP_SIZE_STEPS`, the same ceiling the surface alone
+    /// always had.
     ///
     /// `depth` is a parameter rather than a `stack_pos()` read for the
     /// reason `spawn_pack`'s doc records: ambient surface spawns and nest
@@ -618,14 +628,18 @@ impl Game {
     /// anything read off the party's own locale in here would size those
     /// from the party's depth.
     pub(crate) fn danger_steps(&self, depth: Option<u32>) -> u32 {
+        let zone_step = self
+            .world
+            .resource::<ZoneLevel>()
+            .0
+            .saturating_sub(1)
+            .saturating_div(GROUP_SIZE_STEP_ZONES);
         let steps = match depth {
-            Some(depth) => depth.saturating_sub(1) / GROUP_SIZE_STEP_FRAMES,
-            None => self
-                .world
-                .resource::<ZoneLevel>()
-                .0
-                .saturating_sub(1)
-                .saturating_div(GROUP_SIZE_STEP_ZONES),
+            Some(depth) => {
+                let depth_step = depth.saturating_sub(1) / GROUP_SIZE_STEP_FRAMES;
+                zone_step.saturating_add(depth_step)
+            }
+            None => zone_step,
         };
         steps.min(MAX_GROUP_SIZE_STEPS)
     }

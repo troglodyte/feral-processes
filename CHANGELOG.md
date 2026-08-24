@@ -27,6 +27,44 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.21
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+The Stack answers four complaints.
+
+### Fixed
+
+- **Down turns you around instead of walking you backwards.** Underground,
+  Down (or `j`) is now an about-face: the party pivots on the spot and costs
+  a turn for it, exactly as turning left or right does. Backing up is gone
+  entirely rather than moved to another key — you turn around and walk
+  forward, which is what everyone was doing anyway.
+
+- **You can power down in the Stack.** `r` was bound on the surface and
+  simply absent underground, so the key did nothing at all: no rest, no
+  refusal, nothing in the log to say why. Resting itself was never gated by
+  where you are standing — free on your own slab, one Power Outlet anywhere
+  else, the Stack included — so the whole of the bug was a missing key
+  binding. `e` and a Power Cell always worked down there and still do; they
+  are different things, and only `r` was broken.
+
+- **Deep zones field deeper stacks.** How dangerous an underground fight is
+  used to be read off the frame's depth alone, so the first frame of a stack
+  was a single lone program whether you had just started the game or had
+  breached your way to zone 9 to get there. Depth and zone now both count.
+  A zone-3 stack fields the fights a zone-3 stack should, from the first
+  frame down, and going deeper still escalates on top of that.
+
+- **There is a boss at the bottom.** The thing guarding a lair was drawn
+  from the same danger window everything else spawns from, and the hand-
+  authored apex programs sit so far up that window that no stack short of
+  six frames could reach one. Every shallower lair quietly served an
+  ordinary program with a boss's stat line instead. The bottom of a stack
+  now fields a real apex where its terrain has one, at any depth. Ambushes
+  and wild spawns are unchanged: an apex you never saw coming is still the
+  thing the window exists to prevent, and a lair is walked into on purpose.
+
 ## 0.13.20
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

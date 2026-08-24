@@ -372,9 +372,10 @@ impl App {
         self.after_world_action(acted, is_move_key);
     }
 
-    /// Movement for a party that has a facing. Forward and back walk along
-    /// it; left and right turn in place, which is what makes the Stack a
-    /// first-person space rather than a top-down one seen at an angle.
+    /// Movement for a party that has a facing. Up walks forward along it;
+    /// left and right turn in place and down turns the party clean around,
+    /// which is what makes the Stack a first-person space rather than a
+    /// top-down one seen at an angle.
     ///
     /// Everything else on the map screen is left alone — the mode keys above
     /// already ran, and the ones that need open grid refuse in the engine
@@ -401,7 +402,7 @@ impl App {
                     true
                 }
                 GameKey::Down | GameKey::Char('j') => {
-                    game.step_back();
+                    game.turn_around();
                     true
                 }
                 GameKey::Left | GameKey::Char('h') => {
@@ -426,6 +427,16 @@ impl App {
                 }
                 GameKey::Char('e') => {
                     game.use_power_source();
+                    true
+                }
+                // Bound here as well as on the surface, because a rest is
+                // priced by locale and not gated by it: `Game::rest` takes
+                // neither `require_surface` nor `require_base`, and burns a
+                // charge underground exactly as it does on the open grid.
+                // Left out of this block it was not a refusal the player
+                // could read but a dead key falling through `_ => false`.
+                GameKey::Char('r') => {
+                    game.rest();
                     true
                 }
                 // Not 't', which the mode block above already spends on the

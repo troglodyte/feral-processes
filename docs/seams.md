@@ -567,9 +567,16 @@ zone had no consistent difficulty of its own, and it leaked underground —
 every Stack spawn is placed at the *surface entrance tile*, so descending
 through a far-flung link scaled the whole frame by that link's distance.
 `danger_steps` is still the one input both group curves read, so they
-cannot disagree, but it takes the zone on the surface and the depth in the
-Stack. A new difficulty knob keyed to where the party is standing
-reintroduces both bugs.
+cannot disagree. It takes the zone step on the surface, and the zone step
+**plus** the depth step in the Stack. Depth used to *replace* the zone
+underground, on the argument that a stack should escalate by how far down
+it goes rather than inheriting whatever its entrance sat at. That was
+wrong in play: a depth-1 frame is step 0 in every zone, so the first frame
+of a zone-9 stack fielded a single program exactly as zone 1 did, and the
+zone the player had spent a Portal reaching bought them nothing until they
+were several frames down. Summing keeps both commitments visible and keeps
+the curve linear. A new difficulty knob keyed to where the party is
+*standing* still reintroduces both of the 2026-08-05 bugs.
 
 ### Every difficulty curve in the game is linear
 
@@ -1820,8 +1827,9 @@ ordinary hard species.
 The window is `tuning.rs`'s: band `b` is live from `b * TIER_ENTRY_STEPS`
 through `+ TIER_WINDOW_STEPS` inclusive, apex from `APEX_ENTRY_STEP`. It
 is read against `Game::danger_steps`, the **same scalar** the two
-group-size curves already take — zone on the surface, frame depth
-underground — so there is no second difficulty axis to keep in step with
+group-size curves already take — the zone step on the surface, the zone
+step plus the frame depth underground — so there is no second difficulty
+axis to keep in step with
 the first. The top band and apex **never exit**, whatever the constants
 say: steps are unbounded because zones and depth are, so a closed top
 empties the world past step 7.
@@ -1863,11 +1871,19 @@ at the wrong point in the run. And `pick_lair_species` used to *fall
 back* to the toughest ordinary program when a biome fielded no boss,
 returning `is_boss: false` — so removing a habitat from the last boss
 covering some terrain made every stack under it unbreachable while
-looking like a tuning edit. **That is closed.** The guardian is now drawn
-from the window at its own depth — apex where the depth admits one, the
-windowed ordinary pool otherwise — and is marked a boss either way, so a
-biome with no eligible apex species yields a rolled guardian that pays
-normally. `a_lair_guardian_is_a_boss_even_where_the_biome_has_no_apex_
+looking like a tuning edit. **That is closed.** The guardian is drawn from
+the biome's apex pool **ungated by `APEX_ENTRY_STEP`**, with the windowed
+ordinary pool as the fallback, and is marked a boss either way, so a biome
+with no eligible apex species yields a rolled guardian that pays normally.
+The ungating is itself a fix (2026-08-24): the draw used to be windowed at
+the lair's own depth, and since a stack runs `STACK_FRAMES_MIN` 2 to
+`STACK_FRAMES_MAX` 6 frames while apex species need step
+`APEX_ENTRY_STEP` = 4, every lair shallower than depth 5 silently served
+an ordinary species with `BOSS_STAT_MULT` on it. The player's report was
+that dungeons had no bosses at the bottom. The step gate still holds for
+ambush and wild boss rolls, where an unheralded apex is the thing it
+exists to prevent; a lair is walked into deliberately and announces
+itself. `a_lair_guardian_is_a_boss_even_where_the_biome_has_no_apex_
 species` pins it against a db with the apex species removed, since both
 shipped ones list all four biomes and the case is otherwise unreachable.
 `every_biome_a_stack_link_can_open_in_fields_a_boss` (`species.rs`)

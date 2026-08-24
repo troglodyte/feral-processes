@@ -3,9 +3,10 @@
 use super::support::*;
 use crate::species::DangerBand;
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN,
-    NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS, OPENING_RING_TILES, POPULATION_CHUNK_MARGIN,
-    WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET, WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
+    BOSS_SPAWN_CHANCE, MAX_GROUP_SIZE_STEPS, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY,
+    NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
+    OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
+    WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
 };
 use crate::*;
 
@@ -1710,6 +1711,71 @@ fn group_size_and_count_are_fixed_within_a_zone() {
     );
 }
 
+/// Underground, `danger_steps` used to read `depth` alone — a depth-1 frame
+/// under zone 3 sat at step 0, identical to a depth-1 frame under zone 1,
+/// which is why a late-zone Stack ambush fielded exactly one program. The
+/// zone is a commitment the player already made by breaching there, so the
+/// zone step now carries underground too, summed with the depth step and
+/// clamped exactly as the surface already was.
+#[test]
+fn danger_steps_underground_sums_the_zone_step_and_the_depth_step() {
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    game.world.insert_resource(ZoneLevel(1));
+    assert_eq!(game.danger_steps(Some(1)), 0, "zone 1 depth 1 -> step 0");
+
+    game.world.insert_resource(ZoneLevel(3));
+    assert_eq!(game.danger_steps(Some(1)), 2, "zone 3 depth 1 -> step 2");
+    assert_eq!(game.danger_steps(Some(3)), 4, "zone 3 depth 3 -> step 4");
+
+    game.world.insert_resource(ZoneLevel(5));
+    assert_eq!(
+        game.danger_steps(Some(5)),
+        MAX_GROUP_SIZE_STEPS,
+        "zone 5 depth 5 -> step 8, clamped to {MAX_GROUP_SIZE_STEPS}"
+    );
+}
+
+/// The surface half of `danger_steps` is untouched by the underground fix —
+/// zone alone, clamped the same way it always was.
+#[test]
+fn danger_steps_on_the_surface_is_unchanged() {
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let expected = [0u32, 1, 2, 3, 4, 5];
+    for (zone, &want) in (1..=6u32).zip(expected.iter()) {
+        game.world.insert_resource(ZoneLevel(zone));
+        assert_eq!(
+            game.danger_steps(None),
+            want,
+            "zone {zone} surface step should be unchanged at {want}"
+        );
+    }
+}
+
+/// The bug this fix closes: a zone-3 Stack ambush fielded exactly one
+/// program on its first frame, identical to zone 1, because depth alone
+/// decided the step underground. With the zone step folded in, the same
+/// depth-1 frame now opens the second and third enemy groups the way a
+/// zone-3 surface fight already does.
+#[test]
+fn a_later_zones_stack_ambush_can_field_more_than_one_group() {
+    let mut game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+
+    assert_eq!(
+        game.max_enemy_groups(Some(1)),
+        3,
+        "zone 3 depth 1 is danger step 2, which opens a third group"
+    );
+    assert_eq!(
+        game.max_enemy_groups(Some(1)),
+        game.max_enemy_groups(None),
+        "the first frame down should escalate exactly as far as the zone \
+         it was entered from already had"
+    );
+}
+
 /// A boss used to fight alone, and the gap between it and an ordinary
 /// program was the whole difficulty of the fight. Lowering its stats closes
 /// that gap from one end; an escort closes it from the other, so a boss is
@@ -2798,8 +2864,11 @@ fn zone_one_never_fields_an_apex_species() {
     }
 }
 
-/// The window follows depth underground, not the zone the entrance sat at —
-/// the same rule `danger_steps` already applies to the two group curves.
+/// The window follows depth underground too, on top of whatever the zone
+/// itself already contributes — the same rule `danger_steps` applies to the
+/// two group curves. Run at the default zone 1, where the zone step is
+/// zero, so any band-2 species reaching depth 6 that zone 1's surface
+/// withholds is depth's contribution alone, isolated from the zone term.
 #[test]
 fn the_stack_window_follows_depth_not_the_surface_zone() {
     let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

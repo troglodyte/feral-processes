@@ -8,6 +8,7 @@
 pub(crate) mod achievements;
 pub(crate) mod base;
 pub(crate) mod base_space;
+pub(crate) mod caravan;
 pub(crate) mod catalog;
 pub(crate) mod combat;
 pub(crate) mod combat_damage;

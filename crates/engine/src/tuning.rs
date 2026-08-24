@@ -2832,6 +2832,60 @@ pub const MEMORY_MORALE_MAX_SHIFT: f64 = 0.10;
 /// rather than a moment of it.
 pub const MEMORY_POSTING_PERIOD: u64 = 250;
 
+// ---------------------------------------------------------------------------
+// Caravan traders
+// ---------------------------------------------------------------------------
+
+/// How often a caravan is due — one visit per interval, exactly.
+///
+/// The rhythm the whole feature is felt as. Too short and a trader is
+/// furniture the player stops walking over to; too long and a run never sees
+/// one. Nothing instruments this: `balance_sim` models no base and no trade,
+/// so this and `CARAVAN_MARKUP` are the two figures in the feature that only
+/// a session can judge.
+pub const CARAVAN_VISIT_INTERVAL_TICKS: u64 = 900;
+
+/// How far into its interval a visit's arrival may slide.
+///
+/// Strictly below `CARAVAN_VISIT_INTERVAL_TICKS - CARAVAN_STAY_TICKS`, or two
+/// consecutive visits could overlap and the "exactly one visit per interval"
+/// property would stop being true. Its whole job is that a player cannot
+/// count ticks to the next one.
+pub const CARAVAN_ARRIVAL_JITTER_TICKS: u64 = 300;
+
+/// How long a caravan stands beside the Market before it packs up.
+///
+/// Long enough to outlast a field trip: a player who sees the arrival line,
+/// finishes what they were doing and walks home has to still find it there,
+/// or the feature reads as a taunt. Counted from arrival, not from the
+/// moment the caravan docks — a long walk in is the caravan's problem.
+pub const CARAVAN_STAY_TICKS: u64 = 400;
+
+/// How far from the anchor a caravan appears when its visit opens.
+///
+/// Chebyshev, on the derived bearing. Far enough that it is visibly walking
+/// in rather than materialising on the doorstep, inside the walk radius its
+/// `pursuit::walk_field` searches so the route can actually be found.
+pub const CARAVAN_SPAWN_DISTANCE_TILES: i32 = 10;
+
+/// What a caravan charges over an item's `ItemDef::value`.
+///
+/// Above 1.0 because convenience is the whole product: the same goods are
+/// compilable at a bench or findable in the Stack, and a trader that
+/// undercut either would make both pointless. It is *not* a second
+/// difficulty axis — a caravan sells nothing that cannot be got another way,
+/// which is why `Reward::PortalFragments`' exclusion is the one hard floor
+/// under it.
+pub const CARAVAN_MARKUP: f32 = 1.6;
+
+/// Salts the caravan schedule apart from everything else derived off the
+/// base's seed.
+///
+/// Its own named constant, per `FrameSpec::salted`'s rule — one salting
+/// scheme, not a second seed source that could collide with the Stack's or
+/// the Broker board's.
+pub const CARAVAN_SALT: u64 = 0xCA57_A0A0_5EED_0002;
+
 #[cfg(test)]
 mod tests {
     use super::*;

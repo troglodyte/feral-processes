@@ -1,0 +1,27 @@
+// The compounded case: lair-on-curve.ron's own party (level 24, zone 3,
+// geared, three level-12 scrappers geared) against the lair three frames
+// down instead of two. Both changes bite here — danger_steps sums the zone
+// step (2) and the depth step (2) to 4 instead of just the depth step, and
+// the guardian is unconditionally an apex species.
+(
+    player: Fresh(level: 24, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    encounter: Some(Lair(biome: Mainframe, depth: 3)),
+    reps: 100,
+    seed: 5005,
+)

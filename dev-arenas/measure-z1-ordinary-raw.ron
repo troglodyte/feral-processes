@@ -1,0 +1,16 @@
+// Paired with measure-z1-apex-raw.ron. `rootkit` is the toughest ordinary
+// Mainframe-habitat species at zone 1's danger window (growth_multiplier
+// 1.5, the steepest non-boss species that habitat fields) — the closest
+// same-build stand-in for "what an ordinary guardian would have been",
+// short of literally reproducing the old BOSS_STAT_MULT elevation, which
+// `opponents:` staging cannot do (it never sets `boss: true`; see
+// `spawn_wild_creature_scaled`). Read this pair as "authored apex vs
+// authored toughest-ordinary, single individual, no escort, no depth
+// multiplier" — a narrower question than the real fight, but a legitimate
+// same-build delta.
+(
+    player: Fresh(level: 1, zone: 1),
+    opponents: [(species: "rootkit", count: 1)],
+    reps: 200,
+    seed: 5008,
+)

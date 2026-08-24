@@ -1,0 +1,16 @@
+// Measurement scenario for docs/measurements/2026-08-24-stack-danger-changes.md.
+//
+// The worst-case reading of "a fresh player's first stack bottom": a
+// level-1 player with nothing equipped and no party at all, standing at
+// the bottom of the shallowest possible stack (depth 2, the minimum
+// STACK_FRAMES_MIN) under a Mainframe sector, and rousing the guardian.
+// Since pick_lair_species draws unconditionally from the biome's apex pool
+// now (APEX_ENTRY_STEP no longer gates a Lair), and Mainframe's apex pool
+// is non-empty (overseer, wintermute both list it), this fight is always
+// against a hand-authored apex species rather than a rolled-up ordinary one.
+(
+    player: Fresh(level: 1, zone: 1),
+    encounter: Some(Lair(biome: Mainframe, depth: 2)),
+    reps: 300,
+    seed: 5001,
+)

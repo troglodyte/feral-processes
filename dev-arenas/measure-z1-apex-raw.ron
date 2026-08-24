@@ -1,0 +1,15 @@
+// Same-build A/B, paired with measure-z1-ordinary-raw.ron: what the apex
+// species itself is worth, isolated from the escort and the depth
+// multiplier. `opponents:` always stages with `boss: false` and
+// `depth_mult: 1.0` (see `arena::setup::build_opponents`), so both files in
+// this pair are missing the underground depth multiplier a real Lair fight
+// would apply — that makes both sides equally soft, which is what keeps
+// the A vs B delta meaningful even though neither absolute number matches
+// the real encounter. A level-1, zone-1, ungeared, partyless player is the
+// same worst case as measure-z1d2-lair-fresh-mainframe.ron.
+(
+    player: Fresh(level: 1, zone: 1),
+    opponents: [(species: "overseer", count: 1)],
+    reps: 200,
+    seed: 5007,
+)

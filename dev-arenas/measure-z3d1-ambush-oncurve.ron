@@ -1,0 +1,30 @@
+// Change 1's headline case: an ordinary Stack ambush (never a boss) at zone
+// 3, depth 1. danger_steps used to return the depth step alone (0 at depth
+// 1, so max_enemy_groups was exactly 1 — one enemy). It now sums the zone
+// step (2, since zone 3) and the depth step (0), giving max_enemy_groups =
+// min(2+1, 4) = 3. Uses lair-on-curve.ron's on-curve party so the fight is
+// measured against a player of the strength the zone assumes, not a naked
+// one — this scenario is about confirming group count/composition, not
+// about survivability at the edge.
+(
+    player: Fresh(level: 24, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    encounter: Some(Stack(biome: Mainframe, depth: 1)),
+    reps: 100,
+    seed: 5006,
+)

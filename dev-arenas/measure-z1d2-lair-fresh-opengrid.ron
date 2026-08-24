@@ -1,0 +1,9 @@
+// Same question as measure-z1d2-lair-fresh-mainframe.ron, OpenGrid instead
+// of Mainframe — the other biome shipping both apex species (overseer,
+// wintermute list OpenGrid too), for the second-biome requirement.
+(
+    player: Fresh(level: 1, zone: 1),
+    encounter: Some(Lair(biome: OpenGrid, depth: 2)),
+    reps: 300,
+    seed: 5002,
+)

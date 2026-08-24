@@ -1,0 +1,11 @@
+// Same as measure-z1d2-lair-developed-mainframe.ron, OpenGrid biome.
+(
+    player: Fresh(level: 8, zone: 1),
+    party: [
+        (species: "scrapper", level: 8),
+        (species: "sub_process", level: 8),
+    ],
+    encounter: Some(Lair(biome: OpenGrid, depth: 2)),
+    reps: 300,
+    seed: 5004,
+)

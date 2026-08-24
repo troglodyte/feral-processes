@@ -1,0 +1,16 @@
+// Same fight as measure-z1d2-lair-fresh-mainframe.ron, against a player who
+// has played a little before finding their first stack: level 8, two
+// opening-ring-band companions (scrapper, sub_process) at level 8, still no
+// crafted gear — a plausible "modestly developed" state for a run that
+// has not yet reached a bench, since the first stack is usually found
+// before the player has assembled zone-appropriate equipment.
+(
+    player: Fresh(level: 8, zone: 1),
+    party: [
+        (species: "scrapper", level: 8),
+        (species: "sub_process", level: 8),
+    ],
+    encounter: Some(Lair(biome: Mainframe, depth: 2)),
+    reps: 300,
+    seed: 5003,
+)

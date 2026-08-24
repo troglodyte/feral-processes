@@ -169,19 +169,49 @@ impl Game {
     /// the swap picker, the trade screen and a drop line cannot come to
     /// disagree about what a copy is called.
     ///
-    /// The quality figure goes **last**, after the tier word and the affix's
-    /// decoration, and is omitted at `QUALITY_DEFAULT` — the call
-    /// `Rarity::label` makes for `Ordinary`, and the reason nothing already
-    /// on screen gets wider when the axis ships, since every copy in every
-    /// existing save sits there. It costs seven cells on the worst case,
-    /// which is what moved `SWAP_NAME_COLUMN` and pushed the swap screen's
-    /// stat column out of the row's un-wrappable head.
+    /// A copy carries a **list** of affixes, and a name has room for two
+    /// words: the first with a `prefix` and the first with a `suffix`, in
+    /// the copy's own sorted order. Whatever is left over is counted as
+    /// `+N` rather than named, since fusion can reach eight affixes and a
+    /// name spelling all of them would not fit any screen that draws one.
+    ///
+    /// Both words go on through `AffixDef::decorate` rather than being
+    /// composed here — the suffix appends and the prefix prepends, so
+    /// applying the two in that order *is* the general case, and the affix
+    /// word stays joined to a name in exactly one place.
+    ///
+    /// `+N` is **omitted at zero**, the call `Rarity::label` makes for
+    /// `Ordinary` and this function already makes for a copy at spec — so a
+    /// copy with one prefix and one suffix names both and gains nothing,
+    /// and no name in any existing save moves.
+    ///
+    /// The quality figure goes **last**, after the tier word, the affix
+    /// decoration and the count, and is omitted at `QUALITY_DEFAULT` — the
+    /// reason nothing already on screen gets wider when the axis ships,
+    /// since every copy in every existing save sits there. It costs seven
+    /// cells on the worst case, which is what moved `SWAP_NAME_COLUMN` and
+    /// pushed the swap screen's stat column out of the row's un-wrappable
+    /// head.
     pub fn copy_name(&self, copy: &GearCopy) -> String {
         let base = self.item_name(&copy.item);
-        let named = match self.affixes_of(copy).first() {
-            Some(affix) => affix.decorate(base),
-            None => base.to_string(),
-        };
+        let affixes = self.affixes_of(copy);
+        // An affix carrying both a prefix and a suffix is refused at load
+        // (`AffixDef::fault`), so these two are always different affixes and
+        // the count below cannot double-subtract one.
+        let prefixed = affixes.iter().find(|a| a.prefix.is_some());
+        let suffixed = affixes.iter().find(|a| a.suffix.is_some());
+        let mut named = base.to_string();
+        if let Some(affix) = suffixed {
+            named = affix.decorate(&named);
+        }
+        if let Some(affix) = prefixed {
+            named = affix.decorate(&named);
+        }
+        let unnamed =
+            affixes.len() - usize::from(prefixed.is_some()) - usize::from(suffixed.is_some());
+        if unnamed > 0 {
+            named = format!("{named} +{unnamed}");
+        }
         let tiered = match copy.rarity.label() {
             Some(tier) => format!("{tier} {named}"),
             None => named,

@@ -1735,3 +1735,78 @@ fn a_fight_that_paid_no_xp_writes_no_experience_header() {
         "a fight that earned nothing still headed an empty block: {lines:#?}"
     );
 }
+
+/// A copy carries a list of affixes now, and a name has room for two words.
+/// `copy_name` takes the **first prefix** and the **first suffix** in the
+/// copy's own sorted order and appends `+N` for the rest — so what the
+/// player reads is the two decorations they can act on plus an honest count
+/// of what is not shown.
+///
+/// `+N` sits after the decoration and before the quality figure, which stays
+/// last for the reason it already is: one segment appended to a name already
+/// built, so the axes cannot come to fight over the order.
+#[test]
+fn a_multi_affix_copy_names_two_and_counts_the_rest() {
+    let game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs = game.affix_defs();
+    let prefix = defs
+        .iter()
+        .find(|a| a.prefix.is_some())
+        .expect("the shipped set has a prefix affix");
+    let suffix = defs
+        .iter()
+        .find(|a| a.suffix.is_some())
+        .expect("the shipped set has a suffix affix");
+    let weapon = ItemId::from(ids::OVERCLOCK_CORE);
+    let base = game.item_name(&weapon).to_string();
+
+    // Two affixes, one of each shape: both named, and nothing counted.
+    let two = GearCopy::with_affixes(
+        weapon.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![prefix.id.clone(), suffix.id.clone()],
+        crate::tuning::QUALITY_DEFAULT,
+    );
+    assert_eq!(
+        game.copy_name(&two),
+        format!(
+            "{} {base} {}",
+            prefix.prefix.as_ref().unwrap(),
+            suffix.suffix.as_ref().unwrap()
+        ),
+        "one prefix and one suffix name both and count nothing"
+    );
+
+    // A third affix has nowhere to go in the name, so it is counted.
+    let three = GearCopy::with_affixes(
+        weapon.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![prefix.id.clone(), suffix.id.clone(), prefix.id.clone()],
+        crate::tuning::QUALITY_DEFAULT,
+    );
+    assert_eq!(
+        game.copy_name(&three),
+        format!(
+            "{} {base} {} +1",
+            prefix.prefix.as_ref().unwrap(),
+            suffix.suffix.as_ref().unwrap()
+        ),
+        "the third affix must be counted"
+    );
+
+    // And the count sits ahead of the quality figure, which stays last.
+    let off_spec = GearCopy::with_affixes(
+        weapon,
+        Rarity::Ordinary,
+        0,
+        vec![prefix.id.clone(), suffix.id.clone(), prefix.id.clone()],
+        85,
+    );
+    assert!(
+        game.copy_name(&off_spec).ends_with(" +1 (85%)"),
+        "{}",
+        game.copy_name(&off_spec)
+    );
+}

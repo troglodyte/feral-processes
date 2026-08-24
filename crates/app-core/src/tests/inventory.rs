@@ -1,8 +1,10 @@
 //! Item actions, erasing, and the equip preview tag.
 
-use feral_processes_engine::affixes::AffixId;
+use feral_processes_engine::affixes::{AffixDef, AffixId};
 use feral_processes_engine::items::ids;
-use feral_processes_engine::tuning::{QUALITY_DEFAULT, QUALITY_MAX, QUALITY_MIN};
+use feral_processes_engine::tuning::{
+    ITEM_FUSION_COST, MAX_FUSIONS, QUALITY_DEFAULT, QUALITY_MAX, QUALITY_MIN,
+};
 
 use super::support::*;
 use crate::*;
@@ -670,9 +672,36 @@ fn no_shipped_copy_name_outgrows_the_swap_name_column() {
         "the shipped set has equippable gear"
     );
 
-    let affixes: Vec<Vec<AffixId>> = std::iter::once(Vec::new())
-        .chain(game.affix_defs().into_iter().map(|a| vec![a.id]))
+    // Fusion is the only thing that stacks affixes, so the ceiling is the
+    // fusion ladder: `ITEM_FUSION_COST` to the power of `MAX_FUSIONS` source
+    // copies, each carrying at most one. Derived rather than written down,
+    // or raising either constant widens the worst case in silence.
+    let ceiling = (ITEM_FUSION_COST as usize).pow(MAX_FUSIONS);
+    let defs = game.affix_defs();
+    let longest = |pick: fn(&AffixDef) -> Option<&String>| {
+        defs.iter()
+            .filter(|a| pick(a).is_some())
+            .max_by_key(|a| pick(a).map(|w| w.chars().count()).unwrap_or(0))
+            .map(|a| a.id.clone())
+    };
+    let longest_prefix = longest(|a| a.prefix.as_ref());
+    let longest_suffix = longest(|a| a.suffix.as_ref());
+
+    let mut affixes: Vec<Vec<AffixId>> = std::iter::once(Vec::new())
+        .chain(defs.iter().map(|a| vec![a.id.clone()]))
+        // One affix repeated to the ceiling: one word named and the widest
+        // `+N` the arithmetic can reach.
+        .chain(defs.iter().map(|a| vec![a.id.clone(); ceiling]))
         .collect();
+    // And the real worst case: the longest prefix and the longest suffix
+    // both named, with the rest counted. Padded with copies of those two
+    // rather than with other affixes, so which one `copy_name` picks does
+    // not depend on how the ids happen to sort.
+    if let (Some(prefix), Some(suffix)) = (longest_prefix, longest_suffix) {
+        let mut both = vec![prefix; ceiling / 2];
+        both.resize(ceiling, suffix);
+        affixes.push(both);
+    }
 
     let mut worst = (String::new(), 0usize);
     for item in &equippables {

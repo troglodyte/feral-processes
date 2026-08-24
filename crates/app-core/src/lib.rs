@@ -343,9 +343,15 @@ pub struct SwapRow {
 /// How wide the swap picker's name and stat columns are. Padding lives here
 /// rather than in the renderer because the labels do — see `SwapRow`.
 /// Wide enough for the longest name `Game::copy_name` can build out of the
-/// shipped assets — a rare tier's word, an affix's prefix or suffix, the
-/// item's own name, and the quality figure. "Overclocked Singularity Matrix
-/// of Quiet Handshakes (130%)" is 57 cells.
+/// shipped assets — a rare tier's word, a prefix affix, the item's own
+/// name, a suffix affix, the count of the affixes those two did not name,
+/// and the quality figure. "Overclocked Overdriven Singularity Matrix of
+/// Quiet Handshakes +6 (130%)" is 71 cells.
+///
+/// The count is what a fused copy adds: affixes stack, `copy_name` names
+/// two and counts the rest, and `+N` is bounded by the fusion ladder at
+/// `ITEM_FUSION_COST.pow(MAX_FUSIONS)` source copies — so `+7` is the
+/// widest marker reachable, and `+6` the widest that comes with both words.
 ///
 /// `{:<N}` pads but never truncates, so a name past this does not clip: it
 /// shunts the stat and delta columns right and misaligns every row below it.
@@ -355,9 +361,12 @@ pub struct SwapRow {
 /// does not already know.
 ///
 /// Held by `the_widest_swap_row_still_fits_its_popup`, which measures real
-/// text rather than counting characters. **Adding a long affix or a long
-/// item name can break this**, and that test is what says so.
-const SWAP_NAME_COLUMN: usize = 57;
+/// text rather than counting characters, and by
+/// `no_shipped_copy_name_outgrows_the_swap_name_column`, which asks the
+/// shipped assets whether that string is still the worst case. **Adding a
+/// long affix or a long item name can break this**, and those tests are
+/// what say so.
+const SWAP_NAME_COLUMN: usize = 71;
 const SWAP_STATS_COLUMN: usize = 20;
 
 #[cfg(test)]

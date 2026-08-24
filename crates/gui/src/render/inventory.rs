@@ -953,20 +953,24 @@ mod tests {
     #[test]
     fn the_widest_swap_row_still_fits_its_popup() {
         // The widest row this screen can build out of the shipped assets: the
-        // longest tier word, the longest affix, the longest equippable name,
-        // a maxed fusion note and a six-axis summary. The figures are the
-        // ones `no_shipped_gear_summary_outgrows_the_swap_stats_column`
-        // measures off the real items at the top gear level, fusion tier and
-        // rare tier — that census is what says this string is still the
-        // worst case.
+        // longest tier word, the longest prefix affix, the longest
+        // equippable name, the longest suffix affix, the count of the six
+        // affixes those two did not name, a maxed fusion note and a six-axis
+        // summary. The figures are the ones
+        // `no_shipped_gear_summary_outgrows_the_swap_stats_column` measures
+        // off the real items at the top gear level, fusion tier and rare
+        // tier, and the name is the one
+        // `no_shipped_copy_name_outgrows_the_swap_name_column` measures —
+        // those two censuses are what say this string is still the worst
+        // case.
         //
         // Measured **as wrapped**, because six axes printed twice do not fit
         // one line and `draw_equip_swap` no longer asks them to. Every line
         // the row produces has to fit, which is what this iterates.
         let head = format!(
-            "[a] {:<57}",
+            "[a] {:<71}",
             format!(
-                "{} Singularity Matrix of Quiet Handshakes (130%)",
+                "{} Overdriven Singularity Matrix of Quiet Handshakes +6 (130%)",
                 Rarity::Gold.label().expect("Gold reads as a word")
             ),
         );

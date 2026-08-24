@@ -1072,8 +1072,10 @@ mod tests {
         for h in (600..=2160).step_by(60) {
             let m = ui_metrics(h as f32);
             let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            // Plus a refusal's room, for `the_tallest_gear_page_fits_its_popup`'s
+            // reason: this page has no scroll either.
             assert!(
-                rows <= cap,
+                rows + REFUSAL_MAX_LINES <= cap,
                 "a full store builds a {rows}-row page into a {cap}-row popup at {h}px"
             );
         }

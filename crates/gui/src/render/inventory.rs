@@ -537,7 +537,8 @@ mod tests {
     use super::{equipped_row, equipped_summary, gear_inspect_rows, inventory_row_lines};
     use crate::paint::{painted_runs_in, with_painter};
     use crate::render::popup::{
-        PopupSize, draw_row, item_text, popup_max_rows, tagged_text, wrapped_row_lines,
+        PopupSize, REFUSAL_MAX_LINES, draw_row, item_text, popup_max_rows, tagged_text,
+        wrapped_row_lines,
     };
     use crate::render::{Row, quality_tag_style};
     use crate::text::ui_metrics;
@@ -738,8 +739,11 @@ mod tests {
         for h in (600..=2160).step_by(60) {
             let m = ui_metrics(h as f32);
             let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            // Plus the room a refusal standing over the page needs: this
+            // one has no scroll, so a row past the bottom is dropped in
+            // silence rather than paged to.
             assert!(
-                tallest.0 <= cap,
+                tallest.0 + REFUSAL_MAX_LINES <= cap,
                 "{} builds a {}-row page into a {cap}-row popup at {h}px",
                 tallest.1,
                 tallest.0

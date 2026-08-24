@@ -781,6 +781,19 @@ pub(super) const ROW_WRAP_COLUMNS: usize = 100;
 /// `Large` one — gets half the budget without anyone maintaining a second
 /// number. Nothing clamps a row horizontally (see `wrapped_row_lines`), so
 /// an over-wide refusal would be drawn off the panel in silence.
+/// How many lines to leave for a refusal when measuring whether a
+/// scroll-less page fits its popup.
+///
+/// `draw_popup` pages a `Row::Item` span and nothing else, so a page built
+/// entirely out of text rows — the gear inspect page, the memories page —
+/// has no scroll and loses its tail in silence. A refusal makes such a page
+/// one or two rows taller for four seconds, which is exactly long enough to
+/// eat the last row of one and exactly short enough that nobody would catch
+/// it by eye. Two lines is `status_wrap_columns` twice over, longer than any
+/// sentence the engine builds for a refusal.
+#[cfg(test)]
+pub(super) const REFUSAL_MAX_LINES: usize = 2;
+
 fn status_wrap_columns(size: PopupSize) -> usize {
     let (pct_w, _) = popup_fractions(size);
     let (large_w, _) = popup_fractions(PopupSize::Large);

@@ -27,6 +27,39 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.19
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+When the game says no, it now says so where you are looking.
+
+### Fixed
+
+- **A refusal is drawn inside the screen you typed into.** Pick a research
+  node your zone is too low for and "Requires Zone 3 first." now sits under
+  the popup's title, above the rows, in red. It used to be painted as a strip
+  along the **bottom edge of the window** — on screen the whole time, and a
+  full window's height away from the centred popup you were reading. Every
+  screen with a popup does this: research, perks, building, crafting, trade,
+  the roster, work orders, contracts, the lot. The four screens that draw no
+  popup — the battle screen and the two full-pane frame maps — keep the strip,
+  because they have nowhere else to put it.
+- The popup **grows** by the line rather than covering a row with it, and the
+  numbered options never renumber, so a refusal appearing cannot move the row
+  a keypress was about to land on.
+
+### Added
+
+- **Refusals are kept in the message log.** They were never written there
+  before, so a refusal you looked away from was gone for good after four
+  seconds. `L` now has them, and the map's log pane shows them in red.
+  Refusals raised *inside a fight* are deliberately still not logged: the
+  battle pane is paced line by line as the round scrolls in, and a message
+  from a submenu would arrive as narration and swallow a keypress on the way
+  past.
+- A confirmation is not a refusal — "Game saved." and a fuse's receipt stay
+  out of that history, which is a record of the game saying no.
+
 ## 0.13.18
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

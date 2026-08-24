@@ -1887,6 +1887,46 @@ fn a_standing_order_re_arms_after_the_shelf_drains() {
     );
 }
 
+/// The other half of re-arming: a body already *on* the machine when the
+/// level is reached has to come off it.
+///
+/// The shelf is a Depot rather than the mine's own output, which is what
+/// makes the assertion about the scheduler rather than about
+/// `can_progress`: a machine clogged with its own product stops wanting a
+/// body for a second reason, and a test that fills the mine passes while
+/// the release path is missing entirely.
+#[test]
+fn a_body_comes_off_its_machine_when_the_standing_order_is_satisfied() {
+    let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let (mine, ..) = lay_disk_line(&mut game);
+    let depot = spawn_machine_at(&mut game, "depot", 2, 2);
+    let staff = hire(&mut game, 1);
+    game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 5))
+        .unwrap();
+
+    game.tick();
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        Some(mine),
+        "precondition: an unsatisfied level puts a body on the line"
+    );
+
+    put_output(&mut game, depot, ids::CORE_FRAGMENT, 5);
+    assert!(
+        base_holding(&game, &ItemId::from(ids::CORE_FRAGMENT)) >= 5,
+        "precondition: the shelf now holds what was asked for"
+    );
+
+    game.tick();
+
+    assert_eq!(
+        posted_at(&game, staff[0]),
+        None,
+        "a level the base holds asks for nobody, so the body mills about"
+    );
+}
+
 /// The other half: a one-shot order is still a batch, still announces
 /// itself finished, and still leaves the queue.
 #[test]

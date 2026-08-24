@@ -3400,12 +3400,45 @@ out of the machine's stock by then — so cancelling an order mid-walk
 *destroyed* the goods rather than releasing them. Rare while a worker only
 ever set off from a clogged machine; routine now that one sets off every
 cycle.
-**It never takes a body off a machine unless it has somewhere to put it.**
-That rule is not in the spec and the `chains` template is what caught its
-absence: with every wanted post already filled — a base whose queue has run
-dry, or *any* base loaded from a save written before work orders — the
-scheduler stood down every worker on the first tick, which is exactly the
-regression `Game::load`'s absorption rule exists to prevent.
+**Nor is a body standing on a machine with no output room while a Depot
+stands.** It is the same rule one case earlier rather than a second one: a
+clogged machine cannot progress, so it drops out of `wanted`, and the body
+on it is the only thing that can carry the clog away and give the machine a
+route back *into* `wanted`. Freed instead, the machine sits full for the
+rest of the run. The Depot term is what keeps
+`a_lone_body_walks_the_line_downstream_as_each_machine_stops_being_useful`
+true — with nowhere to deliver there is no errand, so there is nothing to
+stay for.
+**It never takes a body off a machine unless it has somewhere to put it —
+and only on a base with an empty queue.** The rule is not in the spec and
+the `chains` template is what caught its absence: with every wanted post
+already filled — a base whose queue has run dry, or *any* base loaded from
+a save written before work orders — the scheduler stood down every worker
+on the first tick, which is exactly the regression `Game::load`'s
+absorption rule exists to prevent.
+
+**Both cases that argument names are an empty queue, and gating on that is
+what closed the hole it left.** Unqualified, the guard also caught the base
+whose orders are all *satisfied*. A standing order reaching its level is
+skipped rather than removed, so its machines drop out of `wanted` while
+staying in `posted` — every want left was filled, the guard fired, and the
+line kept running for the rest of the run. Reported from a live save: a
+Compiler making ICE Breakers against a hold-at-10 order with 73 already on
+the shelf. Ticking that save 3,000 times reaches **222**; with the queue
+term it stops at exactly 10. A queue is an instruction, so where there is
+one the assignment is the whole truth and a body it does not name goes back
+to the ring.
+
+The blunter fix — deleting the guard outright, on the grounds that
+`StandingJob` is how a machine is deliberately kept running with no order
+behind it — was tried and rejected on cost: 81 engine tests and the
+`chains` template post a program with no queue standing behind it, and
+every one of them would have had to say `StandingJob` to keep measuring
+what it measures. The queue term costs one line and leaves that whole class
+untouched. What it does **not** cover is a base whose *last* order is a
+batch that completes: the order leaves the queue, the queue is empty, and
+the bodies keep their posts. That is the run-dry case the guard was written
+for and it behaves as it always has.
 It is a `&mut Game` method called from `tick_inner` immediately **before**
 `schedule.run`, not a bevy system: posting logs, reads defs through
 `work_ticks_for` and writes `Party`. Running it there buys the same "posted

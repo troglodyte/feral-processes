@@ -818,19 +818,31 @@ impl Game {
         wanted.truncate(staff.len());
 
         // **The scheduler never takes a body off a post unless it has
-        // somewhere better to put it.** With every wanted post already
+        // somewhere better to put it — and only on a base it has been given
+        // no instructions for at all.** With every wanted post already
         // filled there is no gain in moving anyone, and real harm in it: a
         // base whose queue has run dry — or one loaded from a save written
         // before work orders existed, whose workers were all posted by hand
         // — would otherwise be stood down wholesale on the first tick,
         // which is the exact regression `Game::load`'s absorption rule
         // exists to prevent.
+        //
+        // **Both cases that argument names are an *empty queue*, and that
+        // is the condition it is gated on.** Unqualified it also caught the
+        // base whose orders are all *satisfied*: a standing order reaching
+        // its level drops its machines out of `wanted` while leaving them in
+        // `posted`, so every want left was filled, the guard fired, and the
+        // line kept running for the rest of the run — a base holding 76 of
+        // an item it was told to hold 10 of. A queue is an instruction, so
+        // where there is one the assignment is the whole truth and a body
+        // it does not name goes back to the ring.
+        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty();
         let posted: Vec<(Entity, TaskKind)> = staff
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
             .map(|t| (t.target, t.kind))
             .collect();
-        if wanted.iter().all(|post| posted.contains(post)) {
+        if queue_is_empty && wanted.iter().all(|post| posted.contains(post)) {
             return;
         }
 
@@ -840,8 +852,37 @@ impl Game {
         // restarted from zero every tick); everyone else is freed.
         let mut idle = Vec::new();
         let mut remaining = wanted.clone();
+        // Whether a load taken off a machine has anywhere to land, which is
+        // the whole of what `haul_step_system` asks before it starts an
+        // outbound errand: with no Depot standing there is no errand, and a
+        // body on a clogged machine is a body doing nothing.
+        let a_depot_stands = stock::output_buffers(self).any(|(structure, _)| {
+            self.world
+                .resource::<StructureDb>()
+                .get(&structure.kind)
+                .is_some_and(|d| d.stores)
+        });
         for &worker in &staff {
             let held = self.world.get::<Task>(worker).map(|t| (t.target, t.kind));
+            // **A body about to pick a load up is not freed either**, and it
+            // is the same rule as the one below rather than a second one: a
+            // clogged machine cannot progress, so it drops out of `wanted`
+            // — and the body standing on it is the only thing that can carry
+            // the clog away and let it run again. Freed instead, the machine
+            // has no route back into `wanted` at all and sits full for the
+            // rest of the run.
+            //
+            // The Depot term is what keeps a body walking the line
+            // downstream as each machine fills up, which is the behaviour on
+            // a base with nowhere to deliver.
+            let shedding = a_depot_stands
+                && held.is_some_and(|(target, kind)| {
+                    kind == TaskKind::GatherResource
+                        && self
+                            .world
+                            .get::<Stock>(target)
+                            .is_some_and(|s| s.output_room() == 0)
+                });
             // **A body mid-delivery is never freed.** The same rule as the
             // one above, one case wider: a worker holding a load has
             // somewhere to be. Freeing it drops `Carrying` along with the
@@ -849,7 +890,7 @@ impl Game {
             // the machine's stock — so the goods are destroyed rather than
             // released. Rare while a worker only ever set off from a clogged
             // machine; routine now that one sets off every cycle.
-            if self.world.get::<Carrying>(worker).is_some() {
+            if shedding || self.world.get::<Carrying>(worker).is_some() {
                 if let Some(index) = held.and_then(|post| remaining.iter().position(|&p| p == post))
                 {
                     remaining.remove(index);

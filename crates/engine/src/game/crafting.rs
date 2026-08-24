@@ -888,7 +888,13 @@ impl Game {
         let mut consider_cargo = |candidate: GearCopy, held: u32| {
             // The survivor's own row supplies a partner only when it holds
             // two or more: one of them is the survivor.
-            let spare = held - u32::from(&candidate == survivor && !survivor_worn);
+            //
+            // Saturating because a save is an editable file: nothing the
+            // game writes leaves a zero-quantity row (`GearCopies::take`
+            // removes one), but a hand-edited save can carry one and
+            // `GearCopies::add` pushes it through as-is. A `u32` underflow
+            // there is a panic on load-and-fuse, not a wrong number.
+            let spare = held.saturating_sub(u32::from(&candidate == survivor && !survivor_worn));
             if spare > 0 && candidate.fusable_with(survivor) {
                 candidates.push((candidate, false));
             }

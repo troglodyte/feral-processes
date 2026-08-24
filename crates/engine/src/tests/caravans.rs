@@ -646,6 +646,7 @@ fn stand_caravan(game: &mut Game, stage: CaravanStage, tile: (i32, i32)) -> crat
                 visit,
                 arrival_tile: (9, 9),
                 stage_ticks: 0,
+                announced_stuck: false,
             },
             Position {
                 x: tile.0,
@@ -728,6 +729,7 @@ fn a_caravan_mid_journey_survives_a_save_and_load() {
         visit: game.visit_index(),
         arrival_tile: (-7, 4),
         stage_ticks: 13,
+        announced_stuck: false,
     };
     game.world.spawn((
         before.clone(),
@@ -758,5 +760,274 @@ fn caravans_cost_no_save_format_bump() {
         crate::save::SAVE_FORMAT_VERSION,
         32,
         "a caravan is an additive named-struct field and must not bump this"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The journey
+// ---------------------------------------------------------------------------
+
+use crate::MessageKind;
+use crate::resources::MessageLog;
+
+/// A base with an anchor standing, ticked forward to the moment the next
+/// visit opens — the state every journey test starts from.
+///
+/// The clock is wound rather than the caravan hand-placed, so what is under
+/// test is the transition and not a fixture's idea of one.
+fn at_the_arrival(game: &mut Game) -> CaravanVisit {
+    let visit = game.visit_at(game.visit_index() + 1).unwrap();
+    set_tick(game, visit.arrival_tick);
+    visit
+}
+
+fn caravan_of(game: &mut Game) -> Option<Caravan> {
+    let mut query = game.world.query::<&Caravan>();
+    query.iter(&game.world).next().cloned()
+}
+
+fn stage_of(game: &mut Game) -> Option<CaravanStage> {
+    caravan_of(game).map(|c| c.stage)
+}
+
+/// Ticks until `want` is reached or `budget` runs out, and says which.
+fn tick_until(game: &mut Game, budget: u32, want: impl Fn(&mut Game) -> bool) -> bool {
+    for _ in 0..budget {
+        if want(game) {
+            return true;
+        }
+        game.caravan_tick();
+        game.world.resource_mut::<GameClock>().tick += 1;
+    }
+    want(game)
+}
+
+/// All four transitions, driven by ticking rather than by hand-writing a
+/// stage — a fixture that writes the stage tests nothing but the enum.
+#[test]
+fn a_caravan_walks_in_docks_and_walks_back_out() {
+    let mut game = fresh();
+    based(&mut game);
+    at_the_arrival(&mut game);
+
+    game.caravan_tick();
+    assert_eq!(
+        stage_of(&mut game),
+        Some(CaravanStage::Approaching),
+        "the visit opened and nobody walked in"
+    );
+
+    assert!(
+        tick_until(&mut game, 200, |g| stage_of(g)
+            == Some(CaravanStage::Docking)),
+        "it never reached the anchor"
+    );
+    assert!(
+        tick_until(&mut game, 20, |g| stage_of(g)
+            == Some(CaravanStage::Crossing)),
+        "it stood on the anchor and never phased out"
+    );
+    assert!(
+        tick_until(&mut game, 200, |g| stage_of(g)
+            == Some(CaravanStage::Docked)),
+        "it never reached the counter"
+    );
+
+    // The counter it docked at, checked here rather than in its own test:
+    // "beside the Market" is the whole of what `Docked` claims.
+    let counter = game.trading_structures().next().unwrap().1;
+    let standing = {
+        let mut query = game.world.query::<(&Caravan, &Position)>();
+        *query.iter(&game.world).next().unwrap().1
+    };
+    assert!(
+        crate::game::base::hauling::at_station(standing, counter),
+        "docked at {standing:?}, which is not beside the counter at {counter:?}"
+    );
+
+    assert!(
+        tick_until(&mut game, CARAVAN_STAY_TICKS as u32 + 200, |g| {
+            caravan_of(g).is_none()
+        }),
+        "it never left"
+    );
+}
+
+/// Arrival and departure are each one line, and neither is `Raid` — a trader
+/// is not a sweep and must not read as one.
+#[test]
+fn arrival_and_departure_each_log_one_ordinary_line() {
+    let mut game = fresh();
+    based(&mut game);
+    at_the_arrival(&mut game);
+
+    game.caravan_tick();
+    let arrival = caravan_lines(&mut game);
+    assert_eq!(arrival.len(), 1, "arrival said: {arrival:?}");
+
+    tick_until(&mut game, CARAVAN_STAY_TICKS as u32 + 600, |g| {
+        caravan_of(g).is_none()
+    });
+    let all = caravan_lines(&mut game);
+    assert!(
+        all.len() >= 2,
+        "a whole visit should have said arrival and departure: {all:?}"
+    );
+    assert!(
+        all.iter().all(|(_, kind)| *kind != MessageKind::Raid),
+        "a caravan logged as a raid: {all:?}"
+    );
+}
+
+/// Every line the caravan wrote, with its kind — matched on the shipped
+/// traders' own names rather than on a phrase, so rewording a log line does
+/// not silently empty this.
+fn caravan_lines(game: &mut Game) -> Vec<(String, MessageKind)> {
+    let names: Vec<String> = game
+        .world
+        .resource::<CaravanDb>()
+        .all()
+        .map(|d| d.name.clone())
+        .collect();
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|e| names.iter().any(|n| e.text.contains(n.as_str())))
+        .map(|e| (e.text.clone(), e.kind))
+        .collect()
+}
+
+/// Ticks run regardless of where the party is: the base keeps working while
+/// they are underground, and a caravan is a property of the base.
+#[test]
+fn a_caravan_advances_while_the_party_is_underground() {
+    let mut game = fresh();
+    based(&mut game);
+    at_the_arrival(&mut game);
+    game.caravan_tick();
+    let started = {
+        let mut query = game.world.query::<(&Caravan, &Position)>();
+        *query.iter(&game.world).next().unwrap().1
+    };
+
+    game.world.insert_resource(Locale::Surface);
+    descend(&mut game);
+    assert!(game.is_underground(), "the fixture never got underground");
+
+    for _ in 0..20 {
+        game.caravan_tick();
+    }
+    let now = {
+        let mut query = game.world.query::<(&Caravan, &Position)>();
+        *query.iter(&game.world).next().unwrap().1
+    };
+    assert_ne!(
+        (started.x, started.y),
+        (now.x, now.y),
+        "the caravan stood still because the party was elsewhere"
+    );
+}
+
+/// Two Markets and one answer. Bevy's query iteration order is not stable,
+/// so a caravan that docked at a different counter between two loads of one
+/// save would be reporting iteration order rather than the base.
+///
+/// **The two are stood up in the opposite order to their positions**, which
+/// is what makes this bite — `assembler_system`'s own test does the same,
+/// for the same reason: with spawn order and `(x, y)` order agreeing, an
+/// unsorted walk gives the right answer by luck.
+#[test]
+fn a_base_with_two_markets_always_docks_at_the_same_one() {
+    let dir = scratch_assets_dir("caravan_two_markets");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = fresh();
+    game.lay_starting_pocket();
+    deploy(&mut game, "home", 0, 0);
+    deploy(&mut game, "market", 2, 0);
+    deploy(&mut game, "market", -2, 1);
+    stand_in_base_at(&mut game, 1, 1);
+    game.save(&path).unwrap();
+
+    let chosen = |_run: u32| -> (i32, i32) {
+        let mut game = Game::load(&path, &test_assets_dir()).unwrap();
+        let counter = game.trading_structures().next().unwrap().1;
+        (counter.x, counter.y)
+    };
+
+    assert_eq!(
+        chosen(0),
+        (-2, 1),
+        "the counter picked is not the (x, y)-first one, so the walk is \
+         reporting whatever order the query happened to hand back"
+    );
+    for run in 1..6 {
+        assert_eq!(
+            chosen(run),
+            (-2, 1),
+            "the counter moved between two loads of one save"
+        );
+    }
+}
+
+/// The Market comes down mid-visit and the trader has no reason to stay.
+#[test]
+fn a_caravan_leaves_early_when_the_counter_comes_down() {
+    let mut game = fresh();
+    based(&mut game);
+    at_the_arrival(&mut game);
+    game.caravan_tick();
+    assert!(
+        tick_until(&mut game, 400, |g| stage_of(g)
+            == Some(CaravanStage::Docked)),
+        "it never docked"
+    );
+
+    let counter = game.trading_structures().next().unwrap().0;
+    game.world.despawn(counter);
+
+    game.caravan_tick();
+    assert_eq!(
+        stage_of(&mut game),
+        Some(CaravanStage::Leaving),
+        "the counter is gone and the trader is still standing there"
+    );
+}
+
+/// The base-space stall says so **once**, not once a tick, per
+/// `set_machine_status`' rule — a per-tick line is what makes a latch
+/// necessary in the first place.
+#[test]
+fn a_caravan_with_no_way_to_the_counter_complains_once() {
+    let mut game = fresh();
+    based(&mut game);
+    // A counter walled off from the door: base space is solid everywhere the
+    // pocket was not laid, so a Market outside it has no route in.
+    let counter = game.trading_structures().next().unwrap().0;
+    game.world.despawn(counter);
+    deploy(&mut game, "market", 60, 60);
+    at_the_arrival(&mut game);
+
+    game.caravan_tick();
+    assert!(
+        tick_until(&mut game, 400, |g| stage_of(g)
+            == Some(CaravanStage::Crossing)),
+        "it never got inside"
+    );
+    for _ in 0..60 {
+        game.caravan_tick();
+    }
+
+    let complaints = caravan_lines(&mut game)
+        .into_iter()
+        .filter(|(text, _)| text.contains("way through"))
+        .count();
+    assert_eq!(complaints, 1, "said it {complaints} times");
+    assert!(
+        caravan_of(&mut game).is_some(),
+        "it waits out the visit rather than giving up — the player can clear \
+         a way through, which is why it is worth saying at all"
     );
 }

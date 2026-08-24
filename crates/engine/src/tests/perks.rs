@@ -484,6 +484,21 @@ fn buy_enough_keen_scavenger_to_cap_a_level_1_node(game: &mut Game, base_int: i3
         .extend(std::iter::repeat_n(Perk::KeenScavenger, levels));
 }
 
+/// Takes `node` out of the GC Entropy Sweep's target pool, which filters on
+/// `(With<Durability>, With<Structure>)`.
+///
+/// Both perk tests below tick sixty times with a base standing, so a sweep
+/// can land on the very node they are measuring — and a damaged node rolls
+/// differently, which reads as the perk failing to reach the roll. Whether a
+/// sweep lands is a `GameRng` question, so the seed decided it and any change
+/// anywhere that moves the stream flips it: this one surfaced when a resource
+/// registered elsewhere shifted bevy's query iteration order. The fixtures in
+/// `support.rs` built on `spawn_structure_at` are already immune for exactly
+/// this reason (see that file's note); a node deployed properly is not.
+fn keep_the_sweep_off(game: &mut Game, node: Entity) {
+    game.world.entity_mut(node).remove::<Durability>();
+}
+
 /// The perk belongs to the player, but the mining roll runs per gather
 /// cycle — so what needs covering here is the wiring, not the formula
 /// (`systems::keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one`
@@ -506,6 +521,7 @@ fn keen_scavenger_reaches_the_roll_when_you_work_a_node_yourself() {
     );
 
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, crate::tuning::DEFAULT_BASE_INT);
+    keep_the_sweep_off(&mut game, node);
 
     game.work_structure(node)
         .expect("a deployed node is workable");
@@ -550,6 +566,7 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     // the aptitude doing the work.
     let worker_int = generic_species().base_int;
     buy_enough_keen_scavenger_to_cap_a_level_1_node(&mut game, worker_int);
+    keep_the_sweep_off(&mut game, node);
 
     for _ in 0..60 {
         game.wait();

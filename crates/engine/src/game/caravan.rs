@@ -456,3 +456,293 @@ impl Game {
         (marked * zone).max(parts * zone + 1).max(1)
     }
 }
+
+impl Game {
+    /// Walks the visiting caravan one step of its journey — spawning it when
+    /// its visit opens, moving it in, standing it beside the Market, and
+    /// walking it back out when the visit closes.
+    ///
+    /// Runs on every tick regardless of where the party is. There is
+    /// deliberately **no locale special case**: a caravan is a property of
+    /// the base and the base keeps running while the party is four frames
+    /// down, exactly as the production chains do. That is also why nothing
+    /// here reads the player's `Position` — the tile it walks to is the
+    /// anchor's, which is a fixture of the sector.
+    pub(crate) fn caravan_tick(&mut self) {
+        if self.is_game_over().is_some() {
+            return;
+        }
+        let standing: Option<(Entity, Caravan)> = {
+            let mut query = self.world.query::<(Entity, &Caravan)>();
+            query.iter(&self.world).map(|(e, c)| (e, c.clone())).next()
+        };
+        let open = self.scheduled_visit();
+
+        let Some((entity, caravan)) = standing else {
+            // Nothing standing: a visit that is open and has not been walked
+            // yet is one to start. The `visit` check is what stops a trader
+            // that gave up, or was seen off by a breach, from reappearing
+            // for the rest of its own window.
+            if let Some(visit) = open {
+                self.spawn_caravan(&visit);
+            }
+            return;
+        };
+
+        // The visit is over, or the counter it came for has come down. Both
+        // send it home, and neither is a stall: a caravan that leaves early
+        // has done what it could.
+        //
+        // One condition covers both, and deliberately: `scheduled_visit`
+        // already answers `None` with no counter standing, so a second
+        // `has_trading_structure()` clause here would be a redundant reading
+        // of the same fact — and the redundant half is the one that would
+        // rot. It is read as "the *open* visit is no longer mine" rather than
+        // off the clock, so a caravan somehow left standing across a visit
+        // boundary still packs up.
+        let done = open.as_ref().is_none_or(|v| v.visit != caravan.visit);
+        if done && !matches!(caravan.stage, CaravanStage::Leaving) {
+            self.send_caravan_home(entity);
+            return;
+        }
+
+        match caravan.stage {
+            CaravanStage::Approaching => self.walk_caravan_in(entity, &caravan),
+            CaravanStage::Docking => self.phase_caravan_in(entity),
+            CaravanStage::Crossing => self.walk_caravan_to_counter(entity, &caravan),
+            CaravanStage::Docked => self.age_caravan(entity),
+            CaravanStage::Leaving => self.walk_caravan_out(entity, &caravan),
+        }
+    }
+
+    /// Puts a trader on the sector surface, `CARAVAN_SPAWN_DISTANCE_TILES`
+    /// from the anchor on the visit's own bearing.
+    ///
+    /// A caravan with nowhere to walk to — no anchor in the sector — is not
+    /// spawned at all rather than spawned stuck, since the whole journey is
+    /// defined against that tile.
+    fn spawn_caravan(&mut self, visit: &CaravanVisit) {
+        let Some(anchor) = self.anchor_position() else {
+            return;
+        };
+        let Some(def) = self
+            .world
+            .resource::<crate::caravans::CaravanDb>()
+            .get(&visit.def_id)
+            .cloned()
+        else {
+            return;
+        };
+        let (dx, dy) = BEARINGS[visit.bearing as usize % BEARINGS.len()];
+        let reach = crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES;
+        let tile = (anchor.0 + dx * reach, anchor.1 + dy * reach);
+        self.world.spawn((
+            Caravan {
+                stage: CaravanStage::Approaching,
+                visit: visit.visit,
+                arrival_tile: tile,
+                stage_ticks: 0,
+                announced_stuck: false,
+            },
+            Position {
+                x: tile.0,
+                y: tile.1,
+            },
+            Glyph {
+                ch: def.glyph,
+                color: def.color,
+            },
+        ));
+        self.log(format!(
+            "{} rolls in out of the sector, heading for the anchor.",
+            def.name
+        ));
+    }
+
+    /// One step of a surface leg, downhill along a `walk_field` rooted at
+    /// `target`. `Ok(true)` on arrival, `Ok(false)` mid-walk, `Err(())` when
+    /// no route exists at all.
+    ///
+    /// **`walk_field` and not a second walk**: it is the one Dijkstra search
+    /// on the surface and takes its step rule as a parameter for exactly this
+    /// — a caravan crosses the ground a `Pursuing` guardian is refused, since
+    /// it is walking *to* the base rather than hunting somebody on it.
+    fn step_caravan(&mut self, entity: Entity, target: (i32, i32)) -> Result<bool, ()> {
+        let Some(pos) = self.world.get::<Position>(entity).copied() else {
+            return Err(());
+        };
+        if (pos.x, pos.y) == target {
+            return Ok(true);
+        }
+        let radius = crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES + CARAVAN_PATH_MARGIN;
+        let field = {
+            let mut map = self.world.resource_mut::<crate::world::WorldMap>();
+            crate::game::pursuit::walk_field(target, radius, |(x, y)| map.tile(x, y).walkable)
+        };
+        let Some(&here) = field.get(&(pos.x, pos.y)) else {
+            return Err(());
+        };
+        let next = crate::world::NEIGHBOURS
+            .iter()
+            .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
+            .filter_map(|n| field.get(&n).map(|&cost| (cost, n.0, n.1)))
+            .min()
+            .filter(|&(cost, ..)| cost < here);
+        match next {
+            Some((_, x, y)) => {
+                if let Some(mut at) = self.world.get_mut::<Position>(entity) {
+                    *at = Position { x, y };
+                }
+                Ok((x, y) == target)
+            }
+            None => Err(()),
+        }
+    }
+
+    fn walk_caravan_in(&mut self, entity: Entity, caravan: &Caravan) {
+        let Some(anchor) = self.anchor_position() else {
+            self.give_up(entity, caravan);
+            return;
+        };
+        match self.step_caravan(entity, anchor) {
+            Ok(true) => self.set_caravan_stage(entity, CaravanStage::Docking),
+            Ok(false) => self.age_caravan(entity),
+            // No route across the sector at all — walled in, or the anchor
+            // is enclosed. It gives up and goes, which is the honest outcome:
+            // there is nothing the player can do about a trader that never
+            // arrived, so the visit is simply a miss. Said once by
+            // construction, since the entity is gone straight after.
+            Err(()) => self.give_up(entity, caravan),
+        }
+    }
+
+    /// The anchor tile to base space's own door cell, in one tick — the same
+    /// step the party takes through `Game::enter_base`, and the reason
+    /// `Docking` is a stage rather than an instant: the trader is drawn
+    /// standing on the anchor for one tick before it goes out of phase.
+    fn phase_caravan_in(&mut self, entity: Entity) {
+        let (x, y) = crate::game::base_space::BASE_EXIT_CELL;
+        if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
+            *pos = Position { x, y };
+        }
+        self.set_caravan_stage(entity, CaravanStage::Crossing);
+    }
+
+    fn walk_caravan_to_counter(&mut self, entity: Entity, caravan: &Caravan) {
+        let Some((_, counter)) = self.trading_structures().next() else {
+            self.send_caravan_home(entity);
+            return;
+        };
+        let Some(from) = self.world.get::<Position>(entity).copied() else {
+            return;
+        };
+        if crate::game::base::hauling::at_station(from, counter) {
+            self.set_caravan_stage(entity, CaravanStage::Docked);
+            let name = self.caravan_name(caravan);
+            self.log(format!("{name} sets out its stock beside the counter."));
+            return;
+        }
+        let blocked = self.structure_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        let step = {
+            let grid = self.world.resource::<BaseGrid>();
+            crate::game::base::hauling::step_to_post(grid, from, counter, &blocked, pocket_radius)
+        };
+        match step {
+            Ok(Some(next)) => {
+                if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
+                    *pos = next;
+                }
+                self.age_caravan(entity);
+            }
+            Ok(None) => self.age_caravan(entity),
+            // Boxed in, or no route from the door: it waits where it landed
+            // and leaves at the end of the stay rather than giving up, since
+            // the player *can* fix this one by clearing a way through — which
+            // is why it is worth saying, and why it is said **once**.
+            Err(_) => {
+                self.age_caravan(entity);
+                if !caravan.announced_stuck {
+                    if let Some(mut c) = self.world.get_mut::<Caravan>(entity) {
+                        c.announced_stuck = true;
+                    }
+                    let name = self.caravan_name(caravan);
+                    self.log(format!(
+                        "{name} can't find a way through to the counter, and waits by the anchor."
+                    ));
+                }
+            }
+        }
+    }
+
+    fn walk_caravan_out(&mut self, entity: Entity, caravan: &Caravan) {
+        match self.step_caravan(entity, caravan.arrival_tile) {
+            Ok(true) | Err(()) => {
+                let name = self.caravan_name(caravan);
+                self.world.despawn(entity);
+                self.log(format!("{name} packs up and rolls back out of the sector."));
+            }
+            Ok(false) => self.age_caravan(entity),
+        }
+    }
+
+    /// Turns a caravan around wherever it is: back onto the anchor tile if it
+    /// was out of phase, and onto `Leaving` either way.
+    fn send_caravan_home(&mut self, entity: Entity) {
+        let Some(caravan) = self.world.get::<Caravan>(entity).cloned() else {
+            return;
+        };
+        if caravan.stage.in_base_space() {
+            // Straight back to the anchor's tile on the surface. Phasing out
+            // is not a walk in either direction — `enter_base`/`leave_base`
+            // are one step for the party too.
+            let anchor = self.anchor_position().unwrap_or(caravan.arrival_tile);
+            if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
+                *pos = Position {
+                    x: anchor.0,
+                    y: anchor.1,
+                };
+            }
+        }
+        self.set_caravan_stage(entity, CaravanStage::Leaving);
+    }
+
+    fn give_up(&mut self, entity: Entity, caravan: &Caravan) {
+        let name = self.caravan_name(caravan);
+        self.world.despawn(entity);
+        self.log(format!("{name} can't find a way in, and turns back."));
+    }
+
+    fn set_caravan_stage(&mut self, entity: Entity, stage: CaravanStage) {
+        if let Some(mut caravan) = self.world.get_mut::<Caravan>(entity) {
+            caravan.stage = stage;
+            caravan.stage_ticks = 0;
+        }
+    }
+
+    fn age_caravan(&mut self, entity: Entity) {
+        if let Some(mut caravan) = self.world.get_mut::<Caravan>(entity) {
+            caravan.stage_ticks = caravan.stage_ticks.saturating_add(1);
+        }
+    }
+
+    /// What the log and the map call this trader.
+    pub(crate) fn caravan_name(&self, caravan: &Caravan) -> String {
+        self.visit_at(caravan.visit)
+            .and_then(|v| {
+                self.world
+                    .resource::<crate::caravans::CaravanDb>()
+                    .get(&v.def_id)
+                    .map(|d| d.name.clone())
+            })
+            .unwrap_or_else(|| "The caravan".to_string())
+    }
+}
+
+/// How far past `CARAVAN_SPAWN_DISTANCE_TILES` a caravan's surface search
+/// reaches, so a route that has to go round something still exists.
+///
+/// Here rather than in `tuning.rs` for `BASE_EXIT_CELL`'s reason: it is not a
+/// knob, it is the slack a straight-line spawn distance needs to be walkable
+/// at all. `NEST_PATH_SEARCH_MARGIN` is the same idea on the other search.
+const CARAVAN_PATH_MARGIN: i32 = 12;

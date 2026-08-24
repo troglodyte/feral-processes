@@ -169,6 +169,11 @@ impl Game {
         // that counts.
         self.settle_contracts();
         self.structure_regen();
+        // After the schedule, where the base systems' commands have just
+        // flushed, so the walk reads structure positions that are settled —
+        // and **before** `raid_check`, so a trader cannot be caught standing
+        // in a sweep that is resolved the same tick it arrives.
+        self.caravan_tick();
         self.raid_check();
         self.nest_respawn_tick();
         // Immediately after respawn: a guardian that just replaced a fallen

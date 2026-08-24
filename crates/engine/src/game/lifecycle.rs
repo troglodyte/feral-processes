@@ -710,6 +710,9 @@ impl Game {
                     visit: c.visit,
                     arrival_tile: c.arrival_tile,
                     stage_ticks: c.stage_ticks,
+                    // Never saved: a reload is exactly when the player should
+                    // be told again. `DigSite::announced_stuck`'s rule.
+                    announced_stuck: false,
                 },
                 Position {
                     x: c.position.0,

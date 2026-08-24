@@ -1666,6 +1666,15 @@ pub struct Caravan {
     /// How many ticks it has spent on the current stage. Read by the two
     /// stuck cases, which are the only things that care.
     pub stage_ticks: u32,
+    /// Whether the base has already been told this trader cannot reach the
+    /// counter. `DigSite::announced_stuck`'s field, rule and reason: the
+    /// stall lasts the rest of the visit, and entering a state is news while
+    /// staying in it is not.
+    ///
+    /// Not saved, for `DigSite::announced_stuck`'s reason too — it is a
+    /// conversation's "I already said so", and a reload is exactly when the
+    /// player should be told again.
+    pub announced_stuck: bool,
 }
 
 /// A stationary spawner for a wild species. Present on the nest entity

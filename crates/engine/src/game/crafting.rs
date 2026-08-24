@@ -726,30 +726,32 @@ impl Game {
     /// T1, 4 for a T2 and 8 for a T3. Spares are untouched: they stay
     /// ordinary, which is the whole of this feature.
     ///
-    /// A copy currently worn in the item's slot *at that same tier* counts
-    /// as one of the two, so wearing it plus a single spare is enough; that
-    /// worn copy is the survivor, stays equipped, and picks up the new
-    /// tier's bonus immediately rather than only on the next re-equip.
-    /// Returns the confirmation line on success so the caller can surface
-    /// it — unlike equipping, a fusion changes nothing else the player can
-    /// see.
+    /// A copy currently worn in the item's slot counts as one of the two if
+    /// it is eligible, so wearing it plus a single spare is enough. Whenever
+    /// either half was worn the result takes the slot and picks up the new
+    /// tier's bonus immediately rather than only on the next re-equip, so
+    /// the player is never left bare. Returns the confirmation line on
+    /// success so the caller can surface it — unlike equipping, a fusion
+    /// changes nothing else the player can see.
     ///
     /// Bounded by `tuning::MAX_FUSIONS`, the same ceiling a program's
     /// lineage has — see `Game::fuse_companions`. Both refusals sit above
     /// the first `take_copies` deliberately: a refused fusion must spend
     /// nothing from either store, the same ordering `install_routine` and
     /// `use_symlink` keep.
-    /// **The two copies must match on every property, rare tier included**,
-    /// and the result keeps it. That falls out of `GearCopy` being the unit
-    /// of interchangeability rather than being a rule added on top: two
-    /// copies that differ are not two of a thing. The consequence worth
-    /// knowing is that an Overclocked copy can only be fused with another
-    /// Overclocked copy of the same item — deliberately, since the
-    /// alternative launders a rare tier either into or out of the result
-    /// depending on which parent won, and there is no midpoint tier for it
-    /// to land on (the same argument `fuse_companions` makes for taking
-    /// `max`, which it can do because it is combining two creatures rather
-    /// than consuming two of one thing).
+    /// **What must match is `GearCopy::fusable_with` — item, rare tier and
+    /// fusion tier.** Quality and affixes go free and are carried forward:
+    /// the two qualities average and the two affix lists union, duplicates
+    /// kept. The **survivor** is the copy passed in, which is the one the
+    /// player pressed `[U]` on; the **partner** is chosen automatically as
+    /// the best eligible spare, and there is no picker.
+    ///
+    /// Rarity stays matched deliberately: laundering a rare tier into or out
+    /// of the result depending on which parent won is the alternative, and
+    /// there is no midpoint tier for a Gold-plus-Ordinary fuse to land on
+    /// (the same argument `fuse_companions` makes for taking `max`, which it
+    /// can do because it is combining two creatures rather than consuming
+    /// two of one thing).
     pub fn fuse_item(&mut self, copy: &GearCopy) -> Result<String, String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -767,6 +769,10 @@ impl Game {
     /// than one of each per pair. Every refusal still sits above the first
     /// `take_copies`, so a caller looping on this until it errors spends
     /// nothing on the call that stops it.
+    ///
+    /// `copy` is the survivor; `best_fusion_partner` picks what it is fused
+    /// with. See `fuse_item` for what must match and what is carried
+    /// forward.
     fn fuse_copy(&mut self, copy: &GearCopy) -> Result<String, String> {
         let item = &copy.item;
         let Some((slot, _)) = self.equipment_of(item) else {
@@ -781,38 +787,55 @@ impl Game {
             ));
         }
         let player = self.player_entity();
-        let fused = GearCopy {
-            tier: fused_tier,
-            ..copy.clone()
-        };
 
-        // Matched on the whole copy: wearing an ordinary one must not pay
-        // for a fusion of two T1s, or of two Overclocked ones.
         let worn = self
             .world
             .get::<Equipment>(player)
-            .and_then(|e| e.get(slot))
-            .filter(|eq| &eq.copy == copy);
-        let from_cargo = crate::tuning::ITEM_FUSION_COST - u32::from(worn.is_some());
+            .and_then(|e| e.get(slot));
+        // The survivor comes off the player's back when it is what they are
+        // wearing, and out of cargo otherwise. Which it is decides whether
+        // the survivor's own row can also supply the partner.
+        let survivor_worn = worn.as_ref().is_some_and(|eq| &eq.copy == copy);
 
-        let have = self.count_copies(copy);
-        if have < from_cargo {
-            return Err(format!("Need {from_cargo} {name} to fuse (have {have})."));
+        let partner = if survivor_worn || self.count_copies(copy) > 0 {
+            self.best_fusion_partner(copy, survivor_worn, worn.as_ref())
+        } else {
+            None
+        };
+        let Some((partner, partner_worn)) = partner else {
+            // Counted over the whole eligible *group*, not over exact
+            // matches: with quality and affixes free, a count of exact
+            // matches would say "have 1" while the player is looking at
+            // four copies of the thing.
+            let have = self.fusable_group_size(copy, worn.as_ref());
+            return Err(format!(
+                "Need {} {name} to fuse (have {have}).",
+                crate::tuning::ITEM_FUSION_COST
+            ));
+        };
+
+        let mut affixes = copy.affixes.clone();
+        affixes.extend(partner.affixes.iter().cloned());
+        let fused = GearCopy::with_affixes(
+            copy.item.clone(),
+            copy.rarity,
+            fused_tier,
+            affixes,
+            average_quality(copy.quality, partner.quality),
+        );
+
+        if !survivor_worn {
+            self.take_copies(copy, 1);
         }
-        self.take_copies(copy, from_cargo);
-
-        // A fusion yields one stronger copy, so only the *other* one is
-        // spent. When a copy is worn it is the survivor and never leaves the
-        // slot; otherwise the survivor is promoted into the tier above.
-        if worn.is_none() {
-            self.add_copies(&fused, 1);
+        if !partner_worn {
+            self.take_copies(&partner, 1);
         }
 
-        // Swap the worn copy's equip-time bonus for the new tier's so the
-        // boost is felt at once, not only after an unequip/re-equip. Both
-        // figures come from `worn_bonus`, so the subtraction matches what
-        // the equip added and the addition matches what a re-equip would.
-        if let Some(worn) = worn {
+        // Whenever either half came off the player's back the result takes
+        // the slot, so a fusion can never leave them bare. Both figures come
+        // from `worn_bonus`, so the subtraction matches what the equip added
+        // and the addition matches what a re-equip would.
+        if let Some(worn) = worn.filter(|_| survivor_worn || partner_worn) {
             let promoted = EquippedItem {
                 copy: fused,
                 level: worn.level,
@@ -828,6 +851,8 @@ impl Game {
                 .get_mut::<Equipment>(player)
                 .unwrap()
                 .slot_mut(slot) = Some(promoted);
+        } else {
+            self.add_copies(&fused, 1);
         }
 
         let msg = format!(
@@ -836,6 +861,95 @@ impl Game {
             (fused_tier as f64 * crate::tuning::ITEM_FUSION_BONUS_PER_TIER * 100.0).round() as i32
         );
         Ok(msg)
+    }
+
+    /// The copy `survivor` will be fused with, and whether it is the one
+    /// being worn.
+    ///
+    /// **The order is total**, and that is the point rather than tidiness:
+    /// `GearCopies::copies` is a `Vec` in insertion order, which is
+    /// play-history dependent, so without a full tie-break the same cargo
+    /// could fuse differently between two saves of the same shape.
+    ///
+    /// Highest `quality` first, because that is what a player would pick.
+    /// Then cargo before worn, so a fusion disturbs the slot only when it
+    /// has to. Then fewest affixes, which leaves the more interesting spare
+    /// in cargo for a later fusion. Then the affix ids themselves, which is
+    /// what makes it total.
+    fn best_fusion_partner(
+        &self,
+        survivor: &GearCopy,
+        survivor_worn: bool,
+        worn: Option<&EquippedItem>,
+    ) -> Option<(GearCopy, bool)> {
+        let player = self.player_entity();
+        let mut candidates: Vec<(GearCopy, bool)> = Vec::new();
+
+        let mut consider_cargo = |candidate: GearCopy, held: u32| {
+            // The survivor's own row supplies a partner only when it holds
+            // two or more: one of them is the survivor.
+            let spare = held - u32::from(&candidate == survivor && !survivor_worn);
+            if spare > 0 && candidate.fusable_with(survivor) {
+                candidates.push((candidate, false));
+            }
+        };
+
+        let plain = GearCopy::plain(survivor.item.clone());
+        let held = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&plain.item))
+            .unwrap_or(0);
+        if held > 0 {
+            consider_cargo(plain, held);
+        }
+        if let Some(ledger) = self.world.get::<GearCopies>(player) {
+            for (candidate, held) in ledger.copies.clone() {
+                consider_cargo(candidate, held);
+            }
+        }
+
+        if let Some(worn) = worn.filter(|w| !survivor_worn && w.copy.fusable_with(survivor)) {
+            candidates.push((worn.copy.clone(), true));
+        }
+
+        candidates.into_iter().min_by_key(|(candidate, from_slot)| {
+            (
+                std::cmp::Reverse(candidate.quality),
+                u8::from(*from_slot),
+                candidate.affixes.len(),
+                candidate.affixes.clone(),
+            )
+        })
+    }
+
+    /// How many copies the player holds that could take part in this
+    /// fusion, worn one included — what the refusal counts.
+    fn fusable_group_size(&self, survivor: &GearCopy, worn: Option<&EquippedItem>) -> u32 {
+        let player = self.player_entity();
+        let plain = GearCopy::plain(survivor.item.clone());
+        let cargo_plain = if plain.fusable_with(survivor) {
+            self.world
+                .get::<Inventory>(player)
+                .map(|inv| inv.count(&plain.item))
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let cargo_special = self
+            .world
+            .get::<GearCopies>(player)
+            .map(|ledger| {
+                ledger
+                    .copies
+                    .iter()
+                    .filter(|(candidate, _)| candidate.fusable_with(survivor))
+                    .map(|(_, held)| *held)
+                    .sum::<u32>()
+            })
+            .unwrap_or(0);
+        let on_back = u32::from(worn.is_some_and(|eq| eq.copy.fusable_with(survivor)));
+        cargo_plain + cargo_special + on_back
     }
 
     /// Fuses every matching pair in cargo for one keypress and one turn.
@@ -918,4 +1032,19 @@ impl Game {
         self.tick();
         Ok(())
     }
+}
+
+/// The quality of a copy fused from two: the average, snapped to a
+/// `QUALITY_STEP`, **ties down**.
+///
+/// Never rounds up, so no fusion buys quality, and it always lands on a
+/// `QUALITY_STEP` multiple — which every drop and every craft roll already
+/// guarantees, so no screen learns to show a figure no roll could produce.
+///
+/// Integer arithmetic on purpose: `GearCopy::quality` is a `u8` precisely so
+/// the type can take `Eq`, and a float here would put a rounding difference
+/// into the key of three `==`-keyed stores.
+fn average_quality(a: u8, b: u8) -> u8 {
+    let step = crate::tuning::QUALITY_STEP as u32;
+    ((a as u32 + b as u32 + step - 1) / (2 * step) * step) as u8
 }

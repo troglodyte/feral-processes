@@ -1,7 +1,7 @@
 //! Equipping, unequipping, and fusing gear.
 
 use super::support::*;
-use crate::tuning::{MAX_FUSIONS, QUALITY_DEFAULT};
+use crate::tuning::{MAX_FUSIONS, QUALITY_DEFAULT, QUALITY_MAX, QUALITY_MIN};
 use crate::*;
 
 #[test]
@@ -550,6 +550,11 @@ fn a_worn_copy_at_another_tier_does_not_pay_for_the_fusion() {
     assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
 }
 
+/// The refusal counts the whole eligible **group**, worn copy included, not
+/// exact matches: with quality and affixes free of the match, an exact count
+/// would read "have 1" to a player looking at four copies of the thing. So
+/// wearing one and holding no spares is "need 2, have 1", not "need 1, have
+/// 0".
 #[test]
 fn fusing_a_worn_item_still_needs_one_spare() {
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
@@ -561,7 +566,7 @@ fn fusing_a_worn_item_still_needs_one_spare() {
         .add(armor.clone(), 1);
     game.equip(game.player_entity(), &gear(&armor, 0)).unwrap(); // now zero spares held
     let err = game.fuse_item(&gear(&armor, 0)).unwrap_err();
-    assert_eq!(err, "Need 1 Ablative Plating to fuse (have 0).");
+    assert_eq!(err, "Need 2 Ablative Plating to fuse (have 1).");
     assert_eq!(
         game.player_status().armor.map(|e| e.copy.tier),
         Some(0),
@@ -1846,4 +1851,272 @@ fn a_two_affix_copy_survives_save_and_load_worn_and_carried() {
         .and_then(|e| e.weapon.clone())
         .expect("the weapon is still worn");
     assert_eq!(back.copy.affixes, pair, "the worn copy lost its affixes");
+}
+
+/// Quality is thirteen buckets, so two field-found copies of one item almost
+/// never matched as whole values and fusion stopped firing for anything not
+/// crafted or bought. It now goes free, and the result's quality is the two
+/// averaged and snapped to a `QUALITY_STEP`.
+///
+/// Ties go **down**, so no fusion ever buys quality. The table drives both
+/// tie cases through it — `(75, 90)` lands exactly between two steps and
+/// `(85, 85)` is its own average.
+#[test]
+fn two_copies_differing_only_in_quality_fuse_to_their_average() {
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    for (a, b, want) in [
+        (75u8, 90u8, 80u8),
+        (85, 85, 85),
+        (90, 95, 90),
+        (70, 130, 100),
+    ] {
+        let mut game = Game::new(9200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let left = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), a);
+        let right = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), b);
+        game.add_copies(&left, 1);
+        game.add_copies(&right, 1);
+
+        game.fuse_item(&left)
+            .unwrap_or_else(|e| panic!("{a}% and {b}% must fuse: {e}"));
+
+        let fused = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 1, Vec::new(), want);
+        assert_eq!(
+            game.count_copies(&fused),
+            1,
+            "{a}% + {b}% should land at {want}%, and did not"
+        );
+    }
+}
+
+/// The other half of the feature: a copy carries a list, so a fusion of two
+/// affixed copies has somewhere to put the second. The result holds the
+/// union, sorted — sorted because the list is the key of the ledger.
+#[test]
+fn two_copies_with_different_affixes_fuse_and_keep_both() {
+    let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut ids: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
+    ids.sort();
+    let (a, b) = (ids[0].clone(), ids[1].clone());
+
+    let left = GearCopy::with_affixes(
+        armor.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![a.clone()],
+        QUALITY_DEFAULT,
+    );
+    let right = GearCopy::with_affixes(
+        armor.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![b.clone()],
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&left, 1);
+    game.add_copies(&right, 1);
+
+    game.fuse_item(&left).expect("two affixed copies must fuse");
+
+    let fused = GearCopy::with_affixes(armor, Rarity::Ordinary, 1, vec![a, b], QUALITY_DEFAULT);
+    assert_eq!(
+        game.count_copies(&fused),
+        1,
+        "the result must carry both affixes"
+    );
+}
+
+/// The duplicate case, and the one the feature was asked for: two copies
+/// carrying the *same* affix fuse into one carrying it **twice**. Deduping
+/// here would make the second copy's affix worth nothing.
+#[test]
+fn two_copies_with_the_same_affix_fuse_into_one_carrying_it_twice() {
+    let mut game = Game::new(9202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let affix = game
+        .affix_defs()
+        .into_iter()
+        .find(|a| a.fits(EquipmentSlot::Armor) && a.stats.mitigation > 0)
+        .expect("the shipped set has an armour affix worth mitigation");
+
+    let one = GearCopy::with_affixes(
+        armor.clone(),
+        Rarity::Ordinary,
+        0,
+        vec![affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&one, 2);
+    game.fuse_item(&one)
+        .expect("two identical copies must fuse");
+
+    let twice = GearCopy::with_affixes(
+        armor.clone(),
+        Rarity::Ordinary,
+        1,
+        vec![affix.id.clone(), affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    assert_eq!(
+        game.count_copies(&twice),
+        1,
+        "the affix must be carried twice, not deduped"
+    );
+
+    // And it is worth twice as much, which is what makes the duplicate a
+    // feature rather than a row on a screen.
+    let once_t1 = GearCopy::with_affixes(
+        armor,
+        Rarity::Ordinary,
+        1,
+        vec![affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    let doubled = game.copy_bonus(&twice, 1).expect("equippable");
+    let single = game.copy_bonus(&once_t1, 1).expect("equippable");
+    assert!(
+        doubled.mitigation > single.mitigation,
+        "a duplicated affix must count twice: {single:?} against {doubled:?}"
+    );
+}
+
+/// The partner is picked automatically, so which one it picks is the whole
+/// of what a player gets for their spare. It is the **highest quality**
+/// eligible copy.
+///
+/// Three spares at different qualities, because with only one other copy in
+/// cargo "it picked the only candidate" passes and proves nothing.
+#[test]
+fn the_partner_chosen_is_the_highest_quality_spare() {
+    let mut game = Game::new(9203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    let survivor = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), 100);
+    let copy_at = |q| GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), q);
+
+    game.add_copies(&survivor, 1);
+    for q in [75u8, 130, 90] {
+        game.add_copies(&copy_at(q), 1);
+    }
+
+    game.fuse_item(&survivor).expect("a partner is available");
+
+    // 100 and 130 average to 115. Anything else means a lesser spare was
+    // taken.
+    let fused = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 1, Vec::new(), 115);
+    assert_eq!(
+        game.count_copies(&fused),
+        1,
+        "the 130% spare should have been consumed"
+    );
+    assert_eq!(game.count_copies(&copy_at(130)), 0, "and be gone");
+    assert_eq!(game.count_copies(&copy_at(75)), 1, "the 75% spare survives");
+    assert_eq!(game.count_copies(&copy_at(90)), 1, "so does the 90% one");
+}
+
+/// A worn copy that is eligible but not *equal* is folded in — the survivor
+/// is the copy `[U]` was pressed on, and the result takes the slot so the
+/// player is never left bare.
+///
+/// Asserted on `Equipment` rather than on the log line: what matters is what
+/// is on the player's back, and a line saying so proves nothing about it.
+#[test]
+fn an_eligible_worn_copy_is_folded_in_and_the_result_takes_the_slot() {
+    let mut game = Game::new(9204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+
+    let worn = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), 90);
+    game.add_copies(&worn, 1);
+    game.equip(player, &worn).unwrap();
+
+    let spare = GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), 130);
+    game.add_copies(&spare, 1);
+
+    game.fuse_item(&spare)
+        .expect("the worn copy is an eligible partner");
+
+    let back = game
+        .world
+        .get::<Equipment>(player)
+        .and_then(|e| e.armor.clone())
+        .expect("the player must not be left bare");
+    assert_eq!(back.copy.tier, 1, "the result takes the slot: {back:?}");
+    assert_eq!(back.copy.quality, 110, "90% and 130% average to 110%");
+    assert_eq!(
+        game.count_copies(&spare),
+        0,
+        "the survivor was drawn from cargo"
+    );
+    assert_eq!(
+        game.count_copies(&GearCopy::with_affixes(
+            armor,
+            Rarity::Ordinary,
+            1,
+            Vec::new(),
+            110
+        )),
+        0,
+        "and the result is worn, not carried"
+    );
+}
+
+/// `fuse_all_items` needs no rule of its own — it iterates a snapshot taken
+/// before any fusing starts, so it pairs greedily inside a group and still
+/// cannot cascade. Four tier-0 copies at four different qualities come out
+/// as two tier-1s, not one tier-2.
+#[test]
+fn fusing_all_pairs_crosses_quality_in_one_pass() {
+    let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let armor = ItemId::from(ids::ABLATIVE_PLATING);
+    for q in [70u8, 85, 100, 130] {
+        game.add_copies(
+            &GearCopy::with_affixes(armor.clone(), Rarity::Ordinary, 0, Vec::new(), q),
+            1,
+        );
+    }
+
+    game.fuse_all_items()
+        .expect("four mismatched copies are two pairs now");
+
+    let tier_1: u32 = (QUALITY_MIN..=QUALITY_MAX)
+        .step_by(crate::tuning::QUALITY_STEP as usize)
+        .map(|q| {
+            game.count_copies(&GearCopy::with_affixes(
+                armor.clone(),
+                Rarity::Ordinary,
+                1,
+                Vec::new(),
+                q,
+            ))
+        })
+        .sum();
+    assert_eq!(tier_1, 2, "four copies buy two T1s");
+
+    let tier_2: u32 = (QUALITY_MIN..=QUALITY_MAX)
+        .step_by(crate::tuning::QUALITY_STEP as usize)
+        .map(|q| {
+            game.count_copies(&GearCopy::with_affixes(
+                armor.clone(),
+                Rarity::Ordinary,
+                2,
+                Vec::new(),
+                q,
+            ))
+        })
+        .sum();
+    assert_eq!(tier_2, 0, "and are not fused on into a T2");
+
+    let tier_0: u32 = (QUALITY_MIN..=QUALITY_MAX)
+        .step_by(crate::tuning::QUALITY_STEP as usize)
+        .map(|q| {
+            game.count_copies(&GearCopy::with_affixes(
+                armor.clone(),
+                Rarity::Ordinary,
+                0,
+                Vec::new(),
+                q,
+            ))
+        })
+        .sum();
+    assert_eq!(tier_0, 0, "with nothing left over");
 }

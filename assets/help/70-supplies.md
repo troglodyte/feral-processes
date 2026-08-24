@@ -21,15 +21,23 @@ Some pieces grant a routine while they are worn. The cargo list names it under t
 highlighted row opens the whole of it — what makes it fire, what it lands on, what it hits for at
 your level, and what it costs.
 
-Two things about a copy of gear are worth knowing before you throw one away.
+A few things about a copy of gear are worth knowing before you throw one away.
 
 - Gear locks in the level and zone it was equipped at. The same item equipped after a breach is
   stronger than the one you have been wearing since, so re-equipping what you already have is free
   progress every time you cross.
 - Two copies of the same piece fuse into one a tier higher, three tiers deep at most, and each tier
-  adds a fifth of what the piece already gives. If you are wearing one of the two, it is the copy
-  that survives. Rarity is the separate ladder — Ordinary, Silver, Gold, Platinum, Prismatic —
-  rolled when a piece drops in the field, and never on anything you compile or buy.
+  adds a fifth of what the piece already gives. They do not have to be identical: how well each was
+  compiled and what names they carry can differ, and both carry forward. The two compile figures
+  average, rounded down, so fusing never buys you quality. Every name a copy carries stacks, the
+  same one twice included — the piece is worth it twice, the row names two of them and counts the
+  rest, and I on the row lists what each is doing.
+- The one thing that must match is rarity — Ordinary, Silver, Gold, Platinum, Prismatic — the
+  separate ladder, rolled when a piece drops in the field and never on anything you compile or buy.
+  There is no half-step between two rungs for the result to land on, so a Gold will not take an
+  Ordinary.
+- Fuse from the piece you want to keep. The spare is chosen for you, best first, and whichever half
+  you were wearing, the result goes straight back on — a fusion never leaves the slot empty.
 
 What crosses a breach and what does not is the whole of how the economy is paced.
 

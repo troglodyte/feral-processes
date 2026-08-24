@@ -1,0 +1,26 @@
+// What stacked affixes are worth. One of three files identical but for the
+// weapon's `affixes` row: no affix at all — the baseline every other file here is read against.
+//
+// The same affix four times on purpose. Affix stats are added to the item's
+// **base** before every scaling axis, so four of one isolates the stacking
+// from which affixes happened to be picked — a mixed set would measure the
+// pool as much as the mechanic.
+//
+// `equip` is **top-level**, not inside `Fresh(...)` — a row in the wrong
+// place is ignored silently, and identical numbers across a sweep read as a
+// dead feature rather than an unread input.
+//
+// Read the three together and only within one build: an arena absolute moves
+// with any RNG-stream shift, so the deltas are the readable figure.
+(
+    player: Fresh(level: 12, zone: 3),
+    equip: [
+        (item: "arc_lance", affixes: []),
+    ],
+    party: [
+        (species: "scrapper", level: 12),
+    ],
+    opponents: [(species: "rootkit", count: 4)],
+    reps: 30,
+    seed: 7,
+)

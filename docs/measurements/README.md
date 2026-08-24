@@ -54,6 +54,11 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-24 — What stacked affixes are worth](2026-08-24-stacked-affix-power.md)
+  — fusion now unions two copies' affixes, and four of one weapon affix moved
+  an on-curve fight from a **60%** win rate to **90%**, a bigger swing than
+  the whole Ordinary-to-Prismatic ladder buys. `balance_sim` models no fusion
+  and sees none of it.
 - [2026-08-19 — What an unoptimised dependency graph costs a frame](2026-08-19-debug-build-frame-cost.md)
   — `cargo run` was under 20 fps because the workspace had no `[profile.dev]`
   section, so bevy, wgpu and egui compiled unoptimised into the playable

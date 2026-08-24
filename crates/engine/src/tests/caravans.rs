@@ -386,3 +386,246 @@ fn draws(game: &mut Game, n: usize) -> Vec<u64> {
         .map(|_| game.world.resource_mut::<GameRng>().0.random())
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// The derived shelf
+// ---------------------------------------------------------------------------
+
+use crate::items::ids;
+use crate::views::{CaravanOffer, CaravanOfferKind};
+
+fn shelf(game: &mut Game, visit: u64) -> Vec<CaravanOffer> {
+    let v = game.visit_at(visit).unwrap();
+    game.caravan_shelf(&v)
+}
+
+/// Every visit index the schedule can reach in a long run, at one sector.
+/// Used by the censuses, which have to sweep rather than sample: a shelf is
+/// a fold, so a rule that holds for the first ten rows says nothing.
+fn every_shelf(game: &mut Game, visits: u64) -> Vec<CaravanOffer> {
+    (0..visits).flat_map(|v| shelf(game, v)).collect()
+}
+
+#[test]
+fn a_shelf_holds_the_visiting_defs_row_count() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+
+    for visit in 0..20 {
+        let v = game.visit_at(visit).unwrap();
+        let rows = game
+            .world
+            .resource::<CaravanDb>()
+            .get(&v.def_id)
+            .unwrap()
+            .rows;
+        assert_eq!(
+            game.caravan_shelf(&v).len() as u32,
+            rows,
+            "visit {visit} ({}) stocked the wrong number of rows",
+            v.def_id
+        );
+    }
+}
+
+/// The bias, not an exact composition — pinning the latter would pin the RNG
+/// stream rather than the feature.
+#[test]
+fn a_defs_weights_decide_what_it_deals_in() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+
+    let mut gear_trader = (0u32, 0u32);
+    let mut program_trader = (0u32, 0u32);
+    for visit in 0..120u64 {
+        let v = game.visit_at(visit).unwrap();
+        let is_program_weighted = game
+            .world
+            .resource::<CaravanDb>()
+            .get(&v.def_id)
+            .map(|d| d.weights.programs > d.weights.gear)
+            .unwrap();
+        for offer in game.caravan_shelf(&v) {
+            let bucket = if is_program_weighted {
+                &mut program_trader
+            } else {
+                &mut gear_trader
+            };
+            match offer.kind {
+                CaravanOfferKind::Gear(_) => bucket.0 += 1,
+                CaravanOfferKind::Program(_) => bucket.1 += 1,
+                _ => {}
+            }
+        }
+    }
+
+    assert!(
+        gear_trader.0 > gear_trader.1,
+        "the gear-weighted trader sold more programs than gear: {gear_trader:?}"
+    );
+    assert!(
+        program_trader.1 > program_trader.0,
+        "the program-weighted trader sold more gear than programs: {program_trader:?}"
+    );
+}
+
+#[test]
+fn the_same_visit_stocks_the_same_shelf_twice_and_across_a_reload() {
+    let dir = scratch_assets_dir("caravan_shelf_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    let once = shelf(&mut game, 6);
+    let twice = shelf(&mut game, 6);
+    assert_eq!(once, twice, "reading a shelf changed it");
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert_eq!(
+        once,
+        shelf(&mut loaded, 6),
+        "the shelf is a property of the base's seed, not of the session"
+    );
+}
+
+#[test]
+fn a_deeper_sector_charges_more_for_the_same_row() {
+    let mut game = fresh();
+    based(&mut game);
+
+    set_zone(&mut game, 1);
+    let near: Vec<u32> = shelf(&mut game, 3).iter().map(|o| o.unit_cost).collect();
+    set_zone(&mut game, 5);
+    let far: Vec<u32> = shelf(&mut game, 3).iter().map(|o| o.unit_cost).collect();
+
+    assert_eq!(near.len(), far.len(), "the fixture changed the shelf shape");
+    assert!(
+        near.iter().zip(&far).all(|(a, b)| b > a),
+        "a sector-5 shelf is not dearer than a sector-1 one: {near:?} vs {far:?}"
+    );
+}
+
+/// A craftable sold under what its ingredients are worth is an infinite
+/// Credit loop through the nearest counter.
+#[test]
+fn no_craftable_is_sold_under_its_parts() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 4);
+
+    for offer in every_shelf(&mut game, 60) {
+        let item = match &offer.kind {
+            CaravanOfferKind::Gear(copy) => copy.item.clone(),
+            CaravanOfferKind::Material(item) => item.clone(),
+            CaravanOfferKind::Routine(ability) => crate::ItemId::etched(ability),
+            CaravanOfferKind::Program(_) => continue,
+        };
+        let Some(parts) = game
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .get(item.as_str())
+            .and_then(|d| d.craftable.clone())
+        else {
+            continue;
+        };
+        let worth: u32 = parts.cost.iter().map(|(i, q)| game.item_value(i) * q).sum();
+        assert!(
+            offer.unit_cost > worth,
+            "{} sells at {} but its parts are worth {worth}",
+            offer.name,
+            offer.unit_cost
+        );
+    }
+}
+
+/// The craft floor is **slack on the shipped item set** — every shipped
+/// recipe already costs less than its result is worth
+/// (`every_craftable_is_worth_more_than_its_parts`), so the census above
+/// passes with the floor deleted. A mod's item is what makes it bite, and
+/// what it exists for: a craftable a caravan sells under its parts is an
+/// infinite Credit loop through the nearest counter.
+#[test]
+fn an_underpriced_craftable_is_still_sold_above_its_parts() {
+    const CHEAP: &str = r#"(
+        id: "cheap_plate",
+        name: "Cheap Plate",
+        description: "Worth less than what goes into it.",
+        value: Some(1),
+        craftable: Some((cost: [("core_fragment", 40)])),
+    )"#;
+    let dir = modded_assets_dir(
+        "caravan_underpriced",
+        &[],
+        &[("cheap_plate.ron", CHEAP)],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(19, DifficultyMode::Forgiving, &dir).unwrap();
+    based(&mut game);
+    let item = crate::ItemId::from("cheap_plate");
+
+    let parts = game.item_value(&crate::ItemId::from(ids::CORE_FRAGMENT)) * 40;
+    let asked = game.caravan_unit_cost(&item);
+
+    assert!(
+        asked > parts,
+        "the caravan asks {asked} for something whose parts are worth {parts},          so a player could buy it and sell the parts forever"
+    );
+}
+
+/// The one hard floor under the whole feature. Breaching is earned by
+/// fighting and descending; a caravan is convenience, and convenience must
+/// never be the way past that. Held by `stock_pool`'s `EconomyRole`
+/// exclusion, so no weighting of any def at any sector can reach one.
+#[test]
+fn no_shelf_anywhere_ever_stocks_a_currency() {
+    let mut game = fresh();
+    based(&mut game);
+    let fragment = crate::ItemId::from(ids::PORTAL_FRAGMENT);
+
+    for zone in 1..=8u32 {
+        set_zone(&mut game, zone);
+        for offer in every_shelf(&mut game, 40) {
+            let item = match &offer.kind {
+                CaravanOfferKind::Gear(copy) => copy.item.clone(),
+                CaravanOfferKind::Material(item) => item.clone(),
+                CaravanOfferKind::Routine(ability) => crate::ItemId::etched(ability),
+                CaravanOfferKind::Program(_) => continue,
+            };
+            assert_ne!(item, fragment, "a Portal Fragment reached a shelf");
+            assert!(
+                game.world
+                    .resource::<crate::items_db::ItemDb>()
+                    .get(item.as_str())
+                    .is_none_or(|d| d.role.is_none() && !d.banked),
+                "{} is currency or banked and reached a shelf",
+                offer.name
+            );
+        }
+    }
+}
+
+#[test]
+fn reading_a_shelf_draws_no_game_rng() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+
+    reseed_rng(&mut game, 41);
+    let control = draws(&mut game, 4);
+
+    reseed_rng(&mut game, 41);
+    let _ = every_shelf(&mut game, 12);
+    let after = draws(&mut game, 4);
+
+    assert_eq!(
+        control, after,
+        "stocking a shelf moved the shared RNG stream"
+    );
+}

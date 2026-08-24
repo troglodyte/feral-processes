@@ -270,13 +270,29 @@ impl Game {
     /// actually *gets* is scaled by Trace like every other program spawned
     /// down here — see `buy_market_offer`.
     fn market_program_price(&self, species: &str) -> u32 {
+        self.program_price(
+            species,
+            crate::stack::depth_stat_multiplier(self.stack_depth()),
+        )
+    }
+
+    /// What a trader charges for `species` as it would spawn at `mult`: its
+    /// power at `STACK_MARKET_PROGRAM_PRICE_PER_POWER` a point.
+    ///
+    /// The multiplier is a **parameter** because the two counterparties scale
+    /// their stock differently — a Stack stall by depth, a caravan by sector
+    /// — while what a program is *worth* per point of power must not differ
+    /// between them. A caravan calling this rather than restating it is
+    /// `CLAUDE.md`'s rule that a claim to mirror another formula has to be a
+    /// call.
+    pub(crate) fn program_price(&self, species: &str, mult: f32) -> u32 {
         let power = self
             .world
             .resource::<SpeciesDb>()
             .get(species)
             .map(|def| (def.base_hp + def.base_atk + def.base_mitigation).max(0) as u32)
             .unwrap_or(0);
-        let scaled = power as f32 * crate::stack::depth_stat_multiplier(self.stack_depth());
+        let scaled = power as f32 * mult;
         (scaled.round() as u32 * STACK_MARKET_PROGRAM_PRICE_PER_POWER).max(1)
     }
 

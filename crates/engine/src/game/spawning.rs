@@ -136,6 +136,23 @@ pub(crate) fn rarity_for_roll(roll: f64) -> Rarity {
     Rarity::Ordinary
 }
 
+/// How many `QUALITY_STEP`s of spread a quality roll may land on.
+///
+/// Named rather than inlined so a caller drawing from its own stream — the
+/// caravan shelf, which may not touch `GameRng` — asks for the same range
+/// `Game::roll_quality` does instead of restating it.
+pub(crate) fn quality_luck_steps() -> u32 {
+    (QUALITY_SPREAD / QUALITY_STEP) as u32
+}
+
+/// A copy's quality: its `floor` plus `luck` steps of spread, clamped to the
+/// band. The formula half of `Game::roll_quality`, split from the draw so
+/// both sources of a copy compute quality through one expression.
+pub(crate) fn quality_for_luck(floor: u8, luck: u32) -> u8 {
+    let spread = luck as u16 * QUALITY_STEP as u16;
+    (floor as u16 + spread).clamp(QUALITY_MIN as u16, QUALITY_MAX as u16) as u8
+}
+
 impl Game {
     /// Rolls whether a fresh wild program carries a routine, and which —
     /// the `Routines` payload for one creature, empty on the (usual) miss.
@@ -570,12 +587,13 @@ impl Game {
     /// does — so the sum is taken in `u16` before the clamp rather than
     /// overflowing the `u8` the band is expressed in.
     pub(crate) fn roll_quality(&mut self, floor: u8) -> u8 {
-        let steps = (QUALITY_SPREAD / QUALITY_STEP) as u32;
-        let luck = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..=steps) as u16 * QUALITY_STEP as u16
-        };
-        (floor as u16 + luck).clamp(QUALITY_MIN as u16, QUALITY_MAX as u16) as u8
+        let steps = quality_luck_steps();
+        let luck = self
+            .world
+            .resource_mut::<GameRng>()
+            .0
+            .random_range(0..=steps);
+        quality_for_luck(floor, luck)
     }
 
     /// How many escalation steps a fight sits at — the one input both group

@@ -12,6 +12,39 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// Which affix a weighted `pool` rolls, drawn off `rng` — or `None`, either
+/// because `GEAR_AFFIX_CHANCE` missed or because the pool is empty.
+///
+/// **Two rolls, deliberately separate**: the chance decides whether there is
+/// an affix at all and the per-affix `weight` decides which, so *adding* an
+/// affix to the game cannot change how often affixes appear.
+///
+/// A free function taking its own `rng` because a copy is rolled from two
+/// streams: `Game::roll_affix` draws from `GameRng`, and the caravan shelf
+/// draws from a local `StdRng` because a derived shelf may not move the
+/// shared stream. One expression rather than two, per `CLAUDE.md` — a doc
+/// comment cannot hold two copies of a weighted pick in step.
+///
+/// Spends no draw at all on an empty pool, for `grant_gear_drop`'s reason: an
+/// empty `assets/affixes/` must leave every seeded run exactly where it was.
+pub(crate) fn pick_affix(pool: &[(AffixId, u32)], rng: &mut impl rand::RngExt) -> Option<AffixId> {
+    let total: u32 = pool.iter().map(|(_, w)| w).sum();
+    if total == 0 {
+        return None;
+    }
+    if !rng.random_bool(GEAR_AFFIX_CHANCE) {
+        return None;
+    }
+    let mut roll = rng.random_range(0..total);
+    for (id, weight) in pool {
+        match roll.checked_sub(*weight) {
+            Some(rest) => roll = rest,
+            None => return Some(id.clone()),
+        }
+    }
+    None
+}
+
 impl Game {
     /// Every gear drop `species` can roll, from both directions the schema
     /// allows it to be declared: the species' own `equipment_drop`, plus
@@ -127,24 +160,8 @@ impl Game {
             .into_iter()
             .map(|def| (def.id.clone(), def.weight))
             .collect();
-        let total: u32 = pool.iter().map(|(_, w)| w).sum();
-        if total == 0 {
-            return None;
-        }
-        let mut roll = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            if !rng.0.random_bool(GEAR_AFFIX_CHANCE) {
-                return None;
-            }
-            rng.0.random_range(0..total)
-        };
-        for (id, weight) in pool {
-            match roll.checked_sub(weight) {
-                Some(rest) => roll = rest,
-                None => return Some(id),
-            }
-        }
-        None
+        let mut rng = self.world.resource_mut::<GameRng>();
+        pick_affix(&pool, &mut rng.0)
     }
 
     /// What this copy's affixes are, in its own (sorted) order, skipping

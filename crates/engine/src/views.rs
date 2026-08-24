@@ -378,6 +378,51 @@ pub struct MarketOffer {
     pub affordable: bool,
 }
 
+/// What one row of a caravan's shelf is.
+///
+/// Four kinds rather than the Stack market's three, and the extra one is
+/// `Material`: a Stack trader is a stall in a corridor and deals in things
+/// worth carrying out, where a caravan pulls up beside a base and the base
+/// wants feedstock. Each variant carries what `Game::buy_caravan_offer`
+/// needs to hand the goods over and nothing else.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum CaravanOfferKind {
+    /// A rolled copy, with its own rarity, affix and quality — the shelf is
+    /// derived, so the copy is the same one every time it is looked at.
+    Gear(GearCopy),
+    /// An etched Routine Disk, by ability id. A disk and never a slot, for
+    /// `Game::buy_market_offer`'s reason: who it is for is a question the
+    /// player answers later, through `Game::install_disk`.
+    Routine(String),
+    /// A program, adopted through the same `Game::adopt_program` an orphan
+    /// goes through.
+    Program(String),
+    /// A plain stack of cargo.
+    Material(ItemId),
+}
+
+/// One row of a caravan's shelf, already priced — see `Game::caravan_view`.
+///
+/// `index` is the row's position in the *derived* shelf and is what
+/// `Game::buy_caravan_offer` takes, not its position in this list: a bought
+/// row is dropped from the view while `resources::CaravanMemory` goes on
+/// recording it by the index it always had. Same split `MarketOffer` makes,
+/// and for the same reason.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CaravanOffer {
+    pub index: usize,
+    pub kind: CaravanOfferKind,
+    /// The row's headline — what is being sold.
+    pub name: String,
+    /// The line under it.
+    pub detail: String,
+    /// What one of it costs.
+    pub unit_cost: u32,
+    /// How many the trader has of it. One for a copy of gear and one for a
+    /// program; a stack for cargo.
+    pub qty: u32,
+}
+
 /// One stack of the player's cargo a Stack market will take, priced.
 ///
 /// There is no buyback row to match it: a Stack trader keeps no shelf, so

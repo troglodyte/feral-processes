@@ -2884,6 +2884,13 @@ pub const CARAVAN_MARKUP: f32 = 1.6;
 /// Its own named constant, per `FrameSpec::salted`'s rule — one salting
 /// scheme, not a second seed source that could collide with the Stack's or
 /// the Broker board's.
+/// The most of one material a caravan carries in a single row.
+///
+/// A row's actual stack is drawn from `1..=` this off the shelf's own seed,
+/// so a shelf reads as a wagon someone loaded rather than as a menu. Gear and
+/// programs are never stacked — a copy is a copy.
+pub const CARAVAN_MATERIAL_STACK: u32 = 12;
+
 pub const CARAVAN_SALT: u64 = 0xCA57_A0A0_5EED_0002;
 
 #[cfg(test)]

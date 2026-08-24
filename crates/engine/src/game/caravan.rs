@@ -173,3 +173,286 @@ impl Game {
         found.into_iter()
     }
 }
+
+/// Salts the visit seed for the shelf, so what a trader carries does not
+/// correlate with which direction it walked in from. One scheme, per
+/// `FrameSpec::salted`'s doc — not a second seed source.
+const SHELF_SALT: u64 = 0x5_4E1F;
+
+impl Game {
+    /// What the visiting trader has on it, bought rows included — the
+    /// derived shelf `resources::CaravanMemory` indexes into.
+    ///
+    /// **Derived, never stored**, for `Game::market_offers`' forced reason:
+    /// the player is shown a price before they pay it, so the answer has to
+    /// survive a save and load, and `GameRng`'s stream position is not
+    /// persisted. A `GameRng` draw would also shift every later roll in the
+    /// run merely because somebody opened a shop screen.
+    ///
+    /// `&mut self` rather than `&self` only because the row wording reaches
+    /// `Game::copy_name` and `Game::copy_bonus`; the shelf itself is a pure
+    /// function of `visit`.
+    pub(crate) fn caravan_shelf(&mut self, visit: &CaravanVisit) -> Vec<views::CaravanOffer> {
+        let Some(def) = self
+            .world
+            .resource::<crate::caravans::CaravanDb>()
+            .get(&visit.def_id)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let mut rng = StdRng::seed_from_u64(self.visit_seed(visit.visit) ^ SHELF_SALT);
+        let gear = self.stock_pool(|d| d.equipment.is_some());
+        let routines = self.routine_disk_pool();
+        // Every other piece of cargo, craftable or not — a caravan pulls up
+        // beside a base and the base wants feedstock, so salvage it would
+        // otherwise have to go and mine belongs here. That width is what
+        // makes `stock_pool`'s currency exclusion the only thing standing
+        // between a shelf and a Portal Fragment.
+        let materials =
+            self.stock_pool(|d| d.equipment.is_none() && d.id.etched_ability().is_none());
+        let programs: Vec<String> = self
+            .world
+            .resource::<SpeciesDb>()
+            .all()
+            .filter(|d| !d.is_boss)
+            .map(|d| d.id.clone())
+            .collect();
+
+        let mut kinds = Vec::new();
+        for _ in 0..def.rows {
+            // The weights are re-read every row rather than a pool being
+            // shuffled once, so a trader with nothing in one category still
+            // fills its shelf out of the others instead of coming up short.
+            let mut buckets: Vec<(u32, u8)> = Vec::new();
+            if !gear.is_empty() {
+                buckets.push((def.weights.gear, 0));
+            }
+            if !routines.is_empty() {
+                buckets.push((def.weights.routines, 1));
+            }
+            if !programs.is_empty() {
+                buckets.push((def.weights.programs, 2));
+            }
+            if !materials.is_empty() {
+                buckets.push((def.weights.materials, 3));
+            }
+            let total: u32 = buckets.iter().map(|(w, _)| w).sum();
+            if total == 0 {
+                break;
+            }
+            let mut roll = rng.random_range(0..total);
+            let bucket = buckets
+                .iter()
+                .find(|(w, _)| match roll.checked_sub(*w) {
+                    Some(rest) => {
+                        roll = rest;
+                        false
+                    }
+                    None => true,
+                })
+                .map(|(_, b)| *b)
+                .unwrap_or(3);
+            kinds.push(match bucket {
+                0 => {
+                    let item = gear[rng.random_range(0..gear.len())].clone();
+                    views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng))
+                }
+                1 => views::CaravanOfferKind::Routine(
+                    routines[rng.random_range(0..routines.len())].clone(),
+                ),
+                2 => views::CaravanOfferKind::Program(
+                    programs[rng.random_range(0..programs.len())].clone(),
+                ),
+                _ => views::CaravanOfferKind::Material(
+                    materials[rng.random_range(0..materials.len())].clone(),
+                ),
+            });
+        }
+
+        kinds
+            .into_iter()
+            .enumerate()
+            .map(|(index, kind)| {
+                let qty = match &kind {
+                    views::CaravanOfferKind::Material(_) => {
+                        rng.random_range(1..=crate::tuning::CARAVAN_MATERIAL_STACK)
+                    }
+                    _ => 1,
+                };
+                self.caravan_row(index, kind, qty)
+            })
+            .collect()
+    }
+
+    /// The items a caravan may stock, id-sorted, filtered by `keep`.
+    ///
+    /// **Nothing carrying an `EconomyRole` is ever stockable**, and that one
+    /// clause is what keeps Portal Fragments off every shelf at every sector
+    /// however a def's weights are set. It is the data-driven form of the
+    /// rule `assets/structures/black_market.ron` states by hand: progression
+    /// is earned by fighting and descending, and a currency sold over a
+    /// counter is the back door onto it. A banked item is excluded for
+    /// `market_sell_rows`' reason — a bank is not cargo.
+    fn stock_pool(&self, keep: impl Fn(&crate::items_db::ItemDef) -> bool) -> Vec<ItemId> {
+        self.world
+            .resource::<ItemDb>()
+            .all()
+            .filter(|d| d.role.is_none() && !d.banked)
+            .filter(|d| keep(d))
+            .map(|d| d.id.clone())
+            .collect()
+    }
+
+    /// The ability ids a caravan may sell disks of.
+    ///
+    /// The same two exclusions `Game::market_offers` makes and for the same
+    /// reasons: `AbilityDb::wild_pool` is hunt-only and a shop selling one is
+    /// the "just target the species" shortcut that boundary exists to break,
+    /// and `exclusive_pool` is the one thing that cannot be etched at home —
+    /// a caravan is convenience, and convenience must not be the way past
+    /// either boundary.
+    fn routine_disk_pool(&self) -> Vec<String> {
+        let db = self.world.resource::<AbilityDb>();
+        let hunt_only: Vec<&str> = db
+            .wild_pool()
+            .into_iter()
+            .map(|(def, _)| def.id.as_str())
+            .collect();
+        db.all()
+            .filter(|def| !hunt_only.contains(&def.id.as_str()) && !def.exclusive)
+            .map(|def| def.id.clone())
+            .collect()
+    }
+
+    /// One shelf copy, rolled off the shelf's own stream rather than
+    /// `GameRng`.
+    ///
+    /// The three axes are the same three `Game::grant_gear_drop` rolls and
+    /// they go through the same functions — `spawning::rarity_for_roll`,
+    /// `combat_rewards::pick_affix` and `spawning::quality_for_luck` — so a
+    /// retune of any of them moves a caravan's stock with the rest of the
+    /// game. A copy here is priced off the item, not off what it rolled; see
+    /// `caravan_unit_cost`.
+    fn roll_shelf_copy(&self, item: ItemId, rng: &mut StdRng) -> GearCopy {
+        let rarity = crate::game::spawning::rarity_for_roll(rng.random_range(0.0..1.0));
+        let affix = self
+            .equipment_of(&item)
+            .map(|(slot, _)| {
+                let pool: Vec<(AffixId, u32)> = self
+                    .world
+                    .resource::<AffixDb>()
+                    .pool_for(slot)
+                    .into_iter()
+                    .map(|def| (def.id.clone(), def.weight))
+                    .collect();
+                crate::game::combat_rewards::pick_affix(&pool, rng)
+            })
+            .unwrap_or_default();
+        let quality = crate::game::spawning::quality_for_luck(
+            crate::tuning::QUALITY_DROP_BASE,
+            rng.random_range(0..=crate::game::spawning::quality_luck_steps()),
+        );
+        GearCopy::with_affixes(item, rarity, 0, affix.into_iter().collect(), quality)
+    }
+
+    /// One shelf row, worded and priced.
+    fn caravan_row(
+        &mut self,
+        index: usize,
+        kind: views::CaravanOfferKind,
+        qty: u32,
+    ) -> views::CaravanOffer {
+        let (name, detail, unit_cost) = match &kind {
+            views::CaravanOfferKind::Gear(copy) => (
+                self.copy_name(copy),
+                // The item's authored line, not a stat block: what a copy is
+                // worth is the wearer's question and `[I]` answers it through
+                // `Game::gear_detail`, which scales to whoever is holding it.
+                // A figure quoted here would be scaled to nobody.
+                self.item_description(&copy.item)
+                    .unwrap_or_default()
+                    .to_string(),
+                self.caravan_unit_cost(&copy.item),
+            ),
+            views::CaravanOfferKind::Routine(ability) => {
+                let disk = ItemId::etched(ability);
+                (
+                    self.item_name(&disk).to_string(),
+                    self.world
+                        .resource::<AbilityDb>()
+                        .get(ability)
+                        .map(|def| def.description.clone())
+                        .unwrap_or_default(),
+                    self.caravan_unit_cost(&disk),
+                )
+            }
+            views::CaravanOfferKind::Program(species) => {
+                let def = self.world.resource::<SpeciesDb>().get(species).cloned();
+                let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+                let name = def
+                    .as_ref()
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| species.clone());
+                let detail = match &def {
+                    Some(d) => {
+                        let at = |base: i32| (base as f32 * mult).round() as i32;
+                        format!(
+                            "{} HP, {} ATK, {} DEF — compiled to your control",
+                            at(d.base_hp),
+                            at(d.base_atk),
+                            at(d.base_mitigation)
+                        )
+                    }
+                    None => String::new(),
+                };
+                (name, detail, self.program_price(species, mult))
+            }
+            views::CaravanOfferKind::Material(item) => (
+                self.item_name(item).to_string(),
+                self.item_description(item).unwrap_or_default().to_string(),
+                self.caravan_unit_cost(item),
+            ),
+        };
+        views::CaravanOffer {
+            index,
+            kind,
+            name,
+            detail,
+            unit_cost,
+            qty,
+        }
+    }
+
+    /// What a caravan charges for one of `item`.
+    ///
+    /// `Game::item_value` at `CARAVAN_MARKUP`, scaled by the sector, and then
+    /// floored **strictly above** what the recipe's ingredients are worth.
+    ///
+    /// The markup is the whole product: everything a caravan sells is
+    /// compilable at a bench or findable in the Stack, so a trader that
+    /// undercut either would make both pointless. The craft floor is the
+    /// second bound and the non-obvious one — a craftable sold for less than
+    /// its ingredients is an infinite Credit loop through the nearest
+    /// counter, the same fault `every_craftable_is_worth_more_than_its_parts`
+    /// holds shut on the item set itself. Read off `ItemDef::craftable`
+    /// rather than `Game::craft_recipes`, so `Perk::LeanCompiler` cannot buy
+    /// its way under the floor.
+    pub(crate) fn caravan_unit_cost(&self, item: &ItemId) -> u32 {
+        let zone = self.world.resource::<ZoneLevel>().stat_multiplier().max(1) as u32;
+        let marked = (self.item_value(item) as f32 * crate::tuning::CARAVAN_MARKUP).ceil() as u32;
+        let parts: u32 = self
+            .world
+            .resource::<ItemDb>()
+            .get(item.as_str())
+            .and_then(|def| def.craftable.as_ref())
+            .map(|c| {
+                c.cost
+                    .iter()
+                    .map(|(ingredient, qty)| self.item_value(ingredient) * qty)
+                    .sum()
+            })
+            .unwrap_or(0);
+        (marked * zone).max(parts * zone + 1).max(1)
+    }
+}

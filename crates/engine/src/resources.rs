@@ -114,6 +114,15 @@ pub enum MessageKind {
     /// that lands mid-fight has to survive the prune or the player never
     /// learns it finished.
     Complete,
+    /// Why an action the player just asked for was refused — the line
+    /// `Game::note_refusal` pushes and `App::refuse` is the only caller of.
+    ///
+    /// Its own kind rather than `Info` so the colour table can say what it
+    /// is, and deliberately *absent* from
+    /// `MessageLog::retain_outcomes_since_battle`'s keep-set: a refusal is
+    /// news about a keypress, not a result, and has no business following
+    /// the player out of a fight.
+    Refusal,
 }
 
 /// Which of the two things the player is doing produced a line: running the

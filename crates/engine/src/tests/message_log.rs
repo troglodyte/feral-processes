@@ -183,3 +183,35 @@ fn message_history_folds_what_was_pushed() {
         [("a cronjob yields nothing", 5), ("a raid strikes", 1)]
     );
 }
+
+/// A refusal reaches the log under its own kind, so the colour table can
+/// paint it as a refusal and `retain_outcomes_since_battle` can drop it.
+#[test]
+fn a_refusal_lands_in_the_log_under_its_own_kind() {
+    let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.note_refusal("Requires Zone 3 first.");
+    let last = game.message_log(1);
+    assert_eq!(last[0].kind, MessageKind::Refusal);
+    assert_eq!(last[0].source, MessageSource::Field);
+    assert_eq!(last[0].text, "Requires Zone 3 first.");
+}
+
+/// The one rule that is not obvious: a refusal is silent while a fight is
+/// open. `MessageLog::since_round` slices the battle pane by *position* and
+/// the reveal counts *raw* lines, so a line pushed from a battle submenu
+/// would both appear mid-narration and swallow a keypress' worth of reveal.
+/// The player still sees the refusal — it is on the popup they typed into.
+#[test]
+fn a_refusal_stays_out_of_the_log_during_a_battle() {
+    let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    super::support::start_battle_with_a_wild_program(&mut game);
+    let before = game.message_log(crate::MESSAGE_LOG_CAP).len();
+
+    game.note_refusal("Not enough Power.");
+
+    assert_eq!(
+        game.message_log(crate::MESSAGE_LOG_CAP).len(),
+        before,
+        "a refusal must not enter the log while a battle is open"
+    );
+}

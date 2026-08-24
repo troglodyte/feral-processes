@@ -379,7 +379,12 @@ fn message_color(kind: MessageKind) -> Color {
         // lines it shares its wording with.
         MessageKind::LevelUp | MessageKind::Heal | MessageKind::Complete => GREEN,
         MessageKind::Raid | MessageKind::EnemySpecial => ORANGE,
-        MessageKind::EnemyAttack => RED,
+        // Red is the "no" colour the status line has always used, and the
+        // two never share a pane: a refusal is silent during a fight (see
+        // `Game::note_refusal`), and `retain_outcomes_since_battle` drops
+        // every `EnemyAttack` line when one ends. So red on the map pane
+        // means a refusal and red in the battle pane means a blow landing.
+        MessageKind::EnemyAttack | MessageKind::Refusal => RED,
         // A result reads at full brightness: it is the line still on screen
         // once the fight is over and the map is back.
         MessageKind::Outcome => TEXT,

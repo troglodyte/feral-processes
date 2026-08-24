@@ -51,6 +51,25 @@ impl Game {
             .push_base_kind(kind, s);
     }
 
+    /// Records why an action the player asked for was refused. The one
+    /// public door onto the log: `App::refuse` sets `App::status_line` and
+    /// calls this, so the banner the player reads and the history they can
+    /// scroll back to cannot say different things.
+    ///
+    /// **Silent while a battle is open, and that is the load-bearing half.**
+    /// `MessageLog::since_round` slices the battle pane by *position* and
+    /// `App::advance_reveal` paces it by counting *raw* lines, so a line
+    /// pushed from a battle submenu would land inside the round's range —
+    /// drawn mid-narration with no round header to explain it, and
+    /// swallowing one keypress' worth of reveal on the way past. The refusal
+    /// still reaches the player: it is on the popup they typed into.
+    pub fn note_refusal(&mut self, s: impl Into<String>) {
+        if self.has_active_battle() {
+            return;
+        }
+        self.log_kind(MessageKind::Refusal, s);
+    }
+
     pub fn message_log(&self, n: usize) -> Vec<LogLine> {
         self.world.resource::<MessageLog>().recent(n).to_vec()
     }

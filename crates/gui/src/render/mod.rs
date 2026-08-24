@@ -29,6 +29,7 @@ mod bars;
 mod base;
 mod battle;
 mod building;
+mod caravan;
 mod collect;
 mod contracts;
 mod crafting;
@@ -65,6 +66,7 @@ use building::{
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
+use caravan::{draw_caravan, draw_caravan_quantity};
 use collect::draw_collect;
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
@@ -941,6 +943,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
+        Mode::Caravan => draw_caravan(game, selected, refusal, painter, m),
+        Mode::CaravanQuantity => draw_caravan_quantity(
+            game,
+            app.pending_caravan_sale.as_ref(),
+            &app.trade_quantity_input,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Trade => draw_trade_menu(game, selected, refusal, painter, m),
         Mode::TradeAction => draw_trade_action_menu(
             game,
@@ -1053,7 +1064,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 86] = [
+    const ALL_MODES: [Mode; 88] = [
         Mode::MainMenu,
         Mode::DifficultyPick,
         Mode::LoadGame,
@@ -1121,6 +1132,8 @@ mod tests {
         Mode::TradeAction,
         Mode::TradeQuantity,
         Mode::StackMarket,
+        Mode::Caravan,
+        Mode::CaravanQuantity,
         Mode::TradeProgramConfirm,
         Mode::Perks,
         Mode::Research,
@@ -1168,7 +1181,7 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 19] = [
+    const NEEDS_PENDING_STATE: [Mode; 21] = [
         Mode::BattleTarget,
         Mode::BattleSpecial,
         Mode::CraftQuantity,
@@ -1186,6 +1199,13 @@ mod tests {
         Mode::TradeAction,
         Mode::TradeQuantity,
         Mode::StackMarket,
+        // Both caravan screens need a trader actually standing at the
+        // counter, which a fresh run has not got — `StackMarket`'s case.
+        // `a_caravan_page_says_a_refusal_exactly_once` below is what says
+        // their `draw_popup` calls are threaded, since this census can only
+        // say where a refusal must *not* appear on them.
+        Mode::Caravan,
+        Mode::CaravanQuantity,
         Mode::TradeProgramConfirm,
         Mode::StructureAssign,
     ];

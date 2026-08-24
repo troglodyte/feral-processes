@@ -27,6 +27,44 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.20
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Somebody comes to you for once.
+
+### Added
+
+- **Traders visit your base.** Stand an iso Market up and, every so often, a
+  caravan walks in out of the sector, phases through the anchor, sets out its
+  stock beside your counter for a while, and rolls back out again. You will
+  see it coming across the map and standing in the base; `x` toward it says
+  who it is. While it is docked, `b` → **Caravan** opens the wagon.
+
+- **What is on the wagon depends on who turned up.** The Salvage Convoy runs
+  mostly worn equipment; the Kennel Run walks programs on short leashes. A
+  wagon carries gear with its own rarity and quality rolls, Routine Disks,
+  programs, and stacks of the materials your base eats — everything you could
+  get another way, for a markup, without the trip. Portal Fragments are not
+  on it and never will be: breaching is still earned by fighting and
+  descending.
+
+- **They will take what you are carrying**, at the same rate your own counter
+  pays. There is no buyback — a caravan does not come back for it — and `[S]`
+  sells a whole stack at once.
+
+- **A visit is a property of your base and cannot be rerolled.** When one is
+  due, which trader it is, which way it walks in from and what it carries are
+  all derived from the base's own seed, so a save and reload finds exactly
+  the trader you left standing there, with exactly the rows you had not
+  bought yet. Breaching leaves both behind.
+
+- **New moddable content directory, `assets/caravans/`.** One `.ron` file per
+  trader: its name, its line, its glyph, how deep its shelf is and how that
+  shelf is split between gear, disks, programs and materials. Deleting the
+  directory gives you the game exactly as it was before caravans existed.
+  Schema in `assets/caravans/README.md`.
+
 ## 0.13.19
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -645,3 +645,97 @@ fn the_memories_page_and_the_gear_page_hold_separate_subjects() {
         "and the gear page's subject was released by its own Esc"
     );
 }
+
+/// `U` on the roster empties every slot the highlighted program has filled,
+/// in one press, with the gear landing back in your cargo — the same three
+/// removals `E` and the picker already offer, without the three trips.
+#[test]
+fn u_takes_every_piece_of_gear_off_the_highlighted_program() {
+    let worn = ["overclock_core", "scrap_ward", "probe_service"];
+    let mut app = app_with_companions_and_cargo(
+        780,
+        1,
+        &[
+            ("overclock_core", 1),
+            ("scrap_ward", 1),
+            ("probe_service", 1),
+        ],
+    );
+    let program = roster(&mut app)[0];
+    {
+        let game = app.game.as_mut().unwrap();
+        for item in worn {
+            game.equip(program, &gear(&ItemId::from(item), 0)).unwrap();
+        }
+    }
+    let atk_before = companion_atk(&mut app);
+    open_roster(&mut app);
+
+    app.handle_key(GameKey::Char('U'));
+
+    let game = app.game.as_ref().unwrap();
+    for slot in EquipmentSlot::ALL {
+        assert!(
+            game.worn(program, slot).is_none(),
+            "{slot:?} should be empty"
+        );
+    }
+    for item in worn {
+        assert_eq!(
+            game.banked(&ItemId::from(item)),
+            1,
+            "{item} is back in cargo"
+        );
+    }
+    assert_ne!(
+        companion_atk(&mut app),
+        atk_before,
+        "the weapon's bonus comes off with it"
+    );
+    assert_eq!(app.mode, Mode::Companion, "the roster stays open");
+}
+
+/// The key acts on the highlight, like every other key on this screen.
+#[test]
+fn u_leaves_the_programs_it_is_not_highlighting_dressed() {
+    let mut app = app_with_companions_and_cargo(781, 2, &[("overclock_core", 2)]);
+    let programs = roster(&mut app);
+    {
+        let game = app.game.as_mut().unwrap();
+        for program in &programs {
+            game.equip(*program, &gear(&ItemId::from("overclock_core"), 0))
+                .unwrap();
+        }
+    }
+    open_roster(&mut app);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 1);
+
+    app.handle_key(GameKey::Char('U'));
+
+    let game = app.game.as_ref().unwrap();
+    assert!(
+        game.worn(programs[1], EquipmentSlot::Weapon).is_none(),
+        "the highlighted program is stripped"
+    );
+    assert!(
+        game.worn(programs[0], EquipmentSlot::Weapon).is_some(),
+        "and the one above it is not"
+    );
+}
+
+/// A program wearing nothing is the one case with something to say: an empty
+/// slot is refused silently, so three of them produce no line anywhere and
+/// the key reads as broken.
+#[test]
+fn u_on_a_bare_program_says_so_rather_than_going_quiet() {
+    let mut app = app_with_companions_and_cargo(782, 1, &[]);
+    open_roster(&mut app);
+
+    app.handle_key(GameKey::Char('U'));
+
+    assert!(
+        app.status_line.is_some(),
+        "a bare program's refusal reaches the status line"
+    );
+}

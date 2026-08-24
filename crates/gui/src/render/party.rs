@@ -16,7 +16,13 @@ use super::*;
 /// wielded program fills, because that word starts with the capital letter
 /// the census below forbids anywhere in these lines. That is the constraint
 /// working, not a phrasing accident.
-fn companion_help() -> [String; 6] {
+///
+/// `U` sits directly under `E` because it is that same errand run
+/// backwards, and it has to be named: the picker's own `(Unequip)` row is a
+/// keypress and a slot choice away and only ever empties the one slot, so a
+/// player who never finds this line never learns the screen can undress a
+/// program in one press at all.
+fn companion_help() -> [String; 7] {
     [
         format!(
             "P adds the highlighted program to your party (max {MAX_PARTY_SIZE}), or stands a member back down."
@@ -26,6 +32,8 @@ fn companion_help() -> [String; 6] {
         "N renames the highlighted program; clear the name to go back to its species."
             .to_string(),
         "E fits gear to the highlighted program, out of your own cargo."
+            .to_string(),
+        "U takes every piece of gear back off the highlighted program, into your cargo."
             .to_string(),
         "M reads the highlighted program's manifest — its full stat sheet."
             .to_string(),
@@ -745,6 +753,19 @@ mod tests {
         assert!(
             companion_help().iter().any(|line| line.starts_with("E ")),
             "the roster must say which key opens a program's gear: {:?}",
+            companion_help()
+        );
+    }
+
+    /// `U` is the only way to empty a program's three slots without walking
+    /// the picker once per slot, and nothing on the roster hints that it
+    /// exists — the gear cell reads `w|a|m` whether or not that is
+    /// reversible. So the line naming it is the whole affordance.
+    #[test]
+    fn the_companion_screen_names_the_strip_key() {
+        assert!(
+            companion_help().iter().any(|line| line.starts_with("U ")),
+            "the roster must say which key takes a program's gear back off: {:?}",
             companion_help()
         );
     }

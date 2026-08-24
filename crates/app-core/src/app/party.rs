@@ -6,8 +6,9 @@ impl App {
     /// Lists every tamed program you own, wherever it is. Every action on
     /// this screen acts on the highlight — `P` adds the highlighted program
     /// to the party or stands it down again, `<` and `>` shift it along the
-    /// battle line, `N`/`E`/`W` rename, gear and wield it, `M` reads its
-    /// manifest — so a row's number or letter *only* moves the highlight.
+    /// battle line, `N`/`E`/`W` rename, gear and wield it, `U` takes all of
+    /// that gear back off, `M` reads its manifest — so a row's number or
+    /// letter *only* moves the highlight.
     ///
     /// It used to toggle party membership on the spot, which meant a stray
     /// digit, or an Enter aimed at a screen that has never had one, stood a
@@ -50,6 +51,10 @@ impl App {
             self.open_companion_memories();
             return;
         }
+        if key == GameKey::Char('U') {
+            self.strip_highlighted();
+            return;
+        }
 
         let Some(game) = &mut self.game else { return };
         let rows = game.owned_pets().len();
@@ -59,6 +64,56 @@ impl App {
         if let Some(idx) = self.selected_index(key, rows) {
             self.menu_selected = idx;
         }
+    }
+
+    /// Takes every piece of gear back off the highlighted program in one
+    /// press, into your own cargo.
+    ///
+    /// A loop over `Game::unequip` rather than an engine verb of its own.
+    /// Each slot is an independent removal that already logs its own line
+    /// and spends its own tick, so stripping three slots here and stripping
+    /// them one at a time through `E` and the picker cost the player exactly
+    /// the same — an `unequip_all` in the engine would be a second variant
+    /// of `unequip` with a different clock, and nothing outside this key
+    /// would ever want it.
+    ///
+    /// The empty-slot refusal is **dropped**: over three slots it is the
+    /// ordinary case rather than news, and `unequip` states it one slot at a
+    /// time in a voice written for the picker. A program wearing nothing at
+    /// all is the one case with something to say — three silent refusals
+    /// leave no log line anywhere, so without this the key reads as broken.
+    /// Any *other* refusal is surfaced as it comes and stops the sweep,
+    /// since a game that has just said no to one slot will say no to the
+    /// next two as well.
+    fn strip_highlighted(&mut self) {
+        let row = self.menu_selected;
+        let Some(game) = &mut self.game else { return };
+        let Some((program, name)) = game
+            .owned_pets()
+            .get(row)
+            .map(|p| (p.entity, p.name.clone()))
+        else {
+            return;
+        };
+        let mut stripped = 0;
+        let mut refusal = None;
+        for slot in EquipmentSlot::ALL {
+            if game.worn(program, slot).is_none() {
+                continue;
+            }
+            match game.unequip(program, slot) {
+                Ok(()) => stripped += 1,
+                Err(e) => {
+                    refusal = Some(e);
+                    break;
+                }
+            }
+        }
+        self.status_line = match (stripped, refusal) {
+            (_, Some(e)) => Some(e),
+            (0, None) => Some(format!("{name} isn't wearing anything.")),
+            _ => None,
+        };
     }
 
     /// Stands the highlighted program in the party, or stands it down if it

@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.18
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+A hold order finally holds, and stripping a program takes one key.
+
+### Added
+
+- **`U` takes a program's whole loadout back off.** The roster's `E` opens one
+  program's three slots and the picker's `(Unequip)` row empties one of them,
+  so handing one program's gear to another was a keypress and a slot choice,
+  three times over. `U` is that in one press, gear straight back into your
+  cargo.
+
+### Fixed
+
+- **A satisfied hold order stands its line down.** A hold order reaching its
+  level put the order to sleep but left the bodies standing on their machines,
+  so the line kept running for the rest of the run — a base told to hold ten
+  ICE Breakers had seventy-three on the shelf and was still making more.
+  Programs now come off a machine nothing is asking for and go back to milling
+  about. Reported from a live save: ticked three thousand times that base
+  reached 222 against an order of 10, and now stops at exactly 10.
+- The same sweep no longer takes a body off a **clogged** machine while a
+  Depot is standing. That body is the only thing that can carry the clog away
+  and let the machine run again, and freeing it left the machine full for the
+  rest of the run.
+
 ## 0.13.17
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

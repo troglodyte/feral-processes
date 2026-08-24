@@ -9,9 +9,9 @@ enough that finding one is a thing you do rather than a thing that happens. The 
 stands from where your run began, the deeper the stack under it runs — two frames at the least, six
 at the most.
 
-Inside, you are looking down a corridor rather than at a map. hjkl and the arrow keys move you
-forward and back and turn you left and right, g draws what you have walked so far, and > and < take
-you down a frame and up one. Climbing from the top frame is how you leave.
+Inside, you are looking down a corridor rather than at a map. hjkl and the arrow keys walk you
+forward, turn you left and right, and spin you clean around in place, g draws what you have walked
+so far, and > and < take you down a frame and up one. Climbing from the top frame is how you leave.
 
 What a frame holds:
 

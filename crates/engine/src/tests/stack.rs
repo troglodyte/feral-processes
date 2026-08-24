@@ -27,11 +27,12 @@ fn locale(game: &Game) -> Locale {
 
 /// Walking in the Stack rolls for an ambush (`Game::maybe_stack_encounter`),
 /// and an open battle refuses every later step. Tests about doors, seals and
-/// backing up are not about ambushes, so they shake one off and carry on —
-/// otherwise their fixture silently stops moving and the assertion reads as a
-/// broken door rather than an interrupted walk. Which step draws an ambush is
-/// a property of the seed and of how much `GameRng` everything before it
-/// spent, so it moves whenever content is added or an id is renamed.
+/// leaving-and-returning are not about ambushes, so they shake one off and
+/// carry on — otherwise their fixture silently stops moving and the
+/// assertion reads as a broken door rather than an interrupted walk. Which
+/// step draws an ambush is a property of the seed and of how much `GameRng`
+/// everything before it spent, so it moves whenever content is added or an
+/// id is renamed.
 fn step_forward_clear(game: &mut Game) {
     game.step_forward();
     if game.has_active_battle() {
@@ -39,11 +40,15 @@ fn step_forward_clear(game: &mut Game) {
     }
 }
 
-fn step_back_clear(game: &mut Game) {
-    game.step_back();
-    if game.has_active_battle() {
-        flee_until_clear(game);
-    }
+/// Leaves a cell and walks back onto it through the real turn-and-step
+/// path. `turn_around` is the only way to reverse facing now that backing
+/// up is gone, and two of them cancel — the party ends up standing back
+/// where it started, facing the way it started.
+fn leave_and_return(game: &mut Game) {
+    game.turn_around();
+    step_forward_clear(game);
+    game.turn_around();
+    step_forward_clear(game);
 }
 
 fn cell_at(game: &Game, x: i32, y: i32) -> CellKind {
@@ -279,16 +284,15 @@ fn stepping_forward_advances_along_the_facing() {
 }
 
 #[test]
-fn backing_up_retreats_without_turning_round() {
+fn turning_around_flips_facing_without_moving() {
     let mut game = game();
     descend(&mut game);
-    let facing = face_an_open_way(&mut game);
-    let Locale::Stack { x, y, .. } = locale(&game) else {
+    let Locale::Stack { x, y, facing, .. } = locale(&game) else {
         unreachable!()
     };
+    assert_eq!(facing, Dir::North, "the fixture must start facing north");
 
-    step_forward_clear(&mut game);
-    step_back_clear(&mut game);
+    game.turn_around();
 
     let Locale::Stack {
         x: nx,
@@ -299,8 +303,22 @@ fn backing_up_retreats_without_turning_round() {
     else {
         unreachable!()
     };
-    assert_eq!((nx, ny), (x, y), "backing up should undo the step");
-    assert_eq!(after, facing);
+    assert_eq!((nx, ny), (x, y), "turning around must not move the party");
+    assert_eq!(
+        after,
+        Dir::South,
+        "turning around should face the party the opposite way"
+    );
+
+    game.turn_around();
+    let Locale::Stack { facing: back, .. } = locale(&game) else {
+        unreachable!()
+    };
+    assert_eq!(
+        back,
+        Dir::North,
+        "two about-faces should return to the start"
+    );
 }
 
 #[test]
@@ -1228,8 +1246,7 @@ fn maps_do_not_ride_a_breach_into_the_next_zone() {
 /// Teleports the party to the mouth of a cache's dead end, facing it, and
 /// returns the cache's cell. A single `step_forward` then walks onto it,
 /// which is how a cache is actually reached — teleporting *onto* one would
-/// test a state the game never produces, and `step_back` off a dead end is
-/// only sometimes possible depending on which way the party happens to face.
+/// test a state the game never produces.
 ///
 /// Caches sit at dead ends, so walking to one honestly would mean solving
 /// the maze first.
@@ -1358,8 +1375,7 @@ fn a_cache_only_pays_out_once() {
         if game.has_active_battle() {
             flee_until_clear(&mut game);
         }
-        game.step_back();
-        game.step_forward();
+        leave_and_return(&mut game);
     }
     assert_eq!(
         credits(&game),
@@ -1390,8 +1406,7 @@ fn an_emptied_cache_stays_emptied_across_a_save_and_load() {
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(credits(&loaded), after_looting);
-    loaded.step_back();
-    loaded.step_forward();
+    leave_and_return(&mut loaded);
     assert_eq!(
         credits(&loaded),
         after_looting,
@@ -1611,8 +1626,12 @@ fn fleeing_the_lair_leaves_it_held() {
         "fleeing cleared the lair"
     );
 
-    // Step out and back in: it should rouse again.
-    game.step_back();
+    // Step out and back in: it should rouse again. The leaving half is
+    // cleared like any other walk — it is the *return* step whose battle
+    // this test is about, so that one is left open for the assertion below.
+    game.turn_around();
+    step_forward_clear(&mut game);
+    game.turn_around();
     game.step_forward();
     assert!(
         game.has_active_battle(),
@@ -2075,8 +2094,7 @@ fn with_nowhere_to_put_a_new_link_the_stack_does_not_collapse() {
     // an ordinary encounter can roll on any step, and would otherwise fail
     // this test at random.
     let roused = roused_count(&game);
-    game.step_back();
-    game.step_forward();
+    leave_and_return(&mut game);
     assert_eq!(
         roused_count(&game),
         roused,
@@ -2218,7 +2236,9 @@ fn a_door_once_opened_stays_open() {
     let pos = game.stack_pos().unwrap();
     assert!(game.seal_open(pos, seal), "the seal was not recorded open");
 
-    step_back_clear(&mut game);
+    game.turn_around();
+    step_forward_clear(&mut game);
+    game.turn_around();
     let before = locale(&game);
     step_forward_clear(&mut game);
 
@@ -2238,7 +2258,9 @@ fn an_opened_door_stays_open_across_a_save_and_load() {
     // through the door — and then the door this test is about was never
     // opened, and the failure reads as "loading re-sealed it".
     step_forward_clear(&mut game);
-    step_back_clear(&mut game);
+    game.turn_around();
+    step_forward_clear(&mut game);
+    game.turn_around();
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_door_open_{}.bin",
@@ -3017,8 +3039,7 @@ fn cracking_a_cache_raises_trace() {
     assert_eq!(trace(&game), TRACE_PER_CACHE);
 
     // The cache is spent, so stepping off and back on must not charge again.
-    game.step_back();
-    game.step_forward();
+    leave_and_return(&mut game);
     assert_eq!(
         trace(&game),
         TRACE_PER_CACHE,
@@ -3037,8 +3058,7 @@ fn forcing_a_seal_raises_trace() {
     assert_eq!(trace(&game), TRACE_PER_SEAL);
 
     // A door already standing open makes no second noise.
-    game.step_back();
-    game.step_forward();
+    leave_and_return(&mut game);
     assert_eq!(trace(&game), TRACE_PER_SEAL, "the seal was already forced");
 }
 
@@ -3390,14 +3410,17 @@ fn a_hunted_ambush_fields_more_of_the_pack_than_a_quiet_one() {
 /// Stack could not: the party's `Position` is pinned to the entrance tile
 /// they walked in through, so `max_group_size` measured the *base's own
 /// doorstep* however far down they had gone, and every frame at every depth
-/// fielded a single program in a single group. Depth is what pushing out
-/// means underground, and it now feeds the same curve.
+/// fielded a single program in a single group. Depth is what pushing
+/// further down means underground, and it now feeds the same curve — added
+/// to the zone step rather than replacing it, so the first frame down
+/// carries whatever escalation the entrance's own zone had already earned.
 #[test]
 fn a_deeper_frame_fields_more_of_the_pack_than_a_shallow_one() {
     let mut game = game();
-    // Zone 4's cap is 27, so the depth curve rather than the zone clamp is
-    // what this measures — at zone 2 both depths would land on the cap of 3.
-    game.world.insert_resource(ZoneLevel(4));
+    // Zone 2's cap is 10, high enough that it's the depth curve rather than
+    // the zone's own group cap that widens the fight from depth 1 to depth
+    // 4 here.
+    game.world.insert_resource(ZoneLevel(2));
     descend(&mut game);
 
     let pack: Vec<Entity> = (0..8)
@@ -3415,7 +3438,12 @@ fn a_deeper_frame_fields_more_of_the_pack_than_a_shallow_one() {
     set_depth(&mut game, 4);
     let deep = fielded(&game);
 
-    assert_eq!(shallow, 1, "the first frame is still one program");
+    assert_eq!(
+        shallow,
+        game.max_group_size(None) as usize,
+        "the first frame down should carry exactly the escalation zone 2's \
+         surface already had, not start over at one"
+    );
     assert!(
         deep > shallow,
         "depth 4 fielded {deep} of the pack, depth 1 fielded {shallow} — \
@@ -3682,8 +3710,7 @@ fn a_jack_in_that_fails_still_burns_the_port() {
     );
 
     // Off and back on, through the same real step path.
-    game.step_back();
-    game.step_forward();
+    leave_and_return(&mut game);
     assert_eq!(
         trace_of(&game),
         after_first,
@@ -3717,8 +3744,7 @@ fn a_spent_breakpoint_stays_spent_when_the_party_steps_off_and_back_on() {
     let after_first = trace_of(&game);
 
     // Off and back on, through the same real step path.
-    game.step_back();
-    game.step_forward();
+    leave_and_return(&mut game);
     assert_eq!(
         trace_of(&game),
         after_first,
@@ -4199,12 +4225,11 @@ fn an_orphan_does_not_recur_when_the_party_steps_off_and_back_on() {
     let after_first = game.pet_count();
 
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    game.step_back();
-    game.step_forward();
     // A step underground can roll an encounter, and a live battle refuses
     // every action for its own reason — which passed this test against an
-    // `adopt_orphan` with no spent-ness check in it at all.
-    flee_until_clear(&mut game);
+    // `adopt_orphan` with no spent-ness check in it at all. `leave_and_return`
+    // already flees anything either step rolls.
+    leave_and_return(&mut game);
     assert_eq!(
         game.stack_pos().map(|p| (p.x, p.y)),
         Some(cell),
@@ -4911,5 +4936,103 @@ fn a_deeper_lair_draws_a_guardian_no_easier_than_a_shallow_one() {
     assert!(
         rank(deep) >= rank(shallow),
         "a depth-6 guardian ({deep:?}) is easier than a depth-1 one ({shallow:?})"
+    );
+}
+
+/// The bug this guards: `danger_steps` underground is roughly `depth - 1`
+/// and `APEX_ENTRY_STEP` is 4, so a lair gated by the same window as an
+/// ambush could never field an apex species until depth 5 — past
+/// `STACK_FRAMES_MAX` (6) for most runs and unreachable at all for a stack
+/// generated with `STACK_FRAMES_MIN` (2) frames. A lair is ungated: it draws
+/// from the biome's apex pool at the *shallowest* depth a stack can have.
+#[test]
+fn a_shallow_lair_fields_an_apex_species_where_the_biome_has_one() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    game.descend_to(
+        crate::tuning::STACK_FRAMES_MIN,
+        crate::tuning::STACK_FRAMES_MIN,
+        entrance,
+    );
+    let pos = game.stack_pos().expect("descend_to installed a frame");
+    let (species, is_boss) = game
+        .pick_lair_species(pos)
+        .expect("a walkable entrance fields a guardian");
+    assert!(is_boss, "a lair guardian must always come back a boss");
+    assert!(
+        game.species_defs()
+            .into_iter()
+            .any(|s| s.id == species && s.is_boss),
+        "guardian {species} at depth {} is not one of the biome's apex \
+         species, even though the biome ships one",
+        crate::tuning::STACK_FRAMES_MIN
+    );
+}
+
+/// The fallback pinned at the same shallow depth as the test above, so a fix
+/// to the gate cannot quietly break the no-apex-species biome case it is
+/// meant to leave alone.
+#[test]
+fn a_shallow_lair_falls_back_to_the_ordinary_pool_where_the_biome_has_no_apex() {
+    let mut game = game();
+    let entrance = descend_through_a_real_link(&mut game);
+    {
+        let mut db = game.world.resource_mut::<SpeciesDb>();
+        db.retain(|s| !s.is_boss);
+    }
+    game.descend_to(
+        crate::tuning::STACK_FRAMES_MIN,
+        crate::tuning::STACK_FRAMES_MIN,
+        entrance,
+    );
+    let pos = game.stack_pos().expect("descend_to installed a frame");
+    let (species, is_boss) = game
+        .pick_lair_species(pos)
+        .expect("a biome with ordinary species must still field a guardian");
+    assert!(
+        is_boss,
+        "the fallback guardian {species} came back not-a-boss"
+    );
+    assert!(
+        game.species_defs()
+            .into_iter()
+            .any(|s| s.id == species && !s.is_boss),
+        "with every apex species removed the guardian must be a rolled \
+         ordinary one"
+    );
+}
+
+/// `pick_lair_species` seeds its own `StdRng` off the frame spec rather than
+/// off `GameRng`, precisely so the guardian cannot be rerolled by leaving and
+/// coming back — see the doc comment on `Game::rouse_lair`. Repeated calls
+/// for the same `StackPos` must agree, and burning `GameRng` rolls in
+/// between must not move the answer.
+#[test]
+fn pick_lair_species_is_deterministic_and_ignores_gamerng() {
+    let mut game = game();
+    let _entrance = descend_through_a_real_link(&mut game);
+    let pos = game
+        .stack_pos()
+        .expect("descend_through_a_real_link enters");
+
+    let first = game
+        .pick_lair_species(pos)
+        .expect("a walkable entrance fields a guardian");
+
+    {
+        let mut rng = game.world.resource_mut::<GameRng>();
+        for _ in 0..50 {
+            rng.0.random_range(0..1_000_000);
+        }
+    }
+
+    let second = game
+        .pick_lair_species(pos)
+        .expect("a walkable entrance fields a guardian");
+
+    assert_eq!(
+        first, second,
+        "the guardian changed after burning GameRng rolls, which means it \
+         is drawing from the wrong stream"
     );
 }

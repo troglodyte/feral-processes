@@ -60,7 +60,7 @@ piece grants a routine, what fires that routine, what it hits and for how much. 
 
 In the Stack:
 
-- hjkl or the arrow keys — forward, back, turn left, turn right
+- hjkl or the arrow keys — forward, turn left, turn right, turn around
 - > — descend
 - < — climb, or leave the link. The same pair the anchor uses, and the same sense: < goes up, >
   goes down. The base sits above the grid and the Stack below it, so the anchor's two keys are

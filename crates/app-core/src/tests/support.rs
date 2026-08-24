@@ -761,6 +761,43 @@ pub(crate) fn app_underground(seed: u32) -> App {
     app
 }
 
+/// `app_underground`, minus every Power Outlet the fresh game starts with —
+/// the fixture a "rest is refused for want of a charge" test needs, since
+/// `app_underground` inherits a new game's two.
+pub(crate) fn app_underground_with_no_rest_charge(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("stack_no_outlet", seed);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player
+        .inventory
+        .retain(|(id, _)| id.as_str() != feral_processes_engine::items::ids::OUTLET);
+    let spec = FrameSpec {
+        world_seed: data.seed,
+        entrance: data.player.position,
+        depth: 1,
+        frames: 2,
+    };
+    let entry = generate(spec).entry;
+    data.locale = Locale::Stack {
+        depth: spec.depth,
+        frames: spec.frames,
+        x: entry.0,
+        y: entry.1,
+        facing: Dir::North,
+        entrance: spec.entrance,
+    };
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// A game where the player wears `weapon` — an item id plus the gear level
 /// it was equipped at (see `components::EquippedItem`) — carries
 /// `inventory`, and stands `zone` sectors deep.

@@ -708,21 +708,25 @@ impl Game {
         self.tick();
     }
 
-    pub fn step_forward(&mut self) {
-        self.step(1);
+    /// Turns the party clean around in place — two right turns rather than
+    /// a hand-rolled match, so anything hanging off `set_facing` (view
+    /// memory, passage narration) fires exactly as it does for `turn_left`
+    /// and `turn_right`.
+    pub fn turn_around(&mut self) {
+        if !self.can_act_underground() {
+            return;
+        }
+        let Some(pos) = self.stack_pos() else {
+            return;
+        };
+        self.set_facing(pos.facing.turn_right().turn_right());
+        self.tick();
     }
 
-    /// Backs up without turning round — the party keeps facing the way it
-    /// was, which is how you retreat down a corridor you have already read.
-    pub fn step_back(&mut self) {
-        self.step(-1);
-    }
-
-    /// `sign` is +1 to walk forward along the facing, -1 to back up along it.
     /// Ticks the surface sim either way, and ticks it even when the step is
     /// blocked by rock: shoving at a wall still passes time, exactly as a
     /// blocked step does on the surface.
-    fn step(&mut self, sign: i32) {
+    pub fn step_forward(&mut self) {
         if !self.can_act_underground() {
             return;
         }
@@ -730,7 +734,7 @@ impl Game {
             return;
         };
         let (dx, dy) = pos.facing.delta();
-        let (nx, ny) = (pos.x + dx * sign, pos.y + dy * sign);
+        let (nx, ny) = (pos.x + dx, pos.y + dy);
 
         let target = self
             .world

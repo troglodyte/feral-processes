@@ -148,6 +148,9 @@ impl Game {
     /// Not every biome fields a boss — no shipped Deadlock species does
     /// — and there the lair falls back to the toughest ordinary program the
     /// biome has, which at the bottom of a deep stack is no small thing.
+    ///
+    /// A lair is not gated by `APEX_ENTRY_STEP` the way an ambush or a
+    /// wild spawn is — see `pick_lair_species`.
     pub(crate) fn rouse_lair(&mut self) {
         if self.has_active_battle() || self.is_game_over().is_some() {
             return;
@@ -192,12 +195,24 @@ impl Game {
         let biome = self.world.resource_mut::<WorldMap>().tile(ex, ey).biome;
         let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
 
-        let step = self.danger_steps(Some(pos.depth));
-
-        // Apex species first where the depth admits them — a hand-authored
-        // boss is the better guardian when one is available — and the
-        // windowed ordinary pool otherwise. Either way the guardian **is** a
-        // boss: the fallback used to return `false`, which paid no Portal
+        // A lair always draws from its biome's apex pool where the biome
+        // has one — unlike an ambush or a wild spawn, `APEX_ENTRY_STEP`
+        // does not gate this: `boss_habitat_matches` skips the danger-step
+        // window `windowed_boss_matches` applies. A guardian is the one
+        // fight in the game the player deliberately walked up to and
+        // roused; gating it the same way as a chance encounter meant every
+        // stack shallower than depth 5 (`STACK_FRAMES_MIN` = 2 through
+        // `STACK_FRAMES_MAX` = 6, against `danger_steps`'s roughly
+        // `depth - 1`) could never field one. Sorted by id
+        // (`SpeciesDb::sorted_matches`), which the draw below relies on:
+        // it picks by index, so an unsorted pool would make the guardian
+        // change between runs on the same seed.
+        //
+        // The windowed ordinary pool is still the fallback for a biome
+        // that ships no apex species at all — `windowed_matches` keeps its
+        // own step gate there, since that pool is what decides difficulty
+        // for an ordinary guardian. Either way the guardian **is** a boss:
+        // the fallback used to return `false`, which paid no Portal
         // Fragments and made a stack under a biome with no apex species
         // unbreachable in everything but name.
         //
@@ -206,11 +221,13 @@ impl Game {
         // toughest of it as well would double-count.
         let db = self.world.resource::<SpeciesDb>();
         let mut pool: Vec<String> = db
-            .windowed_boss_matches(biome, step)
+            .boss_habitat_matches(biome)
             .into_iter()
             .map(|s| s.id.clone())
             .collect();
         if pool.is_empty() {
+            let step = self.danger_steps(Some(pos.depth));
+            let db = self.world.resource::<SpeciesDb>();
             pool = db
                 .windowed_matches(biome, step)
                 .into_iter()

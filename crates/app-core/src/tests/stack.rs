@@ -113,7 +113,7 @@ fn hjkl_steers_the_same_way_the_arrows_do() {
 }
 
 #[test]
-fn forward_walks_along_the_facing_and_back_retreats_along_it() {
+fn up_walks_forward_along_the_facing() {
     let mut app = app_underground(303);
     // Turn until there's somewhere to walk, so this isn't testing a wall.
     let mut moved = false;
@@ -121,16 +121,35 @@ fn forward_walks_along_the_facing_and_back_retreats_along_it() {
         let before = cell(&app);
         app.handle_key(GameKey::Up);
         if cell(&app) != before {
-            let advanced = cell(&app);
-            app.handle_key(GameKey::Down);
-            assert_eq!(cell(&app), before, "back should undo forward");
-            assert_ne!(advanced, before);
             moved = true;
             break;
         }
         app.handle_key(GameKey::Right);
     }
     assert!(moved, "no open direction from the entry cell");
+}
+
+/// Down used to back the party up along its facing; it now turns them
+/// clean around in place instead, which is what makes a dead end escapable
+/// with one key rather than a turn-turn-turn-forward dance.
+#[test]
+fn down_turns_the_party_around_without_moving_it() {
+    let mut app = app_underground(303);
+    let before = cell(&app);
+    assert_eq!(facing(&app), "N", "the fixture must start facing north");
+
+    app.handle_key(GameKey::Down);
+
+    assert_eq!(cell(&app), before, "turning around must not move the party");
+    assert_eq!(facing(&app), "S", "down should turn the party clean around");
+
+    app.handle_key(GameKey::Down);
+    assert_eq!(cell(&app), before, "turning around must not move the party");
+    assert_eq!(
+        facing(&app),
+        "N",
+        "two about-faces should return to the start"
+    );
 }
 
 #[test]
@@ -423,4 +442,122 @@ fn x_underground_opens_a_cell_description() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_description.is_none());
+}
+
+/// The charge a rest is bought with, out of the player's pack.
+fn held(app: &App, item: &str) -> u32 {
+    app.game
+        .as_ref()
+        .unwrap()
+        .player_status()
+        .inventory
+        .iter()
+        .find(|r| r.copy.item.as_str() == item)
+        .map(|r| r.qty)
+        .unwrap_or(0)
+}
+
+/// A rest is **priced** by locale and never **gated** by it: underground it
+/// burns a Power Outlet exactly as it does on the open grid, and
+/// `Game::rest` takes neither `require_surface` nor `require_base`.
+///
+/// What was missing was the key. `handle_stack_key` bound `.` and `e` but
+/// not `r`, so the press fell through its `_ => false` arm and was a dead
+/// key nothing caught — not a refusal the player could read, but silence.
+/// In play that reads as Power Outlets not working in the Stack, which is a
+/// bug report about the item rather than about the binding.
+#[test]
+fn r_rests_underground_and_burns_an_outlet() {
+    let mut app = app_underground(707);
+    let before = held(&app, feral_processes_engine::items::ids::OUTLET);
+    assert!(before > 0, "the fixture must start holding a rest charge");
+
+    app.handle_key(GameKey::Char('r'));
+
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        held(&app, feral_processes_engine::items::ids::OUTLET),
+        before - 1,
+        "`r` underground never reached Game::rest: {:?}",
+        game.message_log(5)
+    );
+    let status = game.player_status();
+    assert_eq!(
+        status.hp, status.max_hp,
+        "a successful rest fully heals the player"
+    );
+}
+
+/// The other half: with no charge in the pack, `r` underground must refuse
+/// exactly as it does on the open grid — burning nothing and never
+/// advancing the world, since a refusal is not an action
+/// (`App::after_world_action` only fires when `acted` is true).
+#[test]
+fn r_underground_with_no_charge_is_refused_and_spends_nothing() {
+    let mut app = app_underground_with_no_rest_charge(808);
+    assert_eq!(
+        held(&app, feral_processes_engine::items::ids::OUTLET),
+        0,
+        "the fixture must hold no rest charge"
+    );
+    let (x_before, y_before) = cell(&app);
+    let facing_before = facing(&app);
+    let lines_before = app.game.as_ref().unwrap().message_log(50).len();
+
+    app.handle_key(GameKey::Char('r'));
+
+    let game = app.game.as_ref().unwrap();
+    // The load-bearing assertion: a dead key that never reaches
+    // `Game::rest` and a real refusal both leave the pack untouched and the
+    // party where it stood, so those alone would pass whether `r` is bound
+    // here or not. Only `Game::rest` writes this line — proving it is what
+    // tells a genuine refusal apart from the key falling through
+    // `handle_stack_key`'s `_ => false` arm in silence.
+    let log = game.message_log(50);
+    assert_eq!(
+        log.len(),
+        lines_before + 1,
+        "`r` underground never reached Game::rest, so no refusal was logged: {log:?}"
+    );
+    assert!(
+        log.last().unwrap().text.contains("power down"),
+        "expected Game::rest's own refusal line, got: {log:?}"
+    );
+    assert_eq!(
+        held(&app, feral_processes_engine::items::ids::OUTLET),
+        0,
+        "a refused rest must not spend a charge it never had"
+    );
+    assert_eq!(
+        (x_before, y_before),
+        cell(&app),
+        "a refused rest is not an action and must not move the party"
+    );
+    assert_eq!(
+        facing_before,
+        facing(&app),
+        "a refused rest must not advance the world at all"
+    );
+}
+
+/// `e` (`Game::use_power_source`, a Power Cell — Power only, no heal, no
+/// Integrity) was already bound underground before the `r` fix above. This
+/// pins that it actually reaches the engine down there too, so the two
+/// keys are not conflated again: `r` burns an Outlet and fully restores the
+/// party, `e` burns a Power Cell and restores Power alone.
+#[test]
+fn e_restores_power_underground_and_burns_a_power_cell() {
+    let mut app = app_underground(909);
+    let before = held(&app, feral_processes_engine::items::ids::POWER_CELL);
+    assert!(before > 0, "the fixture must start holding a Power Cell");
+
+    app.handle_key(GameKey::Char('e'));
+
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(
+        held(&app, feral_processes_engine::items::ids::POWER_CELL),
+        before - 1,
+        "`e` underground never reached Game::use_power_source: {:?}",
+        game.message_log(5)
+    );
 }

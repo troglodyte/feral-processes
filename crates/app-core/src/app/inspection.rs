@@ -52,6 +52,16 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::StructureManifest;
             }
+            // A trader gets its own line rather than a manifest: it has no
+            // `Stats` for a sheet to draw and nothing may target one as a
+            // combat participant. `Mode::CellDescribe` is already the screen
+            // for "here is what that is", which is why this needs no mode of
+            // its own.
+            Some(InspectTarget::Caravan(entity)) => {
+                self.pending_description = game.caravan_blurb(entity);
+                self.status_line = None;
+                self.mode = Mode::CellDescribe;
+            }
             // Nothing standing there — but in base space the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a

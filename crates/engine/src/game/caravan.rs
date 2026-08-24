@@ -746,3 +746,20 @@ impl Game {
 /// knob, it is the slack a straight-line spawn distance needs to be walkable
 /// at all. `NEST_PATH_SEARCH_MARGIN` is the same idea on the other search.
 const CARAVAN_PATH_MARGIN: i32 = 12;
+
+impl Game {
+    /// What the examine ray reads out for a caravan: the trader's name and
+    /// its authored line.
+    ///
+    /// `None` for anything that is not one, so the caller does not have to
+    /// ask twice — `Game::describe_base_rock`'s shape, and for its reason.
+    pub fn caravan_blurb(&self, entity: Entity) -> Option<String> {
+        let caravan = self.world.get::<Caravan>(entity)?;
+        let visit = self.visit_at(caravan.visit)?;
+        let def = self
+            .world
+            .resource::<crate::caravans::CaravanDb>()
+            .get(&visit.def_id)?;
+        Some(format!("{}. {}", def.name, def.description))
+    }
+}

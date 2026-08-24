@@ -19,6 +19,11 @@ use std::collections::HashSet;
 /// it silently and nothing reads as having changed.
 const STRUCTURE_ON_TILE: u8 = 0;
 const CREATURE_ON_TILE: u8 = 1;
+/// Last of the three, because a caravan is the only one of them that cannot
+/// share a tile with either: it walks the open sector and stands on a free
+/// base cell beside the counter. The rank is here for the *total* order the
+/// walk needs rather than to settle a collision that can happen.
+const CARAVAN_ON_TILE: u8 = 2;
 
 impl Game {
     /// Which sector the party is standing in, or `None` for a neutral one.
@@ -345,6 +350,28 @@ impl Game {
                 .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
                 .collect()
         };
+        // A caravan carries neither `Creature` nor `Structure`, so the ray
+        // looked straight through one — the same gap it still has for nests,
+        // surface links and zone portals (`TODO.md`). This closes the part of
+        // it that has a name to read out, and it is gathered in the *same*
+        // walk for the reason the other two are: two walks and a caller
+        // choosing between them would have to re-derive distance to compare,
+        // putting the ray rule in two places.
+        //
+        // Gated on the same space test, because a caravan is the one entity
+        // that changes spaces mid-visit: ungated, a ray across the open grid
+        // could name a trader standing at a base cell whose coordinates
+        // aliased onto the tile being aimed at.
+        {
+            let mut caravans = self.world.query::<(Entity, &Position, &Caravan)>();
+            let on_ray_now: Vec<(i32, Entity)> = caravans
+                .iter(&self.world)
+                .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
+                .collect();
+            candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
+                (self.stands_in_base_space(e) == in_base).then_some((step, CARAVAN_ON_TILE, e))
+            }));
+        }
         candidates.extend(creatures_on_ray.into_iter().filter_map(|(step, e)| {
             if self.stands_in_base_space(e) != in_base {
                 return None;
@@ -357,13 +384,14 @@ impl Game {
             ))
         }));
 
-        candidates.into_iter().min().map(|(_, rank, entity)| {
-            if rank == STRUCTURE_ON_TILE {
-                InspectTarget::Structure(entity)
-            } else {
-                InspectTarget::Creature(entity)
-            }
-        })
+        candidates
+            .into_iter()
+            .min()
+            .map(|(_, rank, entity)| match rank {
+                STRUCTURE_ON_TILE => InspectTarget::Structure(entity),
+                CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
+                _ => InspectTarget::Creature(entity),
+            })
     }
 
     /// The `B` roster's row for one structure, for the inspector's detail

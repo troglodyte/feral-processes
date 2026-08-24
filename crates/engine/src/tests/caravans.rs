@@ -1031,3 +1031,78 @@ fn a_caravan_with_no_way_to_the_counter_complains_once() {
          a way through, which is why it is worth saying at all"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Examine, and the glyph on the map
+// ---------------------------------------------------------------------------
+
+use crate::views::InspectTarget;
+
+/// The map and the ray asserted **against each other**, never against a
+/// string: they are one rule read from two places, and a test that pinned a
+/// name would pass with either half broken.
+///
+/// The ray is aimed **west**, away from the counter. Aimed east it finds the
+/// Market first and the "not from inside the base" half passes without the
+/// space gate ever being consulted — which is what the first draft of this
+/// test did.
+#[test]
+fn the_examine_ray_names_what_the_map_draws_of_a_caravan() {
+    let mut game = fresh();
+    based(&mut game);
+    game.world.insert_resource(Locale::Surface);
+    let anchor = game.anchor_position().unwrap();
+    let player = game.player_entity();
+    *game.world.get_mut::<Position>(player).unwrap() = Position {
+        x: anchor.0,
+        y: anchor.1,
+    };
+    let caravan = stand_caravan(
+        &mut game,
+        CaravanStage::Approaching,
+        (anchor.0 - 3, anchor.1),
+    );
+    let look = |g: &mut Game| g.find_target_in_direction(-1, 0, crate::tuning::EXAMINE_RANGE_TILES);
+
+    assert!(
+        drawn(&mut game, caravan),
+        "the map has to draw it for the ray to have a subject"
+    );
+    assert_eq!(
+        look(&mut game),
+        Some(InspectTarget::Caravan(caravan)),
+        "the map drew it and the ray looked straight through"
+    );
+
+    // And the other way: out of phase it is on neither.
+    stand_in_base_at(&mut game, anchor.0, anchor.1);
+    assert!(!drawn(&mut game, caravan), "not drawn from inside the base");
+    assert_eq!(
+        look(&mut game),
+        None,
+        "and must not be nameable from inside the base either — base space's \
+         origin and the zone spawn point commonly alias, so an ungated ray \
+         names a trader out in the sector as though it were standing here"
+    );
+}
+
+/// It is a subject to look at, never a subject to fight: no `Creature`, no
+/// `Stats`, and so no manifest.
+#[test]
+fn a_caravan_is_not_a_combat_participant() {
+    let mut game = fresh();
+    based(&mut game);
+    let caravan = stand_caravan(&mut game, CaravanStage::Approaching, (3, 0));
+
+    assert!(game.world.get::<crate::Stats>(caravan).is_none());
+    assert!(game.world.get::<crate::Creature>(caravan).is_none());
+    assert!(game.world.get::<crate::Hostile>(caravan).is_none());
+    assert!(
+        game.manifest(caravan).is_none(),
+        "a trader has no sheet to open"
+    );
+    assert!(
+        game.caravan_blurb(caravan).is_some(),
+        "what it has instead is its own line"
+    );
+}

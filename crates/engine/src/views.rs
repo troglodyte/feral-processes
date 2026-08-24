@@ -1570,6 +1570,13 @@ pub struct ManifestView {
 pub enum InspectTarget {
     Creature(Entity),
     Structure(Entity),
+    /// A trader walking through, or standing beside the counter. Its own
+    /// variant rather than `Creature`, because nothing may target one as a
+    /// combat participant: it carries no `Creature`, no `Stats` and no
+    /// `Hostile`, and a manifest opened on it would be a sheet with nothing
+    /// on it. What the player gets instead is the trader's own line, through
+    /// `Game::caravan_blurb`.
+    Caravan(Entity),
 }
 
 pub enum ManifestSubject {

@@ -5,6 +5,7 @@ pub mod arena;
 pub mod balance_sim;
 pub mod base_grid;
 pub mod battle;
+pub mod caravans;
 pub mod components;
 pub mod contracts;
 pub(crate) mod derive;

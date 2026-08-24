@@ -12,6 +12,7 @@ mod base_grid;
 mod base_space;
 mod battle_timeline;
 mod building;
+mod caravans;
 mod catalog;
 mod chains;
 mod collect;

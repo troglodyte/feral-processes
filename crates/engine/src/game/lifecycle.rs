@@ -109,6 +109,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
             species: species_db,
@@ -143,6 +144,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
@@ -353,6 +355,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
             species: species_db,
@@ -401,6 +404,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
         world.insert_resource(world_map);
@@ -1665,6 +1669,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
+    caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
     structures: StructureDb,
@@ -1763,6 +1768,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (memories, memory_warnings) =
         crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
     warnings.extend(memory_warnings);
+    // Same absent-is-silent rule again — see `CaravanDb`'s own doc. An empty
+    // catalogue leaves `Game::scheduled_visit` with nothing to pick, which is
+    // the pre-caravan game.
+    let (caravans, caravan_warnings) =
+        crate::caravans::CaravanDb::load_dir(&assets_dir.join("caravans"))?;
+    warnings.extend(caravan_warnings);
     // Same absent-is-silent rule a third time. An empty catalogue makes base
     // space one uniform kind of rock — the pre-kinds game — while keeping
     // the swing floor, which is a bug fix and not content.
@@ -1800,6 +1811,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         environment,
         memories,
+        caravans,
         nemesis,
         species,
         structures,

@@ -1606,6 +1606,68 @@ pub struct DigSite {
     pub announced_dry: bool,
 }
 
+/// Which leg of its journey a caravan is on.
+///
+/// **The stage decides which space the caravan stands in**, which is why
+/// `Game::stands_in_base_space` reads a field rather than testing for the
+/// component's presence: this is the first entity besides the player that
+/// changes spaces, and asking "is it a caravan" would put it in one space
+/// forever. See `in_base_space`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CaravanStage {
+    /// Walking across the zone surface toward the anchor.
+    Approaching,
+    /// Standing **on** the anchor tile, about to phase out.
+    Docking,
+    /// Inside base space, walking to the Market.
+    Crossing,
+    /// Standing beside the Market, open for trade.
+    Docked,
+    /// Back on the anchor tile, walking out the way it came.
+    Leaving,
+}
+
+impl CaravanStage {
+    /// Whether a caravan at this stage stands in base space.
+    ///
+    /// `Docking` and `Leaving` are the two transition ticks and both answer
+    /// **false**, decided rather than defaulted: each is spent standing on
+    /// the anchor tile *on the zone surface*, which is the tile the caravan
+    /// walked to and the tile it walks away from. Answering true for either
+    /// would draw it inside the base on a surface coordinate — base space's
+    /// origin and the zone spawn point commonly alias, so the glyph would
+    /// land somewhere plausible and stay wrong.
+    pub fn in_base_space(self) -> bool {
+        matches!(self, CaravanStage::Crossing | CaravanStage::Docked)
+    }
+}
+
+/// A trader walking in, standing beside the Market, and walking out again.
+///
+/// **The journey is entity state; the schedule and the shelf are not.** When
+/// this visit was due, who is walking in and what they carry are all derived
+/// in `game/caravan.rs` from the base's own seed. What lives here is what
+/// could not be derived: which leg it is on and where it is standing.
+///
+/// The third entity to carry a base-space `Position`, after a posted program
+/// and a `DigSite` — and the first that carries one only *sometimes*. See
+/// `CaravanStage::in_base_space`.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct Caravan {
+    pub stage: CaravanStage,
+    /// Which scheduled visit this caravan is, so it can be matched back to
+    /// its own shelf after a reload.
+    pub visit: u64,
+    /// The surface tile it appeared on, and the one it walks back to. Kept
+    /// rather than re-derived from the bearing, because a caravan that
+    /// arrived under one sector's `ZoneLevel` must leave the way it came
+    /// even if something about the derivation moves under it.
+    pub arrival_tile: (i32, i32),
+    /// How many ticks it has spent on the current stage. Read by the two
+    /// stuck cases, which are the only things that care.
+    pub stage_ticks: u32,
+}
+
 /// A stationary spawner for a wild species. Present on the nest entity
 /// itself, which also carries `Position`, `Glyph`, and `Durability` (all
 /// reused as-is — a nest is destroyed the same way a structure is, just

@@ -215,7 +215,17 @@ impl Game {
     /// The player is in both spaces at once and has no answer here — its
     /// callers hold it out, and `scan_center` is where its base-space cell
     /// comes from.
+    /// A caravan is the third arm, and the only one that is **per-stage
+    /// rather than per-entity**: it is the first entity besides the player
+    /// that changes spaces, so the answer is read off `Caravan::stage` and
+    /// not off the component being there at all. Testing for the component
+    /// would pin a trader in one space for its whole visit, and the wrong
+    /// half of that journey would be drawn on a coordinate that aliases onto
+    /// a plausible tile in the other space.
     pub(crate) fn stands_in_base_space(&self, entity: Entity) -> bool {
+        if let Some(caravan) = self.world.get::<Caravan>(entity) {
+            return caravan.stage.in_base_space();
+        }
         self.world.get::<Structure>(entity).is_some() || self.world.get::<Tamed>(entity).is_some()
     }
 

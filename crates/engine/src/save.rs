@@ -485,6 +485,27 @@ pub struct DigSiteSave {
     pub marked: bool,
 }
 
+/// A caravan mid-journey — see `components::Caravan`.
+///
+/// A **named struct, never a positional tuple**, per the standing rule: a
+/// tuple is the one shape field-named RON does not save you from.
+///
+/// What is *not* here is the point. The trader's identity, its shelf and the
+/// ticks it arrived and departs on are all derived from `visit` and the
+/// base's own seed, so writing any of them would be a second source of truth
+/// that a retune could put out of step with the first.
+///
+/// `position` is in **whichever space the stage says**, exactly as the
+/// `Position` component it comes from is — see `CaravanStage::in_base_space`.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CaravanSave {
+    pub position: (i32, i32),
+    pub stage: crate::components::CaravanStage,
+    pub visit: u64,
+    pub arrival_tile: (i32, i32),
+    pub stage_ticks: u32,
+}
+
 /// One remembered thing on disk — see `components::Memory`.
 ///
 /// A **named struct, never a positional tuple**. A tuple is the one shape
@@ -617,6 +638,12 @@ pub struct SaveData {
     /// what that run had.
     #[serde(default)]
     pub dig_sites: Vec<DigSiteSave>,
+    /// The caravan standing in the sector or in the base, if one is —
+    /// see `components::Caravan`. Additive behind `#[serde(default)]`, so it
+    /// costs no `SAVE_FORMAT_VERSION` bump: a file written before it existed
+    /// loads with no caravan, which is exactly what that run had.
+    #[serde(default)]
+    pub caravans: Vec<CaravanSave>,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
     /// The base's pocket-dimension coordinate space — see
     /// `base_grid::BaseGrid`. Saved wholesale, the same way `stack_memory`
@@ -1145,6 +1172,7 @@ mod tests {
             structures: Vec::new(),
             nests: Vec::new(),
             dig_sites: Vec::new(),
+            caravans: Vec::new(),
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
             mining: false,
@@ -1388,6 +1416,36 @@ mod tests {
             loaded.dig_sites.is_empty(),
             "and comes back with no walls half-cut"
         );
+    }
+
+    /// The same demand of the caravan field: a run that predates it must
+    /// load with no trader standing, which is exactly what that run had.
+    #[test]
+    fn a_save_written_before_caravans_existed_still_loads() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_no_caravan_{}.bin",
+            std::process::id()
+        ));
+        save_to_file(&path, &sample_data()).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let older: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("caravans: ["))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !older.contains("caravans:"),
+            "the key has to actually be gone for this to prove anything"
+        );
+        std::fs::write(&path, &older).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("a file written before caravans must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert!(loaded.caravans.is_empty(), "and nobody is standing there");
     }
 
     /// The biome rename is not a save-format break, and this is what says

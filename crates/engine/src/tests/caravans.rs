@@ -629,3 +629,134 @@ fn reading_a_shelf_draws_no_game_rng() {
         "stocking a shelf moved the shared RNG stream"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The component, the space predicate and the save
+// ---------------------------------------------------------------------------
+
+use crate::components::{Caravan, CaravanStage};
+
+/// Stands a caravan on `tile` at `stage`, without walking it there.
+fn stand_caravan(game: &mut Game, stage: CaravanStage, tile: (i32, i32)) -> crate::Entity {
+    let visit = game.visit_index();
+    game.world
+        .spawn((
+            Caravan {
+                stage,
+                visit,
+                arrival_tile: (9, 9),
+                stage_ticks: 0,
+            },
+            Position {
+                x: tile.0,
+                y: tile.1,
+            },
+            Glyph {
+                ch: 'Ω',
+                color: GlyphColor::DarkGreen,
+            },
+        ))
+        .id()
+}
+
+fn drawn(game: &mut Game, entity: crate::Entity) -> bool {
+    game.view_entities(40, 40)
+        .iter()
+        .any(|v| v.entity == entity)
+}
+
+/// Asserted **through `view_entities` from both locales**, never by calling
+/// the predicate directly: the map and the space rule have to be tested
+/// against each other or the two can agree on a wrong answer.
+#[test]
+fn a_caravan_is_drawn_in_exactly_one_space_per_stage() {
+    let mut game = fresh();
+    based(&mut game);
+    let caravan = stand_caravan(&mut game, CaravanStage::Approaching, (3, 0));
+
+    game.world.insert_resource(Locale::Surface);
+    assert!(
+        drawn(&mut game, caravan),
+        "an approaching caravan is out in the sector"
+    );
+    stand_in_base_at(&mut game, 1, 1);
+    assert!(
+        !drawn(&mut game, caravan),
+        "and must not also be inside the base — base space's origin and the \
+         zone spawn point commonly alias, so a wrong-space draw looks right"
+    );
+
+    game.world.get_mut::<Caravan>(caravan).unwrap().stage = CaravanStage::Docked;
+    assert!(
+        drawn(&mut game, caravan),
+        "a docked caravan is standing in the base"
+    );
+    game.world.insert_resource(Locale::Surface);
+    assert!(
+        !drawn(&mut game, caravan),
+        "and is no longer out in the sector"
+    );
+}
+
+/// The two transition ticks are decided, not defaulted: both are spent on
+/// the anchor tile, which is a tile of the zone surface.
+#[test]
+fn the_transition_stages_stand_on_the_surface() {
+    for stage in [CaravanStage::Docking, CaravanStage::Leaving] {
+        assert!(
+            !stage.in_base_space(),
+            "{stage:?} is spent standing on the anchor, out in the sector"
+        );
+    }
+    for stage in [CaravanStage::Crossing, CaravanStage::Docked] {
+        assert!(stage.in_base_space(), "{stage:?} is inside");
+    }
+}
+
+/// A real save→load, not only the RON round trip: a `#[serde(skip)]` would
+/// leave a round-trip test green while losing the field on disk.
+#[test]
+fn a_caravan_mid_journey_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("caravan_component_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = fresh();
+    based(&mut game);
+    let before = Caravan {
+        stage: CaravanStage::Crossing,
+        visit: game.visit_index(),
+        arrival_tile: (-7, 4),
+        stage_ticks: 13,
+    };
+    game.world.spawn((
+        before.clone(),
+        Position { x: 2, y: -1 },
+        Glyph {
+            ch: 'Ω',
+            color: GlyphColor::DarkGreen,
+        },
+    ));
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let mut query = loaded.world.query::<(&Caravan, &Position)>();
+    let found: Vec<(Caravan, Position)> = query
+        .iter(&loaded.world)
+        .map(|(c, p)| (c.clone(), *p))
+        .collect();
+
+    assert_eq!(found.len(), 1, "one caravan in, one caravan out");
+    assert_eq!(found[0].0, before, "the whole journey came back");
+    assert_eq!((found[0].1.x, found[0].1.y), (2, -1), "and where it stood");
+}
+
+/// The field is additive behind `#[serde(default)]`, so it costs nothing.
+#[test]
+fn caravans_cost_no_save_format_bump() {
+    assert_eq!(
+        crate::save::SAVE_FORMAT_VERSION,
+        32,
+        "a caravan is an additive named-struct field and must not bump this"
+    );
+}

@@ -1591,6 +1591,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         structures: Vec::new(),
         nests: Vec::new(),
         dig_sites: Vec::new(),
+        caravans: Vec::new(),
         tile_overrides: Vec::new(),
         base_grid: crate::base_grid::BaseGrid::default(),
         anchor: None,

@@ -690,6 +690,38 @@ impl Game {
             nest_positions.insert(n.position, nest);
         }
 
+        // A caravan whose `.ron` file has gone since the save was written is
+        // dropped rather than spawned glyphless: the visit becomes a miss,
+        // which is the same thing an install with no `assets/caravans/` at
+        // all sees, and is what makes deleting the directory supported rather
+        // than breaking a save.
+        for c in data.caravans {
+            let Some(def) = game.visit_at(c.visit).and_then(|v| {
+                game.world
+                    .resource::<crate::caravans::CaravanDb>()
+                    .get(&v.def_id)
+                    .cloned()
+            }) else {
+                continue;
+            };
+            game.world.spawn((
+                Caravan {
+                    stage: c.stage,
+                    visit: c.visit,
+                    arrival_tile: c.arrival_tile,
+                    stage_ticks: c.stage_ticks,
+                },
+                Position {
+                    x: c.position.0,
+                    y: c.position.1,
+                },
+                Glyph {
+                    ch: def.glyph,
+                    color: def.color,
+                },
+            ));
+        }
+
         for d in data.dig_sites {
             let wall = game.wall_at(d.position.0, d.position.1);
             game.world.spawn((
@@ -1320,6 +1352,21 @@ impl Game {
             });
         }
 
+        let mut caravans = Vec::new();
+        let mut caravan_query = self.world.query::<(&Caravan, &Position)>();
+        for (caravan, pos) in caravan_query.iter(&self.world) {
+            caravans.push(save::CaravanSave {
+                // Surface or base space, per `CaravanStage::in_base_space` —
+                // the component's own `Position` is already in whichever the
+                // stage says, so this copies rather than decides.
+                position: (pos.x, pos.y),
+                stage: caravan.stage,
+                visit: caravan.visit,
+                arrival_tile: caravan.arrival_tile,
+                stage_ticks: caravan.stage_ticks,
+            });
+        }
+
         let tile_overrides = self
             .world
             .resource::<WorldMap>()
@@ -1417,6 +1464,7 @@ impl Game {
             structures,
             nests,
             dig_sites,
+            caravans,
             tile_overrides,
             base_grid,
             mining: self.world.resource::<crate::resources::MiningMode>().0,

@@ -2120,3 +2120,140 @@ fn fusing_all_pairs_crosses_quality_in_one_pass() {
         .sum();
     assert_eq!(tier_0, 0, "with nothing left over");
 }
+
+/// **A save written before affixes stacked keeps the one it had.** That
+/// claim is the whole reason the list costs no `SAVE_FORMAT_VERSION` bump,
+/// and it is a claim about a *file* — so this edits one, the way
+/// `a_pre_quality_save_loads_its_gear_as_designed` does. A real save with
+/// every `affixes:` line rewritten back into the singular `affix:` form is
+/// byte-for-byte what the previous release wrote.
+///
+/// The RON-fragment tests in `save.rs` prove `affixes_from_save` in
+/// isolation; this proves the four sites actually call it, on all three
+/// routes an affix travels — the player's flat slot fields, a companion's
+/// `EquippedItemSave`, and a carried `GearCopySave`.
+#[test]
+fn a_pre_stacking_save_keeps_the_affix_it_had_on_every_route() {
+    let assets = test_assets_dir();
+    let whip = ItemId::from(ids::MONOFILAMENT_WHIP);
+    let plating = ItemId::from(ids::ABLATIVE_PLATING);
+    let mut game = Game::new(4104, DifficultyMode::Forgiving, &assets).unwrap();
+    let affix = game
+        .affix_defs()
+        .into_iter()
+        .find(|a| a.stats.atk > 0)
+        .expect("the shipped set has an ATK affix");
+
+    let worn = GearCopy::with_affixes(
+        whip,
+        Rarity::Ordinary,
+        0,
+        vec![affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&worn, 2);
+    game.equip(game.player_entity(), &worn).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.add_companion(companion).unwrap();
+    game.equip(companion, &worn).unwrap();
+    let carried = GearCopy::with_affixes(
+        plating,
+        Rarity::Ordinary,
+        1,
+        vec![affix.id.clone()],
+        QUALITY_DEFAULT,
+    );
+    game.add_copies(&carried, 1);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_pre_stacking_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    // The three player slots spell the field `weapon_affixes:` and the rest
+    // spell it `affixes:`, so both the drop and the rewrite match on the
+    // tail of the field name — the same trap `a_pre_quality_save_loads_its_
+    // gear_as_designed` documents.
+    let field = |line: &str| {
+        line.trim_start()
+            .split(':')
+            .next()
+            .unwrap_or_default()
+            .to_string()
+    };
+    // The pretty-printer breaks a non-empty list across lines, so this walks
+    // the file rather than mapping over it: an `affixes:` key swallows
+    // everything up to its closing bracket.
+    let text = std::fs::read_to_string(&path).unwrap();
+    let mut out: Vec<String> = Vec::new();
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        let name = field(line);
+        if name.ends_with("affix") {
+            continue;
+        }
+        if !name.ends_with("affixes") {
+            out.push(line.to_string());
+            continue;
+        }
+        let indent = line[..line.len() - line.trim_start().len()].to_string();
+        let singular = name.trim_end_matches("es").to_string();
+        let mut body = line[line.find('[').expect("a list key opens a bracket") + 1..].to_string();
+        while !body.contains(']') {
+            body.push_str(lines.next().expect("an unclosed list"));
+        }
+        let ids = body[..body.find(']').unwrap()]
+            .trim()
+            .trim_end_matches(',')
+            .trim()
+            .to_string();
+        out.push(if ids.is_empty() {
+            // An unaffixed copy simply had no key at all.
+            format!("{indent}{singular}: None,")
+        } else {
+            format!("{indent}{singular}: Some({ids}),")
+        });
+    }
+    let downgraded = out.join("\n");
+    assert!(
+        !downgraded.contains("affixes"),
+        "the downgrade must leave no plural key, or this tests nothing"
+    );
+    assert!(
+        downgraded.contains(&format!("Some(\"{}\")", affix.id.as_str())),
+        "and it must still name the affix somewhere: {downgraded}"
+    );
+    std::fs::write(&path, downgraded).unwrap();
+
+    let loaded = Game::load(&path, &assets).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let equipment = loaded
+        .world
+        .get::<Equipment>(loaded.player_entity())
+        .expect("the player is still wearing something");
+    assert_eq!(
+        equipment.weapon.as_ref().map(|e| e.copy.affixes.clone()),
+        Some(vec![affix.id.clone()]),
+        "the player's own slot lost its affix"
+    );
+    assert_eq!(
+        loaded.count_copies(&carried),
+        1,
+        "the carried copy lost its affix and keyed a different row"
+    );
+    let worn_by_companion = loaded
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<Tamed>())
+        .filter_map(|e| e.get::<Equipment>())
+        .filter_map(|eq| eq.weapon.clone())
+        .next()
+        .expect("the companion is still wearing its weapon");
+    assert_eq!(
+        worn_by_companion.copy.affixes,
+        vec![affix.id],
+        "a companion's loadout lost its affix"
+    );
+}

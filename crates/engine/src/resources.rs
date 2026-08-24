@@ -948,6 +948,26 @@ pub enum SlotShift {
 #[derive(Resource, Default, Clone)]
 pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(GearCopy, u32)>>);
 
+/// Which of the visiting caravan's own rows it has already sold.
+///
+/// **Keyed by visit index, which is what makes it self-clearing.** When the
+/// schedule's index moves on, `visit` no longer matches and the set reads as
+/// empty — so there is no reset call anywhere and no way for a stale entry to
+/// make next month's trader arrive already sold out.
+///
+/// Deliberately **not** a `BuybackLedger`: what the player sells a caravan is
+/// gone, exactly as at a Stack market. A trader that would sell it back is a
+/// shop the party can walk to, and a caravan's whole shape is that it cannot
+/// be walked back to.
+///
+/// Zone-local, and so wiped **by name** in `Game::enter_next_zone` beside
+/// `BuybackLedger` and `StackMemory`.
+#[derive(Resource, Default, Clone, Debug, PartialEq, Eq)]
+pub struct CaravanMemory {
+    pub visit: u64,
+    pub bought: BTreeSet<usize>,
+}
+
 /// Which shelf: the trader's kind and the tile it stands on — see
 /// `BuybackLedger` for why those two and not an `Entity`.
 pub type ShelfKey = (StructureId, (i32, i32));

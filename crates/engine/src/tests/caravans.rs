@@ -1106,3 +1106,270 @@ fn a_caravan_is_not_a_combat_participant() {
         "what it has instead is its own line"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Reach, transactions and within-visit depletion
+// ---------------------------------------------------------------------------
+
+use crate::game::caravan::CaravanReach;
+use crate::resources::{BuybackLedger, CaravanMemory};
+use crate::{GearCopy, Inventory};
+
+/// A base with a docked trader and the party standing beside it — the state
+/// every transaction question is asked from. Returns the open visit.
+fn docked(game: &mut Game) -> CaravanVisit {
+    let visit = at_the_arrival(game);
+    game.caravan_tick();
+    assert!(
+        tick_until(game, 600, |g| stage_of(g) == Some(CaravanStage::Docked)),
+        "the fixture never got a trader to the counter"
+    );
+    visit
+}
+
+fn credits(game: &mut Game) -> u32 {
+    let currency = game.trade_currency();
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .map(|inv| inv.count(&currency))
+        .unwrap_or(0)
+}
+
+fn give_credits(game: &mut Game, n: u32) {
+    let currency = game.trade_currency();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(currency, n);
+}
+
+#[test]
+fn caravan_reach_reports_the_three_states() {
+    let mut game = fresh();
+    based(&mut game);
+    assert_eq!(
+        game.caravan_reach(),
+        CaravanReach::NoCaravan,
+        "nothing is visiting"
+    );
+
+    at_the_arrival(&mut game);
+    game.caravan_tick();
+    assert_eq!(
+        game.caravan_reach(),
+        CaravanReach::NotDocked,
+        "it is still walking in"
+    );
+
+    assert!(tick_until(&mut game, 600, |g| stage_of(g)
+        == Some(CaravanStage::Docked)));
+    assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
+
+    // The far edge of the pocket is still the base — the walk to the counter
+    // is visibility, not a gate.
+    stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    assert_eq!(game.caravan_reach(), CaravanReach::AtCaravan);
+
+    game.world.insert_resource(Locale::Surface);
+    assert_eq!(
+        game.caravan_reach(),
+        CaravanReach::NotDocked,
+        "out on the grid there is nothing to take"
+    );
+}
+
+#[test]
+fn a_bought_row_is_gone_for_the_visit_and_back_the_next() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 1_000_000);
+
+    let before = game.caravan_view().unwrap().offers;
+    let row = before[0].index;
+    game.buy_caravan_offer(row).unwrap();
+
+    let after = game.caravan_view().unwrap().offers;
+    assert_eq!(
+        after.len(),
+        before.len() - 1,
+        "the row is still on the shelf"
+    );
+    assert!(
+        !after.iter().any(|o| o.index == row),
+        "and it is the one that was bought that went"
+    );
+    assert_eq!(
+        game.buy_caravan_offer(row),
+        Err("That's not on the wagon.".into()),
+        "buying it twice"
+    );
+
+    // The memory is keyed by visit index, so the next visit is untouched
+    // without anything having to reset it.
+    let next = game.visit_index() + 1;
+    assert!(
+        game.caravan_spent(next).is_empty(),
+        "next month's trader arrived already sold out"
+    );
+}
+
+/// Asserted on the ledger, not on a screen: a caravan keeps no shelf, and a
+/// screen that merely fails to draw one would pass either way.
+#[test]
+fn selling_to_a_caravan_stocks_no_buyback_shelf() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    let item = crate::ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 10);
+
+    let before = credits(&mut game);
+    game.sell_to_caravan(GearCopy::plain(item.clone()), 4)
+        .unwrap();
+
+    assert!(credits(&mut game) > before, "it paid nothing");
+    assert!(
+        game.world.resource::<BuybackLedger>().0.is_empty(),
+        "a caravan rolls away — there is nothing to buy it back from"
+    );
+}
+
+/// The counter's own rate, read off its `TradeDef` rather than restated, so
+/// retuning the Market moves this with it.
+#[test]
+fn a_caravan_pays_the_counters_own_rate() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    let item = crate::ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 10);
+
+    let counter = game.trading_structures().next().unwrap().0;
+    let rate = game.trade_options(counter).unwrap().sell_rate;
+    let expected = game.item_value(&item) * rate;
+
+    let row = game
+        .caravan_view()
+        .unwrap()
+        .sells
+        .into_iter()
+        .find(|r| r.copy.item == item)
+        .expect("what the player is holding has to be sellable");
+    assert_eq!(row.unit_price, expected);
+}
+
+/// Every refusal lands before anything is spent — a purchase that took the
+/// Credits and then failed is the one bug the player cannot undo, and a
+/// caravan has no buyback to put it right with.
+#[test]
+fn every_refusal_leaves_credits_and_cargo_exactly_as_they_were() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 50);
+    let item = crate::ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 3);
+
+    let dearest = game
+        .caravan_view()
+        .unwrap()
+        .offers
+        .into_iter()
+        .max_by_key(|o| o.unit_cost * o.qty)
+        .unwrap();
+    let holdings = |g: &mut Game| -> (u32, u32) {
+        let held = g
+            .world
+            .get::<Inventory>(g.player_entity())
+            .map(|inv| inv.count(&crate::ItemId::from(ids::CORE_FRAGMENT)))
+            .unwrap_or(0);
+        (credits(g), held)
+    };
+
+    let before = holdings(&mut game);
+    assert!(
+        game.buy_caravan_offer(dearest.index).is_err(),
+        "50 Credits should not cover the dearest row on the wagon"
+    );
+    assert!(game.buy_caravan_offer(9_999).is_err(), "no such row");
+    assert!(
+        game.sell_to_caravan(GearCopy::plain(item), 0).is_err(),
+        "selling nothing"
+    );
+    assert!(
+        game.sell_to_caravan(GearCopy::plain(crate::ItemId::from("nothing_at_all")), 1)
+            .is_err(),
+        "selling what you do not hold"
+    );
+    assert_eq!(holdings(&mut game), before, "a refusal spent something");
+
+    // And off the base, where there is no counter to refuse at.
+    game.world.insert_resource(Locale::Surface);
+    assert!(game.buy_caravan_offer(dearest.index).is_err());
+    assert_eq!(holdings(&mut game), before);
+}
+
+#[test]
+fn a_breach_takes_the_caravan_and_its_memory_with_it() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 1_000_000);
+    let row = game.caravan_view().unwrap().offers[0].index;
+    game.buy_caravan_offer(row).unwrap();
+    assert!(!game.world.resource::<CaravanMemory>().bought.is_empty());
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        *game.world.resource::<CaravanMemory>(),
+        CaravanMemory::default(),
+        "a shelf's sale history is a fact about the last sector"
+    );
+    assert!(
+        caravan_of(&mut game).is_none(),
+        "and the trader does not come along"
+    );
+}
+
+#[test]
+fn caravan_memory_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("caravan_memory_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 1_000_000);
+    let row = game.caravan_view().unwrap().offers[0].index;
+    game.buy_caravan_offer(row).unwrap();
+    let before = game.world.resource::<CaravanMemory>().clone();
+    game.save(&path).unwrap();
+
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert_eq!(
+        *loaded.world.resource::<CaravanMemory>(),
+        before,
+        "a reload put a bought row back on the wagon"
+    );
+    assert_eq!(
+        crate::save::SAVE_FORMAT_VERSION,
+        32,
+        "both caravan fields are additive named-struct ones"
+    );
+}

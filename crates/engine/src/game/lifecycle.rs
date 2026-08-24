@@ -169,6 +169,7 @@ impl Game {
             [abilities::DECOMPILE_ABILITY_ID.to_string()].into(),
         ));
         world.insert_resource(BuybackLedger::default());
+        world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
         world.insert_resource({
             // Base space's seed is minted once, here, from the run's own
@@ -689,6 +690,11 @@ impl Game {
                 .id();
             nest_positions.insert(n.position, nest);
         }
+
+        game.world.insert_resource(crate::resources::CaravanMemory {
+            visit: data.caravan_memory.visit,
+            bought: data.caravan_memory.bought.into_iter().collect(),
+        });
 
         // A caravan whose `.ron` file has gone since the save was written is
         // dropped rather than spawned glyphless: the visit becomes a miss,
@@ -1468,6 +1474,13 @@ impl Game {
             nests,
             dig_sites,
             caravans,
+            caravan_memory: {
+                let memory = self.world.resource::<crate::resources::CaravanMemory>();
+                save::CaravanMemorySave {
+                    visit: memory.visit,
+                    bought: memory.bought.iter().copied().collect(),
+                }
+            },
             tile_overrides,
             base_grid,
             mining: self.world.resource::<crate::resources::MiningMode>().0,

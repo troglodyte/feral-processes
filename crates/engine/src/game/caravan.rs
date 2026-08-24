@@ -763,3 +763,315 @@ impl Game {
         Some(format!("{}. {}", def.name, def.description))
     }
 }
+
+/// Where the player stands in relation to the visiting trader.
+///
+/// Three states out of one call rather than two booleans, for
+/// `BrokerReach`'s reason and `NoPost::BoxedIn`'s before it: the three leave
+/// the player different errands — wait for one, walk home, or trade — and two
+/// independent predicates would let the base menu's row and the screen's own
+/// header disagree about which.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CaravanReach {
+    /// Nothing is visiting, so there is nobody to be away from.
+    NoCaravan,
+    /// A caravan is visiting but its shelf is not open to the player: it is
+    /// still walking in, waiting for a way through to the counter, or set out
+    /// and the party is not in the base.
+    ///
+    /// One state rather than two, unlike `BrokerReach`'s `OffBase`, because
+    /// the map already says which: a board is invisible from outside the
+    /// base, so its refusal has to carry the errand, while a caravan is drawn
+    /// walking in and drawn standing at the counter. The refusal only has to
+    /// say "not yet".
+    NotDocked,
+    /// Docked beside the counter, with the party in the base. Everything is
+    /// available.
+    AtCaravan,
+}
+
+impl Game {
+    /// Where the player stands in relation to the visiting trader.
+    ///
+    /// `AtCaravan` measures **base space**, exactly as `broker_reach` does,
+    /// and deliberately not the distance to the caravan's own tile: a docked
+    /// caravan is standing on the base's laid floor by construction, so its
+    /// tile says nothing the base does not. The walk to the counter is
+    /// visibility and flavour, not a gate — a player who watched a trader
+    /// pull up should not then have to work out which cell to stand on.
+    pub fn caravan_reach(&mut self) -> CaravanReach {
+        let docked = {
+            let mut query = self.world.query::<&Caravan>();
+            match query.iter(&self.world).next() {
+                None => return CaravanReach::NoCaravan,
+                Some(caravan) => matches!(caravan.stage, CaravanStage::Docked),
+            }
+        };
+        if !docked {
+            return CaravanReach::NotDocked;
+        }
+        match self.base_pos() {
+            Some((x, y))
+                if self
+                    .world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(x, y) =>
+            {
+                CaravanReach::AtCaravan
+            }
+            _ => CaravanReach::NotDocked,
+        }
+    }
+}
+
+impl Game {
+    /// The visiting trader's counter, or `None` when there is nothing to
+    /// show.
+    ///
+    /// **One call answers both "is there a trader" and "what is on the
+    /// shelf"**, `Game::stack_market`'s contract, so no screen asks those
+    /// separately and then disagrees. Whether the player may *take* any of it
+    /// is the third question and `caravan_reach`'s.
+    pub fn caravan_view(&mut self) -> Option<views::CaravanView> {
+        if self.caravan_reach() != CaravanReach::AtCaravan {
+            return None;
+        }
+        let caravan = {
+            let mut query = self.world.query::<&Caravan>();
+            query.iter(&self.world).next().cloned()?
+        };
+        let visit = self.visit_at(caravan.visit)?;
+        let def = self
+            .world
+            .resource::<crate::caravans::CaravanDb>()
+            .get(&visit.def_id)
+            .cloned()?;
+        let spent = self.caravan_spent(caravan.visit);
+        let currency = self.trade_currency();
+        let credits = self
+            .world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(&currency))
+            .unwrap_or(0);
+        let offers = self
+            .caravan_shelf(&visit)
+            .into_iter()
+            .filter(|offer| !spent.contains(&offer.index))
+            .collect();
+        Some(views::CaravanView {
+            trader: def.name,
+            description: def.description,
+            offers,
+            sells: self.caravan_sell_rows(),
+            credits,
+            currency: self.item_name(&currency).to_string(),
+            ticks_left: visit
+                .depart_tick
+                .saturating_sub(self.current_tick())
+                .min(u32::MAX as u64) as u32,
+        })
+    }
+
+    /// Which of this visit's rows have already been sold.
+    ///
+    /// Keyed on the visit index rather than reset anywhere: a memory left
+    /// over from a previous visit simply stops matching, so next month's
+    /// trader can never arrive already sold out.
+    pub(crate) fn caravan_spent(&self, visit: u64) -> std::collections::BTreeSet<usize> {
+        let memory = self.world.resource::<crate::resources::CaravanMemory>();
+        if memory.visit == visit {
+            memory.bought.clone()
+        } else {
+            Default::default()
+        }
+    }
+
+    /// Every stack of cargo a caravan will take, at the iso Market's own
+    /// rate.
+    ///
+    /// The same two exclusions `Game::sell_item` and `market_sell_rows` make,
+    /// and for the same reasons: the trade currency (buying Credits with
+    /// Credits is meaningless) and anything banked (a bank is not a good).
+    fn caravan_sell_rows(&mut self) -> Vec<views::CaravanSellRow> {
+        let currency = self.trade_currency();
+        // The rate is fetched once, above the walk: `caravan_sell_price`
+        // wants `&mut self` (it resolves the counter's `TradeDef`), which a
+        // closure over `self.player_status()` cannot also hold.
+        let rate = self.market_sell_rate();
+        let rows: Vec<(GearCopy, u32)> = self
+            .player_status()
+            .inventory
+            .iter()
+            .map(|row| (row.copy.clone(), row.qty))
+            .collect();
+        rows.into_iter()
+            .filter(|(copy, _)| copy.item != currency && !self.is_banked(&copy.item))
+            .map(|(copy, held)| views::CaravanSellRow {
+                name: self.item_name(&copy.item).to_string(),
+                unit_price: self.item_value(&copy.item) * rate,
+                copy,
+                held,
+            })
+            .collect()
+    }
+
+    /// The iso Market's own `sell_rate`, or 1 with no counter standing.
+    fn market_sell_rate(&mut self) -> u32 {
+        self.trading_structures()
+            .next()
+            .and_then(|(entity, _)| self.trade_options(entity))
+            .map(|trade| trade.sell_rate)
+            .unwrap_or(1)
+    }
+
+    /// What a caravan pays for one copy of `item`.
+    ///
+    /// The **iso Market's** rate, read off the counter's own `TradeDef`
+    /// rather than restated, so retuning the Market moves this with it. A
+    /// caravan that paid better than the standing counter would make the
+    /// counter pointless; one that paid worse would make a visit a reason to
+    /// stay away.
+    fn caravan_sell_price(&mut self, item: &ItemId) -> u32 {
+        self.item_value(item) * self.market_sell_rate()
+    }
+
+    /// Buys row `index` off the visiting caravan's shelf.
+    ///
+    /// **Every refusal lands before anything is spent**, which is this
+    /// function's whole ordering and `buy_market_offer`'s: a purchase that
+    /// took the Credits and then failed is the one bug the player cannot
+    /// undo, and a caravan has no buyback to put it right with.
+    pub fn buy_caravan_offer(&mut self, index: usize) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let view = self
+            .caravan_view()
+            .ok_or_else(|| "There's nobody selling anything here.".to_string())?;
+        let offer = view
+            .offers
+            .into_iter()
+            .find(|o| o.index == index)
+            .ok_or_else(|| "That's not on the wagon.".to_string())?;
+        let currency = self.trade_currency();
+        let money = self.item_name(&currency).to_string();
+        let player = self.player_entity();
+        let held = self
+            .world
+            .get::<Inventory>(player)
+            .map(|inv| inv.count(&currency))
+            .unwrap_or(0);
+        let price = offer.unit_cost * offer.qty;
+        if held < price {
+            return Err(format!("Not enough {money} (need {price})."));
+        }
+
+        // Everything below is infallible bar the roster check, which is the
+        // one refusal that cannot be asked earlier without duplicating the
+        // match — so it sits at the very top of its own arm, still above the
+        // charge at the bottom.
+        let delivered = match &offer.kind {
+            views::CaravanOfferKind::Gear(copy) => {
+                self.add_copies(copy, offer.qty);
+                format!("{} goes in the pack", self.copy_name(copy))
+            }
+            views::CaravanOfferKind::Routine(ability) => {
+                let disk = ItemId::etched(ability);
+                let name = self.item_name(&disk).to_string();
+                self.grant_loot(disk, offer.qty);
+                format!("{name} goes in the pack")
+            }
+            views::CaravanOfferKind::Material(item) => {
+                let name = self.item_name(item).to_string();
+                self.grant_loot(item.clone(), offer.qty);
+                format!("{} × {name} goes in the pack", offer.qty)
+            }
+            views::CaravanOfferKind::Program(species) => {
+                if self.pet_count() >= self.pet_capacity() {
+                    return Err("Your roster is full.".into());
+                }
+                let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+                let anchor = self.anchor_position().unwrap_or((0, 0));
+                let program = self
+                    .adopt_program(species, anchor.0, anchor.1, mult)
+                    .ok_or_else(|| "There's nothing left of it to compile.".to_string())?;
+                format!("{} is yours", self.creature_label(program))
+            }
+        };
+
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(currency, price);
+        self.spend_caravan_row(index);
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("{price} {money}, and {delivered}."),
+        );
+        self.tick();
+        Ok(())
+    }
+
+    /// Records that this visit's row `index` is gone, under the visit the
+    /// caravan standing there belongs to.
+    fn spend_caravan_row(&mut self, index: usize) {
+        let Some(visit) = ({
+            let mut query = self.world.query::<&Caravan>();
+            query.iter(&self.world).next().map(|c| c.visit)
+        }) else {
+            return;
+        };
+        let mut memory = self.world.resource_mut::<crate::resources::CaravanMemory>();
+        if memory.visit != visit {
+            memory.visit = visit;
+            memory.bought.clear();
+        }
+        memory.bought.insert(index);
+    }
+
+    /// Sells `qty` copies of `copy` to the visiting caravan.
+    ///
+    /// **It stocks no shelf.** What the player sells here is gone, exactly as
+    /// at a Stack market and deliberately unlike `Game::sell_item`: a buyback
+    /// needs a counter you can walk back to, and a caravan's whole shape is
+    /// that it rolls away. `BuybackLedger` is untouched, which is what a test
+    /// asserts on rather than on a screen.
+    pub fn sell_to_caravan(&mut self, copy: GearCopy, qty: u32) -> Result<(), String> {
+        let item = copy.item.clone();
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self.caravan_reach() != CaravanReach::AtCaravan {
+            return Err("There's nobody buying anything here.".into());
+        }
+        if qty == 0 {
+            return Err("Sell at least 1.".into());
+        }
+        let currency = self.trade_currency();
+        if item == currency {
+            let money = self.item_name(&currency);
+            return Err(format!("{money} aren't worth trading for more {money}."));
+        }
+        if self.is_banked(&item) {
+            return Err(format!("{} can't be traded.", self.item_name(&item)));
+        }
+        let have = self.count_copies(&copy);
+        if have == 0 {
+            return Err(format!("You don't have any {}.", self.item_name(&item)));
+        }
+        let taken = have.min(qty);
+        let payout = self.caravan_sell_price(&item) * taken;
+        let name = self.item_name(&item).to_string();
+        let money = self.item_name(&currency).to_string();
+        self.take_copies(&copy, taken);
+        self.world
+            .get_mut::<Inventory>(self.player_entity())
+            .unwrap()
+            .add(currency, payout);
+        self.log(format!(
+            "You sell {taken} {name} for {payout} {money}. It goes onto the wagon and out of the sector."
+        ));
+        self.tick();
+        Ok(())
+    }
+}

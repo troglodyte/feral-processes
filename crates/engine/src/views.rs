@@ -423,6 +423,33 @@ pub struct CaravanOffer {
     pub qty: u32,
 }
 
+/// The visiting caravan's counter — see `Game::caravan_view`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CaravanView {
+    pub trader: String,
+    pub description: String,
+    pub offers: Vec<CaravanOffer>,
+    pub sells: Vec<CaravanSellRow>,
+    pub credits: u32,
+    pub currency: String,
+    /// Ticks until it packs up. The one figure on the screen that is a claim
+    /// about *time*, and it is here because the player's whole decision is
+    /// whether to go and fetch something.
+    pub ticks_left: u32,
+}
+
+/// One stack of the player's cargo a caravan will take, priced.
+///
+/// There is no buyback row to match it: a caravan keeps no shelf, so what is
+/// sold here is gone. See `Game::sell_to_caravan`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct CaravanSellRow {
+    pub copy: GearCopy,
+    pub name: String,
+    pub held: u32,
+    pub unit_price: u32,
+}
+
 /// One stack of the player's cargo a Stack market will take, priced.
 ///
 /// There is no buyback row to match it: a Stack trader keeps no shelf, so

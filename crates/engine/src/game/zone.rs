@@ -417,6 +417,23 @@ impl Game {
         // with the rest of that zone's economy.
         self.world.insert_resource(BuybackLedger::default());
 
+        // And the caravan, both halves of it, **by name** — nothing else
+        // sweeps it. A caravan is neither a `Structure` nor a `Creature`, so
+        // the wild cull walks straight past one, and its journey is defined
+        // against the anchor tile of the sector it walked into: left
+        // standing, it would be halfway to a counter in a sector it never
+        // entered, on coordinates that mean nothing here. Its shelf's sale
+        // history goes with it for the reason the buyback ledger above does.
+        let travellers: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Caravan>>();
+            query.iter(&self.world).collect()
+        };
+        for traveller in travellers {
+            self.world.despawn(traveller);
+        }
+        self.world
+            .insert_resource(crate::resources::CaravanMemory::default());
+
         // Same reason, and the same trap: a zone's links are gone, but their
         // maps are keyed by tile and would otherwise draw the last sector's
         // walked corridors onto a fresh link that happens to land on a

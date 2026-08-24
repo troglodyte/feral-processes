@@ -506,6 +506,19 @@ pub struct CaravanSave {
     pub stage_ticks: u32,
 }
 
+/// Which of the visiting caravan's rows have been bought — see
+/// `resources::CaravanMemory`.
+///
+/// A **named struct, never a positional tuple**, per the standing rule. A
+/// pair is exactly the shape that reads fine today and arrives as a legacy
+/// positional field the moment a third thing is worth recording about a
+/// visit.
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct CaravanMemorySave {
+    pub visit: u64,
+    pub bought: Vec<usize>,
+}
+
 /// One remembered thing on disk — see `components::Memory`.
 ///
 /// A **named struct, never a positional tuple**. A tuple is the one shape
@@ -644,6 +657,12 @@ pub struct SaveData {
     /// loads with no caravan, which is exactly what that run had.
     #[serde(default)]
     pub caravans: Vec<CaravanSave>,
+    /// Which of the visiting caravan's rows have been bought — see
+    /// `resources::CaravanMemory`. Additive behind `#[serde(default)]`, so it
+    /// costs no `SAVE_FORMAT_VERSION` bump: a file written before it existed
+    /// loads with an empty memory under visit 0, which no live visit matches.
+    #[serde(default)]
+    pub caravan_memory: CaravanMemorySave,
     pub tile_overrides: Vec<((i32, i32), Tile)>,
     /// The base's pocket-dimension coordinate space — see
     /// `base_grid::BaseGrid`. Saved wholesale, the same way `stack_memory`
@@ -1173,6 +1192,7 @@ mod tests {
             nests: Vec::new(),
             dig_sites: Vec::new(),
             caravans: Vec::new(),
+            caravan_memory: CaravanMemorySave::default(),
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
             mining: false,

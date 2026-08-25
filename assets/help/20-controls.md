@@ -23,9 +23,9 @@ The three menus:
 
 Acting on the world:
 
-- c — collect from adjacent structures: opens a window with a row per item, and [A] takes the lot
-- P — put away your cargo into an adjacent Depot: same window, [A] gives everything the Depot has
-  room for
+- c — move cargo between you and the structures beside you: one window with a row per item, where
+  Right takes off a machine's shelf and Left puts your own cargo into an adjacent Depot. [A] takes
+  the lot; Shift goes to the end of a row and Ctrl halves the gap
 - t — trade
 - a — call a routine
 - u — symlink home

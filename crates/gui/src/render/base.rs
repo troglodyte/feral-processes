@@ -970,11 +970,31 @@ fn draw_surface_map(
             // a property of the ground, not of what stands on it.
             let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
             if let Some(ch) = ch {
-                let glyph = ch.to_string();
-                let dims = painter.measure_map(&glyph, glyph_px);
-                let tx = px + (tile_px - dims.width) / 2.0;
-                let ty = py + (tile_px + dims.height) / 2.0;
-                painter.map(&glyph, tx, ty, glyph_px, color);
+                // A sprite *substitutes* for the glyph rather than drawing
+                // beside it, so it can only appear on a tile that would have
+                // had one — and a miss falls back to that glyph, which is
+                // what keeps `assets/sprites/` optional.
+                //
+                // The player alone, and by name: this is the minimum proof
+                // of the texture path. When `sprite:` becomes a field on
+                // species and structures, the name comes off the view and
+                // this literal goes away.
+                let sprite = actor.filter(|ev| ev.is_player).map(|_| "player");
+                // Centred on the cell, not on measured ink: a square sprite
+                // has neither side bearing nor descender. `glyph_px` and not
+                // `tile_px`, so the sprite keeps the glyph's margin inside
+                // its tile and stays on the integer ladder — 16, 32, 48, 64.
+                let inset = (tile_px - glyph_px as f32) / 2.0;
+                let drew = sprite.is_some_and(|name| {
+                    painter.sprite(name, px + inset, py + inset, glyph_px as f32, color)
+                });
+                if !drew {
+                    let glyph = ch.to_string();
+                    let dims = painter.measure_map(&glyph, glyph_px);
+                    let tx = px + (tile_px - dims.width) / 2.0;
+                    let ty = py + (tile_px + dims.height) / 2.0;
+                    painter.map(&glyph, tx, ty, glyph_px, color);
+                }
             }
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is
@@ -1490,9 +1510,71 @@ fn draw_status_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::with_painter;
+    use crate::paint::SpriteTable;
+    use crate::paint::{painted_images, painted_text, with_painter, with_sprites};
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
+    use feral_processes_engine::{DifficultyMode, Game};
+
+    fn test_assets() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// Draws one surface map and reports what landed: the textured meshes,
+    /// and the text of every glyph painted.
+    fn drawn_map(sprites: SpriteTable) -> (usize, Vec<String>) {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(sprites, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+            );
+        });
+        (painted_images(&shapes).len(), painted_text(&shapes))
+    }
+
+    /// The player's sprite stands in for the player's glyph — it does not
+    /// draw beside it. Both halves are asserted in one test on purpose: the
+    /// sprite half alone passes against a renderer that paints the texture
+    /// over an '@' that is still there, which on white placeholder art looks
+    /// exactly right and is wrong the moment the sprite has any transparency.
+    #[test]
+    fn the_player_sprite_stands_in_for_the_at_sign() {
+        let mut table = SpriteTable::default();
+        table.insert("player", bevy_egui::egui::TextureId::User(1));
+
+        let (images, glyphs) = drawn_map(table);
+
+        assert_eq!(images, 1, "exactly one sprite, the player's");
+        assert!(
+            !glyphs.iter().any(|g| g == "@"),
+            "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// ...and with nothing loaded the map is exactly what it was. This is
+    /// what makes `assets/sprites/` deletable, the same supported way
+    /// `assets/environment/` is.
+    #[test]
+    fn an_empty_sprite_table_leaves_the_glyph_map_alone() {
+        let (images, glyphs) = drawn_map(SpriteTable::default());
+
+        assert_eq!(images, 0, "nothing loaded must paint no texture at all");
+        assert!(
+            glyphs.iter().any(|g| g == "@"),
+            "the player must still be drawn as a glyph: {glyphs:?}"
+        );
+    }
 
     /// Every `Biome` variant, listed the way `species.rs`'s own biome census
     /// lists them. A new variant missing from here makes the tint census

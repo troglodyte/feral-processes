@@ -5517,6 +5517,128 @@ offset at all, but stacks a second full-width strip under the first and
 puts the readout in the one place a refusal message is already
 competing for.
 
+### A one-cell sprite substitutes for a glyph, and the table it comes from is the fifteenth `Painter` operation
+
+**A sprite replaces an entity's glyph in the same cell; it never draws
+beside it, and a name the table has nothing under falls back to that
+glyph.** `Painter::sprite` returns `bool` for exactly that reason —
+reporting the miss rather than silently drawing nothing is what lets the
+one call site in `render/base.rs` keep the glyph path as an `else`.
+
+The grid was already shaped for this before any of it was written.
+`text::map_cell` returns a tile edge of `20 x zoom` and a glyph box of
+`16 x zoom`, with zoom clamped to 1..4 — so a 16x16 sprite is drawn at
+16, 32, 48 or 64px, whole multiples of its source. That ladder is not a
+coincidence and not a convenience: `crates/gui/tests/font_rasterization.rs`
+already holds unscii to it and asserts **zero antialiased pixels** at each
+step, because unscii ships as vectorized outlines of a bitmap and is
+pixel-crisp only if the rasterizer lands on the pixel grid. A sprite
+inherits the same contract, and `crates/gui/tests/sprites.rs` is the
+census that refuses one authored at any other size — such a sprite still
+*draws*, it just resamples at some zoom, silently and only on screen.
+
+**`ImageSampler::nearest()` at load is what makes that true, and it is one
+line with no local symptom.** `bevy_egui` binds the `GpuImage`'s own
+sampler when it renders a user texture (`src/render/systems.rs:211` and
+`:250`), and Bevy's default is linear — so the integer ladder buys nothing
+without it, and dropping it produces blurred art rather than an error.
+
+**The sprite table is refcounted, not borrowed.** `SpriteTable` reaches
+`Painter` as an `Arc`, so `Painter` keeps its freedom from lifetime
+parameters and `render/`'s several hundred `&Painter` signatures stay
+exactly as they are; the cost is one atomic bump a frame. A borrow was the
+obvious first shape and was rejected on that ripple alone. `clipped`
+rebuilds a `Painter` by hand and must carry the table through — it is the
+one place a missing field compiles fine and shows up as sprites vanishing
+inside the Stack corridor's clip and nowhere else.
+
+**Two conventions differ from `map`, and both look like the same thing
+until they are wrong.** `map` takes a *baseline* and is centred by the
+caller against measured **ink** extents (`TextDims` is ink, not advance —
+see `Painter::measure`'s own note); `sprite` takes a **top-left** and
+fills its square exactly, because a square sprite has neither side bearing
+nor descender to measure. Reading the two as one convention is a half-cell
+offset that reads as a camera fault rather than a drawing one. And
+`color` is a **tint**, which egui *multiplies* — so art authored near-white
+inherits `difficulty_color`, the boss and nemesis overrides, `biome_tint`
+and the damage dimming for free, with no second mechanism and no change to
+any of them. Art that carries its own hue fights all four: a red sprite
+under a green con colour goes black. Shade with value, never hue.
+
+**The trap is overdraw, and it is invisible against the placeholder.**
+Painting the sprite *over* a glyph that is still there looks pixel-perfect
+while the art is opaque white, and breaks the moment a sprite has any
+transparency — at which point an `@` shows through it. So
+`the_player_sprite_stands_in_for_the_at_sign` asserts both halves at once:
+one textured mesh painted **and** no `@` among the glyphs. The sprite half
+alone passes against the bug.
+
+**Optional by construction, and the property is held at every end.** A
+missing directory, a missing file, a file that fails to decode, and a name
+nothing has been authored for all converge on the same outcome: the name is
+absent from the table, `sprite` reports it drew nothing, the glyph draws.
+Deleting `assets/sprites/` therefore restores the glyph map exactly, the
+same supported way deleting `assets/environment/` restores the pre-effects
+game — and it is what will let a modded species ship without art rather
+than ship invisible. Never gate the draw or the loader on the directory
+being non-empty: that makes the property hold by accident at one site and
+lapse at another.
+
+**Registration waits for `LoadState::Loaded`.** `EguiUserTextures::add_image`
+mints a `TextureId` eagerly, before the pixels exist, so registering at load
+time would put a name in the table that paints an *unbacked quad* for the
+first frames of a run. Gating on the load state means the table only ever
+holds sprites that can actually be drawn, and the glyph covers the gap at no
+cost — which is only affordable because the fallback above is free.
+
+**The second-path-resolver trap came with this and is worth its own line.**
+Bevy's `AssetPlugin` resolves `assets/` itself when left alone — against
+`CARGO_MANIFEST_DIR` in a dev build, the executable's directory once
+installed. That is precisely the trap this file records under
+`crates/launcher/src/paths.rs`: it works on the build machine, works
+nowhere else, and nothing fails to compile. `gui::asset_plugin` feeds it
+the path `paths::resolve()` already produced, taken off the `App` that is
+already carrying it rather than passed as a second parameter, so the two
+cannot disagree. An absolute `file_path` survives bevy's
+`get_base_path().join()` because an absolute join replaces the base — which
+is what makes this override the guess rather than sit under it.
+
+#### What this cost, and what the earlier costing got right
+
+A sprite tileset was costed on 2026-07-27 and parked on 2026-08-06 in
+favour of procedural vector tiles, on the grounds that **the blocker is art
+rather than code** — 112 tiles at 16 edge-and-corner variants per biome
+across seven biomes, 329 for full blob sets. That reasoning stands and is
+untouched here, because it is a claim about **terrain**. Autotiling is what
+sets that bill, and entities do not tile: 17 species plus 26 structures plus
+the player and a handful of fixtures is roughly fifty independent 16x16
+images with no seamless edges to get right. The two questions were being
+answered as one, and separating them is what made this small.
+
+The 2026-08-06 note also called **texture lifetime** the hard part, needing
+a Bevy resource threaded into `Painter::for_frame` and estimating the draw
+call itself at "roughly 30 lines" of hand-built `egui::Mesh` with UVs. Both
+have since dissolved: `bevy_egui` 0.41 ships `EguiUserTextures` as a
+`Resource` whose `add_image`/`image_id` hand back an `egui::TextureId`, so
+the asset server owns the pixels and `Painter` only ever holds cheap
+per-frame data — and `egui::Shape::image` builds the textured mesh already,
+making the operation about ten lines. **Do not re-derive the old estimate
+from that note**; it was accurate when written.
+
+Note that there is no `Shape::Image` variant in epaint 0.35 — `Shape::image`
+produces a `Shape::Mesh` carrying a `texture_id` and a UV'd quad. The test
+helper `painted_images` reads meshes back and skips those with
+`TextureId::default()`, which is what egui's own primitives carry; a helper
+matching on a variant name here compiles against nothing.
+
+**What is deliberately not proven.** Nothing here demonstrates that the
+texture reaches the GPU: Bevy's PNG loader is registered by `bevy_render`,
+so an end-to-end load test needs an adapter and a window, which the suite
+has neither of. What the tests cover is the whole path up to that point —
+the asset root, the file's shape, the loader's paths, the operation's
+geometry and tint, and the substitution at the call site. Whether the art
+*reads* at zoom 1 is a judgement about the art and was always going to be.
+
 ### A base stock tag is derived, unique, and two letters
 
 **A base stock tag is derived, unique, and two letters.** `ItemDef::tag`

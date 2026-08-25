@@ -30,6 +30,11 @@ bevy = { version = "0.19", default-features = false, features = [
     "2d_bevy_render",
     "bevy_audio",
     "wav",
+    # Image format decoders are opt-in per format, the same way `wav` is.
+    # `assets/sprites/` is PNG and nothing else, so this is the whole of
+    # what the map's one-cell sprites cost in the dependency graph — no
+    # `image` crate, and no formats the sprites don't use.
+    "png",
 ] }
 bevy_egui = "0.41"
 

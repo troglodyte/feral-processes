@@ -1,9 +1,9 @@
 (
     id: "rollback_v2",
     name: "Rollback Single v2.0",
-    description: "Restore 20 Integrity to one ally",
+    description: "Restore 15–25 Integrity to one ally",
     target: OneAlly,
-    effect: Heal(power: 20),
+    effect: Heal(power: 20, spread: 5),
     cooldown: 3,
     power_cost: 8.0,
 )

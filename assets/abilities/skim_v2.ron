@@ -3,7 +3,7 @@
     name: "Skim Single v2.0",
     description: "Damage one target and restore nearly half of it to yourself",
     target: OneEnemyGroupFront,
-    effect: Drain(power: 9, heal_fraction: 0.45),
+    effect: Drain(power: 9, spread: 2, heal_fraction: 0.45),
     cooldown: 3,
     power_cost: 8.0,
 )

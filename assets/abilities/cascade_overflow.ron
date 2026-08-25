@@ -1,9 +1,9 @@
 (
     id: "cascade_overflow",
     name: "Packet Shred Group v1.0",
-    description: "Damage 6 to every member of one group",
+    description: "Damage 4–8 to every member of one group",
     target: WholeEnemyGroup,
-    effect: Damage(power: 6),
+    effect: Damage(power: 6, spread: 2),
     cooldown: 2,
     power_cost: 8.0,
 )

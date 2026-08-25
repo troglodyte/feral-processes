@@ -1,9 +1,9 @@
 (
     id: "segfault_v3",
     name: "Segfault Single v3.0",
-    description: "Damage 17 to one target",
+    description: "Damage 13–21 to one target",
     target: OneEnemyGroupFront,
-    effect: Damage(power: 17),
+    effect: Damage(power: 17, spread: 4),
     cooldown: 4,
     power_cost: 10.0,
 )

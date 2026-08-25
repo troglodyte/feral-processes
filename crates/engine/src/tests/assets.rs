@@ -607,6 +607,46 @@ fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
     }
 }
 
+/// Every routine that moves Integrity rolls a band rather than a fixed
+/// figure. The mechanism (`AbilityEffect::spread`, `battle::DamageRange`)
+/// defaults to a degenerate band so a mod's file keeps parsing untouched —
+/// which is exactly why the *shipped* roster needs a census: all 34 of these
+/// authored no spread for as long as the field existed, and a new one would
+/// ship deterministic without anything failing.
+///
+/// The three variants are named rather than matched with a `_ =>` arm, on
+/// `render/stack.rs::cell_mark`'s rule: an eleventh Integrity-moving effect
+/// should fail to compile here rather than skip the check.
+#[test]
+fn every_shipped_integrity_routine_rolls_a_band() {
+    use crate::abilities::AbilityEffect as E;
+    let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let spread = match &def.effect {
+            E::Damage { spread, .. } | E::Heal { spread, .. } | E::Drain { spread, .. } => *spread,
+            E::Buff { .. }
+            | E::Debuff { .. }
+            | E::Cleanse
+            | E::Decompile
+            | E::FieldBuff { .. }
+            | E::Phase
+            | E::Jump => continue,
+        };
+        checked += 1;
+        assert!(
+            spread > 0,
+            "ability {:?} deals a fixed figure every time — author a `spread` so it \
+             rolls a band, the way every species move already does",
+            def.id
+        );
+    }
+    assert!(
+        checked > 0,
+        "the census read no Integrity-moving abilities at all, so it proves nothing"
+    );
+}
+
 /// The scope word an ability's `name` must end in, given what it targets.
 /// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
 /// way, and which side it lands on is never in doubt from the picker.

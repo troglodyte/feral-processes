@@ -3,7 +3,7 @@
     name: "Leech Single",
     description: "Damage one target and restore half of it to yourself",
     target: OneEnemyGroupFront,
-    effect: Drain(power: 10, heal_fraction: 0.5),
+    effect: Drain(power: 10, spread: 2, heal_fraction: 0.5),
     cooldown: 2,
     power_cost: 9.0,
     wild_weight: 9,

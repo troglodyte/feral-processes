@@ -7,7 +7,7 @@
     // only routine anyone would ever field.
     description: "Tear a whole group open and leave every one of them bleeding",
     target: WholeEnemyGroup,
-    effect: Damage(power: 22, status: Some((kind: Bleed, chance: 0.75, duration: 4, power: 6))),
+    effect: Damage(power: 22, spread: 6, status: Some((kind: Bleed, chance: 0.75, duration: 4, power: 6))),
     cooldown: 4,
     power_cost: 16.0,
     exclusive: true,

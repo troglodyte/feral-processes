@@ -373,7 +373,10 @@ fn an_affinity_talent_sharpens_the_category_it_names_and_no_other() {
         spread: 0,
         status: None,
     };
-    let heal = AbilityEffect::Heal { power: 10 };
+    let heal = AbilityEffect::Heal {
+        power: 10,
+        spread: 0,
+    };
     let base_damage = game.ability_affinity(plain, &damage);
     let base_heal = game.ability_affinity(plain, &heal);
 

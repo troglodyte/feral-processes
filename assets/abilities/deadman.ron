@@ -14,7 +14,7 @@
     // this fire on every one of them.
     description: "When one of yours goes down, everything hostile takes the fallout",
     target: AllEnemies,
-    effect: Damage(power: 14),
+    effect: Damage(power: 14, spread: 4),
     cooldown: 4,
     power_cost: 0.0,
     exclusive: true,

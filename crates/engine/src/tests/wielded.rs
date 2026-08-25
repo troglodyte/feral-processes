@@ -452,15 +452,36 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
     // `mitigate_incoming_damage` rather than being restated as a subtractive
     // term here — a second copy of that formula in a test is exactly what
     // drifts, and the logged figure is what actually landed.
-    // A landed hit is the band's roll plus the attacker's flat ATK.
-    // `kernel_panic` authors no `spread`, so the band is degenerate and rolls
-    // its scaled centre exactly — which is what makes this predictable at all.
-    let raw = abilities::scaled_hp_power(
-        power,
+    // A landed hit is the band's roll plus the attacker's flat ATK. The
+    // ability rolls a band, so this is a containment check rather than an
+    // equality — what it pins is *whose* level and affinity built the band,
+    // which is the whole point of the test and is what the guard below
+    // keeps honest.
+    let AbilityEffect::Damage { spread, .. } = ability.effect else {
+        panic!("kernel_panic is a Damage ability");
+    };
+    let atk = game.world.get::<Stats>(program).unwrap().atk;
+    let band = abilities::scaled_range(
+        battle::DamageRange::centred(power, spread),
         game.ability_user_level(program),
         game.ability_affinity(program, &ability.effect),
-    ) + game.world.get::<Stats>(program).unwrap().atk;
-    let expected = game.mitigate_incoming_damage(front_enemy(&game), raw);
+    );
+    let front = front_enemy(&game);
+    let lo = game.mitigate_incoming_damage(front, band.min + atk);
+    let hi = game.mitigate_incoming_damage(front, band.max + atk);
+    // What the same band would be off the *player* — the actor a regression
+    // would reach for. The two must not overlap, or landing inside `lo..=hi`
+    // would prove nothing about which one built it.
+    let wrong = abilities::scaled_range(
+        battle::DamageRange::centred(power, spread),
+        game.ability_user_level(game.player_entity()),
+        game.ability_affinity(game.player_entity(), &ability.effect),
+    );
+    assert!(
+        wrong.max + game.world.get::<Stats>(game.player_entity()).unwrap().atk < band.min + atk,
+        "the player's band ({wrong:?}) has to sit clear below the program's ({band:?}), \
+         or a wrong-actor regression lands inside the window anyway"
+    );
 
     assert!(
         game.world.get::<Experience>(program).unwrap().level
@@ -471,10 +492,11 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
                 .level,
         "the two levels have to differ or this asserts nothing"
     );
-    assert_eq!(
-        damage_in(&game, "Blade hits"),
-        Some(expected),
-        "the proc's level, affinity and ATK all come off the program in your hand"
+    let landed = damage_in(&game, "Blade hits").expect("the proc landed a hit");
+    assert!(
+        (lo..=hi).contains(&landed),
+        "the proc's level, affinity and ATK all come off the program in your hand: \
+         {landed} is outside {lo}..={hi}"
     );
 }
 

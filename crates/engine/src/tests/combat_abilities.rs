@@ -845,7 +845,10 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         name: "Test Patch".into(),
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneAlly,
-        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        effect: crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 0,
+        },
         cooldown: 1,
         power_cost: 0.0,
         wild_weight: 0,
@@ -886,7 +889,10 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         name: "Test Patch".into(),
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneAlly,
-        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        effect: crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 0,
+        },
         cooldown: 1,
         power_cost: 0.0,
         wild_weight: 0,
@@ -1090,7 +1096,10 @@ fn a_heal_scales_with_the_users_level() {
         name: "Test Heal".into(),
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneAlly,
-        effect: crate::abilities::AbilityEffect::Heal { power: 8 },
+        effect: crate::abilities::AbilityEffect::Heal {
+            power: 8,
+            spread: 0,
+        },
         cooldown: 1,
         power_cost: 0.0,
         wild_weight: 0,
@@ -1105,6 +1114,62 @@ fn a_heal_scales_with_the_users_level() {
         game.world.get::<Stats>(player).unwrap().hp,
         100 + crate::abilities::scaled_hp_power(8, 20, crate::tuning::AFFINITY_NEUTRAL),
         "an 8-point patch at level 20 is 32, not 8"
+    );
+}
+
+/// A routine's heal is a band, not a fixed figure — the same shape
+/// `AbilityEffect::Damage`'s `spread` already gives damage. Rolled through
+/// `battle::DamageRange` rather than a second formula, so the low end is
+/// floored at 0 and the band scales with the caster exactly as a damage
+/// band does.
+#[test]
+fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
+    let mut game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let _ = battle_with_a_pack_of(&mut game, 1, 200);
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 4000;
+        stats.hp = 100;
+    }
+
+    let ability = crate::abilities::AbilityDef {
+        id: "test_heal_band".into(),
+        name: "Test Heal Band".into(),
+        description: "d".into(),
+        target: crate::abilities::AbilityTarget::OneAlly,
+        effect: crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 8,
+        },
+        cooldown: 0,
+        power_cost: 0.0,
+        wild_weight: 0,
+        exclusive: false,
+        ranged: false,
+        boss_drop: None,
+        triggers: None,
+    };
+
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..60 {
+        game.world.get_mut::<Stats>(player).unwrap().hp = 100;
+        game.use_ability(&ability, player, "You", &[player]);
+        seen.insert(game.world.get::<Stats>(player).unwrap().hp - 100);
+    }
+
+    let band = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(20, 8),
+        game.world.get::<Experience>(player).unwrap().level,
+        AFFINITY_NEUTRAL,
+    );
+    assert!(
+        seen.len() > 1,
+        "a spread heal must not restore one fixed figure every time; saw {seen:?}"
+    );
+    assert!(
+        seen.iter().all(|&r| r >= band.min && r <= band.max),
+        "every roll must land inside the scaled band {band:?}; saw {seen:?}"
     );
 }
 
@@ -1338,9 +1403,29 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
     );
     let dealt = before - game.world.get::<Stats>(enemies[0]).unwrap().hp;
 
+    // The routine rolls a band now, so the *balance* claim is about where the
+    // band is centred — a single roll can sit anywhere inside it. Both halves
+    // are asserted: the centre is the gate, and containment is the evidence
+    // that this cast actually used that band rather than some other one.
+    let def = ability(&game, "kernel_panic");
+    let crate::abilities::AbilityEffect::Damage { power, spread, .. } = def.effect else {
+        panic!("kernel_panic is a Damage ability");
+    };
+    let atk = game.effective_atk(player);
+    let band = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(power, spread),
+        5,
+        game.ability_affinity(player, &def.effect),
+    );
+    let centre = band.mean() + atk as f64;
     assert!(
-        (140..=165).contains(&dealt),
-        "a perked mid-run Packet Shred Single should land near 150 against 400 Integrity, got {dealt}"
+        (140.0..=165.0).contains(&centre),
+        "a perked mid-run Packet Shred Single should centre near 150 against 400 \
+         Integrity, got {centre}"
+    );
+    assert!(
+        (band.min + atk..=band.max + atk).contains(&dealt),
+        "the cast should land inside its own band {band:?} plus {atk} ATK, got {dealt}"
     );
 }
 
@@ -1418,7 +1503,10 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         name: "Test Patch".into(),
         description: "d".into(),
         target: crate::abilities::AbilityTarget::OneAlly,
-        effect: crate::abilities::AbilityEffect::Heal { power: 20 },
+        effect: crate::abilities::AbilityEffect::Heal {
+            power: 20,
+            spread: 0,
+        },
         cooldown: 1,
         power_cost: 0.0,
         wild_weight: 0,
@@ -1581,11 +1669,25 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
     game.use_ability(&hot_patch, medic, "Test Medic", &[player]);
 
     let healed = game.world.get::<Stats>(player).unwrap().hp - before;
-    // hot_patch is Heal(power: 8); the medic is level 1.
-    let expected = crate::abilities::scaled_hp_power(8, 1, 1.5);
-    assert_eq!(healed, expected, "heal affinity should scale the heal");
+    // hot_patch heals from a band; the medic is level 1. Affinity scales both
+    // ends, so what is pinned is that the *affinity-scaled* band is the one
+    // rolled from.
+    let crate::abilities::AbilityEffect::Heal { power, spread } = hot_patch.effect else {
+        panic!("hot_patch is a Heal ability");
+    };
+    let band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(power, spread), 1, 1.5);
+    let neutral = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(power, spread),
+        1,
+        AFFINITY_NEUTRAL,
+    );
     assert!(
-        expected > crate::abilities::scaled_hp_power(8, 1, AFFINITY_NEUTRAL),
+        (band.min..=band.max).contains(&healed),
+        "heal affinity should scale the heal: {healed} is outside {band:?}"
+    );
+    assert!(
+        band.min > neutral.min && band.max > neutral.max,
         "the fixture must actually differ from neutral, or this proves nothing"
     );
 }
@@ -1662,18 +1764,30 @@ fn a_species_damage_affinity_scales_the_damage_it_deals() {
     // is authored at 0 mitigation so this measures the affinity scaling
     // alone — mitigation is a percentage cut applied afterwards and has its
     // own tests.
-    let scaled = crate::abilities::scaled_hp_power(16, 1, 1.5);
-    // A landed hit is the band's roll plus the attacker's flat ATK, and this
-    // ability's band is degenerate (`spread` defaults to 0), so the roll is
-    // exactly `scaled`.
-    let expected = scaled + game.effective_atk(striker);
-    assert_eq!(
-        taken, expected,
-        "damage affinity should scale the authored power fed to the damage band"
+    // A landed hit is the band's roll plus the attacker's flat ATK. The
+    // ability rolls a band, so what is pinned is that *the affinity-scaled
+    // band* is the one fed to the roll — the guard below is what makes
+    // landing inside it mean something.
+    let crate::abilities::AbilityEffect::Damage { power, spread, .. } = kernel_panic.effect else {
+        panic!("kernel_panic is a Damage ability");
+    };
+    let atk = game.effective_atk(striker);
+    let band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(power, spread), 1, 1.5);
+    let neutral = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(power, spread),
+        1,
+        AFFINITY_NEUTRAL,
     );
     assert!(
-        scaled > crate::abilities::scaled_hp_power(16, 1, AFFINITY_NEUTRAL),
-        "the fixture must actually differ from neutral, or this proves nothing"
+        (band.min + atk..=band.max + atk).contains(&taken),
+        "damage affinity should scale the authored power fed to the damage band: \
+         {taken} is outside {band:?} plus {atk} ATK"
+    );
+    assert!(
+        band.min > neutral.min && band.max > neutral.max,
+        "the fixture must actually differ from neutral ({band:?} vs {neutral:?}), \
+         or this proves nothing"
     );
 }
 
@@ -1747,24 +1861,40 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
     let taken = 200 - game.world.get::<Stats>(target).unwrap().hp;
     // siphon_cycles is Drain(power: 10, heal_fraction: 0.5); level and
     // affinity scale the authored power, same as Damage.
-    let scaled = crate::abilities::scaled_hp_power(10, 1, 1.5);
-    // See the Damage twin above: a degenerate band rolls its centre exactly,
-    // and the attacker's flat ATK is added on top.
-    let expected_dmg = scaled + game.effective_atk(drainer);
-    assert_eq!(
-        taken, expected_dmg,
-        "drain affinity should scale the authored power fed to the damage band"
+    // See the Damage twin above: the band is what affinity scales, and the
+    // attacker's flat ATK is added to whatever it rolls.
+    let crate::abilities::AbilityEffect::Drain { power, spread, .. } = siphon_cycles.effect else {
+        panic!("siphon_cycles is a Drain ability");
+    };
+    let atk = game.effective_atk(drainer);
+    let band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(power, spread), 1, 1.5);
+    let neutral = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(power, spread),
+        1,
+        AFFINITY_NEUTRAL,
+    );
+    assert!(
+        (band.min + atk..=band.max + atk).contains(&taken),
+        "drain affinity should scale the authored power fed to the damage band: \
+         {taken} is outside {band:?} plus {atk} ATK"
+    );
+    assert!(
+        band.min > neutral.min && band.max > neutral.max,
+        "the fixture must actually differ from neutral, or this proves nothing"
     );
 
     let restored = game.world.get::<Stats>(drainer).unwrap().hp - 50;
     // Off the damage actually dealt (already affinity-scaled), times the
     // authored heal_fraction — never affinity again, or this double-dips.
-    let expected_restored = (expected_dmg as f32 * 0.5).round() as i32;
+    // Read off `taken` rather than a recomputed figure, which is what the
+    // engine itself does and so survives the roll.
+    let expected_restored = (taken as f32 * 0.5).round() as i32;
     assert_eq!(
         restored, expected_restored,
         "heal_fraction must apply once, to damage already scaled by affinity"
     );
-    let double_dipped = (expected_dmg as f32 * 0.5 * 1.5).round() as i32;
+    let double_dipped = (taken as f32 * 0.5 * 1.5).round() as i32;
     assert_ne!(
         restored, double_dipped,
         "a regression that re-applies affinity to heal_fraction must fail this"
@@ -1775,7 +1905,10 @@ fn a_species_drain_affinity_scales_the_damage_but_not_the_heal_fraction() {
 fn a_player_affinity_perk_scales_the_players_own_ability() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    let effect = AbilityEffect::Heal { power: 8 };
+    let effect = AbilityEffect::Heal {
+        power: 8,
+        spread: 0,
+    };
     let before = game.ability_affinity(player, &effect);
 
     {
@@ -1833,7 +1966,10 @@ fn a_player_affinity_perk_is_clamped_at_affinity_max() {
             Perk::HealAffinity,
             AFFINITY_PERK_BONUS_PER_LEVEL,
             25u32,
-            AbilityEffect::Heal { power: 8 },
+            AbilityEffect::Heal {
+                power: 8,
+                spread: 0,
+            },
         ),
         (
             Perk::DamageAffinity,
@@ -1884,7 +2020,10 @@ fn a_player_affinity_perk_does_not_scale_a_companions_ability() {
     }
     game.unlock_perk(Perk::HealAffinity).unwrap();
 
-    let effect = AbilityEffect::Heal { power: 8 };
+    let effect = AbilityEffect::Heal {
+        power: 8,
+        spread: 0,
+    };
     assert!(game.ability_affinity(player, &effect) > AFFINITY_NEUTRAL);
     assert_eq!(
         game.ability_affinity(medic, &effect),

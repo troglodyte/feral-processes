@@ -98,11 +98,13 @@ impl Game {
                 }
                 line
             }
-            AbilityEffect::Heal { power } => {
-                format!(
-                    "Restores {} Integrity",
-                    scaled_hp_power(*power, level, affinity)
-                )
+            AbilityEffect::Heal { power, spread } => {
+                let band = scaled_range(
+                    crate::battle::DamageRange::centred(*power, *spread),
+                    level,
+                    affinity,
+                );
+                format!("Restores {} Integrity", self.damage_range_label(band))
             }
             AbilityEffect::Buff {
                 kind,

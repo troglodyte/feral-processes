@@ -12,7 +12,7 @@
     // to use the item would be to let a program die. See `PassiveTrigger`.
     description: "Driven low, the wearer dumps what it was holding into the nearest hostile",
     target: OneEnemyGroupFront,
-    effect: Damage(power: 9),
+    effect: Damage(power: 9, spread: 2),
     cooldown: 3,
     power_cost: 0.0,
     triggers: Some(AllyWounded),

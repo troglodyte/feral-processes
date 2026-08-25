@@ -1,9 +1,9 @@
 (
     id: "redundancy_sync",
     name: "Patch Party v1.1",
-    description: "Restore 10 Integrity to the whole party",
+    description: "Restore 8–12 Integrity to the whole party",
     target: WholeParty,
-    effect: Heal(power: 10),
+    effect: Heal(power: 10, spread: 2),
     cooldown: 3,
     power_cost: 12.0,
 )

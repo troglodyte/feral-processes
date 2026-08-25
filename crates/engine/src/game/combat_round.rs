@@ -1005,9 +1005,21 @@ impl Game {
                         ability.name
                     ));
                 }
-                AbilityEffect::Heal { power } => {
-                    let power = abilities::scaled_hp_power(*power, level, affinity);
-                    let restored = self.restore_hp(recipient, power);
+                AbilityEffect::Heal { power, spread } => {
+                    // Rolled from a band on the same terms `Damage` is, and
+                    // through the same `DamageRange` — a degenerate band
+                    // still consumes exactly one draw, so authoring a spread
+                    // on an ability cannot shift a seeded run's RNG stream.
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
+                    let rolled = {
+                        let mut rng = self.world.resource_mut::<GameRng>();
+                        band.roll(&mut rng.0)
+                    };
+                    let restored = self.restore_hp(recipient, rolled);
                     self.log_kind(heal_kind, format!("{name} patches {on} for {restored} HP."));
                 }
                 AbilityEffect::Debuff {

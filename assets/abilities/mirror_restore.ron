@@ -1,9 +1,9 @@
 (
     id: "mirror_restore",
     name: "Patch Party v1.0",
-    description: "Restore 8 Integrity to the whole party",
+    description: "Restore 6–10 Integrity to the whole party",
     target: WholeParty,
-    effect: Heal(power: 8),
+    effect: Heal(power: 8, spread: 2),
     cooldown: 2,
     power_cost: 10.0,
     wild_weight: 8,

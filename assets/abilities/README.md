@@ -104,8 +104,16 @@ way deleting the Currency item does.
     //     per-round bleed damage and is unused (but still required — use 0)
     //     for `Stun`.
     //
-    //   Heal(power: 8)
-    //     Restores that much Integrity, capped at the recipient's maximum.
+    //   Heal(power: 8, spread: 2)
+    //     Restores Integrity, capped at the recipient's maximum. `power` is
+    //     the *centre* of the band and `spread` its half-width, exactly as
+    //     `Damage` reads them, so `power: 8, spread: 2` restores 6..=10
+    //     inclusive. Both ends scale with the caster's level and affinity.
+    //
+    //     `spread` is optional and defaults to 0 — a degenerate band, the
+    //     single deterministic figure a heal restored before ranges reached
+    //     this variant. Every shipped healing routine authors one; a mod
+    //     that never mentions it heals a flat amount.
     //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is

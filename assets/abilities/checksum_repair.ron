@@ -1,9 +1,9 @@
 (
     id: "checksum_repair",
     name: "Patch Single v2.0",
-    description: "Restore 25 Integrity to one ally",
+    description: "Restore 19–31 Integrity to one ally",
     target: OneAlly,
-    effect: Heal(power: 25),
+    effect: Heal(power: 25, spread: 6),
     cooldown: 3,
     power_cost: 9.0,
     wild_weight: 9,

@@ -1734,7 +1734,7 @@ mod tests {
         use crate::abilities::AbilityEffect as E;
         match effect {
             E::Damage { power, .. }
-            | E::Heal { power }
+            | E::Heal { power, .. }
             | E::Buff { power, .. }
             | E::Debuff { power, .. }
             | E::Drain { power, .. } => *power,

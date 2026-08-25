@@ -266,7 +266,19 @@ pub enum AbilityEffect {
         status: Option<MoveEffect>,
     },
     Heal {
+        /// The centre of the restored band — see `spread`.
         power: i32,
+        /// Half-width of the band around `power`, on exactly the terms
+        /// `Damage::spread` states: `#[serde(default)]` at 0 is a degenerate
+        /// band, which is the single deterministic figure every heal restored
+        /// before ranges reached this variant.
+        ///
+        /// Rolled through `battle::DamageRange` rather than a second formula,
+        /// so the low end is floored at 0 and both ends scale with the caster
+        /// through `scaled_range` — a heal band widens with level instead of
+        /// collapsing to a point, the same reason damage bands do.
+        #[serde(default)]
+        spread: i32,
     },
     Buff {
         kind: BuffKind,
@@ -1401,7 +1413,11 @@ mod tests {
     fn only_magnitude_carrying_effects_have_an_affinity_category() {
         use crate::components::{BuffKind, StatusKind};
         assert_eq!(
-            AbilityEffect::Heal { power: 8 }.affinity_kind(),
+            AbilityEffect::Heal {
+                power: 8,
+                spread: 0
+            }
+            .affinity_kind(),
             Some(AffinityKind::Heal)
         );
         assert_eq!(

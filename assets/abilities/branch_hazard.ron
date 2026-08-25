@@ -3,7 +3,7 @@
     name: "Pipeline Stall Group",
     description: "Damage every member of one group, sometimes locking them up",
     target: WholeEnemyGroup,
-    effect: Damage(power: 6, status: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
+    effect: Damage(power: 6, spread: 2, status: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
     cooldown: 4,
     power_cost: 13.0,
     wild_weight: 5,

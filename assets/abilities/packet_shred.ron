@@ -1,9 +1,9 @@
 (
     id: "packet_shred",
     name: "Packet Shred Group v2.0",
-    description: "Damage 10 to every member of one group",
+    description: "Damage 8–12 to every member of one group",
     target: WholeEnemyGroup,
-    effect: Damage(power: 10),
+    effect: Damage(power: 10, spread: 2),
     cooldown: 3,
     power_cost: 11.0,
     wild_weight: 8,

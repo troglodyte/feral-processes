@@ -243,6 +243,32 @@ mod tests {
         assert_eq!(power.total, power.evasion);
     }
 
+    /// **The rating is absolute, and that is what makes one figure mean the
+    /// same thing on six screens.** It takes no wearer and reads no
+    /// `ZoneLevel`, so the same copy rates the same in zone 1 and in zone 10.
+    ///
+    /// The regression to head off is someone "fixing" the column to be
+    /// contextual because it disagrees with the swap picker's delta — those
+    /// two answer different questions. The delta is a property of the *swap*
+    /// (gear locks in `EquippedItem::level`, so the worn piece and the
+    /// candidate are scaled at two different levels); this is a property of
+    /// the *copy*.
+    #[test]
+    fn a_copys_rating_does_not_move_with_the_zone() {
+        let mut game = Game::new(
+            934,
+            crate::DifficultyMode::Forgiving,
+            &crate::tests::support::test_assets_dir(),
+        )
+        .unwrap();
+        let copy = GearCopy::plain(crate::items::ItemId::from(
+            crate::items::ids::MONOFILAMENT_WHIP,
+        ));
+        let at_zone_one = game.copy_power(&copy).expect("a weapon rates");
+        game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 10;
+        assert_eq!(game.copy_power(&copy), Some(at_zone_one));
+    }
+
     /// A Decompiler module buys taming, not combat. There is no answer here,
     /// which is a different thing from an answer of zero.
     #[test]

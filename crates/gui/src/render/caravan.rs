@@ -69,13 +69,23 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
         // that are not items pass a blank rather than a token invented in
         // the renderer. `ItemCategory::short_label` stays the one place the
         // three letters are spelled.
-        let (tag, quality) = match &offer.kind {
+        // The rating column keys off the same match, and the two kinds that
+        // are not items draw a *blank* rather than an em dash: a dash would
+        // claim the disk had been rated and found wanting.
+        let (tag, quality, power) = match &offer.kind {
             CaravanOfferKind::Gear(copy) => (
                 game.item_category(&copy.item).short_label(),
                 Some(copy.quality),
+                PowerCell::of_copy(game, copy),
             ),
-            CaravanOfferKind::Material(item) => (game.item_category(item).short_label(), None),
-            CaravanOfferKind::Routine(_) | CaravanOfferKind::Program(_) => ("", None),
+            CaravanOfferKind::Material(item) => (
+                game.item_category(item).short_label(),
+                None,
+                PowerCell::of_item(game, item),
+            ),
+            CaravanOfferKind::Routine(_) | CaravanOfferKind::Program(_) => {
+                ("", None, PowerCell::Blank)
+            }
         };
         // Colour on this list means "can you afford it" and nothing else.
         // Rarity deliberately does *not* reach it: `fusion_color`'s rule is
@@ -83,9 +93,15 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
         // and the affordability dimming is the one the player is scanning
         // for. The tier still shows in the name and in the tag column.
         rows.push(if view.credits >= cost {
-            with_tag(item_row(label, idx == selected), lead, tag, quality)
+            with_tag(item_row(label, idx == selected), lead, tag, quality, power)
         } else {
-            with_tag(spent_item_row(label, idx == selected), lead, tag, quality)
+            with_tag(
+                spent_item_row(label, idx == selected),
+                lead,
+                tag,
+                quality,
+                power,
+            )
         });
         // The same wrap for the same reason — an item's authored description
         // is prose too, and the indent has to come out of the budget or the
@@ -116,6 +132,7 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
             row_lead(menu_shortcut(idx), Some(row.held)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
+            PowerCell::of_copy(game, &row.copy),
         ));
         for line in effect_lines(game, &row.copy.item) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));

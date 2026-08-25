@@ -18,7 +18,7 @@ pub(super) fn draw_craft_menu(
         text_row(""),
     ];
     for (i, recipe) in recipes.iter().enumerate() {
-        let (lead, tag, lines) = craft_rows(game, recipe, i, &status.inventory);
+        let (lead, tag, power, lines) = craft_rows(game, recipe, i, &status.inventory);
         let mut lines = lines.into_iter();
         let head = lines.next().expect("craft_rows always emits the head line");
         rows.push(with_tag(
@@ -28,6 +28,7 @@ pub(super) fn draw_craft_menu(
             // A recipe's result, not a copy: what it will compile at is a roll
             // the player has not made yet.
             None,
+            power,
         ));
         // Dim, unselected continuations, the same shape `draw_recipes` gives a
         // product and its steps: the highlight belongs on the line carrying the
@@ -71,20 +72,23 @@ fn craft_rows(
     recipe: &CraftRecipe,
     i: usize,
     inventory: &[InventoryRow],
-) -> (String, &'static str, Vec<String>) {
+) -> (String, &'static str, PowerCell, Vec<String>) {
     let blurb = game
         .item_blurb(&recipe.result)
         .map(|b| format!(" ({b})"))
         .unwrap_or_default();
     let lead = row_lead(menu_shortcut(i), None);
     let tag = game.item_category(&recipe.result).short_label();
+    // What a plain copy of the result rates — the roll has not been made, so
+    // this is what compiling one is worth before quality moves it.
+    let power = PowerCell::of_item(game, &recipe.result);
     let head = format!("{}{}", game.item_name(&recipe.result), blurb);
     let cost = cost_display(game, &recipe.cost, inventory).join(", ");
 
     // Measured with the tag column joined back on, not without it: the row
     // that has to fit is the one the screen draws, column and all.
     let one_line = format!("{head} - {cost}");
-    let lines = if tagged_text(&lead, tag, &one_line).chars().count() <= ROW_WRAP_COLUMNS {
+    let lines = if tagged_text(&lead, tag, power, &one_line).chars().count() <= ROW_WRAP_COLUMNS {
         vec![one_line]
     } else {
         std::iter::once(head)
@@ -95,7 +99,7 @@ fn craft_rows(
             )
             .collect()
     };
-    (lead, tag, lines)
+    (lead, tag, power, lines)
 }
 
 /// The quantity page's key line, and the widest row that page can draw.
@@ -413,8 +417,8 @@ mod tests {
         i: usize,
         inventory: &[InventoryRow],
     ) -> Vec<String> {
-        let (lead, tag, mut lines) = craft_rows(game, recipe, i, inventory);
-        lines[0] = tagged_text(&lead, tag, &lines[0]);
+        let (lead, tag, power, mut lines) = craft_rows(game, recipe, i, inventory);
+        lines[0] = tagged_text(&lead, tag, power, &lines[0]);
         lines
     }
 
@@ -547,9 +551,9 @@ mod tests {
             "a row this wide should have been split: {lines:?}"
         );
         assert!(
-            lines[0].starts_with("[1] MOD  Singularity Matrix"),
-            "the shortcut, kind and name are what the eye scans, so they stay \
-             together on the first line: {}",
+            lines[0].starts_with("[1] MOD") && lines[0].contains("  Singularity Matrix"),
+            "the shortcut, kind, rating and name are what the eye scans, so they \
+             stay together on the first line: {}",
             lines[0]
         );
 

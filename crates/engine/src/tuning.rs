@@ -3058,7 +3058,7 @@ mod tests {
         assert_eq!(levelled.atk, POWER_REFERENCE_ATK);
         assert_eq!(levelled.mitigation, POWER_REFERENCE_MITIGATION);
         // `Stats::power` divides by `1 - mitigation/100`.
-        assert!(POWER_REFERENCE_MITIGATION < MAX_MITIGATION_PERCENT);
+        const { assert!(POWER_REFERENCE_MITIGATION < MAX_MITIGATION_PERCENT) };
     }
 
     /// Seeding and maintenance must agree about how crowded a zone should

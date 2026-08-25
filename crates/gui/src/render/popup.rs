@@ -60,6 +60,67 @@ pub(super) struct ItemTag {
     pub(super) text: String,
     pub(super) color: Color,
     pub(super) bold: bool,
+    /// The combat-rating column, between this tag and the row's name — see
+    /// `PowerCell`. On the tag rather than beside it because it shares the
+    /// tag's whole reason for existing: it is a fixed-width column inside
+    /// the label, and what precedes it is what places it.
+    pub(super) power: PowerCell,
+}
+
+/// The combat-rating column on a row that names an item — `Game::copy_power`
+/// rendered into a fixed-width cell.
+///
+/// **Three cells, three meanings, and they are not interchangeable.** A
+/// figure is a rating; an em dash is *no answer* — the item has no combat
+/// axis at all, a Decompiler module or a consumable — and a blank is a row
+/// that is not an item, the wagon's Routine and Program offers. A dash on
+/// one of those would claim the disk had been rated and found wanting.
+///
+/// Fixed width so the figures form a straight edge down the list, which is
+/// the entire feature. It sits *inside* the label and never in
+/// `Row::Item::suffix`: `suffix_x` places a suffix one inset past each row's
+/// own right edge, so the numbers would stagger with the name lengths above
+/// them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PowerCell {
+    Blank,
+    Unrated,
+    Rated(i32),
+}
+
+/// Cells wide enough for the shipped range — the strongest armour in the set
+/// rates in the low thousands, and a weapon worse than bare fists rates
+/// negative. A figure past this grows its own row rather than losing a
+/// digit, `qty_column`'s call.
+const POWER_COLUMN_WIDTH: usize = 4;
+
+impl PowerCell {
+    /// What one carried copy rates. `Unrated` where the engine has no
+    /// answer, which is `Game::copy_power`'s own `None`.
+    pub(super) fn of_copy(game: &Game, copy: &feral_processes_engine::items::GearCopy) -> Self {
+        match game.copy_power(copy) {
+            Some(power) => PowerCell::Rated(power.total),
+            None => PowerCell::Unrated,
+        }
+    }
+
+    /// What a *plain* copy of `item` would rate — for the rows that name
+    /// something no copy exists of yet: a recipe's result, a trader's shelf.
+    pub(super) fn of_item(game: &Game, item: &feral_processes_engine::items::ItemId) -> Self {
+        PowerCell::of_copy(
+            game,
+            &feral_processes_engine::items::GearCopy::plain(item.clone()),
+        )
+    }
+
+    /// Right-aligned, so the digits line up rather than the signs.
+    fn text(self) -> String {
+        match self {
+            PowerCell::Blank => " ".repeat(POWER_COLUMN_WIDTH),
+            PowerCell::Unrated => format!("{:>POWER_COLUMN_WIDTH$}", "\u{2014}"),
+            PowerCell::Rated(n) => format!("{n:>POWER_COLUMN_WIDTH$}"),
+        }
+    }
 }
 
 /// What holds a tag apart from the name after it: the two spaces every one of
@@ -78,6 +139,7 @@ pub(super) fn with_tag(
     lead: impl Into<String>,
     text: impl Into<String>,
     quality: Option<u8>,
+    power: PowerCell,
 ) -> Row {
     let (color, bold) = quality_tag_style(quality);
     match row {
@@ -101,6 +163,7 @@ pub(super) fn with_tag(
                 text: text.into(),
                 color,
                 bold,
+                power,
             }),
         },
         // Nothing calls this on a Text row — `with_icon`'s call, for its
@@ -133,7 +196,7 @@ pub(super) fn row_lead(shortcut: char, qty: Option<u32>) -> String {
 /// string, which `a_tagged_rows_pieces_join_back_into_its_text` pins.
 pub(super) fn item_text(text: &str, tag: Option<&ItemTag>) -> String {
     match tag {
-        Some(t) => tagged_text(&t.lead, &t.text, text),
+        Some(t) => tagged_text(&t.lead, &t.text, t.power, text),
         None => text.to_string(),
     }
 }
@@ -143,8 +206,8 @@ pub(super) fn item_text(text: &str, tag: Option<&ItemTag>) -> String {
 /// the two screens that wrap a long row onto continuation lines. The wrap has
 /// to see the column's width, or it budgets for a row narrower than the one
 /// it will draw.
-pub(super) fn tagged_text(lead: &str, tag: &str, text: &str) -> String {
-    format!("{lead}{tag}{TAG_GAP}{text}")
+pub(super) fn tagged_text(lead: &str, tag: &str, power: PowerCell, text: &str) -> String {
+    format!("{lead}{tag}{TAG_GAP}{}{TAG_GAP}{text}", power.text())
 }
 
 /// `wrapped_row_lines` for a row that carries a tag column: the wrap sees the
@@ -157,11 +220,12 @@ pub(super) fn tagged_text(lead: &str, tag: &str, text: &str) -> String {
 pub(super) fn wrapped_tagged_lines(
     lead: &str,
     tag: &str,
+    power: PowerCell,
     head: &str,
     tags: &[String],
 ) -> Vec<String> {
-    let prefix = tagged_text(lead, tag, "");
-    let mut lines = wrapped_row_lines(tagged_text(lead, tag, head), tags);
+    let prefix = tagged_text(lead, tag, power, "");
+    let mut lines = wrapped_row_lines(tagged_text(lead, tag, power, head), tags);
     lines[0] = lines[0]
         .strip_prefix(&prefix)
         .expect("wrapped_row_lines only ever appends to the head line")
@@ -626,9 +690,10 @@ fn tag_pieces(
     icon: Option<(char, Color)>,
     text: &str,
     tag: &ItemTag,
-) -> (String, String) {
+) -> (String, String, String) {
     (
         row_label(prefix, icon, &tag.lead),
+        format!("{TAG_GAP}{}", tag.power.text()),
         format!("{TAG_GAP}{text}"),
     )
 }
@@ -689,7 +754,7 @@ pub(super) fn draw_row(
                 // the name after it (see
                 // `emphasising_part_of_a_line_does_not_shift_the_rest_of_it`).
                 Some(t) => {
-                    let (head, tail) = tag_pieces(prefix, *icon, s, t);
+                    let (head, power, tail) = tag_pieces(prefix, *icon, s, t);
                     painter.ui_runs(
                         &[
                             TextRun {
@@ -701,6 +766,15 @@ pub(super) fn draw_row(
                                 text: &t.text,
                                 bold: t.bold,
                                 color: t.color,
+                            },
+                            // Dim, like the suffix column: the rating is an
+                            // annotation on the row, and painting it in the
+                            // row's own colour would make it compete with
+                            // the name it is rating.
+                            TextRun {
+                                text: &power,
+                                bold: false,
+                                color: TEXT_DIM,
                             },
                             TextRun {
                                 text: &tail,
@@ -997,20 +1071,31 @@ mod tests {
         // `"[{}] {} {}  Sell {} ..."` — a trader's shelf, the inventory list
         // and the Stack market.
         assert_eq!(
-            tagged_text(&row_lead('a', Some(3)), "WEP", "Sell Arc Lance"),
+            tagged_text(
+                &row_lead('a', Some(3)),
+                "WEP",
+                PowerCell::Rated(54),
+                "Sell Arc Lance"
+            ),
             format!(
-                "[{}] {} {}  {}",
+                "[{}] {} {}  {:>4}  {}",
                 'a',
                 qty_column(3),
                 "WEP",
+                54,
                 "Sell Arc Lance"
             ),
         );
         // `"[{}] {}  Buy {} ..."` — a trader's stock, and the Compile screen,
         // neither of which prints a count.
         assert_eq!(
-            tagged_text(&row_lead('a', None), "MOD", "Buy Watchdog Tap"),
-            format!("[{}] {}  {}", 'a', "MOD", "Buy Watchdog Tap"),
+            tagged_text(
+                &row_lead('a', None),
+                "MOD",
+                PowerCell::Rated(397),
+                "Buy Watchdog Tap"
+            ),
+            format!("[{}] {}  {:>4}  {}", 'a', "MOD", 397, "Buy Watchdog Tap"),
         );
         // A four-digit stack grows the row rather than losing a digit, which
         // is `qty_column`'s call, not this one's.
@@ -1029,23 +1114,91 @@ mod tests {
             "[a]   3x  ",
             "WEP",
             Some(115),
+            PowerCell::Rated(54),
         ) else {
             panic!("with_tag returns the Item row it was given")
         };
         let tag = tag.expect("with_tag sets the column");
         assert_eq!(
             item_text(&text, Some(&tag)),
-            "[a]   3x  WEP  Arc Lance (115%)",
+            "[a]   3x  WEP    54  Arc Lance (115%)",
             "the joined row reads exactly as the hand-formatted one did"
         );
         for icon in [None, Some(('o', TEXT))] {
-            let (head, tail) = tag_pieces("  ", icon, &text, &tag);
+            let (head, power, tail) = tag_pieces("  ", icon, &text, &tag);
             assert_eq!(
-                format!("{head}{}{tail}", tag.text),
+                format!("{head}{}{power}{tail}", tag.text),
                 row_label("  ", icon, &item_text(&text, Some(&tag))),
                 "the drawn pieces and the measured label must be one string"
             );
         }
+    }
+
+    /// The three cells are three *meanings*, and each has to be
+    /// distinguishable on the row's own pieces — never on a substring of the
+    /// joined text, which passes just as well against a renderer that
+    /// formatted the column into the middle of a string and left no span to
+    /// paint.
+    #[test]
+    fn each_power_cell_draws_its_own_mark() {
+        let cell = |power| {
+            let Row::Item { text, tag, .. } = with_tag(
+                item_row("Arc Lance", false),
+                row_lead('a', None),
+                "WEP",
+                None,
+                power,
+            ) else {
+                panic!("with_tag returns the Item row it was given")
+            };
+            let tag = tag.expect("with_tag sets the column");
+            let (_, power, _) = tag_pieces("  ", None, &text, &tag);
+            power
+        };
+        assert_eq!(cell(PowerCell::Rated(54)).trim(), "54");
+        assert_eq!(
+            cell(PowerCell::Unrated).trim(),
+            "\u{2014}",
+            "no combat axis is an em dash — there is no answer, not a bad answer"
+        );
+        assert_eq!(
+            cell(PowerCell::Blank).trim(),
+            "",
+            "a row that is not an item draws nothing here: a dash would claim it \
+             had been rated and found wanting"
+        );
+    }
+
+    /// The straight edge down the list is the entire feature, and the UI face
+    /// is monospace — so equal character offsets are equal pixels, which is
+    /// the same reasoning `draw_row` reserves the icon's slot on.
+    ///
+    /// Asserted across *both* axes that could break it: a longer name after
+    /// the cell, and a wider figure inside it.
+    #[test]
+    fn every_power_cell_is_the_same_width() {
+        let widths: Vec<usize> = [
+            PowerCell::Blank,
+            PowerCell::Unrated,
+            PowerCell::Rated(5),
+            PowerCell::Rated(-38),
+            PowerCell::Rated(1421),
+        ]
+        .into_iter()
+        .map(|c| c.text().chars().count())
+        .collect();
+        assert_eq!(widths, vec![POWER_COLUMN_WIDTH; 5]);
+
+        let offset = |name: &str, power| {
+            let row = tagged_text(&row_lead('a', Some(3)), "WEP", power, name);
+            row.find(name).expect("the name is in the row it names")
+        };
+        assert_eq!(
+            offset("Shim Blade", PowerCell::Rated(36)),
+            offset("A Very Much Longer Name Indeed", PowerCell::Rated(1421)),
+            "the name — and so the column in front of it — must start at one x \
+             on every row"
+        );
     }
 
     /// The column is a *third* axis, beside the row's colour and its icon:
@@ -1059,6 +1212,7 @@ mod tests {
             "[a] ",
             "WEP",
             Some(130),
+            PowerCell::Rated(54),
         );
         assert_eq!(
             row_color(&row),
@@ -1099,6 +1253,7 @@ mod tests {
             "[a] ",
             "WEP",
             Some(130),
+            PowerCell::Rated(54),
         );
         let (_, shapes) = crate::paint::with_painter(|p| {
             draw_row(&row, 0.0, 400.0, 40.0, 400.0, p, &m);

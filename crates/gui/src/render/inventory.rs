@@ -82,6 +82,9 @@ pub(super) fn draw_inventory(
             Some(w) => text_row(tagged_text(
                 &row_lead(menu_shortcut(0), None),
                 EquipmentSlot::Weapon.short_label(),
+                // A program in the weapon slot is not a copy of gear, so
+                // there is nothing to rate — blank, not an em dash.
+                PowerCell::Blank,
                 &format!(
                     "{} Lv{} (+{} ATK, +{} DEF)",
                     w.name, w.level, w.bonus.0, w.bonus.1
@@ -119,7 +122,7 @@ pub(super) fn draw_inventory(
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let (lead, tag, lines) =
+        let (lead, tag, power, lines) =
             inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone);
         let mut lines = lines.into_iter();
         let head = lines
@@ -130,6 +133,7 @@ pub(super) fn draw_inventory(
             lead,
             tag,
             Some(row.copy.quality),
+            power,
         ));
         // A continuation carries this row's own tail rather than a second kind
         // of information, so it keeps the tier colour. Only the head is ever
@@ -196,17 +200,19 @@ fn inventory_row_lines(
     copy: &GearCopy,
     qty: u32,
     zone: u32,
-) -> (String, &'static str, Vec<String>) {
+) -> (String, &'static str, PowerCell, Vec<String>) {
     let lead = row_lead(shortcut, Some(qty));
     let tag = game.item_category(&copy.item).short_label();
+    let power = PowerCell::of_copy(game, copy);
     let mut lines = wrapped_tagged_lines(
         &lead,
         tag,
+        power,
         &game.copy_name(copy),
         &[equip_preview_tag(game, copy, zone)],
     );
     lines.extend(effect_lines(game, &copy.item));
-    (lead, tag, lines)
+    (lead, tag, power, lines)
 }
 
 /// One slot of an equipment panel: its key, its category column, and what is
@@ -235,11 +241,18 @@ pub(super) fn equipped_row(
     let fusions = equipped.as_ref().map(|e| e.copy.tier).unwrap_or(0);
     let rarity = equipped.as_ref().map(|e| e.copy.rarity).unwrap_or_default();
     let quality = equipped.as_ref().map(|e| e.copy.quality);
+    // An empty slot has nothing to rate, and that is a blank rather than an
+    // em dash: there is no item on the row to have no combat axis.
+    let power = equipped
+        .as_ref()
+        .map(|e| PowerCell::of_copy(game, &e.copy))
+        .unwrap_or(PowerCell::Blank);
     with_tag(
         tier_row(worn_summary(equipped, game), selected, fusions, rarity),
         row_lead(menu_shortcut(index), None),
         slot.short_label(),
         quality,
+        power,
     )
 }
 
@@ -666,7 +679,7 @@ mod tests {
         let Row::Item { text, tag, .. } = &empty else {
             panic!("an equipment slot is a row you can pick")
         };
-        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM  (empty)");
+        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM        (empty)");
     }
 
     /// **The tallest page any shipped item can produce fits its popup.**
@@ -963,8 +976,8 @@ mod tests {
         qty: u32,
         zone: u32,
     ) -> Vec<String> {
-        let (lead, tag, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
-        lines[0] = tagged_text(&lead, tag, &lines[0]);
+        let (lead, tag, power, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
+        lines[0] = tagged_text(&lead, tag, power, &lines[0]);
         lines
     }
 

@@ -1143,7 +1143,6 @@ impl Game {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
-        let is_player = slot == 0;
         let mut options = vec![
             ActionOption {
                 kind: ActionKind::Attack,
@@ -1177,19 +1176,22 @@ impl Game {
             });
         }
 
-        if is_player {
-            options.push(ActionOption {
-                kind: ActionKind::UseItem,
-                key: 'u',
-                label: "[u]se item".to_string(),
-                detail: "Spend a consumable".to_string(),
-                target: TargetSpec::InventoryItem,
-                unavailable: self
-                    .battle_usable_items()
-                    .is_empty()
-                    .then(|| "no usable items".to_string()),
-            });
-        }
+        // Offered to every slot, not just the player's. The pack is shared
+        // (`Inventory` lives on the player alone), but the effect lands on
+        // whoever spent the round taking it — which is the only way a
+        // companion can top up the reserve its own Specials are priced
+        // against. See `Game::consume_item`.
+        options.push(ActionOption {
+            kind: ActionKind::UseItem,
+            key: 'u',
+            label: "[u]se item".to_string(),
+            detail: "Spend a consumable".to_string(),
+            target: TargetSpec::InventoryItem,
+            unavailable: self
+                .battle_usable_items()
+                .is_empty()
+                .then(|| "no usable items".to_string()),
+        });
 
         options
     }

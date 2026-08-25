@@ -386,3 +386,95 @@ fn the_chosen_ability_index_decides_which_special_resolves() {
         "picking Sandbox should raise DEF"
     );
 }
+
+/// A companion burns its *own* reserve on a Special, so it has to be able to
+/// top that reserve up. The pack is the player's — one shared kit — but the
+/// charge lands on whoever spent the round taking it.
+#[test]
+fn a_companion_spends_its_round_on_a_power_cell_and_charges_itself() {
+    let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 20);
+    game.add_companion(companion).unwrap();
+
+    *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(10.0);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(40.0);
+    let cell = ItemId::from(ids::POWER_CELL);
+    let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+    let held = inv.count(&cell);
+    inv.take(cell.clone(), held);
+    inv.add(cell.clone(), 2);
+
+    // Toothless on purpose: the companion has to survive to its place in
+    // the initiative order for the round to say anything about the item.
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Hostile,
+            Position { x: 5, y: 5 },
+            Stats {
+                hp: 10_000,
+                max_hp: 10_000,
+                atk: 0,
+                mitigation: 0,
+            },
+            StatusEffects::default(),
+        ))
+        .id();
+    insert_battle(&mut game, player, vec![wild]);
+    let player_before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    companion_acts(
+        &mut game,
+        companion,
+        BattleAction::UseItem { item: cell.clone() },
+    );
+
+    assert!(
+        game.world.get::<PowerReserve>(companion).unwrap().get() > 30.0,
+        "the companion that drank the cell should be the one charged by it, \
+         but its reserve read {}",
+        game.world.get::<PowerReserve>(companion).unwrap().get()
+    );
+    assert!(
+        game.world.get::<PowerReserve>(player).unwrap().get() <= player_before,
+        "the player's reserve must not rise off a cell a companion drank"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().count(&cell),
+        1,
+        "the cell comes out of the party's one shared pack"
+    );
+}
+
+/// The item row used to be pushed only for slot 0, which left a companion
+/// that had run its reserve dry with no way to refill it mid-fight.
+#[test]
+fn a_companion_slot_is_offered_the_item_row() {
+    let mut game = Game::new(505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 20);
+    game.add_companion(companion).unwrap();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::POWER_CELL), 1);
+
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    insert_battle(&mut game, player, vec![wild]);
+
+    let row = game
+        .battle_action_options(1)
+        .into_iter()
+        .find(|o| o.kind == ActionKind::UseItem)
+        .expect("a companion slot should offer the item row");
+    assert_eq!(row.unavailable, None, "the pack is holding a Power Cell");
+}

@@ -64,18 +64,21 @@ impl Game {
         }
     }
 
-    /// `entity`'s side of an attack roll, with `range` as the band it swings
-    /// for.
+    /// `entity`'s side of an attack roll, making `swing`.
     ///
     /// **The one place accuracy and evasion are resolved from the ECS**, so
     /// the four creature-versus-creature call sites cannot each derive them
     /// differently. `species_base_speed` already has a player arm; gear
     /// accuracy and evasion are read live off `gear_bonus` because, unlike
     /// `atk` and `mitigation`, neither is baked into `Stats`.
+    ///
+    /// `swing.accuracy` is added on top: it belongs to the invocation rather
+    /// than to `entity`, so it must not reach `evasion` and must not persist
+    /// past this one roll.
     pub(crate) fn combatant_profile(
         &self,
         entity: Entity,
-        range: battle::DamageRange,
+        swing: battle::Swing,
     ) -> battle::Combatant {
         let gear = self.gear_bonus(entity);
         let level = self.ability_user_level(entity);
@@ -96,10 +99,10 @@ impl Game {
             evasion
         };
         battle::Combatant {
-            accuracy: battle::accuracy_of(speed, level, gear.accuracy),
+            accuracy: battle::accuracy_of(speed, level, gear.accuracy + swing.accuracy),
             evasion,
             atk: self.effective_atk(entity),
-            range,
+            range: swing.range,
         }
     }
 
@@ -158,12 +161,17 @@ impl Game {
         &mut self,
         attacker: Entity,
         defender: Entity,
-        range: battle::DamageRange,
+        swing: battle::Swing,
     ) -> battle::AttackOutcome {
-        let attacker_profile = self.combatant_profile(attacker, range);
+        let attacker_profile = self.combatant_profile(attacker, swing);
         // The defender's own band, so an Opening rung's riposte — rolled
         // inside `resolve_attack` — deals real damage rather than zero.
-        let defender_profile = self.combatant_profile(defender, self.natural_range_of(defender));
+        // `plain`, not `swing`: an aimed routine aims the attacker's swing,
+        // and handing its accuracy to the riposte would aim the counter too.
+        let defender_profile = self.combatant_profile(
+            defender,
+            battle::Swing::plain(self.natural_range_of(defender)),
+        );
         let outcome = {
             let mut rng = self.world.resource_mut::<GameRng>();
             battle::resolve_attack(attacker_profile, defender_profile, &mut rng.0)

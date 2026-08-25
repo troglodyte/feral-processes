@@ -647,6 +647,65 @@ fn every_shipped_integrity_routine_rolls_a_band() {
     );
 }
 
+/// Every routine that rolls to hit is aimed, and no routine that never rolls
+/// pretends to be.
+///
+/// Two halves, because `AbilityDef::accuracy` fails in both directions.
+/// `#[serde(default)]` is 0, so a mod's file keeps parsing untouched — and a
+/// shipped routine that forgets the key is silently as blind as a basic
+/// attack, which is the bug this whole change exists to close. In the other
+/// direction the field is read *only* by `Damage` and `Drain`; authored on a
+/// `Buff` or a `Cleanse` it is a number that does nothing, and a modder
+/// reading the shipped roster would copy it.
+///
+/// The variants are named rather than swept with a `_ =>` arm, on
+/// `render/stack.rs::cell_mark`'s rule: a new effect that rolls to hit
+/// should fail to compile here rather than skip the check.
+///
+/// Deliberately not a census of the *values* — how aimed a routine is, is a
+/// content decision, and `tuning.rs` is where difficulty lives.
+#[test]
+fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
+    use crate::abilities::AbilityEffect as E;
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mut aimed, mut blind) = (0, 0);
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let rolls_to_hit = match &def.effect {
+            E::Damage { .. } | E::Drain { .. } => true,
+            E::Heal { .. }
+            | E::Buff { .. }
+            | E::Debuff { .. }
+            | E::Cleanse
+            | E::Decompile
+            | E::FieldBuff { .. }
+            | E::Phase
+            | E::Jump => false,
+        };
+        if rolls_to_hit {
+            aimed += 1;
+            assert!(
+                def.accuracy > 0,
+                "routine {:?} rolls to hit but authors no `accuracy`, so it is exactly as \
+                 blind as a basic attack while costing Power and a cooldown",
+                def.id
+            );
+        } else {
+            blind += 1;
+            assert_eq!(
+                def.accuracy, 0,
+                "routine {:?} never rolls to hit, so its `accuracy` is read by nothing — \
+                 authoring one here teaches a modder that the key works everywhere",
+                def.id
+            );
+        }
+    }
+    assert!(
+        aimed > 0 && blind > 0,
+        "the census read {aimed} rolling and {blind} non-rolling routines, so at least \
+         one half of it proves nothing"
+    );
+}
+
 /// The scope word an ability's `name` must end in, given what it targets.
 /// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
 /// way, and which side it lands on is never in doubt from the picker.

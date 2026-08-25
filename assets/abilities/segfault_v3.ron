@@ -5,5 +5,6 @@
     target: OneEnemyGroupFront,
     effect: Damage(power: 17, spread: 4),
     cooldown: 4,
+    accuracy: 6,
     power_cost: 10.0,
 )

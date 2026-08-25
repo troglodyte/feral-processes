@@ -9,6 +9,7 @@
     target: AllEnemies,
     effect: Drain(power: 4, spread: 1, heal_fraction: 0.2),
     cooldown: 5,
+    accuracy: 2,
     power_cost: 17.0,
     wild_weight: 3,
 )

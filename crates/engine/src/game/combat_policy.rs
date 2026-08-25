@@ -266,8 +266,13 @@ impl Game {
         // rolling: the policy is choosing a swing, not making one, and a
         // draw here would shift every seeded run's stream by however many
         // options it weighed.
-        let attacker = self.combatant_profile(wild, self.attack_range(wild, range));
-        let defender = self.combatant_profile(target, battle::DamageRange::default());
+        // `plain` on both sides: the policy is projecting a basic attack, and
+        // a routine's own accuracy belongs to the invocation it was authored
+        // on rather than to the swing being weighed here.
+        let attacker =
+            self.combatant_profile(wild, battle::Swing::plain(self.attack_range(wild, range)));
+        let defender =
+            self.combatant_profile(target, battle::Swing::plain(battle::DamageRange::default()));
         let projected = battle::expected_damage(attacker, defender);
         let dmg = (projected * (1.0 - mitigation as f64 / 100.0)).round() as i32;
         f.set(

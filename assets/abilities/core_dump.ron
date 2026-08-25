@@ -14,6 +14,7 @@
     target: OneEnemyGroupFront,
     effect: Damage(power: 9, spread: 2),
     cooldown: 3,
+    accuracy: 6,
     power_cost: 0.0,
     triggers: Some(AllyWounded),
 )

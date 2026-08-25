@@ -59,6 +59,34 @@ impl DamageRange {
     }
 }
 
+/// Everything about one attack that belongs to the *invocation* rather than
+/// to the combatant making it.
+///
+/// The damage band was the only such property for a long time and travelled
+/// as a bare `DamageRange`. A routine's own Accuracy is the second, and a
+/// pair of loose parameters is exactly what `Combatant`'s doc comment
+/// rejects for exactly this reason: a third axis added later would be
+/// forgettable at a call site, and two of the four call sites here have
+/// nothing to say about accuracy at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Swing {
+    /// The band this attack rolls its damage from.
+    pub range: DamageRange,
+    /// Flat Accuracy for this attack only, on top of whatever the attacker
+    /// carries. `AbilityDef::accuracy` is the only thing that authors it —
+    /// a weapon's accuracy belongs to the *wielder* and rides `Combatant`,
+    /// where it applies to every swing they make.
+    pub accuracy: i32,
+}
+
+impl Swing {
+    /// A swing with no accuracy of its own: every basic attack, and every
+    /// defender profile built for an Opening rung's riposte.
+    pub fn plain(range: DamageRange) -> Self {
+        Swing { range, accuracy: 0 }
+    }
+}
+
 /// Odds one attack lands, from the attacker's Accuracy against the
 /// defender's Evasion.
 ///

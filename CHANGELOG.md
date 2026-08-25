@@ -27,6 +27,48 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.24
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Routines roll a band, and you run them.
+
+### Changed
+
+- **Every routine that moves Integrity now rolls a range instead of a fixed
+  figure.** The mechanism had been in the engine for several releases —
+  damage bands, the scaling that widens them with level and affinity, eight
+  paragraphs of schema documentation — and not one of the 77 shipped
+  abilities ever used it, so every Special dealt exactly the same number
+  every time. All 34 damage, drain and healing routines now author a spread
+  of about a quarter of their power, which is the ratio the roster's basic
+  attacks have used all along. `Heal` gained the range it never had.
+
+  The band is **centred on the old number**, so nothing got stronger or
+  weaker: the average of every routine in the game is exactly what it was,
+  and the balance suite passed the change without a single curve moving.
+  What changed is that a big hit and a small one are now different rolls
+  rather than the same roll twice.
+
+- **The word "cast" is gone.** You *run* a routine, or invoke one; the thing
+  you did is an *invocation*. "Cast" and "spell" are fantasy words and this
+  game has none, so they are out of the manual, the ability descriptions,
+  the perk pages and the log lines — and, unlike the 2026-08-05 Raid rename
+  which stopped at the player-facing half, out of the code as well. No asset
+  field was ever named `cast`, so nothing a mod author writes had to change.
+
+  Ability descriptions that quoted a number now quote the band: Segfault
+  Single v3.0 reads "Damage 13–21 to one target" where it read "Damage 17".
+
+### Fixed
+
+- The ability catalogue in `docs/abilities.md` had been six abilities short
+  of the game for at least a release — Clock Skew, Core Dump, Hot Spare,
+  Interrupt, Parity and Quarantine were never listed, while the page's own
+  prose counted them. It also described two passives where eight ship. Both
+  are corrected, and the page now shows what each routine rolls rather than
+  its centre.
+
 ## 0.13.23
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.26
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+A companion can reach into the pack mid-fight.
+
+### Fixed
+
+- **A companion can spend its round on a consumable.** The `[u]se item` row
+  was offered only to slot 0, and `Game::consume_item` hardcoded the player as
+  the recipient — so a companion that had run its Power reserve dry had no way
+  to refill it, while the pack sat full of Power Cells. That matters because a
+  companion's Special is charged to its *own* reserve
+  (`spend_power(entity, ..)`), not to the player's.
+
+  The item row is now offered to every party slot, and `consume_item` takes a
+  recipient. **The pack stays the player's and only the effect moves**:
+  `Inventory` lives on the player alone and is the party's one shared kit, so
+  a companion draws from the same stack the player would, but the Power
+  restore, the heal, any armed field buff and the log line all land on
+  whoever spent the round taking it. The reserve and stat writes became
+  no-ops rather than unwraps, matching `spend_power`'s asymmetry.
+
+  There is no ally-targeting picker: the player cannot hand a cell to a
+  companion, the companion spends its own round on one. Both frontends were
+  untouched — the picker already resolved against `battle_active_slot`, and
+  its prompt already read "It costs this member their round."
+
 ## 0.13.25
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

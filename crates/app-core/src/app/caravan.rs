@@ -107,6 +107,17 @@ impl App {
             .saturating_sub(claimed)
     }
 
+    /// What the purse will hold once this basket commits — Credits, plus
+    /// every pending sale, minus every pending buy.
+    ///
+    /// `caravan_budget` with no row held back, which is what makes it the
+    /// same arithmetic the keys are clamped against rather than a second
+    /// sum: a header that disagreed with the ceilings would be worse than
+    /// no header.
+    pub fn caravan_purse_after(&self, view: &CaravanView) -> u32 {
+        self.caravan_budget(view, usize::MAX)
+    }
+
     /// What the highlighted row's amount may reach: one whole shelf slot for
     /// an offer the purse can cover, or the held stack for a sell row.
     pub fn caravan_ceiling(&self, view: &CaravanView, row: usize) -> u32 {

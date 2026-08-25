@@ -65,7 +65,7 @@ use building::{
     draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
-use caravan::draw_caravan;
+use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_routine, draw_field_routine_ally};
@@ -716,6 +716,30 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             .collect(),
         _ => Vec::new(),
     };
+    // The wagon's view, and each row's basket cell beside it. Taken here for
+    // `transfer_entries`' reason — `App::caravan_ceiling` takes `&self`, so
+    // it cannot run once `game` below holds `&mut app.game` — and computed
+    // through app-core rather than here, so the figure the screen draws is
+    // the figure the keys clamp against.
+    let caravan = match app.mode {
+        Mode::Caravan => app
+            .game
+            .as_mut()
+            .and_then(|g| g.caravan_view())
+            .map(|view| {
+                let cells = (0..view.offers.len() + view.sells.len())
+                    .map(|row| {
+                        (
+                            app.caravan_amounts.get(row).copied().unwrap_or(0),
+                            app.caravan_ceiling(&view, row),
+                        )
+                    })
+                    .collect();
+                let purse = app.caravan_purse_after(&view);
+                CaravanBasket { view, cells, purse }
+            }),
+        _ => None,
+    };
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, refusal, painter, m),
@@ -938,7 +962,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
-        Mode::Caravan => draw_caravan(game, selected, refusal, painter, m),
+        Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
         Mode::Trade => draw_trade_menu(game, selected, refusal, painter, m),
         Mode::TradeAction => draw_trade_action_menu(
             game,

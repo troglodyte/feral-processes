@@ -172,6 +172,33 @@ pub(super) fn with_tag(
     }
 }
 
+/// Gives an `Item` row its trailing annotation — a combinator, exactly as
+/// `with_tag` and `with_icon` are, for the rows whose annotation is decided
+/// after the row is built. The caravan basket's per-row amount is that case:
+/// what a row is holding is not known to the constructor that names it.
+pub(super) fn with_suffix(row: Row, text: impl Into<String>) -> Row {
+    match row {
+        Row::Item {
+            text: row_text,
+            selected,
+            bold,
+            color,
+            icon,
+            tag,
+            ..
+        } => Row::Item {
+            text: row_text,
+            selected,
+            bold,
+            color,
+            suffix: Some(text.into()),
+            icon,
+            tag,
+        },
+        other => other,
+    }
+}
+
 /// What precedes a tag column on a row that names an item: the row's
 /// shortcut, and the quantity where the screen prints one.
 ///

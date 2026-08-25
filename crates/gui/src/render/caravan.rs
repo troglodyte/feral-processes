@@ -13,18 +13,35 @@ use super::*;
 /// the drawn rows and the handler's rows disagreeing about which row number
 /// is which. A renderer that rebuilt either list itself would be right until
 /// the first purchase.
+/// The wagon, and what the player has put in the basket in front of it.
+///
+/// Assembled in `render::draw` rather than here, because every figure on it
+/// comes out of `App` — `App::caravan_ceiling` takes `&self`, so it cannot
+/// run once the draw holds `&mut app.game`. A struct rather than the tuple it
+/// started as: three unlabelled numbers at a call site is how a `purse` ends
+/// up drawn where a ceiling belongs.
+pub(super) struct CaravanBasket {
+    pub(super) view: CaravanView,
+    /// `(amount, ceiling)` per row, index-aligned with the drawn list exactly
+    /// as `App::caravan_amounts` is.
+    pub(super) cells: Vec<(u32, u32)>,
+    /// What the purse holds once this basket commits.
+    pub(super) purse: u32,
+}
+
 pub(super) fn draw_caravan(
     game: &mut Game,
+    basket: Option<CaravanBasket>,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some(view) = game.caravan_view() else {
+    let Some(basket) = basket else {
         return;
     };
-    let title = view.trader.clone();
-    let rows = caravan_page_rows(game, &view, selected);
+    let title = basket.view.trader.clone();
+    let rows = caravan_page_rows(game, &basket.view, &basket.cells, basket.purse, selected);
     draw_popup(&title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -32,8 +49,28 @@ pub(super) fn draw_caravan(
 /// **this page has no scroll**, so the two censuses below have to be able to
 /// build the tallest and widest page the game can produce without a trader
 /// standing in front of them.
-pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: usize) -> Vec<Row> {
+pub(super) fn caravan_page_rows(
+    game: &mut Game,
+    view: &CaravanView,
+    cells: &[(u32, u32)],
+    purse: u32,
+    selected: usize,
+) -> Vec<Row> {
     let money = &view.currency;
+    // What a row is holding, and out of what — the figures the arrows are
+    // clamped to, taken from app-core and never recomputed here. An offer is
+    // all-or-nothing, so it says *whether* rather than how many.
+    // A row holding nothing says nothing: an untouched wagon has to read
+    // exactly as it did before baskets existed, and the stack a cargo row
+    // holds is already in its quantity column.
+    let cell = |idx: usize, offer: bool| -> Option<String> {
+        let (amount, ceiling) = cells.get(idx).copied().unwrap_or((0, 0));
+        match (offer, amount) {
+            (_, 0) => None,
+            (true, _) => Some("in the basket".to_string()),
+            (false, n) => Some(format!("{n} of {ceiling}")),
+        }
+    };
     // Wrapped, not trimmed: a trader's own line is prose a modder writes, and
     // nothing clips a row horizontally — an over-wide line is drawn off the
     // panel in silence. `no_caravan_row_overflows_its_popup` caught the
@@ -46,6 +83,16 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
         "You have: {} {money}  ·  rolling on in {} turns",
         view.credits, view.ticks_left
     )));
+    // **The figure the screen now exists to show.** Without it a player sets
+    // six rows blind and finds out what the visit cost only after Enter.
+    // Omitted while the basket is empty, so an untouched wagon reads exactly
+    // as it did.
+    if purse != view.credits {
+        rows.push(Row::TextColored(
+            format!("This basket leaves you {purse} {money}"),
+            TEXT,
+        ));
+    }
     rows.push(Row::TextColored("On the wagon:".to_string(), TEXT));
 
     let mut idx = 0;
@@ -104,7 +151,7 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
         // that a second meaning on one colour axis makes both unreadable,
         // and the affordability dimming is the one the player is scanning
         // for. The tier still shows in the name and in the tag column.
-        rows.push(if view.credits >= cost {
+        let row = if view.credits >= cost {
             with_tag(item_row(label, idx == selected), lead, tag, quality, power)
         } else {
             with_tag(
@@ -114,6 +161,10 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
                 quality,
                 power,
             )
+        };
+        rows.push(match cell(idx, true) {
+            Some(text) => with_suffix(row, text),
+            None => row,
         });
         // The same wrap for the same reason — an item's authored description
         // is prose too, and the indent has to come out of the budget or the
@@ -144,7 +195,7 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
             rows.push(Row::TextColored(heading.to_string(), TEXT));
             run = Some(rank);
         }
-        rows.push(with_tag(
+        let sell = with_tag(
             tier_row(
                 format!("Sell {} ({} {money} each)", row.name, row.unit_price),
                 idx == selected,
@@ -155,14 +206,23 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
             PowerCell::of_copy(game, &row.copy),
-        ));
+        );
+        rows.push(match cell(idx, false) {
+            Some(text) => with_suffix(sell, text),
+            None => sell,
+        });
         for line in effect_lines(game, &row.copy.item) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
         }
         idx += 1;
     }
     rows.push(text_row(""));
-    rows.push(text_row("[S] sells the whole stack  ·  Esc to step away"));
+    rows.push(text_row(
+        "Left/Right set a row  ·  Shift jumps to the end  ·  Ctrl halves the gap",
+    ));
+    rows.push(text_row(
+        "[A] all your cargo  ·  [N] clear  ·  Enter to trade  ·  Esc to step away",
+    ));
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
     ));
@@ -245,11 +305,101 @@ mod tests {
             currency: "Credits".to_string(),
             ticks_left: 9_999,
         };
-        caravan_page_rows(game, &view, 0)
+        // Measured with a **filled** basket: every row's amount suffix and
+        // the total header are real width and a real row, and a census that
+        // built an empty basket would measure a page nobody sees once they
+        // start shopping.
+        let cells: Vec<(u32, u32)> = (0..view.offers.len() + view.sells.len())
+            .map(|i| {
+                if i < view.offers.len() {
+                    (1, 1)
+                } else {
+                    (9_999, 9_999)
+                }
+            })
+            .collect();
+        caravan_page_rows(game, &view, &cells, 0, 0)
     }
 
     fn census_game() -> Game {
         Game::new(3, DifficultyMode::Forgiving, &assets()).expect("a game for the census")
+    }
+
+    /// Every figure the basket puts on the page comes from app-core, and the
+    /// page says nothing at all while the basket is empty — an untouched
+    /// wagon has to read exactly as it did before baskets existed.
+    #[test]
+    fn the_wagon_draws_its_basket_and_only_when_there_is_one() {
+        let mut game = census_game();
+        let material = ItemId::from(ids::BYTECODE_BLOCK);
+        let view = CaravanView {
+            trader: "T".to_string(),
+            description: String::new(),
+            offers: vec![CaravanOffer {
+                index: 0,
+                kind: CaravanOfferKind::Material(material.clone()),
+                name: "x".to_string(),
+                detail: String::new(),
+                unit_cost: 7,
+                qty: 1,
+            }],
+            sells: vec![CaravanSellRow {
+                copy: GearCopy::plain(material),
+                name: "y".to_string(),
+                held: 40,
+                unit_price: 2,
+            }],
+            credits: 100,
+            currency: "Credits".to_string(),
+            ticks_left: 10,
+        };
+        let text = |rows: Vec<Row>| -> Vec<String> {
+            rows.into_iter()
+                .map(|row| match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    Row::Item { text, suffix, .. } => {
+                        format!("{text}|{}", suffix.unwrap_or_default())
+                    }
+                })
+                .collect()
+        };
+
+        let empty = text(caravan_page_rows(
+            &mut game,
+            &view,
+            &[(0, 1), (0, 40)],
+            100,
+            0,
+        ));
+        assert!(
+            !empty.iter().any(|l| l.starts_with("This basket")),
+            "an untouched wagon must not claim a basket: {empty:?}"
+        );
+        assert!(
+            empty.iter().all(|l| !l.contains('|') || l.ends_with('|')),
+            "an untouched row must carry no amount: {empty:?}"
+        );
+
+        // One of each: the offer taken whole, three of the cargo stack.
+        let filled = text(caravan_page_rows(
+            &mut game,
+            &view,
+            &[(1, 1), (3, 40)],
+            93,
+            0,
+        ));
+        assert!(
+            filled.contains(&"This basket leaves you 93 Credits".to_string()),
+            "the total is the figure the screen now exists to show: {filled:?}"
+        );
+        assert!(
+            filled.iter().any(|l| l.ends_with("|in the basket")),
+            "an offer is all-or-nothing, so it says whether and not how many: {filled:?}"
+        );
+        assert!(
+            filled.iter().any(|l| l.ends_with("|3 of 40")),
+            "a cargo row says how many, out of what: {filled:?}"
+        );
     }
 
     /// A heading per run, and — the thing that can silently break — the
@@ -292,7 +442,8 @@ mod tests {
             ticks_left: 10,
         };
 
-        let rows = caravan_page_rows(&mut game, &view, 0);
+        let cells = vec![(0, 0); view.offers.len() + view.sells.len()];
+        let rows = caravan_page_rows(&mut game, &view, &cells, view.credits, 0);
         let headings: Vec<&str> = rows
             .iter()
             .filter_map(|r| match r {
@@ -423,7 +574,8 @@ mod tests {
             ticks_left: 9,
         };
 
-        let tag = caravan_page_rows(&mut game, &view, 0)
+        let cells = vec![(0, 0); view.offers.len() + view.sells.len()];
+        let tag = caravan_page_rows(&mut game, &view, &cells, view.credits, 0)
             .into_iter()
             .find_map(|r| match r {
                 Row::Item { tag, .. } => tag,

@@ -59,9 +59,9 @@ each site settled on:
 | `game/base/building.rs` `remove_structure` | `require_base` | same |
 | `game/base/building.rs` `work_structure` | `require_base` | stands the player at a machine's station tile |
 | `game/base/work_orders.rs` `queue_work_order` | `require_base` | reads which machines the base has standing |
-| `game/base/collect.rs` `collectable_adjacent` | `require_base` | reads the buffers of the machines around you |
-| `game/base/collect.rs` `collect_items` | `require_base` | draws a basket out of those buffers |
-| `game/base/collect.rs` `collect_adjacent` | `require_base` | the same, asking for everything on offer |
+| `game/base/transfer.rs` `transfer_offer` | `require_base` | reads the buffers of the machines around you, and the pack against them |
+| `game/base/transfer.rs` `transfer_items` | `require_base` | moves a basket in both directions between the two |
+| `game/base/transfer.rs` `refuse_transfer` | `require_base` | says why there was nothing to move |
 | `game/trade.rs` `sell_item` | `require_base` | a trader is a deployed `Structure` |
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
@@ -2785,6 +2785,14 @@ that could differ from those two is the signal to re-read this entry.
 
 ### Putting cargo into a Depot mirrors the collect trio, and the one place the mirror does not hold is the ceiling
 
+> **Superseded in part.** The two screens and the six public doors described
+> below were merged into one `Mode::Transfer` screen and one
+> `game/base/transfer.rs` commit door — see *Taking and putting are one
+> screen* at the end of this file. What survives unchanged is why a Depot is
+> `Stock::output` rather than a stash, why the pack side filters `banked`,
+> `stores` and gear copies, and why the room is one shared budget. The
+> function names in the rest of this entry are historical.
+
 A Depot was the only structure the player could take *out* of and never put
 *into*. `game/base/deposit.rs` is the other half, and it is deliberately a
 reflection of `collect.rs` function for function: `adjacent_depots`,
@@ -2879,6 +2887,11 @@ The key is `P`, uppercase because every mnemonic lowercase letter is taken —
 (`n`, `w`, `y`, `z`) name nothing.
 
 ### A collect is one reach rule and one taking path, and the neighbour scan is sorted for a reason take-all could never see
+
+> **Superseded in part.** `collectable_adjacent`, `collect_items` and
+> `collect_adjacent` are gone; the reach rule, the sort and the single taking
+> path all survive, now through `take_from_adjacent` — see *Taking and
+> putting are one screen* at the end of this file.
 
 **A collect is one reach rule and one taking path.** The reach is
 `collect::ORTHOGONAL` through `Game::adjacent_stock`, the one private scan
@@ -5969,3 +5982,54 @@ that only checks a draw call did not panic. Nineteen modes need pending state
 a fresh run has not got (a chosen trade, a program picked to fuse) and draw
 nothing at all; they are listed as such rather than quietly excluded, and the
 census still asserts they draw it **zero** times.
+
+### Taking and putting are one screen, and the commit takes before it gives
+
+A Depot could be collected from with `c` and deposited into with `P`, and an
+item sitting on a shelf *and* in the pack had a row on each screen with no way
+to see the other. The two screens are now one, `Mode::Transfer`, whose per-row
+amount is **signed**: negative puts into an adjacent Depot, positive takes off
+an adjacent `Stock`.
+
+**The engine grew one module and lost six doors.** `game/base/transfer.rs`
+holds the union offer, the room, the two refusals and the one commit. It does
+not reimplement either half: `collect_items` and `deposit_items` were first
+split so their moving bodies became `take_from_adjacent` and
+`give_to_adjacent` — `pub(crate)` movers that hold **no guards**, neither
+tick nor log — and `transfer_items` calls both, logging once and ticking once.
+That split is what lets one action move cargo in both directions; leaving the
+guards in the movers would have meant checking them twice and, worse, would
+have left two functions each able to spend a turn.
+
+**Take before give is the one ordering constraint, and it is load-bearing.**
+A rebalance that empties a full Depot and refills it from the pack only lands
+both halves in this order. The other way round the give clamps to zero for
+want of room and the failure is *silent* — `give_to_adjacent` returns an empty
+list and nothing is said. It is pinned by a test whose fixture is a Depot at
+exactly `capacity`.
+
+**`transfer_room` exists so a zero can be told from an absence.**
+`deposit_room` answers 0 both for a Depot with nothing left and for no Depot
+at all, and the screen has to draw those differently: the room line is omitted
+entirely when there is no Depot, because a line reading `Depot room remaining:
+0` beside a Mining Node claims the base is full when it has no shelf. So the
+engine answers `Option<u32>`, app-core carries it as `basket_room` unchanged
+in type and changed in meaning, and nothing infers the `None` from a zero.
+
+**The two ceilings are different shapes, and only one is shared.**
+`take_available` is the row's own shelf. `put_available` is the pack row
+capped by the Depot room the *other* rows have not spent — subtracting only
+the others is what lets the highlighted row be lowered and raised while it is
+being edited, which is `basket_available`'s old argument carried across. A
+pending *take* deliberately does not credit the put budget: a take may come
+off a machine that is not a Depot, so crediting it would offer room that never
+appears. Under-offering is safe precisely because the commit takes first.
+
+**The key table stayed one table and grew a sign.** `half_way_to` generalises
+the Ctrl step over the sign, still `div_ceil` on the *magnitude* of the gap so
+a gap of one closes rather than stranding; digits accumulate in the row's
+current sign, and a row at zero types a take. **Left puts in and Right takes
+out** — the inversion collect shipped with, kept, and now named in as many
+words by `left_puts_in_and_right_takes_out`. `[A]` writes the take ceiling
+over every row, clearing a pending give; that is a decision about what "take
+everything" means on one axis, not an oversight.

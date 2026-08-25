@@ -500,6 +500,7 @@ impl Game {
             level,
             quality: copy.quality,
             stats,
+            power: self.copy_power(copy),
             accuracy,
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
             nominal,

@@ -232,6 +232,18 @@ pub struct WornDetailView {
     /// consumable's page has nothing to state rather than a defaulted 100.
     pub quality: u8,
     pub stats: crate::items::EquipmentStats,
+    /// What this copy is worth in combat, absolutely — `Game::copy_power`.
+    ///
+    /// Carried on the view rather than left to the renderer to call for
+    /// itself, for `quality`'s reason: `GearDetailView`'s promise is that
+    /// the page is one call, and a renderer reaching past it for one figure
+    /// is how each of the four hand-rolled `copy_bonus` chains started.
+    ///
+    /// `None` where the copy has no combat axis at all — a Decompiler
+    /// module. Priced against the reference wearer and **not** at
+    /// `level` above, so the figure on this page is the figure on the row
+    /// that opened it.
+    pub power: Option<ItemPower>,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you
     /// are wearing reports the accuracy you actually have.

@@ -19,6 +19,7 @@ mod keys;
 mod paint;
 mod render;
 mod sounds;
+mod sprites;
 mod text;
 
 use bevy::ecs::system::SystemParam;
@@ -197,7 +198,12 @@ pub fn run(app: App) {
             text_gate: TextGate::new(),
             last_mode,
         })
-        .add_systems(Startup, (setup, maximize_window))
+        .init_resource::<sprites::Sprites>()
+        .add_systems(Startup, (setup, maximize_window, sprites::load))
+        // In `PreUpdate` rather than the egui pass: registration needs
+        // `EguiUserTextures` mutably, and the pass already holds the context.
+        // It runs every frame but returns immediately once nothing is pending.
+        .add_systems(PreUpdate, sprites::register)
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
     bevy_app.run();
@@ -279,13 +285,14 @@ fn frame(
     mut input: FrameInput,
     mut commands: Commands,
     sounds: Res<SoundBank>,
+    sprites: Res<sprites::Sprites>,
     mut exit: MessageWriter<AppExit>,
 ) -> Result {
     let now = input.time.elapsed_secs_f64();
     let painter = Painter::for_frame(
         contexts.ctx_mut()?,
         input.time.delta_secs(),
-        std::sync::Arc::default(),
+        sprites.table(),
     );
 
     let fe = &mut *frontend;

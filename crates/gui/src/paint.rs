@@ -167,7 +167,7 @@ pub fn install_fonts(ctx: &egui::Context) {
 /// rather refcounted — every frame alongside the `Painter` that reads it.
 /// Empty is a supported state and is what `assets/sprites/` being absent
 /// looks like: every lookup misses and every caller draws its glyph.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct SpriteTable {
     by_name: HashMap<String, egui::TextureId>,
 }

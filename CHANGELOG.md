@@ -27,6 +27,34 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.29
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+The Transfer picker's figures line up.
+
+### Changed
+
+- **The Transfer screen (`c`) draws its quantities in a column.** Each row
+  carries the signed amount and both live ceilings, and those figures were
+  staggering with the item names above them — `suffix_x` places a suffix one
+  inset past the *advance* of the row's own label, so a short name pulled its
+  figures left and a long one pushed them right. The screen read as a list
+  where it is really a table.
+
+  The name is now padded out to the widest one on screen and each figure is
+  right-aligned in its own width. The UI face is monospace and a trailing
+  space advances exactly as a glyph does, so equal-width labels put every
+  suffix at the same x — `draw_row` and `popup.rs` are untouched, and the
+  figures keep the dim annotation colour a suffix is drawn in.
+
+  Widths are measured from the rows actually listed rather than fixed, so a
+  shelf of short names draws a narrow table instead of a wide one full of
+  empty space. A name longer than the column is not truncated: it pushes its
+  own figures right and leaves the rest of the table alone, since losing
+  characters off an item's name to keep a column straight is the worse of the
+  two failures.
+
 ## 0.13.28
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -27,6 +27,38 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.23
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+One key moves cargo both ways.
+
+### Changed
+
+- **Taking and putting are one screen.** `c` beside a machine or a Depot now
+  opens a single window with a row per item, carrying what the shelves hold
+  of it *and* what your pack could hand over. The amount on each row is
+  signed: **Right takes off a shelf, Left puts your own cargo into a Depot**,
+  and Enter moves the whole basket in one action and one turn. `P` is gone —
+  an item that was on a shelf and in the pack at once used to have a row on
+  each of two screens, with no way to see the other from either.
+- **A transfer takes before it gives.** Emptying a full Depot and refilling it
+  from your pack now lands in one commit; done the other way round the put
+  would have been refused for want of room, silently.
+- **The screen tells a full Depot apart from no Depot.** A Mining Node draws
+  no room line at all, where a Depot with nothing left draws one reading 0.
+  The put ends of every row read `-0` in that case while the take ends stay
+  live, which is the state the report this came from could not explain.
+- **`[A]` still means take everything**, and now overwrites a put you had
+  set on a row with nothing on its shelf. Shift goes to the end of a row and
+  Ctrl halves the gap, in whichever direction the plain arrow was heading.
+
+### Fixed
+
+- **A Depot at exactly its capacity no longer reads as a broken screen.** The
+  old deposit picker showed rows whose ceiling was zero with nothing on screen
+  saying why; the room line and the live per-row figures now say it outright.
+
 ## 0.13.22
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

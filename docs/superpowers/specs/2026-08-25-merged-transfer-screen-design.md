@@ -69,7 +69,11 @@ Credits                   +0     -12 .. +0
 
 The room line is **omitted entirely** when no adjacent `Stock` has
 `stores` — a Mining Node has no room to report, and a line reading 0 there
-would claim the base is full when it has no shelf at all.
+would claim the base is full when it has no shelf at all. That is why
+`App::basket_room` stays an `Option<u32>` rather than collapsing to a plain
+number now that there is one screen: `None` is "no Depot beside you" and
+`Some(0)` is "a Depot with nothing left", and those are the two states the
+report this came from could not tell apart.
 
 The suffix column is one string: the signed amount, then the row's **live**
 availables. Live, not the static shelf and pack figures, because the put
@@ -106,8 +110,9 @@ Two functions, because the two ceilings are genuinely different shapes and
 collapsing them is what would drift:
 
 - `take_available(row)` is `on_shelves`. Per row, independent.
-- `put_available(row)` is `deposit_room()` less what **the other** rows are
-  giving, then capped at `in_pack`. Shared across every row.
+- `put_available(row)` is `basket_room.unwrap_or(0)` less what **the other**
+  rows are giving, then capped at `in_pack`. Shared across every row, and 0
+  for every row when no Depot is adjacent.
 
 Subtracting only the other rows is `basket_available`'s existing rule and
 is what lets the highlighted row be lowered and raised while it is being
@@ -136,8 +141,13 @@ it is never the binding constraint.
 | `Backspace` | magnitude `/10`, sign kept |
 | `[A]` | every row to `+take_available` |
 | `[N]` | every row to zero |
-| `Enter` | commit |
+| `Enter` | commit, then leave |
 | `Esc` | leave |
+
+`Enter` closes the screen whether or not the basket moved anything, which
+is what both screens do today. An all-zero basket never reaches the engine:
+`transfer_items` already makes that a no-op, but two places both keeping
+that true is how a no-op stops being one.
 
 Shift is a target and Ctrl a step toward that same target — the existing
 distinction, generalised so each modifier pair points at the end its
@@ -214,7 +224,7 @@ are bare.
 - `app/playing.rs` — the `c` arm rewritten, the `P` arm deleted.
 - `app/input.rs` — the modifier fold names `Mode::Transfer`.
 - `lib.rs` — `basket_rows: Vec<TransferRow>`, `basket_amounts: Vec<i64>`,
-  `basket_room: u32`.
+  `basket_room: Option<u32>` (unchanged in type, changed in meaning).
 - `tests/collect.rs` + `tests/deposit.rs` → `tests/transfer.rs`.
 
 **gui**
@@ -236,7 +246,9 @@ deposit suites; the app-core ones replace both test files.
   carrying both figures.
 - A banked item never gets a put end; an item on a non-`stores` `Stock`
   never gets one either.
-- `in_pack` is 0 for every row when no adjacent `Stock` has `stores`.
+- `in_pack` is 0 for every row when no adjacent `Stock` has `stores`, and
+  the room header is absent rather than reading 0 — the two states a full
+  Depot and no Depot must not collapse into.
 - The put budget is shared: filling one row lowers `put_available` on the
   others, and the highlighted row keeps its own amount while being edited.
 - **A full Depot** — capacity exactly reached — leaves every put end at 0

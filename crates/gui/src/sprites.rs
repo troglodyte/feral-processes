@@ -111,3 +111,35 @@ pub fn register(
         table.insert(name, id);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SPRITES;
+
+    /// Every name the loader asks for must have a file where it asks for it.
+    ///
+    /// The asset server resolves a missing path asynchronously and reports
+    /// it as a load failure several frames later, by which time the only
+    /// symptom is a glyph where a sprite was expected — which is also
+    /// exactly what a correctly-working fallback looks like. Nothing else
+    /// distinguishes "no art yet" from "the path is wrong", so it is
+    /// asserted here against the real directory.
+    #[test]
+    fn every_sprite_the_loader_asks_for_is_on_disk() {
+        // The prefix the loader joins onto the asset root, kept beside the
+        // `load` call it mirrors rather than spelled twice.
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        assert!(
+            !SPRITES.is_empty(),
+            "no sprites asked for, so this proved nothing"
+        );
+        for name in SPRITES {
+            let path = root.join(format!("sprites/{name}.png"));
+            assert!(
+                path.is_file(),
+                "the loader asks for `sprites/{name}.png`, which is not at {}",
+                path.display()
+            );
+        }
+    }
+}

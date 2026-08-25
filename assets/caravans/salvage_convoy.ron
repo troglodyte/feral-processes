@@ -4,7 +4,7 @@
     description: "Three carts of other people's gear, sorted by whoever got there first. They don't ask where anything came from and they'd rather you didn't either.",
     glyph: 'Ω',
     color: DarkGreen,
-    rows: 6,
+    rows: 12,
     // Gear-weighted: what this one is for is a shelf of worn equipment you
     // cannot compile yet. Materials are the filler.
     weights: (

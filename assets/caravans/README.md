@@ -22,7 +22,7 @@ with a logged warning and costs you that one trader, never the startup.
     description: "Three carts of other people's gear ...",
     glyph: 'Ω',
     color: DarkGreen,
-    rows: 6,
+    rows: 12,
     weights: (
         gear: 6,
         routines: 2,

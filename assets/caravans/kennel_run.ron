@@ -4,7 +4,7 @@
     description: "A handler and a string of programs on short leashes, walking them somewhere that pays better. Everything here has been someone else's already.",
     glyph: 'Ω',
     color: DarkGreen,
-    rows: 5,
+    rows: 10,
     // Program-weighted, so which trader is standing there is visibly a
     // different shelf rather than a reroll of one table.
     weights: (

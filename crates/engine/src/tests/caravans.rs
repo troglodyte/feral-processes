@@ -191,7 +191,7 @@ fn a_def_with_no_bonus_share_parses_at_zero() {
 // ---------------------------------------------------------------------------
 
 use crate::game::caravan::CaravanVisit;
-use crate::resources::{GameClock, GameRng, Locale, ZoneLevel};
+use crate::resources::{GameClock, GameRng, Locale};
 use crate::tuning::{
     CARAVAN_ARRIVAL_JITTER_TICKS, CARAVAN_STAY_TICKS, CARAVAN_VISIT_INTERVAL_TICKS,
 };
@@ -474,8 +474,145 @@ fn a_shelf_holds_the_visiting_defs_row_count() {
     }
 }
 
+/// Dedupe is per kind, and each key is what the player can tell apart: a
+/// routine is its ability, a program its species, a stack of cargo its item.
+/// Two material rows differing only in stack size are the same row twice.
+/// Gear alone keys on the whole `GearCopy`, because rarity, affix and
+/// quality are what make two copies of one item different things to buy.
+///
+/// Swept **within** each shelf and never across the run: a wagon may stock
+/// what the last one did, and should — the pools are redrawn per visit.
+#[test]
+fn a_shelf_never_lists_the_same_thing_twice() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+
+    for visit in 0..30 {
+        let mut seen: Vec<String> = Vec::new();
+        for offer in shelf(&mut game, visit) {
+            let key = match &offer.kind {
+                CaravanOfferKind::Gear(copy) => format!("gear {copy:?}"),
+                CaravanOfferKind::Routine(ability) => format!("routine {ability}"),
+                CaravanOfferKind::Program(species) => format!("program {species}"),
+                CaravanOfferKind::Material(item) => format!("material {item:?}"),
+            };
+            assert!(
+                !seen.contains(&key),
+                "visit {visit} stocked {key} twice on one shelf"
+            );
+            seen.push(key);
+        }
+    }
+}
+
+/// A def whose best-weighted category runs dry fills the rest of its shelf
+/// out of the others rather than coming up short. This is the shipped Kennel
+/// Run's own case — there are fewer non-boss species than its shelf has rows
+/// — but it is pinned against a def that reaches it on purpose, because what
+/// holds it is the draw and not the content.
+#[test]
+fn a_drained_pool_hands_the_rest_of_the_shelf_to_the_others() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    game.world.insert_resource(one_def(
+        "drains",
+        50,
+        "(gear: 1, routines: 0, programs: 100, materials: 0)",
+    ));
+
+    let rows = shelf(&mut game, 0);
+    assert_eq!(rows.len(), 50, "the shelf came up short of its row count");
+    let programs = rows
+        .iter()
+        .filter(|o| matches!(o.kind, CaravanOfferKind::Program(_)))
+        .count();
+    let gear = rows
+        .iter()
+        .filter(|o| matches!(o.kind, CaravanOfferKind::Gear(_)))
+        .count();
+    assert!(
+        programs < rows.len(),
+        "the program pool never drained, so this proves nothing"
+    );
+    assert_eq!(
+        programs + gear,
+        rows.len(),
+        "the shelf dealt a kind its weights gave no share of"
+    );
+    assert!(gear > 0, "the drained pool took the rest of the shelf down");
+}
+
+/// `rows` is a ceiling, not a count: with nothing else weighted there is
+/// nothing to fall back to, so the shelf stops when its one pool empties.
+/// A def that asks for more than is installed gets what is installed.
+#[test]
+fn a_shelf_deeper_than_its_pools_stops_when_they_empty() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    game.world.insert_resource(one_def(
+        "only_programs",
+        500,
+        "(gear: 0, routines: 0, programs: 1, materials: 0)",
+    ));
+
+    let rows = shelf(&mut game, 0);
+    let species = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .all()
+        .filter(|d| !d.is_boss)
+        .count();
+    assert_eq!(
+        rows.len(),
+        species,
+        "a shelf of nothing but programs is exactly the roster, once each"
+    );
+}
+
+/// A `CaravanDb` holding one made-up trader, so a test can pin the draw
+/// against weights the shipped content has no reason to carry.
+fn one_def(id: &str, rows: u32, weights: &str) -> CaravanDb {
+    let dir = scratch_assets_dir(&format!("caravans_{id}"));
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(
+        &*dir.join("only.ron"),
+        format!(
+            "(
+    id: \"{id}\",
+    name: \"Test Wagon\",
+    description: \"A test wagon.\",
+    glyph: 'W',
+    color: DarkGreen,
+    rows: {rows},
+    weights: {weights},
+    bonus_share: 0,
+    min_zone: 0,
+    max_zone: 99,
+)"
+        ),
+    )
+    .unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "the test def did not load: {warnings:?}"
+    );
+    db
+}
+
 /// The bias, not an exact composition — pinning the latter would pin the RNG
 /// stream rather than the feature.
+///
+/// **Shares rather than a majority**, because a shelf is now deeper than
+/// some of the pools it draws from and the outcome bias is bounded by pool
+/// depth rather than by the weights alone: there are sixteen non-boss
+/// species against fifty rows, so no def can make programs the largest part
+/// of a wagon however it is weighted. What the weights still decide — and
+/// all they can decide — is which trader deals in a category at all and
+/// which one deals in more of it.
 #[test]
 fn a_defs_weights_decide_what_it_deals_in() {
     let mut game = fresh();
@@ -510,9 +647,19 @@ fn a_defs_weights_decide_what_it_deals_in() {
         gear_trader.0 > gear_trader.1,
         "the gear-weighted trader sold more programs than gear: {gear_trader:?}"
     );
+    assert_eq!(
+        gear_trader.1, 0,
+        "the gear-weighted trader is weighted out of programs entirely"
+    );
     assert!(
-        program_trader.1 > program_trader.0,
-        "the program-weighted trader sold more gear than programs: {program_trader:?}"
+        program_trader.1 > gear_trader.1,
+        "the program-weighted trader sold no more programs than the one \
+         weighted out of them: {program_trader:?} against {gear_trader:?}"
+    );
+    assert!(
+        gear_trader.0 > program_trader.0,
+        "the gear-weighted trader sold no more gear than the program-weighted \
+         one: {gear_trader:?} against {program_trader:?}"
     );
 }
 
@@ -997,7 +1144,7 @@ fn a_base_with_two_markets_always_docks_at_the_same_one() {
     game.save(&path).unwrap();
 
     let chosen = |_run: u32| -> (i32, i32) {
-        let mut game = Game::load(&path, &test_assets_dir()).unwrap();
+        let game = Game::load(&path, &test_assets_dir()).unwrap();
         let counter = game.trading_structures().next().unwrap().1;
         (counter.x, counter.y)
     };

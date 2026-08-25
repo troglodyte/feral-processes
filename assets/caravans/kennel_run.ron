@@ -4,18 +4,25 @@
     description: "A handler and a string of programs on short leashes, walking them somewhere that pays better. Everything here has been someone else's already.",
     glyph: 'Ω',
     color: DarkGreen,
-    rows: 10,
+    rows: 50,
     // Program-weighted, so which trader is standing there is visibly a
     // different shelf rather than a reroll of one table.
+    //
+    // Gear outweighs routines even though neither is the pitch, and that is
+    // a consequence of the shelf being deeper than the roster: there are
+    // sixteen non-boss species, so the program pool drains around a third
+    // of the way down and every row after it is dealt out of the other two.
+    // At `routines: 3` the rest of the wagon came up disks — a program
+    // trader whose actual shelf was a rack of routines.
     weights: (
-        gear: 1,
-        routines: 3,
+        gear: 4,
+        routines: 2,
         programs: 6,
         materials: 0,
     ),
-    // Lower than the Salvage Convoy's, and on a shelf that is mostly
-    // programs anyway: what this one is for is the leashes, and its one or
-    // two racks of gear are a sideline rather than the pitch.
+    // Lower than the Salvage Convoy's: this one's pitch is the leashes, and
+    // its gear is what fills the wagon out once the roster has been dealt
+    // rather than what anyone walked over to look at.
     bonus_share: 20,
     min_zone: 2,
     max_zone: 99,

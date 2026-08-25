@@ -114,18 +114,17 @@ fn the_base_menu_offers_the_caravan_row_only_while_one_is_docked() {
     );
 }
 
+/// The wagon is one screen now, not two — the quantity page it used to open
+/// on a cargo row is gone, so Esc has one step to take rather than two.
 #[test]
-fn esc_backs_out_of_each_caravan_screen_to_where_it_came_from() {
+fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     let mut app = a_caravan();
     open_via_menu(&mut app, 'b', "Caravan");
     assert_eq!(app.mode, Mode::Caravan);
 
-    // Into the quantity page off a cargo row, and back out of it to the
-    // wagon rather than to the map.
-    //
-    // Walked to with the arrows rather than typed: a shelf is deeper than
-    // `menu_shortcut`'s 35 labels, so the sell rows below it have no key of
-    // their own and Enter on the highlighted row is the only way in.
+    // Editing a row must not take the player anywhere. Walked to with the
+    // arrows rather than typed: a shelf is deeper than `menu_shortcut`'s 35
+    // labels, so the sell rows below it have no key of their own.
     let offers = app
         .game
         .as_mut()
@@ -137,14 +136,8 @@ fn esc_backs_out_of_each_caravan_screen_to_where_it_came_from() {
     for _ in 0..offers {
         app.handle_key(GameKey::Down);
     }
-    app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::CaravanQuantity);
-    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::Caravan);
-    assert!(
-        app.pending_caravan_sale.is_none(),
-        "an abandoned sale must not stay pending"
-    );
 
     app.handle_key(GameKey::Esc);
     assert_eq!(
@@ -168,7 +161,10 @@ fn a_cursor_past_the_end_still_resolves_to_a_row() {
         "the fixture needs both sections to have rows for this to mean anything"
     );
 
-    app.handle_key(GameKey::Char('1'));
+    // Buy the first row, which drops it out of the offers section and
+    // leaves `menu_selected` pointing one past where it did.
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Caravan, "one purchase should not close it");
     let after = app.game.as_mut().unwrap().caravan_view().unwrap();
     assert_eq!(
@@ -177,24 +173,13 @@ fn a_cursor_past_the_end_still_resolves_to_a_row() {
         "the bought row is still on the wagon"
     );
 
-    // Well past whatever the list holds now. `S` sells the highlighted cargo
-    // row, and the last row of the list is one — so a cursor that resolves
-    // lands a sale, and a cursor that does not silently does nothing.
-    // Asserted on the money rather than on the mode: doing nothing leaves
-    // the screen exactly as it was, which is indistinguishable from working.
-    let credits = |app: &mut App| -> u32 {
-        app.game
-            .as_mut()
-            .unwrap()
-            .caravan_view()
-            .map(|v| v.credits)
-            .unwrap_or(0)
-    };
-    let before_sale = credits(&mut app);
+    // Well past whatever the list holds now. Asserted on the basket rather
+    // than on the mode: a dead key leaves the screen exactly as it was,
+    // which is indistinguishable from working.
     app.menu_selected = 999;
-    app.handle_key(GameKey::Char('S'));
+    app.handle_key(GameKey::ShiftRight);
     assert!(
-        credits(&mut app) > before_sale,
+        app.caravan_amounts.iter().any(|n| *n > 0),
         "a cursor past the end resolved to nothing, so the key was dead"
     );
 }
@@ -220,4 +205,164 @@ fn a_trader_that_rolls_away_closes_the_screen() {
         Mode::Playing,
         "the wagon has gone and the screen is still open on it"
     );
+}
+
+/// Sets the cursor on the first sell row and returns its index.
+fn first_sell_row(app: &mut App) -> usize {
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    assert!(!view.sells.is_empty(), "the fixture needs cargo to sell");
+    view.offers.len()
+}
+
+/// **The sell ceiling is per row and static** — the mirror of
+/// `App::take_available`, and the half of the transfer picker's asymmetry
+/// this side inherits. Nothing pending anywhere may move it, its own row
+/// included: the shelf it counts is the pack, and the pack does not change
+/// until the basket commits.
+#[test]
+fn a_sell_rows_ceiling_is_static() {
+    let mut app = a_caravan();
+    open_via_menu(&mut app, 'b', "Caravan");
+    let row = first_sell_row(&mut app);
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    let before = app.caravan_sell_available(&view, row);
+    assert!(before > 0, "the fixture needs cargo the wagon will take");
+
+    // Something pending on both sides of the basket.
+    app.menu_selected = 0;
+    app.handle_key(GameKey::ShiftRight);
+    app.menu_selected = row;
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(
+        app.caravan_amounts[row], before,
+        "the row filled to its stack"
+    );
+
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    assert_eq!(
+        app.caravan_sell_available(&view, row),
+        before,
+        "a pending amount moved the shelf it was measured against"
+    );
+    assert_eq!(
+        app.caravan_sell_available(&view, 0),
+        0,
+        "an offer row has no shelf of the player's to count"
+    );
+}
+
+/// **The buy side is one budget.** A pending buy lowers what the *others*
+/// can reach — and never what the highlighted row can, or the row could be
+/// lowered and never raised again.
+#[test]
+fn a_pending_buy_lowers_the_other_rows_budget_but_not_its_own() {
+    let mut app = a_caravan();
+    open_via_menu(&mut app, 'b', "Caravan");
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    assert!(view.offers.len() >= 2, "the fixture needs two offers");
+    let budget_before = app.caravan_budget(&view, 1);
+
+    app.menu_selected = 0;
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(app.caravan_amounts[0], 1, "an offer row is all or nothing");
+
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    let price = view.offers[0].unit_cost * view.offers[0].qty;
+    assert_eq!(
+        app.caravan_budget(&view, 1),
+        budget_before - price,
+        "a pending buy has to come off what the rest of the basket can reach"
+    );
+    assert_eq!(
+        app.caravan_budget(&view, 0),
+        budget_before,
+        "...and never off its own row, or it could not be raised again"
+    );
+
+    // Which is the property that matters: lowered and raised, at the ceiling.
+    app.handle_key(GameKey::ShiftLeft);
+    assert_eq!(app.caravan_amounts[0], 0);
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(app.caravan_amounts[0], 1, "the row went dead once lowered");
+}
+
+/// Enter commits and **leaves the screen open**: a wagon is a place you shop
+/// at, not a form you submit. The amounts clear, because they have been
+/// spent.
+#[test]
+fn enter_commits_the_basket_and_stays_on_the_wagon() {
+    let mut app = a_caravan();
+    open_via_menu(&mut app, 'b', "Caravan");
+    let before = app.game.as_mut().unwrap().caravan_view().unwrap();
+
+    app.menu_selected = 0;
+    app.handle_key(GameKey::ShiftRight);
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::Caravan, "the wagon closed on a commit");
+    assert!(
+        app.caravan_amounts.iter().all(|n| *n == 0),
+        "a committed basket must not still be holding what it spent"
+    );
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .caravan_view()
+            .unwrap()
+            .offers
+            .len(),
+        before.offers.len() - 1,
+        "the row was bought"
+    );
+}
+
+/// **The modifier fold.** `Mode::Caravan` has to be named in the one
+/// condition at the top of `App::handle_key`, or its four modified arrows are
+/// folded to bare `Left`/`Right` before this handler ever sees them — Shift
+/// becomes a step of one and nothing anywhere fails.
+///
+/// Read on the *left* modifier from a full row, because a step of one and a
+/// jump to the end differ by exactly one press only there.
+#[test]
+fn shift_left_empties_a_sell_row_in_one_press() {
+    let mut app = a_caravan();
+    open_via_menu(&mut app, 'b', "Caravan");
+    let row = first_sell_row(&mut app);
+    app.menu_selected = row;
+
+    app.handle_key(GameKey::ShiftRight);
+    let filled = app.caravan_amounts[row];
+    assert!(filled > 1, "the fixture needs a stack deeper than one");
+
+    app.handle_key(GameKey::ShiftLeft);
+    assert_eq!(
+        app.caravan_amounts[row], 0,
+        "Shift+Left stepped by one, so the modifier never reached this screen"
+    );
+}
+
+/// `[A]` fills the **sell** rows only. The take side is the one with a
+/// per-row ceiling, and here that is the sell side — filling the offers
+/// would spend the whole purse on one keypress, on a screen with no buyback.
+#[test]
+fn a_fills_the_sell_rows_and_leaves_the_offers_alone() {
+    let mut app = a_caravan();
+    open_via_menu(&mut app, 'b', "Caravan");
+    let view = app.game.as_mut().unwrap().caravan_view().unwrap();
+    let offers = view.offers.len();
+
+    app.handle_key(GameKey::Char('A'));
+
+    assert!(
+        app.caravan_amounts[..offers].iter().all(|n| *n == 0),
+        "[A] spent the purse on the wagon's stock"
+    );
+    assert!(
+        app.caravan_amounts[offers..].iter().any(|n| *n > 0),
+        "[A] filled nothing at all"
+    );
+    for (i, n) in app.caravan_amounts[offers..].iter().enumerate() {
+        assert_eq!(*n, view.sells[i].held, "a cargo row is filled to the stack");
+    }
 }

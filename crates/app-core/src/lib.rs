@@ -1094,10 +1094,11 @@ pub enum Mode {
     /// One list with two sections, the wagon's stock then cargo it will
     /// take, resolved by `caravan_row`. There is no buyback section, because
     /// there is no buyback: a caravan rolls away.
+    ///
+    /// Every row carries an amount, edited with the arrows and committed
+    /// together by Enter — one basket, one commit, one turn. There is no
+    /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
-    /// How many of the picked stack to sell into the wagon. Digits and
-    /// Enter, like `Mode::TradeQuantity`, whose input buffer it shares.
-    CaravanQuantity,
     /// Confirming the sale of the program picked in `Mode::TradeAction`.
     /// Programs take a confirmation where items don't: the sale is
     /// irreversible, and it silently cancels whatever the program was doing,
@@ -1279,7 +1280,6 @@ impl Mode {
             | Mode::TradeProgramConfirm
             | Mode::StackMarket
             | Mode::Caravan
-            | Mode::CaravanQuantity
             | Mode::Perks
             | Mode::Research
             | Mode::Contracts
@@ -1595,6 +1595,19 @@ pub struct App {
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,
+    /// How many of each caravan row the basket is holding, **index-aligned**
+    /// with the drawn list: the wagon's offers first, then the cargo it will
+    /// take, exactly as `caravan_row` resolves them.
+    ///
+    /// Unsigned, unlike `basket_amounts`: the sign is fixed by which section
+    /// a row is in, so there is no direction for a number to carry. An offer
+    /// row is `0..=1` — a shelf slot is spent whole and `CaravanOffer::qty`
+    /// is part of the price the player was quoted.
+    ///
+    /// Index alignment is safe because **editing costs no tick** and neither
+    /// list can change without one. Cleared on commit and on leaving, so a
+    /// reopened wagon never shows a stale basket.
+    pub caravan_amounts: Vec<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,
@@ -1631,11 +1644,6 @@ pub struct App {
     /// The sell/buy line item picked in `Mode::TradeAction`, awaiting a
     /// quantity from `Mode::TradeQuantity` before `Game::sell_item`/
     /// `Game::buy_item` is actually called.
-    /// Which stack of cargo `Mode::CaravanQuantity` is asking a quantity
-    /// for. Its own field rather than `pending_trade_choice`: that one
-    /// carries a trading-post `Entity` alongside the choice, and a caravan
-    /// has none.
-    pub pending_caravan_sale: Option<GearCopy>,
     pub pending_trade_choice: Option<TradeChoice>,
     /// Which screen the in-flight trade was started from — see
     /// `TradeOrigin`. Set when a trade begins, read when it ends.

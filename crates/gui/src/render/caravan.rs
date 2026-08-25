@@ -169,49 +169,6 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
     rows
 }
 
-/// How many of the picked stack to sell into the wagon.
-pub(super) fn draw_caravan_quantity(
-    game: &mut Game,
-    copy: Option<&GearCopy>,
-    quantity_input: &str,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let (Some(copy), Some(view)) = (copy, game.caravan_view()) else {
-        return;
-    };
-    let unit_price = view
-        .sells
-        .iter()
-        .find(|row| row.copy == *copy)
-        .map(|row| row.unit_price)
-        .unwrap_or(0);
-    let held = view
-        .sells
-        .iter()
-        .find(|row| row.copy == *copy)
-        .map(|row| row.held)
-        .unwrap_or(0);
-    let shown = if quantity_input.is_empty() {
-        "1"
-    } else {
-        quantity_input
-    };
-    let money = &view.currency;
-    let rows = vec![
-        text_row(format!("Sell how many {}?", game.item_name(&copy.item))),
-        text_row(""),
-        text_row(format!("Price: {unit_price} {money} each")),
-        text_row(format!("You hold: {held}")),
-        text_row(""),
-        text_row(format!("Quantity: {shown}")),
-        text_row(""),
-        text_row("Type digits, Enter to sell, Esc to go back"),
-    ];
-    draw_popup(&view.trader, PopupSize::Large, &rows, refusal, painter, m);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

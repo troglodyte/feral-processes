@@ -2244,3 +2244,17 @@ pub(crate) fn reseed_rng(game: &mut Game, seed: u64) {
     game.world
         .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(seed)));
 }
+
+/// Takes everything the adjacent structures are offering, through the one
+/// door there now is — the shape `Game::collect_adjacent` used to be, kept
+/// here rather than in the engine because "select everything, then commit"
+/// is a fixture's convenience and not a verb the game has.
+pub(crate) fn take_everything_adjacent(game: &mut Game) -> Vec<(ItemId, u32)> {
+    let all: Vec<(ItemId, u32)> = game
+        .transfer_offer()
+        .into_iter()
+        .filter(|r| r.on_shelves > 0)
+        .map(|r| (r.item, r.on_shelves))
+        .collect();
+    game.transfer_items(&all, &[]).0
+}

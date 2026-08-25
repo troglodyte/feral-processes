@@ -161,7 +161,7 @@ fn filing_a_work_order_is_a_base_action() {
     );
 }
 
-/// `collect_adjacent` reports what it took rather than a `Result`, so its
+/// A transfer reports what it took rather than a `Result`, so its
 /// refusal is an empty haul. That makes the base half of this the load-bearing
 /// assertion: an empty haul on the surface is what a site left on
 /// `require_surface` would produce in base space instead.
@@ -183,7 +183,7 @@ fn collecting_from_a_machine_is_a_base_action() {
         ));
     };
     let collect = |game: &mut Game, ()| {
-        if game.collect_adjacent().is_empty() {
+        if take_everything_adjacent(game).is_empty() {
             Err("nothing was collected".to_string())
         } else {
             Ok(())

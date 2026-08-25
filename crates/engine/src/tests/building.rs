@@ -1223,7 +1223,7 @@ fn walking_away_stops_the_job() {
 
 /// A cycle you run yourself pays into the *node's* buffer
 /// (`player_gather_system`), and `c` reaches only the four orthogonal tiles
-/// (`collect_adjacent`) — so a job started from across the base earns into a
+/// (a take) — so a job started from across the base earns into a
 /// buffer that is nowhere near you, and the extraction lines read as though
 /// you were pocketing it. The work menu lists everything within
 /// `MENU_SCAN_RADIUS`, so this is a refusal at the action rather than a
@@ -1759,7 +1759,7 @@ fn collecting_from_a_clogged_node_lets_it_resume() {
         "the fixture has to actually clog, or the rest of this proves nothing"
     );
 
-    game.collect_adjacent();
+    take_everything_adjacent(&mut game);
     for _ in 0..40 {
         game.tick();
     }

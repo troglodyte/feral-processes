@@ -1913,3 +1913,17 @@ pub struct MemoryRow {
     /// because the half-life is on the def, which never reaches the page.
     pub age: String,
 }
+
+/// One item the transfer screen offers a row for — see
+/// `Game::transfer_offer`.
+///
+/// The union of the two old offers: `on_shelves` is what the adjacent
+/// `Stock` buffers are holding of it, `in_pack` what the player could put
+/// into an adjacent Depot. An item on both sides is **one** row carrying
+/// both figures, which is the whole reason the two screens became one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferRow {
+    pub item: ItemId,
+    pub on_shelves: u32,
+    pub in_pack: u32,
+}

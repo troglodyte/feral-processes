@@ -3,6 +3,17 @@
 use crate::*;
 
 impl App {
+    /// Where the game's content tree was resolved to, for a frontend that
+    /// needs to load an asset of its own.
+    ///
+    /// Exposed rather than re-derived: `crates/launcher/src/paths.rs` is the
+    /// one place a runtime path is decided, and this is already the value it
+    /// handed over. A frontend resolving `assets/` for itself works on the
+    /// build machine and nowhere else.
+    pub fn assets_dir(&self) -> &Path {
+        &self.assets_dir
+    }
+
     pub fn new(
         assets_dir: PathBuf,
         saves_dir: PathBuf,

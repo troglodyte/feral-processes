@@ -143,14 +143,36 @@ fn draw_toast(text: &str, p: &Painter) {
     p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
 }
 
+/// Points Bevy's asset server at the content tree the launcher already
+/// resolved.
+///
+/// Left to its default, `AssetPlugin` resolves `assets/` itself — against
+/// `CARGO_MANIFEST_DIR` in a dev build and the executable's directory once
+/// installed. That is a second site deciding a runtime path, which
+/// `CLAUDE.md` names as the trap under `crates/launcher/src/paths.rs`: it
+/// works on the build machine, works nowhere else, and nothing fails to
+/// compile. `App` is already carrying the resolved value, so taking it from
+/// there is what keeps the two from disagreeing.
+///
+/// The path is absolute, and bevy joins `file_path` onto its own base — an
+/// absolute join replaces the base, which is what makes this override the
+/// guess rather than sit under it.
+fn asset_plugin(app: &App) -> AssetPlugin {
+    AssetPlugin {
+        file_path: app.assets_dir().to_string_lossy().into_owned(),
+        ..default()
+    }
+}
+
 /// Runs the graphics frontend to completion (until `app.quit`). Takes `App`
 /// by value: the Bevy app owns it as a resource for the rest of the process,
 /// and nothing is lost by that, since the process exits once this returns.
 pub fn run(app: App) {
     let last_mode = app.mode;
+    let assets = asset_plugin(&app);
     let mut bevy_app = bevy::app::App::new();
     bevy_app
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+        .add_plugins(DefaultPlugins.set(assets).set(WindowPlugin {
             primary_window: Some(Window {
                 title: "feral-processes".to_string(),
                 // Windowed and maximized rather than borderless fullscreen:
@@ -367,6 +389,47 @@ mod tests {
 
     fn assets_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// An `App` carrying nothing but a known content root.
+    fn app_with_assets(assets: &std::path::Path) -> App {
+        let tmp = std::env::temp_dir().join("feral_processes_gui_asset_root");
+        App::new(
+            assets.to_path_buf(),
+            tmp.join("saves"),
+            tmp.join("history.log"),
+            tmp.join("profile.ron"),
+            tmp.join("arenas"),
+            tmp.join("telemetry.jsonl"),
+        )
+    }
+
+    /// Bevy resolves `AssetPlugin::file_path` against `CARGO_MANIFEST_DIR`
+    /// when it is left to its own devices, which works on the build machine
+    /// and nowhere else — the second-path-resolver trap `CLAUDE.md` names
+    /// under `crates/launcher/src/paths.rs`. Nothing fails to compile if
+    /// this regresses, so it is asserted rather than reviewed.
+    #[test]
+    fn the_asset_root_comes_from_the_resolved_content_tree() {
+        let dir = PathBuf::from("/not/the/manifest/dir/assets");
+        let app = app_with_assets(&dir);
+        assert_eq!(
+            asset_plugin(&app).file_path,
+            dir.to_string_lossy(),
+            "the asset root must come from the App's resolved path"
+        );
+    }
+
+    /// An absolute `file_path` has to survive bevy's `get_base_path().join()`
+    /// — it does, because joining an absolute path replaces the base — so
+    /// the resolved root must actually be handed over absolute.
+    #[test]
+    fn the_asset_root_is_absolute() {
+        let app = app_with_assets(&assets_dir().canonicalize().unwrap());
+        assert!(
+            std::path::Path::new(&asset_plugin(&app).file_path).is_absolute(),
+            "a relative root would be re-anchored by bevy's base path"
+        );
     }
 
     /// An `App` standing on `(x, y)` of Stack frame 1 with the given facing.

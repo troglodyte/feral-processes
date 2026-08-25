@@ -35,7 +35,7 @@ pub(super) const GENERIC_SPECIES_ID: &str = "test_generic";
 /// resolved to construct and made **every** `spawn_tamed` companion carry
 /// that species' data — so giving the roster kits would have taken the
 /// `expect` out from under 233 call sites at once, and giving it affinities
-/// silently multiplied every fixture's ability casts by construct's. Both
+/// silently multiplied every fixture's ability invocations by construct's. Both
 /// are properties of the shipped roster leaking into a fixture that only
 /// ever wanted a blank program.
 ///
@@ -1401,7 +1401,7 @@ pub(super) const FIELD_ONLY_ABILITY: &str = r#"(
 )"#;
 
 /// A `Run`-scoped `FieldBuff` — `field_buff_target_mismatch` requires
-/// `target: WholeParty` on this scope even though `Game::cast_field_routine`
+/// `target: WholeParty` on this scope even though `Game::run_field_routine`
 /// ignores it and always lands the buff on the player alone. For the test
 /// asserting that a `Run`-scoped routine held by a companion still lands on
 /// the player, not the companion.
@@ -1415,8 +1415,8 @@ pub(super) const FIELD_ONLY_RUN_ABILITY: &str = r#"(
 )"#;
 
 /// A `Creature`-scoped, `WholeParty`-targeted `FieldBuff` — for the test
-/// asserting a cast arms every living party member (and skips a dead one)
-/// rather than just the caster.
+/// asserting an invocation arms every living party member (and skips a dead one)
+/// rather than just the invoker.
 pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
     id: "test_field_atk",
     name: "Test Field Atk",
@@ -1428,9 +1428,9 @@ pub(super) const FIELD_ONLY_PARTY_ABILITY: &str = r#"(
 
 /// A `Creature`-scoped, percentage-magnitude `FieldBuff` — `Mitigation` is
 /// the one percentage kind with a real `affinity_kind` (`Buff`, the same
-/// category `FIELD_ONLY_PARTY_ABILITY`'s `Atk` uses), so casting the two off
+/// category `FIELD_ONLY_PARTY_ABILITY`'s `Atk` uses), so running the two off
 /// the same high-level, high-affinity holder is what proves
-/// `FieldBuffKind::scales_with_caster` actually splits them: `Atk` scales,
+/// `FieldBuffKind::scales_with_invoker` actually splits them: `Atk` scales,
 /// `Mitigation` lands at exactly its authored value either way.
 pub(super) const FIELD_ONLY_MITIGATION_ABILITY: &str = r#"(
     id: "test_field_mitigation",

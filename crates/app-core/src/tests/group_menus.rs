@@ -334,7 +334,7 @@ fn i_opens_the_pack_and_x_inspects() {
 #[test]
 fn the_hot_keys_stayed_on_the_map() {
     for (key, expected) in [
-        (GameKey::Char('a'), Mode::FieldCast),
+        (GameKey::Char('a'), Mode::FieldRoutine),
         (GameKey::Char('u'), Mode::Symlink),
     ] {
         let mut app = test_app(4014);

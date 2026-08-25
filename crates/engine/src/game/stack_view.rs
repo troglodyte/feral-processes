@@ -215,7 +215,7 @@ impl Game {
         self.cell_paragraph(pos, cell)
     }
 
-    /// Which cell a ray cast down view-space column `lateral` resolves to:
+    /// Which cell a ray traced down view-space column `lateral` resolves to:
     /// the nearest notable cell along it, or — when it holds nothing notable
     /// — the corridor itself, meaning the nearest walkable cell on it and
     /// the party's own as the last resort. So the ray always answers.

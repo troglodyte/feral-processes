@@ -209,7 +209,7 @@ const A_GRANTING_MODULE: &str = r#"(
 /// Wearable, grants nothing, and stat-for-stat identical to its granting
 /// twin — the control for "the gear did it" against "wearing anything at
 /// all did it". A stat line that differed by a point would move the
-/// passive's own damage, since a Damage effect scales with its caster.
+/// passive's own damage, since a Damage effect scales with its invoker.
 const A_PLAIN_MODULE: &str = r#"(
     id: "test_plain_module", name: "Test Plain Module", description: "d",
     equipment: Some((Module, (def: 1))),
@@ -619,7 +619,7 @@ fn item_grant_reports_the_routines_own_name_and_prose() {
 /// A grant is read off the item id, so every axis a *copy* carries —
 /// rarity, fusion tier, an affix — is orthogonal to it. Worth pinning
 /// rather than reasoning about: `Game::copy_bonus` folds all three into the
-/// wearer's stats, and a Damage passive scales with its caster's ATK, so
+/// wearer's stats, and a Damage passive scales with its invoker's ATK, so
 /// the two systems do meet — just not at the lookup.
 #[test]
 fn a_rare_fused_affixed_copy_grants_the_same_routine() {
@@ -645,7 +645,7 @@ fn a_rare_fused_affixed_copy_grants_the_same_routine() {
 
 /// And the whole way through, not just at the lookup: an affixed copy fires
 /// its grant in a real round, and hits harder for the affix — the passive
-/// casts as its wearer, so the ATK the copy added is ATK the routine swings
+/// runs as its wearer, so the ATK the copy added is ATK the routine swings
 /// with.
 #[test]
 fn an_affixed_copy_fires_its_grant_and_the_affix_reaches_the_damage() {

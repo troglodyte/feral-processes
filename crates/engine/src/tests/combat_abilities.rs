@@ -152,8 +152,8 @@ fn game_with_a_sweeper() -> (Game, Entity) {
 
 #[test]
 fn a_whole_group_ability_damages_every_member_not_just_the_front() {
-    // **A sweep, because each recipient now rolls its own attack.** One cast
-    // lands on three members and any of the three can miss, so a single cast
+    // **A sweep, because each recipient now rolls its own attack.** One invocation
+    // lands on three members and any of the three can miss, so a single run
     // cannot show that every rank is *reachable*. Summing a fixed set of
     // `GameRng` seeds can, is deterministic, and still fails outright if a
     // rank is never touched — which is the thing that would break.
@@ -238,7 +238,7 @@ fn a_sweeper_against_four_groups() -> (Game, Entity, Vec<Entity>) {
 fn an_all_enemies_ability_reaches_every_group_including_past_engagement_range() {
     // A sweep, for the reason
     // `a_whole_group_ability_damages_every_member_not_just_the_front` gives:
-    // each group's front rolls its own attack, so one cast cannot show that
+    // each group's front rolls its own attack, so one invocation cannot show that
     // all four are *reachable*, only that they happened to be hit.
     let mut dealt = [0i32; 4];
     for seed in 0..16u64 {
@@ -284,7 +284,7 @@ fn a_whole_party_heal_raises_every_living_member_and_skips_the_downed() {
     );
     assert!(
         game.world.get::<Stats>(sweeper).unwrap().hp > 10,
-        "the caster heals itself too"
+        "the invoker heals itself too"
     );
     assert_eq!(
         game.world.get::<Stats>(downed).unwrap().hp,
@@ -352,7 +352,7 @@ fn cooldowns_do_not_survive_the_battle_that_set_them() {
     let (mut game, sweeper) = game_with_a_sweeper();
     battle_with_a_pack_of(&mut game, 1, 1);
 
-    // The cast has to land for the kill that ends the fight — this test is
+    // The invocation has to land for the kill that ends the fight — this test is
     // about what teardown does to cooldowns, not about the to-hit roll.
     force_the_next_attack_to_land(&mut game);
     companion_uses_special(
@@ -375,7 +375,7 @@ fn cooldowns_do_not_survive_the_battle_that_set_them() {
 
 /// The bug this closes: a companion's routine came out of *your* meter, so
 /// the party's own kit was rationed against a pool only the player had.
-/// Whatever a Special costs, the caster is who pays it.
+/// Whatever a Special costs, the invoker is who pays it.
 #[test]
 fn a_companions_special_charges_the_player_no_power() {
     let (mut game, sweeper) = game_with_a_sweeper();
@@ -408,7 +408,7 @@ fn a_player_out_of_power_can_still_command_a_companions_routine() {
     let options = game.battle_special_options(1);
     assert_eq!(
         options[1].unavailable, None,
-        "the caster's reserve is what gates a Special, and the caster here is \
+        "the invoker's reserve is what gates a Special, and the invoker here is \
          the companion"
     );
     let _ = sweeper;
@@ -1120,7 +1120,7 @@ fn a_heal_scales_with_the_users_level() {
 /// A routine's heal is a band, not a fixed figure — the same shape
 /// `AbilityEffect::Damage`'s `spread` already gives damage. Rolled through
 /// `battle::DamageRange` rather than a second formula, so the low end is
-/// floored at 0 and the band scales with the caster exactly as a damage
+/// floored at 0 and the band scales with the invoker exactly as a damage
 /// band does.
 #[test]
 fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
@@ -1282,9 +1282,9 @@ fn ability_damage_scales_with_the_users_level() {
         triggers: None,
     };
 
-    // Both casts are forced to land. These tests are about what levelling
+    // Both invocations are forced to land. These tests are about what levelling
     // does to a hit's *size*; letting either one miss would make them about
-    // the to-hit roll instead, and a missed level-1 cast reads as infinite
+    // the to-hit roll instead, and a missed level-1 run reads as infinite
     // scaling rather than none.
     game.world.get_mut::<Experience>(player).unwrap().level = 1;
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
@@ -1333,9 +1333,9 @@ fn drain_scales_with_the_users_level() {
         triggers: None,
     };
 
-    // Both casts are forced to land. These tests are about what levelling
+    // Both invocations are forced to land. These tests are about what levelling
     // does to a hit's *size*; letting either one miss would make them about
-    // the to-hit roll instead, and a missed level-1 cast reads as infinite
+    // the to-hit roll instead, and a missed level-1 run reads as infinite
     // scaling rather than none.
     game.world.get_mut::<Experience>(player).unwrap().level = 1;
     let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
@@ -1406,7 +1406,7 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
     // The routine rolls a band now, so the *balance* claim is about where the
     // band is centred — a single roll can sit anywhere inside it. Both halves
     // are asserted: the centre is the gate, and containment is the evidence
-    // that this cast actually used that band rather than some other one.
+    // that this invocation actually used that band rather than some other one.
     let def = ability(&game, "kernel_panic");
     let crate::abilities::AbilityEffect::Damage { power, spread, .. } = def.effect else {
         panic!("kernel_panic is a Damage ability");
@@ -1425,7 +1425,7 @@ fn a_perked_mid_run_kernel_panic_lands_in_the_intended_band() {
     );
     assert!(
         (band.min + atk..=band.max + atk).contains(&dealt),
-        "the cast should land inside its own band {band:?} plus {atk} ATK, got {dealt}"
+        "the invocation should land inside its own band {band:?} plus {atk} ATK, got {dealt}"
     );
 }
 
@@ -1634,7 +1634,7 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     // Only `Creature` (for species lookup) and `Experience` (for level)
-    // matter here — cast directly via `use_ability` rather than through a
+    // matter here — run directly via `use_ability` rather than through a
     // full battle round, so a wild enemy's counterattack can't land on the
     // player in the same round and make the net HP delta disagree with the
     // heal actually applied.
@@ -1659,7 +1659,7 @@ fn a_species_heal_affinity_scales_the_heal_it_casts() {
     let hot_patch = ability(&game, "hot_patch");
 
     // Wound the player so a heal has room to land, then have the medic
-    // cast hot_patch (Heal(power: 8)) on them directly.
+    // run hot_patch (Heal(power: 8)) on them directly.
     let before = 20;
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -2028,7 +2028,7 @@ fn a_player_affinity_perk_does_not_scale_a_companions_ability() {
     assert_eq!(
         game.ability_affinity(medic, &effect),
         AFFINITY_NEUTRAL,
-        "the player's perk must not reach a companion's cast"
+        "the player's perk must not reach a companion's invocation"
     );
 }
 
@@ -2214,7 +2214,7 @@ fn committing_a_special_that_sits_behind_a_field_only_ability_resolves_the_right
 }
 
 /// The gate and the plan must never disagree — a routine the picker offers
-/// has to be one the cast can pay for. `ability_unavailable` is the one seam
+/// has to be one the invocation can pay for. `ability_unavailable` is the one seam
 /// both read, and this asserts both halves rather than trusting that.
 #[test]
 fn an_empty_reserve_greys_a_special_and_refuses_the_same_plan() {
@@ -2243,7 +2243,7 @@ fn an_empty_reserve_greys_a_special_and_refuses_the_same_plan() {
     );
 }
 
-/// **The caster pays.** This is the assertion that "every companion tracks
+/// **The invoker pays.** This is the assertion that "every companion tracks
 /// their power level" actually shipped: a companion's Special draws on the
 /// companion's own reserve and leaves the player's alone.
 #[test]
@@ -2283,7 +2283,7 @@ fn a_casting_companion_pays_from_its_own_reserve_not_the_players() {
 /// Hostiles get no reserve, deliberately: `Game::choose_wild_action`'s
 /// policy weights were trained against today's action distribution, and a
 /// Power constraint would change which moves are available in which rounds.
-/// A missing reserve must therefore leave a hostile's casting untouched —
+/// A missing reserve must therefore leave a hostile's invocations untouched —
 /// `spend_power` is a no-op rather than a branch.
 #[test]
 fn a_hostile_with_no_reserve_casts_normally() {
@@ -2318,7 +2318,7 @@ fn a_hostile_with_no_reserve_casts_normally() {
 
 /// A high-level ability must not become deterministic: the spread scales
 /// with the centre, proportionally. Delete the scaling of `spread` and this
-/// fails — the band collapses to a point as the caster levels.
+/// fails — the band collapses to a point as the invoker levels.
 #[test]
 fn an_abilitys_spread_scales_with_its_centre() {
     use crate::abilities::scaled_range;

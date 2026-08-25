@@ -5,7 +5,7 @@
     // party rests, so length is no longer what separates them — Ablative
     // Layer Single is -10% to one ally, this is a quarter off everyone. The
     // Power cost is the whole price and it is a steep one: at 40 it is most
-    // of a full charge, so this is cast at the top of a run and lived with.
+    // of a full charge, so this is run at the top of a run and lived with.
     description: "-25% incoming damage to the whole party until you rest",
     target: WholeParty,
     power_cost: 40.0,

@@ -367,7 +367,7 @@ fn a_passive_never_appears_in_the_special_menu() {
 /// is field-only and *not* passive, so this also shows the two flags are
 /// read independently rather than one standing in for the other.
 #[test]
-fn a_passive_never_appears_in_the_field_cast_list() {
+fn a_passive_never_appears_in_the_field_routine_list() {
     let mut game = Game::new(9007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     set_level(&mut game, player, 40);
@@ -383,7 +383,7 @@ fn a_passive_never_appears_in_the_field_cast_list() {
         .collect();
     assert!(
         !listed.contains(&passive),
-        "{passive} is castable from the map: {listed:?}"
+        "{passive} is runnable from the map: {listed:?}"
     );
 }
 

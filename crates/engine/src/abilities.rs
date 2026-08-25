@@ -74,7 +74,7 @@ pub fn ability_hp_scale(level: u32) -> f32 {
 }
 
 /// A stat-point `power` scaled by `ability_stat_scale(level)` and by the
-/// caster's `affinity` for this effect's category, rounded once. Negative
+/// invoker's `affinity` for this effect's category, rounded once. Negative
 /// powers scale too — a sap is a negative-power buff, and it has to sharpen
 /// with level and with affinity the same way a buff does.
 ///
@@ -90,7 +90,7 @@ pub fn scaled_hp_power(power: i32, level: u32, affinity: f32) -> i32 {
     (power as f32 * ability_hp_scale(level) * affinity).round() as i32
 }
 
-/// An authored damage range scaled for its caster, on the same curve
+/// An authored damage range scaled for its invoker, on the same curve
 /// `scaled_hp_power` puts the centre on.
 ///
 /// **The spread scales proportionally rather than staying put**, or a
@@ -110,7 +110,7 @@ pub fn scaled_range(
     }
 }
 
-/// The cooldown armed on a combatant right after it casts an ability whose
+/// The cooldown armed on a combatant right after it runs an ability whose
 /// authored value is `cooldown`, floored at `floor` rounds. Called from both
 /// `resolve_one_action` (party side, `floor = 0`, so the authored value is
 /// untouched — this is what keeps `decompile` spammable) and `wild_retaliate`
@@ -123,7 +123,7 @@ pub fn scaled_range(
 ///
 /// The `+1` is armed before the effect resolves and read again at the end of
 /// this same round by `tick_ability_cooldowns` — without it, that tick would
-/// eat a round the caster never actually got to wait out.
+/// eat a round the invoker never actually got to wait out.
 pub fn armed_cooldown(cooldown: u32, floor: u32) -> u32 {
     cooldown.max(floor) + 1
 }
@@ -190,7 +190,7 @@ impl AbilityTarget {
 }
 
 /// The category an ability's magnitude belongs to, for affinity purposes —
-/// one per `AbilityEffect` variant that *has* a magnitude. A caster's
+/// one per `AbilityEffect` variant that *has* a magnitude. A invoker's
 /// affinity for a category multiplies every magnitude in it (see
 /// `Game::ability_affinity`).
 /// The serde derives are for `talents::TalentNode::Affinity`, which names a
@@ -274,7 +274,7 @@ pub enum AbilityEffect {
         /// before ranges reached this variant.
         ///
         /// Rolled through `battle::DamageRange` rather than a second formula,
-        /// so the low end is floored at 0 and both ends scale with the caster
+        /// so the low end is floored at 0 and both ends scale with the invoker
         /// through `scaled_range` — a heal band widens with level instead of
         /// collapsing to a point, the same reason damage bands do.
         #[serde(default)]
@@ -317,9 +317,9 @@ pub enum AbilityEffect {
     Decompile,
     /// Arms a `components::ActiveFieldBuff` outside battle rather than
     /// resolving against a recipient in one. This is the field-only marker:
-    /// there is no separate `field_cast: bool` on `AbilityDef`, an ability
+    /// there is no separate `field_routine: bool` on `AbilityDef`, an ability
     /// carrying this effect *is* field-only, and `AbilityDb::load_dir`
-    /// rejects a `target` its `kind`'s `FieldScope` can't reach. What casting
+    /// rejects a `target` its `kind`'s `FieldScope` can't reach. What running
     /// costs lives on `AbilityDef::power_cost` like every other effect's —
     /// this variant carried its own `power_cost` field until the two cost
     /// fields were folded into one. `cooldown` is dead here, since battle
@@ -334,7 +334,7 @@ pub enum AbilityEffect {
         /// `field_buff_duration_mismatch` refuses both mistakes at load, so a
         /// 0 reaching `ActiveFieldBuff::remaining` is always an until-rest
         /// buff whose count nothing reads — never a counted buff that expires
-        /// the turn it was cast.
+        /// the turn it was run.
         #[serde(default)]
         duration: u32,
         /// How many turns pass between firings. `1` — the default, and what
@@ -355,7 +355,7 @@ pub enum AbilityEffect {
     ///
     /// Carries no fields, and specifically no depth: one wall is a rule of
     /// the mechanic rather than an authored magnitude, because a two-deep
-    /// cast from the frame edge cuts a diagonal across the whole maze. A mod
+    /// run from the frame edge cuts a diagonal across the whole maze. A mod
     /// gets the routine, not a tunneller.
     Phase,
     /// Moves the party to any cell of the current frame the player points
@@ -369,7 +369,7 @@ impl AbilityEffect {
     /// original field-only marker and the two Stack movement effects joined
     /// it, which is why this is a predicate rather than a `matches!` at each
     /// of the four sites that need it: `Game::field_routines` (which builds
-    /// the cast list), `Game::battle_special_options` and
+    /// the invocation list), `Game::battle_special_options` and
     /// `Game::wild_routine_ready` (which exclude it from both sides of a
     /// fight), and `use_ability`'s `unreachable!` arm (which is only
     /// unreachable *because* the other three agree with this one).
@@ -421,7 +421,7 @@ pub struct AbilityDef {
     /// which for a battle effect means entirely unthrottled.
     #[serde(default)]
     pub cooldown: u32,
-    /// Power spent running this routine, by *whoever runs it* — the caster
+    /// Power spent running this routine, by *whoever runs it* — the invoker
     /// pays, so a companion's Special draws on the companion's reserve. Read
     /// through `routine_power_cost`, never directly, so the refusal in
     /// `Game::ability_unavailable` and the charge in `Game::spend_power`
@@ -474,7 +474,7 @@ pub struct AbilityDef {
     /// behind `tuning::ENGAGED_GROUPS` can use only its ranged attacks and
     /// idles if it has none. A Special has never been gated on reach and
     /// still is not, so honouring this in `use_ability` would silently stop
-    /// back-row hostiles casting what they cast today.
+    /// back-row hostiles running what they run today.
     ///
     /// `#[serde(default)]` to false, matching `MoveDef::ranged`, so a
     /// converted attack and an authored ability agree on melee-by-default.
@@ -567,14 +567,14 @@ impl PassiveTrigger {
     }
 }
 
-/// What running `def` actually costs its caster: the authored
+/// What running `def` actually costs its invoker: the authored
 /// `power_cost` scaled by `tuning::ROUTINE_POWER_COST_MULTIPLIER`.
 ///
 /// **This must stay the one expression for a routine's price.** Two call
 /// sites reading `def.power_cost * MULTIPLIER` independently is exactly the
 /// drift a shared doc comment cannot prevent — and here the two sites are a
 /// refusal (`Game::ability_unavailable`) and a charge (`Game::spend_power`),
-/// which disagreeing means a routine the picker offers and the cast cannot
+/// which disagreeing means a routine the picker offers and the invocation cannot
 /// pay for, or one charged more than the row quoted.
 pub(crate) fn routine_power_cost(def: &AbilityDef) -> f32 {
     def.power_cost * crate::tuning::ROUTINE_POWER_COST_MULTIPLIER
@@ -665,12 +665,12 @@ impl AbilityDef {
     /// A `FieldBuff` effect paired with a `target` its `kind`'s
     /// `FieldScope` can't reach. A `Run`-scoped kind always lands on the
     /// player (`FieldBuffKind::scope`, `Game::arm_field_buff`), so anything
-    /// but `WholeParty` is a stated target the cast never actually honours.
+    /// but `WholeParty` is a stated target the invocation never actually honours.
     /// A `Creature`-scoped kind may aim at a party member — `OneAlly` or
     /// `WholeParty` — but never an enemy: there is no mechanic to aim a
     /// field buff at a hostile. Caught here for the same reason
     /// `decompile_target_mismatch` is: refused loudly at load rather than
-    /// silently doing nothing (or nothing coherent) at cast time.
+    /// silently doing nothing (or nothing coherent) at invocation time.
     fn field_buff_target_mismatch(&self) -> Option<&'static str> {
         let AbilityEffect::FieldBuff { kind, .. } = &self.effect else {
             return None;
@@ -698,7 +698,7 @@ impl AbilityDef {
     ///   refused here instead, because a dead `cooldown` leaves a routine
     ///   that still works as written and a dead `duration` does not.
     /// - A kind that **counts down** with no `duration` arms at 0 and expires
-    ///   on the tick it was cast. That was silently possible before this
+    ///   on the tick it was run. That was silently possible before this
     ///   field defaulted, and it is a routine that spends Power for nothing.
     fn field_buff_duration_mismatch(&self) -> Option<&'static str> {
         let AbilityEffect::FieldBuff { kind, duration, .. } = &self.effect else {
@@ -718,9 +718,9 @@ impl AbilityDef {
     /// A `Phase` or `Jump` effect paired with a `target` other than
     /// `WholeParty`. Both move the party as a body — there is no mechanic to
     /// phase one companion through a wall and leave the rest behind — so any
-    /// other target is a stated aim the cast never honours. Refused at load
+    /// other target is a stated aim the invocation never honours. Refused at load
     /// for the same reason `field_buff_target_mismatch` refuses its own
-    /// mismatches rather than quietly doing something else at cast time.
+    /// mismatches rather than quietly doing something else at invocation time.
     fn movement_target_mismatch(&self) -> Option<&'static str> {
         if !matches!(self.effect, AbilityEffect::Phase | AbilityEffect::Jump) {
             return None;
@@ -970,7 +970,7 @@ mod tests {
     }
 
     /// The other direction. `duration` defaults to 0 now, and a counting kind
-    /// armed at 0 expires on the tick it was cast — a routine that spends
+    /// armed at 0 expires on the tick it was run — a routine that spends
     /// Power for nothing.
     #[test]
     fn a_counting_field_buff_kind_must_author_a_duration() {
@@ -1038,7 +1038,7 @@ mod tests {
     }
 
     /// `Trickle` is `Run`-scoped (`FieldBuffKind::scope`) — it always lands
-    /// on the player, so authoring `OneAlly` states a target the cast never
+    /// on the player, so authoring `OneAlly` states a target the invocation never
     /// actually reaches.
     #[test]
     fn a_run_scoped_field_buff_targeting_one_ally_is_skipped() {
@@ -1121,7 +1121,7 @@ mod tests {
         assert!(db.get("test_sweep").is_some(), "the valid file still loads");
         assert!(
             db.get("test_bad_power_cost").is_none(),
-            "a NaN power_cost must not reach the cast formula"
+            "a NaN power_cost must not reach the invocation formula"
         );
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("power_cost"), "{}", warnings[0]);

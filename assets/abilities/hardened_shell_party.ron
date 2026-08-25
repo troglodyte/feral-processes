@@ -5,7 +5,7 @@
     // than size — unlike the Mitigation pair, where Long Winter Party is a
     // boss-exclusive prize and raises the magnitude too. The price sits
     // between one Single and covering a full party a Single at a time, which
-    // is what keeps both worth casting; see
+    // is what keeps both worth running; see
     // `the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between`.
     name: "Hardened Shell Party",
     description: "-12% incoming damage to the whole party until you rest",

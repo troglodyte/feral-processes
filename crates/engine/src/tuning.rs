@@ -524,7 +524,7 @@ pub const DEFEND_MITIGATION_BONUS: i32 = 20;
 /// charge move together and cannot disagree. `Phase` and `Jump` are covered
 /// too; one knob, no exemptions.
 ///
-/// **This is the lever for the whole casting curve, and the reason it exists
+/// **This is the lever for the whole routine-cost curve, and the reason it exists
 /// is that the shipped numbers' *scale* is inherited while their *ordering*
 /// is trusted.** The 55 files carrying a cost were priced against a Fatigue
 /// pool that refilled at 0.08 a tick — cheap and renewable. They are now
@@ -1692,7 +1692,7 @@ pub const NEST_CACHE_EQUIPMENT_ROLLS: u32 = 3;
 /// the regen hole in `power_regen_system` closed, it is a fifth of a reserve
 /// with no supply. The costs did not move; the denominator did.
 ///
-/// The one lever over the whole casting curve is
+/// The one lever over the whole routine-cost curve is
 /// `ROUTINE_POWER_COST_MULTIPLIER`. This constant still only paces
 /// starvation.
 pub const HUNGER_DECAY_PER_TICK: f32 = 0.15;
@@ -1753,7 +1753,7 @@ pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 ///
 /// Sized like `MINING_SUCCESS_PER_INT`: enough that swapping the posted
 /// program is visible on one screen, small enough that upgrading the
-/// machine still beats re-casting the roster.
+/// machine still beats re-running the roster.
 pub const WORK_TICKS_PER_SPEED: f64 = 0.05;
 
 /// Extra units a worked node pays per zone below the current one, on top of
@@ -2470,7 +2470,7 @@ pub const ABILITY_HP_SCALE_PER_LEVEL: f32 = 0.80;
 pub const ABILITY_SCALE_LEVEL_CAP: u32 = 20;
 
 /// An ability magnitude's neutral affinity — no bonus, no penalty. The
-/// value every `AffinityKind` defaults to, and what a caster with neither
+/// value every `AffinityKind` defaults to, and what an invoker with neither
 /// a species nor perks resolves to.
 pub const AFFINITY_NEUTRAL: f32 = 1.0;
 

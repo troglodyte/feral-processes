@@ -8,7 +8,7 @@
     //
     // Four rounds, the same floor every other Everyone-scope routine pays
     // (`every_everyone_scope_routine_pays_the_everyone_tier_price`). Being
-    // passive exempts it from that tier's *Power cost*, which is a cast cost
+    // passive exempts it from that tier's *Power cost*, which is an invocation cost
     // and so meaningless here, but not from its cooldown: a party being
     // wiped drops somebody every round, and a cheaper cooldown would let
     // this fire on every one of them.

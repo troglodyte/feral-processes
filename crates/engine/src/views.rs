@@ -161,7 +161,7 @@ pub struct BuybackOption {
 /// **One derivation, for `Game::copy_bonus`'s reason.** Four screens once
 /// rebuilt the scaling chain by hand and all four dropped the affix at
 /// once; this page adds a second axis of the same hazard, since a granted
-/// routine's magnitudes are scaled for their caster and a renderer reading
+/// routine's magnitudes are scaled for their invoker and a renderer reading
 /// `AbilityEffect::Damage`'s authored `power` would quote the level-1
 /// figure forever.
 pub struct GearDetailView {
@@ -254,13 +254,13 @@ pub struct RoutineDetailView {
     pub when: String,
     /// What it lands on, through `AbilityTarget::phrase`.
     pub target: String,
-    /// What it does, with every magnitude scaled for the caster through the
+    /// What it does, with every magnitude scaled for the invoker through the
     /// same `abilities::scaled_range`/`scaled_hp_power`/`scaled_stat_power`
-    /// the cast itself uses.
+    /// the invocation itself uses.
     pub effect: String,
     /// Battle rounds before it can run again. 0 means unthrottled.
     pub cooldown: u32,
-    /// What running it costs its caster, through
+    /// What running it costs its invoker, through
     /// `abilities::routine_power_cost` — so the page, the refusal and the
     /// charge cannot quote three different numbers.
     pub power_cost: f32,
@@ -1388,14 +1388,14 @@ pub struct ExtractableRoutineView {
 /// Which second pick a field routine needs after it has been chosen, or
 /// `None` if there is nothing left to choose.
 ///
-/// The field-cast twin of `battle::SpecialTargeting`, and named the same way
+/// The field-routine twin of `battle::SpecialTargeting`, and named the same way
 /// for the same reason: this says which *picker* opens, while
-/// `FieldCastTarget` carries what came back out of it.
+/// `FieldRoutineTarget` carries what came back out of it.
 ///
 /// Replaced a `needs_ally_target: bool`, which could express two answers and
 /// there are now three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FieldCastPick {
+pub enum FieldRoutinePick {
     /// Commits from the routine list — a `WholeParty` field buff, or either
     /// Stack movement routine, which acts on the party where it stands.
     None,
@@ -1407,10 +1407,10 @@ pub enum FieldCastPick {
 }
 
 /// What the player picked, once they have. The payload-carrying twin of
-/// `FieldCastPick`, exactly as `battle::SpecialTarget` is to
-/// `battle::SpecialTargeting` — `Game::cast_field_routine` takes this.
+/// `FieldRoutinePick`, exactly as `battle::SpecialTarget` is to
+/// `battle::SpecialTargeting` — `Game::run_field_routine` takes this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FieldCastTarget {
+pub enum FieldRoutineTarget {
     None,
     Ally(Entity),
     Cell(i32, i32),
@@ -1439,12 +1439,12 @@ pub struct FieldRoutineView {
     /// the engine that knows *why* is the one that writes the sentence.
     pub unavailable: Option<String>,
     /// Which picker follows this row, if any.
-    pub second_pick: FieldCastPick,
+    pub second_pick: FieldRoutinePick,
 }
 
 /// One row of the ally picker a `OneAlly` field routine opens — you, then
 /// each active `Party` member, priced by the stats the buff is about to
-/// land on. See `Game::field_cast_targets`.
+/// land on. See `Game::field_routine_targets`.
 ///
 /// Its own type rather than more fields on `RoutineHolderView`, which is the
 /// *install* picker's row: that screen decides between free slots and this
@@ -1452,7 +1452,7 @@ pub struct FieldRoutineView {
 /// (routine, target) pair that the shared `Game::routine_holder_view` has no
 /// routine to answer for. The glyph, name and level still come from that one
 /// builder, so the two pickers cannot describe the same holder two ways.
-pub struct FieldCastTargetView {
+pub struct FieldRoutineTargetView {
     pub entity: Entity,
     /// The map glyph and colour, for the reason `RoutineHolderView` carries
     /// them: this list puts the player and their programs side by side.
@@ -1468,12 +1468,12 @@ pub struct FieldCastTargetView {
     pub mitigation: i32,
     /// A rough overall-strength scalar — see `components::Stats::power`.
     pub power: i32,
-    /// The buff this cast would *overwrite*, if any — see
+    /// The buff this invocation would *overwrite*, if any — see
     /// `RunningBuffView`.
     pub running: Option<RunningBuffView>,
 }
 
-/// The routine-armed field buff a pending cast would replace on one target.
+/// The routine-armed field buff a pending run would replace on one target.
 ///
 /// `Game::arm_field_buff` displaces a running `Routine` buff of the same
 /// kind and leaves a `Consumable` one of that kind alone, so this is
@@ -1499,7 +1499,7 @@ pub struct RunningBuffView {
 /// battle, any running `CombatBuff`. See `Game::active_buffs`.
 pub struct ActiveBuffView {
     /// `ActiveFieldBuff::name` (the ability or item that armed it), or the
-    /// stat name for a `CombatBuff` — that component carries no cast-time
+    /// stat name for a `CombatBuff` — that component carries no invocation-time
     /// name of its own, only which stat it moves.
     pub name: String,
     /// `FieldBuffKind::magnitude_label` of the power actually stored, which

@@ -8,8 +8,8 @@
 # `cost` is what the engine actually charges: power_cost for a FieldBuff,
 # fatigue_cost for the two movement routines, and nothing at all for a battle
 # routine, which is priced in its cooldown alone. The two passives
-# (`deadman`, `watchdog`) show a cost of 0 because they are never cast at
-# all -- they fire on a trigger, and Fatigue is a cast cost. Most battle files still
+# (`deadman`, `watchdog`) show a cost of 0 because they are never run at
+# all -- they fire on a trigger, and Fatigue is an invocation cost. Most battle files still
 # carry a fatigue_cost the engine stopped reading on 2026-08-08 -- it is left
 # out of this table deliberately, because transcribing an inert number would
 # put it in front of a reader as though it meant something. `status` is the
@@ -257,7 +257,7 @@ their own two tables further down.
 
 Read this one carefully, because it measures power per round and **not** total
 damage dealt: a routine at the top of the chart that reaches one program is
-worth far less per cast than one halfway down that reaches five. Packet Shred
+worth far less per run than one halfway down that reaches five. Packet Shred
 Everyone leads on both counts at once, which is exactly why it is a boss
 routine and not something a player is ever taught.
 
@@ -267,7 +267,7 @@ tiers, and Fork Bomb drops from 5.00 at Group to 1.60 at Everyone. You buy
 reach with efficiency. Packet Shred is the one family that doesn't pay,
 rising from 3.00 at Group v1.0 to 6.25 at Everyone — better per round as well
 as wider — and the thing holding those tiers back is what it takes to learn
-them rather than what they cost to cast.
+them rather than what they cost to run.
 
 Nothing here is *cheap*, because nothing here is bought. Every one of these
 was priced in the player's Fatigue as well until 2026-08-08, including the
@@ -325,7 +325,7 @@ the table above with a Power cost nothing else comes near.
 menu, and fire on an event instead of a turn — Deadman when one of your own
 goes down, Watchdog the moment a status condition lands on its holder. Their
 cooldowns are their whole price; the Fatigue column reads 0 because a
-passive is never cast.
+passive is never run.
 
 ## Movement routines
 

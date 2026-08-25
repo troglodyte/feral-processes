@@ -697,7 +697,7 @@ fn a_wielded_program_survives_a_save_and_load() {
 ///
 /// This is why the charge lives at the `BattleAction::Special` site rather
 /// than in `use_ability` — that function is also the path the proc and
-/// hostile casts take.
+/// hostile invocations take.
 #[test]
 fn a_proc_charges_neither_the_player_nor_the_program() {
     let game = first_seed_where(

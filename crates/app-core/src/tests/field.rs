@@ -1,25 +1,25 @@
-//! The field-cast flow: `Mode::FieldCast` and `Mode::FieldCastAlly` — see
-//! `Game::field_routines`/`Game::cast_field_routine`.
+//! The field-routine flow: `Mode::FieldRoutine` and `Mode::FieldRoutineAlly` — see
+//! `Game::field_routines`/`Game::run_field_routine`.
 
 use super::support::*;
 use crate::*;
 
 #[test]
-fn a_from_playing_opens_field_cast() {
+fn a_from_playing_opens_field_routine() {
     let mut app = test_app(70);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
 }
 
 #[test]
 fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
     let mut app = app_with_player_routines(71, &["trace_analysis"], 100.0);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.status_line, None,
-        "cast was refused with: {:?}",
+        "invocation was refused with: {:?}",
         app.status_line
     );
     assert_eq!(app.mode, Mode::Playing);
@@ -35,19 +35,19 @@ fn a_whole_party_routine_casts_immediately_and_returns_to_playing() {
 fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
     let mut app = app_with_player_routines(72, &["hardened_shell"], 100.0);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.mode,
-        Mode::FieldCastAlly,
-        "a OneAlly routine needs a target before it can cast"
+        Mode::FieldRoutineAlly,
+        "a OneAlly routine needs a target before it can run"
     );
     assert_eq!(app.pending_field_routine, Some(0));
 
     app.handle_key(GameKey::Char('1')); // "You" — the only holder, and the only ally
     assert_eq!(
         app.status_line, None,
-        "cast was refused with: {:?}",
+        "invocation was refused with: {:?}",
         app.status_line
     );
     assert_eq!(app.mode, Mode::Playing);
@@ -61,34 +61,34 @@ fn a_one_ally_routine_opens_the_ally_picker_then_casts_on_the_pick() {
 }
 
 #[test]
-fn escape_backs_out_of_field_cast_without_casting_anything() {
+fn escape_backs_out_of_field_routine_without_casting_anything() {
     let mut app = app_with_player_routines(73, &["trace_analysis"], 100.0);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
-    assert!(buffs.is_empty(), "escaping must not have cast anything");
+    assert!(buffs.is_empty(), "escaping must not have run anything");
 }
 
 #[test]
-fn escape_backs_out_of_the_ally_picker_to_field_cast_without_casting_anything() {
+fn escape_backs_out_of_the_ally_picker_to_field_routine_without_casting_anything() {
     let mut app = app_with_player_routines(74, &["hardened_shell"], 100.0);
     app.handle_key(GameKey::Char('a'));
     app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.mode, Mode::FieldCastAlly);
+    assert_eq!(app.mode, Mode::FieldRoutineAlly);
 
     app.handle_key(GameKey::Esc);
     assert_eq!(
         app.mode,
-        Mode::FieldCast,
+        Mode::FieldRoutine,
         "backs out one step, same as BattleAlly -> BattleSpecial"
     );
     assert_eq!(app.pending_field_routine, None);
 
     let buffs = app.game.as_mut().unwrap().active_buffs();
-    assert!(buffs.is_empty(), "escaping must not have cast anything");
+    assert!(buffs.is_empty(), "escaping must not have run anything");
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -99,13 +99,13 @@ fn an_unaffordable_routine_is_refused_and_does_not_change_mode() {
     // hardened_shell costs 14.0 Power; 5.0 Hunger can't cover it.
     let mut app = app_with_player_routines(75, &["hardened_shell"], 5.0);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Char('1'));
 
     assert_eq!(
         app.mode,
-        Mode::FieldCast,
-        "a refused cast must not advance to the ally picker or back to Playing"
+        Mode::FieldRoutine,
+        "a refused run must not advance to the ally picker or back to Playing"
     );
     assert!(app.status_line.is_some(), "the refusal should be reported");
 
@@ -118,12 +118,12 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     let mut app = app_with_owned_and_wild_neighbors(76, &["hardened_shell"]);
     app.handle_key(GameKey::Char('a'));
     app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.mode, Mode::FieldCastAlly);
+    assert_eq!(app.mode, Mode::FieldRoutineAlly);
 
     // Just "You": the fixture's owned program is never added to the party
     // (`party_slot: None`), and a `Creature`-scoped buff only ever ticks on
     // the player and the party (`Game::tick_field_buffs`) — offering a
-    // benched program here used to let a cast pay Power for a buff that
+    // benched program here used to let an invocation pay Power for a buff that
     // ticked nowhere, same bug as offering the wild neighbor would be.
     let offered = app.field_ally_options(0);
     assert_eq!(
@@ -161,19 +161,19 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
         .expect("the fixture placed one wild neighbor");
     assert!(
         offered.iter().all(|o| o.entity != wild.entity),
-        "the wild neighbor must never be offered as a cast target"
+        "the wild neighbor must never be offered as an invocation target"
     );
 
     // A key past the end of the (player-only) list does nothing — proof the
     // picker has no second row to select.
     app.handle_key(GameKey::Char('2'));
-    assert_eq!(app.mode, Mode::FieldCastAlly);
+    assert_eq!(app.mode, Mode::FieldRoutineAlly);
 
-    // The one real row, "You", still casts fine.
+    // The one real row, "You", still runs fine.
     app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.status_line, None,
-        "cast was refused with: {:?}",
+        "invocation was refused with: {:?}",
         app.status_line
     );
     assert_eq!(app.mode, Mode::Playing);
@@ -185,15 +185,15 @@ fn the_ally_picker_offers_only_the_player_and_the_active_party() {
     );
 }
 
-/// The cell picker (`Mode::FieldCastCell`) opens only for a routine whose
+/// The cell picker (`Mode::FieldRoutineCell`) opens only for a routine whose
 /// `FieldRoutineView::second_pick` asks for one.
 #[test]
 fn only_a_cell_routine_opens_the_cell_picker() {
     let mut app = app_underground_with_routines(90, &["wild_jump"]);
     app.handle_key(GameKey::Char('a'));
-    assert_eq!(app.mode, Mode::FieldCast);
+    assert_eq!(app.mode, Mode::FieldRoutine);
     app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.mode, Mode::FieldCastCell);
+    assert_eq!(app.mode, Mode::FieldRoutineCell);
     assert_eq!(app.pending_field_routine, Some(0));
     assert_eq!(
         app.field_cursor,
@@ -242,7 +242,7 @@ fn esc_backs_out_of_the_cell_picker_spending_nothing() {
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Esc);
 
-    assert_eq!(app.mode, Mode::FieldCast, "Esc steps back one screen");
+    assert_eq!(app.mode, Mode::FieldRoutine, "Esc steps back one screen");
     assert_eq!(app.pending_field_routine, None);
     assert_eq!(app.field_cursor, None);
     assert_eq!(
@@ -273,7 +273,7 @@ fn enter_commits_the_jump_the_cursor_is_aimed_at() {
 }
 
 /// On open grid both movement routines are greyed with the reason the
-/// engine wrote, and picking one says so rather than casting.
+/// engine wrote, and picking one says so rather than running.
 #[test]
 fn the_movement_routines_are_greyed_on_the_surface() {
     let mut app = app_with_player_routines(95, &["wild_jump"], 100.0);
@@ -281,7 +281,7 @@ fn the_movement_routines_are_greyed_on_the_surface() {
     app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.mode,
-        Mode::FieldCast,
+        Mode::FieldRoutine,
         "it must not open the cell picker"
     );
     assert_eq!(

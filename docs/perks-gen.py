@@ -18,11 +18,11 @@ P = [
  ("Attacker",       "Attacker",          2, "+2 ATK, permanent",                     "ATTACKER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
  ("Defender",       "Defender",          2, "+2 DEF, permanent",                     "DEFENDER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
  ("Buffer",         "Buffer",            3, "+1% max Integrity, at least +10",       "BUFFER_BONUS_PERCENT_PER_LEVEL = 0.01",     "a direct Stats write, plus a full heal"),
- ("DamageAffinity", "Payload Tuning",    2, "+15% Damage magnitude",                 "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own casts only"),
- ("HealAffinity",   "Field Medic",       2, "+5% Heal magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
- ("BuffAffinity",   "Overclocker",       2, "+5% Buff magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
- ("DebuffAffinity", "Corruption Vector", 2, "+5% Debuff magnitude",                  "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own casts only"),
- ("DrainAffinity",  "Siphon Protocol",   2, "+15% Drain damage",                     "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own casts only"),
+ ("DamageAffinity", "Payload Tuning",    2, "+15% Damage magnitude",                 "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own invocations only"),
+ ("HealAffinity",   "Field Medic",       2, "+5% Heal magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own invocations only"),
+ ("BuffAffinity",   "Overclocker",       2, "+5% Buff magnitude",                    "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own invocations only"),
+ ("DebuffAffinity", "Corruption Vector", 2, "+5% Debuff magnitude",                  "AFFINITY_PERK_BONUS_PER_LEVEL",             "the player's own invocations only"),
+ ("DrainAffinity",  "Siphon Protocol",   2, "+15% Drain damage",                     "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own invocations only"),
  ("Obfuscation",    "Obfuscation",       3, "-10% to every Trace rise, floor 1",     "OBFUSCATION_REDUCTION_PER_LEVEL = 0.10",    "Game::raise_trace"),
  ("ProcessPool",    "Process Pool",      3, "+1 tamed program you may own",          "PROCESS_POOL_SLOTS_PER_LEVEL = 1",          "Game::pet_capacity"),
  ("Teardown",       "Teardown",          4, "+1 work resource per kill",             "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::award_loot"),
@@ -148,7 +148,7 @@ a hook wherever its effect belongs, rather than a new file.
 
 These are the one place the {len(R)} *do* share a shape: each multiplies one
 `AffinityKind` category — Damage, Heal, Buff, Debuff, Drain — for the player's
-own ability casts. Never a companion's: a companion's affinity is its species'
+own ability invocations. Never a companion's: a companion's affinity is its species'
 business, and a party-wide perk would multiply against it.
 
 They cost the same and they do not pay the same.
@@ -171,7 +171,7 @@ and then hits a ceiling.
 
 The clamp is `AFFINITY_MAX`, the same ceiling a species file is held to at
 load. Perk *levels* are uncapped, so without it a long enough run would let
-the player's own casts exceed the bound every affinity in the game is bound
+the player's own invocations exceed the bound every affinity in the game is bound
 by. `AffinityKind::perk_bonus_per_level` is what picks the right rate, so a
 perk's category decides it rather than a match repeated at five call sites.
 

@@ -1,4 +1,4 @@
-//! Casting a field routine: the abilities that run outside battle rather
+//! Running a field routine: the abilities that run outside battle rather
 //! than being spent as a Special.
 //!
 //! Three effects reach this path — `AbilityEffect::FieldBuff`, which arms a
@@ -20,16 +20,16 @@ impl Game {
     /// Every **field-only** ability installed on you or a program you own,
     /// flat across holders. `Game::routine_holders` is the walk over "you,
     /// then every program you own"; this narrows each holder's installed
-    /// slots down to the field-castable ones and reshapes them for the
+    /// slots down to the field-runnable ones and reshapes them for the
     /// picker.
     ///
-    /// `index` into the returned `Vec` is exactly what `cast_field_routine`
+    /// `index` into the returned `Vec` is exactly what `run_field_routine`
     /// takes, and this is the *only* place that list is built — a filtered
-    /// view and a cast-time index can never disagree about what a position
+    /// view and an invocation-time index can never disagree about what a position
     /// means, which is the trap `battle_special_options` fell into before it
     /// started resolving by stable index instead of filtered position. It is
     /// also the only place a row's cost is decided, which is what stops the
-    /// list quoting one price and the cast charging another — and, since
+    /// list quoting one price and the invocation charging another — and, since
     /// each row is gated against **its own holder's** reserve, the only
     /// place that can stop it quoting one bar and charging another.
     pub fn field_routines(&mut self) -> Vec<FieldRoutineView> {
@@ -81,10 +81,10 @@ impl Game {
                         // target but WholeParty, so OneAlly can only appear
                         // here on a Creature-scoped one.
                         AbilityEffect::FieldBuff { .. } if def.target == AbilityTarget::OneAlly => {
-                            FieldCastPick::Ally
+                            FieldRoutinePick::Ally
                         }
-                        AbilityEffect::Jump => FieldCastPick::Cell,
-                        _ => FieldCastPick::None,
+                        AbilityEffect::Jump => FieldRoutinePick::Cell,
+                        _ => FieldRoutinePick::None,
                     },
                 });
             }
@@ -96,26 +96,26 @@ impl Game {
     /// each current `Party` member — exactly the walk `tick_field_buffs` and
     /// `active_buffs` make. `field_routines` above deliberately widens to
     /// "every program you own" because installing/uninstalling a routine on
-    /// a benched program is legitimate; casting one is not, since nothing
+    /// a benched program is legitimate; running one is not, since nothing
     /// ticks a buff on an entity that isn't in this narrower set. The ally
-    /// picker (`App::field_ally_options`) and its gui row (`draw_field_cast_ally`)
-    /// both call this rather than `routine_holders`, and `cast_field_routine`
+    /// picker (`App::field_ally_options`) and its gui row (`draw_field_routine_ally`)
+    /// both call this rather than `routine_holders`, and `run_field_routine`
     /// checks the same set again below so a picker bug can't hand the
     /// engine a target nothing will ever tick.
     ///
-    /// `routine_index` is the same index space `cast_field_routine` takes —
-    /// the routine about to be cast, which is what decides each row's
+    /// `routine_index` is the same index space `run_field_routine` takes —
+    /// the routine about to be run, which is what decides each row's
     /// `running` tag. An index naming no `FieldBuff` (either Stack movement
     /// routine, or nothing at all) still lists the full roster, untagged:
     /// the roster is a fact about the party and only the tag is a fact about
     /// the pair.
-    pub fn field_cast_targets(&mut self, routine_index: usize) -> Vec<FieldCastTargetView> {
+    pub fn field_routine_targets(&mut self, routine_index: usize) -> Vec<FieldRoutineTargetView> {
         let kind = self.field_routine_buff_kind(routine_index);
         let player = self.player_entity();
-        let mut targets = vec![self.field_cast_target_view(player, "You".to_string(), kind)];
+        let mut targets = vec![self.field_routine_target_view(player, "You".to_string(), kind)];
         for member in self.world.resource::<Party>().0.clone() {
             let name = self.creature_label(member);
-            targets.push(self.field_cast_target_view(member, name, kind));
+            targets.push(self.field_routine_target_view(member, name, kind));
         }
         targets
     }
@@ -132,19 +132,19 @@ impl Game {
 
     /// One ally-picker row: the shared holder derivation, plus the stats the
     /// buff is about to land on and the buff it would displace.
-    fn field_cast_target_view(
+    fn field_routine_target_view(
         &mut self,
         entity: Entity,
         name: String,
         kind: Option<FieldBuffKind>,
-    ) -> FieldCastTargetView {
+    ) -> FieldRoutineTargetView {
         let holder = self.routine_holder_view(entity, name);
         let (hp, max_hp, atk, mitigation, power) = self
             .world
             .get::<Stats>(entity)
             .map(|s| (s.hp, s.max_hp, s.atk, s.mitigation, s.power()))
             .unwrap_or_default();
-        FieldCastTargetView {
+        FieldRoutineTargetView {
             entity: holder.entity,
             glyph: holder.glyph,
             color: holder.color,
@@ -177,10 +177,10 @@ impl Game {
 
     /// Whether `entity` is someone a `Creature`-scoped field buff can land
     /// on: the player, or a current `Party` member. The same set
-    /// `field_cast_targets` offers and `tick_field_buffs`/`active_buffs`
+    /// `field_routine_targets` offers and `tick_field_buffs`/`active_buffs`
     /// walk — checked again here because the picker being correct is not a
     /// substitute for the engine enforcing it.
-    fn is_field_cast_target(&self, entity: Entity) -> bool {
+    fn is_field_routine_target(&self, entity: Entity) -> bool {
         entity == self.player_entity() || self.world.resource::<Party>().0.contains(&entity)
     }
 
@@ -199,26 +199,26 @@ impl Game {
     /// The holder pays. Every row was gated against that holder's reserve in
     /// `field_routines` above, so the charge and the refusal read the same
     /// bar — a companion running a party-wide buff spends its own Power even
-    /// though a `Run`-scoped kind lands on the player regardless of who cast
+    /// though a `Run`-scoped kind lands on the player regardless of who run
     /// it. Rest is what refills a companion's reserve, so the party's field
     /// budget is base-bound exactly as its battle Specials are.
     ///
     /// Every check runs before the first write (the need deduction), so a
-    /// refused cast spends nothing and arms nothing: no buff with the cost
+    /// refused run spends nothing and arms nothing: no buff with the cost
     /// unpaid, no cost paid with nothing to show for it, no party moved
     /// through a wall for free.
     ///
-    /// A successful cast ticks the clock, the same as `use_item` spending a
+    /// A successful run ticks the clock, the same as `use_item` spending a
     /// turn on a consumable that arms the identical `ActiveFieldBuff`
     /// through the same `arm_field_buff`. Power is renewable and an item is
     /// one-shot, so the item path is already the costlier of the two; not
     /// ticking here would leave a strictly better option on the table for
-    /// no reason anyone chose. A refused cast spends nothing and so costs
+    /// no reason anyone chose. A refused run spends nothing and so costs
     /// no time — the tick sits only on the success path.
-    pub fn cast_field_routine(
+    pub fn run_field_routine(
         &mut self,
         index: usize,
-        pick: FieldCastTarget,
+        pick: FieldRoutineTarget,
     ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -242,8 +242,8 @@ impl Game {
             .expect("field_routines only lists abilities AbilityDb actually holds");
 
         match def.effect {
-            AbilityEffect::Phase => return self.cast_phase(holder, &def, pick),
-            AbilityEffect::Jump => return self.cast_jump(holder, &def, pick),
+            AbilityEffect::Phase => return self.run_phase(holder, &def, pick),
+            AbilityEffect::Jump => return self.run_jump(holder, &def, pick),
             _ => {}
         }
 
@@ -269,10 +269,10 @@ impl Game {
             FieldScope::Run => vec![player],
             FieldScope::Creature => match def.target {
                 AbilityTarget::OneAlly => {
-                    let FieldCastTarget::Ally(target) = pick else {
+                    let FieldRoutineTarget::Ally(target) = pick else {
                         return Err(format!("Choose who to run {} on.", def.name));
                     };
-                    if !self.is_field_cast_target(target) {
+                    if !self.is_field_routine_target(target) {
                         return Err(
                             "That program isn't in your active party — bring it along first."
                                 .into(),
@@ -294,18 +294,18 @@ impl Game {
             },
         };
 
-        // The holder is the caster: level and affinity are read off whoever
+        // The holder is the invoker: level and affinity are read off whoever
         // runs the routine, not the player, so the same routine lands
         // stronger off a levelled companion than fresh off capture. The
         // scaled value is what's stored on the buff (not the authored one),
         // so a later level-up doesn't retroactively change it.
         //
-        // `kind.scales_with_caster()` gates this: a percentage-point kind
+        // `kind.scales_with_invoker()` gates this: a percentage-point kind
         // (`Mitigation`, `CaptureBoost`, `XpBoost`, `EncounterDamp`,
         // `DropBoost`) is delivered exactly as authored regardless of who
-        // casts it — see that method's doc for why a rate doesn't scale the
+        // runs it — see that method's doc for why a rate doesn't scale the
         // way a point amount does.
-        let magnitude = if kind.scales_with_caster() {
+        let magnitude = if kind.scales_with_invoker() {
             let level = self.ability_user_level(holder);
             let affinity = self.ability_affinity(holder, &def.effect);
             abilities::scaled_stat_power(power, level, affinity)
@@ -338,32 +338,32 @@ impl Game {
     /// `field_routines` already greys those rows on the surface, so a player
     /// working the menu never reaches this — it is here because the picker
     /// being correct is not a substitute for the engine enforcing it, the
-    /// same call `is_field_cast_target` makes about the ally list.
-    fn movement_cast_pos(&self, name: &str) -> Result<StackPos, String> {
+    /// same call `is_field_routine_target` makes about the ally list.
+    fn movement_routine_pos(&self, name: &str) -> Result<StackPos, String> {
         self.stack_pos()
             .ok_or_else(|| format!("{name} only runs inside the Stack."))
     }
 
-    /// Spends `def`'s Power off `caster` and steps the party through one wall.
+    /// Spends `def`'s Power off `invoker` and steps the party through one wall.
     ///
     /// `phase_landing` has already applied every refusal by the time
     /// anything below runs, so the Power is spent on a move that is
     /// certain to happen. Trace is raised for the phase itself *before*
     /// `arrive`, so the crossing reads as the consequence of the routine
     /// rather than of whatever the party landed on top of.
-    fn cast_phase(
+    fn run_phase(
         &mut self,
-        caster: Entity,
+        invoker: Entity,
         def: &AbilityDef,
-        pick: FieldCastTarget,
+        pick: FieldRoutineTarget,
     ) -> Result<(), String> {
-        if pick != FieldCastTarget::None {
+        if pick != FieldRoutineTarget::None {
             return Err(format!("{} takes no target.", def.name));
         }
-        let pos = self.movement_cast_pos(&def.name)?;
+        let pos = self.movement_routine_pos(&def.name)?;
         let landing = self.phase_landing(pos)?;
 
-        self.spend_power(caster, routine_power_cost(def));
+        self.spend_power(invoker, routine_power_cost(def));
         self.log_kind(
             MessageKind::Outcome,
             "The wall goes soft for exactly as long as it takes to cross it.",
@@ -375,7 +375,7 @@ impl Game {
         Ok(())
     }
 
-    /// Spends `def`'s Power off `caster` and moves the party to the cell they pointed
+    /// Spends `def`'s Power off `invoker` and moves the party to the cell they pointed
     /// at — or kills them, if that cell turns out to be solid.
     ///
     /// The Power comes off either way: the routine ran, and what it found
@@ -384,19 +384,19 @@ impl Game {
     /// inside rock has arrived nowhere, and `die_in_the_rock` deliberately
     /// never writes `Locale`, so there is no cell for the arrival tail to
     /// act on.
-    fn cast_jump(
+    fn run_jump(
         &mut self,
-        caster: Entity,
+        invoker: Entity,
         def: &AbilityDef,
-        pick: FieldCastTarget,
+        pick: FieldRoutineTarget,
     ) -> Result<(), String> {
-        let FieldCastTarget::Cell(x, y) = pick else {
+        let FieldRoutineTarget::Cell(x, y) = pick else {
             return Err(format!("Choose where to run {} to.", def.name));
         };
-        let pos = self.movement_cast_pos(&def.name)?;
+        let pos = self.movement_routine_pos(&def.name)?;
         self.jump_refusal(pos, (x, y))?;
 
-        self.spend_power(caster, routine_power_cost(def));
+        self.spend_power(invoker, routine_power_cost(def));
         if self.jump_is_lethal((x, y)) {
             self.die_in_the_rock();
         } else {
@@ -415,7 +415,7 @@ impl Game {
     /// Takes `cost` off `entity`'s reserve — **the one write path**, and the
     /// only place a routine's price is charged.
     ///
-    /// `entity` rather than the player, because the caster pays: a
+    /// `entity` rather than the player, because the invoker pays: a
     /// companion's Special draws on the companion's own reserve. That single
     /// parameter is the whole of "every companion tracks their power level"
     /// on the spending side.
@@ -469,7 +469,7 @@ impl Game {
             }
 
             if let Some(active) = self.world.get::<CombatBuff>(holder).and_then(|b| b.active) {
-                // `CombatBuff` carries no cast-time name like `FieldBuff`
+                // `CombatBuff` carries no invocation-time name like `FieldBuff`
                 // does, only which stat it moves — `Def`/`Atk` share the
                 // same two `FieldBuffKind` variants, so the tag is built by
                 // the one function that already owns that format rather

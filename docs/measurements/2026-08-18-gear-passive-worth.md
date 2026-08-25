@@ -240,7 +240,7 @@ So the relay is not *strictly better* than the disk by anything measurable;
 it is the same effect through a different slot. Whether that makes the disk
 dead content is a question about which slot a level-36 player would rather
 spend, and the arena cannot answer it — the player plays All-Attack there, so
-the routine the disk displaces would never have been cast.
+the routine the disk displaces would never have been run.
 
 What the table does say is that `deadman` itself is a fight-ender at level
 36: a 33-round fight becomes a 6.5-round one and a 74% band becomes 100%.

@@ -888,12 +888,12 @@ pub enum FieldScope {
     /// Lands on whatever `AbilityTarget` names, and travels with that
     /// creature into whatever battle it's in.
     Creature,
-    /// Always lands on the player, regardless of who cast it.
+    /// Always lands on the player, regardless of who ran it.
     Run,
 }
 
 /// A buff a field routine or consumable can arm outside combat that keeps
-/// running after the map turn it was cast on — through any battle that
+/// running after the map turn it was run on — through any battle that
 /// follows, unlike `CombatBuff` — and through a save.
 ///
 /// A variant *name* is the save format; the order is not. That is the RON
@@ -947,15 +947,15 @@ impl FieldBuffKind {
         }
     }
 
-    /// Whether `Game::cast_field_routine` should run this kind's authored
+    /// Whether `Game::run_field_routine` should run this kind's authored
     /// `power` through `abilities::scaled_stat_power` (level and affinity) or
     /// deliver it unchanged. The two point-amount kinds scale; the rest do
     /// not, for the reason `AbilityEffect::Drain`'s `heal_fraction` is
     /// excluded from `scaled_hp_power` too: a value that already carries its
     /// own ceiling doesn't need a second one stacked on top. A percentage is
-    /// a property of the routine, not of how strong the caster is — scaling
+    /// a property of the routine, not of how strong the invoker is — scaling
     /// one the way a flat point value scales would let an authored 10% cut
-    /// land anywhere up to 140% off a high-level, high-affinity caster, the
+    /// land anywhere up to 140% off a high-level, high-affinity invoker, the
     /// exact ceiling-defeating outcome the cap on `Mitigation` exists to
     /// prevent.
     ///
@@ -968,7 +968,7 @@ impl FieldBuffKind {
     /// duration and makes the authored number untunable: the level term
     /// swamps whatever the file says. Unscaled, `power` means what it says
     /// at every level.
-    pub fn scales_with_caster(self) -> bool {
+    pub fn scales_with_invoker(self) -> bool {
         use FieldBuffKind::*;
         match self {
             Regen | Atk => true,
@@ -978,7 +978,7 @@ impl FieldBuffKind {
 
     /// Whether a **routine**-armed buff of this kind runs until the party
     /// rests instead of counting turns down. The fourth per-kind rule on
-    /// this enum, beside `scope`, `affinity_kind` and `scales_with_caster`,
+    /// this enum, beside `scope`, `affinity_kind` and `scales_with_invoker`,
     /// and read only through `ActiveFieldBuff::runs_until_rest` — which is
     /// where the `BuffSource::Routine` half of the predicate lives, and why
     /// this one is not called anywhere directly except there and the load
@@ -1038,7 +1038,7 @@ impl FieldBuffKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveFieldBuff {
     pub kind: FieldBuffKind,
-    /// Display name of the ability or item that armed it, captured at cast.
+    /// Display name of the ability or item that armed it, captured at invocation.
     /// Stored rather than derived from `kind`: two different routines can
     /// arm the same kind, and the buff list has to tell them apart.
     pub name: String,

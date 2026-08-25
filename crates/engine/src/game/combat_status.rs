@@ -248,7 +248,7 @@ impl Game {
     /// one ending because its clock ran out.
     ///
     /// Walks the same player-plus-`Party` set `tick_field_buffs` does, and
-    /// for the same reason: it is the only set a cast will ever arm one on.
+    /// for the same reason: it is the only set an invocation will ever arm one on.
     /// `Game::rest` is one of the two callers; the other is
     /// `difficulty::death_handling_system`, which is a bevy system and so
     /// reaches `drop_until_rest_buffs` directly instead of coming through
@@ -284,8 +284,8 @@ impl Game {
     /// Scoped to the player and party, unlike `age_temporary_structures`
     /// (`game/turn.rs`), which walks every `Temporary` entity that exists.
     /// This is not just where a field buff happens to end up — it is the
-    /// only set `Game::cast_field_routine` will ever arm one on: a
-    /// `Creature`-scoped `OneAlly` cast is checked against this same
+    /// only set `Game::run_field_routine` will ever arm one on: a
+    /// `Creature`-scoped `OneAlly` run is checked against this same
     /// player-plus-`Party` roster before anything is armed, so nothing this
     /// loop skips is a buff that's actually running anywhere.
     pub(crate) fn tick_field_buffs(&mut self) {

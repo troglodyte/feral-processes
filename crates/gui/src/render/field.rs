@@ -1,11 +1,11 @@
-//! Casting a field routine outside battle, and the always-visible list of
+//! Running a field routine outside battle, and the always-visible list of
 //! whatever is currently running — see `Game::field_routines` and
 //! `Game::active_buffs`.
 
 use super::battle::cell;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::{ActiveBuffView, FieldCastTargetView};
+use feral_processes_engine::{ActiveBuffView, FieldRoutineTargetView};
 
 /// Width of the buff name column, in monospace cells. Long enough for every
 /// shipped routine's name with room to spare; a name that overruns clips
@@ -238,10 +238,10 @@ pub(super) fn draw_battle_buffs(
 }
 
 /// Which installed field routine to run — a `FieldBuff` ability on you or a
-/// program you own, cast outside battle. Reached with `a` from
+/// program you own, run outside battle. Reached with `a` from
 /// `Mode::Playing`; rows come straight from `Game::field_routines`, same
 /// contract the battle action bar holds to.
-pub(super) fn draw_field_cast(
+pub(super) fn draw_field_routine(
     game: &mut Game,
     selected: usize,
     refusal: Option<&str>,
@@ -286,14 +286,14 @@ pub(super) fn draw_field_cast(
     );
 }
 
-/// Who a `OneAlly` field routine picked in `Mode::FieldCast` lands on: you,
-/// then your active `Party`, via `Game::field_cast_targets` — narrower than
+/// Who a `OneAlly` field routine picked in `Mode::FieldRoutine` lands on: you,
+/// then your active `Party`, via `Game::field_routine_targets` — narrower than
 /// `draw_routine_target`'s "you, then every program you own"
 /// (`Game::routine_holders`), since only the player and the party are ever
-/// ticked. `App::field_ally_options` calls the same `Game::field_cast_targets`
+/// ticked. `App::field_ally_options` calls the same `Game::field_routine_targets`
 /// to resolve what row was picked, so this list and the target the engine
-/// actually casts on can't disagree.
-pub(super) fn draw_field_cast_ally(
+/// actually runs on can't disagree.
+pub(super) fn draw_field_routine_ally(
     game: &mut Game,
     pending: Option<usize>,
     selected: usize,
@@ -307,11 +307,11 @@ pub(super) fn draw_field_cast_ally(
         return;
     };
     let mut rows = vec![text_row(format!("Run {} on whom?", routine.name))];
-    for (i, t) in game.field_cast_targets(pending).into_iter().enumerate() {
-        let mut lines = field_cast_target_rows(menu_shortcut(i), &t).into_iter();
+    for (i, t) in game.field_routine_targets(pending).into_iter().enumerate() {
+        let mut lines = field_routine_target_rows(menu_shortcut(i), &t).into_iter();
         let head = lines
             .next()
-            .expect("field_cast_target_rows always emits the target's row");
+            .expect("field_routine_target_rows always emits the target's row");
         rows.push(with_icon(
             item_row(head, i == selected),
             t.glyph,
@@ -332,7 +332,7 @@ pub(super) fn draw_field_cast_ally(
 }
 
 /// One ally-picker target's lines: the row its shortcut selects, priced with
-/// the stats the buff is about to land on, then the buff this cast would
+/// the stats the buff is about to land on, then the buff this invocation would
 /// displace underneath.
 ///
 /// The stats sit on the row itself in the format `fuse_candidate_label`
@@ -340,7 +340,7 @@ pub(super) fn draw_field_cast_ally(
 /// `OneAlly` routine the game ships is about a stat, and the picker's job is
 /// choosing whose. The displaced buff goes to a continuation line instead:
 /// `arm_field_buff` drops a running `Routine` buff of the same kind, so the
-/// tag is the one thing on this screen saying the cast is a replacement
+/// tag is the one thing on this screen saying the invocation is a replacement
 /// rather than an addition — but it is also 30-odd cells of routine name and
 /// magnitude on a row already carrying five numbers, and `draw_row` clamps a
 /// row vertically and nothing clamps it horizontally. A target carrying
@@ -348,7 +348,7 @@ pub(super) fn draw_field_cast_ally(
 ///
 /// Returns the lines rather than drawing them so their width is measurable
 /// without a window — see `the_widest_ally_picker_row_fits_its_popup`.
-fn field_cast_target_rows(num: char, t: &FieldCastTargetView) -> Vec<String> {
+fn field_routine_target_rows(num: char, t: &FieldRoutineTargetView) -> Vec<String> {
     let displaced = t.running.as_ref().map(|b| {
         format!(
             "replaces {} {} — {}t left",
@@ -827,8 +827,8 @@ mod tests {
         assert!(rows.iter().all(|r| indicator_of(r).is_none()));
     }
 
-    fn target(name: &str, running: Option<RunningBuffView>) -> FieldCastTargetView {
-        FieldCastTargetView {
+    fn target(name: &str, running: Option<RunningBuffView>) -> FieldRoutineTargetView {
+        FieldRoutineTargetView {
             entity: Entity::PLACEHOLDER,
             glyph: 'p',
             color: GlyphColor::White,
@@ -849,7 +849,7 @@ mod tests {
     /// choose is to remember them.
     #[test]
     fn an_ally_picker_row_prices_the_target_by_its_stats() {
-        let lines = field_cast_target_rows('a', &target("Kestrel", None));
+        let lines = field_routine_target_rows('a', &target("Kestrel", None));
 
         assert_eq!(lines.len(), 1, "nothing running means no second line");
         assert!(lines[0].contains("[a] Kestrel Lv6"), "{lines:?}");
@@ -859,13 +859,13 @@ mod tests {
         assert!(lines[0].contains("PWR 19"), "{lines:?}");
     }
 
-    /// The tag names the routine and how long it has left, because the cast
+    /// The tag names the routine and how long it has left, because the invocation
     /// *replaces* it rather than stacking with it (`Game::arm_field_buff`)
     /// — and two different routines can arm one kind, so "already running"
     /// alone would not say which is about to go.
     #[test]
     fn an_ally_picker_row_says_what_the_cast_would_replace() {
-        let lines = field_cast_target_rows(
+        let lines = field_routine_target_rows(
             'b',
             &target(
                 "Kestrel",
@@ -914,9 +914,9 @@ mod tests {
             .name
             .clone();
 
-        let lines = field_cast_target_rows(
+        let lines = field_routine_target_rows(
             'a',
-            &FieldCastTargetView {
+            &FieldRoutineTargetView {
                 // Four digits apiece: past anything reachable, so the census
                 // is not one level-up away from being wrong.
                 hp: 9999,

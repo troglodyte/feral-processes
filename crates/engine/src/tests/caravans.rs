@@ -474,6 +474,38 @@ fn a_shelf_holds_the_visiting_defs_row_count() {
     }
 }
 
+/// Dedupe is per kind, and each key is what the player can tell apart: a
+/// routine is its ability, a program its species, a stack of cargo its item.
+/// Two material rows differing only in stack size are the same row twice.
+/// Gear alone keys on the whole `GearCopy`, because rarity, affix and
+/// quality are what make two copies of one item different things to buy.
+///
+/// Swept **within** each shelf and never across the run: a wagon may stock
+/// what the last one did, and should — the pools are redrawn per visit.
+#[test]
+fn a_shelf_never_lists_the_same_thing_twice() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+
+    for visit in 0..30 {
+        let mut seen: Vec<String> = Vec::new();
+        for offer in shelf(&mut game, visit) {
+            let key = match &offer.kind {
+                CaravanOfferKind::Gear(copy) => format!("gear {copy:?}"),
+                CaravanOfferKind::Routine(ability) => format!("routine {ability}"),
+                CaravanOfferKind::Program(species) => format!("program {species}"),
+                CaravanOfferKind::Material(item) => format!("material {item:?}"),
+            };
+            assert!(
+                !seen.contains(&key),
+                "visit {visit} stocked {key} twice on one shelf"
+            );
+            seen.push(key);
+        }
+    }
+}
+
 /// The bias, not an exact composition — pinning the latter would pin the RNG
 /// stream rather than the feature.
 #[test]

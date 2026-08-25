@@ -179,6 +179,24 @@ impl Game {
 /// `FrameSpec::salted`'s doc — not a second seed source.
 const SHELF_SALT: u64 = 0x5_4E1F;
 
+/// One shelf row's identity, drawn but not yet rolled.
+///
+/// **Not a second `views::CaravanOfferKind`**: that names a finished, priced
+/// row, and this names what a row *is* before its copy exists. Gear is the
+/// difference and the whole reason the type is here — the other three kinds
+/// are settled the moment they are drawn, while a gear row cannot be rolled
+/// until the shelf knows how many gear rows there are, because
+/// `bonus_share`'s standout ordinals are chosen over that count and `bonus`
+/// moves three separate draws inside `roll_shelf_copy`. A copy cannot be
+/// rolled plain and upgraded afterwards without drawing twice and shifting
+/// the stream.
+enum Drawn {
+    Gear(ItemId),
+    Routine(String),
+    Program(String),
+    Material(ItemId),
+}
+
 /// How many of a trader's `gear_rows` are standout stock at `share` percent.
 ///
 /// **Rounded up**, so a non-zero share always puts at least one standout row
@@ -215,25 +233,32 @@ impl Game {
             return Vec::new();
         };
         let mut rng = StdRng::seed_from_u64(self.visit_seed(visit.visit) ^ SHELF_SALT);
+        // **Every pool is drawn from without replacement**, by `swap_remove`
+        // off a seeded index: a row names something no other row on this
+        // shelf names. Drained rather than shuffled once, because draining is
+        // what the fallback below reads — a pool that has run out stops being
+        // offered as a bucket, which is the same clause that already skips a
+        // pool that was empty to begin with. The pools are rebuilt per visit,
+        // so a wagon may stock what the last one did.
+        //
         // Gear is pooled **per slot** rather than as one list, because the
         // rows are dealt round-robin across `EquipmentSlot::ALL` below. Drawn
         // from one pool the split followed the *file count* — 13 weapons, 12
         // armour, 14 modules — so a wagon could stand there with six weapons
         // and no armour at all, which reads as a shop that stocks one thing.
-        let gear_by_slot: Vec<Vec<ItemId>> = EquipmentSlot::ALL
+        let mut gear_by_slot: Vec<Vec<ItemId>> = EquipmentSlot::ALL
             .iter()
             .map(|slot| self.stock_pool(|d| d.equipment.is_some_and(|(s, _)| s == *slot)))
             .collect();
-        let has_gear = gear_by_slot.iter().any(|pool| !pool.is_empty());
-        let routines = self.routine_disk_pool();
+        let mut routines = self.routine_disk_pool();
         // Every other piece of cargo, craftable or not — a caravan pulls up
         // beside a base and the base wants feedstock, so salvage it would
         // otherwise have to go and mine belongs here. That width is what
         // makes `stock_pool`'s currency exclusion the only thing standing
         // between a shelf and a Portal Fragment.
-        let materials =
+        let mut materials =
             self.stock_pool(|d| d.equipment.is_none() && d.id.etched_ability().is_none());
-        let programs: Vec<String> = self
+        let mut programs: Vec<String> = self
             .world
             .resource::<SpeciesDb>()
             .all()
@@ -247,17 +272,21 @@ impl Game {
         // guarantee rather than an average.
         let first_slot = rng.random_range(0..EquipmentSlot::ALL.len());
 
-        // Pass one decides only *which kind* each row is. The grade of a gear
-        // row cannot be settled here because it depends on how many gear rows
-        // there turn out to be, and that is not known until the last row is
-        // drawn — so the bucket ids are kept and materialised below.
-        let mut buckets_drawn: Vec<u8> = Vec::new();
+        // One pass, drawing each row's identity. A gear row keeps only its
+        // item: its grade cannot be settled here because it depends on how
+        // many gear rows there turn out to be, and that is not known until
+        // the last row is drawn. See `Drawn`.
+        let mut gear_ordinal = 0usize;
+        let mut drawn: Vec<Drawn> = Vec::new();
         for _ in 0..def.rows {
             // The weights are re-read every row rather than a pool being
-            // shuffled once, so a trader with nothing in one category still
-            // fills its shelf out of the others instead of coming up short.
+            // shuffled once, so a trader whose best-weighted category has
+            // run dry fills the rest of its shelf out of the others instead
+            // of coming up short. That is also why `rows` is a ceiling: a
+            // shelf deeper than everything installed put together stops when
+            // the last pool empties.
             let mut buckets: Vec<(u32, u8)> = Vec::new();
-            if has_gear {
+            if gear_by_slot.iter().any(|pool| !pool.is_empty()) {
                 buckets.push((def.weights.gear, 0));
             }
             if !routines.is_empty() {
@@ -285,7 +314,34 @@ impl Game {
                 })
                 .map(|(_, b)| *b)
                 .unwrap_or(3);
-            buckets_drawn.push(bucket);
+            drawn.push(match bucket {
+                0 => {
+                    // Positional round-robin, skipping a slot that is empty
+                    // or has been bought out of this shelf — so an install
+                    // with no armour files, and a wagon that has already
+                    // taken every module, both fill out of the other slots.
+                    let mut slot = (first_slot + gear_ordinal) % EquipmentSlot::ALL.len();
+                    while gear_by_slot[slot].is_empty() {
+                        slot = (slot + 1) % EquipmentSlot::ALL.len();
+                    }
+                    gear_ordinal += 1;
+                    let pool = &mut gear_by_slot[slot];
+                    let pick = rng.random_range(0..pool.len());
+                    Drawn::Gear(pool.swap_remove(pick))
+                }
+                1 => {
+                    let pick = rng.random_range(0..routines.len());
+                    Drawn::Routine(routines.swap_remove(pick))
+                }
+                2 => {
+                    let pick = rng.random_range(0..programs.len());
+                    Drawn::Program(programs.swap_remove(pick))
+                }
+                _ => {
+                    let pick = rng.random_range(0..materials.len());
+                    Drawn::Material(materials.swap_remove(pick))
+                }
+            });
         }
 
         // Which of the gear rows are standout stock. Chosen as a *set of
@@ -293,7 +349,7 @@ impl Game {
         // share the def authors is what the shelf actually shows — a per-row
         // chance leaves a twelve-row wagon able to come up with none, which
         // is the case the field exists to rule out.
-        let gear_rows = buckets_drawn.iter().filter(|b| **b == 0).count();
+        let gear_rows = drawn.iter().filter(|d| matches!(d, Drawn::Gear(_))).count();
         let bonus_rows = bonus_row_count(gear_rows, def.bonus_share);
         let mut ordinals: Vec<usize> = (0..gear_rows).collect();
         for i in 0..bonus_rows {
@@ -304,32 +360,17 @@ impl Game {
             ordinals[..bonus_rows].iter().copied().collect();
 
         let mut gear_ordinal = 0usize;
-        let kinds: Vec<views::CaravanOfferKind> = buckets_drawn
+        let kinds: Vec<views::CaravanOfferKind> = drawn
             .into_iter()
-            .map(|bucket| match bucket {
-                0 => {
-                    // Positional round-robin, skipping a slot nothing is
-                    // stocked for so an install with no armour files still
-                    // fills its shelf out of the other two.
-                    let mut slot = (first_slot + gear_ordinal) % EquipmentSlot::ALL.len();
-                    while gear_by_slot[slot].is_empty() {
-                        slot = (slot + 1) % EquipmentSlot::ALL.len();
-                    }
-                    let pool = &gear_by_slot[slot];
-                    let item = pool[rng.random_range(0..pool.len())].clone();
+            .map(|d| match d {
+                Drawn::Gear(item) => {
                     let bonus = bonus.contains(&gear_ordinal);
                     gear_ordinal += 1;
                     views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
                 }
-                1 => views::CaravanOfferKind::Routine(
-                    routines[rng.random_range(0..routines.len())].clone(),
-                ),
-                2 => views::CaravanOfferKind::Program(
-                    programs[rng.random_range(0..programs.len())].clone(),
-                ),
-                _ => views::CaravanOfferKind::Material(
-                    materials[rng.random_range(0..materials.len())].clone(),
-                ),
+                Drawn::Routine(ability) => views::CaravanOfferKind::Routine(ability),
+                Drawn::Program(species) => views::CaravanOfferKind::Program(species),
+                Drawn::Material(item) => views::CaravanOfferKind::Material(item),
             })
             .collect();
 

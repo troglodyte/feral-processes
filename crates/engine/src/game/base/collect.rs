@@ -106,6 +106,31 @@ impl Game {
         if self.require_base().is_err() {
             return Vec::new();
         }
+        let taken = self.take_from_adjacent(want);
+        if taken.is_empty() {
+            return Vec::new();
+        }
+        let summary = taken
+            .iter()
+            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
+        self.tick();
+        taken
+    }
+
+    /// Moves an exact basket off the adjacent structures and reports what
+    /// actually landed, keyed and ordered by `ItemId`.
+    ///
+    /// **It holds no guards of its own and it neither ticks nor logs.** Every
+    /// caller must have checked game over, an active battle and
+    /// `require_base` already, and owns the announcement and the turn. That
+    /// is what lets one screen take and give inside a single action.
+    ///
+    /// An over-ask is clamped rather than refused, and units leave a buffer
+    /// through `hauling::take_from` alone.
+    pub(crate) fn take_from_adjacent(&mut self, want: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
         let neighbours = self.adjacent_stock();
 
@@ -133,16 +158,6 @@ impl Game {
             }
         }
 
-        if taken.is_empty() {
-            return Vec::new();
-        }
-        let summary = taken
-            .iter()
-            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.log_base_kind(MessageKind::Loot, format!("You collect {summary}."));
-        self.tick();
         taken.into_iter().collect()
     }
 

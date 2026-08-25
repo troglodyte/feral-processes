@@ -124,6 +124,31 @@ impl Game {
         if self.require_base().is_err() {
             return Vec::new();
         }
+        let given = self.give_to_adjacent(give);
+        if given.is_empty() {
+            return Vec::new();
+        }
+        let summary = given
+            .iter()
+            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.log_base(format!("You put away {summary}."));
+        self.tick();
+        given
+    }
+
+    /// Moves an exact basket out of the pack and into the adjacent Depots,
+    /// reporting what actually landed, keyed and ordered by `ItemId`.
+    ///
+    /// **It holds no guards of its own and it neither ticks nor logs.** Every
+    /// caller must have checked game over, an active battle and
+    /// `require_base` already, and owns the announcement and the turn. That
+    /// is what lets one screen take and give inside a single action.
+    ///
+    /// Both clamps live here: against what the pack holds, and against each
+    /// Depot's `output_room()` as the fill walks them in `(x, y)` order.
+    pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
         let depots = self.adjacent_depots();
 
@@ -158,16 +183,6 @@ impl Game {
             }
         }
 
-        if given.is_empty() {
-            return Vec::new();
-        }
-        let summary = given
-            .iter()
-            .map(|(item, n)| format!("{n} {}", self.item_name(item)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.log_base(format!("You put away {summary}."));
-        self.tick();
         given.into_iter().collect()
     }
 

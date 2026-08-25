@@ -169,6 +169,11 @@ git commit -m "refactor(base): split the movers out of collect and deposit"
   - `pub struct TransferRow { pub item: ItemId, pub on_shelves: u32, pub in_pack: u32 }`
     in `views.rs`, deriving whatever the neighbouring view structs derive.
   - `pub fn transfer_offer(&self) -> Vec<TransferRow>` on `Game`.
+  - `pub fn transfer_room(&self) -> Option<u32>` on `Game` — `None` when
+    `adjacent_depots()` is empty, `Some(deposit_room())` otherwise. This is
+    the one call that keeps "no Depot beside you" distinguishable from "a
+    Depot with nothing left"; app-core passes its result straight through to
+    `App::basket_room` without ever inferring one state from the other.
 
 **Behaviour to build:**
 
@@ -197,6 +202,9 @@ second explicit one.
 4. Beside a `Stock` that does **not** `stores` (a Mining Node), every row has
    `in_pack: 0` while `on_shelves` is untouched.
 5. Each of the three guards returns an empty offer.
+6. `transfer_room` is `None` beside a non-`stores` `Stock`, `Some(0)` beside a
+   Depot at exactly `capacity`, and `Some(n)` beside one with room. The first
+   two are the states the report this came from could not tell apart.
 
 - [ ] **Step 1: Write test 1, run it, watch it fail to compile**
 - [ ] **Step 2: Add `TransferRow` and a stub `transfer_offer`; make test 1 pass**
@@ -361,11 +369,12 @@ highlighted row be lowered and raised while it is being edited:
 
 ```rust
 pub fn put_available(&self, row: usize) -> u32 {
-    let given: u32 = self.basket_amounts.iter()
-        .enumerate()
+    // `(-n).max(0)`: a giving row is negative, so this is its magnitude and
+    // a taking row contributes nothing. Folded with `saturating_add` because
+    // nothing bounds a modded Depot's capacity.
+    let given = self.basket_amounts.iter().enumerate()
         .filter(|(i, _)| *i != row)
-        .map(|(_, n)| n.min(&0).unsigned_abs() as u32)
-        .sum();
+        .fold(0u32, |acc, (_, n)| acc.saturating_add((-*n).max(0) as u32));
     let budget = self.basket_room.unwrap_or(0).saturating_sub(given);
     self.basket_rows.get(row).map_or(0, |r| r.in_pack).min(budget)
 }
@@ -426,8 +435,8 @@ call `game.refuse_transfer()` and return `true`; otherwise hand the rows and
 `game.deposit_room()` out past the `self.game` borrow — the existing `opening`
 local does this and the `putting` local is deleted with the `P` arm. `room` is
 `Some(deposit_room())` when `adjacent_depots()` is non-empty and `None`
-otherwise; add a small `&self` engine call for that rather than inferring it
-from a zero. **Opening a screen is not an action** — it must leave `acted`
+otherwise — that is `game.transfer_room()` from Task 2, passed straight
+through. Never infer the `None` from a zero. **Opening a screen is not an action** — it must leave `acted`
 false so no turn is spent and the last refusal is not cleared.
 
 **`input.rs`.** Both the modifier-promotion condition (currently
@@ -456,7 +465,11 @@ every case that still applies):
    others, while the highlighted row keeps its own amount while being edited.
 7. **A Depot at exactly `capacity`** leaves every `put_available` at 0 while
    `take_available` is untouched. This is the reported case; the suite covers
-   195/200 today and never 200/200.
+   195/200 today and never 200/200. Assert it **again with a take already set
+   on another row**: a pending take deliberately does not credit the put
+   budget, because a take may come off a machine that is not a Depot.
+   Under-offering is safe, and Task 3's take-before-give order means it is
+   never the binding constraint at the commit.
 8. `basket_room` is `None` beside a non-`stores` `Stock` and `Some(0)` beside a
    full Depot — the two states that must not collapse.
 9. Digits type into the row's current sign, and into a take at zero;

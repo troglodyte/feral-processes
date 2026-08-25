@@ -849,7 +849,7 @@ pub fn player_gather_system(
         // earn that: `work_structure` refuses a node the player is not at the
         // station of, and `move_player` drops the task the moment they step
         // away. Either half alone leaves a player working a node they are
-        // nowhere near — which pays into a buffer `collect_adjacent` cannot
+        // nowhere near — which pays into a buffer a transfer cannot
         // reach.
         let Ok((node, tier, structure, mut stock, mut status, _)) = nodes.get_mut(task.target)
         else {

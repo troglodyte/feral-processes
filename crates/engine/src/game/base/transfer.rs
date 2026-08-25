@@ -17,7 +17,7 @@ impl Game {
     /// order.
     ///
     /// `&self`: no tick, no log, no RNG. The guards are
-    /// `collectable_adjacent`'s, in the same order, each answering with an
+    /// the base doors' own, in the same order, each answering with an
     /// empty offer — game over, an active battle, `require_base`. No
     /// `require_surface`: `require_base` is the stronger statement.
     ///

@@ -1851,7 +1851,7 @@ fn an_order_below_a_satisfied_standing_order_is_worked() {
     );
 }
 
-/// No hysteresis, and none needed: `collect_adjacent` empties the whole
+/// No hysteresis, and none needed: a take empties the whole
 /// output buffer, so the drain is a burst rather than a trickle and there
 /// is nothing for a re-arm threshold to oscillate around.
 #[test]
@@ -1875,7 +1875,7 @@ fn a_standing_order_re_arms_after_the_shelf_drains() {
     // party's *base* cell and takes from its orthogonal neighbours.
     game.world.insert_resource(Locale::Base { x: 1, y: 0 });
     assert!(
-        !game.collect_adjacent().is_empty(),
+        !take_everything_adjacent(&mut game).is_empty(),
         "precondition: the shelf actually drained"
     );
     game.tick();

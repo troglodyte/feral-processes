@@ -399,3 +399,332 @@ fn a_guarded_refusal_is_silent() {
 
     assert_eq!(lines(&game).len(), before, "no guard says a word");
 }
+
+// The rules below survived the merge of the collect and deposit doors into
+// this one, and these are their only cover: the orthogonal reach, the
+// `(x, y)` scan order both movers walk in, and the two clamps.
+
+/// The player pulls by exactly the rule a machine does — four orthogonal
+/// tiles, never a diagonal. Standing in the crook of an L empties three
+/// buildings; sprawling your base out costs you trips.
+#[test]
+fn a_take_reaches_every_orthogonal_neighbour_and_no_diagonal_one() {
+    let mut game = Game::new(1753, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
+        stocked(
+            &mut game,
+            "mining_node",
+            p.x + dx,
+            p.y + dy,
+            20,
+            &[(ids::CORE_FRAGMENT, 2)],
+        );
+    }
+    let diagonal = stocked(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y + 1,
+        20,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 99)], &[]);
+
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT) - before,
+        8,
+        "all four orthogonal neighbours at once, and only those"
+    );
+    assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 8)]);
+    assert_eq!(
+        game.world
+            .get::<Stock>(diagonal)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(5),
+        "a diagonal neighbour is out of reach, exactly as it is for a machine"
+    );
+}
+
+/// A take can no more reach a machine's `input` than a neighbouring machine
+/// can. Without this the player could strip the ingredients out from under a
+/// working assembler.
+#[test]
+fn a_take_leaves_a_neighbours_input_untouched() {
+    let mut game = Game::new(1754, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let node = stocked(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 3)],
+    );
+    game.world
+        .get_mut::<Stock>(node)
+        .unwrap()
+        .input
+        .insert(ItemId::from(ids::POWER_CELL), 4);
+
+    game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 3)], &[]);
+
+    let stock = game.world.get::<Stock>(node).unwrap();
+    assert!(stock.output.is_empty(), "the output is emptied");
+    assert_eq!(
+        stock.input.get(&ItemId::from(ids::POWER_CELL)).copied(),
+        Some(4),
+        "the input is not the player's to take"
+    );
+}
+
+/// The shelf side is pooled across every neighbour, one row per item.
+#[test]
+fn the_shelf_side_is_pooled_across_neighbours() {
+    let mut game = Game::new(1755, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(
+        &mut game,
+        "mining_node",
+        p.x - 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 2)],
+    );
+    stocked(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 3), (ids::POWER_CELL, 1)],
+    );
+
+    assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 5);
+    assert_eq!(row(&game, ids::POWER_CELL).on_shelves, 1);
+}
+
+/// The neighbour scan is sorted by tile for `assembler_system`'s reason:
+/// bevy's query iteration order is not stable, and a *partial* take across
+/// two neighbours holding the same item has to drain them in the same order
+/// every run. Spawned in the reverse of their tile order, so an unsorted
+/// scan genuinely flips.
+#[test]
+fn the_neighbour_scan_is_sorted_by_tile() {
+    let mut game = Game::new(1756, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let east = stocked(&mut game, "mining_node", p.x + 1, p.y, 20, &[]);
+    let west = stocked(&mut game, "mining_node", p.x - 1, p.y, 20, &[]);
+    assert_eq!(game.adjacent_stock(), vec![west, east]);
+
+    let east = stocked(&mut game, "depot", p.x, p.y + 1, 200, &[]);
+    let west = stocked(&mut game, "depot", p.x, p.y - 1, 200, &[]);
+    assert_eq!(
+        game.adjacent_depots(),
+        vec![west, east],
+        "and the Depot filter leaves that order alone"
+    );
+}
+
+/// Asking for less than is on the shelf takes exactly that. The remainder
+/// stays where the base's chains can still pull it.
+#[test]
+fn asking_for_part_of_a_buffer_leaves_the_rest_in_it() {
+    let mut game = Game::new(1757, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let node = stocked(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 10)],
+    );
+
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+    let (got, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]);
+
+    assert_eq!(got, vec![(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+    assert_eq!(count_item(&game, ids::CORE_FRAGMENT) - before, 4);
+    assert_eq!(
+        game.world
+            .get::<Stock>(node)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied(),
+        Some(6),
+        "the six the player did not ask for are still the base's"
+    );
+}
+
+/// A partial take across two neighbours drains them in tile order, and a
+/// give that outgrows the first Depot spills into the next one in the same
+/// order. Both walks are the same `(x, y)` scan.
+#[test]
+fn both_movers_walk_their_neighbours_in_tile_order() {
+    let mut game = Game::new(1758, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let east = stocked(
+        &mut game,
+        "depot",
+        p.x + 1,
+        p.y,
+        10,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+    let west = stocked(
+        &mut game,
+        "depot",
+        p.x - 1,
+        p.y,
+        8,
+        &[(ids::CORE_FRAGMENT, 5)],
+    );
+    set_inventory(&mut game, &[(ids::POWER_CELL, 5)]);
+
+    let held = |game: &Game, e: Entity, id: &str| {
+        game.world
+            .get::<Stock>(e)
+            .unwrap()
+            .output
+            .get(&ItemId::from(id))
+            .copied()
+            .unwrap_or(0)
+    };
+
+    let (taken, given) = game.transfer_items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 7)],
+        &[(ItemId::from(ids::POWER_CELL), 5)],
+    );
+    assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 7)]);
+    assert_eq!(
+        held(&game, west, ids::CORE_FRAGMENT),
+        0,
+        "the lower tile empties first"
+    );
+    assert_eq!(
+        held(&game, east, ids::CORE_FRAGMENT),
+        3,
+        "and the higher one holds the remainder"
+    );
+
+    assert_eq!(given, vec![(ItemId::from(ids::POWER_CELL), 5)]);
+    assert_eq!(
+        held(&game, west, ids::POWER_CELL),
+        5,
+        "and a give fills the lower tile first too"
+    );
+}
+
+/// A give that outgrows the first Depot's room spills into the next.
+#[test]
+fn a_give_larger_than_the_first_depots_room_spills_into_the_second() {
+    let mut game = Game::new(1759, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let east = stocked(&mut game, "depot", p.x + 1, p.y, 10, &[]);
+    let west = stocked(&mut game, "depot", p.x - 1, p.y, 3, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+    let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(given, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+
+    let in_output = |e: Entity| {
+        game.world
+            .get::<Stock>(e)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+    };
+    assert_eq!(
+        in_output(west),
+        3,
+        "west fills first and takes all its room"
+    );
+    assert_eq!(in_output(east), 2, "the remaining 2 spill into the next");
+}
+
+/// `Inventory` is by definition the plain-copy store, so a rare or fused
+/// copy is never offered as cargo — `Stock` keys by `ItemId` alone and would
+/// hand it back ordinary.
+#[test]
+fn a_gear_copy_in_the_pack_is_never_offered() {
+    let mut game = Game::new(1760, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(&mut game, "depot", p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 1)]);
+    let player = game.player_entity();
+    let rare = ItemId::from(ids::ICE_BREAKER);
+    game.world
+        .get_mut::<GearCopies>(player)
+        .unwrap()
+        .add(gear(&rare, 1), 1);
+
+    let offered: Vec<ItemId> = game
+        .transfer_offer()
+        .into_iter()
+        .filter(|r| r.in_pack > 0)
+        .map(|r| r.item)
+        .collect();
+    assert_eq!(offered, vec![ItemId::from(ids::CORE_FRAGMENT)]);
+}
+
+/// Room falls as a Depot fills — it is the shared budget the picker enforces
+/// live.
+#[test]
+fn transfer_room_sums_across_depots_and_drops_as_one_fills() {
+    let mut game = Game::new(1761, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let first = stocked(&mut game, "depot", p.x + 1, p.y, 10, &[]);
+    stocked(&mut game, "depot", p.x - 1, p.y, 5, &[]);
+    assert_eq!(game.transfer_room(), Some(15));
+
+    game.world
+        .get_mut::<Stock>(first)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::CORE_FRAGMENT), 4);
+    assert_eq!(game.transfer_room(), Some(11));
+}
+
+/// A give is not a stash: it is handing the base your materials, and
+/// `base_stock` and the take side of the next offer are the two readers that
+/// make that true.
+#[test]
+fn given_goods_land_in_output_and_the_base_can_see_them() {
+    let mut game = Game::new(1762, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(&mut game, "depot", p.x + 1, p.y, 200, &[]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
+
+    let (_, landed) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(landed, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+
+    let held = game
+        .base_stock()
+        .into_iter()
+        .find(|r| r.item == ItemId::from(ids::CORE_FRAGMENT));
+    assert_eq!(held.map(|r| r.qty), Some(5), "base_holding sees it");
+    assert_eq!(
+        row(&game, ids::CORE_FRAGMENT).on_shelves,
+        5,
+        "and the next take could pull it straight back out"
+    );
+}

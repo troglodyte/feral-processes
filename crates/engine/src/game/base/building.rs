@@ -539,7 +539,7 @@ impl Game {
     /// the same `hauling::at_station` a posted program has to walk to. The
     /// cycle pays into the node's *own* buffer (`systems::
     /// player_gather_system`) and `c` reaches only those four tiles
-    /// (`collect_adjacent`), so a job run from anywhere else fills a buffer
+    /// (`transfer_offer`), so a job run from anywhere else fills a buffer
     /// the player cannot open — silently, since the extraction lines read
     /// the same either way. `move_player` drops the `Task` on any step, so
     /// checking once at the start is what makes "a player still holding one

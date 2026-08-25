@@ -273,16 +273,16 @@ fn a_carried_load_ends_up_in_the_depot_and_in_your_cargo() {
     );
 
     // Consolidation costs no new code: a depot is a `Stock` with an output,
-    // which is the only thing `collect_adjacent` has ever asked about.
+    // which is the only thing a take has ever asked about.
     let depot_pos = *game.world.get::<Position>(depot).unwrap();
     let player = game.player_entity();
     move_to(&mut game, player, depot_pos.x - 1, depot_pos.y);
-    let taken = game.collect_adjacent();
+    let taken = take_everything_adjacent(&mut game);
     assert!(
         taken
             .iter()
             .any(|(id, n)| *id == ItemId::from(ids::CORE_FRAGMENT) && *n > 0),
-        "collect_adjacent must work on a depot unchanged: {taken:?}"
+        "a take must work on a depot unchanged: {taken:?}"
     );
 }
 

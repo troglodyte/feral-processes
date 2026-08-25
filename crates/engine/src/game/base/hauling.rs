@@ -162,7 +162,7 @@ pub(crate) fn structure_tiles(positions: impl Iterator<Item = Position>) -> Hash
 /// which is the one thing the walk refuses. A machine packed tightly enough
 /// that all four of its neighbours hold buildings has no station at all —
 /// and the player could never have collected from it either, since
-/// `collect_adjacent` is orthogonal and they cannot stand on a building.
+/// a take is orthogonal and they cannot stand on a building.
 fn station_tiles(
     grid: &BaseGrid,
     structure: Position,

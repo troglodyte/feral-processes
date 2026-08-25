@@ -282,7 +282,11 @@ fn frame(
     mut exit: MessageWriter<AppExit>,
 ) -> Result {
     let now = input.time.elapsed_secs_f64();
-    let painter = Painter::for_frame(contexts.ctx_mut()?, input.time.delta_secs());
+    let painter = Painter::for_frame(
+        contexts.ctx_mut()?,
+        input.time.delta_secs(),
+        std::sync::Arc::default(),
+    );
 
     let fe = &mut *frontend;
     fe.app.update_realtime();
@@ -769,7 +773,7 @@ mod tests {
         struct Measured(bool);
 
         fn probe(mut contexts: EguiContexts, mut measured: ResMut<Measured>) -> Result {
-            let p = Painter::for_frame(contexts.ctx_mut()?, 1.0 / 60.0);
+            let p = Painter::for_frame(contexts.ctx_mut()?, 1.0 / 60.0, std::sync::Arc::default());
             for face in [paint::Face::Ui, paint::Face::UiBold, paint::Face::Map] {
                 let dims = p.measure(face, "Integrity", 24);
                 assert!(dims.width > 0.0, "{face:?} measured nothing");

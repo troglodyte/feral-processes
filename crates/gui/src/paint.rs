@@ -20,6 +20,7 @@
 //! top-left, so `text` converts rather than reinterprets; see
 //! `baseline_offset`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy_egui::egui;
@@ -159,6 +160,28 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// The sprites the frontend has loaded, by name.
+///
+/// A `TextureId` is a cheap handle egui resolves at paint time; the pixels
+/// belong to Bevy's asset server, which is what lets this be rebuilt — or
+/// rather refcounted — every frame alongside the `Painter` that reads it.
+/// Empty is a supported state and is what `assets/sprites/` being absent
+/// looks like: every lookup misses and every caller draws its glyph.
+#[derive(Default)]
+pub struct SpriteTable {
+    by_name: HashMap<String, egui::TextureId>,
+}
+
+impl SpriteTable {
+    pub fn insert(&mut self, name: impl Into<String>, texture: egui::TextureId) {
+        self.by_name.insert(name.into(), texture);
+    }
+
+    fn get(&self, name: &str) -> Option<egui::TextureId> {
+        self.by_name.get(name).copied()
+    }
+}
+
 /// Everything a screen needs in order to draw itself.
 ///
 /// Threaded through `render/` in the parameter slot that used to carry
@@ -175,10 +198,14 @@ pub struct Painter {
     width: f32,
     height: f32,
     delta: f32,
+    /// Refcounted rather than borrowed, so `Painter` keeps its freedom from
+    /// lifetimes and `render/`'s several hundred `&Painter` signatures stay
+    /// as they are. The clone is one atomic bump per frame.
+    sprites: Arc<SpriteTable>,
 }
 
 impl Painter {
-    pub fn for_frame(ctx: &egui::Context, delta: f32) -> Self {
+    pub fn for_frame(ctx: &egui::Context, delta: f32, sprites: Arc<SpriteTable>) -> Self {
         // The background layer, so the game draws beneath any egui window —
         // there are none today, but a debug overlay shouldn't have to fight
         // the map for z-order. `layer_painter` hands back a full-screen
@@ -191,6 +218,7 @@ impl Painter {
             width: screen.width(),
             height: screen.height(),
             delta,
+            sprites,
         }
     }
 
@@ -282,6 +310,9 @@ impl Painter {
             width: self.width,
             height: self.height,
             delta: self.delta,
+            // Carried through, or a sprite drawn inside the Stack corridor's
+            // clip would silently fall back to its glyph.
+            sprites: Arc::clone(&self.sprites),
         });
     }
 
@@ -333,6 +364,41 @@ impl Painter {
 
     pub fn map(&self, glyph: impl AsRef<str>, x: f32, y: f32, size: u16, color: Color) {
         self.text(Face::Map, glyph, x, y, size, color);
+    }
+
+    /// Draws a one-cell sprite into the `size`-square at `(x, y)`, reporting
+    /// whether it had one to draw.
+    ///
+    /// The fifteenth operation, and the first that names a texture. It is a
+    /// widening of the seam `CLAUDE.md` protects, taken deliberately: the
+    /// alternative is `render/` reaching for egui directly, which is what
+    /// the seam exists to prevent.
+    ///
+    /// Unlike `map`, which takes a *baseline* and is centred by the caller
+    /// against measured ink extents, this takes a **top-left** corner and
+    /// fills the square exactly. A square sprite has neither side bearing
+    /// nor descender, so there is nothing to measure; reading the two as one
+    /// convention is a half-cell offset that reads as a camera fault.
+    ///
+    /// `color` is a **tint**, and an egui tint multiplies — so a white
+    /// sprite inherits every existing colour rule (the con read, the boss
+    /// and nemesis overrides, `biome_tint`, the damage dimming) for free.
+    ///
+    /// Returns `false` for a name the table has nothing under, which is what
+    /// makes `assets/sprites/` optional: the caller draws its glyph instead,
+    /// so a species with no art ships visible rather than blank.
+    #[must_use]
+    pub fn sprite(&self, name: &str, x: f32, y: f32, size: f32, color: Color) -> bool {
+        let Some(texture) = self.sprites.get(name) else {
+            return false;
+        };
+        self.painter.image(
+            texture,
+            rect_of(x, y, size, size),
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+            to_egui(color),
+        );
+        true
     }
 
     pub fn measure_ui(&self, text: impl AsRef<str>, size: u16) -> TextDims {
@@ -459,9 +525,51 @@ pub(crate) fn with_painter<R>(
         )),
         ..Default::default()
     });
-    let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0));
+    let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::default()));
     let shapes = ctx.end_pass().shapes;
     (out, shapes)
+}
+
+/// `with_painter`, with sprites loaded — for the one operation that has a
+/// texture table to consult.
+#[cfg(test)]
+pub(crate) fn with_sprites<R>(
+    sprites: SpriteTable,
+    f: impl FnOnce(&Painter) -> R,
+) -> (R, Vec<egui::epaint::ClippedShape>) {
+    let ctx = egui::Context::default();
+    install_fonts(&ctx);
+    ctx.begin_pass(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    });
+    let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::new(sprites)));
+    let shapes = ctx.end_pass().shapes;
+    (out, shapes)
+}
+
+/// Every textured mesh `with_painter` recorded, as `(texture, bounds, tint)`.
+///
+/// `egui::Shape::image` is a `Mesh` carrying a texture id and a UV'd quad —
+/// there is no `Shape::Image` variant — so this reads the mesh back rather
+/// than matching one. The untextured meshes egui builds for its own
+/// primitives carry `TextureId::default()` and are skipped.
+#[cfg(test)]
+pub(crate) fn painted_images(
+    shapes: &[egui::epaint::ClippedShape],
+) -> Vec<(egui::TextureId, egui::Rect, egui::Color32)> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => {
+                Some((m.texture_id, m.calc_bounds(), m.vertices[0].color))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// The text of every `Shape::Text` `with_painter` recorded, in paint order —
@@ -759,6 +867,65 @@ mod tests {
         assert_eq!(
             to_egui(Color::new(2.0, -1.0, 0.0, 1.0)).to_srgba_unmultiplied(),
             [255, 0, 0, 255]
+        );
+    }
+
+    /// A name the table has nothing under must leave the caller free to draw
+    /// the glyph instead — the whole of how `assets/sprites/` stays optional
+    /// and a modded species without art ships visible rather than blank.
+    #[test]
+    fn an_unknown_sprite_paints_nothing_and_says_so() {
+        let (drew, shapes) = with_sprites(SpriteTable::default(), |p| {
+            p.sprite("nobody", 10.0, 20.0, 16.0, WHITE)
+        });
+        assert!(!drew, "an unknown name must report that it drew nothing");
+        assert!(
+            painted_images(&shapes).is_empty(),
+            "an unknown name must paint no image at all"
+        );
+    }
+
+    /// The sprite fills the square it is given, top-left anchored — unlike
+    /// `map`, which takes a baseline and centres by measured ink extents. A
+    /// square sprite has neither bearing nor descender, and reading the two
+    /// as the same convention is a half-cell offset that looks like a camera
+    /// bug rather than a drawing one.
+    #[test]
+    fn a_sprite_fills_the_square_it_is_given() {
+        let id = egui::TextureId::User(7);
+        let mut table = SpriteTable::default();
+        table.insert("player", id);
+
+        let (drew, shapes) = with_sprites(table, |p| p.sprite("player", 10.0, 20.0, 48.0, WHITE));
+
+        assert!(drew, "a known name must report that it drew");
+        let images = painted_images(&shapes);
+        assert_eq!(images.len(), 1, "exactly one image per sprite call");
+        assert_eq!(images[0].0, id, "the table's texture, not another");
+        assert_eq!(
+            images[0].1,
+            egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(48.0, 48.0)),
+            "a sprite is top-left anchored and square"
+        );
+    }
+
+    /// The colour is handed over as a tint, so everything that already
+    /// colours a glyph — the con read, the boss and nemesis overrides,
+    /// `biome_tint`, the damage dimming — keeps working with no second
+    /// mechanism. A sprite op that dropped the colour would look correct
+    /// against white placeholder art and wrong against every real sprite.
+    #[test]
+    fn a_sprite_carries_the_colour_it_was_given() {
+        let mut table = SpriteTable::default();
+        table.insert("player", egui::TextureId::User(1));
+        let red = Color::new(1.0, 0.0, 0.0, 1.0);
+
+        let (_, shapes) = with_sprites(table, |p| p.sprite("player", 0.0, 0.0, 16.0, red));
+
+        assert_eq!(
+            painted_images(&shapes)[0].2,
+            to_egui(red),
+            "the sprite must be tinted with the colour the caller passed"
         );
     }
 }

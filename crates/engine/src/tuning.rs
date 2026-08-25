@@ -134,6 +134,16 @@ pub const LEVELS_PER_RING: u32 = 2;
 /// `Affinity` and `RoutineSlot` and this bound sits low.
 pub const MAX_TALENT_STAT_PERCENT: f32 = 15.0;
 
+/// The ceiling on a `TalentNode::Accuracy`'s points, `MAX_TALENT_STAT_PERCENT`'s
+/// peer on the axis that has no `Stats` field to bound it.
+///
+/// Flat rather than a percentage, so it does not compound with the four
+/// multiplicative axes a developed companion already carries — and bounded
+/// all the same, because Accuracy feeds a ratio: unbounded, one node would
+/// walk a companion to `HIT_CHANCE_MAX` on its own and take every later
+/// decision in its tree with it.
+pub const MAX_TALENT_ACCURACY_POINTS: i32 = 6;
+
 /// The highest level any companion can reach with every ring open. For the
 /// two arena sites, which author their own composition and have no entity to
 /// read a `KernelRing` from; everything with an entity calls

@@ -88,7 +88,30 @@ impl Game {
                 + crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL
                     * self.player_perk_level(crate::perks::Perk::TargetLock) as i32;
         }
-        gear
+        gear + self.talent_accuracy(entity)
+    }
+
+    /// The sum of every `TalentNode::Accuracy` `entity` has taken — 0 when it
+    /// has none, so the arm above is one expression either way.
+    ///
+    /// The shape `talent_affinity_mult` already has, and read on demand for
+    /// the same reason: Accuracy has no `Stats` field to bake into.
+    fn talent_accuracy(&self, entity: Entity) -> i32 {
+        let Some(taken) = self.world.get::<Talents>(entity) else {
+            return 0;
+        };
+        let Some(tree) = self.talent_tree(entity) else {
+            return 0;
+        };
+        tree.tiers
+            .iter()
+            .flat_map(|tier| tier.0.iter())
+            .filter(|choice| taken.0.contains(&choice.id))
+            .filter_map(|choice| match &choice.node {
+                crate::talents::TalentNode::Accuracy { points } => Some(*points),
+                _ => None,
+            })
+            .sum()
     }
 
     /// `entity`'s side of an attack roll, making `swing`.

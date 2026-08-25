@@ -21,7 +21,7 @@
         ],
         [
             (id: "bastion_watchdog", name: "Watchdog", description: "Learns Watchdog — clears a condition off an ally.", node: Ability(id: "watchdog")),
-            (id: "bastion_wall", name: "Load-Bearing Wall", description: "Raises Mitigation by a further 12%.", node: Stat(stat: Def, percent: 12.0)),
+            (id: "bastion_control", name: "Fire Control", description: "Raises Accuracy by 4 — it holds the line and still lands its blows.", node: Accuracy(points: 4)),
         ],
         [
             (id: "bastion_shield3", name: "Bastion Shield", description: "Learns Bastion Shield — the strongest Mitigation buff there is.", node: Ability(id: "bastion_shield_v3")),

@@ -64,6 +64,33 @@ impl Game {
         }
     }
 
+    /// Every flat Accuracy source `entity` carries, summed — what
+    /// `battle::accuracy_of` takes on top of speed and level.
+    ///
+    /// **The one place those sources meet**, which is why `Perk::TargetLock`
+    /// is read here rather than at the roll: a perk's hook belongs where its
+    /// sources meet, the same reason `Obfuscation` sits inside `raise_trace`
+    /// rather than at the six things that raise Trace. A hook that has to be
+    /// repeated is the signal the perk is aimed at the wrong seam.
+    ///
+    /// Perks are the player's axis and never a companion's, checked by
+    /// identity against `player_entity()` rather than by which components
+    /// `entity` happens to carry — `ability_affinity`'s rule, so the
+    /// no-stacking property holds by construction.
+    ///
+    /// `Swing::accuracy` is deliberately **not** here. This is what `entity`
+    /// brings to every swing it makes; a routine's own accuracy belongs to
+    /// the invocation and is added once, at `combatant_profile`.
+    pub(crate) fn accuracy_bonus(&self, entity: Entity) -> i32 {
+        let gear = self.gear_bonus(entity).accuracy;
+        if entity == self.player_entity() {
+            return gear
+                + crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL
+                    * self.player_perk_level(crate::perks::Perk::TargetLock) as i32;
+        }
+        gear
+    }
+
     /// `entity`'s side of an attack roll, making `swing`.
     ///
     /// **The one place accuracy and evasion are resolved from the ECS**, so
@@ -99,7 +126,11 @@ impl Game {
             evasion
         };
         battle::Combatant {
-            accuracy: battle::accuracy_of(speed, level, gear.accuracy + swing.accuracy),
+            accuracy: battle::accuracy_of(
+                speed,
+                level,
+                self.accuracy_bonus(entity) + swing.accuracy,
+            ),
             evasion,
             atk: self.effective_atk(entity),
             range: swing.range,

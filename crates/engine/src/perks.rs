@@ -116,6 +116,20 @@ pub enum Perk {
     /// each copy compiled after it, so gear already carried keeps the
     /// quality it was compiled at.
     TightenTolerances,
+    /// Adds `TARGET_LOCK_ACCURACY_PER_LEVEL` Accuracy per level to every
+    /// attack the player makes, through `Game::accuracy_bonus`.
+    ///
+    /// The player's half of the accuracy axis, and the only one that is not
+    /// a piece of gear. Hooked at `accuracy_bonus` rather than at the roll
+    /// because that is where the flat Accuracy sources meet — the same
+    /// reason `Obfuscation` is read inside `raise_trace` rather than at the
+    /// six things that raise Trace.
+    ///
+    /// Uncapped like every perk, and safe to leave uncapped: `HIT_CHANCE_MAX`
+    /// keeps the *benefit* short of a guaranteed landing however many levels
+    /// are bought, so this asymptotes rather than terminating the way a
+    /// four-level knob would.
+    TargetLock,
 }
 
 impl Perk {
@@ -123,7 +137,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 17] {
+    pub fn all() -> [Perk; 18] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -142,6 +156,7 @@ impl Perk {
             Perk::Teardown,
             Perk::Failover,
             Perk::TightenTolerances,
+            Perk::TargetLock,
         ]
     }
 

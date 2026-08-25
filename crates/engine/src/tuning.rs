@@ -2380,6 +2380,16 @@ pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 /// catalogue.
 pub const TEARDOWN_SALVAGE_PER_LEVEL: u32 = 1;
 
+/// Accuracy one level of `Perk::TargetLock` adds to every attack the player
+/// makes. Peer to `ATTACKER_BONUS_PER_LEVEL`, which buys 2 points of ATK for
+/// a comparable price.
+///
+/// Worth most early, which is deliberate: an unaimed player sits near the
+/// `ATTACKER_ACCURACY_ADVANTAGE` baseline for the first ten levels and then
+/// climbs on their own, because a hostile's Evasion grows with the zone
+/// while theirs grows with their level.
+pub const TARGET_LOCK_ACCURACY_PER_LEVEL: i32 = 2;
+
 /// Durability `Perk::Failover` adds to `Game::total_repair_rate` per level,
 /// restored to every damaged structure each `STRUCTURE_REGEN_INTERVAL`.
 ///

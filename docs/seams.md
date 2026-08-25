@@ -6211,3 +6211,160 @@ out** — the inversion collect shipped with, kept, and now named in as many
 words by `left_puts_in_and_right_takes_out`. `[A]` writes the take ceiling
 over every row, clearing a pending give; that is a decision about what "take
 everything" means on one axis, not an oversight.
+
+### `Game::copy_power` is the one door to a rating, and every term in it is a call
+
+A player comparing two pieces of gear had six stat axes and no scalar. Every
+list row that names an item now carries one figure, and one derivation
+produces it: `game/gear_power.rs`.
+
+**It is absolute, not relative to whoever is holding it.** Every copy is
+priced against one fixed reference wearer in `tuning.rs` — a mid-run player,
+derived rather than invented: the zone is the midpoint of the range
+`balance_sim` sweeps, the level is what its geared sweep reports as the
+minimum to clear that zone, and the three stat figures are
+`stats_after_levels` of `PLAYER_BASE_STATS` at that level.
+`the_power_reference_wearer_is_a_levelled_player` asserts the derivation
+rather than trusting the arithmetic in the comments. A reference far from
+where players actually stand makes every figure in the game wrong in the same
+direction, which is hard to notice and easy to ship.
+
+Absolute is what lets one number mean one thing on the inventory list, a
+trader's shelf, a recipe's result and the inspect page. The **swap picker's
+delta may disagree with it, and that is correct** — gear locks in
+`EquippedItem::level`, so the worn piece and a candidate are scaled at two
+different levels. The column is a property of the *copy*; the delta is a
+property of the *swap*. `a_copys_rating_does_not_move_with_the_zone` is what
+says so, because the reader who "fixes" the disagreement by making the column
+contextual gives one copy two numbers on two screens.
+
+**Four terms, and none of them restates a formula that already exists.**
+Attack and mitigation go through `Stats::power` — the game's own "how strong
+is this" scalar, which already prices mitigation as the effective HP it buys
+rather than summing a percentage into a total. The damage band is a
+*difference* against `POWER_REFERENCE_DAMAGE`, because a weapon **overrides**
+the natural attack rather than adding to it (`Game::attack_range`), so a band
+worse than bare fists is worth negative offense — that test is the one that
+fails if the term is ever written as a sum. Accuracy and evasion are
+**proportional**, priced through `battle::hit_chance` as the fraction they
+move the throughput they act on: a probability is not a quantity and must
+never be summed into a total. `EquipmentStats::decompiler` gets **no term** —
+it buys taming, not combat.
+
+`rate` is split out from `Game::copy_power` as a pure function so each term
+can be exercised on its own axis; a shipped item mixes them, and a term
+nothing catches is a term that can be deleted later by accident. All six
+were mutation-proved: each deleted term reddens exactly one test.
+
+**`None` means "no combat axis", never "rated zero".** A Decompiler module, a
+consumable and a material all answer `None`, and the two censuses in
+`tests/assets.rs` hold both halves over the real assets — every shipped
+equipment item rates, and nothing that is not equipment does.
+
+### `PowerCell` has three cells and three meanings, and they are not interchangeable
+
+The rating reaches six screens through the existing `with_tag` seam rather
+than through six `format!` calls, and sits **between the category tag and the
+name** so it inherits the fixed-width `row_lead`. The figures forming a
+straight edge down the list is the entire feature; in `Row::Item::suffix` they
+would stagger, because `suffix_x` places a suffix one inset past each row's
+*own* right edge.
+
+`Rated(n)` is a rating. `Unrated` is an em dash: there is no answer, not a bad
+one. `Blank` is a row that is not an item at all — the wagon's Routine and
+Program offers, an empty equipment slot, a program held in the weapon slot —
+where a dash would claim the disk had been rated and found wanting.
+
+**A fifth parameter on `with_tag`, not a defaulted builder**, deliberately:
+every call site is made to decide and the compiler is what makes them. That is
+the same move the tag column itself made.
+
+The row is now four `ui_runs` pieces, and `a_tagged_rows_pieces_join_back_into_its_text`
+still holds them to joining into exactly the string `draw_row` measures — a row
+measured from one set of pieces and drawn from another is a suffix landing on
+its own tail.
+
+**The gear inspect page pays for its breakdown out of the affix block.** The
+page has no scroll, and `the_tallest_gear_page_fits_its_popup` refused the
+row-per-axis form the breakdown was first written as: a Crash Handler built a
+25-row page into a 23-row popup at 600px. Compacted to one line it was still
+one row over, and the page had exactly zero headroom — so `GEAR_AFFIX_ROW_CAP`
+went from 3 to 2. That block already had a cap, and it degrades by *counting*
+what it cannot draw rather than dropping it in silence, which is why it is the
+one that can lose a row and still say what it is for.
+
+### The caravan is one basket, and the commit sells before it buys
+
+The wagon was a list you bought from a row at a time, with a per-item quantity
+page for selling. It is now a basket: every row carries an amount, Enter
+commits them all through `Game::commit_caravan_basket`, and
+`Mode::CaravanQuantity` was deleted outright.
+
+**Two ordering rules, and they are the whole reason the function exists.**
+Every refusal lands before anything is spent — `buy_caravan_offer` already
+held that and said why: a purchase that took the Credits and then failed is
+the one bug the player cannot undo, and a caravan has no buyback to put it
+right with. A basket makes that stricter rather than looser. And **sells land
+before buys**, `transfer_items`' take-before-give rule, which is what lets a
+basket be funded by its own sales — the entire reason the two sections are one
+basket rather than two screens.
+
+The funding test starts the player below the purchase price with cargo whose
+sale covers it, and **asserts the resulting Credits rather than the outcome**.
+That distinction is load-bearing: with the order reversed the goods are still
+delivered, because the aggregate affordability check has already passed and
+`Inventory::take` clamps — the price simply vanishes out of a purse that had
+nothing in it. Only the arithmetic catches that, which the mutation run
+confirmed.
+
+**One tick for the whole commit**, not one per line: the basket is the visit.
+`close_if_gone` still runs after it, because the tick spent may be the one the
+trader leaves on.
+
+To hold "every refusal first", `buy_caravan_offer` and `sell_to_caravan` were
+each split into a side-effect-free refusal half and an infallible apply half.
+The Program arm's roster check is counted **down across the basket** rather
+than re-read per row — two programs asked one at a time would both pass
+against a roster with one slot left — and the species resolution
+`adopt_program` would answer `None` for is asked up front, where the old code
+learned about it after the goods had started moving.
+
+**`Mode::Caravan` had to be named in the modifier fold at the top of
+`App::handle_key`.** Miss it and the four modified-arrow variants are folded
+to bare `Left`/`Right` before the caravan handler sees them, so Shift and Ctrl
+silently become plain steps and nothing anywhere fails.
+`shift_left_empties_a_sell_row_in_one_press` is the only thing that catches
+it.
+
+**Right increases and Left decreases — not the transfer picker's inversion.**
+That inversion is specified for a single row spanning both directions, so its
+amount is signed and an arrow picks an end. Here the sign is fixed by which
+section a row is in, so inverting would read as a slip.
+`left_puts_in_and_right_takes_out` is about `Mode::Transfer` and stays
+untouched. `[A]` fills the **sell** rows only: on the picker it writes the
+per-row ceiling over every row, and here that ceiling is the sell side —
+filling the offer side would spend the whole purse on one keypress, on a
+screen with no buyback.
+
+**The two ceilings differ in shape, mirroring the picker.**
+`caravan_sell_available` is the row's own stack, per row and static;
+`caravan_budget` is one budget shared across the offer rows — Credits, plus
+the basket's pending sales, minus its *other* pending buys. Subtracting only
+the others is what lets the highlighted row be lowered and raised while it is
+being edited. An offer clamps to `0..=1`: a shelf slot is spent whole, and
+`CaravanOffer::qty` is part of the price the player was quoted. All three
+take the `CaravanView` as a parameter rather than reading a cached copy,
+which is what keeps the figures the screen draws and the figures the keys
+clamp against the same numbers.
+
+**Grouping is a property of the view, not of the shelf.** The offers are
+sorted by `Game::caravan_group` in `caravan_view` and deliberately not in
+`caravan_shelf`: the deal is a round-robin across the three equipment slots
+whose leading slot rotates per visit, and sorting the shelf itself would make
+that rotation unobservable and open every wagon with a weapon. `index` is
+handed out before the sort and is the tiebreak after it, so the rows move on
+screen and no shelf identity moves with them — `CaravanMemory` keys on it and
+`buy_caravan_offer` resolves by it. `caravan_group` returns rank *and* heading
+together so the sort and the header cannot disagree about where a run starts,
+and it is exhaustive on `CaravanOfferKind`: two of the four kinds are not
+items and have no `ItemCategory` to head under.

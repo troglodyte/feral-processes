@@ -16,6 +16,15 @@ use super::*;
 /// row without its column makes `suffix_x` drop the suffix on the row's own
 /// tail, and a wrap then budgets for a row narrower than it draws.
 ///
+/// **The columns line up because the name is padded to the widest one on the
+/// screen**, not because `draw_row` knows anything about tables. `suffix_x`
+/// places a suffix one inset past the *advance* of the row's own label, so a
+/// name padded out to a common width puts every suffix at the same x — the
+/// UI face is monospace, and a trailing space advances exactly as a glyph
+/// does. `PowerCell` reaches the same straight edge the other way, by
+/// reserving a fixed cell inside the label; that shape is for a column
+/// between the lead and the name, and these figures sit after it.
+///
 /// **The hint says which arrow does which.** Left puts in and Right takes out
 /// here, against every other Left/Right in the game, so a player who guesses
 /// from the rest of the UI guesses wrong — and a modifier is invisible until
@@ -71,10 +80,11 @@ fn body_rows(
         text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
         text_row(""),
     ]);
+    let cols = Columns::of(game, entries);
     for (i, (item, amount, put, take)) in entries.iter().enumerate() {
         body.push(annotated_item_row(
-            game.item_name(item),
-            Some(transfer_suffix(*amount, *put, *take)),
+            cols.name_cell(game.item_name(item)),
+            Some(cols.suffix(*amount, *put, *take)),
             i == selected,
             TEXT,
         ));
@@ -82,16 +92,78 @@ fn body_rows(
     body
 }
 
-/// What a row's suffix column reads: the signed amount, then how far it may
-/// still go in each direction.
+/// How wide each of this screen's four columns runs: the item name, then the
+/// three figures after it.
 ///
-/// The availables are **live** rather than the row's raw figures: a row
-/// reading `-0` while the pack still holds units is the screen saying the
-/// other rows have spent the Depot's room. Its own function so the width
-/// census measures the string the screen draws rather than a hand-written
-/// stand-in for it.
-fn transfer_suffix(amount: i64, put: u32, take: u32) -> String {
-    format!("{amount} / -{put} .. +{take}")
+/// **Measured from the rows actually listed rather than fixed**, so a shelf
+/// of short names draws a narrow table instead of a wide one full of empty space.
+/// Every row is built in one pass over `entries`, so the widths cannot shift
+/// under a row while the screen is open — typing an amount rebuilds the whole
+/// body, and a wider figure widens the column for every row at once rather
+/// than knocking one out of line.
+///
+/// A name longer than the column is not truncated: it pushes its own figures
+/// right and leaves the rest of the table alone. Losing characters off an
+/// item's name to keep a column straight is the worse of the two failures,
+/// and `no_transfer_row_overflows_its_popup` is what says the shipped set has
+/// room for the widest of them.
+struct Columns {
+    name: usize,
+    amount: usize,
+    put: usize,
+    take: usize,
+}
+
+impl Columns {
+    fn of(game: &Game, entries: &[(ItemId, i64, u32, u32)]) -> Self {
+        let mut cols = Columns {
+            name: 0,
+            amount: 0,
+            put: 0,
+            take: 0,
+        };
+        for (item, amount, put, take) in entries {
+            cols.name = cols.name.max(game.item_name(item).chars().count());
+            cols.amount = cols.amount.max(amount.to_string().len());
+            cols.put = cols.put.max(put_cell(*put).len());
+            cols.take = cols.take.max(take_cell(*take).len());
+        }
+        cols
+    }
+
+    /// The name padded out to the column, which is what puts every suffix at
+    /// the same x — see the module doc.
+    fn name_cell(&self, name: &str) -> String {
+        format!("{name:<width$}", width = self.name)
+    }
+
+    /// What a row's suffix column reads: the signed amount, then how far the
+    /// row may still go in each direction.
+    ///
+    /// The availables are **live** rather than the row's raw figures: a row
+    /// reading `-0` while the pack still holds units is the screen saying the
+    /// other rows have spent the Depot's room. Its own function so the width
+    /// census measures the string the screen draws rather than a hand-written
+    /// stand-in for it.
+    fn suffix(&self, amount: i64, put: u32, take: u32) -> String {
+        let (put, take) = (put_cell(put), take_cell(take));
+        format!(
+            "{amount:>aw$} / {put:>pw$} .. {take:>tw$}",
+            aw = self.amount,
+            pw = self.put,
+            tw = self.take,
+        )
+    }
+}
+
+/// The two ends of a row's range, spelled once each so the width measured for
+/// a column and the string drawn into it cannot disagree.
+fn put_cell(put: u32) -> String {
+    format!("-{put}")
+}
+
+fn take_cell(take: u32) -> String {
+    format!("+{take}")
 }
 
 #[cfg(test)]
@@ -129,7 +201,16 @@ mod tests {
             .map(|def| game.item_name(&def.id).to_string())
             .max_by_key(|name| name.chars().count())
             .expect("the shipped assets define items");
-        let suffix = transfer_suffix(-(u32::MAX as i64), u32::MAX, u32::MAX);
+        let cols = Columns::of(
+            &game,
+            &[(
+                ItemId::from("core_fragment"),
+                -(u32::MAX as i64),
+                u32::MAX,
+                u32::MAX,
+            )],
+        );
+        let suffix = cols.suffix(-(u32::MAX as i64), u32::MAX, u32::MAX);
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
@@ -147,6 +228,71 @@ mod tests {
                 "the widest transfer row overflows by {:.0}px \
                  ({drawn:.0} into {room:.0}):\n{widest}  {suffix}",
                 drawn - room
+            );
+        });
+    }
+
+    /// **Every row's figures start at the same x, whatever its name is
+    /// worth.** That is the whole of the column: `suffix_x` places a suffix
+    /// one inset past the *advance* of the row's own label, so two rows agree
+    /// only if their labels measure the same — which is what the padding in
+    /// `name_cell` buys. Drop it and the figures step in and out with the
+    /// names above them.
+    ///
+    /// Measured rather than asserted on the string, because the advance is
+    /// what `draw_row` actually places against; and the suffixes are held to
+    /// one width besides, since a row whose figures are internally ragged is
+    /// a table only at its left edge.
+    #[test]
+    fn every_rows_figures_start_at_the_same_x() {
+        let game = shipped_game();
+        let mut names: Vec<_> = game
+            .item_defs()
+            .into_iter()
+            .map(|def| (def.id.clone(), game.item_name(&def.id).chars().count()))
+            .collect();
+        names.sort_by_key(|(_, len)| *len);
+        let short = names
+            .first()
+            .expect("the shipped assets define items")
+            .clone();
+        let long = names
+            .last()
+            .expect("the shipped assets define items")
+            .clone();
+        assert!(
+            short.1 < long.1,
+            "the census needs two names of different lengths to say anything"
+        );
+
+        // Figures of different widths too, or the suffix column would line up
+        // by luck rather than by being one.
+        let entries = vec![(short.0, 5i64, 7u32, 9u32), (long.0, -1234i64, 99u32, 1u32)];
+        let rows = body_rows(&game, &entries, None, 0);
+        let items: Vec<_> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { text, suffix, .. } => Some((text.clone(), suffix.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(items.len(), 2, "one row per entry");
+
+        let widths: Vec<_> = items
+            .iter()
+            .map(|(_, suffix)| suffix.as_ref().expect("every row carries figures").len())
+            .collect();
+        assert_eq!(widths[0], widths[1], "the figures are ragged: {items:?}");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `draw_row`'s own label for an unselected, untagged, iconless
+            // row — the string `suffix_x` measures.
+            let at = |text: &str| p.measure_ui_advance(format!("  {text}"), m.font_size);
+            let (a, b) = (at(&items[0].0), at(&items[1].0));
+            assert!(
+                (a - b).abs() < 0.5,
+                "the figures step with the name: {a} against {b}\n{items:?}"
             );
         });
     }

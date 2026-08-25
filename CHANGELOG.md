@@ -27,6 +27,91 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.27
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Gear says what it is worth, and the wagon is one basket.
+
+### Added
+
+- **Every piece of gear carries one combat rating.** Six stat axes and no
+  scalar meant "is this better?" was a question the game never answered.
+  `Game::copy_power` answers it in one figure, in a fixed-width column that
+  runs down every list naming an item — cargo, a trader's shelf, a recipe's
+  result, the equipment panel, the Stack market, the wagon.
+
+  **It is absolute, not measured for whoever is holding it**, so one number
+  means one thing on all six screens. Every copy is priced against a single
+  reference wearer in `tuning.rs`, and that wearer is *derived* rather than
+  invented: the zone is the midpoint of the range `balance_sim` sweeps, the
+  level is what its geared sweep reports as the minimum to clear that zone,
+  and the stats are `stats_after_levels` of `PLAYER_BASE_STATS` at that
+  level. A reference far from where players actually stand would make every
+  figure in the game wrong in the same direction.
+
+  Four terms, and none of them restates a formula that already exists.
+  Attack and mitigation go through `Stats::power`, which already prices
+  mitigation as the effective HP it buys rather than summing a percentage
+  into a total. The damage band is a **difference** against the band it
+  replaces, because a weapon *overrides* the natural attack — so a weapon
+  worse than bare fists rates negative, which is the whole reason the term
+  is not a sum. Accuracy and evasion are **proportional**, priced through
+  `battle::hit_chance` as the fraction they move the throughput they act on:
+  a probability is not a quantity. A Decompiler module buys taming rather
+  than combat and gets no term at all.
+
+  So there are three cells and three meanings, and they do not overlap: a
+  figure is a rating, an em dash is *no answer* (a module with no combat
+  axis, a consumable), and a blank is a row that is not an item — a Routine
+  Disk on the wagon, an empty slot. A dash on one of those would claim the
+  disk had been rated and found wanting.
+
+  The **swap picker's delta may disagree with the column, and that is
+  correct**: gear locks in the level it was equipped at, so a worn piece and
+  a candidate are scaled at two different levels. The column is a property
+  of the copy; the delta is a property of the swap.
+
+- **The inspect page breaks the rating down.** `[I]` on any piece now says
+  what the figure came off — offense, survivability, accuracy, evasion —
+  with the axes that contributed nothing left out. One line rather than one
+  per axis, because that page has no scroll and had no rows to spare; it
+  paid for the line out of the affix block, which already had a cap and
+  degrades by counting what it cannot draw.
+
+### Changed
+
+- **The visiting caravan is one basket, committed by Enter.** Buying was a
+  row at a time and selling opened a per-item quantity page, so a visit that
+  cleared a stack of Core Fragments and picked up two things was a dozen
+  keypresses and a dozen turns.
+
+  Every row now carries an amount, edited with the arrows — Shift jumps to
+  the end of a row, Ctrl halves the gap, `[A]` fills your cargo rows, `[N]`
+  clears — and Enter commits the lot. A header line says what the basket
+  leaves in your purse, so six rows are no longer set blind.
+  `Mode::CaravanQuantity` is gone.
+
+  **The commit sells before it buys**, which is what lets a basket be funded
+  by its own sales — the entire reason the two sections are one basket
+  rather than two screens. And **every refusal lands before anything is
+  spent**: a caravan has no buyback, so a half-committed basket is the one
+  bug a player cannot undo. The whole visit costs **one turn**, not one per
+  line.
+
+  On this screen Right increases and Left decreases. The transfer picker's
+  inverted arrows are specified for a single row spanning both directions;
+  here the sign is fixed by which section a row is in, so inverting would
+  read as a slip.
+
+- **The wagon's two lists are grouped by category.** The offers came off the
+  roll shuffled by construction — a weapon, a program, a second weapon — and
+  a deep shelf read as a heap. Both lists now run in one order under their
+  own headings. The grouping is a property of the *view*: the shelf itself
+  stays in deal order, because which equipment slot a wagon leads with
+  rotates per visit and sorting the shelf would open every wagon with a
+  weapon.
+
 ## 0.13.26
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

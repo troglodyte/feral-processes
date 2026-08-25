@@ -1,7 +1,7 @@
 # Perk catalogue
 
 Every perk a player can buy, charted from `assets/perks/` and
-`crates/engine/src/tuning.rs`. 17 of them, and there will be 17
+`crates/engine/src/tuning.rs`. 18 of them, and there will be 18
 until someone writes Rust.
 
 **These numbers are a transcription, not a read.** They were copied out on
@@ -20,11 +20,11 @@ dearer but never stronger.
 
 | | |
 |---|---|
-| perks | 17 |
+| perks | 18 |
 | prices | 2, 3 and 4 Perk Points |
-| one level of everything | 42 points |
+| one level of everything | 45 points |
 | points earned | 1 per player level, plus up to 5 from the [achievement ladder](achievements.md) |
-| affinity perks | 5 of 17, sharing two rates |
+| affinity perks | 5 of 18, sharing two rates |
 
 ## The catalogue
 
@@ -51,6 +51,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `Teardown` | Teardown | 4 | +1 work resource per kill | Game::award_loot |
 | `Failover` | Failover | 2 | +1 Durability per repair interval | Game::total_repair_rate |
 | `TightenTolerances` | Tighten Tolerances | 3 | +5pp on a compiled copy's quality floor | Game::craft_quality_floor |
+| `TargetLock` | Target Lock | 3 | +2 Accuracy on every attack you make | Game::accuracy_bonus |
 
 ## Price
 
@@ -58,10 +59,10 @@ positionally, so this order is load-bearing: append, never reorder.
 PERK POINT PRICE
 
 4  Teardown
-3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool, Tighten Tolerances
+3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool, Tighten Tolerances, Target Lock
 2  Keen Scavenger, Low Power Mode, Attacker, Defender, Payload Tuning, Field Medic, Overclocker, Corruption Vector, Siphon Protocol, Failover
 
-one level of all 17: 42 points
+one level of all 18: 45 points
 ```
 
 What the perks at 3 have in common is that they change a *rate* rather than a
@@ -76,7 +77,7 @@ Teardown is alone at 4 because it is the steepest thing in the catalogue
 relative to what it modifies: a kill drops 2-4 work resources, so a single
 level is worth between a third and a half again of every fight in the run.
 
-Note what 42 points means against how they arrive. A Perk Point is
+Note what 45 points means against how they arrive. A Perk Point is
 1 per player level and at most 5 more from a fully cleared
 profile, so buying one level of each is most of the first forty levels of a
 run. Perks are not a shopping list to complete; they are a shape to commit
@@ -103,16 +104,17 @@ to.
 | Teardown | `TEARDOWN_SALVAGE_PER_LEVEL = 1` |
 | Failover | `FAILOVER_REPAIR_PER_LEVEL = 1` |
 | Tighten Tolerances | `QUALITY_PERK_PER_LEVEL = 5` |
+| Target Lock | `TARGET_LOCK_ACCURACY_PER_LEVEL = 2` |
 
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why an eighteenth perk is a new `Perk` variant plus
+has no `effect:` field and why a nineteenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks
 
-These are the one place the 17 *do* share a shape: each multiplies one
+These are the one place the 18 *do* share a shape: each multiplies one
 `AffinityKind` category — Damage, Heal, Buff, Debuff, Drain — for the player's
 own ability invocations. Never a companion's: a companion's affinity is its species'
 business, and a party-wide perk would multiply against it.

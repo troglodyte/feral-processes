@@ -80,16 +80,16 @@ one fails rather than quietly minting money.
 EQUIPMENT BY SLOT
 
 Weapon (10)
-  Black ICE Pick          90  ####################......  atk+3 decompiler+2
-  Siege Compiler          90  ####################......  atk+3 def+2
+  Black ICE Pick          90  ####################......  atk+3 decompiler+2 acc+2
+  Siege Compiler          90  ####################......  atk+3 def+2 acc+1
   Plasma Router           80  #################.........  atk+4
   Monofilament Whip       60  #############.............  atk+4
-  Overclock Core          22  #####.....................  atk+3
-  Recursion Blade         14  ###.......................  atk+2 def+1
-  Shim Blade              14  ###.......................  atk+2 decompiler+1
-  Arc Lance               12  ###.......................  atk+3
-  Kinetic Edge             7  ##........................  atk+2
-  Shiv Routine             4  #.........................  atk+1
+  Overclock Core          22  #####.....................  atk+3 acc+2
+  Recursion Blade         14  ###.......................  atk+2 def+1 acc+2
+  Shim Blade              14  ###.......................  atk+2 decompiler+1 acc+2
+  Arc Lance               12  ###.......................  atk+3 acc+2
+  Kinetic Edge             7  ##........................  atk+2 acc+2
+  Shiv Routine             4  #.........................  atk+1 acc+3
 
 Armor (10)
   Nullsteel Plate         90  ####################......  def+3 decompiler+2
@@ -98,10 +98,10 @@ Armor (10)
   Ablative Plating        25  #####.....................  def+4
   Firewall Plating        20  ####......................  def+3
   Null Weave              14  ###.......................  def+2 atk+1
-  Static Mesh             14  ###.......................  def+2 decompiler+1
+  Static Mesh             14  ###.......................  def+2 decompiler+1 eva+5
   Hardened Shell          12  ###.......................  def+3
   Packet Buffer            7  ##........................  def+2
-  Scrap Ward               4  #.........................  def+1
+  Scrap Ward               4  #.........................  def+1 eva+3
 
 Module (11)
   Singularity Matrix     120  ##########################  atk+3 def+3 decompiler+3

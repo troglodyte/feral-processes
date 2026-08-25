@@ -634,22 +634,58 @@ crit and fumble mutually exclusive *by construction* rather than by a check
 somebody can drop. `crit_and_fumble_are_mutually_exclusive_by_construction`
 sweeps the unit interval to say so exhaustively rather than by sampling.
 
-**`hit_chance` is the ratio form `acc / (acc + eva)`, and a difference form
-must not replace it.** The ratio is scale-free: doubling both sides leaves it
-at 0.5, so a zone that multiplies everything by its tier multiplier changes
-no hit rate anywhere, and the geometric-versus-linear hazard that shaped
-every other curve in the game cannot reappear on this axis at all.
-`base + k * (acc - eva)` makes hit rate depend on absolute scale, so deep
-zones drift silently toward always-hit or always-miss. Two identical
-combatants get exactly 0.5 before the clamp, which is the baseline every
-constant in the section is read against; two combatants with *nothing* — a
-mod species authoring `base_speed: 0` at level 1 — get an even matchup rather
-than a divide by zero.
+**`hit_chance` is the ratio form `k*acc / (k*acc + eva)`, and a difference
+form must not replace it.** The ratio is scale-free: doubling both sides
+leaves it where it was, so a zone that multiplies everything by its tier
+multiplier changes no hit rate anywhere, and the geometric-versus-linear
+hazard that shaped every other curve in the game cannot reappear on this axis
+at all. `base + k * (acc - eva)` makes hit rate depend on absolute scale, so
+deep zones drift silently toward always-hit or always-miss. Two combatants
+with *nothing* — a mod species authoring `base_speed: 0` at level 1 — get an
+even matchup rather than a divide by zero, and that arm resolves *as* parity
+rather than restating a figure, so it tracks `k` instead of drifting from it.
+
+**`k` is `ATTACKER_ACCURACY_ADVANTAGE`, and it is the whole reason the parity
+baseline is not 0.5.** It was 0.5 until 2026-08-25, deliberately — an even
+matchup, the number every constant in the section was read against. What that
+missed is that an even matchup is not what the game actually fields: measured
+against the shipped roster with the real functions, a player carrying no
+accuracy gear sat at 0.44-0.64 for the first ten levels, and both apex
+species — the lair guardians — are the fastest things in the game and so the
+hardest to hit at every level. Roughly half of everything whiffed early.
+
+It surfaced as "routines miss too often", and the asymmetry in that complaint
+is real even though the *rate* is not routine-specific: a routine and a basic
+attack share one path (`resolve_and_apply_attack`), but a basic attack shrugs
+a miss off, while a routine has already spent its Power and armed its
+cooldown by the time the roll happens. Thirteen of the twenty-five damaging
+routines are multi-target with an independent roll per recipient, so one
+sweep at 55% printed two or three "goes wide" lines in a row.
+
+**A multiplier and not an addend**, because a flat `+n` on accuracy washes
+out as levels grow — the same scale-dependence the difference form is
+forbidden for, arriving by another door. 1.4 puts parity at 0.583.
+
+**Necessarily symmetric**, because `hit_chance` is a pure function of two
+numbers and cannot know which side is the player. Hostiles take the same
+edge, which notably lifts them off `HIT_CHANCE_MIN` — a level-40-plus player
+had pinned them to the floor. The player's *asymmetric* edge is the flat
+accuracy sources instead (see the accuracy-door seam below).
+
+**What the balance gate caught, and what it meant.** Zones 2-10 were
+untouched (25 to 146 rounds against the round floor). Zone 1 fell from 3
+rounds to 2 — because `zone_group_cap(1)` was **1**, making that fixture a
+five-against-*one* fight rather than the body ratio the rest of the curve is
+about. The fix was `ZONE_ONE_GROUP_CAP`, applied as the clamp's *lower bound*
+so no later zone's step moves, rather than backing the constant off to 1.25
+to fit a degenerate fixture. It also ends `TRACE_GROUP_MULT`'s zone-1
+inertness, which was always a consequence of the group curve rather than an
+intent of that constant.
 
 **Accuracy and Evasion are derived, never stored.** No `Stats` field, no save
 field, so they cannot drift from their inputs: `base_speed` plus level plus
-gear, where gear `accuracy`/`evasion` are read live off `gear_bonus` because,
-unlike `atk` and `mitigation`, neither is baked into `Stats`. `atk` is
+every flat source, which `Game::accuracy_bonus` sums and which are read live
+because, unlike `atk` and `mitigation`, none is baked into `Stats`. `atk` is
 deliberately absent from both — feeding it to-hit *and* damage compounds
 quadratically. Speed comes from `Game::combat_speed`, which is one rule for
 initiative and to-hit alike; they disagreed briefly, and the player came out
@@ -676,6 +712,64 @@ no speed and cannot dodge, so it keeps the deterministic path it always had —
 identical swings stay identical, or wearing a nest down becomes a slot
 machine. `combat_policy` is the other non-roller: it is *choosing* a swing,
 not making one, so it takes `expected_damage`'s mean and spends no draw.
+
+### Flat Accuracy has one door per axis, and the two axes are not the same one
+
+**`Game::accuracy_bonus` is what an *entity* brings to every swing it makes.**
+Gear, plus `Perk::TargetLock` for the player, plus `TalentNode::Accuracy` for
+a companion. The perk is hooked here rather than at the roll because a perk's
+hook belongs where its sources meet — `Obfuscation` sits inside `raise_trace`
+rather than at the six things that raise Trace, and a hook that has to be
+repeated is the signal the perk is aimed at the wrong seam. The player/
+companion split is on identity against `player_entity()`, `ability_affinity`'s
+rule, so a perk and a talent can never stack by construction rather than by
+the player happening to have no `Talents`.
+
+**`battle::Swing` is what an *invocation* brings**, and that is
+`AbilityDef::accuracy` and nothing else. The damage band was the only
+per-invocation property for a long time and travelled as a bare
+`DamageRange`; accuracy is the second, and loose parameters are what
+`Combatant`'s own doc rejects, since two of the four call sites have nothing
+to say about accuracy at all. It aims one swing:
+`resolve_and_apply_attack` builds the *defender's* profile from
+`Swing::plain`, or an Opening rung's free counter would be aimed by the very
+routine it is countering, and `combat_policy`'s projection stays a
+basic-attack projection.
+
+**A routine's accuracy is flat and never scaled by level**, unlike every
+magnitude beside it. A hostile's Evasion grows with the *zone* while the
+invoker's Accuracy grows with their *level*, and a player levels far faster
+than zones advance — so to-hit is already a solved problem late and an
+unsolved one early. A bonus that scaled would be largest exactly where it is
+needed least. The shipped roster grades it by how narrow the routine is (6
+single-target, 4 whole-group, 2 all-enemies), so a sweep trades odds for
+reach rather than being strictly better.
+
+**The serde default has to stay 0** for a mod's file to parse untouched,
+which is exactly why the shipped roster needs a census — `spread` shipped
+documented and authored by none of 77 files for several releases. This one
+runs both ways: every rolling routine must author it, and no non-rolling
+routine may, since the field is read by nothing there and a modder reads the
+shipped roster as the schema.
+
+**The trap is enumerating `EquipmentStats`' fields by hand.** Both emptiness
+arms in `AffixDef::fault` named three of six, so an affix paying only
+accuracy, only evasion or only damage was refused at load as granting
+nothing. The accuracy axis could therefore only ever ride along on an ATK
+affix — which is part of why it stayed on three weapons for as long as it
+did, and why the fix was found by trying to author the first pure-accuracy
+affix rather than by reading the code. `EquipmentStats::is_empty` and
+`has_upside` **destructure** rather than field-access, on `cell_mark`'s rule:
+a seventh stat is a compile error there rather than a field silently
+uncounted.
+
+**A companion's node is read on demand, never baked**, for the reason above:
+there is no `Stats` field to bake into, and a baked one would be re-applied
+on every load. It is `Affinity`'s shape exactly, down to
+`Game::talent_accuracy` mirroring `talent_affinity_mult`. Bounded by
+`MAX_TALENT_ACCURACY_POINTS` because Accuracy feeds a ratio — unbounded, one
+node would walk a companion to `HIT_CHANCE_MAX` on its own and make every
+later tier in its tree moot.
 
 ### Mitigation is percentage points, and `Game::effective_mitigation` is the one door
 

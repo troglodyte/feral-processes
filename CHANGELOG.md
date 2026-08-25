@@ -27,6 +27,39 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.22
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+A visiting caravan is worth walking over to.
+
+### Changed
+
+- **A caravan's shelf never lists the same thing twice.** Every category is
+  drawn from without replacement now: a routine is its ability, a program its
+  species, a stack of cargo its item, and gear the whole rolled copy — so two
+  copies of one item are on the wagon together only when their rarity, affix
+  or quality tell them apart. Before this a wagon could stand there with three
+  stacks of Power Cells and two of the same disk.
+- **Both traders carry fifty rows**, up from twelve and ten. A Salvage Convoy
+  now sets out 23–34 distinct pieces of equipment, and about eleven of them
+  are standout stock rather than three.
+- **The Kennel Run deals more gear than routines.** There are sixteen
+  non-boss species, so on a fifty-row shelf its program pool runs dry a third
+  of the way down and everything after it comes out of the other two
+  categories — which at its old weights made a program trader whose actual
+  wagon was a rack of disks. It is `gear: 4` / `routines: 2` now, and stocks
+  the whole roster besides.
+- **`rows` is a ceiling rather than a count.** A category that runs dry stops
+  being dealt from and the rest of the shelf fills out of the others, so how
+  much of anything a wagon can hold is bounded by how many files are
+  installed. A shelf deeper than every pool it draws from stops when the last
+  one empties. `assets/caravans/README.md` documents both.
+
+Rows past the thirty-fifth have no letter of their own — `menu_shortcut` runs
+out at nine digits and twenty-six letters — so a deep shelf is walked with the
+arrows below that point, as a long inventory already is.
+
 ## 0.13.21
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

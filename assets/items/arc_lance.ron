@@ -3,7 +3,7 @@
     name: "Arc Lance",
     description: "Standard weapon. A straight, dependable damage upgrade.",
     value: Some(12),
-    equipment: Some((Weapon, (atk: 3, damage: (min: 5, max: 10)))),
+    equipment: Some((Weapon, (atk: 3, damage: (min: 5, max: 10), accuracy: 2))),
     craftable: Some((cost: [("core_fragment", 12)], requires_structure: Some("fabricator"))),
     droppable: Some([("scrapper", 0.1), ("worm", 0.08)]),
 )

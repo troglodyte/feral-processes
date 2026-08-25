@@ -8,6 +8,10 @@
 
 use crate::*;
 
+/// What one direction of a transfer actually moved, keyed and ordered by
+/// `ItemId` — the shape both movers already return.
+pub type Moved = Vec<(ItemId, u32)>;
+
 impl Game {
     /// Every item the party could move in either direction, in `ItemId`
     /// order.
@@ -97,12 +101,12 @@ impl Game {
         &mut self,
         take: &[(ItemId, u32)],
         give: &[(ItemId, u32)],
-    ) -> (Vec<(ItemId, u32)>, Vec<(ItemId, u32)>) {
+    ) -> (Moved, Moved) {
         if self.is_game_over().is_some() || self.has_active_battle() {
-            return (Vec::new(), Vec::new());
+            return (Moved::new(), Moved::new());
         }
         if self.require_base().is_err() {
-            return (Vec::new(), Vec::new());
+            return (Moved::new(), Moved::new());
         }
         let taken = self.take_from_adjacent(take);
         let given = self.give_to_adjacent(give);

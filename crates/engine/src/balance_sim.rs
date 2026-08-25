@@ -888,9 +888,10 @@ mod tests {
     /// The zone 1 -> 2 pair is exempt from the growth guard, and only from
     /// that half of it — the monotonicity check still covers every pair.
     ///
-    /// Zone 1 fields one program at a time (`zone_group_cap(1)` is 1, and
-    /// `max_enemy_groups` allows one group), so "needs level 1" measures an
-    /// intentionally empty tutorial zone rather than a difficulty. Six times
+    /// Zone 1 fields `ZONE_ONE_GROUP_CAP` programs in one group
+    /// (`max_enemy_groups` allows one group there), so "needs level 1"
+    /// measures an intentionally quiet tutorial zone rather than a
+    /// difficulty. Six times
     /// almost nothing is still almost nothing: the guard hands zone 2 a
     /// ceiling of 16 whatever the roster actually says, and the shipped
     /// curve has sat one level under that wire. That is a property of the

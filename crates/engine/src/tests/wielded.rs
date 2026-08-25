@@ -502,9 +502,12 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
 
 #[test]
 fn a_proc_lands_on_top_of_the_strike() {
+    // Both halves have to land for there to be a sum to check, and every
+    // swing can miss by design — so the search asks for both rather than
+    // asking for the proc and assuming the strike.
     let game = first_seed_where(
         |rng_seed| armed_battle(9114, rng_seed, "kernel_panic", 9999),
-        |g| damage_in(g, "Blade hits").is_some(),
+        |g| damage_in(g, "Blade hits").is_some() && damage_in(g, "data strike").is_some(),
     );
 
     let strike = damage_in(&game, "data strike").expect("the player still strikes");
@@ -519,18 +522,32 @@ fn a_proc_lands_on_top_of_the_strike() {
 
 #[test]
 fn no_proc_fires_when_the_strike_ended_the_battle() {
-    // One enemy on one HP: the strike always kills, so the fight is over
-    // before the proc could roll however the stream happens to fall.
+    // One enemy on one HP, so any strike that *lands* kills, and the fight
+    // is over before the proc could roll however the stream happens to fall.
+    //
+    // A strike that misses leaves the fight open, which is the case this
+    // test is not about — skipped rather than assumed away. The skips are
+    // counted, because a fixture where the strike never landed would run
+    // this loop to completion while proving nothing at all.
+    let mut decided = 0;
     for rng_seed in 0..64u64 {
         let mut game = armed_battle(9115, rng_seed, "kernel_panic", 1);
 
         player_attacks(&mut game);
 
+        if damage_in(&game, "data strike").is_none() {
+            continue;
+        }
+        decided += 1;
         assert!(
             damage_in(&game, "Blade hits").is_none(),
             "a routine must never resolve after the fight is already won (seed {rng_seed})"
         );
     }
+    assert!(
+        decided > 0,
+        "no seed landed the strike, so the invariant was never exercised"
+    );
 }
 
 #[test]

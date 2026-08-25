@@ -30,10 +30,8 @@ mod base;
 mod battle;
 mod building;
 mod caravan;
-mod collect;
 mod contracts;
 mod crafting;
-mod deposit;
 mod field;
 mod frame_map;
 mod group_menu;
@@ -52,6 +50,7 @@ mod stock;
 mod structure_manifest;
 mod talents;
 mod trade;
+mod transfer;
 
 use arena::{
     draw_arena_builder, draw_arena_load, draw_arena_pick, draw_arena_result, draw_arena_save,
@@ -67,10 +66,8 @@ use building::{
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{draw_caravan, draw_caravan_quantity};
-use collect::draw_collect;
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
-use deposit::draw_deposit;
 use field::{draw_field_cast, draw_field_cast_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
@@ -100,6 +97,7 @@ use talents::{draw_develop, draw_develop_program};
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
+use transfer::draw_transfer;
 
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
 const BORDER: Color = Color::new(0.25, 0.65, 0.65, 1.0);
@@ -696,18 +694,24 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BaseStaff => app.base_staff_rows(),
         _ => Vec::new(),
     };
-    // `App::basket_available` takes `&self`, so it has to run before `game`
-    // below takes `&mut app.game` — a method call borrows the whole `App`,
-    // not just the field. Calling it here rather than recomputing the budget
-    // expression in `draw_deposit` keeps the rule stated once, in `basket.rs`.
-    let deposit_entries: Vec<(ItemId, u32, u32)> = match app.mode {
-        Mode::Deposit => app
+    // `App::take_available`/`put_available` take `&self`, so they have to
+    // run before `game` below takes `&mut app.game` — a method call borrows
+    // the whole `App`, not just the field. Calling them here rather than
+    // recomputing the budget in `draw_transfer` keeps the rule stated once,
+    // in `basket.rs`.
+    let transfer_entries: Vec<(ItemId, i64, u32, u32)> = match app.mode {
+        Mode::Transfer => app
             .basket_rows
             .iter()
             .enumerate()
-            .map(|(row, (item, _))| {
-                let given = app.basket_amounts.get(row).copied().unwrap_or(0);
-                (item.clone(), given, app.basket_available(row))
+            .map(|(row, r)| {
+                let amount = app.basket_amounts.get(row).copied().unwrap_or(0);
+                (
+                    r.item.clone(),
+                    amount,
+                    app.put_available(row),
+                    app.take_available(row),
+                )
             })
             .collect(),
         _ => Vec::new(),
@@ -723,19 +727,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BuildDirection => {
             draw_build_direction(game, pending_structure.as_deref(), refusal, painter, m)
         }
-        Mode::Collect => draw_collect(
+        Mode::Transfer => draw_transfer(
             game,
-            &app.basket_rows,
-            &app.basket_amounts,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::Deposit => draw_deposit(
-            game,
-            &deposit_entries,
-            app.basket_room.unwrap_or(0),
+            &transfer_entries,
+            app.basket_room,
             selected,
             refusal,
             painter,
@@ -1064,14 +1059,13 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 88] = [
+    const ALL_MODES: [Mode; 87] = [
         Mode::MainMenu,
         Mode::DifficultyPick,
         Mode::LoadGame,
         Mode::SaveAction,
         Mode::Playing,
-        Mode::Collect,
-        Mode::Deposit,
+        Mode::Transfer,
         Mode::BaseMenu,
         Mode::PartyMenu,
         Mode::Battle,

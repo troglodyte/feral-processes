@@ -39,7 +39,7 @@ use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, ContractRefusal, ContractRow,
     DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game,
     LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift,
-    WorkOrder, WorkOrderReport, WorkProfile, condense,
+    TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -807,25 +807,21 @@ pub enum Mode {
     /// Load-or-delete choice for the save picked from `Mode::LoadGame`.
     SaveAction,
     Playing,
-    /// The collect picker, opened with `c` beside a stocked machine. One
-    /// row per item on offer (`App::basket_rows`) and a quantity per row
-    /// (`App::basket_amounts`); Enter takes exactly that basket.
+    /// The transfer picker, opened with `c` beside a stocked machine or a
+    /// Depot. One row per item (`App::basket_rows`) and a **signed** amount
+    /// per row (`App::basket_amounts`): negative puts into an adjacent
+    /// Depot, positive takes off an adjacent `Stock`. Enter moves exactly
+    /// that basket, in one action.
+    ///
+    /// One screen rather than two because an item can be on both sides at
+    /// once — the shelf and the pack are two ends of one row, not two
+    /// screens with a mirrored key table.
     ///
     /// **This screen cannot use `App::selected_index`.** There a digit picks
     /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
     /// through `App::scroll`, so it still drives `menu_selected` and the
     /// popup's window still follows it — the page scrolls for free.
-    Collect,
-    /// The deposit picker, opened with `P` beside a Depot. The mirror of
-    /// `Mode::Collect` and built from the same `app/basket.rs` key table —
-    /// the rows are the player's own pack rather than a machine's output,
-    /// and Enter puts exactly that basket into the base's hands.
-    ///
-    /// **Its ceiling is shared where the collect screen's is per row.** A
-    /// Depot has one `output_room()` across every item, so filling one row
-    /// lowers the rest — carried as `App::basket_room`, and the one place
-    /// the mirror of the collect screen does not hold.
-    Deposit,
+    Transfer,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -1230,11 +1226,9 @@ impl Mode {
             | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
-            // Opened from the map with `c` and `P`, so neither layers over a
-            // fight — and the engine refuses a collect or a deposit
-            // mid-battle anyway.
-            | Mode::Collect
-            | Mode::Deposit
+            // Opened from the map with `c`, so it never layers over a
+            // fight — and the engine refuses a transfer mid-battle anyway.
+            | Mode::Transfer
             | Mode::Craft
             | Mode::CraftQuantity
             | Mode::WorkOrders
@@ -1572,27 +1566,34 @@ pub struct App {
     pub pending_erase: Option<GearCopy>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
-    /// What is on offer, snapshotted when either basket picker opens — the
-    /// adjacent machines' output for `Mode::Collect`, the player's own pack
-    /// for `Mode::Deposit`.
+    /// What is on offer, snapshotted when the transfer picker opens — one
+    /// row per item, carrying what the adjacent shelves hold of it and what
+    /// the pack could put back.
     ///
     /// Snapshotted rather than re-derived per keypress, which is the
     /// opposite of what the trade screen does. The amounts below are pending
     /// state *indexed into this list*, so re-deriving opens a gap where the
     /// two lengths disagree. Nothing ticks while a menu is open, so the
     /// snapshot cannot go stale — the commit is the first tick.
-    pub basket_rows: Vec<(ItemId, u32)>,
-    /// How much of each `basket_rows` entry the player has asked for.
-    /// Same length as that list, all zeroes on open. Written with it, so the
-    /// two cannot drift apart.
-    pub basket_amounts: Vec<u32>,
-    /// The ceiling the amounts are clamped against, and the only thing that
-    /// separates the two pickers — see `App::basket_available`.
+    pub basket_rows: Vec<TransferRow>,
+    /// How much of each `basket_rows` entry the player has asked for, and in
+    /// which direction: **negative puts in, positive takes out**. Same length
+    /// as that list, all zeroes on open. Written with it, so the two cannot
+    /// drift apart.
     ///
-    /// `None` is a shelf: every row's ceiling is its own, because taking one
-    /// item off a machine says nothing about how much of another is there.
-    /// `Some(r)` is a Depot's remaining room: **one budget shared across
-    /// every row**, so filling one lowers all the rest.
+    /// `i64` rather than a pair of `u32`s: one signed number is what makes a
+    /// row's two ends one axis the arrows walk along, and it is wide enough
+    /// that a magnitude clamped against a modded Depot's `u32` capacity
+    /// cannot overflow.
+    pub basket_amounts: Vec<i64>,
+    /// Room left across the adjacent Depots — the ceiling every *put* is
+    /// clamped against, shared across the rows, see `App::put_available`.
+    ///
+    /// **`None` is "no Depot beside you"; `Some(0)` is "a Depot with nothing
+    /// left".** Keeping those distinguishable is what stops the screen
+    /// drawing a room line reading 0 beside a Mining Node, which would claim
+    /// the base is full when it has no shelf at all. Never infer the `None`
+    /// from a zero.
     pub basket_room: Option<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.

@@ -1,45 +1,53 @@
-//! The basket picker, shared by both screens that build one: a row per item,
-//! a quantity per row, and one commit that moves exactly that basket.
+//! The transfer picker: a row per item, a **signed** amount per row, and one
+//! commit that moves exactly that basket in both directions at once.
 //!
-//! Two screens ride this. `Mode::Collect` takes goods off the adjacent
-//! machines; `Mode::Deposit` puts the pack's cargo into an adjacent Depot.
-//! Everything a player presses is the same on both — the cursor, `[A]`/`[N]`,
-//! the digits, the four modifier verbs — and **the only thing that differs is
-//! how high a row may go**, which is carried as a value on `App::basket_room`
-//! rather than as a second copy of the key table.
+//! Negative puts into an adjacent Depot, positive takes off an adjacent
+//! `Stock`, and the two ends of a row are the two things the arrows walk
+//! between. One key table rather than the two screens this replaces, because
+//! an item can be on both sides at once and a mirrored table could never say
+//! so.
 //!
-//! That is deliberate and load-bearing. The table below is sixty lines of
-//! deliberately subtle semantics: an inverted Left/Right that is *specified*
-//! to be inverted, a `div_ceil` that is what makes the Ctrl step terminate,
-//! and a saturating digit accumulation that lets a held key reach the clamp
-//! rather than overflow. Two copies of it would drift, and the inversion is
-//! precisely the thing a later reader "restores" — only one copy would be
-//! under the test that says so in as many words.
+//! The two ceilings are what a row is clamped against, and they are not the
+//! same shape. A take is **per row and static** — what that item is sitting
+//! on the machine. A put is **one budget shared across every row**, the
+//! Depot's remaining room, so filling one row lowers all the others.
+//!
+//! The table below is deliberately subtle: an inverted Left/Right that is
+//! *specified* to be inverted, a `div_ceil` that is what makes the Ctrl step
+//! terminate, and a saturating digit accumulation that lets a held key reach
+//! the clamp rather than overflow.
 
 use crate::*;
 
+/// One direction of a basket, as the engine's `transfer_items` wants it.
+type Basket = Vec<(ItemId, u32)>;
+
+/// Closes half the gap between `n` and `target`, landing exactly on the
+/// target rather than stalling one short.
+///
+/// `div_ceil` on the **magnitude** of the gap is what makes it terminate:
+/// rounded down, a gap of one gives a step of zero and the key goes dead
+/// with the row neither full nor empty. Generalised over the sign so each
+/// modifier pair points at the end its unmodified arrow heads for.
+fn half_way_to(n: i64, target: i64) -> i64 {
+    let gap = target - n;
+    n + gap.signum() * gap.unsigned_abs().div_ceil(2) as i64
+}
+
 impl App {
-    /// Snapshots the offer and opens whichever picker asked for it. The
-    /// amounts are written in the same breath as the rows so the two lengths
-    /// cannot disagree.
+    /// How much of the highlighted row the player may still **take**: what
+    /// that item is sitting on the adjacent shelves, per row and static.
     ///
-    /// `room` is the axis: `None` for a shelf, where each row's ceiling is
-    /// its own, and `Some(r)` for one budget shared across every row. See
-    /// `basket_available`.
-    pub(crate) fn open_basket(&mut self, rows: Vec<(ItemId, u32)>, room: Option<u32>, mode: Mode) {
-        self.basket_amounts = vec![0; rows.len()];
-        self.basket_rows = rows;
-        self.basket_room = room;
-        self.menu_selected = 0;
-        self.mode = mode;
+    /// `pub`, not `pub(crate)`: the screen draws this same figure in its
+    /// suffix column, and recomputing it in `gui` would be a second copy of
+    /// the rule rather than a call to the one that governs the key handling.
+    pub fn take_available(&self, row: usize) -> u32 {
+        self.basket_rows.get(row).map_or(0, |r| r.on_shelves)
     }
 
-    /// How high the highlighted row may go, and the whole of what separates
-    /// the two screens.
-    ///
-    /// A shelf gives every row an independent ceiling — what that item is
-    /// sitting on the machine. A Depot has **one** `output_room()` across
-    /// every row, so filling one row lowers all the others.
+    /// How much of the highlighted row the player may still **put**: what
+    /// the pack holds of it, capped by the Depot room the other rows have
+    /// not already spent.
     ///
     /// Subtracting only the *other* rows is what lets the highlighted row
     /// keep its own amount while it is being edited. Counting itself would
@@ -47,19 +55,25 @@ impl App {
     /// row could never be lowered and then raised again, because its own
     /// units would already be spending the budget it was asking against.
     ///
-    /// `pub`, not `pub(crate)`: the deposit screen draws this same figure in
-    /// its suffix column, and recomputing the budget expression in `gui`
-    /// would be a second copy of the rule rather than a call to the one that
-    /// governs the key handling.
-    pub fn basket_available(&self, row: usize) -> u32 {
-        let taken: u32 = self.basket_amounts.iter().sum();
-        let others = taken.saturating_sub(self.basket_amounts.get(row).copied().unwrap_or(0));
-        let budget = self
-            .basket_room
-            .map_or(u32::MAX, |r| r.saturating_sub(others));
+    /// A pending *take* deliberately does not credit the budget: a take may
+    /// come off a machine that is not a Depot, so crediting it would offer
+    /// room that never appears. Under-offering is safe — `transfer_items`
+    /// takes before it gives, so the real room at the commit is never
+    /// smaller than this.
+    pub fn put_available(&self, row: usize) -> u32 {
+        // `(-n).max(0)`: a giving row is negative, so this is its magnitude
+        // and a taking row contributes nothing. Folded with `saturating_add`
+        // because nothing bounds a modded Depot's capacity.
+        let given = self
+            .basket_amounts
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != row)
+            .fold(0u32, |acc, (_, n)| acc.saturating_add((-*n).max(0) as u32));
+        let budget = self.basket_room.unwrap_or(0).saturating_sub(given);
         self.basket_rows
             .get(row)
-            .map_or(0, |(_, qty)| *qty)
+            .map_or(0, |r| r.in_pack)
             .min(budget)
     }
 
@@ -70,103 +84,99 @@ impl App {
     ///
     /// Amounts are edited numerically (`n * 10 + d`, then clamp) rather than
     /// through the `String` buffer the craft and trade quantity pages use.
-    /// Those pages have no ceiling to clamp against; these ones do, and a
+    /// Those pages have no ceiling to clamp against; this one does, and a
     /// number that cannot exceed what is available is worth having by
     /// construction rather than by a check at the commit.
     ///
-    /// **Left adds and Right removes**, inverted against every other
+    /// **Left puts in and Right takes out**, inverted against every other
     /// Left/Right in the game — the manifest pager, the arena row editor and
     /// all four movement handlers step `Right` positive. It is inverted here
     /// by request, so the inconsistency is the specification rather than a
     /// slip: anything "restoring" it fails
-    /// `left_and_right_step_by_one_and_saturate`, which says so in as many
-    /// words.
+    /// `left_puts_in_and_right_takes_out`, which says so in as many words.
     pub(crate) fn handle_basket_key(&mut self, key: GameKey) {
         let len = self.basket_rows.len();
         match key {
             GameKey::Esc => self.leave_basket(),
-            // Which screen this is decides where the basket goes, and that is
-            // the one place the two diverge after the keys. Two arms rather
-            // than a stored callback: the commit is a different verb on a
-            // different engine door, not a parameter of the same one.
-            GameKey::Enter => match self.mode {
-                Mode::Deposit => self.commit_deposit(),
-                _ => self.commit_collect(),
-            },
+            GameKey::Enter => self.commit_transfer(),
             GameKey::Up | GameKey::Down => self.scroll(key, len),
             // Uppercase for the two screen actions, matching the reserved
             // uppercase convention. Nothing here picks a row by letter, so
             // the reservation costs these screens nothing — but it is what
             // makes uppercase read as "acts" everywhere else.
             //
-            // Filled one row at a time through `edit_row` rather than zipped
-            // straight across the rows: under a shared budget each row's
-            // ceiling depends on what the rows before it just took, so a zip
-            // would hand every row the full budget and blow past it.
+            // `[A]` writes the take ceiling over **every** row, clearing a
+            // give the player had set on a row with nothing on the shelf.
+            // That is what "take everything" means on one axis, and it is a
+            // decision rather than an oversight.
+            //
+            // Filled one row at a time rather than zipped straight across:
+            // `[A]` no longer touches the shared budget, but the loop is
+            // what stops the next person reintroducing a zip that would.
             GameKey::Char('A') => {
                 for row in 0..len {
-                    let available = self.basket_available(row);
-                    if let Some(want) = self.basket_amounts.get_mut(row) {
-                        *want = available;
+                    let want = self.take_available(row) as i64;
+                    if let Some(n) = self.basket_amounts.get_mut(row) {
+                        *n = want;
                     }
                 }
             }
             GameKey::Char('N') => self.basket_amounts.iter_mut().for_each(|n| *n = 0),
+            // The magnitude accumulates in the row's **current sign**, and a
+            // row sitting at zero types a take. `saturating_*` because a
+            // held digit key must reach the clamp rather than overflow.
             GameKey::Char(c) if c.is_ascii_digit() => {
-                // `saturating_mul`/`saturating_add`: a held digit key must
-                // reach the clamp rather than overflowing `u32` on the way.
-                self.edit_row(|n, available| {
-                    n.saturating_mul(10)
-                        .saturating_add(c.to_digit(10).unwrap_or(0))
-                        .min(available)
+                let d = c.to_digit(10).unwrap_or(0) as u64;
+                self.edit_row(|n, _, _| {
+                    let sign = if n < 0 { -1 } else { 1 };
+                    let magnitude = n.unsigned_abs().saturating_mul(10).saturating_add(d);
+                    sign * magnitude.min(i64::MAX as u64) as i64
                 });
             }
-            GameKey::Backspace => self.edit_row(|n, _| n / 10),
-            GameKey::Left => self.edit_row(|n, available| (n + 1).min(available)),
-            GameKey::Right => self.edit_row(|n, _| n.saturating_sub(1)),
+            GameKey::Backspace => self.edit_row(|n, _, _| n / 10),
+            GameKey::Left => self.edit_row(|n, _, _| n - 1),
+            GameKey::Right => self.edit_row(|n, _, _| n + 1),
             // The two modifiers are different verbs. Shift is a *target* —
             // an end of the range, idempotent under the key repeat driving
             // these arrows. Ctrl is a *step*: it closes half the gap to the
             // end it is heading for, so pressing it again halves what is
             // left rather than landing on the same number twice.
-            //
-            // `div_ceil` on the step is what makes it terminate. Rounded
-            // down, a gap of one gives a step of zero and the key goes dead
-            // with the row neither full nor empty.
-            GameKey::ShiftLeft => self.edit_row(|_, available| available),
-            GameKey::ShiftRight => self.edit_row(|_, _| 0),
-            GameKey::CtrlLeft => {
-                self.edit_row(|n, available| n + available.saturating_sub(n).div_ceil(2))
-            }
-            GameKey::CtrlRight => self.edit_row(|n, _| n - n.div_ceil(2)),
+            GameKey::ShiftLeft => self.edit_row(|_, _, put| -put),
+            GameKey::ShiftRight => self.edit_row(|_, take, _| take),
+            GameKey::CtrlLeft => self.edit_row(|n, _, put| half_way_to(n, -put)),
+            GameKey::CtrlRight => self.edit_row(|n, take, _| half_way_to(n, take)),
             _ => {}
         }
     }
 
-    /// Applies `f` to the highlighted row's amount, handing it that row's own
-    /// available so every rule here is per row rather than against a shared
-    /// maximum — even when the ceiling those availables come from is itself
-    /// shared.
-    fn edit_row(&mut self, f: impl FnOnce(u32, u32) -> u32) {
+    /// Applies `f` to the highlighted row's amount and clamps the result to
+    /// that row's two ends, so every rule above can be written as the number
+    /// it wants rather than as the number it is allowed.
+    fn edit_row(&mut self, f: impl FnOnce(i64, i64, i64) -> i64) {
         let row = self.menu_selected;
         if row >= self.basket_rows.len() {
             return;
         }
-        let available = self.basket_available(row);
-        if let Some(want) = self.basket_amounts.get_mut(row) {
-            *want = f(*want, available);
+        let take = self.take_available(row) as i64;
+        let put = self.put_available(row) as i64;
+        if let Some(n) = self.basket_amounts.get_mut(row) {
+            *n = f(*n, take, put).clamp(-put, take);
         }
     }
 
-    /// The basket as the engine wants it: the rows actually asked for, with
-    /// the untouched ones dropped.
-    pub(crate) fn basket_request(&self) -> Vec<(ItemId, u32)> {
-        self.basket_rows
-            .iter()
-            .zip(self.basket_amounts.iter())
-            .filter(|(_, n)| **n > 0)
-            .map(|((item, _), n)| (item.clone(), *n))
-            .collect()
+    /// The basket as the engine wants it: what to take and what to give,
+    /// each with the untouched rows dropped.
+    pub(crate) fn basket_request(&self) -> (Basket, Basket) {
+        let mut take = Basket::new();
+        let mut give = Basket::new();
+        for (row, n) in self.basket_rows.iter().zip(self.basket_amounts.iter()) {
+            match (*n).cmp(&0) {
+                std::cmp::Ordering::Greater => take.push((row.item.clone(), *n as u32)),
+                std::cmp::Ordering::Less => give.push((row.item.clone(), n.unsigned_abs() as u32)),
+                std::cmp::Ordering::Equal => {}
+            }
+        }
+        (take, give)
     }
 
     /// The one teardown every exit uses. Clearing the three fields is what

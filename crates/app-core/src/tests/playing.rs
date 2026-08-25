@@ -82,15 +82,16 @@ fn update_realtime_ticks_once_a_second_only_while_playing() {
     );
 }
 
-/// `c` is the collect key, and it is bound on the map rather than being
+/// `c` is the transfer key, and it is bound on the map rather than being
 /// swallowed as an unknown character. Asserted through the log because
 /// app-core cannot reach the engine's `World` to look at a buffer — which
 /// is the point of the seam, not a limitation of the test.
 #[test]
-fn c_reaches_the_collect_action() {
+fn c_reaches_the_transfer_action() {
     let mut app = test_app(203);
-    // `c` collects from the machines around you, and those stand in base
-    // space — so the key only reaches the action from inside it.
+    // `c` moves cargo between you and the machines around you, and those
+    // stand in base space — so the key only reaches the action from inside
+    // it.
     stand_in_base(&mut app);
     app.handle_key(GameKey::Char('c'));
 
@@ -100,10 +101,10 @@ fn c_reaches_the_collect_action() {
         .unwrap()
         .message_log(200)
         .into_iter()
-        .any(|e| e.text.contains("nothing to collect"));
+        .any(|e| e.text.contains("nothing here to take from or put into"));
     assert!(
         said,
-        "pressing C with nothing adjacent should reach Game::collect_adjacent"
+        "pressing c with nothing adjacent should reach Game::refuse_transfer"
     );
 }
 

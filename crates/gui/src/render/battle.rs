@@ -229,7 +229,7 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
     // scroll and only this side knows it.
     let (buffs, party_commands) = {
         let Some(game) = &mut app.game else { return };
-        // A field buff cast before the fight keeps ticking through it (see
+        // A field buff run before the fight keeps ticking through it (see
         // `Game::active_buffs`), so the panel has to survive the transition
         // from the map screen rather than being a `Mode::Playing`-only
         // readout.

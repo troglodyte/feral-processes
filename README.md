@@ -23,7 +23,7 @@ you fund yourself.
   where only the front groups can reach you. Decompile a hostile to add it to
   your roster; five can fight beside you at once.
 - **Routines.** Abilities install into level-derived slots, come from species
-  kits, research, wild carriers or a Compiler's extraction, and some cast
+  kits, research, wild carriers or a Compiler's extraction, and some can be run
   straight from the map as run-long buffs.
 - **Cronjobs and production chains.** Post programs to structures and they
   work tick by tick wherever you are. Machines feed each other by touching, so

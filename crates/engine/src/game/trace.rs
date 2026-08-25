@@ -78,7 +78,7 @@ impl Game {
     /// The floor is the design: Trace is the Stack's only escalation
     /// pressure, so however many levels are stacked, descending still costs
     /// something. A level count past the point the reduction reaches 1.0
-    /// saturates the cast to 0 and the clamp lifts it back to 1, which is
+    /// saturates the conversion to 0 and the clamp lifts it back to 1, which is
     /// why the arithmetic needs no ceiling of its own.
     fn obfuscated(&self, amount: u32) -> u32 {
         let level = self.player_perk_level(Perk::Obfuscation);

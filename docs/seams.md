@@ -1728,6 +1728,51 @@ since the tile that resolves it despawns the entity holding the latch.
 alone. It is a player verb, paid the way every other player verb is — the
 asymmetry *is* the rule.
 
+### Every routine that moves Integrity rolls a band
+
+**Every routine that moves Integrity rolls a band, and the census is what
+keeps it that way.** The mechanism long predates this: `battle::DamageRange`,
+`DamageRange::centred`, `abilities::scaled_range`, and a `spread` field on
+`AbilityEffect::Damage` and `Drain`. What was missing is that **not one of
+the 77 shipped ability files ever authored a `spread`**, while all 34
+species basic-attack moves have authored one since ranges shipped. So for
+several releases every routine in the game dealt exactly one number, on a
+field documented as giving mods damage ranges for free.
+
+`Heal` gained the same field on the same terms in 0.13.24 and rolls through
+the same `DamageRange` — so the low end is floored at 0 and both ends scale
+with the invoker, rather than a second formula growing up beside the first.
+
+**The serde default must stay 0.** That is what lets a mod's file parse
+untouched, and it is exactly why the shipped roster needs a census rather
+than a validator: a degenerate band is a legitimate authored choice and an
+unauthored one is indistinguishable from it.
+`every_shipped_integrity_routine_rolls_a_band` names the three variants
+rather than matching `_ =>`, on `cell_mark`'s rule — an eleventh
+Integrity-moving effect should fail to compile there rather than skip the
+check.
+
+**Spreads are authored at about 25% of `power`**, the median of the ratios
+the species moves already use (they run 0.12 to 0.40). The band is
+*centred*, so `DamageRange::mean` is unchanged — and `expected_damage` is
+built on `mean`, so `balance_sim` passed the whole change without a single
+curve moving. That is the evidence the retune is variance and not a
+difficulty change.
+
+**One draw whatever the width.** `DamageRange::roll` is written as an offset
+from `min` rather than `random_range(min..=max)` precisely so a degenerate
+band still consumes exactly one draw; that is what makes authoring a spread
+on an ability unable to shift a seeded run's stream, and it is why this
+landed with no seed churn at all.
+
+The trap the change exposed: four tests asserted the determinism and *said
+so in their comments* ("this ability's band is degenerate, so the roll is
+exactly `scaled`"). Each now pins the property it was actually for — that
+the affinity-scaled band is the one rolled from — with a guard asserting
+the wrong-actor or neutral-affinity band sits clear of it, since containment
+in a band nothing else could produce is what makes the assertion mean
+anything.
+
 ### `Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a wild program's swing is decided
 
 **`Game::choose_wild_action` (`game/combat_policy.rs`) is the one place a
@@ -1979,9 +2024,9 @@ regression that matters is a fourth arrival path quietly skipping the
 tail, so `a_jump_fires_the_arrival_tail` asserts *behaviour* (a cache
 emptied by a jump) rather than that a function was called.
 
-### `Game::cast_field_routine` is Stack-only for two of the three effects it runs, and `require_surface` is not what does it
+### `Game::run_field_routine` is Stack-only for two of the three effects it runs, and `require_surface` is not what does it
 
-**`Game::cast_field_routine` is Stack-only for two of the three effects it
+**`Game::run_field_routine` is Stack-only for two of the three effects it
 runs, and `require_surface` is not what does it.** That guard exists for
 actions reaching zone-map state through a `Position` pinned to the
 entrance tile; `Phase` and `Jump` have the opposite problem, reading and
@@ -2025,9 +2070,9 @@ either — that slot holds an `EquippedItem`, and a bonus baked into
 `EquippedItem::fusion_tier` trap again, permanent free stats with no
 record of where they came from.
 
-### The wielded program's proc casts as the *program*, not the player
+### The wielded program's proc runs as the *program*, not the player
 
-**The wielded program's proc casts as the *program*, not the player.**
+**The wielded program's proc runs as the *program*, not the player.**
 `Game::proc_wielded_routine` hands the program to `use_ability`, which
 reads `ability_user_level`, `ability_affinity` and `effective_atk` off
 whoever it is given — so a proc scales by that program's level, species
@@ -2155,6 +2200,45 @@ modder or a compiler reads says raid. New player-facing text follows the
 first rule, and note the phrasing trap the rename hit: the sweep is a noun
 phrase, so "takes N sweep damage" doesn't work and the line reads "loses N
 Durability to a GC Entropy Sweep".
+
+### You run a routine; the noun is an invocation
+
+**You *run* (or *invoke*) a routine; the noun is an *invocation*.** "Cast"
+and "spell" are fantasy words and this setting has none. Unlike the Raid
+rename one entry up, this one went all the way through the identifiers:
+`Game::cast_field_routine` → `run_field_routine`, `Mode::FieldCast*` →
+`Mode::FieldRoutine*`, `FieldCastTarget`/`FieldCastPick` →
+`FieldRoutineTarget`/`FieldRoutinePick`, `scales_with_caster` →
+`scales_with_invoker`. That is the more expensive choice and it was made
+deliberately — Raid's argument is that `.ron` field names are mod schema,
+and **nothing here is**: no asset field was ever named `cast`, so the whole
+rename is internal and breaks no mod.
+
+**Two collisions decide the vocabulary, and they are why "cast" could not
+simply become "run" everywhere.** A *run* is a playthrough — "a seeded
+run's RNG stream", "survive a run" — so "a refused run" reads as a lost
+game. And a *runner* would sit beside hauling's own bodies. So the verb is
+**run**, the agent noun is **invoker**, and the event noun is
+**invocation**; a blanket verb substitution produced "the whole run rather
+than per recipient" and "leave a hostile's running untouched", both of
+which had to be walked back by hand.
+
+Two things are deliberately left alone, and both are the word in its
+programming sense rather than its fantasy one: a float-to-integer
+conversion in `game/trace.rs` and a raycast in `game/stack_view.rs`. Both
+were reworded anyway, because the gate is cheaper to keep absolute than to
+carve exceptions into.
+
+`no_player_facing_text_says_cast_or_spell` walks the ability, item,
+structure and species databases plus the parsed help pages. It matches
+**whitespace-and-punctuation-delimited tokens, never substrings** — the
+shipped ability id `broadcast_storm` and the ordinary prose "spelled out"
+both contain the letters, and a substring rule would fail on content that
+is entirely correct. It reads *parsed* help pages for the same reason
+`no_shipped_help_page_names_a_hidden_key` does: `assets/help/README.md` is
+schema documentation, not a page. Player-facing strings assembled in Rust
+are **not** covered — there is no way to enumerate them from a test — so
+that half is held by review.
 
 ### An item's price is bounded twice, and the second bound is the one that isn't obvious
 
@@ -2615,9 +2699,9 @@ axis further along. Four screens once rebuilt the *gear* scaling chain by
 hand and all four dropped the affix on the day it landed. A routine's
 magnitudes are the same hazard: `AbilityEffect::Damage`'s authored
 `power` is the level-1 figure, so a renderer reading it would quote a
-level-12 player a number no cast of theirs ever uses. `routine_detail`
+level-12 player a number no run of theirs ever uses. `routine_detail`
 scales through the same `abilities::scaled_range` / `scaled_hp_power` /
-`scaled_stat_power` the cast does, at the wearer's level and affinity —
+`scaled_stat_power` the invocation does, at the wearer's level and affinity —
 so a granted passive on a program is priced for the program.
 
 **The mechanics are three exhaustive matches, `cell_mark`'s rule.**
@@ -4683,7 +4767,7 @@ paths" already records one component earlier.
 Nothing about `world.spawn` or `.insert` fails to compile when a component
 is missing from one of four hand-written tuples, so a shared constructor is
 the only barrier available. This is the pattern `work_node_parts()` sets,
-and the failure is the same shape: a fused companion silently unable to cast
+and the failure is the same shape: a fused companion silently unable to run
 reads as *fusion producing a bad program*, not as a missing component.
 
 Fusion takes `roster_parts` and then overrides the one piece genuinely its
@@ -4730,7 +4814,7 @@ in a cooldown *and* a Power cost: the cooldown says "not again yet", the
 reserve says "not any more". Two sites reading `def.power_cost * MULTIPLIER`
 independently is the drift a comment cannot prevent, and here the two are a
 refusal and a charge — disagreeing means a routine the picker offers and the
-cast cannot pay for, or one charged more than the row quoted.
+run cannot pay for, or one charged more than the row quoted.
 
 Both read the reserve off **the entity in question**, and that single
 parameter is the whole of "every companion tracks their power level". A
@@ -4738,7 +4822,7 @@ companion's Special draws on the companion's reserve with no second code
 path.
 
 The two ends are deliberately asymmetric. `ability_unavailable` treats a
-missing `PowerReserve` as **refusing**: between a companion that cannot cast
+missing `PowerReserve` as **refusing**: between a companion that cannot run
 because a roster door skipped `roster_parts` and one with silently unlimited
 Power, the first is the failure that gets reported. `spend_power` treats one
 as a **no-op**, which is what makes hostiles safe without a branch — they
@@ -4748,7 +4832,7 @@ cost a retrain that `CLAUDE.md` already records as not cheap.
 
 **The charge is at the `BattleAction::Special` resolution site, not in
 `use_ability`.** `use_ability` is also the path `proc_wielded_routine` and
-hostile casts take, and both stay free — the proc's 25% rate is that
+hostile runs take, and both stay free — the proc's 25% rate is that
 feature's whole price. Moving the charge into `use_ability` compiles, works,
 and makes `a_proc_charges_neither_the_player_nor_the_program` fail.
 
@@ -4790,10 +4874,10 @@ is also what keeps the five uncosted shipped files behaving exactly as they
 did — `priority_boost` above all, the fallback every companion has when its
 species grants nothing.
 
-### `Trickle` is the one restore kind that does not scale with its caster
+### `Trickle` is the one restore kind that does not scale with its invoker
 
-**`Trickle` is the one restore kind that does not scale with its caster**,
-and the rule that excludes it is the one `scales_with_caster` already
+**`Trickle` is the one restore kind that does not scale with its invoker**,
+and the rule that excludes it is the one `scales_with_invoker` already
 stated: a value that already carries its own ceiling does not need a second
 one stacked on top.
 
@@ -4808,7 +4892,7 @@ whatever the file says.
 This surfaced retuning `trickle_charge`, which is now the only in-Stack
 Power source and so the highest-leverage number in the feature. Its numbers
 (80 turns at 20, to 60 turns at 25) buy back about a quarter of a reserve
-per cast and take 60 underground turns to collect, which is a real Trace and
+per run and take 60 underground turns to collect, which is a real Trace and
 encounter cost: a sustain rather than a tap.
 
 ### A field buff's lifetime is decided by its kind *and* its source, and the source half is the load-bearing one
@@ -4850,7 +4934,7 @@ authored on a kind that ignores it (the modder's 90-turn shield is permanent
 and nothing says so — refused, where `field_only_dead_fields` merely warns
 about a dead `cooldown`, because a dead cooldown leaves a routine that still
 works as written), and a counting kind with none, which armed at 0 and
-expired on the turn it was cast. That second corner was silently reachable
+expired on the turn it was run. That second corner was silently reachable
 before the field defaulted.
 
 Two smaller consequences worth knowing. The drop is a **free function on the
@@ -4867,7 +4951,7 @@ happened clears nothing.
 being a budget and becomes a one-time toll, since rest refills the reserve
 for free — the steady state is a party that is always fully buffed, at
 roughly 66 of 100 PWR for four of the eight converted routines, and
-`cast_field_routine` charges the *player's* reserve even when a companion
+`run_field_routine` charges the *player's* reserve even when a companion
 holds the routine, so it is one pool for the lot. `balance_sim` models no
 abilities (next entry), so nothing in the suite can see this. It shipped on
 the reading that the displacement rule is cap enough and repricing is a
@@ -4890,7 +4974,7 @@ this tag caused.
 **`balance_sim` gates none of the Power economy.** It models no abilities at
 all, so none of the 66 inherited costs is covered by the balance regression
 suite, and neither is `ROUTINE_POWER_COST_MULTIPLIER` nor `trickle_charge`'s
-retune. Its curve tests pass against a game whose entire casting economy has
+retune. Its curve tests pass against a game whose entire running economy has
 changed.
 
 That is the accepted trade rather than an oversight, and it is the same
@@ -5132,7 +5216,7 @@ the test is holding something.
 
 ### A basic attack is an ability; the two are applied by different arithmetic on purpose
 
-A wild program's turn has always had two branches — cast a Special
+A wild program's turn has always had two branches — run a Special
 (`use_ability`) or swing a basic attack — and until now they carried two
 different *types*. `MoveDef` was name, power, an optional status rider and a
 reach flag, which is `AbilityEffect::Damage` plus one field; the effect's own
@@ -5174,7 +5258,7 @@ than silently disarmed. A Special is the ability's own damage and takes no
 weapon band at all — a routine is not swung.
 
 **`ranged` lives on `AbilityDef` but is read by one path.** Honouring it in
-`use_ability` would silently stop back-row hostiles casting Specials they cast
+`use_ability` would silently stop back-row hostiles running Specials they run
 today, since every authored ability defaults to `ranged: false`.
 
 **`balance_sim` still reads `species.moves`**, the authored form, on purpose.
@@ -5952,7 +6036,7 @@ and `Mode::ArenaSave` drew it twice.
 
 **`needs_status_banner` inverted.** It used to mean "everything except the
 four screens that show the line themselves"; it now names the four that draw
-no popup at all — `Battle`, `BattleResult`, `FrameMap`, `FieldCastCell`.
+no popup at all — `Battle`, `BattleResult`, `FrameMap`, `FieldRoutineCell`.
 `Battle` is the load-bearing one, for the reason below.
 
 **`Game::note_refusal` is silent while a battle is open, and that is the one

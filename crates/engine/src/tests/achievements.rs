@@ -371,7 +371,7 @@ fn a_starting_program_naming_an_unknown_species_warns_and_pays_nothing() {
 
 /// `grant_starting_program` is the fourth door into the roster, and the only
 /// one a player never chooses to walk through — the program arrives with the
-/// run. It has to be able to cast like any other companion. See
+/// run. It has to be able to run like any other companion. See
 /// `Game::roster_parts` for why each door is tested on its own.
 #[test]
 fn a_starting_program_arrives_holding_a_full_reserve() {
@@ -401,6 +401,6 @@ fn a_starting_program_arrives_holding_a_full_reserve() {
     assert_eq!(
         reserves,
         vec![POWER_MAX],
-        "the program a profile hands you must arrive able to cast"
+        "the program a profile hands you must arrive able to run"
     );
 }

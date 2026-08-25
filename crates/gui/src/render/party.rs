@@ -714,7 +714,7 @@ mod tests {
     /// goes in the party, which one gets the gear — so it carries the two
     /// figures a fight turns on and not only the two meters. `MIT` is
     /// percentage points, the same unit and the same word the fuse picker
-    /// and the field-cast picker already use for it.
+    /// and the field-routine picker already use for it.
     #[test]
     fn a_roster_row_carries_the_combat_figures() {
         let mut p = pet("Kestrel", "w|a|m");

@@ -115,7 +115,7 @@ is skipped with a warning logged in-game rather than crashing startup.
     base_int: 12,
 
     // A species' basic attacks: what it swings when it has no Special to
-    // cast. This is still the shape to author them in, and a mod's file
+    // run. This is still the shape to author them in, and a mod's file
     // needs no editing — but the engine converts each one into an ability
     // at load (`species::basic_attack_ability`), so combat sees a single
     // kind of thing. A converted attack is priced at nothing, has no
@@ -312,7 +312,7 @@ is skipped with a warning logged in-game rather than crashing startup.
 
     // Optional; can be left out entirely, and so can any individual
     // category. Each is a multiplier on the *magnitude* of abilities in
-    // that category when a member of this species casts them: 1.1 is a 10%
+    // that category when a member of this species runs them: 1.1 is a 10%
     // stronger heal, 0.8 a 20% weaker one. Clamped to 0.5-2.0 at load; a
     // non-finite value (RON accepts bare `NaN`/`inf`) skips the whole file
     // with a warning.

@@ -1631,7 +1631,7 @@ fn fusing_a_geared_program_returns_its_gear_and_leaves_the_child_unchanged() {
 /// because it despawns both parents and assembles its own component list
 /// instead of going through `adopt_program`.
 ///
-/// A companion with no reserve cannot cast at all (`ability_unavailable`
+/// A companion with no reserve cannot run at all (`ability_unavailable`
 /// refuses a missing one rather than treating it as unlimited), and that would
 /// read as fusion producing a bad program rather than as a missing component.
 #[test]
@@ -1696,7 +1696,7 @@ fn a_fused_companion_joins_the_roster_with_a_full_reserve() {
     assert_eq!(
         game.world.get::<PowerReserve>(child).map(|r| r.get()),
         Some(POWER_MAX),
-        "a fused program must be able to cast"
+        "a fused program must be able to run"
     );
 }
 
@@ -1741,7 +1741,7 @@ fn a_companion_at_zero_power_loses_no_integrity_over_many_ticks() {
 
 /// Rest is the sole refill, and it already full-heals every owned program —
 /// including ones left behind guarding a structure during a raid. Topping up
-/// their reserves in the same loop gives the party's casting budget the same
+/// their reserves in the same loop gives the party's running budget the same
 /// base-bound shape as everything else.
 #[test]
 fn rest_refills_a_drained_companions_reserve() {

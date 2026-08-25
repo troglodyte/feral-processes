@@ -3,7 +3,7 @@
 //! One derivation behind the `[I]` page, for the reason `Game::copy_bonus`
 //! is one: four screens rebuilt the scaling chain by hand and all four
 //! dropped the affix at once. The page adds a second axis of the same
-//! hazard — a granted routine's magnitudes are scaled for their caster, so
+//! hazard — a granted routine's magnitudes are scaled for their invoker, so
 //! a renderer reading `AbilityEffect::Damage`'s authored `power` would
 //! quote the level-1 figure forever.
 
@@ -46,7 +46,7 @@ fn the_grant_block_carries_the_routines_mechanics() {
 
 /// A routine's authored `power` is the level-1 figure. Quoting it directly
 /// is the hand-rolled-chain bug in a new place, so the line goes through
-/// the same `abilities::scaled_range` the cast does.
+/// the same `abilities::scaled_range` the invocation does.
 #[test]
 fn a_damage_routines_band_is_scaled_for_its_caster() {
     let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -59,7 +59,7 @@ fn a_damage_routines_band_is_scaled_for_its_caster() {
 
     assert_ne!(
         low.effect, high.effect,
-        "a level-12 caster hits for more than a level-1 one"
+        "a level-12 invoker hits for more than a level-1 one"
     );
 }
 

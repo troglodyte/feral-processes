@@ -279,7 +279,7 @@ fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
 
 /// The engine already greys a routine it would refuse — no taming
 /// catalyst, still recharging, roster full — and both the action menu
-/// (`handle_battle_key`) and the field cast list refuse the press with
+/// (`handle_battle_key`) and the field routine list refuse the press with
 /// that reason. The ability picker didn't: it took the press and opened
 /// the group picker, so the player aimed a routine that could only be
 /// thrown away once committed.

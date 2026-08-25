@@ -2,7 +2,7 @@
 //!
 //! Every other routine in the game reaches `Game::use_ability` because
 //! somebody picked it: the player off `battle_special_options`, a wild
-//! carrier off `wild_routine_ready`, the field caster off `field_routines`.
+//! carrier off `wild_routine_ready`, the field invoker off `field_routines`.
 //! A passive is the one that reaches it because something *happened* — a
 //! party member dropped, a status landed — and that is the whole of what
 //! this module is.
@@ -87,7 +87,7 @@ impl Game {
     /// `ability_recipients` answers with an empty list for anything
     /// Single-scope. That is a routine that arms its cooldown, logs that it
     /// cut in, and lands on nobody: the authored-and-never-runs failure this
-    /// module refuses everywhere else, arriving at cast time instead of at
+    /// module refuses everywhere else, arriving at invocation time instead of at
     /// load.
     ///
     /// The holder is the answer for an ally-facing routine — a passive is
@@ -222,7 +222,7 @@ impl Game {
     /// `tick_round_status_effects` already maintains so a status does not
     /// burn a round of its own duration in the round it arrived. Reading it
     /// here means "afflicted" is *newly* afflicted: a routine that fired
-    /// again every round of a four-round Bleed would be four casts for one
+    /// again every round of a four-round Bleed would be four invocations for one
     /// event.
     ///
     /// Called before `tick_round_status_effects` clears the flag, which is

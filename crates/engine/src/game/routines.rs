@@ -20,15 +20,15 @@ impl Game {
     /// One routine's mechanics for the inspect page — what makes it run,
     /// what it lands on, what it does, and what it costs.
     ///
-    /// **`caster` is who would run it, and every magnitude is scaled for
+    /// **`invoker` is who would run it, and every magnitude is scaled for
     /// them.** An ability's authored `power` is its level-1 figure, so a
-    /// screen printing it directly quotes a number the cast never uses.
-    /// Both scaling axes are the cast's own — `abilities::scaled_range` and
-    /// friends for level, `Game::ability_affinity` for the caster's
+    /// screen printing it directly quotes a number the invocation never uses.
+    /// Both scaling axes are the invocation's own — `abilities::scaled_range` and
+    /// friends for level, `Game::ability_affinity` for the invoker's
     /// category multiplier — which is what keeps this page from becoming a
     /// third copy of the damage chain.
     ///
-    /// For gear, the caster is the wearer: a granted passive fires as
+    /// For gear, the invoker is the wearer: a granted passive fires as
     /// whoever is wearing it.
     ///
     /// `None` for an id the current ability set doesn't define, which a save
@@ -37,11 +37,11 @@ impl Game {
     pub fn routine_detail(
         &self,
         id: &crate::abilities::AbilityId,
-        caster: Entity,
+        invoker: Entity,
     ) -> Option<RoutineDetailView> {
         let def = self.world.resource::<AbilityDb>().get(id)?.clone();
-        let level = self.ability_user_level(caster);
-        let affinity = self.ability_affinity(caster, &def.effect);
+        let level = self.ability_user_level(invoker);
+        let affinity = self.ability_affinity(invoker, &def.effect);
         Some(RoutineDetailView {
             name: def.name.clone(),
             description: def.description.clone(),
@@ -52,7 +52,7 @@ impl Game {
                 // player to look for Phase on the Special menu sends them
                 // somewhere it can never appear.
                 None if def.effect.field_only() => {
-                    "Cast outside battle from the routine list".to_string()
+                    "Run outside battle from the routine list".to_string()
                 }
                 None => "Chosen as a Special in battle".to_string(),
             },
@@ -68,7 +68,7 @@ impl Game {
     }
 
     /// What a routine does, in one line, with its magnitudes already scaled
-    /// for a caster at `level` with `affinity`.
+    /// for an invoker at `level` with `affinity`.
     ///
     /// **Exhaustive on `AbilityEffect`**, the rule `render/stack.rs`'s
     /// `cell_mark` records: as a `_ =>` arm an eleventh effect would ship
@@ -98,11 +98,13 @@ impl Game {
                 }
                 line
             }
-            AbilityEffect::Heal { power } => {
-                format!(
-                    "Restores {} Integrity",
-                    scaled_hp_power(*power, level, affinity)
-                )
+            AbilityEffect::Heal { power, spread } => {
+                let band = scaled_range(
+                    crate::battle::DamageRange::centred(*power, *spread),
+                    level,
+                    affinity,
+                );
+                format!("Restores {} Integrity", self.damage_range_label(band))
             }
             AbilityEffect::Buff {
                 kind,
@@ -133,7 +135,7 @@ impl Game {
                     affinity,
                 );
                 format!(
-                    "Damage {}, healing the caster {:.0}% of it",
+                    "Damage {}, healing the invoker {:.0}% of it",
                     self.damage_range_label(band),
                     heal_fraction * 100.0
                 )
@@ -149,7 +151,7 @@ impl Game {
                 let magnitude =
                     kind.magnitude_label(scaled_stat_power(*power, level, affinity), *interval);
                 // A `0` here is an until-rest buff whose count nothing
-                // reads, never a buff that expires the turn it is cast —
+                // reads, never a buff that expires the turn it is run —
                 // see `AbilityEffect::FieldBuff::duration`.
                 match kind.runs_until_rest() {
                     true => format!("{magnitude} until the party rests"),
@@ -193,7 +195,7 @@ impl Game {
 
     /// Builds one `RoutineHolderView` row for `entity`, labelled `name`.
     /// Shared by `routine_holders` (every program you own) and
-    /// `Game::field_cast_targets` (just you and your active `Party`) so the
+    /// `Game::field_routine_targets` (just you and your active `Party`) so the
     /// two lists can't describe the same holder's slot count two different
     /// ways.
     pub(crate) fn routine_holder_view(

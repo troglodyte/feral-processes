@@ -3,7 +3,7 @@
     name: "Leech Group",
     description: "Damage a whole group and restore a third of it to yourself",
     target: WholeEnemyGroup,
-    effect: Drain(power: 6, heal_fraction: 0.3),
+    effect: Drain(power: 6, spread: 2, heal_fraction: 0.3),
     cooldown: 4,
     power_cost: 13.0,
     wild_weight: 5,

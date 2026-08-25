@@ -292,11 +292,11 @@ impl Game {
                     // Charged here rather than in `use_ability`, for the same
                     // reason and at the same moment as the cooldown above.
                     // `use_ability` is also the path `proc_wielded_routine`
-                    // and hostile casts take, and both are deliberately free —
+                    // and hostile invocations take, and both are deliberately free —
                     // the proc's 25% rate is its whole price, and hostiles
                     // hold no reserve at all.
                     //
-                    // The *caster* pays: `entity` is whoever is acting, so a
+                    // The *invoker* pays: `entity` is whoever is acting, so a
                     // companion's Special draws on the companion's reserve.
                     // Directing one used to come out of the player's meter,
                     // which rationed the party's own kit against a pool only
@@ -950,7 +950,7 @@ impl Game {
         name: &str,
         recipients: &[Entity],
     ) {
-        // Both resolved once for the whole cast rather than per recipient:
+        // Both resolved once for the whole invocation rather than per recipient:
         // every recipient of one ability is scaled by the *user's* level and
         // affinity, and re-reading either inside the loop would invite
         // someone to key it off the recipient instead.
@@ -1005,9 +1005,21 @@ impl Game {
                         ability.name
                     ));
                 }
-                AbilityEffect::Heal { power } => {
-                    let power = abilities::scaled_hp_power(*power, level, affinity);
-                    let restored = self.restore_hp(recipient, power);
+                AbilityEffect::Heal { power, spread } => {
+                    // Rolled from a band on the same terms `Damage` is, and
+                    // through the same `DamageRange` — a degenerate band
+                    // still consumes exactly one draw, so authoring a spread
+                    // on an ability cannot shift a seeded run's RNG stream.
+                    let band = abilities::scaled_range(
+                        battle::DamageRange::centred(*power, *spread),
+                        level,
+                        affinity,
+                    );
+                    let rolled = {
+                        let mut rng = self.world.resource_mut::<GameRng>();
+                        band.roll(&mut rng.0)
+                    };
+                    let restored = self.restore_hp(recipient, rolled);
                     self.log_kind(heal_kind, format!("{name} patches {on} for {restored} HP."));
                 }
                 AbilityEffect::Debuff {
@@ -1038,7 +1050,7 @@ impl Game {
                     // `party_member_attacks` for why passing it to
                     // the damage formula too would count it twice.
                     // **No `attack_range` here.** A Special is the
-                    // ability's own damage, not the caster's weapon — the
+                    // ability's own damage, not the invoker's weapon — the
                     // override is a property of a basic attack.
                     let band = abilities::scaled_range(
                         battle::DamageRange::centred(*power, *spread),
@@ -1055,7 +1067,7 @@ impl Game {
                         }
                         battle::AttackOutcome::Miss => format!("{name} goes wide of {on}."),
                         battle::AttackOutcome::Fumble(rung) => {
-                            self.fumble_line_for_other(name, "cast", rung)
+                            self.fumble_line_for_other(name, "the routine", rung)
                         }
                     };
                     self.log_kind(hit_kind, line);
@@ -1122,7 +1134,7 @@ impl Game {
                         self.log(format!("{name} flushes the corruption from {on}."));
                     }
                     // Silent on a clean recipient: a "nothing to clear" line
-                    // per party member, every cast, would drown the log.
+                    // per party member, every invocation, would drown the log.
                 }
                 // `resolve_one_action` branches around `use_ability` entirely
                 // for `Decompile` — it needs the group index, not a

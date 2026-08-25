@@ -37,9 +37,9 @@ use feral_processes_engine::tuning::{
 };
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, ContractRefusal, ContractRow,
-    DifficultyMode, Entity, EntityView, FieldCastPick, FieldCastTarget, FieldCastTargetView, Game,
-    LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift,
-    TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    DifficultyMode, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
+    FieldRoutineTargetView, Game, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
+    ProgramSaleOption, SlotShift, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1011,31 +1011,31 @@ pub enum Mode {
     /// no disk of the thing they wanted.
     RoutineEtch,
     /// Picking which installed field routine to run — a `FieldBuff` ability
-    /// on you or a program you own, cast outside battle rather than spent as
+    /// on you or a program you own, run outside battle rather than spent as
     /// a Special. Reached with `a` from `Mode::Playing`; rows come from
-    /// `Game::field_routines`. A row with no ally target casts immediately
+    /// `Game::field_routines`. A row with no ally target runs immediately
     /// and returns here to `Mode::Playing`; one that needs an ally instead
-    /// goes to `Mode::FieldCastAlly`.
-    FieldCast,
+    /// goes to `Mode::FieldRoutineAlly`.
+    FieldRoutine,
     /// Picking who a `OneAlly` field routine lands on. Entered from
-    /// `Mode::FieldCast` only when the chosen row's
+    /// `Mode::FieldRoutine` only when the chosen row's
     /// `FieldRoutineView::needs_ally_target` is set — same split
     /// `Mode::BattleSpecial`/`Mode::BattleAlly` makes, for the same reason:
     /// the routine and its target are separate choices. Offers only the
     /// player and programs the player owns (`App::field_ally_options`),
-    /// since `Game::cast_field_routine` checks a target is alive but not
+    /// since `Game::run_field_routine` checks a target is alive but not
     /// that the player owns it.
-    FieldCastAlly,
+    FieldRoutineAlly,
     /// Aiming an `AbilityEffect::Jump` at a cell of the frame the party is
-    /// standing in. Entered from `Mode::FieldCast` when the chosen row's
-    /// `FieldRoutineView::second_pick` is `FieldCastPick::Cell`.
+    /// standing in. Entered from `Mode::FieldRoutine` when the chosen row's
+    /// `FieldRoutineView::second_pick` is `FieldRoutinePick::Cell`.
     ///
     /// The cursor (`App::field_cursor`) starts on the party's own cell,
     /// walks with the same keys the map already walks with, and is clamped
     /// to the frame's bounds — an out-of-bounds coordinate is unreachable
     /// rather than lethal. Enter commits, Esc backs out spending nothing,
     /// matching every other second pick.
-    FieldCastCell,
+    FieldRoutineCell,
     /// The Excavation plan, opened with `m` in base space: a cursor, an
     /// anchor and a box, which commit through `Game::toggle_mark_box`.
     ///
@@ -1262,9 +1262,9 @@ impl Mode {
             | Mode::Routines
             | Mode::RoutineInstall
             | Mode::RoutineEtch
-            | Mode::FieldCast
-            | Mode::FieldCastAlly
-            | Mode::FieldCastCell
+            | Mode::FieldRoutine
+            | Mode::FieldRoutineAlly
+            | Mode::FieldRoutineCell
             | Mode::Excavate
             | Mode::Refactor
             | Mode::RefactorItem
@@ -1499,13 +1499,13 @@ pub struct App {
     /// The routine index picked in `Mode::ExtractPick`, awaiting confirmation
     /// from `Mode::ExtractConfirm` before `Game::extract_routine` is called.
     pub pending_extract_index: Option<usize>,
-    /// The index into `Game::field_routines` picked in `Mode::FieldCast`,
-    /// awaiting a target from `Mode::FieldCastAlly` before
-    /// `Game::cast_field_routine` is called. `None` outside that wait — a
-    /// routine needing no ally casts straight from `Mode::FieldCast` and
+    /// The index into `Game::field_routines` picked in `Mode::FieldRoutine`,
+    /// awaiting a target from `Mode::FieldRoutineAlly` before
+    /// `Game::run_field_routine` is called. `None` outside that wait — a
+    /// routine needing no ally runs straight from `Mode::FieldRoutine` and
     /// never sets this.
     pub pending_field_routine: Option<usize>,
-    /// Where the cell cursor is aimed in `Mode::FieldCastCell`, in frame
+    /// Where the cell cursor is aimed in `Mode::FieldRoutineCell`, in frame
     /// coordinates. `None` outside that mode — a routine needing no cell
     /// never sets it, and Esc and a committed jump both clear it.
     pub field_cursor: Option<(i32, i32)>,

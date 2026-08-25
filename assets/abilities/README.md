@@ -87,7 +87,7 @@ way deleting the Currency item does.
     //     `power` is the *centre* of the band and `spread` its half-width,
     //     so `power: 6, spread: 2` rolls 4..=8 inclusive. The low end is
     //     floored at 0, so a wide spread on a weak ability cannot roll
-    //     negative. Both ends scale with the caster's level and affinity, so
+    //     negative. Both ends scale with the invoker's level and affinity, so
     //     the band widens as the numbers grow rather than collapsing to a
     //     point.
     //
@@ -104,8 +104,16 @@ way deleting the Currency item does.
     //     per-round bleed damage and is unused (but still required — use 0)
     //     for `Stun`.
     //
-    //   Heal(power: 8)
-    //     Restores that much Integrity, capped at the recipient's maximum.
+    //   Heal(power: 8, spread: 2)
+    //     Restores Integrity, capped at the recipient's maximum. `power` is
+    //     the *centre* of the band and `spread` its half-width, exactly as
+    //     `Damage` reads them, so `power: 8, spread: 2` restores 6..=10
+    //     inclusive. Both ends scale with the invoker's level and affinity.
+    //
+    //     `spread` is optional and defaults to 0 — a degenerate band, the
+    //     single deterministic figure a heal restored before ranges reached
+    //     this variant. Every shipped healing routine authors one; a mod
+    //     that never mentions it heals a flat amount.
     //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is
@@ -165,10 +173,10 @@ way deleting the Currency item does.
     //   FieldBuff(kind: Atk, power: 4)
     //     The field-only marker: an ability carrying this effect never
     //     appears in the in-battle Special picker and a wild carrier never
-    //     retaliates with it — there is no separate `field_cast: bool` to
+    //     retaliates with it — there is no separate `field_routine: bool` to
     //     set, this variant *is* the flag. Instead it arms a running field
-    //     buff outside battle, through whatever cast path spends `power_cost`
-    //     of the caster's Power to start it.
+    //     buff outside battle, through whatever run path spends `power_cost`
+    //     of the invoker's Power to start it.
     //
     //     **Whether you write a `duration` at all is decided by `kind`, and
     //     both mistakes are refused at load rather than resolved quietly.**
@@ -177,7 +185,7 @@ way deleting the Currency item does.
     //     rests and must *omit* it. A duration on one of those states a
     //     lifetime the game will never read — your 90-turn shield would be
     //     permanent and nothing would say so — and a missing one on an
-    //     over-time kind arms at zero and expires on the turn it was cast.
+    //     over-time kind arms at zero and expires on the turn it was run.
     //
     //     `duration` is in turns, not battle rounds, and keeps ticking
     //     through any battle that follows until it runs out. An until-rest
@@ -207,7 +215,7 @@ way deleting the Currency item does.
     //         Mitigation   percentage points of damage reduction
     //
     //       Run-scoped (`target: WholeParty` only — these always land on
-    //       the player regardless of who casts them, so any other target is
+    //       the player regardless of who runs them, so any other target is
     //       a lie about where the buff actually goes, and is refused at
     //       load):
     //         Trickle       restores Power each turn
@@ -220,7 +228,7 @@ way deleting the Currency item does.
     //     level/affinity scaling (`abilities::scaled_stat_power` — see
     //     "Magnitudes scale with level") before delivering it: Regen and
     //     Atk. The other six are delivered at exactly the authored `power`
-    //     regardless of who casts them, because each already carries its own
+    //     regardless of who runs them, because each already carries its own
     //     ceiling and scaling one the way a flat amount scales would let it
     //     exceed that ceiling — which is what the cap on Mitigation exists to
     //     prevent. Mitigation and the four rate kinds (CaptureBoost, XpBoost,
@@ -235,7 +243,7 @@ way deleting the Currency item does.
     //     one logs a warning naming the file, since its default is 0 and any
     //     other value is a deliberate (if pointless) choice.
     //
-    //     What casting costs is the top-level `power_cost` below, the same
+    //     What running costs is the top-level `power_cost` below, the same
     //     field every other effect is priced in. This variant carried a
     //     `power_cost` of its own until the two cost fields were folded into
     //     one; a file still authoring it inside the effect will not parse.
@@ -288,7 +296,7 @@ way deleting the Currency item does.
     cooldown: 2,
 
     // Optional; **defaults to 0.0**. Power spent to run this routine, by
-    // whoever runs it — the caster pays, so a companion's Special draws on
+    // whoever runs it — the invoker pays, so a companion's Special draws on
     // the companion's own reserve rather than the player's.
     //
     // Free by default on purpose. This field reached only `Phase` and `Jump`
@@ -399,9 +407,9 @@ rides damage that has already been scaled.
 A wild program has no level — it scales by zone and distance — so a carrier
 scales its routine from the current zone instead.
 
-`power` also carries a caster-side multiplier that has nothing to do with
+`power` also carries an invoker-side multiplier that has nothing to do with
 level: every effect above belongs to an `AffinityKind` category (`Damage`,
-`Heal`, `Buff`, `Debuff`, `Drain`), and the caster's affinity for that
+`Heal`, `Buff`, `Debuff`, `Drain`), and the invoker's affinity for that
 category — from its species' `affinities` field, or from the player's
 matching perk — multiplies the magnitude on top of everything in this
 section. See `assets/species/README.md`'s `affinities` entry for the
@@ -436,7 +444,7 @@ permanently unreachable.
 
 `ranged: true` marks an attack that reaches past the front line. It is read
 by **one path only** — the basic-attack path a wild program falls back on
-when it has no Special to cast. A group standing behind
+when it has no Special to run. A group standing behind
 `tuning::ENGAGED_GROUPS` may use only its ranged attacks, and idles if it
 has none.
 
@@ -477,7 +485,7 @@ claim to name the routine's only source, and they name different ones.
 `triggers: Some(RoundStart)` — or `AllyWounded`, `Afflicted`, `AllyDropped`
 — makes a routine fire on an event instead of being chosen on a turn. A passive occupies a slot
 like anything else and appears in no menu: not the Special picker, not the
-field cast list, and not a wild carrier's options. It costs no turn, so its
+field run list, and not a wild carrier's options. It costs no turn, so its
 `power_cost` is never charged; `cooldown` is its whole price and is honoured
 exactly as a chosen routine's is.
 

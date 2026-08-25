@@ -3,7 +3,7 @@
     name: "Packet Shred Single",
     description: "Heavy damage to one target",
     target: OneEnemyGroupFront,
-    effect: Damage(power: 16),
+    effect: Damage(power: 16, spread: 4),
     cooldown: 3,
     power_cost: 10.0,
     wild_weight: 10,

@@ -36,9 +36,9 @@ impl Game {
     }
 
     /// The third-person twin of `fumble_line_for_player`, for a companion, a
-    /// hostile, or an ability's caster.
+    /// hostile, or an ability's invoker.
     ///
-    /// Deliberately never possessive. The caster label reaching this is
+    /// Deliberately never possessive. The invoker label reaching this is
     /// `actor_label`'s, which is `"Your process"` for the player, and
     /// `"Your process's Fray"` reads badly where `"Your process overreaches
     /// with Fray"` does not.

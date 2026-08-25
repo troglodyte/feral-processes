@@ -16,7 +16,7 @@ use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
 /// `drop_until_rest` below is the system-side twin of
 /// `Game::drop_until_rest_buffs_on_party`, sharing its implementation
 /// through `components::drop_until_rest_buffs` — and, like that method,
-/// walking the player then `Party`, which is the only set a cast can arm a
+/// walking the player then `Party`, which is the only set an invocation can arm a
 /// buff on.
 #[derive(bevy_ecs::system::SystemParam)]
 pub(crate) struct PartyFieldBuffs<'w, 's> {

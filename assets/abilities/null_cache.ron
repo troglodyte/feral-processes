@@ -8,7 +8,7 @@
     // lets a party grind a deep frame without a Patch.
     description: "Drain a whole group and take back every point of it",
     target: WholeEnemyGroup,
-    effect: Drain(power: 12, heal_fraction: 1.0),
+    effect: Drain(power: 12, spread: 3, heal_fraction: 1.0),
     cooldown: 3,
     power_cost: 18.0,
     exclusive: true,

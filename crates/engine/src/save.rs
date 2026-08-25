@@ -134,7 +134,7 @@ pub struct CreatureSave {
     /// creature's is written and ignored.
     ///
     /// Defaults to full rather than to zero, so companions in a save written
-    /// before reserves existed load able to cast rather than mysteriously
+    /// before reserves existed load able to run rather than mysteriously
     /// unable to. Additive behind `#[serde(default)]`, so it earns no version
     /// bump of its own — it rides the one `PlayerSave::fatigue`'s removal
     /// already spent.

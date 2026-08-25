@@ -68,7 +68,7 @@ use building::{
 use caravan::{draw_caravan, draw_caravan_quantity};
 use contracts::draw_contracts;
 use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
-use field::{draw_field_cast, draw_field_cast_ally};
+use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
 use help::{draw_help_index, draw_help_page};
@@ -441,7 +441,7 @@ fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Me
 fn needs_status_banner(mode: Mode) -> bool {
     matches!(
         mode,
-        Mode::Battle | Mode::BattleResult | Mode::FrameMap | Mode::FieldCastCell
+        Mode::Battle | Mode::BattleResult | Mode::FrameMap | Mode::FieldRoutineCell
     )
 }
 
@@ -530,7 +530,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         // Full-pane for the same reason `Mode::FrameMap` is, and doubly so:
         // picking a cell you have never walked to means seeing the whole
         // frame at once.
-        Mode::FieldCastCell => {
+        Mode::FieldRoutineCell => {
             match (
                 app.game.as_ref().and_then(|g| g.frame_map()),
                 app.field_cursor,
@@ -887,9 +887,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::FieldCast => draw_field_cast(game, selected, refusal, painter, m),
-        Mode::FieldCastAlly => {
-            draw_field_cast_ally(game, pending_field_routine, selected, refusal, painter, m)
+        Mode::FieldRoutine => draw_field_routine(game, selected, refusal, painter, m),
+        Mode::FieldRoutineAlly => {
+            draw_field_routine_ally(game, pending_field_routine, selected, refusal, painter, m)
         }
         Mode::RoutineTarget => draw_routine_target(game, selected, refusal, painter, m),
         Mode::Routines => draw_routines(
@@ -1111,9 +1111,9 @@ mod tests {
         Mode::Routines,
         Mode::RoutineInstall,
         Mode::RoutineEtch,
-        Mode::FieldCast,
-        Mode::FieldCastAlly,
-        Mode::FieldCastCell,
+        Mode::FieldRoutine,
+        Mode::FieldRoutineAlly,
+        Mode::FieldRoutineCell,
         Mode::Excavate,
         Mode::Refactor,
         Mode::RefactorItem,
@@ -1184,7 +1184,7 @@ mod tests {
         Mode::FuseName,
         Mode::RenamePet,
         Mode::Routines,
-        Mode::FieldCastAlly,
+        Mode::FieldRoutineAlly,
         Mode::Excavate,
         Mode::RefactorItem,
         Mode::DevelopProgram,
@@ -1469,7 +1469,7 @@ mod tests {
             Mode::Battle,
             Mode::BattleResult,
             Mode::FrameMap,
-            Mode::FieldCastCell,
+            Mode::FieldRoutineCell,
         ] {
             assert!(
                 needs_status_banner(mode),

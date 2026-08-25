@@ -212,7 +212,7 @@ fn the_generic_fixture_species_is_blank_and_unshipped() {
     );
     assert!(
         fixture.affinities.non_neutral().is_empty(),
-        "the fixture companion must be affinity-neutral, or every ability cast in \
+        "the fixture companion must be affinity-neutral, or every ability run in \
          every spawn_tamed test is silently multiplied"
     );
     assert!(
@@ -578,7 +578,7 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
 /// Two kinds of ability never enter a battle at all, so a cooldown on either
 /// would just be inert: `decompile`, the player's capture mechanism, which
 /// hostiles never use and which must stay spammable so a failed capture roll
-/// doesn't change the core loop; and any `FieldBuff` ability, which is cast
+/// doesn't change the core loop; and any `FieldBuff` ability, which is run
 /// outside battle and limited by `power_cost` instead — the doc on
 /// `AbilityEffect::FieldBuff` explains why `cooldown` is dead weight on that
 /// variant.
@@ -605,6 +605,46 @@ fn every_shipped_ability_but_decompile_and_field_routines_has_a_cooldown() {
             def.id
         );
     }
+}
+
+/// Every routine that moves Integrity rolls a band rather than a fixed
+/// figure. The mechanism (`AbilityEffect::spread`, `battle::DamageRange`)
+/// defaults to a degenerate band so a mod's file keeps parsing untouched —
+/// which is exactly why the *shipped* roster needs a census: all 34 of these
+/// authored no spread for as long as the field existed, and a new one would
+/// ship deterministic without anything failing.
+///
+/// The three variants are named rather than matched with a `_ =>` arm, on
+/// `render/stack.rs::cell_mark`'s rule: an eleventh Integrity-moving effect
+/// should fail to compile here rather than skip the check.
+#[test]
+fn every_shipped_integrity_routine_rolls_a_band() {
+    use crate::abilities::AbilityEffect as E;
+    let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let spread = match &def.effect {
+            E::Damage { spread, .. } | E::Heal { spread, .. } | E::Drain { spread, .. } => *spread,
+            E::Buff { .. }
+            | E::Debuff { .. }
+            | E::Cleanse
+            | E::Decompile
+            | E::FieldBuff { .. }
+            | E::Phase
+            | E::Jump => continue,
+        };
+        checked += 1;
+        assert!(
+            spread > 0,
+            "ability {:?} deals a fixed figure every time — author a `spread` so it \
+             rolls a band, the way every species move already does",
+            def.id
+        );
+    }
+    assert!(
+        checked > 0,
+        "the census read no Integrity-moving abilities at all, so it proves nothing"
+    );
 }
 
 /// The scope word an ability's `name` must end in, given what it targets.
@@ -710,7 +750,7 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 /// prize with no ladder leading up to it.
 ///
 /// Field routines are excluded rather than exempted by accident: they are
-/// cast from the map, never appear in the battle picker, and each is its
+/// run from the map, never appear in the battle picker, and each is its
 /// own thing — Deep Scan has no Single tier because a scope ladder is not
 /// what that half of the set is organised by.
 ///
@@ -747,8 +787,8 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
 
 /// `AbilityDef::validate` refuses a non-finite cost at load, and that check
 /// has to survive the rename off `fatigue_cost` rather than be lost with it.
-/// Asserted over the real files, since a negative cost would *pay* the caster
-/// for casting and nothing downstream defends against one.
+/// Asserted over the real files, since a negative cost would *pay* the invoker
+/// for running and nothing downstream defends against one.
 #[test]
 fn every_shipped_power_cost_is_finite_and_non_negative() {
     let game = Game::new(3307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -794,7 +834,7 @@ fn the_flip_to_power_cost_carried_the_authored_numbers_over_unchanged() {
 /// Group tier while reaching further than it.
 ///
 /// The cost half is skipped for **passives**, and only for them: `power_cost`
-/// is what running a routine costs its caster, and a passive is never run —
+/// is what running a routine costs its invoker, and a passive is never run —
 /// it fires on its trigger and takes no turn. The cooldown half still applies
 /// to everything, passive or not, because a cooldown is what bounds how often
 /// the effect lands, and that question does not care who asked for it.
@@ -968,15 +1008,15 @@ fn the_ten_field_routines_load_with_real_descriptions_and_no_wild_weight() {
 /// Both bounds are the reason the wide one exists. Under the cheaper bound it
 /// is strictly better than the Single at every party size, which makes the
 /// Single dead content the moment the research lands. Over the dearer one
-/// nobody would ever run it: casting on each body in turn would cost less
-/// Power *and* leave the same buffs standing, and the only thing the wide cast
+/// nobody would ever run it: running on each body in turn would cost less
+/// Power *and* leave the same buffs standing, and the only thing the wide invocation
 /// would still buy is the turns — which are free.
 ///
 /// Asserted as a relationship rather than as the three authored numbers, so a
 /// Power retune moves them freely and only an inversion fails. The party size
 /// comes from `Game::pet_capacity` (+1 for the player) rather than
 /// `BASE_PET_CAPACITY`, because a deployed `pet_slot_bonus` widens the party
-/// the cast has to beat.
+/// the invocation has to beat.
 #[test]
 fn the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between() {
     use crate::abilities::{AbilityEffect, AbilityTarget};
@@ -1007,13 +1047,13 @@ fn the_def_field_routine_ships_both_scopes_and_prices_the_wide_one_between() {
     let bodies = (game.pet_capacity() + 1) as f32;
     assert!(
         party.power_cost > single.power_cost,
-        "the Party cast ({}) must cost more than one Single ({})",
+        "the Party invocation ({}) must cost more than one Single ({})",
         party.power_cost,
         single.power_cost
     );
     assert!(
         party.power_cost < bodies * single.power_cost,
-        "the Party cast ({}) must undercut {bodies} Singles ({})",
+        "the Party invocation ({}) must undercut {bodies} Singles ({})",
         party.power_cost,
         bodies * single.power_cost
     );
@@ -1081,7 +1121,7 @@ fn every_field_buff_kind_is_exercised_by_a_shipped_ability() {
 fn a_nan_affinity_disqualifies_the_file_and_the_rest_still_load() {
     // NaN specifically, not just inf: f32::clamp returns NaN for a NaN
     // input, so the clamp alone would pass this straight through into
-    // every magnitude the species ever casts.
+    // every magnitude the species ever runs.
     let body = AFFINITY_SPECIES.replace("heal: 1.5", "heal: NaN");
     let dir = super::support::modded_assets_dir(
         "affinity_nan",
@@ -1764,6 +1804,90 @@ fn no_shipped_help_page_carries_more_than_nine_links() {
             page.links.len()
         );
     }
+}
+
+/// The game's word for using a routine is **run** (or *invoke*); the thing
+/// you did is an **invocation**. "Cast" and "spell" are the fantasy words
+/// this setting does not use, and player-facing text may never carry them.
+///
+/// Asserted on whitespace-and-punctuation-delimited **tokens**, never on
+/// substrings — `broadcast_storm` is a shipped ability id and "spelled out"
+/// is ordinary prose, and a substring match would fail both while proving
+/// nothing. Over parsed help pages rather than raw files, on
+/// `no_shipped_help_page_names_a_hidden_key`'s reasoning: `assets/help/
+/// README.md` is schema documentation, not a page.
+///
+/// This gate covers **authored content**, which is where the vocabulary
+/// actually lives. Player-facing strings built in Rust are held by review;
+/// there is no way to enumerate them from a test.
+#[test]
+fn no_player_facing_text_says_cast_or_spell() {
+    const FORBIDDEN: &[&str] = &[
+        "cast",
+        "casts",
+        "casting",
+        "caster",
+        "casters",
+        "recast",
+        "recasting",
+        "spell",
+        "spells",
+    ];
+    let offends = |text: &str| -> Option<String> {
+        text.split(|c: char| !c.is_ascii_alphabetic())
+            .find(|w| FORBIDDEN.contains(&w.to_ascii_lowercase().as_str()))
+            .map(|w| w.to_string())
+    };
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    let mut complaints = Vec::new();
+    let mut check = |what: &str, id: &str, text: &str, checked: &mut i32| {
+        *checked += 1;
+        if let Some(word) = offends(text) {
+            complaints.push(format!("{what} {id:?} says {word:?} in: {text:?}"));
+        }
+    };
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        check("ability", &def.id, &def.name, &mut checked);
+        check("ability", &def.id, &def.description, &mut checked);
+    }
+    for def in game.world.resource::<crate::items_db::ItemDb>().all() {
+        check("item", def.id.as_str(), &def.name, &mut checked);
+        check("item", def.id.as_str(), &def.description, &mut checked);
+    }
+    for def in game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .all()
+    {
+        check("structure", &def.id, &def.name, &mut checked);
+        check("structure", &def.id, &def.description, &mut checked);
+    }
+    for def in game.world.resource::<crate::species::SpeciesDb>().all() {
+        check("species", &def.id, &def.name, &mut checked);
+    }
+    let (help, _) = help::HelpDb::load_dir(&help_assets_dir()).unwrap();
+    for page in help.pages() {
+        check("help page", &page.id, &page.title, &mut checked);
+        for block in page.blocks.iter() {
+            match block {
+                help::HelpBlock::Paragraph(text) | help::HelpBlock::Bullet(text) => {
+                    check("help page", &page.id, text, &mut checked)
+                }
+                help::HelpBlock::Blank => {}
+            }
+        }
+    }
+    assert!(
+        checked > 200,
+        "the census read only {checked} strings, so it is not walking the shipped content"
+    );
+    assert!(
+        complaints.is_empty(),
+        "player-facing text uses the fantasy vocabulary — say \"run\"/\"invoke\" a \
+         routine, and \"invocation\" for the noun:\n{}",
+        complaints.join("\n")
+    );
 }
 
 fn help_assets_dir() -> std::path::PathBuf {

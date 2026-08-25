@@ -86,7 +86,7 @@ impl App {
             // these three are pressed every few turns while walking, and a
             // group menu is a keystroke tax on anything that frequent.
             GameKey::Char('a') => {
-                self.mode = Mode::FieldCast;
+                self.mode = Mode::FieldRoutine;
                 return;
             }
             // The Excavation plan. Refused out here rather than in the mode

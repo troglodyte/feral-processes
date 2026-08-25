@@ -515,7 +515,7 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
 }
 
 /// A game where the player has `routines` installed (in place of the
-/// default `decompile`) and `hunger` set to a chosen level, so a field-cast
+/// default `decompile`) and `hunger` set to a chosen level, so a field-routine
 /// test can pin affordability on either side of a routine's `power_cost`
 /// exactly. Built by editing a save and reloading it, for the same reason
 /// `app_owning_a_program_and_a_compiler` is.
@@ -572,7 +572,7 @@ pub(crate) fn app_underground_with_routines(seed: u32, routines: &[&str]) -> App
 
 /// Same as `app_with_player_routines`, but the player also owns one program
 /// (parked next to them) and one wild, unowned creature is nearby too — for
-/// asserting the field-cast ally picker (`Mode::FieldCastAlly`) offers the
+/// asserting the field-routine ally picker (`Mode::FieldRoutineAlly`) offers the
 /// former and never the latter. Full Power, since affordability isn't what
 /// these tests are checking.
 pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) -> App {

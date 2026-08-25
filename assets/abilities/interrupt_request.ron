@@ -13,7 +13,7 @@
     // routine slot — the item is what was spent.
     description: "The moment the round opens, an unmasked interrupt lands on the nearest hostile",
     target: OneEnemyGroupFront,
-    effect: Damage(power: 5),
+    effect: Damage(power: 5, spread: 1),
     cooldown: 4,
     power_cost: 0.0,
     triggers: Some(RoundStart),

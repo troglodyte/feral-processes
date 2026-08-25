@@ -1,5 +1,5 @@
-//! Casting a field routine: `Game::field_routines` and
-//! `Game::cast_field_routine`.
+//! Running a field routine: `Game::field_routines` and
+//! `Game::run_field_routine`.
 
 use super::support::*;
 use crate::components::{
@@ -11,7 +11,7 @@ use crate::*;
 
 fn game_with_field_ability() -> Game {
     let dir = modded_assets_dir(
-        "field_cast",
+        "field_routine",
         &[],
         &[],
         &[],
@@ -33,7 +33,7 @@ fn reserve_of(game: &Game, entity: Entity) -> f32 {
 }
 
 #[test]
-fn casting_arms_the_buff_and_deducts_power() {
+fn running_arms_the_buff_and_deducts_power() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     game.world
@@ -43,13 +43,13 @@ fn casting_arms_the_buff_and_deducts_power() {
     let routines = game.field_routines();
     assert_eq!(routines.len(), 1);
     assert_eq!(routines[0].cost, "5 PWR");
-    assert_eq!(routines[0].second_pick, FieldCastPick::Ally);
+    assert_eq!(routines[0].second_pick, FieldRoutinePick::Ally);
 
     let before = player_hunger(&game);
-    game.cast_field_routine(0, FieldCastTarget::Ally(player))
-        .expect("casting a field routine you can afford should succeed");
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
+        .expect("running a field routine you can afford should succeed");
 
-    // A successful cast ticks the clock (see `cast_field_routine`'s doc), so
+    // A successful run ticks the clock (see `run_field_routine`'s doc), so
     // the ordinary per-tick Power decay lands on top of the routine's own
     // cost. `systems::power_drain_per_tick` is the one place that decay formula
     // lives — read through it rather than restating its constant here.
@@ -64,7 +64,7 @@ fn casting_arms_the_buff_and_deducts_power() {
         buff.power,
         abilities::scaled_stat_power(2, 1, AFFINITY_NEUTRAL)
     );
-    // duration: 20, aged by the one tick the successful cast itself spends.
+    // duration: 20, aged by the one tick the successful run itself spends.
     assert_eq!(buff.remaining, 19);
     assert_eq!(buff.source, BuffSource::Routine);
 }
@@ -79,21 +79,21 @@ fn a_successful_cast_ticks_the_clock_and_a_refused_one_does_not() {
     let start = game.current_tick();
 
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
-    let refused = game.cast_field_routine(0, FieldCastTarget::Ally(player));
+    let refused = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
     assert!(refused.is_err(), "4.0 Power can't cover a 5.0 cost");
     assert_eq!(
         game.current_tick(),
         start,
-        "a refused cast spends nothing, so it must cost no time"
+        "a refused run spends nothing, so it must cost no time"
     );
 
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
-    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .expect("100.0 Power covers a 5.0 cost");
     assert_eq!(
         game.current_tick(),
         start + 1,
-        "a successful cast is a turn, exactly like use_item spending one on the same buff"
+        "a successful run is a turn, exactly like use_item spending one on the same buff"
     );
 }
 
@@ -106,7 +106,7 @@ fn insufficient_power_returns_err_and_leaves_state_untouched() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(4.0);
 
-    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
+    let result = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
 
     assert_eq!(
         result,
@@ -115,18 +115,18 @@ fn insufficient_power_returns_err_and_leaves_state_untouched() {
     assert_eq!(
         player_hunger(&game),
         4.0,
-        "a refused cast must not spend Power"
+        "a refused run must not spend Power"
     );
     assert!(
         game.world
             .get::<FieldBuff>(player)
             .is_none_or(|b| b.active.is_empty()),
-        "a refused cast must not arm a buff"
+        "a refused run must not arm a buff"
     );
 }
 
 #[test]
-fn casting_during_a_battle_is_refused() {
+fn running_during_a_battle_is_refused() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     game.world
@@ -136,9 +136,9 @@ fn casting_during_a_battle_is_refused() {
     insert_battle(&mut game, player, vec![wild]);
     let before = player_hunger(&game);
 
-    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
+    let result = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
 
-    assert!(result.is_err(), "casting mid-battle must be refused");
+    assert!(result.is_err(), "running mid-battle must be refused");
     assert_eq!(player_hunger(&game), before);
     assert!(
         game.world
@@ -148,7 +148,7 @@ fn casting_during_a_battle_is_refused() {
 }
 
 #[test]
-fn casting_underground_succeeds() {
+fn running_underground_succeeds() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     game.world
@@ -157,11 +157,11 @@ fn casting_underground_succeeds() {
     let pos = *game.world.get::<Position>(player).unwrap();
     game.enter_stack(pos.x, pos.y);
 
-    let result = game.cast_field_routine(0, FieldCastTarget::Ally(player));
+    let result = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
 
     assert!(
         result.is_ok(),
-        "casting is not gated on require_surface and must work underground: {result:?}"
+        "running is not gated on require_surface and must work underground: {result:?}"
     );
     assert!(game.world.get::<FieldBuff>(player).is_some());
 }
@@ -174,7 +174,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     game.add_companion(low).unwrap();
     game.add_companion(high).unwrap();
     // `CREATURE_MAX_LEVEL` rather than an arbitrary 20: a companion cannot
-    // level past it in play, so a fixture that did would be scaling a cast
+    // level past it in play, so a fixture that did would be scaling an invocation
     // nobody can ever make.
     set_level(&mut game, high, CREATURE_MAX_LEVEL);
     game.world
@@ -193,7 +193,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
         .iter()
         .position(|r| r.holder == low)
         .expect("the level-1 holder's routine is listed");
-    game.cast_field_routine(low_index, FieldCastTarget::Ally(low))
+    game.run_field_routine(low_index, FieldRoutineTarget::Ally(low))
         .unwrap();
 
     *game
@@ -205,7 +205,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
         .iter()
         .position(|r| r.holder == high)
         .expect("the top-level holder's routine is listed");
-    game.cast_field_routine(high_index, FieldCastTarget::Ally(high))
+    game.run_field_routine(high_index, FieldRoutineTarget::Ally(high))
         .unwrap();
 
     let low_power = game.world.get::<FieldBuff>(low).unwrap().active[0].power;
@@ -220,12 +220,12 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     );
     assert!(
         high_power > low_power,
-        "a top-level holder's cast should outscale a level-1 holder's: \
+        "a top-level holder's invocation should outscale a level-1 holder's: \
          {high_power} vs {low_power}"
     );
 }
 
-/// The two `FieldBuffKind::scales_with_caster` tests below share this
+/// The two `FieldBuffKind::scales_with_invoker` tests below share this
 /// holder shape — level 20 (`ABILITY_SCALE_LEVEL_CAP` is 40, so this
 /// is short of the cap but still well past level 1) and `AFFINITY_MAX`
 /// worth of the `BuffAffinity` perk, bought directly onto `Perks` rather
@@ -249,7 +249,7 @@ fn buff_affinity_maxed_player(game: &mut Game) -> Entity {
 #[test]
 fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_affinity() {
     let dir = modded_assets_dir(
-        "field_cast_pct_unscaled",
+        "field_routine_pct_unscaled",
         &[],
         &[],
         &[],
@@ -262,7 +262,7 @@ fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_a
         .entity_mut(player)
         .insert(Routines(vec!["test_field_mitigation".to_string()]));
 
-    game.cast_field_routine(0, FieldCastTarget::None)
+    game.run_field_routine(0, FieldRoutineTarget::None)
         .expect("a WholeParty target needs no picked ally");
 
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
@@ -278,7 +278,7 @@ fn a_percentage_kind_is_delivered_at_its_authored_value_regardless_of_level_or_a
 #[test]
 fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
     let dir = modded_assets_dir(
-        "field_cast_flat_still_scales",
+        "field_routine_flat_still_scales",
         &[],
         &[],
         &[],
@@ -291,7 +291,7 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
         .entity_mut(player)
         .insert(Routines(vec!["test_field_atk".to_string()]));
 
-    game.cast_field_routine(0, FieldCastTarget::None)
+    game.run_field_routine(0, FieldRoutineTarget::None)
         .expect("a WholeParty target needs no picked ally");
 
     let power = game.world.get::<FieldBuff>(player).unwrap().active[0].power;
@@ -306,20 +306,20 @@ fn a_flat_kind_still_scales_for_the_same_high_level_high_affinity_holder() {
     );
 }
 
-/// `field_cast_targets` — what the ally picker offers — is narrower than
+/// `field_routine_targets` — what the ally picker offers — is narrower than
 /// `routine_holders`: only the player and the active `Party`, since those
 /// are the only entities `tick_field_buffs` ever walks. An owned program
 /// that isn't in the party must not appear, even though it's a perfectly
 /// valid `routine_holders` row (installing a routine on it is legitimate).
 #[test]
-fn field_cast_targets_excludes_an_owned_program_outside_the_party() {
+fn field_routine_targets_excludes_an_owned_program_outside_the_party() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     let party_member = spawn_tamed(&mut game, 10, 3);
     game.add_companion(party_member).unwrap();
     let benched = spawn_tamed(&mut game, 10, 3);
 
-    let targets = game.field_cast_targets(0);
+    let targets = game.field_routine_targets(0);
 
     assert!(targets.iter().any(|t| t.entity == player));
     assert!(targets.iter().any(|t| t.entity == party_member));
@@ -331,12 +331,12 @@ fn field_cast_targets_excludes_an_owned_program_outside_the_party() {
     let holders = game.routine_holders();
     assert!(
         holders.iter().any(|h| h.entity == benched),
-        "routine_holders (install/uninstall) still lists it — only casting narrows"
+        "routine_holders (install/uninstall) still lists it — only running narrows"
     );
 }
 
 /// Arms the player with the fixture's `OneAlly` field routine, so
-/// `field_routines()[0]` is it and `field_cast_targets(0)` is the picker
+/// `field_routines()[0]` is it and `field_routine_targets(0)` is the picker
 /// that would follow.
 fn game_with_the_field_routine_installed() -> Game {
     let mut game = game_with_field_ability();
@@ -358,7 +358,7 @@ fn an_ally_picker_row_carries_the_targets_stats() {
     game.add_companion(member).unwrap();
     let stats = *game.world.get::<Stats>(member).unwrap();
 
-    let targets = game.field_cast_targets(0);
+    let targets = game.field_routine_targets(0);
     let row = targets
         .iter()
         .find(|t| t.entity == member)
@@ -378,7 +378,7 @@ fn the_ally_pickers_player_row_carries_stats_too() {
     let player = game.player_entity();
     let stats = *game.world.get::<Stats>(player).unwrap();
 
-    let targets = game.field_cast_targets(0);
+    let targets = game.field_routine_targets(0);
     let row = targets
         .iter()
         .find(|t| t.entity == player)
@@ -389,7 +389,7 @@ fn the_ally_pickers_player_row_carries_stats_too() {
 }
 
 /// `arm_field_buff` displaces a running `Routine` buff of the same kind, so
-/// casting on a target that already has one replaces it rather than stacking
+/// running on a target that already has one replaces it rather than stacking
 /// — and nothing else on this screen says so. The tag names the buff it
 /// would overwrite, because two different routines can arm one kind
 /// (Ablative Layer and Long Winter both arm Mitigation) and "already
@@ -411,14 +411,14 @@ fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
         },
     );
 
-    let targets = game.field_cast_targets(0);
+    let targets = game.field_routine_targets(0);
     let running = targets
         .iter()
         .find(|t| t.entity == member)
         .expect("the party member is offered")
         .running
         .as_ref()
-        .expect("a routine-armed Regen is exactly what this cast would replace");
+        .expect("a routine-armed Regen is exactly what this invocation would replace");
 
     assert_eq!(running.name, "Repair Loop Single");
     assert_eq!(running.remaining, "62t");
@@ -442,7 +442,7 @@ fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
 
 /// A buff of the same kind armed by a *consumable* is deliberately not
 /// named: `arm_field_buff` displaces `Consumable` and `Routine` entries
-/// separately, so this cast would leave it running. The tag says what is
+/// separately, so this invocation would leave it running. The tag says what is
 /// about to be overwritten, not what is running in general — which is the
 /// distinction that makes it worth reading.
 #[test]
@@ -462,7 +462,7 @@ fn a_consumable_buff_of_the_same_kind_is_not_named_as_replaced() {
         },
     );
 
-    let targets = game.field_cast_targets(0);
+    let targets = game.field_routine_targets(0);
     assert!(
         targets
             .iter()
@@ -493,19 +493,19 @@ fn an_index_naming_no_field_buff_tags_nothing() {
         },
     );
 
-    let targets = game.field_cast_targets(99);
+    let targets = game.field_routine_targets(99);
 
     assert_eq!(targets.len(), 2, "the roster is unaffected by the index");
     assert!(targets.iter().all(|t| t.running.is_none()));
 }
 
 /// The picker narrowing above is a UX convenience, not the only guard: the
-/// engine has to refuse a `OneAlly` cast aimed at an owned-but-benched
+/// engine has to refuse a `OneAlly` run aimed at an owned-but-benched
 /// program too, or a caller that bypasses the picker (a bug, a future UI)
 /// could still arm a buff on an entity `tick_field_buffs` never walks — paid
 /// for, frozen at full duration, and doing nothing forever.
 #[test]
-fn casting_on_an_owned_program_outside_the_party_is_refused() {
+fn running_on_an_owned_program_outside_the_party_is_refused() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     let benched = spawn_tamed(&mut game, 10, 3);
@@ -514,29 +514,29 @@ fn casting_on_an_owned_program_outside_the_party_is_refused() {
         .insert(Routines(vec!["test_field_regen".to_string()]));
     let before = player_hunger(&game);
 
-    let result = game.cast_field_routine(0, FieldCastTarget::Ally(benched));
+    let result = game.run_field_routine(0, FieldRoutineTarget::Ally(benched));
 
     assert!(
         result.is_err(),
-        "casting on an owned, non-party program must be refused"
+        "running on an owned, non-party program must be refused"
     );
     assert_eq!(
         player_hunger(&game),
         before,
-        "a refused cast must not spend Power"
+        "a refused run must not spend Power"
     );
     assert!(
         game.world
             .get::<FieldBuff>(benched)
             .is_none_or(|b| b.active.is_empty()),
-        "a refused cast must not arm a buff on the rejected target"
+        "a refused run must not arm a buff on the rejected target"
     );
 }
 
 #[test]
 fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
     let dir = modded_assets_dir(
-        "field_cast_run",
+        "field_routine_run",
         &[],
         &[],
         &[],
@@ -556,18 +556,18 @@ fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
         .position(|r| r.holder == companion)
         .expect("the companion's routine is listed");
     assert!(
-        routines[index].second_pick == FieldCastPick::None,
+        routines[index].second_pick == FieldRoutinePick::None,
         "a Run-scoped routine needs no target picker"
     );
 
     // `target: None` — a Run-scoped kind must ignore it entirely rather
     // than requiring one.
-    game.cast_field_routine(index, FieldCastTarget::None)
-        .expect("a Run-scoped cast needs no target");
+    game.run_field_routine(index, FieldRoutineTarget::None)
+        .expect("a Run-scoped invocation needs no target");
 
     assert!(
         game.world.get::<FieldBuff>(companion).is_none(),
-        "a Run-scoped buff must not land on the holder that cast it"
+        "a Run-scoped buff must not land on the holder that ran it"
     );
     let active = &game.world.get::<FieldBuff>(player).unwrap().active;
     assert_eq!(active.len(), 1);
@@ -577,7 +577,7 @@ fn a_run_scoped_kind_lands_on_the_player_even_when_cast_off_a_companion() {
 #[test]
 fn whole_party_arms_every_living_member_and_skips_the_dead() {
     let dir = modded_assets_dir(
-        "field_cast_party",
+        "field_routine_party",
         &[],
         &[],
         &[],
@@ -599,10 +599,10 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
         .iter()
         .position(|r| r.holder == player)
         .expect("the player's routine is listed");
-    assert_eq!(routines[index].second_pick, FieldCastPick::None);
+    assert_eq!(routines[index].second_pick, FieldRoutinePick::None);
 
-    game.cast_field_routine(index, FieldCastTarget::None)
-        .expect("a WholeParty cast needs no target");
+    game.run_field_routine(index, FieldRoutineTarget::None)
+        .expect("a WholeParty invocation needs no target");
 
     assert_eq!(game.world.get::<FieldBuff>(player).unwrap().active.len(), 1);
     assert_eq!(game.world.get::<FieldBuff>(alive).unwrap().active.len(), 1);
@@ -613,10 +613,10 @@ fn whole_party_arms_every_living_member_and_skips_the_dead() {
 }
 
 /// The same walk against the **shipped** routine rather than a fixture one:
-/// `hardened_shell_party` hardens the player and every companion off one cast,
+/// `hardened_shell_party` hardens the player and every companion off one invocation,
 /// which is the whole of what it buys over `hardened_shell` at the same +4.
 ///
-/// Worth an asset-level test of its own because everything about the wide cast
+/// Worth an asset-level test of its own because everything about the wide invocation
 /// is authored: `target: WholeParty` is what reaches the party, and an
 /// `assets/` edit narrowing it to `OneAlly` would leave a routine that still
 /// loads, still lists, still costs the wide price and quietly hardens one body.
@@ -638,16 +638,16 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
         .expect("the party routine is listed once installed");
     assert_eq!(
         routines[index].second_pick,
-        FieldCastPick::None,
+        FieldRoutinePick::None,
         "a WholeParty routine opens no ally picker"
     );
 
-    game.cast_field_routine(index, FieldCastTarget::None)
-        .expect("a WholeParty cast needs no target");
+    game.run_field_routine(index, FieldRoutineTarget::None)
+        .expect("a WholeParty invocation needs no target");
 
     // Authored, not scaled: `hardened_shell_party` is a `Mitigation` buff
     // now, and a percentage kind is delivered at exactly what the file says
-    // — see `FieldBuffKind::scales_with_caster`.
+    // — see `FieldBuffKind::scales_with_invoker`.
     for holder in [player, first, second] {
         let active = &game.world.get::<FieldBuff>(holder).unwrap().active;
         assert_eq!(active.len(), 1, "one buff per body");
@@ -655,7 +655,7 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
         assert_eq!(active[0].power, 12);
         assert!(
             active[0].runs_until_rest(),
-            "an authored duration would give the wide cast a turn count"
+            "an authored duration would give the wide invocation a turn count"
         );
     }
 }
@@ -663,7 +663,7 @@ fn the_shipped_party_def_routine_hardens_the_whole_party() {
 #[test]
 fn field_routines_lists_across_holders_and_excludes_non_field() {
     let dir = modded_assets_dir(
-        "field_cast_listing",
+        "field_routine_listing",
         &[],
         &[],
         &[],
@@ -722,7 +722,7 @@ fn active_buffs_reports_a_player_buff_with_no_holder_label() {
         .entity_mut(player)
         .insert(Routines(vec!["test_field_regen".to_string()]));
 
-    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .unwrap();
     let stored = game.world.get::<FieldBuff>(player).unwrap().active[0].clone();
 
@@ -759,7 +759,7 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
         .iter()
         .position(|r| r.holder == companion)
         .expect("the companion's routine is listed");
-    game.cast_field_routine(index, FieldCastTarget::Ally(companion))
+    game.run_field_routine(index, FieldRoutineTarget::Ally(companion))
         .unwrap();
     let expected_label = game.creature_label(companion);
 
@@ -788,12 +788,12 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
         .iter()
         .position(|r| r.holder == holder)
         .expect("the top-level holder's routine is listed");
-    game.cast_field_routine(index, FieldCastTarget::Ally(holder))
+    game.run_field_routine(index, FieldRoutineTarget::Ally(holder))
         .unwrap();
 
     let scaled = abilities::scaled_stat_power(2, CREATURE_MAX_LEVEL, AFFINITY_NEUTRAL);
     // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a top-level
-    // holder's cast must scale well past that, so asserting against the
+    // holder's invocation must scale well past that, so asserting against the
     // scaled value (rather than "2") actually exercises the distinction.
     assert_ne!(scaled, 2);
 
@@ -848,13 +848,13 @@ fn a_companions_field_routine_spends_the_companions_reserve() {
 
     let player_before = player_hunger(&game);
     let companion_before = reserve_of(&game, companion);
-    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .expect("the companion can afford its own routine");
 
     assert_eq!(
         reserve_of(&game, companion),
         companion_before - 5.0,
-        "the caster pays"
+        "the invoker pays"
     );
     assert_eq!(
         player_hunger(&game),
@@ -884,9 +884,9 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
         "a full player bar must not make a drained companion's routine look runnable"
     );
     assert!(
-        game.cast_field_routine(0, FieldCastTarget::Ally(player))
+        game.run_field_routine(0, FieldRoutineTarget::Ally(player))
             .is_err(),
-        "and the cast must refuse it too"
+        "and the invocation must refuse it too"
     );
 
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(1.0);
@@ -896,6 +896,6 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
         None,
         "a drained player must not block a companion's own routine"
     );
-    game.cast_field_routine(0, FieldCastTarget::Ally(player))
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .expect("the companion has the Power for it");
 }

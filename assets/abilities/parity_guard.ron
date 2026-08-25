@@ -4,7 +4,7 @@
     // PASSIVE, `OneAlly` scope, and the ally it lands on is its own holder:
     // `Game::passive_target` answers an ally-facing passive with the
     // combatant carrying it. Armour that braces the wearer, not the party —
-    // a party-wide rung would be a `Bastion` the player never has to cast.
+    // a party-wide rung would be a `Bastion` the player never has to run.
     //
     // Three rounds against a four-round cooldown, so there is a round in
     // every cycle without it. A duration at or above the cooldown would make

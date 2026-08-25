@@ -14,7 +14,7 @@ There are sixteen, and they fall into five jobs.
   them. Buffer widens Integrity by a percentage and heals you in full on the way through.
 - Your routines. Payload Tuning and Siphon Protocol sharpen what you do to other programs by 15% a
   level; Field Medic, Overclocker and Corruption Vector do the same at 5% for healing, boosts and
-  afflictions. All five move your own casts and nothing else's.
+  afflictions. All five move your own invocations and nothing else's.
 - Decompiling. Exploit Focus makes a target's remaining Integrity count for less against your odds,
   which means it is worth most against a program you have not worn down and nothing at all against
   one already finished. Roster room is Process Pool, one more program per level.

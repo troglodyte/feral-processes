@@ -3,7 +3,7 @@
     name: "Fork Bomb Group",
     description: "Damage every member of one group, sometimes leaving them bleeding",
     target: WholeEnemyGroup,
-    effect: Damage(power: 15, status: Some((kind: Bleed, chance: 0.35, duration: 2, power: 2))),
+    effect: Damage(power: 15, spread: 4, status: Some((kind: Bleed, chance: 0.35, duration: 2, power: 2))),
     cooldown: 3,
     power_cost: 12.0,
     wild_weight: 6,

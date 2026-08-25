@@ -1,32 +1,32 @@
-//! Casting a field routine outside battle — see `Game::field_routines`.
+//! Running a field routine outside battle — see `Game::field_routines`.
 
 use crate::*;
 
 impl App {
     /// Who a `OneAlly` field routine can be aimed at: you, then your active
-    /// `Party` — `Game::field_cast_targets`, not the wider
+    /// `Party` — `Game::field_routine_targets`, not the wider
     /// `Game::routine_holders` `Mode::RoutineTarget` uses. That wider list is
     /// every program you own regardless of location, but only the player and
     /// the party are ever ticked (`tick_field_buffs`); offering a benched
-    /// program here used to let a cast pay Power for a buff that ticked
-    /// nowhere. `Game::cast_field_routine` checks the same narrower set
+    /// program here used to let an invocation pay Power for a buff that ticked
+    /// nowhere. `Game::run_field_routine` checks the same narrower set
     /// again on its own, so this is a UX narrowing, not the only guard.
     ///
     /// `routine` is the pending `field_routines` index, which is what lets a
-    /// row say the cast would displace a buff already running on that target.
-    pub(crate) fn field_ally_options(&mut self, routine: usize) -> Vec<FieldCastTargetView> {
+    /// row say the invocation would displace a buff already running on that target.
+    pub(crate) fn field_ally_options(&mut self, routine: usize) -> Vec<FieldRoutineTargetView> {
         self.game
             .as_mut()
-            .map(|g| g.field_cast_targets(routine))
+            .map(|g| g.field_routine_targets(routine))
             .unwrap_or_default()
     }
 
     /// Picks which installed field routine to run. A row that needs no
-    /// second pick casts on the spot; one that does hands off to whichever
-    /// picker its `FieldCastPick` names — the routine and its target are
+    /// second pick runs on the spot; one that does hands off to whichever
+    /// picker its `FieldRoutinePick` names — the routine and its target are
     /// separate choices, same split `Mode::BattleSpecial` makes before
     /// `Mode::BattleAlly`.
-    pub(crate) fn handle_field_cast_key(&mut self, key: GameKey) {
+    pub(crate) fn handle_field_routine_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
@@ -46,24 +46,24 @@ impl App {
             return;
         }
         match row.second_pick {
-            FieldCastPick::Ally => {
+            FieldRoutinePick::Ally => {
                 self.pending_field_routine = Some(idx);
                 self.menu_selected = 0;
-                self.mode = Mode::FieldCastAlly;
+                self.mode = Mode::FieldRoutineAlly;
                 return;
             }
-            FieldCastPick::Cell => {
+            FieldRoutinePick::Cell => {
                 self.pending_field_routine = Some(idx);
                 // The cursor opens on the party's own cell, which is the one
                 // coordinate a player already knows the meaning of.
                 self.field_cursor = self.game.as_ref().and_then(|g| g.stack_pos_xy());
-                self.mode = Mode::FieldCastCell;
+                self.mode = Mode::FieldRoutineCell;
                 return;
             }
-            FieldCastPick::None => {}
+            FieldRoutinePick::None => {}
         }
         let Some(game) = &mut self.game else { return };
-        let outcome = game.cast_field_routine(idx, FieldCastTarget::None);
+        let outcome = game.run_field_routine(idx, FieldRoutineTarget::None);
         self.report(outcome);
         self.mode = Mode::Playing;
     }
@@ -77,11 +77,11 @@ impl App {
     ///
     /// Clamped to the frame's bounds, so an out-of-bounds coordinate is
     /// unreachable rather than lethal. Inside the grid, solid is solid.
-    pub(crate) fn handle_field_cast_cell_key(&mut self, key: GameKey) {
+    pub(crate) fn handle_field_routine_cell_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_field_routine = None;
             self.field_cursor = None;
-            self.mode = Mode::FieldCast;
+            self.mode = Mode::FieldRoutine;
             return;
         }
         let Some(game) = &mut self.game else { return };
@@ -90,7 +90,7 @@ impl App {
             return;
         };
         let Some((cx, cy)) = self.field_cursor else {
-            self.mode = Mode::FieldCast;
+            self.mode = Mode::FieldRoutine;
             return;
         };
         let (dx, dy) = match key {
@@ -100,11 +100,11 @@ impl App {
             GameKey::Right | GameKey::Char('l') => (1, 0),
             GameKey::Enter => {
                 let Some(index) = self.pending_field_routine.take() else {
-                    self.mode = Mode::FieldCast;
+                    self.mode = Mode::FieldRoutine;
                     return;
                 };
                 self.field_cursor = None;
-                let outcome = game.cast_field_routine(index, FieldCastTarget::Cell(cx, cy));
+                let outcome = game.run_field_routine(index, FieldRoutineTarget::Cell(cx, cy));
                 self.report(outcome);
                 self.mode = Mode::Playing;
                 return;
@@ -114,17 +114,17 @@ impl App {
         self.field_cursor = Some(((cx + dx).clamp(0, w - 1), (cy + dy).clamp(0, h - 1)));
     }
 
-    /// Picks who the routine chosen in `Mode::FieldCast` lands on, then
-    /// casts it.
-    pub(crate) fn handle_field_cast_ally_key(&mut self, key: GameKey) {
+    /// Picks who the routine chosen in `Mode::FieldRoutine` lands on, then
+    /// runs it.
+    pub(crate) fn handle_field_routine_ally_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_field_routine = None;
             self.menu_selected = 0;
-            self.mode = Mode::FieldCast;
+            self.mode = Mode::FieldRoutine;
             return;
         }
         let Some(index) = self.pending_field_routine else {
-            self.mode = Mode::FieldCast;
+            self.mode = Mode::FieldRoutine;
             return;
         };
         let targets = self.field_ally_options(index);
@@ -134,7 +134,7 @@ impl App {
         let target = targets[idx].entity;
         self.pending_field_routine = None;
         let Some(game) = &mut self.game else { return };
-        let outcome = game.cast_field_routine(index, FieldCastTarget::Ally(target));
+        let outcome = game.run_field_routine(index, FieldRoutineTarget::Ally(target));
         self.report(outcome);
         self.mode = Mode::Playing;
     }

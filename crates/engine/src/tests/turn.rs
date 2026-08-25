@@ -123,7 +123,7 @@ fn idle_tick_advances_the_clock_outside_battle_but_not_during_one() {
 
 /// With Fatigue gone, rest's meter refill lands on Power. That is a real
 /// behaviour change — rest used to leave a drained player drained — and it is
-/// what makes the base the place a casting budget is bought back.
+/// what makes the base the place a running budget is bought back.
 #[test]
 fn rest_fully_heals_and_restores_power() {
     let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -518,7 +518,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
 }
 
 /// The drop walks the player *and* the party — the same set
-/// `tick_field_buffs` ages, which is the only set a cast can arm one on.
+/// `tick_field_buffs` ages, which is the only set an invocation can arm one on.
 #[test]
 fn resting_drops_a_companions_until_rest_buffs_too() {
     let mut game = Game::new(623, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -551,7 +551,7 @@ fn resting_drops_a_companions_until_rest_buffs_too() {
 
 /// The drop sits with the heal and the refill, past every bail — so a rest
 /// that never happened costs nothing. A player who walked to the wrong tile
-/// has not lost what they cast.
+/// has not lost what they run.
 #[test]
 fn a_refused_rest_keeps_until_rest_buffs() {
     let mut game = Game::new(624, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

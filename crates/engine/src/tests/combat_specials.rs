@@ -159,10 +159,17 @@ fn special_ability_heal_restores_player_hp_and_debuff_afflicts_the_wild_creature
     let heal = ability(&game, "hot_patch");
     game.use_ability(&heal, player, "TestBot", &[player]);
     let hp = game.world.get::<Stats>(player).unwrap().hp;
-    assert_eq!(
-        hp,
-        5 + crate::abilities::scaled_hp_power(8, 1, crate::tuning::AFFINITY_NEUTRAL),
-        "Heal should restore the player's HP by its power, capped at max_hp"
+    let crate::abilities::AbilityEffect::Heal { power, spread } = heal.effect else {
+        panic!("hot_patch is a Heal ability");
+    };
+    let band = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(power, spread),
+        1,
+        crate::tuning::AFFINITY_NEUTRAL,
+    );
+    assert!(
+        (5 + band.min..=5 + band.max).contains(&hp),
+        "Heal should restore the player's HP from its band {band:?}, capped at max_hp; got {hp}"
     );
 
     let debuff = ability(&game, "memory_leak");
@@ -232,7 +239,7 @@ fn a_species_with_several_abilities_offers_each_one_in_menu_order() {
         vec![0, 1],
         "index is what BattleAction::Special carries, so it must match position"
     );
-    assert_eq!(options[0].detail, "Restore 8 Integrity to one ally");
+    assert_eq!(options[0].detail, "Restore 6–10 Integrity to one ally");
 }
 
 #[test]

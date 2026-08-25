@@ -35,14 +35,14 @@ fn surfaced_with_routines_on(mode: DifficultyMode) -> Game {
     game.world
         .entity_mut(player)
         .insert(Routines(vec![PHASE.to_string(), JUMP.to_string()]));
-    // Full Power, so an unrelated drain can never be what refuses a cast
+    // Full Power, so an unrelated drain can never be what refuses an invocation
     // these tests expect to run.
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(100.0);
     game
 }
 
 /// Index of `id` in the field-routine picker — the number
-/// `cast_field_routine` actually takes.
+/// `run_field_routine` actually takes.
 fn row(game: &mut Game, id: &str) -> usize {
     game.field_routines()
         .iter()
@@ -50,9 +50,9 @@ fn row(game: &mut Game, id: &str) -> usize {
         .unwrap_or_else(|| panic!("{id} is not in the field-routine list"))
 }
 
-fn cast(game: &mut Game, id: &str, pick: FieldCastTarget) -> Result<(), String> {
+fn run(game: &mut Game, id: &str, pick: FieldRoutineTarget) -> Result<(), String> {
     let index = row(game, id);
-    game.cast_field_routine(index, pick)
+    game.run_field_routine(index, pick)
 }
 
 fn frame(game: &Game) -> crate::stack::Frame {
@@ -164,7 +164,8 @@ fn phasing_crosses_one_wall_and_lands_on_the_open_cell_beyond() {
         wall_site(&level, |l, c| l.walkable(c.0, c.1)).expect("a one-thick wall somewhere");
     stand(&mut game, from, dir);
 
-    cast(&mut game, PHASE, FieldCastTarget::None).expect("a one-thick wall is what Phase crosses");
+    run(&mut game, PHASE, FieldRoutineTarget::None)
+        .expect("a one-thick wall is what Phase crosses");
 
     assert_eq!(at(&game), landing, "the party did not land beyond the wall");
     assert_eq!(
@@ -182,7 +183,7 @@ fn phasing_is_refused_by_two_deep_rock() {
         .expect("two-deep rock somewhere in a 21x21 maze");
     stand(&mut game, from, dir);
 
-    let refused = cast(&mut game, PHASE, FieldCastTarget::None);
+    let refused = run(&mut game, PHASE, FieldRoutineTarget::None);
 
     assert!(
         refused.is_err(),
@@ -206,7 +207,7 @@ fn phasing_off_the_edge_of_the_frame_is_refused() {
         .expect("a walkable cell one in from the west border");
     stand(&mut game, from, Dir::West);
 
-    let refused = cast(&mut game, PHASE, FieldCastTarget::None);
+    let refused = run(&mut game, PHASE, FieldRoutineTarget::None);
 
     assert!(refused.is_err(), "phasing out of the frame must be refused");
     assert_eq!(at(&game), from);
@@ -230,7 +231,7 @@ fn phasing_with_nothing_solid_ahead_is_refused() {
         .expect("an open corridor somewhere");
     stand(&mut game, from, dir);
 
-    let refused = cast(&mut game, PHASE, FieldCastTarget::None);
+    let refused = run(&mut game, PHASE, FieldRoutineTarget::None);
 
     assert!(
         refused.is_err(),
@@ -245,7 +246,7 @@ fn phasing_with_nothing_solid_ahead_is_refused() {
 fn neither_routine_runs_on_the_surface() {
     let mut game = surfaced_with_routines();
     for id in [PHASE, JUMP] {
-        let refused = cast(&mut game, id, FieldCastTarget::Cell(3, 3));
+        let refused = run(&mut game, id, FieldRoutineTarget::Cell(3, 3));
         assert!(refused.is_err(), "{id} ran on open grid");
     }
 }
@@ -258,7 +259,7 @@ fn neither_routine_runs_mid_battle_or_after_game_over() {
     insert_battle(&mut game, player, vec![wild]);
     for id in [PHASE, JUMP] {
         assert!(
-            cast(&mut game, id, FieldCastTarget::Cell(3, 3)).is_err(),
+            run(&mut game, id, FieldRoutineTarget::Cell(3, 3)).is_err(),
             "{id} ran mid-battle"
         );
     }
@@ -269,7 +270,7 @@ fn neither_routine_runs_mid_battle_or_after_game_over() {
         .reason = Some("test".into());
     for id in [PHASE, JUMP] {
         assert!(
-            cast(&mut game, id, FieldCastTarget::Cell(3, 3)).is_err(),
+            run(&mut game, id, FieldRoutineTarget::Cell(3, 3)).is_err(),
             "{id} ran after game over"
         );
     }
@@ -284,8 +285,8 @@ fn a_refused_cast_spends_no_power_and_raises_no_trace() {
     stand(&mut game, from, dir);
     let (before_power, before_trace) = (power(&game), trace(&game));
 
-    assert!(cast(&mut game, PHASE, FieldCastTarget::None).is_err());
-    assert!(cast(&mut game, JUMP, FieldCastTarget::Cell(-4, -4)).is_err());
+    assert!(run(&mut game, PHASE, FieldRoutineTarget::None).is_err());
+    assert!(run(&mut game, JUMP, FieldRoutineTarget::Cell(-4, -4)).is_err());
 
     assert_eq!(power(&game), before_power, "a refusal charged Power");
     assert_eq!(trace(&game), before_trace, "a refusal raised Trace");
@@ -299,14 +300,14 @@ fn both_routines_charge_power_and_raise_trace_on_success() {
     let (from, dir, _) = wall_site(&level, |l, c| l.walkable(c.0, c.1)).unwrap();
     stand(&mut game, from, dir);
     let before = power(&game);
-    cast(&mut game, PHASE, FieldCastTarget::None).unwrap();
+    run(&mut game, PHASE, FieldRoutineTarget::None).unwrap();
     assert!(power(&game) < before, "a phase cost no Power");
     assert_eq!(trace(&game), TRACE_PER_PHASE);
 
     // Onto the cell it just came from, which is known walkable and known
     // reachable — this test is about the meter, not the landing.
     let before = power(&game);
-    cast(&mut game, JUMP, FieldCastTarget::Cell(from.0, from.1)).unwrap();
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(from.0, from.1)).unwrap();
     assert!(power(&game) < before, "a jump cost no Power");
     assert_eq!(trace(&game), TRACE_PER_PHASE + TRACE_PER_JUMP);
 }
@@ -322,8 +323,12 @@ fn jumping_to_a_mapped_floor_cell_arrives_there() {
         .max_by_key(|c| (c.0 - entry.0).abs() + (c.1 - entry.1).abs())
         .expect("a floor cell");
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(target.0, target.1))
-        .expect("a plain floor cell is a legal landing");
+    run(
+        &mut game,
+        JUMP,
+        FieldRoutineTarget::Cell(target.0, target.1),
+    )
+    .expect("a plain floor cell is a legal landing");
 
     assert_eq!(at(&game), target);
 }
@@ -340,7 +345,7 @@ fn a_jump_fires_the_arrival_tail() {
         .find(|&c| level.cell(c.0, c.1) == CellKind::Cache)
         .expect("every frame lays caches");
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(cache.0, cache.1)).unwrap();
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(cache.0, cache.1)).unwrap();
 
     let pos = game.stack_pos().unwrap();
     assert!(
@@ -366,7 +371,7 @@ fn jumping_onto_a_fault_drops_the_party_a_frame() {
     };
     let depth = game.stack_pos().unwrap().depth;
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(fault.0, fault.1)).unwrap();
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(fault.0, fault.1)).unwrap();
 
     assert_eq!(
         game.stack_pos().unwrap().depth,
@@ -386,7 +391,7 @@ fn jumping_into_rock_ends_a_permadeath_run_and_never_writes_the_locale() {
     let rock = solid_cell(&level);
     let before = at(&game);
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(rock.0, rock.1))
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(rock.0, rock.1))
         .expect("jumping into rock is allowed — that is the gamble");
 
     assert!(
@@ -411,7 +416,7 @@ fn jumping_into_rock_reboots_a_forgiving_run_onto_open_grid() {
     let level = frame(&game);
     let rock = solid_cell(&level);
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(rock.0, rock.1)).unwrap();
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(rock.0, rock.1)).unwrap();
 
     assert!(game.is_game_over().is_none(), "Forgiving survives a death");
     assert_eq!(
@@ -447,7 +452,7 @@ fn neither_routine_lands_behind_an_unopened_seal_or_on_one() {
     let (seal, lair) = bottom_frame_with_a_seal(&mut game);
 
     for cell in [seal, lair] {
-        let refused = cast(&mut game, JUMP, FieldCastTarget::Cell(cell.0, cell.1));
+        let refused = run(&mut game, JUMP, FieldRoutineTarget::Cell(cell.0, cell.1));
         assert!(
             refused.is_err(),
             "a jump reached {cell:?} without forcing a seal"
@@ -462,7 +467,7 @@ fn a_forced_seal_stops_excluding_the_wing_behind_it() {
     let pos = game.stack_pos().unwrap();
     game.frame_memory_mut(pos).opened.insert(seal);
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(lair.0, lair.1))
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(lair.0, lair.1))
         .expect("the wing is the party's once the seal has been forced");
     assert_eq!(at(&game), lair);
 }
@@ -503,8 +508,8 @@ fn bottom_frame_with_a_seal(game: &mut Game) -> ((i32, i32), (i32, i32)) {
 fn a_jump_outside_the_frame_is_refused() {
     let mut game = underground();
     let before = at(&game);
-    assert!(cast(&mut game, JUMP, FieldCastTarget::Cell(-1, 4)).is_err());
-    assert!(cast(&mut game, JUMP, FieldCastTarget::Cell(4, 999)).is_err());
+    assert!(run(&mut game, JUMP, FieldRoutineTarget::Cell(-1, 4)).is_err());
+    assert!(run(&mut game, JUMP, FieldRoutineTarget::Cell(4, 999)).is_err());
     assert_eq!(at(&game), before);
 }
 
@@ -518,8 +523,8 @@ fn the_picker_asks_for_a_cell_only_for_the_jump() {
             .map(|r| r.second_pick)
             .unwrap()
     };
-    assert_eq!(pick(JUMP), FieldCastPick::Cell);
-    assert_eq!(pick(PHASE), FieldCastPick::None);
+    assert_eq!(pick(JUMP), FieldRoutinePick::Cell);
+    assert_eq!(pick(PHASE), FieldRoutinePick::None);
 }
 
 /// The rows are greyed with the permanent objection rather than the
@@ -547,7 +552,7 @@ fn a_routine_the_player_cannot_pay_for_is_greyed_rather_than_hidden() {
         rows.iter()
             .all(|r| r.unavailable.as_deref() == Some("not enough PWR"))
     );
-    assert!(cast(&mut game, PHASE, FieldCastTarget::None).is_err());
+    assert!(run(&mut game, PHASE, FieldRoutineTarget::None).is_err());
 }
 
 /// Installing either routine goes through the ordinary door — a research
@@ -578,8 +583,12 @@ fn an_unseen_floor_cell_is_a_legal_landing() {
         .find(|&c| level.cell(c.0, c.1) == CellKind::Floor && !seen(&game, c))
         .expect("a corridor the party has not walked");
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(target.0, target.1))
-        .expect("an unseen cell is exactly what a wild jump is for");
+    run(
+        &mut game,
+        JUMP,
+        FieldRoutineTarget::Cell(target.0, target.1),
+    )
+    .expect("an unseen cell is exactly what a wild jump is for");
     assert_eq!(at(&game), target);
 }
 
@@ -594,12 +603,12 @@ fn seen(game: &Game, cell: (i32, i32)) -> bool {
 
 /// A lethal Jump still charges. The routine ran, and what it found at the
 /// address is not something the party gets refunded for — same reasoning
-/// `cast_jump` already carried, now that the meter it spends is the one with
+/// `run_jump` already carried, now that the meter it spends is the one with
 /// no supply underground.
 ///
 /// Asserted on Permadeath, where nothing else can touch the reserve
 /// afterwards: `difficulty.rs`'s Forgiving reboot raises it to a floor, which
-/// would mask what the cast took.
+/// would mask what the invocation took.
 #[test]
 fn a_lethal_jump_still_charges_its_power_cost() {
     let mut game = underground_on(DifficultyMode::Permadeath);
@@ -612,10 +621,10 @@ fn a_lethal_jump_still_charges_its_power_cost() {
     assert!(cost > 0.0, "the jump has to cost something to prove this");
     let before = power(&game);
 
-    cast(&mut game, JUMP, FieldCastTarget::Cell(rock.0, rock.1))
+    run(&mut game, JUMP, FieldRoutineTarget::Cell(rock.0, rock.1))
         .expect("jumping into rock is allowed — that is the gamble");
 
-    // Plus the tick the cast itself advances, the same drain a Defend round
+    // Plus the tick the invocation itself advances, the same drain a Defend round
     // or a step would have cost.
     let expected = cost + crate::systems::power_drain_per_tick(1.0);
     assert!(

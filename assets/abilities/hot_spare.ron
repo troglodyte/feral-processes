@@ -13,7 +13,7 @@
     // be survivable in.
     description: "Driven low, the wearer brings its spare capacity online",
     target: OneAlly,
-    effect: Heal(power: 8),
+    effect: Heal(power: 8, spread: 2),
     cooldown: 3,
     power_cost: 0.0,
     triggers: Some(AllyWounded),

@@ -15,8 +15,8 @@ Routines reach you four ways.
 - Extraction. Breaking a program down at a Compiler teaches you one of its routines and destroys
   the program.
 
-In a fight, s calls one. It is paid for out of the caster's own Power reserve, so a companion
-spends its own, and a routine on cooldown or priced above what the caster is carrying greys out with
+In a fight, s calls one. It is paid for out of the invoker's own Power reserve, so a companion
+spends its own, and a routine on cooldown or priced above what that program is carrying greys out with
 the reason on the row.
 
 The names tell you the shape of what you are buying. A routine ending in Group hits one whole enemy
@@ -28,7 +28,7 @@ Field routines are the ones you call outside a fight, with a on the map — an e
 buy at home and carry with you rather than something you time against a fight you cannot predict.
 
 - Every field routine except Repair Loop and Trickle Charge runs until you rest. Nothing else ends
-  one but a Forgiving reboot, or casting another of the same kind over it.
+  one but a Forgiving reboot, or running another of the same kind over it.
 - Repair Loop and Trickle Charge keep a tick counter, because they are the two that pay out
   per tick, and unbounded Integrity or unbounded Power would answer scarcity the game is built on.
 - What they buy: mitigation, attack, Integrity regeneration, a Power trickle, more XP, better
@@ -37,7 +37,7 @@ buy at home and carry with you rather than something you time against a fight yo
   underground, so they refuse on the surface.
 
 An item's buff is not a routine's. A Patch Routine runs on its own clock whatever it arms, because
-it is spent when you use it where a routine can simply be cast again — which is why a consumable's
+it is spent when you use it where a routine can simply be run again — which is why a consumable's
 buff and a routine's of the same kind stack instead of replacing one another.
 
 Read on: [intrusions](intrusions), [your companions](companions), and [supplies](supplies).

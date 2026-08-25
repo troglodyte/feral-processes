@@ -294,7 +294,7 @@ fn test_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
 }
 
 /// A running `Def`/`Atk` field buff has to actually raise the stat it
-/// names, or casting a routine for one is a no-op dressed up as a choice.
+/// names, or running a routine for one is a no-op dressed up as a choice.
 #[test]
 fn a_field_buff_raises_the_effective_stat_it_names() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

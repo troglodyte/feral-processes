@@ -20,7 +20,7 @@ straight to your stats at purchase time, Obfuscation into what a Trace source
 costs, Process Pool into the roster capacity, Teardown into a kill's salvage,
 Failover into the base-wide repair rate, Tighten Tolerances into the floor a
 compiled copy of gear rolls its quality off, and the five `*_affinity` perks
-each multiply one `AffinityKind` category's magnitude for your own casts only
+each multiply one `AffinityKind` category's magnitude for your own invocations only
 — see below. There is no `effect:` field that could cover those without
 becoming a programming language. So an eighteenth perk means a new `Perk`
 variant in `crates/engine/src/perks.rs` plus a hook wherever its effect
@@ -59,8 +59,8 @@ picks the right one, so a perk's category decides its rate rather than a
 match at each of the five call sites. The result is clamped at
 `AFFINITY_MAX`, the same ceiling a species file is clamped to at load — perk
 levels are uncapped, so without the clamp a long enough game would let your
-own casts exceed the bound every other affinity is held to. They scale
-**only your own** ability casts, never a companion's: a companion's
+own invocations exceed the bound every other affinity is held to. They scale
+**only your own** ability invocations, never a companion's: a companion's
 affinity is its species' business (`SpeciesDef::affinities`), and a
 party-wide perk would double-multiply against it. As with every perk here,
 the `description` below is authored text — the engine never derives it from

@@ -344,7 +344,7 @@ impl Game {
     /// missing from one of four hand-written tuples, so a shared constructor
     /// is the only thing available — the same role `work_node_parts()` plays
     /// for test fixtures, and the same failure if it is skipped: a fused
-    /// companion silently unable to cast reads as fusion producing a bad
+    /// companion silently unable to run reads as fusion producing a bad
     /// program, not as a missing component.
     ///
     /// Reserves are full on arrival at every door.

@@ -893,10 +893,10 @@ impl Game {
             .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0)
     }
 
-    /// The caster's multiplier for `effect`'s category — the affinity half
+    /// The invoker's multiplier for `effect`'s category — the affinity half
     /// of an ability's magnitude, alongside `ability_user_level`'s scale.
     /// Resolved from `actor`, never from a recipient: an affinity is a
-    /// property of who casts.
+    /// property of who runs.
     ///
     /// The player's comes from perks and a companion's from its species, and
     /// the two can never stack — checked by identity against
@@ -910,7 +910,7 @@ impl Game {
     /// The perk arm is clamped at `AFFINITY_MAX`, the same ceiling a species
     /// file is clamped to at load (`Affinities::clamp_all`): perk levels are
     /// uncapped, so without this a long enough game would let the player's
-    /// own casts exceed the bound `tuning.rs` reasons about everywhere else.
+    /// own invocations exceed the bound `tuning.rs` reasons about everywhere else.
     /// `.min` rather than `.clamp`, because the perk arithmetic — a `u32`
     /// level times a finite constant — cannot produce NaN or undershoot
     /// `AFFINITY_MIN`, so there is no lower bound to express.
@@ -1028,7 +1028,7 @@ impl Game {
     /// can never be planned and silently waste the member's round.
     ///
     /// **The reserve is read off `entity`, and that is the whole of what
-    /// makes companion reserves work.** The caster pays, so asking the entity
+    /// makes companion reserves work.** The invoker pays, so asking the entity
     /// being enquired about — rather than assuming the player — gives a
     /// companion's Special its own budget with no second code path. A routine
     /// is priced in a cooldown *and* a Power cost: the cooldown says "not
@@ -1036,7 +1036,7 @@ impl Game {
     ///
     /// **A missing `PowerReserve` refuses rather than permits.** Hostiles
     /// hold none by design, and they never reach here — `choose_wild_action`
-    /// picks their moves. Between a companion that cannot cast because a
+    /// picks their moves. Between a companion that cannot run because a
     /// roster door skipped `roster_parts`, and one with silently unlimited
     /// Power, the first is the failure that gets reported.
     pub(crate) fn ability_unavailable(

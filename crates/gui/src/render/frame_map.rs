@@ -284,7 +284,7 @@ pub(super) fn draw_map_inset(
 }
 
 /// Aiming a Wild Jump: the same map, with a cursor on the cell the jump
-/// would resolve at — `Mode::FieldCastCell`.
+/// would resolve at — `Mode::FieldRoutineCell`.
 ///
 /// The **third caller** of this file, and deliberately not a fourth copy of
 /// the glyph table: it reuses `layout`, `draw_grid`, `tile_color` and

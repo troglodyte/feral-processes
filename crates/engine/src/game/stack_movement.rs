@@ -6,7 +6,7 @@
 //! corrupted ground). These two act on it. The design argument is in
 //! `docs/superpowers/archive/specs/2026-08-05-stack-movement-routines-design.md`.
 //!
-//! Both are cast through `Game::cast_field_routine`, which owns the ordering
+//! Both are run through `Game::run_field_routine`, which owns the ordering
 //! rule they share with every other field routine: every refusal lands
 //! before the first write, and the clock ticks only on success.
 
@@ -18,11 +18,11 @@ use crate::stack::CellKind;
 use crate::*;
 
 impl Game {
-    /// Where a `Phase` cast from `pos` would put the party, or why it is
+    /// Where a `Phase` run from `pos` would put the party, or why it is
     /// refused.
     ///
     /// Exactly one wall thick, and that is a rule of the mechanic rather
-    /// than an authored number: two deep, a cast from the frame edge cuts a
+    /// than an authored number: two deep, an invocation from the frame edge cuts a
     /// diagonal across the whole maze, where at one wall it opens the room
     /// next door and nothing further.
     ///

@@ -72,7 +72,7 @@ pub enum Perk {
     Buffer,
     /// Multiplies the magnitude of the player's own `Damage` abilities by
     /// `AFFINITY_PERK_BONUS_PER_LEVEL` per level. Scoped to the player's
-    /// own casts: a companion's affinity is its species' business, and a
+    /// own invocations: a companion's affinity is its species' business, and a
     /// party-wide perk would multiply against it.
     DamageAffinity,
     /// As `DamageAffinity`, for `Heal`.

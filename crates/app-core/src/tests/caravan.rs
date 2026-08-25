@@ -122,6 +122,10 @@ fn esc_backs_out_of_each_caravan_screen_to_where_it_came_from() {
 
     // Into the quantity page off a cargo row, and back out of it to the
     // wagon rather than to the map.
+    //
+    // Walked to with the arrows rather than typed: a shelf is deeper than
+    // `menu_shortcut`'s 35 labels, so the sell rows below it have no key of
+    // their own and Enter on the highlighted row is the only way in.
     let offers = app
         .game
         .as_mut()
@@ -130,7 +134,10 @@ fn esc_backs_out_of_each_caravan_screen_to_where_it_came_from() {
         .unwrap()
         .offers
         .len();
-    app.handle_key(GameKey::Char(menu_shortcut(offers)));
+    for _ in 0..offers {
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::CaravanQuantity);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Caravan);

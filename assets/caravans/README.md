@@ -22,7 +22,7 @@ with a logged warning and costs you that one trader, never the startup.
     description: "Three carts of other people's gear ...",
     glyph: 'Ω',
     color: DarkGreen,
-    rows: 12,
+    rows: 50,
     weights: (
         gear: 6,
         routines: 2,
@@ -42,7 +42,7 @@ with a logged warning and costs you that one trader, never the startup.
 | `description` | string | One line of flavour under the header, and what the examine ray reads out. The player's vocabulary, not the code's. |
 | `glyph` | char | The mark it wears on the zone map and the base map. |
 | `color` | enum | One of `White`, `Gray`, `Green`, `DarkGreen`, `Red`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `Brown`, `Orange`. |
-| `rows` | u32 | How many rows its shelf holds. Must be at least 1. This is the trader's own number and is deliberately **not** a `tuning.rs` constant — how much stock a particular trader carries is content. |
+| `rows` | u32 | How many rows its shelf holds, as a **ceiling** — see below. Must be at least 1. This is the trader's own number and is deliberately **not** a `tuning.rs` constant — how much stock a particular trader carries is content. |
 | `weights` | struct | Relative weights across the four row kinds; see below. At least one must be non-zero. |
 | `bonus_share` | u32 | Percentage of this trader's **gear** rows that are standout stock; see below. Defaults to `0`, and must not exceed `100`. |
 | `min_zone` | u32 | First sector this trader may visit in, inclusive. |
@@ -60,6 +60,26 @@ instead of two draws from one table.
 - `routines` — a Routine Disk.
 - `programs` — a tamed program, priced by its power.
 - `materials` — a plain stack of a craftable or salvage item.
+
+### No row is stocked twice, and `rows` is a ceiling
+
+A shelf never lists the same thing twice. Each kind is drawn from its pool
+**without replacement**: a routine is its ability, a program its species, a
+stack of cargo its item, and gear the whole rolled copy — so two copies of
+one item may both be on the wagon only if their rarity, affix or quality
+tell them apart.
+
+That makes a category's *pool* an upper bound on how much of it a shelf can
+hold, whatever the weights say. A pool that runs dry stops being dealt from
+and the rest of the shelf is filled out of the other categories, so a deep
+shelf is bounded by the pool depth rather than by the weights — a wagon
+weighted almost entirely toward programs still cannot hold more programs
+than there are non-boss species files, and the rows past that point come up
+gear and routines instead.
+
+`rows` is therefore a ceiling rather than a count. A shelf deeper than every
+pool it is weighted to draw from put together simply stops when the last one
+empties; nothing warns, because what is installed is the answer.
 
 ### `bonus_share`
 
@@ -79,9 +99,9 @@ you change `rows` or reweight the shelf. It **rounds up**: any non-zero share
 puts at least one standout row on a wagon that carries any gear at all.
 
 ```ron
-rows: 12,
+rows: 50,
 weights: (gear: 6, routines: 2, materials: 2),
-bonus_share: 35,      // of ~9 gear rows, 4 are standout
+bonus_share: 35,      // of ~30 gear rows, 11 are standout
 ```
 
 `0` — or leaving the field out, which is what every file written before it

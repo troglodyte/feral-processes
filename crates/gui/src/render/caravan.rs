@@ -1,7 +1,7 @@
 //! The counter a visiting caravan sets out, and the quantity page for
 //! selling into it.
 
-use feral_processes_engine::CaravanView;
+use feral_processes_engine::{CaravanOfferKind, CaravanView};
 
 use super::popup::*;
 use super::*;
@@ -59,10 +59,33 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
         let cost = offer.unit_cost * offer.qty;
         let label = format!("{}  ({cost} {money})", offer.name);
         let lead = row_lead(menu_shortcut(idx), (offer.qty > 1).then_some(offer.qty));
+        // The same column the sell list below already carries, which the
+        // offer list did not: what *category* a row is, and for a copy of
+        // gear what quality it rolled. Both are the questions the wagon is
+        // read for, and without them a Prismatic affixed weapon drew
+        // identically to a plain one.
+        //
+        // Exhaustive on the kind, `cell_mark`'s rule — and the two kinds
+        // that are not items pass a blank rather than a token invented in
+        // the renderer. `ItemCategory::short_label` stays the one place the
+        // three letters are spelled.
+        let (tag, quality) = match &offer.kind {
+            CaravanOfferKind::Gear(copy) => (
+                game.item_category(&copy.item).short_label(),
+                Some(copy.quality),
+            ),
+            CaravanOfferKind::Material(item) => (game.item_category(item).short_label(), None),
+            CaravanOfferKind::Routine(_) | CaravanOfferKind::Program(_) => ("", None),
+        };
+        // Colour on this list means "can you afford it" and nothing else.
+        // Rarity deliberately does *not* reach it: `fusion_color`'s rule is
+        // that a second meaning on one colour axis makes both unreadable,
+        // and the affordability dimming is the one the player is scanning
+        // for. The tier still shows in the name and in the tag column.
         rows.push(if view.credits >= cost {
-            with_tag(item_row(label, idx == selected), lead, "", None)
+            with_tag(item_row(label, idx == selected), lead, tag, quality)
         } else {
-            with_tag(spent_item_row(label, idx == selected), lead, "", None)
+            with_tag(spent_item_row(label, idx == selected), lead, tag, quality)
         });
         // The same wrap for the same reason — an item's authored description
         // is prose too, and the indent has to come out of the budget or the
@@ -278,6 +301,77 @@ mod tests {
                  {cap}-row popup for the wagon itself at {h}px"
             );
         }
+    }
+
+    /// The offer list carries the same `WEP`/`ARM`/`MOD` column the sell
+    /// list below it already did. It did not, and the gap was invisible on
+    /// this page precisely because the two lists sit one above the other:
+    /// the wagon's own stock was the untagged half.
+    ///
+    /// Asserted on the `Row::Item`'s `tag`, not on its text — the token is a
+    /// column laid out as its own `ui_runs` piece, and a test matching a
+    /// substring would pass against a renderer that formatted it into the
+    /// middle of the row and left no span to paint.
+    #[test]
+    fn an_offer_row_carries_its_category_and_quality() {
+        let mut game = census_game();
+        // Picked out of the item set rather than named, so the test measures
+        // the column and not one shipped weapon's continued existence.
+        let weapon = game
+            .item_defs()
+            .iter()
+            .find(|d| {
+                matches!(
+                    d.equipment.map(|(slot, _)| slot),
+                    Some(feral_processes_engine::items::EquipmentSlot::Weapon)
+                )
+            })
+            .expect("the item set ships a weapon")
+            .id
+            .clone();
+        let copy = GearCopy::with_affixes(
+            weapon,
+            feral_processes_engine::components::Rarity::Ordinary,
+            0,
+            Vec::new(),
+            117,
+        );
+        let view = CaravanView {
+            trader: "T".to_string(),
+            description: "d".to_string(),
+            offers: vec![CaravanOffer {
+                index: 0,
+                kind: CaravanOfferKind::Gear(copy),
+                name: "Arc Lance".to_string(),
+                detail: String::new(),
+                unit_cost: 1,
+                qty: 1,
+            }],
+            sells: Vec::new(),
+            credits: 9_999,
+            currency: "Credits".to_string(),
+            ticks_left: 9,
+        };
+
+        let tag = caravan_page_rows(&mut game, &view, 0)
+            .into_iter()
+            .find_map(|r| match r {
+                Row::Item { tag, .. } => tag,
+                _ => None,
+            })
+            .expect("the offer drew no item row");
+
+        assert_eq!(
+            tag.text, "WEP",
+            "a weapon on the wagon drew as {:?}",
+            tag.text
+        );
+        let (color, bold) = quality_tag_style(Some(117));
+        assert_eq!(
+            (tag.color, tag.bold),
+            (color, bold),
+            "the tag ignored the copy's quality"
+        );
     }
 
     /// The other axis, and the one nothing clamps at all: `draw_row` clips a

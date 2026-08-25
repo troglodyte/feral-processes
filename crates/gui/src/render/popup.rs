@@ -56,10 +56,10 @@ pub(super) struct ItemTag {
     /// into a joined string instead would leave two representations of one
     /// row to keep in step; these are the pieces, and `item_text` is the
     /// join.
-    lead: String,
-    text: String,
-    color: Color,
-    bold: bool,
+    pub(super) lead: String,
+    pub(super) text: String,
+    pub(super) color: Color,
+    pub(super) bold: bool,
 }
 
 /// What holds a tag apart from the name after it: the two spaces every one of

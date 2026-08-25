@@ -28,11 +28,30 @@ use crate::*;
 /// Spends no draw at all on an empty pool, for `grant_gear_drop`'s reason: an
 /// empty `assets/affixes/` must leave every seeded run exactly where it was.
 pub(crate) fn pick_affix(pool: &[(AffixId, u32)], rng: &mut impl rand::RngExt) -> Option<AffixId> {
-    let total: u32 = pool.iter().map(|(_, w)| w).sum();
-    if total == 0 {
+    // The emptiness check sits above the chance roll so an item whose slot
+    // has no affixes spends no draw at all — moving it below would shift
+    // every later roll in a run merely because a pool was empty.
+    if pool.iter().map(|(_, w)| w).sum::<u32>() == 0 {
         return None;
     }
     if !rng.random_bool(GEAR_AFFIX_CHANCE) {
+        return None;
+    }
+    weighted_affix(pool, rng)
+}
+
+/// The weighted walk alone, with no chance gate in front of it — what a
+/// caller that has *already decided* this copy gets an affix wants.
+///
+/// Split out rather than copied because a caravan's standout row and an
+/// ordinary drop must agree about which affix a given weight table yields;
+/// a second walk is the copy that drifts when `weight` grows a meaning.
+pub(crate) fn weighted_affix(
+    pool: &[(AffixId, u32)],
+    rng: &mut impl rand::RngExt,
+) -> Option<AffixId> {
+    let total: u32 = pool.iter().map(|(_, w)| w).sum();
+    if total == 0 {
         return None;
     }
     let mut roll = rng.random_range(0..total);

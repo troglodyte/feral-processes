@@ -136,6 +136,18 @@ pub(crate) fn rarity_for_roll(roll: f64) -> Rarity {
     Rarity::Ordinary
 }
 
+/// The total probability mass `rarity_for_roll` gives to everything above
+/// `Rarity::Ordinary` — the width of the window a `0.0..1.0` roll has to
+/// land inside to come up rare at all.
+///
+/// Exposed so a caller that wants a *different* rare rate can narrow the
+/// range it draws from instead of authoring a second table: the caravan's
+/// standout rows do exactly that. A copy of this sum is the thing that
+/// silently stops matching when a rung is added.
+pub(crate) fn rarity_mass() -> f64 {
+    Rarity::ALL.into_iter().map(rarity_spawn_chance).sum()
+}
+
 /// How many `QUALITY_STEP`s of spread a quality roll may land on.
 ///
 /// Named rather than inlined so a caller drawing from its own stream — the

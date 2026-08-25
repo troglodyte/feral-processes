@@ -2893,6 +2893,28 @@ pub const CARAVAN_MATERIAL_STACK: u32 = 12;
 
 pub const CARAVAN_SALT: u64 = 0xCA57_A0A0_5EED_0002;
 
+/// Chance a caravan's standout gear row lands above `Rarity::Ordinary`.
+///
+/// Spent by *narrowing the range the rarity roll is drawn from* rather than
+/// by authoring a second rarity table, so the rungs keep the proportions
+/// `rarity_spawn_chance` gives them and a new tier added there reaches a
+/// wagon for free. A second table is the copy that drifts.
+///
+/// Deliberately short of 1.0: a standout row is a good find, not a
+/// guaranteed one, and a shelf where every marked row is Silver-or-better
+/// stops the rarity colour meaning anything.
+pub const CARAVAN_BONUS_RARITY_CHANCE: f64 = 0.6;
+
+/// The quality floor a caravan's standout gear row rolls off, against
+/// `QUALITY_DROP_BASE` for every other row.
+///
+/// `QUALITY_DEFAULT` is the authored item's own figure, so this is the line
+/// between "worse than spec" and "better than spec" — a plain drop rolls
+/// `QUALITY_DROP_BASE..+QUALITY_SPREAD` and so is *always* below the number
+/// the item was authored at, which is the whole reason a wagon of drop-rate
+/// gear reads as a rack of junk.
+pub const CARAVAN_BONUS_QUALITY_FLOOR: u8 = QUALITY_DEFAULT;
+
 #[cfg(test)]
 mod tests {
     use super::*;

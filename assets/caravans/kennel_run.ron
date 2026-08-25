@@ -13,6 +13,10 @@
         programs: 6,
         materials: 0,
     ),
+    // Lower than the Salvage Convoy's, and on a shelf that is mostly
+    // programs anyway: what this one is for is the leashes, and its one or
+    // two racks of gear are a sideline rather than the pitch.
+    bonus_share: 20,
     min_zone: 2,
     max_zone: 99,
 )

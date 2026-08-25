@@ -179,6 +179,19 @@ impl Game {
 /// `FrameSpec::salted`'s doc — not a second seed source.
 const SHELF_SALT: u64 = 0x5_4E1F;
 
+/// How many of a trader's `gear_rows` are standout stock at `share` percent.
+///
+/// **Rounded up**, so a non-zero share always puts at least one standout row
+/// on a shelf that has any gear on it at all. A share that silently rounds to
+/// nothing on a small wagon is a content field that reads as broken, and the
+/// def census would have no way to catch it.
+///
+/// A free function so the tests can ask it the same question the shelf does,
+/// rather than restating the arithmetic and agreeing with a bug.
+pub(crate) fn bonus_row_count(gear_rows: usize, share: u32) -> usize {
+    (gear_rows * share.min(100) as usize).div_ceil(100)
+}
+
 impl Game {
     /// What the visiting trader has on it, bought rows included — the
     /// derived shelf `resources::CaravanMemory` indexes into.
@@ -202,7 +215,16 @@ impl Game {
             return Vec::new();
         };
         let mut rng = StdRng::seed_from_u64(self.visit_seed(visit.visit) ^ SHELF_SALT);
-        let gear = self.stock_pool(|d| d.equipment.is_some());
+        // Gear is pooled **per slot** rather than as one list, because the
+        // rows are dealt round-robin across `EquipmentSlot::ALL` below. Drawn
+        // from one pool the split followed the *file count* — 13 weapons, 12
+        // armour, 14 modules — so a wagon could stand there with six weapons
+        // and no armour at all, which reads as a shop that stocks one thing.
+        let gear_by_slot: Vec<Vec<ItemId>> = EquipmentSlot::ALL
+            .iter()
+            .map(|slot| self.stock_pool(|d| d.equipment.is_some_and(|(s, _)| s == *slot)))
+            .collect();
+        let has_gear = gear_by_slot.iter().any(|pool| !pool.is_empty());
         let routines = self.routine_disk_pool();
         // Every other piece of cargo, craftable or not — a caravan pulls up
         // beside a base and the base wants feedstock, so salvage it would
@@ -219,13 +241,23 @@ impl Game {
             .map(|d| d.id.clone())
             .collect();
 
-        let mut kinds = Vec::new();
+        // Which slot the first gear row is dealt from, so two traders in one
+        // sector do not both lead with a weapon. The round-robin from here is
+        // positional, not a draw — that is what makes the coverage a
+        // guarantee rather than an average.
+        let first_slot = rng.random_range(0..EquipmentSlot::ALL.len());
+
+        // Pass one decides only *which kind* each row is. The grade of a gear
+        // row cannot be settled here because it depends on how many gear rows
+        // there turn out to be, and that is not known until the last row is
+        // drawn — so the bucket ids are kept and materialised below.
+        let mut buckets_drawn: Vec<u8> = Vec::new();
         for _ in 0..def.rows {
             // The weights are re-read every row rather than a pool being
             // shuffled once, so a trader with nothing in one category still
             // fills its shelf out of the others instead of coming up short.
             let mut buckets: Vec<(u32, u8)> = Vec::new();
-            if !gear.is_empty() {
+            if has_gear {
                 buckets.push((def.weights.gear, 0));
             }
             if !routines.is_empty() {
@@ -253,10 +285,41 @@ impl Game {
                 })
                 .map(|(_, b)| *b)
                 .unwrap_or(3);
-            kinds.push(match bucket {
+            buckets_drawn.push(bucket);
+        }
+
+        // Which of the gear rows are standout stock. Chosen as a *set of
+        // ordinals* over the gear rows rather than rolled per row, so the
+        // share the def authors is what the shelf actually shows — a per-row
+        // chance leaves a twelve-row wagon able to come up with none, which
+        // is the case the field exists to rule out.
+        let gear_rows = buckets_drawn.iter().filter(|b| **b == 0).count();
+        let bonus_rows = bonus_row_count(gear_rows, def.bonus_share);
+        let mut ordinals: Vec<usize> = (0..gear_rows).collect();
+        for i in 0..bonus_rows {
+            let pick = rng.random_range(i..gear_rows);
+            ordinals.swap(i, pick);
+        }
+        let bonus: std::collections::HashSet<usize> =
+            ordinals[..bonus_rows].iter().copied().collect();
+
+        let mut gear_ordinal = 0usize;
+        let kinds: Vec<views::CaravanOfferKind> = buckets_drawn
+            .into_iter()
+            .map(|bucket| match bucket {
                 0 => {
-                    let item = gear[rng.random_range(0..gear.len())].clone();
-                    views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng))
+                    // Positional round-robin, skipping a slot nothing is
+                    // stocked for so an install with no armour files still
+                    // fills its shelf out of the other two.
+                    let mut slot = (first_slot + gear_ordinal) % EquipmentSlot::ALL.len();
+                    while gear_by_slot[slot].is_empty() {
+                        slot = (slot + 1) % EquipmentSlot::ALL.len();
+                    }
+                    let pool = &gear_by_slot[slot];
+                    let item = pool[rng.random_range(0..pool.len())].clone();
+                    let bonus = bonus.contains(&gear_ordinal);
+                    gear_ordinal += 1;
+                    views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
                 }
                 1 => views::CaravanOfferKind::Routine(
                     routines[rng.random_range(0..routines.len())].clone(),
@@ -267,8 +330,8 @@ impl Game {
                 _ => views::CaravanOfferKind::Material(
                     materials[rng.random_range(0..materials.len())].clone(),
                 ),
-            });
-        }
+            })
+            .collect();
 
         kinds
             .into_iter()
@@ -334,8 +397,27 @@ impl Game {
     /// retune of any of them moves a caravan's stock with the rest of the
     /// game. A copy here is priced off the item, not off what it rolled; see
     /// `caravan_unit_cost`.
-    fn roll_shelf_copy(&self, item: ItemId, rng: &mut StdRng) -> GearCopy {
-        let rarity = crate::game::spawning::rarity_for_roll(rng.random_range(0.0..1.0));
+    /// `bonus` is what the def's `bonus_share` bought this row: an affix for
+    /// certain, a rarity roll drawn from a narrowed window, and a quality
+    /// floor at the item's authored figure rather than below it.
+    ///
+    /// One function with a flag rather than two, for `Game::craft_cost`'s
+    /// reason — the plain and careful prices are one expression there so a
+    /// refusal and a charge cannot quote different numbers, and here it is so
+    /// the two grades of row cannot drift into being two different items.
+    /// Every axis a copy has is still rolled on both paths; only the numbers
+    /// they are drawn against move.
+    fn roll_shelf_copy(&self, item: ItemId, rng: &mut StdRng, bonus: bool) -> GearCopy {
+        // Narrowing the range rather than swapping the table: `rarity_for_roll`
+        // walks the ladder rarest-first, so a roll drawn from `0.0..span`
+        // raises every rung by the same factor and keeps their proportions.
+        let span = if bonus {
+            let mass = crate::game::spawning::rarity_mass();
+            (mass / crate::tuning::CARAVAN_BONUS_RARITY_CHANCE).max(mass)
+        } else {
+            1.0
+        };
+        let rarity = crate::game::spawning::rarity_for_roll(rng.random_range(0.0..span));
         let affix = self
             .equipment_of(&item)
             .map(|(slot, _)| {
@@ -346,11 +428,20 @@ impl Game {
                     .into_iter()
                     .map(|def| (def.id.clone(), def.weight))
                     .collect();
-                crate::game::combat_rewards::pick_affix(&pool, rng)
+                if bonus {
+                    crate::game::combat_rewards::weighted_affix(&pool, rng)
+                } else {
+                    crate::game::combat_rewards::pick_affix(&pool, rng)
+                }
             })
             .unwrap_or_default();
+        let floor = if bonus {
+            crate::tuning::CARAVAN_BONUS_QUALITY_FLOOR
+        } else {
+            crate::tuning::QUALITY_DROP_BASE
+        };
         let quality = crate::game::spawning::quality_for_luck(
-            crate::tuning::QUALITY_DROP_BASE,
+            floor,
             rng.random_range(0..=crate::game::spawning::quality_luck_steps()),
         );
         GearCopy::with_affixes(item, rarity, 0, affix.into_iter().collect(), quality)

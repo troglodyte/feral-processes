@@ -13,6 +13,11 @@
         programs: 0,
         materials: 2,
     ),
+    // What this wagon trades on. A gear-weighted trader whose every row is
+    // a drop-rate roll is a rack of ordinary junk, so better than a third
+    // of its equipment is standout stock — the reason to walk over and
+    // look rather than to check the price and leave.
+    bonus_share: 35,
     min_zone: 1,
     max_zone: 99,
 )

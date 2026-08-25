@@ -29,6 +29,7 @@ with a logged warning and costs you that one trader, never the startup.
         programs: 0,
         materials: 2,
     ),
+    bonus_share: 35,
     min_zone: 1,
     max_zone: 99,
 )
@@ -43,6 +44,7 @@ with a logged warning and costs you that one trader, never the startup.
 | `color` | enum | One of `White`, `Gray`, `Green`, `DarkGreen`, `Red`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `Brown`, `Orange`. |
 | `rows` | u32 | How many rows its shelf holds. Must be at least 1. This is the trader's own number and is deliberately **not** a `tuning.rs` constant — how much stock a particular trader carries is content. |
 | `weights` | struct | Relative weights across the four row kinds; see below. At least one must be non-zero. |
+| `bonus_share` | u32 | Percentage of this trader's **gear** rows that are standout stock; see below. Defaults to `0`, and must not exceed `100`. |
 | `min_zone` | u32 | First sector this trader may visit in, inclusive. |
 | `max_zone` | u32 | Last sector, inclusive. Must not be below `min_zone`. |
 
@@ -58,6 +60,37 @@ instead of two draws from one table.
 - `routines` — a Routine Disk.
 - `programs` — a tamed program, priced by its power.
 - `materials` — a plain stack of a craftable or salvage item.
+
+### `bonus_share`
+
+Gear rows are dealt round-robin across the three equipment slots, so any
+shelf with three or more of them stocks a weapon, a piece of armour and a
+module — a trader is a shop that carries a range, not a rack of whatever the
+item set has most files of.
+
+`bonus_share` then decides how many of those rows are **standout stock**
+rather than plain drop-rate rolls. A standout row is guaranteed an affix,
+draws its rarity from a narrowed window so it is likelier to come up above
+Ordinary, and rolls its quality off the item's *authored* figure instead of
+below it. Everything else on the shelf rolls exactly as a drop does.
+
+It is a share of the gear rows and not a count, so it keeps its meaning when
+you change `rows` or reweight the shelf. It **rounds up**: any non-zero share
+puts at least one standout row on a wagon that carries any gear at all.
+
+```ron
+rows: 12,
+weights: (gear: 6, routines: 2, materials: 2),
+bonus_share: 35,      // of ~9 gear rows, 4 are standout
+```
+
+`0` — or leaving the field out, which is what every file written before it
+existed does — gives you a shelf of plain copies, exactly as before.
+
+How *good* a standout row is stays in `crates/engine/src/tuning.rs`
+(`CARAVAN_BONUS_RARITY_CHANCE`, `CARAVAN_BONUS_QUALITY_FLOOR`), for the
+reason perk costs are data while perk effects are not: what a trader carries
+is content, and how hard the game is, is not.
 
 **Portal Fragments can never appear**, on any shelf, at any sector, however
 the weights are set. Breaching is earned by fighting and descending; a census

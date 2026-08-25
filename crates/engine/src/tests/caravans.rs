@@ -138,7 +138,52 @@ fn every_shipped_caravan_is_stockable() {
         assert!(*rows >= 1, "{id} would stand there with nothing to sell");
         assert!(weights.gear + weights.routines + weights.programs + weights.materials > 0);
         assert!(min_zone <= max_zone, "{id}'s window is inverted");
+        assert!(
+            def.bonus_share <= 100,
+            "{id}'s bonus_share {} is a percentage",
+            def.bonus_share
+        );
     }
+}
+
+/// The fourth thing `complaint` refuses, asserted the way the other three
+/// are: a percentage above 100 is a content mistake, and left in it would
+/// simply saturate at "every gear row" with nothing said.
+#[test]
+fn a_def_with_a_bonus_share_over_a_hundred_is_refused() {
+    let dir = scratch_assets_dir("caravans_bonus_share");
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(
+        &*dir.join("greedy.ron"),
+        "(id: \"greedy\", name: \"G\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 3, weights: (gear: 1), bonus_share: 101, min_zone: 1, max_zone: 9)",
+    )
+    .unwrap();
+    std::fs::write(
+        &*dir.join("fine.ron"),
+        "(id: \"fine\", name: \"F\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 3, weights: (gear: 1), bonus_share: 100, min_zone: 1, max_zone: 9)",
+    )
+    .unwrap();
+
+    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+
+    assert_eq!(warnings.len(), 1, "one bad file, one warning: {warnings:?}");
+    assert!(db.get("greedy").is_none(), "101% was stocked anyway");
+    assert!(db.get("fine").is_some(), "100% is a legal shelf");
+}
+
+/// A shelf with no `bonus_share` authored at all is exactly the shelf the
+/// feature replaced — the `#[serde(default)]` half of the additive-change
+/// rule, and what a modder's existing file gets.
+#[test]
+fn a_def_with_no_bonus_share_parses_at_zero() {
+    let def: CaravanDef = ron::from_str(
+        "(id: \"plain\", name: \"P\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 3, weights: (gear: 1), min_zone: 1, max_zone: 9)",
+    )
+    .expect("a file written before bonus_share existed still parses");
+    assert_eq!(def.bonus_share, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1371,5 +1416,229 @@ fn caravan_memory_survives_a_save_and_load() {
         crate::save::SAVE_FORMAT_VERSION,
         32,
         "both caravan fields are additive named-struct ones"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// What grade of gear a shelf carries, and how it spreads across the slots
+
+/// Stands one synthetic trader up in place of the shipped pair, so a shelf's
+/// composition can be asserted against an authored `rows`/`weights`/
+/// `bonus_share` instead of against whichever wagon the schedule happened to
+/// send. Written to a scratch dir and swapped in as a resource — mutating
+/// `assets/` is how a timed-out run once left a shipped item edited.
+fn only_trader(game: &mut Game, name: &str, body: &str) {
+    let dir = scratch_assets_dir(name);
+    std::fs::create_dir_all(&*dir).unwrap();
+    std::fs::write(&*dir.join("solo.ron"), body).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "the fixture's own def warned: {warnings:?}"
+    );
+    assert_eq!(
+        db.all().count(),
+        1,
+        "the fixture stands up exactly one trader"
+    );
+    game.world.insert_resource(db);
+}
+
+/// Every gear row's slot, in the order the shelf deals them.
+fn gear_slots(game: &mut Game, visit: u64) -> Vec<crate::items::EquipmentSlot> {
+    shelf(game, visit)
+        .into_iter()
+        .filter_map(|offer| match offer.kind {
+            CaravanOfferKind::Gear(copy) => game.equipment_of(&copy.item).map(|(slot, _)| slot),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every copy of gear on a shelf, in row order.
+fn gear_copies(game: &mut Game, visit: u64) -> Vec<crate::items::GearCopy> {
+    shelf(game, visit)
+        .into_iter()
+        .filter_map(|offer| match offer.kind {
+            CaravanOfferKind::Gear(copy) => Some(copy),
+            _ => None,
+        })
+        .collect()
+}
+
+/// **The coverage is a guarantee, not an average.** Drawn from one pool the
+/// split followed the file count rather than the slot, so a wagon could
+/// stand there with six weapons and no armour — a shop that stocks one
+/// thing. Swept over every visit rather than sampled: a shelf is a fold, so
+/// a rule that holds for the first one says nothing.
+#[test]
+fn a_shelf_deals_gear_across_every_equipment_slot() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    only_trader(
+        &mut game,
+        "caravan_slot_spread",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 9, weights: (gear: 1), bonus_share: 0, min_zone: 1, max_zone: 99)",
+    );
+
+    for visit in 0..30u64 {
+        let slots = gear_slots(&mut game, visit);
+        assert_eq!(slots.len(), 9, "visit {visit} did not fill its shelf");
+        for slot in crate::items::EquipmentSlot::ALL {
+            assert!(
+                slots.contains(&slot),
+                "visit {visit} stocked no {slot:?}: {slots:?}"
+            );
+        }
+        // Nine rows across three slots is three each, and the round-robin is
+        // positional — an equal-chance draw would pass the clause above and
+        // still leave a wagon seven-eighths weapons.
+        for slot in crate::items::EquipmentSlot::ALL {
+            assert_eq!(
+                slots.iter().filter(|s| **s == slot).count(),
+                3,
+                "visit {visit} dealt {slot:?} unevenly: {slots:?}"
+            );
+        }
+    }
+}
+
+/// Which slot a wagon leads with rotates, or two traders in one sector both
+/// open with a weapon and the round-robin reads as a fixed list.
+#[test]
+fn which_slot_a_shelf_leads_with_varies_between_visits() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    only_trader(
+        &mut game,
+        "caravan_slot_lead",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 6, weights: (gear: 1), bonus_share: 0, min_zone: 1, max_zone: 99)",
+    );
+
+    let mut leads: Vec<_> = (0..30u64)
+        .filter_map(|v| gear_slots(&mut game, v).first().copied())
+        .map(|s| s.short_label())
+        .collect();
+    leads.sort_unstable();
+    leads.dedup();
+    assert!(
+        leads.len() > 1,
+        "every shelf led with the same slot: {leads:?}"
+    );
+}
+
+/// The share is what the shelf *shows*, not what it rolls for. A per-row
+/// chance leaves a twelve-row wagon able to come up with none, which is the
+/// case the field exists to rule out.
+#[test]
+fn a_defs_bonus_share_decides_how_many_rows_are_standout() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    only_trader(
+        &mut game,
+        "caravan_bonus_count",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 8, weights: (gear: 1), bonus_share: 50, min_zone: 1, max_zone: 99)",
+    );
+
+    let want = crate::game::caravan::bonus_row_count(8, 50);
+    assert_eq!(want, 4, "the fixture is chosen so the count is unambiguous");
+
+    for visit in 0..30u64 {
+        let copies = gear_copies(&mut game, visit);
+        // A standout row is separable from outside by quality alone: the
+        // plain floor is `QUALITY_DROP_BASE` and the whole plain spread sits
+        // below `CARAVAN_BONUS_QUALITY_FLOOR`, which is the item's authored
+        // figure. That gap is the feature, not an artefact of the test.
+        let standout: Vec<_> = copies
+            .iter()
+            .filter(|c| c.quality >= crate::tuning::CARAVAN_BONUS_QUALITY_FLOOR)
+            .collect();
+        assert_eq!(
+            standout.len(),
+            want,
+            "visit {visit} showed {} standout rows of 8",
+            standout.len()
+        );
+        for copy in &standout {
+            assert!(
+                !copy.affixes.is_empty(),
+                "visit {visit} sold a standout row with no affix: {copy:?}"
+            );
+        }
+        assert!(
+            copies.len() - standout.len() == 8 - want,
+            "visit {visit} left no plain rows to compare against"
+        );
+    }
+}
+
+/// The other end of the same axis, and the property that keeps an existing
+/// modded file behaving exactly as it did: no share, no standout rows.
+#[test]
+fn a_trader_with_no_bonus_share_stocks_a_shelf_of_plain_copies() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    only_trader(
+        &mut game,
+        "caravan_bonus_zero",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 9, weights: (gear: 1), min_zone: 1, max_zone: 99)",
+    );
+
+    for visit in 0..30u64 {
+        for copy in gear_copies(&mut game, visit) {
+            assert!(
+                copy.quality < crate::tuning::CARAVAN_BONUS_QUALITY_FLOOR,
+                "visit {visit} stocked a standout row on a wagon that authored none: {copy:?}"
+            );
+        }
+    }
+}
+
+/// A standout row is a *good* find, not a guaranteed rare one — and the
+/// rarity still moves, which is what says the narrowed window is being drawn
+/// against rather than the tier being assigned.
+#[test]
+fn a_standout_row_is_likelier_to_be_rare_without_always_being_rare() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 3);
+    only_trader(
+        &mut game,
+        "caravan_bonus_rarity",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 12, weights: (gear: 1), bonus_share: 100, min_zone: 1, max_zone: 99)",
+    );
+    let bonus_rare = (0..60u64)
+        .flat_map(|v| gear_copies(&mut game, v))
+        .filter(|c| c.rarity != crate::components::Rarity::Ordinary)
+        .count();
+
+    only_trader(
+        &mut game,
+        "caravan_plain_rarity",
+        "(id: \"solo\", name: \"S\", description: \"d\", glyph: 'Ω', color: DarkGreen, \
+         rows: 12, weights: (gear: 1), bonus_share: 0, min_zone: 1, max_zone: 99)",
+    );
+    let plain_rare = (0..60u64)
+        .flat_map(|v| gear_copies(&mut game, v))
+        .filter(|c| c.rarity != crate::components::Rarity::Ordinary)
+        .count();
+
+    assert!(
+        bonus_rare > plain_rare,
+        "standout rows came up rare no more often than plain ones \
+         ({bonus_rare} vs {plain_rare} of 720)"
+    );
+    assert!(
+        bonus_rare < 720,
+        "every standout row was rare, so the tier is being assigned rather than rolled"
     );
 }

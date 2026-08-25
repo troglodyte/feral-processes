@@ -66,6 +66,22 @@ pub struct CaravanDef {
     /// How many rows its shelf holds.
     pub rows: u32,
     pub weights: CaravanWeights,
+    /// What percentage of this trader's *gear* rows are standout stock —
+    /// guaranteed an affix, likely above `Rarity::Ordinary`, and rolled off
+    /// a raised quality floor — rather than the plain drop rates every other
+    /// row uses.
+    ///
+    /// Content rather than a `tuning.rs` constant for `rows`' reason: how
+    /// much stock a trader carries and what grade it is are the same
+    /// question asked twice, and `weights` already settles the third. The
+    /// *magnitudes* of a standout roll stay in `tuning.rs`, exactly as a
+    /// perk's cost is data while its effect is not.
+    ///
+    /// Rounded **up**, so any non-zero share puts at least one standout row
+    /// on a shelf that has any gear at all — a share that quietly rounds to
+    /// nothing is a field that reads as broken.
+    #[serde(default)]
+    pub bonus_share: u32,
     /// The inclusive sector window this trader may visit in.
     pub min_zone: u32,
     pub max_zone: u32,
@@ -148,6 +164,12 @@ fn complaint(def: &CaravanDef) -> Option<String> {
     }
     if def.weights.total() == 0 {
         return Some("every weight is 0, so no row could be filled".into());
+    }
+    if def.bonus_share > 100 {
+        return Some(format!(
+            "bonus_share {} is a percentage and cannot exceed 100",
+            def.bonus_share
+        ));
     }
     if def.min_zone > def.max_zone {
         return Some(format!(

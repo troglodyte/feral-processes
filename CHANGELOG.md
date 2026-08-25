@@ -27,6 +27,62 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.28
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+The map can draw a sprite where a glyph was.
+
+### Added
+
+- **A one-cell sprite may stand in for an entity's map glyph.** Drop a
+  16x16 RGBA PNG into `assets/sprites/` and the map draws it in the cell
+  the glyph would have occupied. This release ships the pipeline and one
+  placeholder — the player's — rather than a set of art; per-species and
+  per-structure sprites are a later change.
+
+  **The size is not arbitrary.** Map glyphs are drawn at `16 x zoom` with
+  zoom clamped to 1..4, so a 16px source lands on exactly 16, 32, 48 or
+  64px — whole multiples, sampled nearest-neighbour, which is the same
+  contract `unscii-16` is already held to and the reason the font
+  rasterization test asserts zero antialiased pixels at each step. A
+  sprite authored at any other size still draws; it just blurs at some
+  zoom, silently and only on screen. A census refuses one.
+
+  **A sprite substitutes for the glyph rather than drawing over it.** The
+  overdraw bug looks pixel-perfect against opaque art and breaks the
+  moment a sprite has any transparency, at which point the old character
+  shows through — so the test asserts both the sprite drawn *and* the
+  `@` absent.
+
+  **Colour is a multiplying tint**, so art authored near-white inherits
+  everything that already colours a glyph — the difficulty read, the boss
+  and nemesis overrides, the biome tint, the damage dimming — with no
+  second mechanism and no change to any of them. Art carrying its own hue
+  fights all four.
+
+  **The directory is optional by construction.** A missing directory, a
+  missing file, or a name nothing is authored for all end at the glyph, so
+  deleting `assets/sprites/` restores the previous map exactly — the same
+  supported way deleting `assets/environment/` restores the pre-effects
+  game. That is what will let a modded species ship without art rather
+  than ship invisible.
+
+### Fixed
+
+- **The asset server now reads the path the launcher resolved**, instead of
+  guessing one of its own. Bevy resolves its asset root against the build
+  machine's manifest directory in a dev build and the executable's
+  directory once installed; left alone it would have been a second site
+  deciding a runtime path, which works where it was built and nowhere
+  else. Nothing player-visible today, since nothing was loading an asset
+  through it before this release.
+
+- **`crates/engine/src/lib.rs` no longer carries an unresolved `git stash
+  pop`.** 5,056 lines of a stale inline test block, conflict markers
+  included, had been committed on top of the one-line module declaration;
+  the workspace did not compile. Resolved to the upstream side.
+
 ## 0.13.27
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

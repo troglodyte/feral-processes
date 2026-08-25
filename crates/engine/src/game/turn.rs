@@ -736,9 +736,23 @@ impl Game {
     /// Nothing can fail after the charge is taken, so there is no refund
     /// path: the two gates and the payment run in that order and the
     /// restore is unconditional from there.
-    pub fn rest(&mut self) {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return;
+    ///
+    /// **Every exit that does not rest says why**, which is what the
+    /// `Result` is for rather than the bare `return`s this used to take.
+    /// Three of its four failures were silent and the fourth was a plain
+    /// `log()` line — an `Info` the log filter can hide — so a rest that
+    /// did nothing was indistinguishable from a key that was never bound.
+    /// That is not a hypothetical: `r` genuinely *was* unbound in the Stack
+    /// until 0.13.21, the report survived the fix, and nothing either side
+    /// of the seam could tell the two apart. A refusal now goes back to the
+    /// caller, which puts it on the map's status banner through
+    /// `App::refuse` like every other refused verb on that screen.
+    pub fn rest(&mut self) -> Result<(), String> {
+        if self.is_game_over().is_some() {
+            return Err("Your run is over.".to_string());
+        }
+        if self.has_active_battle() {
+            return Err("No powering down in the middle of an intrusion.".to_string());
         }
         let player = self.player_entity();
         let mut spent = None;
@@ -748,9 +762,12 @@ impl Game {
                     Some(name) => format!("no {name}"),
                     None => "nothing".to_string(),
                 };
-                self.log(format!("You have {name} to power down with out here."));
-                return;
+                return Err(format!("You have {name} to power down with out here."));
             };
+            // `rest_charge_in_pack` has already refused an empty slot, so
+            // this cannot come back short — it is spelled as a refusal
+            // rather than an `unwrap` because the alternative, the silent
+            // `return` it replaces, is the bug this whole path is about.
             if self
                 .world
                 .get_mut::<Inventory>(player)
@@ -758,7 +775,8 @@ impl Game {
                 .take(charge.clone(), 1)
                 == 0
             {
-                return;
+                let name = self.item_name(&charge).to_string();
+                return Err(format!("You have no {name} to power down with out here."));
             }
             spent = Some(self.item_name(&charge).to_string());
         }
@@ -806,18 +824,28 @@ impl Game {
                 "You power down at the base and come back online, fully recharged and repaired.",
             ),
         }
+        Ok(())
     }
 
     /// The first item in the player's pack whose def sets
-    /// `ItemDef::enables_rest` — what a field rest is bought with. Mirrors
-    /// `use_power_source`'s scan, which answers the same shape of question
-    /// about Power.
+    /// `ItemDef::enables_rest` **and which there is at least one of** — what
+    /// a field rest is bought with. Mirrors `use_power_source`'s scan, which
+    /// answers the same shape of question about Power.
+    ///
+    /// The quantity is part of the predicate because a charge is a unit you
+    /// can spend, not an id that happens to be in the map.
+    /// `Inventory::take` drops a slot the moment it empties, but
+    /// `Inventory::add` *pushes* a `(item, 0)` slot when asked for none and
+    /// no slot exists yet — so an empty stack is a reachable state, and one
+    /// matched on the flag alone sailed past the "you have none" refusal
+    /// into a `take` that came back with nothing.
     fn rest_charge_in_pack(&self) -> Option<ItemId> {
         let player = self.player_entity();
         let db = self.world.resource::<ItemDb>();
         let inv = self.world.get::<Inventory>(player).unwrap();
         inv.items
             .iter()
+            .filter(|(_, qty)| *qty > 0)
             .map(|(id, _)| id.clone())
             .find(|id| db.get(id.as_str()).is_some_and(|d| d.enables_rest))
     }

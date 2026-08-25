@@ -298,7 +298,7 @@ fn resting_is_free_in_base_space_and_priced_outside_it() {
                 .count(&ItemId::from(ids::OUTLET))
         };
         let before = held(&game);
-        game.rest();
+        game.rest().unwrap();
         assert_eq!(
             game.world.get::<PowerReserve>(player).unwrap().get(),
             100.0,

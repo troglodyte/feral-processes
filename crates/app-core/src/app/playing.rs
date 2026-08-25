@@ -309,10 +309,19 @@ impl App {
                         false
                     }
                 }
-                GameKey::Char('r') => {
-                    game.rest();
-                    true
-                }
+                // Refused through the shared tail rather than silently, for
+                // the reason `<`, `>` and `v` below are: the engine already
+                // prices a rest by locale and knows why it will not happen,
+                // so the sentence has to be its own. A rest that failed
+                // used to report nothing at all here, which is what a bug
+                // report about the key being dead looks like from outside.
+                GameKey::Char('r') => match game.rest() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
                 // The same two keys the Stack binds, read the way the
                 // Stack reads them: the pair is *up and down*, not in and
                 // out. Base space is a platform you step onto, so `<` goes
@@ -366,8 +375,13 @@ impl App {
                 _ => false,
             }
         };
-        if refusal.is_some() {
-            self.status_line = refusal;
+        // Through `App::refuse` rather than straight onto `status_line`:
+        // a refusal is one sentence on two surfaces, and the banner ages
+        // out after a few seconds while the log is what the player scrolls
+        // back through. Assigning the field alone put every refused verb on
+        // this screen on the banner only.
+        if let Some(reason) = refusal {
+            self.refuse(reason);
         }
         if let Some((offer, room)) = opening {
             self.open_transfer(offer, room);
@@ -438,10 +452,19 @@ impl App {
                 // charge underground exactly as it does on the open grid.
                 // Left out of this block it was not a refusal the player
                 // could read but a dead key falling through `_ => false`.
-                GameKey::Char('r') => {
-                    game.rest();
-                    true
-                }
+                //
+                // Binding it was not the whole fix, though it was reported
+                // as one: a rest that *was* reached and then refused still
+                // said nothing on this screen, so a player four frames down
+                // could not tell the two apart. The refusal is the engine's
+                // and goes through the shared tail, like `o` below.
+                GameKey::Char('r') => match game.rest() {
+                    Ok(()) => true,
+                    Err(reason) => {
+                        refusal = Some(reason);
+                        false
+                    }
+                },
                 // Not 't', which the mode block above already spends on the
                 // trader list before this arm is ever reached. 'o' is free
                 // and matches the glyph the orphan draws as in both views.
@@ -469,8 +492,13 @@ impl App {
                 _ => false,
             }
         };
-        if refusal.is_some() {
-            self.status_line = refusal;
+        // Through `App::refuse` rather than straight onto `status_line`:
+        // a refusal is one sentence on two surfaces, and the banner ages
+        // out after a few seconds while the log is what the player scrolls
+        // back through. Assigning the field alone put every refused verb on
+        // this screen on the banner only.
+        if let Some(reason) = refusal {
+            self.refuse(reason);
         }
         self.after_world_action(acted, is_move_key);
     }

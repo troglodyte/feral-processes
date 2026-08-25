@@ -152,6 +152,25 @@ impl ItemCategory {
             ItemCategory::Currency => "CUR",
         }
     }
+
+    /// The heading a run of rows in this category is drawn under — the long
+    /// form of `short_label`, for a list that groups rather than tags.
+    ///
+    /// One definition rather than one per list, `short_label`'s reason: the
+    /// wagon heads its offers and the goods it will take with the same
+    /// words, and two tables would eventually disagree about one of them.
+    /// The enum's own declaration order is the run order, so the heading and
+    /// the sort cannot drift apart either.
+    pub fn heading(self) -> &'static str {
+        match self {
+            ItemCategory::Consumable => "Consumables",
+            ItemCategory::Weapon => "Weapons",
+            ItemCategory::Armor => "Armor",
+            ItemCategory::Module => "Modules",
+            ItemCategory::Material => "Materials",
+            ItemCategory::Currency => "Currency",
+        }
+    }
 }
 
 /// Which *copy* of an item this is — everything that makes two copies of the

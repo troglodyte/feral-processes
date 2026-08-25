@@ -179,6 +179,12 @@ impl Game {
 /// `FrameSpec::salted`'s doc — not a second seed source.
 const SHELF_SALT: u64 = 0x5_4E1F;
 
+/// Where the two non-item offer kinds sort, past every `ItemCategory`.
+///
+/// Derived from the enum rather than written as a literal 6, so a seventh
+/// category cannot silently land on top of the Routine Disks run.
+const CARAVAN_ROUTINE_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
+
 /// One shelf row's identity, drawn but not yet rolled.
 ///
 /// **Not a second `views::CaravanOfferKind`**: that names a finished, priced
@@ -387,6 +393,36 @@ impl Game {
                 self.caravan_row(index, kind, qty)
             })
             .collect()
+    }
+
+    /// Which run of the wagon's shelf an offer belongs in, and the heading
+    /// that run is drawn under.
+    ///
+    /// **Rank and heading come back together** so the sort and the header
+    /// cannot disagree about where a run starts — a heading drawn a row
+    /// early or late is worse than no heading at all.
+    ///
+    /// **Exhaustive on the kind**, `cell_mark`'s rule: as a `_ =>` arm a
+    /// fifth `CaravanOfferKind` would ship into an unlabelled run and
+    /// nothing would fail to compile. Two of the four kinds are not items
+    /// and so have no `ItemCategory` to head under; the two that are share
+    /// `ItemCategory`'s own declaration order, which is what the player's
+    /// cargo is already sorted by (`Game::category_sort_key`), so the two
+    /// lists on this screen run in the same order.
+    pub fn caravan_group(&self, kind: &views::CaravanOfferKind) -> (u8, &'static str) {
+        let of_item = |item: &ItemId| {
+            let category = self.item_category(item);
+            (category as u8, category.heading())
+        };
+        match kind {
+            views::CaravanOfferKind::Gear(copy) => of_item(&copy.item),
+            views::CaravanOfferKind::Material(item) => of_item(item),
+            // Past every `ItemCategory`, and in the order the shelf offers
+            // them. Neither is cargo, so neither can borrow a category's
+            // rank without colliding with a real one.
+            views::CaravanOfferKind::Routine(_) => (CARAVAN_ROUTINE_RANK, "Routine Disks"),
+            views::CaravanOfferKind::Program(_) => (CARAVAN_ROUTINE_RANK + 1, "Programs"),
+        }
     }
 
     /// The items a caravan may stock, id-sorted, filtered by `keep`.
@@ -1014,11 +1050,24 @@ impl Game {
             .get::<Inventory>(self.player_entity())
             .map(|inv| inv.count(&currency))
             .unwrap_or(0);
-        let offers = self
+        let mut offers: Vec<views::CaravanOffer> = self
             .caravan_shelf(&visit)
             .into_iter()
             .filter(|offer| !spent.contains(&offer.index))
             .collect();
+        // Grouped for the eye, here and not in `caravan_shelf`: the deal is
+        // a round-robin across the three equipment slots and which slot it
+        // leads with rotates per visit, so sorting the shelf itself would
+        // make that rotation unobservable and every wagon would open with a
+        // weapon. What the shelf *is* stays the deal; what the screen shows
+        // is grouped.
+        //
+        // Sorting moves rows on screen and must move no shelf identity:
+        // `index` is handed out by `caravan_shelf`'s `enumerate`,
+        // `CaravanMemory` keys on it and `buy_caravan_offer` resolves by
+        // `find(|o| o.index == index)`, so both are blind to this. It is the
+        // tiebreak too, so the order stays total.
+        offers.sort_by_key(|offer| (self.caravan_group(&offer.kind).0, offer.index));
         Some(views::CaravanView {
             trader: def.name,
             description: def.description,

@@ -52,7 +52,19 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
     if view.offers.is_empty() {
         rows.push(text_row("(bought out)"));
     }
+    // The heading of the run being drawn. Emitted on the change rather than
+    // counted up front, so a run of one still gets its heading and the two
+    // lists need no second walk. `Game::caravan_group` is the one rule for
+    // both where a run starts and what it is called — and these are
+    // `Row::TextColored`, so `idx` (which is what `App::caravan_row`
+    // resolves a pick through) never sees them.
+    let mut run: Option<u8> = None;
     for offer in &view.offers {
+        let (rank, heading) = game.caravan_group(&offer.kind);
+        if run != Some(rank) {
+            rows.push(Row::TextColored(heading.to_string(), TEXT));
+            run = Some(rank);
+        }
         // Rows the player cannot afford stay listed and stay dim: a wagon
         // you have to come back to is a reason to go and earn, where a
         // hidden row is a wagon that looks emptier than it is.
@@ -121,7 +133,17 @@ pub(super) fn caravan_page_rows(game: &mut Game, view: &CaravanView, selected: u
     if view.sells.is_empty() {
         rows.push(text_row("(nothing they want)"));
     }
+    let mut run = None;
     for row in &view.sells {
+        // The same headings, from the same call — the goods a wagon will
+        // take are cargo, so every one of them has an `ItemCategory` and the
+        // `Material` arm is the whole of what this needs from the kind.
+        let (rank, heading) =
+            game.caravan_group(&CaravanOfferKind::Material(row.copy.item.clone()));
+        if run != Some(rank) {
+            rows.push(Row::TextColored(heading.to_string(), TEXT));
+            run = Some(rank);
+        }
         rows.push(with_tag(
             tier_row(
                 format!("Sell {} ({} {money} each)", row.name, row.unit_price),
@@ -273,6 +295,74 @@ mod tests {
         Game::new(3, DifficultyMode::Forgiving, &assets()).expect("a game for the census")
     }
 
+    /// A heading per run, and — the thing that can silently break — the
+    /// shortcut on the *n*th pickable row still reads `n`.
+    ///
+    /// Headings are `Row::TextColored` and must never touch the counter
+    /// `App::caravan_row` resolves a pick through. Off by one, `[c]` buys
+    /// what `[b]` names and nothing anywhere fails.
+    #[test]
+    fn the_wagon_heads_each_run_without_moving_a_shortcut() {
+        let mut game = census_game();
+        let weapon = ItemId::from(ids::MONOFILAMENT_WHIP);
+        let material = ItemId::from(ids::BYTECODE_BLOCK);
+        let offer = |index: usize, kind: CaravanOfferKind| CaravanOffer {
+            index,
+            kind,
+            name: "x".to_string(),
+            detail: String::new(),
+            unit_cost: 1,
+            qty: 1,
+        };
+        let view = CaravanView {
+            trader: "T".to_string(),
+            description: String::new(),
+            // Two runs on the offer side, in the order `caravan_group` ranks
+            // them, plus one row the player can take.
+            offers: vec![
+                offer(0, CaravanOfferKind::Gear(GearCopy::plain(weapon.clone()))),
+                offer(1, CaravanOfferKind::Gear(GearCopy::plain(weapon))),
+                offer(2, CaravanOfferKind::Material(material.clone())),
+            ],
+            sells: vec![CaravanSellRow {
+                copy: GearCopy::plain(material),
+                name: "y".to_string(),
+                held: 1,
+                unit_price: 1,
+            }],
+            credits: 10,
+            currency: "Credits".to_string(),
+            ticks_left: 10,
+        };
+
+        let rows = caravan_page_rows(&mut game, &view, 0);
+        let headings: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::TextColored(t, _) if t == "Weapons" || t == "Materials" => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            headings,
+            vec!["Weapons", "Materials", "Materials"],
+            "one heading per run, on both lists, and never one per row"
+        );
+
+        let shortcuts: Vec<char> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { tag: Some(t), .. } => t.lead.chars().nth(1),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            shortcuts,
+            (0..4).map(menu_shortcut).collect::<Vec<_>>(),
+            "the headings moved a shortcut off the row it belongs to"
+        );
+    }
+
     /// **This page does scroll**, unlike the gear inspect and memories
     /// pages — `popup_layout` takes the span from the first `Row::Item` to
     /// the last as the body and pages it, and both of this page's sections
@@ -306,6 +396,12 @@ mod tests {
             .iter()
             .rposition(|r| matches!(r, Row::Item { .. }))
             .expect("the page is a list");
+        // The ends only, and deliberately: unlike the gear page this one
+        // *scrolls* — `draw_popup` pages its `Row::Item` span — so a
+        // category heading between the first and the last row travels with
+        // the list rather than eating into it, exactly as the per-offer
+        // detail lines already did. What the scroll can never page past is
+        // what sits outside the span, and that is what this counts.
         let chrome = first + (rows.len() - 1 - last);
 
         for h in (600..=2160).step_by(60) {

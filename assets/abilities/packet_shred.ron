@@ -5,6 +5,7 @@
     target: WholeEnemyGroup,
     effect: Damage(power: 10, spread: 2),
     cooldown: 3,
+    accuracy: 4,
     power_cost: 11.0,
     wild_weight: 8,
 )

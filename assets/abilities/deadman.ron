@@ -16,6 +16,7 @@
     target: AllEnemies,
     effect: Damage(power: 14, spread: 4),
     cooldown: 4,
+    accuracy: 2,
     power_cost: 0.0,
     exclusive: true,
     triggers: Some(AllyDropped),

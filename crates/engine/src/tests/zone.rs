@@ -103,8 +103,9 @@ fn zone_group_cap_is_linear_and_never_passes_max_group_size() {
     use crate::game::spawning::zone_group_cap;
     assert_eq!(
         zone_group_cap(1),
-        1,
-        "zone 1 is solo, whatever else is true"
+        2,
+        "zone 1 takes the ZONE_ONE_GROUP_CAP floor, not the curve's base — the curve alone \
+         puts it at 1, which is a group that teaches a new player nothing about groups"
     );
     assert_eq!(zone_group_cap(2), 10);
     assert_eq!(zone_group_cap(3), 19);

@@ -1145,7 +1145,7 @@ fn one_landed_swing(game: &mut Game, attacker: Entity, defender: Entity, power: 
     let outcome = game.resolve_and_apply_attack(
         attacker,
         defender,
-        crate::battle::DamageRange::centred(power, 0),
+        crate::battle::Swing::plain(crate::battle::DamageRange::centred(power, 0)),
     );
     outcome.damage_to_defender()
 }

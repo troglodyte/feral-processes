@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::items::ItemId;
 use crate::species::SpeciesId;
 use crate::tuning::{
-    ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, BACK_SLOT_AGGRO_WEIGHT, CRIT_CHANCE,
-    CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
+    ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, ATTACKER_ACCURACY_ADVANTAGE, BACK_SLOT_AGGRO_WEIGHT,
+    CRIT_CHANCE, CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
     FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE, FUMBLE_RECOIL_FRACTION,
     FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE,
     JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
@@ -59,6 +59,34 @@ impl DamageRange {
     }
 }
 
+/// Everything about one attack that belongs to the *invocation* rather than
+/// to the combatant making it.
+///
+/// The damage band was the only such property for a long time and travelled
+/// as a bare `DamageRange`. A routine's own Accuracy is the second, and a
+/// pair of loose parameters is exactly what `Combatant`'s doc comment
+/// rejects for exactly this reason: a third axis added later would be
+/// forgettable at a call site, and two of the four call sites here have
+/// nothing to say about accuracy at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Swing {
+    /// The band this attack rolls its damage from.
+    pub range: DamageRange,
+    /// Flat Accuracy for this attack only, on top of whatever the attacker
+    /// carries. `AbilityDef::accuracy` is the only thing that authors it —
+    /// a weapon's accuracy belongs to the *wielder* and rides `Combatant`,
+    /// where it applies to every swing they make.
+    pub accuracy: i32,
+}
+
+impl Swing {
+    /// A swing with no accuracy of its own: every basic attack, and every
+    /// defender profile built for an Opening rung's riposte.
+    pub fn plain(range: DamageRange) -> Self {
+        Swing { range, accuracy: 0 }
+    }
+}
+
 /// Odds one attack lands, from the attacker's Accuracy against the
 /// defender's Evasion.
 ///
@@ -75,13 +103,18 @@ impl DamageRange {
 pub fn hit_chance(accuracy: f64, evasion: f64) -> f64 {
     let acc = accuracy.max(0.0);
     let eva = evasion.max(0.0);
-    let total = acc + eva;
     // Two combatants with nothing at all is an even matchup, not an
     // infinity. Reachable from a mod species authoring `base_speed: 0`.
-    if total <= 0.0 {
-        return 0.5f64.clamp(HIT_CHANCE_MIN, HIT_CHANCE_MAX);
-    }
-    (acc / total).clamp(HIT_CHANCE_MIN, HIT_CHANCE_MAX)
+    // Resolved *as* parity rather than as a hardcoded 0.5, so it tracks
+    // `ATTACKER_ACCURACY_ADVANTAGE` instead of drifting away from what an
+    // even matchup means everywhere else in this function.
+    let (acc, eva) = if acc + eva <= 0.0 {
+        (1.0, 1.0)
+    } else {
+        (acc, eva)
+    };
+    let acc = acc * ATTACKER_ACCURACY_ADVANTAGE;
+    (acc / (acc + eva)).clamp(HIT_CHANCE_MIN, HIT_CHANCE_MAX)
 }
 
 /// A combatant's Accuracy. **Derived, never stored** — not a `Stats` field,
@@ -677,9 +710,21 @@ mod tests {
     }
 
     #[test]
-    fn two_identical_combatants_hit_each_other_half_the_time() {
+    fn two_identical_combatants_favour_the_attacker() {
         // The baseline every tuning number in this section is read against.
-        assert!((hit_chance(12.0, 12.0) - 0.5).abs() < f64::EPSILON);
+        // Deliberately *not* 0.5: an even matchup where both sides whiff
+        // half their swings reads as broken rather than as even, and it
+        // lands hardest on a routine, which has already spent its Power and
+        // armed its cooldown before the roll.
+        let parity = hit_chance(12.0, 12.0);
+        assert!(
+            parity > 0.5,
+            "an even matchup should favour the attacker, got {parity}"
+        );
+        assert!(
+            (parity - 0.583_333_333_333_333_3).abs() < 1e-12,
+            "the parity baseline moved to {parity}"
+        );
     }
 
     #[test]
@@ -701,8 +746,10 @@ mod tests {
     #[test]
     fn hit_chance_survives_two_combatants_with_nothing_at_all() {
         // Reachable through a mod species authoring base_speed 0 at level 1
-        // with no gear. An even matchup, not a divide by zero.
-        assert!((hit_chance(0.0, 0.0) - 0.5).abs() < f64::EPSILON);
+        // with no gear. An even matchup, not a divide by zero — and an even
+        // matchup means exactly what it means everywhere else, so this
+        // tracks `ATTACKER_ACCURACY_ADVANTAGE` rather than restating 0.5.
+        assert!((hit_chance(0.0, 0.0) - hit_chance(12.0, 12.0)).abs() < f64::EPSILON);
     }
 
     #[test]

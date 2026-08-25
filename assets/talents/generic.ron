@@ -14,7 +14,7 @@
         ],
         [
             (id: "gen_slot", name: "Spare Register", description: "One more routine slot.", node: RoutineSlot),
-            (id: "gen_plate", name: "Layered Plate", description: "Raises Mitigation by 10%.", node: Stat(stat: Def, percent: 10.0)),
+            (id: "gen_calibration", name: "Calibration", description: "Raises Accuracy by 4.", node: Accuracy(points: 4)),
         ],
         [
             (id: "gen_damage", name: "Blunt Force", description: "Every damage routine lands 15% harder.", node: Affinity(kind: Damage, mult: 1.15)),

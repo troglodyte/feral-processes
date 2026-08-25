@@ -126,8 +126,10 @@ ones and mean the same thing:
 | `patched` | +1 DECOMP | Module, Armor | 11 |
 | `of_static` | +1 ATK +3 MIT | any | 10 |
 | `shimmed` | +6 MIT | Module | 10 |
+| `zeroed` | +3 ACC | Weapon | 10 |
 | `rigged` | +2 ATK | Module | 9 |
 | `of_the_ghost_protocol` | +2 DECOMP | Module, Armor | 8 |
+| `of_direct_access` | +3 ACC | Weapon, Module | 8 |
 | `of_deep_cache` | +3 MIT +1 DECOMP | Module, Armor | 7 |
 | `overdriven` / `hardened` | +3 ATK +1–3 DMG / +9 MIT | Weapon / Armor | 6 |
 | `of_sidechannel` | +1 ATK +1 DECOMP | Module | 6 |

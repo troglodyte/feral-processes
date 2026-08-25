@@ -20,7 +20,7 @@
         ],
         [
             (id: "sab_heap", name: "Heap Corruption", description: "Learns Heap Corruption — a heavy bleed.", node: Ability(id: "heap_corruption")),
-            (id: "sab_frame", name: "Padded Frame", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+            (id: "sab_vector", name: "Attack Vector", description: "Raises Accuracy by 4 — the payload has to arrive to do anything.", node: Accuracy(points: 4)),
         ],
         [
             (id: "sab_rot", name: "Bit Rot", description: "Learns Bit Rot — the worst bleed a program can inflict.", node: Ability(id: "bit_rot_v3")),

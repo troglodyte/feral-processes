@@ -106,6 +106,10 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
             status: mv.effect.clone(),
         },
         cooldown: 0,
+        // A basic attack is not an aimed routine — it is what a program does
+        // when it has nothing better, and it already takes the wielder's
+        // weapon band. Its accuracy is the wielder's alone.
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,

@@ -400,6 +400,50 @@ pub struct EquipmentStats {
 }
 
 impl EquipmentStats {
+    /// Whether this bonus is nothing at all — an affix carrying it would
+    /// rename an item and change nothing.
+    ///
+    /// **Destructured rather than field-accessed**, on `cell_mark`'s rule: a
+    /// seventh stat is a compile error here rather than a field silently
+    /// uncounted. `accuracy` was exactly that — an affix authoring only
+    /// accuracy was refused at load as empty for as long as the field
+    /// existed, so the accuracy axis could only ever be a rider on an ATK
+    /// affix, which is part of why it stayed on three weapons.
+    pub(crate) fn is_empty(self) -> bool {
+        let EquipmentStats {
+            atk,
+            mitigation,
+            decompiler,
+            damage,
+            accuracy,
+            evasion,
+        } = self;
+        atk == 0
+            && mitigation == 0
+            && decompiler == 0
+            && accuracy == 0
+            && evasion == 0
+            && damage == crate::battle::DamageRange::default()
+    }
+
+    /// Whether anything here is worth having. A penalty is legal *beside* a
+    /// bonus — that trade is a shipped affix shape — but a penalty on its own
+    /// is a roll no player has a reason to equip.
+    ///
+    /// Destructured for `is_empty`'s reason, and it carried the same gap:
+    /// accuracy and evasion were both invisible to it.
+    pub(crate) fn has_upside(self) -> bool {
+        let EquipmentStats {
+            atk,
+            mitigation,
+            decompiler,
+            damage,
+            accuracy,
+            evasion,
+        } = self;
+        atk > 0 || mitigation > 0 || decompiler > 0 || accuracy > 0 || evasion > 0 || damage.max > 0
+    }
+
     /// This item's bonus scaled up for `level` (1 = base, no scaling).
     /// Each component is rounded independently to the nearest whole point.
     pub(crate) fn scaled_for_level(self, level: u32) -> EquipmentStats {

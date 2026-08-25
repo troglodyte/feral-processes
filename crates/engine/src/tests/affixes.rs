@@ -98,6 +98,36 @@ fn an_affix_that_pays_before_it_charges_loads() {
     assert_eq!(db.all().count(), 1);
 }
 
+/// An affix paying on an axis that is not ATK, mitigation or decompiler
+/// loads. Both of `fault`'s emptiness arms enumerated three of the six
+/// fields, so an accuracy-only or evasion-only affix was refused as though
+/// it granted nothing — the accuracy axis could only ever ride along on an
+/// ATK affix, which is part of why it stayed on three weapons.
+#[test]
+fn an_affix_paying_only_on_a_newer_axis_loads() {
+    let dir = affix_dir(
+        "affix_newer_axes",
+        &[
+            (
+                "zeroed.ron",
+                r#"(id: "zeroed", prefix: Some("Zeroed"), stats: (accuracy: 3))"#,
+            ),
+            (
+                "slippery.ron",
+                r#"(id: "slippery", prefix: Some("Slippery"), stats: (evasion: 3))"#,
+            ),
+            (
+                "keen.ron",
+                r#"(id: "keen", prefix: Some("Keen"), stats: (damage: (min: 1, max: 3)))"#,
+            ),
+        ],
+    );
+    let (db, warnings) = AffixDb::load_dir(&dir).unwrap();
+
+    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+    assert_eq!(db.all().count(), 3, "all three axes have to be authorable");
+}
+
 // ---------------------------------------------------------------------------
 // The census over what ships.
 

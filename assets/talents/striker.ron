@@ -8,7 +8,7 @@
         ],
         [
             (id: "striker_dump", name: "Core Dump", description: "Learns Core Dump — a heavy single strike.", node: Ability(id: "core_dump")),
-            (id: "striker_frame", name: "Reinforced Frame", description: "Raises Integrity by 10%.", node: Stat(stat: Hp, percent: 10.0)),
+            (id: "striker_range", name: "Range Finder", description: "Raises Accuracy by 4 — a heavy strike that misses is worth nothing.", node: Accuracy(points: 4)),
         ],
         [
             (id: "striker_stall", name: "Pipeline Stall", description: "Learns Pipeline Stall — damage that often halts the target.", node: Ability(id: "pipeline_stall")),

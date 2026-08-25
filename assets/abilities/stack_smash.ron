@@ -5,6 +5,7 @@
     target: OneEnemyGroupFront,
     effect: Damage(power: 9, spread: 2, status: Some((kind: Bleed, chance: 0.6, duration: 3, power: 3))),
     cooldown: 2,
+    accuracy: 6,
     power_cost: 8.0,
     wild_weight: 12,
 )

@@ -1,0 +1,11 @@
+// The accuracy axis's own find, and Honed's opposite number: Honed splits
+// itself between damage and aim, this spends the whole roll on aim and so
+// sits at the axis's calibration ceiling. Weapon-only, because a weapon is
+// what a program points at something.
+(
+    id: "zeroed",
+    prefix: Some("Zeroed"),
+    stats: (accuracy: 3),
+    slots: Some([Weapon]),
+    weight: 10,
+)

@@ -768,6 +768,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
             heal_fraction: 0.5,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -810,6 +811,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
             heal_fraction: 1.0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -850,6 +852,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
             spread: 0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -894,6 +897,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
             spread: 0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -937,6 +941,7 @@ fn drain_logs_what_it_actually_restored() {
             heal_fraction: 1.0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -975,6 +980,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         target: crate::abilities::AbilityTarget::WholeParty,
         effect: crate::abilities::AbilityEffect::Cleanse,
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1023,6 +1029,7 @@ fn a_negative_power_buff_saps_effective_attack() {
             duration: 3,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1062,6 +1069,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
             duration: 3,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1101,6 +1109,7 @@ fn a_heal_scales_with_the_users_level() {
             spread: 0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1143,6 +1152,7 @@ fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
             spread: 8,
         },
         cooldown: 0,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1191,6 +1201,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
             duration: 3,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1230,6 +1241,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
             duration: 3,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1274,6 +1286,7 @@ fn ability_damage_scales_with_the_users_level() {
             status: None,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1325,6 +1338,7 @@ fn drain_scales_with_the_users_level() {
             heal_fraction: 0.5,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1508,6 +1522,7 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
             spread: 0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -1569,6 +1584,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
             heal_fraction: 1.0,
         },
         cooldown: 1,
+        accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
@@ -2402,5 +2418,94 @@ fn a_programs_manifest_shows_the_band_it_actually_swings_for() {
     assert_ne!(
         armed, natural,
         "the worn weapon has to reach the page, not just the fight"
+    );
+}
+
+/// An aimed routine — one authoring `AbilityDef::accuracy` — lands more
+/// often than the same routine with the field at its default.
+///
+/// Swept over seeds rather than forced, because the whole claim is about a
+/// *rate*: a single forced roll would land either way and prove nothing.
+/// Deterministic all the same — the same seeds are replayed for both arms,
+/// and the world is rebuilt identically each time, so only the field differs.
+#[test]
+fn an_aimed_routine_lands_more_often_than_an_unaimed_one() {
+    fn hits_over_seeds(accuracy: i32) -> u32 {
+        let mut landed = 0;
+        for rng_seed in 0..200u64 {
+            let mut game = Game::new(4180, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+            let player = game.player_entity();
+            let enemies = battle_with_a_pack_of(&mut game, 1, 5000);
+            game.world
+                .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(rng_seed)));
+            let before = game.world.get::<Stats>(enemies[0]).unwrap().hp;
+            let ability = crate::abilities::AbilityDef {
+                id: "test_aim".into(),
+                name: "Test Aim".into(),
+                description: "d".into(),
+                target: crate::abilities::AbilityTarget::OneEnemyGroupFront,
+                effect: crate::abilities::AbilityEffect::Damage {
+                    power: 10,
+                    spread: 0,
+                    status: None,
+                },
+                cooldown: 1,
+                accuracy,
+                power_cost: 0.0,
+                wild_weight: 0,
+                exclusive: false,
+                ranged: false,
+                boss_drop: None,
+                triggers: None,
+            };
+            game.use_ability(&ability, player, "You", &[enemies[0]]);
+            if game.world.get::<Stats>(enemies[0]).unwrap().hp < before {
+                landed += 1;
+            }
+        }
+        landed
+    }
+
+    let unaimed = hits_over_seeds(0);
+    let aimed = hits_over_seeds(40);
+    assert!(
+        unaimed > 0 && unaimed < 200,
+        "the unaimed arm has to be able to go both ways, or the comparison is \
+         against a constant: {unaimed}/200"
+    );
+    assert!(
+        aimed > unaimed,
+        "an authored accuracy has to reach the roll: aimed landed {aimed}/200 \
+         against unaimed {unaimed}/200"
+    );
+}
+
+/// A routine's accuracy belongs to the invocation, so it must not follow the
+/// invoker around: it reaches neither their Evasion nor the free swing an
+/// Opening rung hands the *defender*.
+#[test]
+fn a_routines_accuracy_aims_that_swing_and_nothing_else() {
+    let game = Game::new(4181, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let band = crate::battle::DamageRange::centred(10, 0);
+
+    let plain = game.combatant_profile(player, crate::battle::Swing::plain(band));
+    let aimed = game.combatant_profile(
+        player,
+        crate::battle::Swing {
+            range: band,
+            accuracy: 40,
+        },
+    );
+
+    assert!(
+        aimed.accuracy > plain.accuracy,
+        "the swing's accuracy has to reach the profile: {} is not above {}",
+        aimed.accuracy,
+        plain.accuracy
+    );
+    assert_eq!(
+        aimed.evasion, plain.evasion,
+        "aiming a swing must not make its author harder to hit"
     );
 }

@@ -6,7 +6,7 @@ ill-formed file is skipped with a warning logged in-game rather than crashing
 startup, so a broken tree costs one class its ladder and nothing else.
 
 **This is a real content directory.** Unlike `assets/perks/`, you can add a
-tree by dropping in a file: every node here is one of four shapes the engine
+tree by dropping in a file: every node here is one of five shapes the engine
 already knows how to apply, so nothing about a new tree needs Rust.
 
 ## What a tree is for
@@ -84,7 +84,7 @@ other depth is skipped with a warning, as is a tier offering one choice or
 three: a tier is a decision, and a third option makes the ladder a list of
 everything with extra steps.
 
-## The four node kinds
+## The five node kinds
 
 ### `Stat(stat: Hp | Atk | Def, percent: <float>)`
 
@@ -122,23 +122,45 @@ One more routine slot than the program's level would give it. Note that every
 routine slot in the game starts full, so this is what makes a granted routine
 land beside a kit rather than competing with it.
 
+### `Accuracy(points: <int>)`
+
+Adds flat Accuracy to every attack the program makes — its own swings and the
+routines it runs alike, since Accuracy belongs to whoever is swinging.
+
+**Read on demand, never baked**, unlike `Stat`. Accuracy is derived from
+speed, level and flat sources and has no field on a program's stats, so there
+is nothing to bake it into and nothing that could be re-applied on load. It is
+the companion's half of the accuracy axis; `Perk::TargetLock` is the player's,
+and the two never stack.
+
+Worth most early and least late, which is a property of the curve rather than
+of the node: a hostile's Evasion grows with the *zone* while a program's
+Accuracy grows with its *level*.
+
+Bounded by `tuning::MAX_TALENT_ACCURACY_POINTS` (6), asserted over this
+directory by a census. Accuracy feeds a ratio, so an unbounded node would walk
+a program to the hit-chance ceiling on its own and make every later tier in
+its tree moot.
+
 ## Authoring guidance
 
 **Weight a tree toward `Ability`, `Affinity` and `RoutineSlot`, and keep the
-`Stat` percentages small.** Two reasons, and the second is the one that
-matters:
+`Stat` percentages and `Accuracy` points small.** Two reasons, and the second
+is the one that matters:
 
 1. A developed companion already carries four multiplicative axes — bought
    Recompile Kernel tiers, five refactor slots, the levels a ring buys, and
    now talents. Options compound far less dangerously than numbers do.
 2. `balance_sim`, the engine's balance regression gate, models **no
-   abilities**. A `Stat` node moves its curves; an `Ability`, `Affinity` or
-   `RoutineSlot` node is invisible to it and can only be measured in the
-   arena. Weighting toward options keeps less of the tree ungated *and* less
-   of it dangerous.
+   abilities**. A `Stat` node moves its curves; an `Ability`, `Affinity`,
+   `Accuracy` or `RoutineSlot` node is invisible to it and can only be
+   measured in the arena. Weighting toward options keeps less of the tree
+   ungated *and* less of it dangerous.
 
-A census holds every shipped tree to spending at most half its nodes on
-`Stat`.
+A census holds every shipped tree to spending at most half its nodes on a
+number — `Stat` and `Accuracy` together. `Accuracy` counts even though it
+never reaches the program's stats: what the rule is about is how much of a
+tree is a figure going up rather than a decision.
 
 **Make the tree read as its class.** `assets/species/README.md`'s "Kits"
 section is the authority on what each class means: a Medic tree that reads

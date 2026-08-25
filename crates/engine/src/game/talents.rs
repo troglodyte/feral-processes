@@ -158,7 +158,8 @@ impl Game {
     fn apply_talent_node(&mut self, entity: Entity, node: &TalentNode) {
         match node {
             TalentNode::Stat { stat, percent } => self.bake_talent_stat(entity, *stat, *percent),
-            TalentNode::Affinity { .. } | TalentNode::RoutineSlot => {}
+            TalentNode::Affinity { .. } | TalentNode::RoutineSlot | TalentNode::Accuracy { .. } => {
+            }
             // Through `install_unlocked_routines` rather than
             // `install_innate_routines`, with an empty level range so the
             // species half offers nothing: a granted routine then competes for

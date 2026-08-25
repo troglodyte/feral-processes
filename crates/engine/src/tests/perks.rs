@@ -417,7 +417,50 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[15], Perk::Failover);
     // And again for the quality perk appended after those.
     assert_eq!(all[16], Perk::TightenTolerances);
-    assert_eq!(all.len(), 17);
+    // And again for the accuracy perk appended after that.
+    assert_eq!(all[17], Perk::TargetLock);
+    assert_eq!(all.len(), 18);
+}
+
+/// `Perk::TargetLock` reaches the roll, and reaches the player alone.
+///
+/// Asserted through `hit_chance` rather than through the accuracy number,
+/// because a bonus that raised Accuracy without moving the odds would be
+/// worth nothing and would pass a test that only read the input.
+#[test]
+fn target_lock_raises_the_players_odds_and_nobody_elses() {
+    let mut game = Game::new(4190, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let swing = crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0));
+
+    let odds = |g: &Game, attacker| {
+        let a = g.combatant_profile(attacker, swing);
+        let d = g.combatant_profile(
+            if attacker == player { wild } else { player },
+            crate::battle::Swing::default(),
+        );
+        crate::battle::hit_chance(a.accuracy, d.evasion)
+    };
+    let before_player = odds(&game, player);
+    let before_wild = odds(&game, wild);
+
+    for _ in 0..3 {
+        game.world.get_mut::<Perks>(player).unwrap().points = 10;
+        game.unlock_perk(Perk::TargetLock).unwrap();
+    }
+
+    assert!(
+        odds(&game, player) > before_player,
+        "three levels of Target Lock must move the player's odds: {} is not above {}",
+        odds(&game, player),
+        before_player
+    );
+    assert_eq!(
+        odds(&game, wild),
+        before_wild,
+        "a player's perk must not aim a wild program's swing"
+    );
 }
 
 #[test]

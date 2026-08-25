@@ -134,6 +134,16 @@ pub const LEVELS_PER_RING: u32 = 2;
 /// `Affinity` and `RoutineSlot` and this bound sits low.
 pub const MAX_TALENT_STAT_PERCENT: f32 = 15.0;
 
+/// The ceiling on a `TalentNode::Accuracy`'s points, `MAX_TALENT_STAT_PERCENT`'s
+/// peer on the axis that has no `Stats` field to bound it.
+///
+/// Flat rather than a percentage, so it does not compound with the four
+/// multiplicative axes a developed companion already carries — and bounded
+/// all the same, because Accuracy feeds a ratio: unbounded, one node would
+/// walk a companion to `HIT_CHANCE_MAX` on its own and take every later
+/// decision in its tree with it.
+pub const MAX_TALENT_ACCURACY_POINTS: i32 = 6;
+
 /// The highest level any companion can reach with every ring open. For the
 /// two arena sites, which author their own composition and have no entity to
 /// read a `KernelRing` from; everything with an entity calls
@@ -366,6 +376,20 @@ pub const APEX_ENTRY_STEP: u32 = 4;
 /// in `1..=ceiling`, so raising it widens the range of fights a zone can
 /// produce rather than making every fight bigger.
 pub const ZONE_GROUP_STEP: u32 = 9;
+
+/// The floor under `zone_group_cap`, and so the size of a zone-1 group.
+///
+/// Zone 1 used to be solo, which fell out of the curve — `ZONE_GROUP_STEP *
+/// (zone - 1) + 1` is 1 there — rather than being chosen. That made the
+/// zone-1 fixture in `balance_sim` a five-against-*one* fight, which is not
+/// the body ratio the rest of the curve is about, and it left a new player's
+/// entire first zone unable to teach them that programs come in groups.
+///
+/// A floor rather than a change to the curve's base: zone 2 is already 10,
+/// so this lifts zone 1 alone and every later zone's step is exactly what it
+/// was. Note it also ends `TRACE_GROUP_MULT`'s zone-1 inertness, which was a
+/// consequence of the old value and never an intent.
+pub const ZONE_ONE_GROUP_CAP: u32 = 2;
 
 /// Hard ceiling on a single species group. With `MAX_ENEMY_GROUPS` groups on
 /// the field, one intrusion tops out at four hundred programs.
@@ -1293,9 +1317,11 @@ pub const TRACE_STAT_MULT: [f32; 4] = [1.0, 1.10, 1.25, 1.45];
 
 /// Per-band multiplier on the group-size ceiling handed to `spawn_pack`.
 ///
-/// **Inert in zone 1**, where `zone_group_cap(1)` pins every group to a
-/// single member whatever this says. That is a consequence of the group
-/// curve, not a defect in this constant.
+/// It used to be **inert in zone 1**, where `zone_group_cap(1)` pinned every
+/// group to a single member whatever this said. `ZONE_ONE_GROUP_CAP` lifted
+/// that floor, so the lever now has room to move there too — the inertness
+/// was always a consequence of the group curve rather than an intent of this
+/// constant, which is why lifting the floor was allowed to end it.
 pub const TRACE_GROUP_MULT: [u32; 4] = [1, 1, 2, 3];
 
 /// Floor under `swarm_radius`, the radius that actually governs how
@@ -2364,6 +2390,16 @@ pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 /// catalogue.
 pub const TEARDOWN_SALVAGE_PER_LEVEL: u32 = 1;
 
+/// Accuracy one level of `Perk::TargetLock` adds to every attack the player
+/// makes. Peer to `ATTACKER_BONUS_PER_LEVEL`, which buys 2 points of ATK for
+/// a comparable price.
+///
+/// Worth most early, which is deliberate: an unaimed player sits near the
+/// `ATTACKER_ACCURACY_ADVANTAGE` baseline for the first ten levels and then
+/// climbs on their own, because a hostile's Evasion grows with the zone
+/// while theirs grows with their level.
+pub const TARGET_LOCK_ACCURACY_PER_LEVEL: i32 = 2;
+
 /// Durability `Perk::Failover` adds to `Game::total_repair_rate` per level,
 /// restored to every damaged structure each `STRUCTURE_REGEN_INTERVAL`.
 ///
@@ -2649,6 +2685,32 @@ pub const ACCURACY_PER_LEVEL: f64 = 0.5;
 pub const EVASION_PER_SPEED: f64 = 1.0;
 /// See `ACCURACY_PER_LEVEL`.
 pub const EVASION_PER_LEVEL: f64 = 0.5;
+
+/// What the attacker's Accuracy is multiplied by inside
+/// `battle::hit_chance`, before the ratio against the defender's Evasion.
+///
+/// **A multiplier and not an addend, because the ratio form is scale-free
+/// and must stay that way.** `k*acc / (k*acc + eva)` survives doubling both
+/// sides exactly as `acc / (acc + eva)` does, so a zone that scales
+/// everything by its tier multiplier still changes no hit rate. A flat
+/// `+n` on accuracy would wash out as levels grow, which is the same
+/// scale-dependence the difference form was rejected for.
+///
+/// 1.4 puts an even matchup at 0.583 rather than 0.5. The old 0.5 baseline
+/// was the whole of "routines miss too often": measured against the shipped
+/// roster, a player with no accuracy gear sat at 0.44-0.64 for the first ten
+/// levels and both apex species — the lair guardians — are the fastest
+/// things in the game and so the hardest to hit at every level. A basic
+/// attack shrugs a miss off; a routine has already spent its Power and armed
+/// its cooldown by the time the roll happens, which is why the same rate
+/// reads as a routine problem.
+///
+/// **Necessarily symmetric.** `hit_chance` is a pure function of two
+/// numbers and cannot know which side is the player, so hostiles take the
+/// same edge — notably lifting them off `HIT_CHANCE_MIN`, which a
+/// high-level player had pinned them to. The player's *asymmetric* edge is
+/// the flat accuracy sources instead, summed by `Game::accuracy_bonus`.
+pub const ATTACKER_ACCURACY_ADVANTAGE: f64 = 1.4;
 
 /// Bounds on `battle::hit_chance`. The floor is what keeps
 /// `balance_sim`'s `TURN_CAP` meaningful as stalemate detection rather than

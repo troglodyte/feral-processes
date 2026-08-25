@@ -5,5 +5,6 @@
     target: WholeEnemyGroup,
     effect: Drain(power: 4, spread: 1, heal_fraction: 0.3),
     cooldown: 3,
+    accuracy: 4,
     power_cost: 8.0,
 )

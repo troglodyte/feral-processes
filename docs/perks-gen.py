@@ -28,6 +28,7 @@ P = [
  ("Teardown",       "Teardown",          4, "+1 work resource per kill",             "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::award_loot"),
  ("Failover",       "Failover",          2, "+1 Durability per repair interval",     "FAILOVER_REPAIR_PER_LEVEL = 1",             "Game::total_repair_rate"),
  ("TightenTolerances", "Tighten Tolerances", 3, "+5pp on a compiled copy's quality floor", "QUALITY_PERK_PER_LEVEL = 5",             "Game::craft_quality_floor"),
+ ("TargetLock",     "Target Lock",       3, "+2 Accuracy on every attack you make",  "TARGET_LOCK_ACCURACY_PER_LEVEL = 2",        "Game::accuracy_bonus"),
 ]
 K = "variant name cost effect const hook".split()
 R = [dict(zip(K, r)) for r in P]
@@ -141,7 +142,7 @@ to.
 Every one of those is a hook into a different formula — a mining roll, a
 hunger multiplier, a capture chance's HP term, a recipe cost, a direct `Stats`
 write. There is no shared shape between them, which is exactly why `PerkDef`
-has no `effect:` field and why an eighteenth perk is a new `Perk` variant plus
+has no `effect:` field and why a nineteenth perk is a new `Perk` variant plus
 a hook wherever its effect belongs, rather than a new file.
 
 ## The five affinity perks

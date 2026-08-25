@@ -1261,11 +1261,11 @@ fn exposed_cuts_the_fumblers_evasion() {
     let mut game = Game::new(780, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let victim = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
     let clean = game
-        .combatant_profile(victim, battle::DamageRange::default())
+        .combatant_profile(victim, battle::Swing::default())
         .evasion;
     game.arm_status(victim, StatusKind::Exposed, 1, 0);
     let exposed = game
-        .combatant_profile(victim, battle::DamageRange::default())
+        .combatant_profile(victim, battle::Swing::default())
         .evasion;
     assert!(exposed < clean, "{exposed} should be below {clean}");
 }

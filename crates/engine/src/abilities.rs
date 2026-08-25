@@ -451,6 +451,22 @@ pub struct AbilityDef {
     /// to exclusion is what keeps `priority_boost` and `decompile` — and
     /// every other ability reachable through a species or a research node —
     /// out of the pool without this module having to name them.
+    /// Flat Accuracy this routine adds to its invoker's own, for the roll it
+    /// makes and nothing else.
+    ///
+    /// **Read only by the effects that roll to hit** — `Damage` and `Drain`.
+    /// Every other effect lands without a roll, so authoring this on one is
+    /// inert; the census in `tests/assets.rs` is what holds the shipped
+    /// roster to authoring it exactly where it means something.
+    ///
+    /// **Flat, not scaled by level**, unlike every magnitude beside it. A
+    /// hostile's Evasion grows with the *zone* while the invoker's Accuracy
+    /// grows with their *level*, and a player levels far faster than zones
+    /// advance — so to-hit is already a solved problem late and an unsolved
+    /// one early. A bonus that scaled would be largest exactly where it is
+    /// least needed.
+    #[serde(default)]
+    pub accuracy: i32,
     #[serde(default)]
     pub wild_weight: u32,
     /// Marks this routine **exclusive**: it never enters `KnownRoutines`, no

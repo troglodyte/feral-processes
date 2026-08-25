@@ -3,7 +3,7 @@
     name: "Crash Handler",
     description: "Scavenged weapon. Wired to the wearer's own fault lines, and armed by the moment they nearly go out.",
     value: Some(115),
-    equipment: Some((Weapon, (atk: 2, damage: (min: 3, max: 7)))),
+    equipment: Some((Weapon, (atk: 2, damage: (min: 3, max: 7), accuracy: 3))),
     grants: Some("core_dump"),
     droppable: Some([("virus", 0.10), ("glitch", 0.08)]),
     cache_drop: Some(0.04),

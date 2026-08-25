@@ -5,6 +5,7 @@
     target: WholeEnemyGroup,
     effect: Damage(power: 15, spread: 4, status: Some((kind: Bleed, chance: 0.35, duration: 2, power: 2))),
     cooldown: 3,
+    accuracy: 4,
     power_cost: 12.0,
     wild_weight: 6,
 )

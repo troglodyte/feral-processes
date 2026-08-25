@@ -371,7 +371,7 @@ impl Game {
             }
         };
         let range = self.attack_range(entity, natural);
-        let outcome = self.resolve_and_apply_attack(entity, front, range);
+        let outcome = self.resolve_and_apply_attack(entity, front, battle::Swing::plain(range));
         // A miss and a fumble are `PartyDamage` too — this is still the
         // party's turn being narrated, and the kind is what paces the reveal.
         let line = if slot == 0 {
@@ -1057,7 +1057,14 @@ impl Game {
                         level,
                         affinity,
                     );
-                    let outcome = self.resolve_and_apply_attack(actor, recipient, band);
+                    let outcome = self.resolve_and_apply_attack(
+                        actor,
+                        recipient,
+                        battle::Swing {
+                            range: band,
+                            accuracy: ability.accuracy,
+                        },
+                    );
                     let line = match outcome {
                         battle::AttackOutcome::Crit { dmg } => {
                             format!("{name} tears into {on} for {dmg} damage!")
@@ -1089,7 +1096,14 @@ impl Game {
                         level,
                         affinity,
                     );
-                    let outcome = self.resolve_and_apply_attack(actor, recipient, band);
+                    let outcome = self.resolve_and_apply_attack(
+                        actor,
+                        recipient,
+                        battle::Swing {
+                            range: band,
+                            accuracy: ability.accuracy,
+                        },
+                    );
                     let dmg = outcome.damage_to_defender();
                     if dmg <= 0 {
                         // **A missed drain restores nothing.** The heal

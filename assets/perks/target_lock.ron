@@ -1,0 +1,6 @@
+(
+    id: TargetLock,
+    name: "Target Lock",
+    description: "Your routines resolve where you point them. +2 Accuracy on every attack you make, per level — worth most early, while your own aim is still the thing holding you back.",
+    cost: 3,
+)

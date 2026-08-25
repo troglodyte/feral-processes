@@ -3,7 +3,7 @@
 //! A companion earns one talent point per level above `CREATURE_MAX_LEVEL`
 //! (see `Game::talent_points`), and spends it on one of two choices in the
 //! next untaken tier of its class's tree. The trees are **data**, unlike
-//! `perks::Perk`: every node here is one of four shapes the engine already
+//! `perks::Perk`: every node here is one of five shapes the engine already
 //! knows how to apply, so a mod can ship a sixth class's tree by dropping in a
 //! file. `assets/talents/README.md` is the schema reference.
 
@@ -52,7 +52,7 @@ pub enum TalentStat {
     Def,
 }
 
-/// What taking a node does. Four shapes, each one the engine already applies
+/// What taking a node does. Five shapes, each one the engine already applies
 /// somewhere else — which is the whole argument for the tree being data.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TalentNode {
@@ -68,6 +68,19 @@ pub enum TalentNode {
     Ability { id: AbilityId },
     /// One more routine slot than this companion's level would give it.
     RoutineSlot,
+    /// Adds `points` of flat Accuracy to every attack this companion makes,
+    /// through `Game::accuracy_bonus`.
+    ///
+    /// **Read on demand, never baked**, unlike `Stat` — Accuracy is derived
+    /// from speed, level and flat sources and deliberately has no `Stats`
+    /// field, so there is nowhere to bake it and `apply_equipment_delta`
+    /// must not invent one. `Affinity` is the node this follows, for the
+    /// same reason and at the same kind of seam.
+    ///
+    /// The companion's half of the accuracy axis: `Perk::TargetLock` is the
+    /// player's, and the two never stack, because `accuracy_bonus` splits on
+    /// identity against `player_entity()` the way `ability_affinity` does.
+    Accuracy { points: i32 },
 }
 
 impl TalentNode {
@@ -80,6 +93,7 @@ impl TalentNode {
             TalentNode::Affinity { .. } => "affinity",
             TalentNode::Ability { .. } => "routine",
             TalentNode::RoutineSlot => "slot",
+            TalentNode::Accuracy { .. } => "accuracy",
         }
     }
 }

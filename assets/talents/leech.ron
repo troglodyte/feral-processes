@@ -16,7 +16,7 @@
         ],
         [
             (id: "leech_array", name: "Leech Array", description: "Learns Leech Array — a wider, heavier tap.", node: Ability(id: "leech_array")),
-            (id: "leech_edge", name: "Filed Edge", description: "Raises Attack by 8%.", node: Stat(stat: Atk, percent: 8.0)),
+            (id: "leech_vein", name: "Vein Finder", description: "Raises Accuracy by 4 — it finds the seam before it cuts.", node: Accuracy(points: 4)),
         ],
         [
             (id: "leech_siphon", name: "Siphon Cycles", description: "Learns Siphon Cycles — a heavy drain that mends half of what it takes.", node: Ability(id: "siphon_cycles")),

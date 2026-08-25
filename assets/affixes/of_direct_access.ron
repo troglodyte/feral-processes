@@ -1,0 +1,10 @@
+// The suffix half of the accuracy axis, and the only one that reaches a
+// Module: a targeting module is aim without a blade attached, which is what
+// makes the axis buyable by a program already carrying the weapon it wants.
+(
+    id: "of_direct_access",
+    suffix: Some("of Direct Access"),
+    stats: (accuracy: 3),
+    slots: Some([Weapon, Module]),
+    weight: 8,
+)

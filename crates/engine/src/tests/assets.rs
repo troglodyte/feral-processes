@@ -647,6 +647,65 @@ fn every_shipped_integrity_routine_rolls_a_band() {
     );
 }
 
+/// Every routine that rolls to hit is aimed, and no routine that never rolls
+/// pretends to be.
+///
+/// Two halves, because `AbilityDef::accuracy` fails in both directions.
+/// `#[serde(default)]` is 0, so a mod's file keeps parsing untouched — and a
+/// shipped routine that forgets the key is silently as blind as a basic
+/// attack, which is the bug this whole change exists to close. In the other
+/// direction the field is read *only* by `Damage` and `Drain`; authored on a
+/// `Buff` or a `Cleanse` it is a number that does nothing, and a modder
+/// reading the shipped roster would copy it.
+///
+/// The variants are named rather than swept with a `_ =>` arm, on
+/// `render/stack.rs::cell_mark`'s rule: a new effect that rolls to hit
+/// should fail to compile here rather than skip the check.
+///
+/// Deliberately not a census of the *values* — how aimed a routine is, is a
+/// content decision, and `tuning.rs` is where difficulty lives.
+#[test]
+fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
+    use crate::abilities::AbilityEffect as E;
+    let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mut aimed, mut blind) = (0, 0);
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let rolls_to_hit = match &def.effect {
+            E::Damage { .. } | E::Drain { .. } => true,
+            E::Heal { .. }
+            | E::Buff { .. }
+            | E::Debuff { .. }
+            | E::Cleanse
+            | E::Decompile
+            | E::FieldBuff { .. }
+            | E::Phase
+            | E::Jump => false,
+        };
+        if rolls_to_hit {
+            aimed += 1;
+            assert!(
+                def.accuracy > 0,
+                "routine {:?} rolls to hit but authors no `accuracy`, so it is exactly as \
+                 blind as a basic attack while costing Power and a cooldown",
+                def.id
+            );
+        } else {
+            blind += 1;
+            assert_eq!(
+                def.accuracy, 0,
+                "routine {:?} never rolls to hit, so its `accuracy` is read by nothing — \
+                 authoring one here teaches a modder that the key works everywhere",
+                def.id
+            );
+        }
+    }
+    assert!(
+        aimed > 0 && blind > 0,
+        "the census read {aimed} rolling and {blind} non-rolling routines, so at least \
+         one half of it proves nothing"
+    );
+}
+
 /// The scope word an ability's `name` must end in, given what it targets.
 /// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
 /// way, and which side it lands on is never in doubt from the picker.
@@ -1547,7 +1606,7 @@ mod talents {
     use super::*;
     use crate::species::AffinityClass;
     use crate::talents::{CHOICES_PER_TIER, TalentDb, TalentNode, tiers_per_tree};
-    use crate::tuning::MAX_TALENT_STAT_PERCENT;
+    use crate::tuning::{MAX_TALENT_ACCURACY_POINTS, MAX_TALENT_STAT_PERCENT};
 
     fn shipped() -> TalentDb {
         let (db, warnings) = TalentDb::load_dir(&test_assets_dir().join("talents")).unwrap();
@@ -1639,6 +1698,31 @@ mod talents {
         }
     }
 
+    /// The same bound on the axis that has no `Stats` field to hold it.
+    /// Accuracy feeds a ratio, so an unbounded node would walk a companion to
+    /// `HIT_CHANCE_MAX` on its own and take every later decision in its tree
+    /// with it.
+    #[test]
+    fn no_accuracy_node_is_worth_more_than_its_ceiling() {
+        let db = shipped();
+        let mut seen = 0;
+        for choice in db.all_nodes() {
+            if let TalentNode::Accuracy { points } = choice.node {
+                seen += 1;
+                assert!(
+                    points > 0 && points <= MAX_TALENT_ACCURACY_POINTS,
+                    "talent {} raises Accuracy by {points}, outside \
+                     1..={MAX_TALENT_ACCURACY_POINTS}",
+                    choice.id
+                );
+            }
+        }
+        assert!(
+            seen > 0,
+            "no tree offers the accuracy axis at all, so the node ships dark"
+        );
+    }
+
     /// `Game::take_talent` resolves a node by id against the whole tree, so two
     /// nodes sharing one id would make which of them a player bought depend on
     /// tier order.
@@ -1663,13 +1747,22 @@ mod talents {
         let db = shipped();
         for tree in db.trees() {
             let nodes: Vec<_> = tree.tiers.iter().flat_map(|t| t.0.iter()).collect();
-            let stats = nodes
+            // `Accuracy` counts as a number even though it never reaches
+            // `Stats`: what this rule is about is how much of a tree is spent
+            // on a figure going up rather than on a decision, and a flat
+            // Accuracy node is as much a figure as a percentage is.
+            let numbers = nodes
                 .iter()
-                .filter(|c| matches!(c.node, TalentNode::Stat { .. }))
+                .filter(|c| {
+                    matches!(
+                        c.node,
+                        TalentNode::Stat { .. } | TalentNode::Accuracy { .. }
+                    )
+                })
                 .count();
             assert!(
-                stats * 2 <= nodes.len(),
-                "{:?}'s tree is {stats} stat nodes of {} — options compound less \
+                numbers * 2 <= nodes.len(),
+                "{:?}'s tree is {numbers} number nodes of {} — options compound less \
                  dangerously than numbers",
                 tree.class,
                 nodes.len()

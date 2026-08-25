@@ -114,14 +114,14 @@ impl AffixDef {
         if self.weight == 0 {
             return Some("has weight 0, so it could never be rolled");
         }
-        if self.stats.atk == 0 && self.stats.mitigation == 0 && self.stats.decompiler == 0 {
+        if self.stats.is_empty() {
             return Some("grants no stats, so it would rename an item and nothing else");
         }
         // A penalty is legal *beside* a bonus — that trade is a shipped
         // affix shape. A penalty on its own is not: nothing weighs it, so
         // the copy that rolled it is one no player has a reason to equip,
         // and the roll that produced it was a wasted one.
-        if self.stats.atk <= 0 && self.stats.mitigation <= 0 && self.stats.decompiler <= 0 {
+        if !self.stats.has_upside() {
             return Some("grants no positive stat, so it is a cost with nothing to weigh it");
         }
         if self.slots.as_ref().is_some_and(|s| s.is_empty()) {

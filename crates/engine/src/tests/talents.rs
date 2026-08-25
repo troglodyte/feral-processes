@@ -543,13 +543,20 @@ fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
     let plain = developed(&mut game, absolute_companion_level_cap());
     let baseline = game.world.get::<Stats>(plain).unwrap().power();
 
-    // Every `Stat` node the generic tree offers, taken as deep as its tiers
-    // allow — the most a tree can spend on numbers rather than options.
+    // Every number the generic tree offers, taken as deep as its tiers allow
+    // — the most a tree can spend on numbers rather than options.
+    //
+    // `gen_calibration` is one of those numbers and is deliberately *not* one
+    // of these multiples: `TalentNode::Accuracy` is read on demand and never
+    // reaches `Stats`, so it cannot raise `power()` and so cannot be part of
+    // a sale press however deep a tree stacks it. It is taken here so the
+    // selection is still the greediest one available, not because it moves
+    // the figure.
     let stacked = developed(&mut game, absolute_companion_level_cap());
     for id in [
         "gen_frame",
         "gen_interrupt",
-        "gen_plate",
+        "gen_calibration",
         "gen_damage",
         "gen_boost",
         "gen_deadman",
@@ -572,5 +579,53 @@ fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
     println!(
         "power at cap {} / at ring cap {baseline} / ring cap + full stat tree {developed_power}",
         game.world.get::<Stats>(capped).unwrap().power()
+    );
+}
+
+/// An `Accuracy` node reaches the roll, and does it without touching `Stats`.
+///
+/// Both halves matter. It is read on demand precisely *because* there is no
+/// `Stats` field to bake it into, so a test that only watched `Stats` would
+/// pass against a node that did nothing at all — which is how the read-on-
+/// demand kinds fail.
+#[test]
+fn an_accuracy_talent_reaches_the_roll_without_touching_stats() {
+    let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = developed(&mut game, absolute_companion_level_cap());
+    let target = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
+    let swing = crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0));
+
+    let odds = |g: &Game| {
+        let a = g.combatant_profile(pet, swing);
+        let d = g.combatant_profile(target, crate::battle::Swing::default());
+        crate::battle::hit_chance(a.accuracy, d.evasion)
+    };
+    let snapshot = |g: &Game| {
+        let s = g.world.get::<Stats>(pet).unwrap();
+        (s.hp, s.max_hp, s.atk, s.mitigation)
+    };
+
+    // Tiers are taken in order, so the two rungs above it are spent first —
+    // and the baseline is read *after* them, or `gen_frame` (a `Stat` node)
+    // would be inside the delta this test attributes to the accuracy node.
+    for id in ["gen_frame", "gen_interrupt"] {
+        game.take_talent(pet, &TalentId::from(id)).unwrap();
+    }
+    let before_odds = odds(&game);
+    let before_stats = snapshot(&game);
+
+    game.take_talent(pet, &TalentId::from("gen_calibration"))
+        .unwrap();
+
+    assert!(
+        odds(&game) > before_odds,
+        "the node has to move the odds: {} is not above {before_odds}",
+        odds(&game)
+    );
+    assert_eq!(
+        snapshot(&game),
+        before_stats,
+        "Accuracy has no `Stats` field, so nothing there may move — a node that \
+         baked one would be re-applied on every load"
     );
 }

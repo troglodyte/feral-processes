@@ -64,18 +64,71 @@ impl Game {
         }
     }
 
-    /// `entity`'s side of an attack roll, with `range` as the band it swings
-    /// for.
+    /// Every flat Accuracy source `entity` carries, summed — what
+    /// `battle::accuracy_of` takes on top of speed and level.
+    ///
+    /// **The one place those sources meet**, which is why `Perk::TargetLock`
+    /// is read here rather than at the roll: a perk's hook belongs where its
+    /// sources meet, the same reason `Obfuscation` sits inside `raise_trace`
+    /// rather than at the six things that raise Trace. A hook that has to be
+    /// repeated is the signal the perk is aimed at the wrong seam.
+    ///
+    /// Perks are the player's axis and never a companion's, checked by
+    /// identity against `player_entity()` rather than by which components
+    /// `entity` happens to carry — `ability_affinity`'s rule, so the
+    /// no-stacking property holds by construction.
+    ///
+    /// `Swing::accuracy` is deliberately **not** here. This is what `entity`
+    /// brings to every swing it makes; a routine's own accuracy belongs to
+    /// the invocation and is added once, at `combatant_profile`.
+    pub(crate) fn accuracy_bonus(&self, entity: Entity) -> i32 {
+        let gear = self.gear_bonus(entity).accuracy;
+        if entity == self.player_entity() {
+            return gear
+                + crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL
+                    * self.player_perk_level(crate::perks::Perk::TargetLock) as i32;
+        }
+        gear + self.talent_accuracy(entity)
+    }
+
+    /// The sum of every `TalentNode::Accuracy` `entity` has taken — 0 when it
+    /// has none, so the arm above is one expression either way.
+    ///
+    /// The shape `talent_affinity_mult` already has, and read on demand for
+    /// the same reason: Accuracy has no `Stats` field to bake into.
+    fn talent_accuracy(&self, entity: Entity) -> i32 {
+        let Some(taken) = self.world.get::<Talents>(entity) else {
+            return 0;
+        };
+        let Some(tree) = self.talent_tree(entity) else {
+            return 0;
+        };
+        tree.tiers
+            .iter()
+            .flat_map(|tier| tier.0.iter())
+            .filter(|choice| taken.0.contains(&choice.id))
+            .filter_map(|choice| match &choice.node {
+                crate::talents::TalentNode::Accuracy { points } => Some(*points),
+                _ => None,
+            })
+            .sum()
+    }
+
+    /// `entity`'s side of an attack roll, making `swing`.
     ///
     /// **The one place accuracy and evasion are resolved from the ECS**, so
     /// the four creature-versus-creature call sites cannot each derive them
     /// differently. `species_base_speed` already has a player arm; gear
     /// accuracy and evasion are read live off `gear_bonus` because, unlike
     /// `atk` and `mitigation`, neither is baked into `Stats`.
+    ///
+    /// `swing.accuracy` is added on top: it belongs to the invocation rather
+    /// than to `entity`, so it must not reach `evasion` and must not persist
+    /// past this one roll.
     pub(crate) fn combatant_profile(
         &self,
         entity: Entity,
-        range: battle::DamageRange,
+        swing: battle::Swing,
     ) -> battle::Combatant {
         let gear = self.gear_bonus(entity);
         let level = self.ability_user_level(entity);
@@ -96,10 +149,14 @@ impl Game {
             evasion
         };
         battle::Combatant {
-            accuracy: battle::accuracy_of(speed, level, gear.accuracy),
+            accuracy: battle::accuracy_of(
+                speed,
+                level,
+                self.accuracy_bonus(entity) + swing.accuracy,
+            ),
             evasion,
             atk: self.effective_atk(entity),
-            range,
+            range: swing.range,
         }
     }
 
@@ -158,12 +215,17 @@ impl Game {
         &mut self,
         attacker: Entity,
         defender: Entity,
-        range: battle::DamageRange,
+        swing: battle::Swing,
     ) -> battle::AttackOutcome {
-        let attacker_profile = self.combatant_profile(attacker, range);
+        let attacker_profile = self.combatant_profile(attacker, swing);
         // The defender's own band, so an Opening rung's riposte — rolled
         // inside `resolve_attack` — deals real damage rather than zero.
-        let defender_profile = self.combatant_profile(defender, self.natural_range_of(defender));
+        // `plain`, not `swing`: an aimed routine aims the attacker's swing,
+        // and handing its accuracy to the riposte would aim the counter too.
+        let defender_profile = self.combatant_profile(
+            defender,
+            battle::Swing::plain(self.natural_range_of(defender)),
+        );
         let outcome = {
             let mut rng = self.world.resource_mut::<GameRng>();
             battle::resolve_attack(attacker_profile, defender_profile, &mut rng.0)

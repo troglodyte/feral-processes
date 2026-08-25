@@ -5,5 +5,6 @@
     target: AllEnemies,
     effect: Damage(power: 25, spread: 6),
     cooldown: 4,
+    accuracy: 2,
     power_cost: 15.0,
 )

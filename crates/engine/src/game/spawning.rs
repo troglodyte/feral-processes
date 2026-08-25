@@ -7,7 +7,7 @@ use crate::tuning::{
     BOSS_SPAWN_CHANCE, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX,
     NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, OPENING_RING_TILES,
     PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
-    chunk_wild_population,
+    ZONE_ONE_GROUP_CAP, chunk_wild_population,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
@@ -26,9 +26,11 @@ use crate::*;
 /// `zone_group_cap` is a balance bound on how big any fight in a zone can
 /// get, and a meter the player runs up themselves should not vault it.
 ///
-/// That is also where the lever's zone-1 inertness comes from rather than
-/// being a special case: `zone_group_cap(1)` is 1, so the clamp pins every
-/// group to a single member whatever Trace says.
+/// The lever used to be inert in zone 1 for that reason rather than as a
+/// special case — `zone_group_cap(1)` was 1, so the clamp pinned every group
+/// to a single member whatever Trace said. `ZONE_ONE_GROUP_CAP` lifted that
+/// floor and the clamp still does exactly what it did; there is simply room
+/// under it now.
 pub(crate) fn trace_group_ceiling(base: u32, group_mult: u32, cap: u32) -> u32 {
     base.saturating_mul(group_mult).clamp(1, cap.max(1))
 }
@@ -69,15 +71,19 @@ impl SpawnEscalation {
     }
 }
 
-/// The zone's ceiling on one species group: zone 1 is solo, every level
-/// after adds `ZONE_GROUP_STEP`, and `MAX_GROUP_SIZE` is the hard stop.
-/// Saturating arithmetic because zones are unbounded — the clamp is the
-/// intent, an overflow partway to it is not.
+/// The zone's ceiling on one species group: `ZONE_ONE_GROUP_CAP` at zone 1,
+/// every level after adds `ZONE_GROUP_STEP`, and `MAX_GROUP_SIZE` is the
+/// hard stop. Saturating arithmetic because zones are unbounded — the clamp
+/// is the intent, an overflow partway to it is not.
+///
+/// The zone-1 floor is applied as the clamp's lower bound rather than as the
+/// curve's base, so it lifts zone 1 alone: zone 2 already sits at 10 and
+/// every later step is untouched.
 pub(crate) fn zone_group_cap(zone: u32) -> u32 {
     ZONE_GROUP_STEP
         .saturating_mul(zone.saturating_sub(1))
         .saturating_add(1)
-        .clamp(1, MAX_GROUP_SIZE)
+        .clamp(ZONE_ONE_GROUP_CAP, MAX_GROUP_SIZE)
 }
 
 /// How far a group of `n` scatters when it spawns, and how far `gather_pack`

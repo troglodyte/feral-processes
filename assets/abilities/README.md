@@ -295,6 +295,33 @@ way deleting the Currency item does.
     // battle ends and are never saved.
     cooldown: 2,
 
+    // Optional; **defaults to 0**. Flat Accuracy this routine adds to its
+    // invoker's own, for the roll it makes and for nothing else.
+    //
+    // Read **only** by the two effects that roll to hit, `Damage` and
+    // `Drain`. Every other effect lands without a roll, so authoring this on
+    // one is a number nothing reads — a census refuses that in the shipped
+    // roster, and a mod authoring it there is writing a no-op.
+    //
+    // A routine is *aimed* and a basic attack is not: a Special has already
+    // spent its Power and armed its cooldown by the time the roll happens,
+    // so it should not be exactly as likely to whiff as a free swing. The
+    // shipped roster grades it by how narrow the routine is — 6 for a single
+    // front target, 4 for a whole group, 2 for every hostile on the field —
+    // so a sweep trades odds for reach rather than being strictly better.
+    //
+    // **Flat, and not scaled by level**, unlike every magnitude beside it.
+    // A hostile's Evasion grows with the *zone* while the invoker's Accuracy
+    // grows with their *level*, and a player levels far faster than zones
+    // advance — so to-hit is already a solved problem late and an unsolved
+    // one early. A bonus that scaled would be largest exactly where it is
+    // needed least.
+    //
+    // It aims that one swing and nothing else: it never reaches the
+    // invoker's Evasion, and never the free counter-swing an Opening fumble
+    // rung hands the *defender*.
+    accuracy: 6,
+
     // Optional; **defaults to 0.0**. Power spent to run this routine, by
     // whoever runs it — the invoker pays, so a companion's Special draws on
     // the companion's own reserve rather than the player's.

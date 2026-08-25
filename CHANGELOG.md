@@ -27,6 +27,90 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.25
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Routines miss less, and accuracy is something you can buy.
+
+### Fixed
+
+- **An even matchup no longer means half your swings whiff.**
+  `battle::hit_chance` returned exactly 0.5 for two identical combatants, and
+  that was the whole of "routines miss too often". Measured against the
+  shipped roster with the real functions, a player carrying no accuracy gear
+  sat between 0.44 and 0.64 for the first ten levels — and both apex species,
+  the ones that guard a Stack lair, are the fastest things in the game and so
+  the hardest to hit at every level.
+
+  A routine and a basic attack have always shared one resolution path, so the
+  rate was never routine-specific. What is specific is the *cost*: a basic
+  attack shrugs a miss off, while a routine has already spent its Power and
+  armed its cooldown by the time the roll happens. Thirteen of the twenty-five
+  damaging routines are multi-target with an independent roll for each
+  recipient, so a single sweep at 55% printed two or three "goes wide" lines
+  in a row.
+
+  The attacker's Accuracy is now multiplied by `ATTACKER_ACCURACY_ADVANTAGE`
+  before the ratio, putting an even matchup at 0.583. A multiplier rather than
+  a flat bonus, because the ratio form is scale-free and has to stay that way
+  — a flat `+n` would wash out as levels grow. It is necessarily symmetric,
+  since the function takes two numbers and cannot know which side is the
+  player; hostiles come off the hit-chance floor a high-level player had
+  pinned them to.
+
+- **An affix that paid only Accuracy, only Evasion or only a damage band was
+  refused at load as granting nothing.** Both emptiness checks in
+  `AffixDef::fault` enumerated three of `EquipmentStats`' six fields, so the
+  accuracy axis could only ever ride along on an ATK affix — which is part of
+  why it stayed on three weapons for as long as it did. Both now destructure
+  the whole struct, so a seventh stat is a compile error rather than a field
+  silently uncounted.
+
+### Added
+
+- **Routines are aimed.** A new `accuracy` key on an ability file adds flat
+  Accuracy to the roll that routine makes, and to nothing else. The shipped
+  roster grades it by how narrow the routine is — 6 for a single target, 4
+  for a whole group, 2 for every hostile on the field — so a sweep trades
+  odds for reach rather than being strictly better than an aimed shot. Flat
+  and unscaled on purpose: a hostile's Evasion grows with the zone while
+  yours grows with your level, so aim is a problem early and solves itself
+  late.
+
+- **Target Lock**, an eighteenth perk. +2 Accuracy per level on every attack
+  you make, for 3 Perk Points, under the Combat heading.
+
+- **An Accuracy talent node**, the fifth kind a tree may offer, one per class
+  ladder and one in the generic tree. Companions get the axis through their
+  tree exactly as the player gets it through a perk, and the two never stack.
+
+- **Two accuracy affixes**, `Zeroed` (Weapon) and `of Direct Access` (Weapon
+  and Module) — the latter the only one reaching a Module, so the axis is
+  buyable by a program already carrying the weapon it wants.
+
+### Changed
+
+- **Eleven of thirteen weapons now author Accuracy**, up from three. The two
+  heaviest author none, so the axis is a trade rather than a free line on
+  everything.
+
+- **A zone-1 group is no longer a single program.** `zone_group_cap(1)` was 1,
+  which made the balance suite's zone-1 fixture a five-against-one fight
+  rather than the body ratio the rest of the curve is about.
+  `ZONE_ONE_GROUP_CAP` is a floor under the curve, so zone 1 lifts and no
+  later zone's step moves. It also ends the Trace group lever's zone-1
+  inertness, which was always a consequence of the old cap rather than an
+  intent.
+
+### Documentation
+
+- `docs/seams.md` records why the parity baseline is no longer 0.5, and gains
+  an entry for the two accuracy doors — what an *entity* brings to every
+  swing against what one *invocation* brings.
+- `docs/items.md` had never shown Accuracy or Evasion at all: `shiv_routine`
+  read "atk+1" while carrying +3 Accuracy. Ten rows corrected.
+
 ## 0.13.24
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

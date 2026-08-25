@@ -327,8 +327,11 @@ impl Game {
             // bracing covers the whole round rather than only what happens
             // after this member's place in the initiative order.
             BattleAction::Defend => {}
+            // The acting member drinks it: a companion's Special is priced
+            // against its *own* reserve, so a cell that always charged the
+            // player left a companion no way to refill mid-fight.
             BattleAction::UseItem { item } => {
-                self.consume_item(&item);
+                self.consume_item(entity, &item);
             }
         }
     }

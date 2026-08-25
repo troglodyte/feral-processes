@@ -608,18 +608,29 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        if self.consume_item(id) {
+        if self.consume_item(self.player_entity(), id) {
             self.tick();
         }
     }
 
-    /// Spends one `id` and applies its consume effect to the player,
-    /// *without* advancing the clock. Shared by the map's `use_item` and the
-    /// battle's `BattleAction::UseItem`, which tick on their own schedules —
-    /// a round already ticks once at the end of `battle_resolve_round`, so
-    /// an item used mid-round must not tick a second time. Returns whether
-    /// an item was actually consumed.
-    pub(crate) fn consume_item(&mut self, id: &ItemId) -> bool {
+    /// Spends one `id` and applies its consume effect to `who`, *without*
+    /// advancing the clock. Shared by the map's `use_item` and the battle's
+    /// `BattleAction::UseItem`, which tick on their own schedules — a round
+    /// already ticks once at the end of `battle_resolve_round`, so an item
+    /// used mid-round must not tick a second time. Returns whether an item
+    /// was actually consumed.
+    ///
+    /// **The pack is always the player's and the effect is always `who`'s.**
+    /// `Inventory` lives on the player alone and is the party's one shared
+    /// kit, so a companion spending its round on a Power Cell draws from the
+    /// same stack the player would — but the charge lands on the companion's
+    /// own `PowerReserve`, which is the reserve its Specials are priced
+    /// against (`combat_round.rs`'s `spend_power(entity, ..)`).
+    ///
+    /// A missing `PowerReserve` or `Stats` is a no-op rather than a panic,
+    /// matching `spend_power`'s asymmetry: nothing outside the roster reaches
+    /// here, and a hostile that somehow did should not crash the run.
+    pub(crate) fn consume_item(&mut self, who: Entity, id: &ItemId) -> bool {
         let Some(effect) = self
             .world
             .resource::<ItemDb>()
@@ -640,18 +651,18 @@ impl Game {
             self.log(format!("You have no {}.", self.item_name(id)));
             return false;
         }
-        {
-            let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
+        if let Some(mut needs) = self.world.get_mut::<PowerReserve>(who) {
             needs.restore(effect.power);
         }
-        if effect.heal != 0 {
-            let mut stats = self.world.get_mut::<Stats>(player).unwrap();
+        if effect.heal != 0
+            && let Some(mut stats) = self.world.get_mut::<Stats>(who)
+        {
             stats.hp = (stats.hp + effect.heal).min(stats.max_hp);
         }
         let name = self.item_name(id).to_string();
         if let Some(buff) = effect.prebattle_buff {
             self.arm_field_buff(
-                player,
+                who,
                 ActiveFieldBuff {
                     kind: buff.kind,
                     name: name.clone(),
@@ -666,7 +677,12 @@ impl Game {
                 },
             );
         }
-        self.log(format!("You use a {name}."));
+        if who == player {
+            self.log(format!("You use a {name}."));
+        } else {
+            let label = self.creature_label(who);
+            self.log(format!("{label} uses a {name}."));
+        }
         true
     }
 

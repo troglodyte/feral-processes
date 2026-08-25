@@ -226,6 +226,12 @@ pub(super) fn companion_uses_special(
     ability: usize,
     target: battle::SpecialTarget,
 ) {
+    companion_acts(game, companion, BattleAction::Special { ability, target });
+}
+
+/// Resolves a round in which `companion` takes `action` and everyone else
+/// braces. A no-op if `companion` is not in the party.
+pub(super) fn companion_acts(game: &mut Game, companion: Entity, action: BattleAction) {
     let slot = game
         .world
         .resource::<Party>()
@@ -242,12 +248,12 @@ pub(super) fn companion_uses_special(
         .map(|b| b.planned.len())
         .unwrap_or(0);
     for other in 0..slots {
-        let action = if other == slot {
-            BattleAction::Special { ability, target }
+        let planned = if other == slot {
+            action.clone()
         } else {
             BattleAction::Defend
         };
-        let _ = game.battle_set_action(other, action);
+        let _ = game.battle_set_action(other, planned);
     }
     game.battle_resolve_round();
 }

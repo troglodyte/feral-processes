@@ -200,3 +200,29 @@ fn inspect_on_a_programs_slot_row_reads_what_that_program_wears() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::CompanionEquip);
 }
+
+/// The rating rides the **view**, not a second `Game::copy_power` call in
+/// the renderer. `GearDetailView`'s promise is that the page is one call,
+/// and a renderer reaching past it for one figure is how each of the four
+/// hand-rolled `copy_bonus` chains started.
+///
+/// And it is the **absolute** figure, not one measured for the wearer: the
+/// same copy inspected from a program's slots rates exactly what it rates
+/// from the player's cargo, which is what makes one number mean one thing on
+/// every screen.
+#[test]
+fn the_inspect_view_carries_the_copys_absolute_rating() {
+    let mut app = app_with_companions_and_cargo(945, 1, &[("shim_blade", 1)]);
+    let game = app.game.as_mut().unwrap();
+    let copy = feral_processes_engine::items::GearCopy::plain("shim_blade".into());
+    let program = game.owned_pets()[0].entity;
+
+    let rated = game.copy_power(&copy).expect("a weapon is rated");
+    for wearer in [game.player_entity(), program] {
+        let worn = game
+            .gear_detail(&copy, wearer)
+            .worn
+            .expect("a weapon has a slot");
+        assert_eq!(worn.power, Some(rated));
+    }
+}

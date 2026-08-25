@@ -29,7 +29,7 @@ type Basket = Vec<(ItemId, u32)>;
 /// rounded down, a gap of one gives a step of zero and the key goes dead
 /// with the row neither full nor empty. Generalised over the sign so each
 /// modifier pair points at the end its unmodified arrow heads for.
-fn half_way_to(n: i64, target: i64) -> i64 {
+pub(crate) fn half_way_to(n: i64, target: i64) -> i64 {
     let gap = target - n;
     n + gap.signum() * gap.unsigned_abs().div_ceil(2) as i64
 }

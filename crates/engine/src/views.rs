@@ -188,6 +188,32 @@ pub struct GearDetailView {
     pub grant: Option<RoutineDetailView>,
 }
 
+/// One gear copy's combat rating, and the four axes it came off.
+///
+/// **Absolute** — every copy is priced against the same reference wearer
+/// (`tuning`'s power reference block), which is what lets one figure mean
+/// the same thing on the inventory list, a trader's shelf and the swap
+/// picker. `Game::copy_power` is the one derivation.
+///
+/// `total` is the sum of the other four. It is carried rather than left for
+/// a caller to add up, because the two proportional axes are rounded once
+/// here and a caller summing rounded parts would print a total that does not
+/// match the column.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ItemPower {
+    pub total: i32,
+    /// Attack, plus what the copy's damage band is worth **against** the
+    /// band it replaces — negative for a weapon worse than bare fists.
+    pub offense: i32,
+    /// What the copy's mitigation buys, in effective HP.
+    pub survivability: i32,
+    /// What the copy's Accuracy is worth as a fraction of the throughput it
+    /// multiplies. Never the raw stat: a probability is not a quantity.
+    pub accuracy: i32,
+    /// ...and the same for Evasion, against the soak it protects.
+    pub evasion: i32,
+}
+
 /// What a copy is worth in its slot, and what it does for the wearer's
 /// chance of landing a swing.
 pub struct WornDetailView {
@@ -206,6 +232,18 @@ pub struct WornDetailView {
     /// consumable's page has nothing to state rather than a defaulted 100.
     pub quality: u8,
     pub stats: crate::items::EquipmentStats,
+    /// What this copy is worth in combat, absolutely — `Game::copy_power`.
+    ///
+    /// Carried on the view rather than left to the renderer to call for
+    /// itself, for `quality`'s reason: `GearDetailView`'s promise is that
+    /// the page is one call, and a renderer reaching past it for one figure
+    /// is how each of the four hand-rolled `copy_bonus` chains started.
+    ///
+    /// `None` where the copy has no combat axis at all — a Decompiler
+    /// module. Priced against the reference wearer and **not** at
+    /// `level` above, so the figure on this page is the figure on the row
+    /// that opened it.
+    pub power: Option<ItemPower>,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you
     /// are wearing reports the accuracy you actually have.

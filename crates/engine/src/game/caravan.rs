@@ -179,6 +179,12 @@ impl Game {
 /// `FrameSpec::salted`'s doc — not a second seed source.
 const SHELF_SALT: u64 = 0x5_4E1F;
 
+/// Where the two non-item offer kinds sort, past every `ItemCategory`.
+///
+/// Derived from the enum rather than written as a literal 6, so a seventh
+/// category cannot silently land on top of the Routine Disks run.
+const CARAVAN_ROUTINE_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
+
 /// One shelf row's identity, drawn but not yet rolled.
 ///
 /// **Not a second `views::CaravanOfferKind`**: that names a finished, priced
@@ -387,6 +393,36 @@ impl Game {
                 self.caravan_row(index, kind, qty)
             })
             .collect()
+    }
+
+    /// Which run of the wagon's shelf an offer belongs in, and the heading
+    /// that run is drawn under.
+    ///
+    /// **Rank and heading come back together** so the sort and the header
+    /// cannot disagree about where a run starts — a heading drawn a row
+    /// early or late is worse than no heading at all.
+    ///
+    /// **Exhaustive on the kind**, `cell_mark`'s rule: as a `_ =>` arm a
+    /// fifth `CaravanOfferKind` would ship into an unlabelled run and
+    /// nothing would fail to compile. Two of the four kinds are not items
+    /// and so have no `ItemCategory` to head under; the two that are share
+    /// `ItemCategory`'s own declaration order, which is what the player's
+    /// cargo is already sorted by (`Game::category_sort_key`), so the two
+    /// lists on this screen run in the same order.
+    pub fn caravan_group(&self, kind: &views::CaravanOfferKind) -> (u8, &'static str) {
+        let of_item = |item: &ItemId| {
+            let category = self.item_category(item);
+            (category as u8, category.heading())
+        };
+        match kind {
+            views::CaravanOfferKind::Gear(copy) => of_item(&copy.item),
+            views::CaravanOfferKind::Material(item) => of_item(item),
+            // Past every `ItemCategory`, and in the order the shelf offers
+            // them. Neither is cargo, so neither can borrow a category's
+            // rank without colliding with a real one.
+            views::CaravanOfferKind::Routine(_) => (CARAVAN_ROUTINE_RANK, "Routine Disks"),
+            views::CaravanOfferKind::Program(_) => (CARAVAN_ROUTINE_RANK + 1, "Programs"),
+        }
     }
 
     /// The items a caravan may stock, id-sorted, filtered by `keep`.
@@ -1014,11 +1050,24 @@ impl Game {
             .get::<Inventory>(self.player_entity())
             .map(|inv| inv.count(&currency))
             .unwrap_or(0);
-        let offers = self
+        let mut offers: Vec<views::CaravanOffer> = self
             .caravan_shelf(&visit)
             .into_iter()
             .filter(|offer| !spent.contains(&offer.index))
             .collect();
+        // Grouped for the eye, here and not in `caravan_shelf`: the deal is
+        // a round-robin across the three equipment slots and which slot it
+        // leads with rotates per visit, so sorting the shelf itself would
+        // make that rotation unobservable and every wagon would open with a
+        // weapon. What the shelf *is* stays the deal; what the screen shows
+        // is grouped.
+        //
+        // Sorting moves rows on screen and must move no shelf identity:
+        // `index` is handed out by `caravan_shelf`'s `enumerate`,
+        // `CaravanMemory` keys on it and `buy_caravan_offer` resolves by
+        // `find(|o| o.index == index)`, so both are blind to this. It is the
+        // tiebreak too, so the order stays total.
+        offers.sort_by_key(|offer| (self.caravan_group(&offer.kind).0, offer.index));
         Some(views::CaravanView {
             trader: def.name,
             description: def.description,
@@ -1127,11 +1176,53 @@ impl Game {
             return Err(format!("Not enough {money} (need {price})."));
         }
 
-        // Everything below is infallible bar the roster check, which is the
-        // one refusal that cannot be asked earlier without duplicating the
-        // match — so it sits at the very top of its own arm, still above the
-        // charge at the bottom.
-        let delivered = match &offer.kind {
+        self.refuse_caravan_delivery(&offer, self.roster_room())?;
+        let delivered = self.deliver_caravan_offer(&offer);
+        self.charge_for_caravan_offer(&offer, price, &money, delivered);
+        self.tick();
+        Ok(())
+    }
+
+    /// How many programs the roster has room for. Split out because a basket
+    /// has to test its Program rows *together* — one at a time each of two
+    /// would pass against a roster with one slot left.
+    fn roster_room(&self) -> usize {
+        self.pet_capacity().saturating_sub(self.pet_count())
+    }
+
+    /// Everything that can refuse a purchase once its price is settled,
+    /// asked with **no side effect at all**, so a basket can ask it of every
+    /// row before the first one moves.
+    ///
+    /// `room` is how many programs may still be adopted, which the caller
+    /// counts down across a basket rather than re-reading per row.
+    fn refuse_caravan_delivery(
+        &self,
+        offer: &views::CaravanOffer,
+        room: usize,
+    ) -> Result<(), String> {
+        let views::CaravanOfferKind::Program(species) = &offer.kind else {
+            return Ok(());
+        };
+        if room == 0 {
+            return Err("Your roster is full.".into());
+        }
+        // Asked here rather than left to `adopt_program`'s `None`, which
+        // lands *after* the goods have started moving. A shelf naming a
+        // species no file defines is a mod problem, and the player has to be
+        // told before the Credits go.
+        if self.world.resource::<SpeciesDb>().get(species).is_none() {
+            return Err("There's nothing left of it to compile.".into());
+        }
+        Ok(())
+    }
+
+    /// Hands the goods over. **Infallible**, because
+    /// `refuse_caravan_delivery` has already asked every question — which is
+    /// what lets a basket deliver several rows knowing none of them can
+    /// strand the rest half-committed.
+    fn deliver_caravan_offer(&mut self, offer: &views::CaravanOffer) -> String {
+        match &offer.kind {
             views::CaravanOfferKind::Gear(copy) => {
                 self.add_copies(copy, offer.qty);
                 format!("{} goes in the pack", self.copy_name(copy))
@@ -1148,29 +1239,40 @@ impl Game {
                 format!("{} × {name} goes in the pack", offer.qty)
             }
             views::CaravanOfferKind::Program(species) => {
-                if self.pet_count() >= self.pet_capacity() {
-                    return Err("Your roster is full.".into());
-                }
                 let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
                 let anchor = self.anchor_position().unwrap_or((0, 0));
-                let program = self
-                    .adopt_program(species, anchor.0, anchor.1, mult)
-                    .ok_or_else(|| "There's nothing left of it to compile.".to_string())?;
-                format!("{} is yours", self.creature_label(program))
+                match self.adopt_program(species, anchor.0, anchor.1, mult) {
+                    Some(program) => format!("{} is yours", self.creature_label(program)),
+                    // Unreachable behind `refuse_caravan_delivery`, and a
+                    // no-op rather than a panic: the row is still marked
+                    // spent below, so a mod that breaks here loses one shelf
+                    // slot instead of the run.
+                    None => "nothing comes of it".to_string(),
+                }
             }
-        };
+        }
+    }
 
+    /// Takes the money, spends the shelf slot and says so. The tail of a
+    /// purchase, shared so a basket's rows read exactly as a single buy's do.
+    fn charge_for_caravan_offer(
+        &mut self,
+        offer: &views::CaravanOffer,
+        price: u32,
+        money: &str,
+        delivered: String,
+    ) {
+        let player = self.player_entity();
+        let currency = self.trade_currency();
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(currency, price);
-        self.spend_caravan_row(index);
+        self.spend_caravan_row(offer.index);
         self.log_kind(
             MessageKind::Outcome,
             format!("{price} {money}, and {delivered}."),
         );
-        self.tick();
-        Ok(())
     }
 
     /// Records that this visit's row `index` is gone, under the visit the
@@ -1198,13 +1300,29 @@ impl Game {
     /// that it rolls away. `BuybackLedger` is untouched, which is what a test
     /// asserts on rather than on a screen.
     pub fn sell_to_caravan(&mut self, copy: GearCopy, qty: u32) -> Result<(), String> {
-        let item = copy.item.clone();
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
         if self.caravan_reach() != CaravanReach::AtCaravan {
             return Err("There's nobody buying anything here.".into());
         }
+        let taken = self.refuse_caravan_sale(&copy, qty)?;
+        self.apply_caravan_sale(&copy, taken);
+        self.tick();
+        Ok(())
+    }
+
+    /// Everything that can refuse one sale, and **how many would actually
+    /// leave the pack** — an over-ask is clamped to what is held rather than
+    /// refused, which is `transfer_items`' rule and the reason this returns a
+    /// count rather than `()`.
+    ///
+    /// No side effect, so a basket can ask it of every row before the first
+    /// one moves. The reach and the battle are the caller's to check: they
+    /// are facts about the visit rather than about the row, and asking them
+    /// once per row would put the same refusal on the screen five times.
+    fn refuse_caravan_sale(&mut self, copy: &GearCopy, qty: u32) -> Result<u32, String> {
+        let item = copy.item.clone();
         if qty == 0 {
             return Err("Sell at least 1.".into());
         }
@@ -1216,15 +1334,22 @@ impl Game {
         if self.is_banked(&item) {
             return Err(format!("{} can't be traded.", self.item_name(&item)));
         }
-        let have = self.count_copies(&copy);
+        let have = self.count_copies(copy);
         if have == 0 {
             return Err(format!("You don't have any {}.", self.item_name(&item)));
         }
-        let taken = have.min(qty);
-        let payout = self.caravan_sell_price(&item) * taken;
-        let name = self.item_name(&item).to_string();
+        Ok(have.min(qty))
+    }
+
+    /// The sale itself — infallible behind `refuse_caravan_sale`, and silent
+    /// about the turn so a basket spends one tick for the whole visit rather
+    /// than one per line. Returns what it paid.
+    fn apply_caravan_sale(&mut self, copy: &GearCopy, taken: u32) -> u32 {
+        let currency = self.trade_currency();
+        let payout = self.caravan_sell_price(&copy.item) * taken;
+        let name = self.item_name(&copy.item).to_string();
         let money = self.item_name(&currency).to_string();
-        self.take_copies(&copy, taken);
+        self.take_copies(copy, taken);
         self.world
             .get_mut::<Inventory>(self.player_entity())
             .unwrap()
@@ -1232,7 +1357,111 @@ impl Game {
         self.log(format!(
             "You sell {taken} {name} for {payout} {money}. It goes onto the wagon and out of the sector."
         ));
+        payout
+    }
+
+    /// Commits a whole basket at the visiting caravan: `sells` first, then
+    /// the shelf rows named by `buys`.
+    ///
+    /// `buys` are **shelf indices** (`views::CaravanOffer::index`), never row
+    /// positions — the screen sorts its rows for the eye and the shelf's
+    /// identity must not move with them.
+    ///
+    /// **Two ordering rules, and they are the whole of why this function
+    /// exists.**
+    ///
+    /// *Every refusal lands before anything is spent.* `buy_caravan_offer`
+    /// already holds this and says why: a purchase that took the Credits and
+    /// then failed is the one bug the player cannot undo, and a caravan has
+    /// no buyback to put it right with. A basket makes that stricter rather
+    /// than looser — a half-committed basket is the same bug wearing a
+    /// bigger coat.
+    ///
+    /// *Sells land before buys.* `transfer_items`' take-before-give rule, and
+    /// here it is what lets a basket be funded by its own sales — the entire
+    /// reason the two sections are one basket. The other way round the buy is
+    /// refused for want of money the player is in the middle of making.
+    ///
+    /// **One tick for the whole commit**, not one per line: the basket is the
+    /// visit. The tick spent may be the one the trader leaves on, and
+    /// `close_if_gone` still runs after it.
+    pub fn commit_caravan_basket(
+        &mut self,
+        sells: Vec<(GearCopy, u32)>,
+        buys: Vec<usize>,
+    ) -> Result<String, String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if self.caravan_reach() != CaravanReach::AtCaravan {
+            return Err("There's nobody trading here.".into());
+        }
+        if sells.is_empty() && buys.is_empty() {
+            return Err("Nothing in the basket.".into());
+        }
+
+        // ---- every question, before anything moves ----
+        let mut planned_sells = Vec::new();
+        let mut proceeds = 0u32;
+        for (copy, qty) in sells {
+            let taken = self.refuse_caravan_sale(&copy, qty)?;
+            proceeds += self.caravan_sell_price(&copy.item) * taken;
+            planned_sells.push((copy, taken));
+        }
+
+        let offers = self
+            .caravan_view()
+            .ok_or_else(|| "There's nobody selling anything here.".to_string())?
+            .offers;
+        let mut planned_buys = Vec::new();
+        let mut cost = 0u32;
+        let mut room = self.roster_room();
+        for index in buys {
+            let offer = offers
+                .iter()
+                .find(|o| o.index == index)
+                .cloned()
+                .ok_or_else(|| "That's not on the wagon.".to_string())?;
+            // Counted down across the basket, not re-read per row: two
+            // programs asked one at a time would both pass against a roster
+            // with one slot left.
+            self.refuse_caravan_delivery(&offer, room)?;
+            if matches!(offer.kind, views::CaravanOfferKind::Program(_)) {
+                room -= 1;
+            }
+            cost += offer.unit_cost * offer.qty;
+            planned_buys.push(offer);
+        }
+
+        let currency = self.trade_currency();
+        let money = self.item_name(&currency).to_string();
+        let held = self
+            .world
+            .get::<Inventory>(self.player_entity())
+            .map(|inv| inv.count(&currency))
+            .unwrap_or(0);
+        // The sales are counted **in**, which is the funding rule stated as
+        // arithmetic: a basket may spend money it is about to make.
+        if held + proceeds < cost {
+            return Err(format!("Not enough {money} (need {cost})."));
+        }
+
+        // ---- nothing below may refuse ----
+        let sold = planned_sells.len();
+        for (copy, taken) in planned_sells {
+            self.apply_caravan_sale(&copy, taken);
+        }
+        let bought = planned_buys.len();
+        for offer in planned_buys {
+            let price = offer.unit_cost * offer.qty;
+            let delivered = self.deliver_caravan_offer(&offer);
+            self.charge_for_caravan_offer(&offer, price, &money, delivered);
+        }
         self.tick();
-        Ok(())
+        Ok(match (sold, bought) {
+            (0, b) => format!("Bought {b}."),
+            (s, 0) => format!("Sold {s}."),
+            (s, b) => format!("Sold {s}, bought {b}."),
+        })
     }
 }

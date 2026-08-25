@@ -1789,3 +1789,241 @@ fn a_standout_row_is_likelier_to_be_rare_without_always_being_rare() {
         "every standout row was rare, so the tier is being assigned rather than rolled"
     );
 }
+
+/// The wagon's offers come off the roll shuffled by construction — the draw
+/// re-reads its weights per row, so a weapon, a program and a second weapon
+/// is the normal shape. Grouped, each kind is one contiguous run.
+#[test]
+fn the_wagons_offers_come_back_grouped_by_kind() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+
+    let offers = game.caravan_view().unwrap().offers;
+    assert!(offers.len() > 3, "a wagon with no shelf proves nothing");
+    let ranks: Vec<u8> = offers
+        .iter()
+        .map(|o| game.caravan_group(&o.kind).0)
+        .collect();
+    let mut sorted = ranks.clone();
+    sorted.sort_unstable();
+    assert_eq!(
+        ranks, sorted,
+        "each kind must be one contiguous run: {ranks:?}"
+    );
+
+    // ...and the run the roll actually produced is *not* that order, or the
+    // grouping is passing against no fix at all.
+    let visit = caravan_of(&mut game).unwrap().visit;
+    let dealt: Vec<u8> = shelf(&mut game, visit)
+        .iter()
+        .map(|o| game.caravan_group(&o.kind).0)
+        .collect();
+    assert_ne!(
+        dealt, sorted,
+        "the deal was already sorted, so this fixture cannot see the grouping"
+    );
+}
+
+/// Sorting moves rows on screen and must move no shelf identity. `index` is
+/// handed out before the sort, `CaravanMemory` keys on it and
+/// `buy_caravan_offer` resolves by it — so buying the row drawn *last* buys
+/// the slot it names, not the slot that happens to sit at that position.
+#[test]
+fn buying_the_last_drawn_row_buys_the_slot_it_names() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 1_000_000);
+
+    let offers = game.caravan_view().unwrap().offers;
+    let last = offers.last().unwrap().clone();
+    assert_ne!(
+        last.index,
+        offers.len() - 1,
+        "the sorted order must differ from the dealt order here, or the test \
+         passes against no fix at all"
+    );
+
+    game.buy_caravan_offer(last.index).unwrap();
+
+    assert!(
+        game.world
+            .resource::<CaravanMemory>()
+            .bought
+            .contains(&last.index),
+        "the shelf slot the row named is what was spent"
+    );
+    assert!(
+        !game
+            .caravan_view()
+            .unwrap()
+            .offers
+            .iter()
+            .any(|o| o.index == last.index),
+        "and it is gone from the wagon"
+    );
+}
+
+/// Stocks the player with enough Core Fragments that selling them covers
+/// `cost`, and returns the sell line that does it.
+fn cargo_worth(game: &mut Game, cost: u32) -> (GearCopy, u32) {
+    let item = crate::ItemId::from(ids::CORE_FRAGMENT);
+    let unit = game
+        .caravan_view()
+        .unwrap()
+        .sells
+        .iter()
+        .find(|row| row.copy.item == item)
+        .map(|row| row.unit_price)
+        .unwrap_or_else(|| {
+            // Nothing of it in the pack yet, so the wagon lists no sell row —
+            // seed one unit and ask again.
+            let player = game.player_entity();
+            game.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .add(item.clone(), 1);
+            let price = game
+                .caravan_view()
+                .unwrap()
+                .sells
+                .iter()
+                .find(|row| row.copy.item == item)
+                .map(|row| row.unit_price)
+                .expect("the wagon prices cargo it will take");
+            game.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), 1);
+            price
+        });
+    assert!(unit > 0, "the fixture needs cargo the wagon will pay for");
+    let qty = cost.div_ceil(unit);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), qty);
+    (GearCopy::plain(item), qty)
+}
+
+/// **The reason the function exists.** The player starts unable to afford
+/// the row and can afford it only out of what the same basket is selling, so
+/// this is red the moment the buys are applied before the sells.
+#[test]
+fn a_basket_is_funded_by_its_own_sales() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+
+    let offer = game.caravan_view().unwrap().offers[0].clone();
+    let price = offer.unit_cost * offer.qty;
+    let sell = cargo_worth(&mut game, price);
+    assert_eq!(
+        credits(&mut game),
+        0,
+        "the player must not be able to pay for this out of pocket"
+    );
+    let proceeds = game
+        .caravan_view()
+        .unwrap()
+        .sells
+        .iter()
+        .find(|row| row.copy == sell.0)
+        .map(|row| row.unit_price * sell.1)
+        .expect("the wagon will take the cargo");
+
+    game.commit_caravan_basket(vec![sell], vec![offer.index])
+        .expect("the sale covers the purchase");
+
+    // **The ledger, not just the outcome.** `Inventory::take` clamps, so a
+    // basket that bought before it sold still delivers the goods — it simply
+    // takes whatever was in the purse (nothing) and the price vanishes. Only
+    // the arithmetic catches that.
+    assert_eq!(
+        credits(&mut game),
+        proceeds - price,
+        "the purchase must have been paid for out of the sale"
+    );
+
+    assert!(
+        !game
+            .caravan_view()
+            .unwrap()
+            .offers
+            .iter()
+            .any(|o| o.index == offer.index),
+        "the row was bought"
+    );
+    assert!(
+        game.world
+            .resource::<CaravanMemory>()
+            .bought
+            .contains(&offer.index),
+        "and its shelf slot is spent"
+    );
+}
+
+/// A basket that cannot be paid for refuses whole: no cargo gone, no Credits
+/// gone, no shelf slot spent. A caravan has no buyback, so a half-committed
+/// basket is the one bug the player cannot undo.
+#[test]
+fn an_unaffordable_basket_spends_nothing() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+
+    let offer = game.caravan_view().unwrap().offers[0].clone();
+    let price = offer.unit_cost * offer.qty;
+    // Cargo worth a fraction of the row, so the sale is real and still short.
+    let (copy, _) = cargo_worth(&mut game, price);
+    let held_before = game.count_copies(&copy);
+    let credits_before = credits(&mut game);
+
+    assert!(
+        game.commit_caravan_basket(vec![(copy.clone(), 1)], vec![offer.index])
+            .is_err(),
+        "one unit of cargo does not cover the row"
+    );
+
+    assert_eq!(game.count_copies(&copy), held_before, "cargo left the pack");
+    assert_eq!(credits(&mut game), credits_before, "Credits moved");
+    assert!(
+        game.world.resource::<CaravanMemory>().bought.is_empty(),
+        "a shelf slot was spent by a refused basket"
+    );
+    assert!(
+        game.caravan_view()
+            .unwrap()
+            .offers
+            .iter()
+            .any(|o| o.index == offer.index),
+        "and the row is still on the wagon"
+    );
+}
+
+/// **The basket is the visit.** One tick whatever the line count, or a wagon
+/// with a long basket charges the player several turns of raid pressure and
+/// need decay for one stop.
+#[test]
+fn a_basket_costs_one_tick_whatever_its_size() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    give_credits(&mut game, 1_000_000);
+
+    let offers = game.caravan_view().unwrap().offers;
+    let many: Vec<usize> = offers.iter().take(3).map(|o| o.index).collect();
+    assert!(many.len() > 1, "the fixture needs more than one row");
+    let (copy, qty) = cargo_worth(&mut game, 1);
+
+    let before = game.current_tick();
+    game.commit_caravan_basket(vec![(copy, qty)], many)
+        .expect("an affordable basket commits");
+    assert_eq!(
+        game.current_tick() - before,
+        1,
+        "a basket spends one turn, not one per line"
+    );
+}

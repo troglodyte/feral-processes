@@ -82,6 +82,9 @@ pub(super) fn draw_inventory(
             Some(w) => text_row(tagged_text(
                 &row_lead(menu_shortcut(0), None),
                 EquipmentSlot::Weapon.short_label(),
+                // A program in the weapon slot is not a copy of gear, so
+                // there is nothing to rate — blank, not an em dash.
+                PowerCell::Blank,
                 &format!(
                     "{} Lv{} (+{} ATK, +{} DEF)",
                     w.name, w.level, w.bonus.0, w.bonus.1
@@ -119,7 +122,7 @@ pub(super) fn draw_inventory(
         rows.push(text_row("(empty)"));
     }
     for (i, row) in status.inventory.iter().enumerate() {
-        let (lead, tag, lines) =
+        let (lead, tag, power, lines) =
             inventory_row_lines(game, menu_shortcut(i + 3), &row.copy, row.qty, status.zone);
         let mut lines = lines.into_iter();
         let head = lines
@@ -130,6 +133,7 @@ pub(super) fn draw_inventory(
             lead,
             tag,
             Some(row.copy.quality),
+            power,
         ));
         // A continuation carries this row's own tail rather than a second kind
         // of information, so it keeps the tier colour. Only the head is ever
@@ -196,17 +200,19 @@ fn inventory_row_lines(
     copy: &GearCopy,
     qty: u32,
     zone: u32,
-) -> (String, &'static str, Vec<String>) {
+) -> (String, &'static str, PowerCell, Vec<String>) {
     let lead = row_lead(shortcut, Some(qty));
     let tag = game.item_category(&copy.item).short_label();
+    let power = PowerCell::of_copy(game, copy);
     let mut lines = wrapped_tagged_lines(
         &lead,
         tag,
+        power,
         &game.copy_name(copy),
         &[equip_preview_tag(game, copy, zone)],
     );
     lines.extend(effect_lines(game, &copy.item));
-    (lead, tag, lines)
+    (lead, tag, power, lines)
 }
 
 /// One slot of an equipment panel: its key, its category column, and what is
@@ -235,11 +241,18 @@ pub(super) fn equipped_row(
     let fusions = equipped.as_ref().map(|e| e.copy.tier).unwrap_or(0);
     let rarity = equipped.as_ref().map(|e| e.copy.rarity).unwrap_or_default();
     let quality = equipped.as_ref().map(|e| e.copy.quality);
+    // An empty slot has nothing to rate, and that is a blank rather than an
+    // em dash: there is no item on the row to have no combat axis.
+    let power = equipped
+        .as_ref()
+        .map(|e| PowerCell::of_copy(game, &e.copy))
+        .unwrap_or(PowerCell::Blank);
     with_tag(
         tier_row(worn_summary(equipped, game), selected, fusions, rarity),
         row_lead(menu_shortcut(index), None),
         slot.short_label(),
         quality,
+        power,
     )
 }
 
@@ -402,7 +415,15 @@ pub(super) fn draw_gear_inspect(
 /// the page a scroll; `the_tallest_gear_page_fits_its_popup` is what says so.
 ///
 /// The storage is deliberately not capped with it — only the drawing.
-const GEAR_AFFIX_ROW_CAP: usize = 3;
+///
+/// **It was 3, and the combat-rating row took the third.** The page had
+/// exactly zero rows of headroom, so the rating had to be paid for out of
+/// something already on it rather than added to it. This is the block with a
+/// cap already, it degrades by *counting* what it cannot draw rather than
+/// dropping it in silence, and the trade-offs it leads with are the lines
+/// that matter — so it is the one block that can lose a row and still say
+/// what it is for.
+const GEAR_AFFIX_ROW_CAP: usize = 2;
 
 /// The page's rows, split out so a height test can count them without a
 /// window — the same split `inventory_row_lines` makes for its width test.
@@ -433,6 +454,41 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
             worn.slot.label(),
             stat_summary(game, worn.stats)
         )));
+        // The same absolute figure the row that opened this page prints,
+        // broken into the axes it came off. Under the stats it prices and
+        // above the quality that scaled them.
+        //
+        // **One row, not one per axis.** A row per axis is what this was
+        // first written as, and `the_tallest_gear_page_fits_its_popup`
+        // refused it — a Crash Handler built a 25-row page into a 23-row
+        // popup at 600px. The page has no scroll, so the census is the only
+        // thing between that and rows dropped in silence.
+        //
+        // An axis that contributed nothing is left out entirely, and a copy
+        // whose whole rating came off one axis says only the total: a
+        // breakdown that repeats the figure above it is a row spent saying
+        // nothing.
+        if let Some(power) = worn.power {
+            let parts: Vec<String> = [
+                ("offense", power.offense),
+                ("survivability", power.survivability),
+                ("accuracy", power.accuracy),
+                ("evasion", power.evasion),
+            ]
+            .into_iter()
+            .filter(|(_, value)| *value != 0)
+            .map(|(label, value)| format!("{label} {value:+}"))
+            .collect();
+            let line = match parts.len() {
+                0 | 1 => format!("Power {}", power.total),
+                _ => format!("Power {} \u{2014} {}", power.total, parts.join(", ")),
+            };
+            rows.extend(
+                wrap_text(&line, DESCRIBE_WRAP_COLUMNS)
+                    .into_iter()
+                    .map(text_row),
+            );
+        }
         // Under the stats it explains, and unconditional — the name carries
         // the figure only when it is off spec, so this is the only place a
         // copy at spec says what it compiled at.
@@ -666,7 +722,7 @@ mod tests {
         let Row::Item { text, tag, .. } = &empty else {
             panic!("an equipment slot is a row you can pick")
         };
-        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM  (empty)");
+        assert_eq!(item_text(text, tag.as_ref()), "[2] ARM        (empty)");
     }
 
     /// **The tallest page any shipped item can produce fits its popup.**
@@ -740,6 +796,56 @@ mod tests {
         assert!(
             !quality_row(GearCopy::plain("kinetic_edge".into())),
             "a copy at spec must not claim 115%"
+        );
+    }
+
+    /// The rating and its breakdown are the page's own answer to "is this
+    /// worth wearing", and they have to name the axes the figure came off —
+    /// a bare total is a number the player cannot argue with.
+    ///
+    /// A copy with no combat axis says **nothing** here rather than `Power
+    /// 0`: a Decompiler module buys taming, and a zero would read as a
+    /// verdict on it.
+    #[test]
+    fn the_gear_page_prices_a_copy_and_says_what_off() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(43, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let page = |item: &str| {
+            gear_inspect_rows(
+                &game,
+                &GearInspect {
+                    copy: GearCopy::plain(item.into()),
+                    wearer: None,
+                    from: Mode::Inventory,
+                },
+            )
+            .into_iter()
+            .filter_map(|row| match row {
+                Row::Text(t) | Row::TextColored(t, _) => Some(t),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+        };
+
+        let power = page("shim_blade")
+            .into_iter()
+            .find(|line| line.starts_with("Power "))
+            .expect("a weapon is rated");
+        assert!(
+            power.contains("offense") && power.contains("accuracy"),
+            "the breakdown must name the axes the figure came off: {power}"
+        );
+        assert!(
+            !power.contains("survivability") && !power.contains("evasion"),
+            "an axis that contributed nothing gets no words on a page with no \
+             scroll: {power}"
+        );
+
+        assert!(
+            !page("cortex_hack")
+                .iter()
+                .any(|line| line.starts_with("Power ")),
+            "a copy with no combat axis has no rating to state"
         );
     }
 
@@ -963,8 +1069,8 @@ mod tests {
         qty: u32,
         zone: u32,
     ) -> Vec<String> {
-        let (lead, tag, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
-        lines[0] = tagged_text(&lead, tag, &lines[0]);
+        let (lead, tag, power, mut lines) = inventory_row_lines(game, shortcut, copy, qty, zone);
+        lines[0] = tagged_text(&lead, tag, power, &lines[0]);
         lines
     }
 

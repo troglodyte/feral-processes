@@ -2284,3 +2284,73 @@ fn no_shipped_description_calls_mitigation_defense() {
         offenders.join("\n")
     );
 }
+
+/// Every shipped equipment item must rate `Some`.
+///
+/// A weapon, armour or module that rates `None` is one whose whole bonus
+/// sits on axes `Game::copy_power` does not price — a formula gap, and it
+/// must fail the build rather than draw an em dash in the shipping game
+/// where the player expects a number.
+///
+/// The one legitimate `None` is a piece paying only in `decompiler`, which
+/// buys taming rather than combat. That is a real category, so the census
+/// names those explicitly rather than exempting a whole slot: a *new* one
+/// has to be added here deliberately.
+#[test]
+fn every_shipped_equipment_item_rates_a_power() {
+    let game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<ItemId> = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .all()
+        .filter(|def| def.equipment.is_some())
+        .map(|def| def.id.clone())
+        .collect();
+    assert!(
+        !ids.is_empty(),
+        "the shipped set defines no equipment at all"
+    );
+    let mut unrated = Vec::new();
+    for id in ids {
+        let (_, base) = game.equipment_of(&id).unwrap();
+        // A copy whose only authored bonus is `decompiler` has no combat
+        // axis by construction, and `copy_power` says so on purpose.
+        let combat_only_decompiler = base.atk == 0
+            && base.mitigation == 0
+            && base.accuracy == 0
+            && base.evasion == 0
+            && base.damage == crate::battle::DamageRange::default();
+        if game.copy_power(&gear(&id, 0)).is_none() && !combat_only_decompiler {
+            unrated.push(id);
+        }
+    }
+    assert!(
+        unrated.is_empty(),
+        "these shipped equipment items rate no power at all — the formula is missing an axis \
+         they pay on: {unrated:?}"
+    );
+}
+
+/// ...and nothing that is not equipment may rate at all. A consumable, a
+/// material or a currency has no combat axis, so a `Some` here means the
+/// formula is reading something it should not.
+#[test]
+fn no_shipped_non_equipment_item_rates_a_power() {
+    let game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ids: Vec<ItemId> = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .all()
+        .filter(|def| def.equipment.is_none())
+        .map(|def| def.id.clone())
+        .collect();
+    assert!(!ids.is_empty());
+    let rated: Vec<&ItemId> = ids
+        .iter()
+        .filter(|id| game.copy_power(&gear(id, 0)).is_some())
+        .collect();
+    assert!(
+        rated.is_empty(),
+        "these shipped items are not equipment and yet rate a combat power: {rated:?}"
+    );
+}

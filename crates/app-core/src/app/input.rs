@@ -125,9 +125,13 @@ impl App {
         // second screen wanting a modifier widens this one condition; doing
         // it in the renderer instead would put "what a modifier means" on
         // the far side of the seam from the mode that decides it. The
-        // The transfer picker is that screen — see `app/basket.rs`.
+        // The transfer picker and the caravan basket are those screens — see
+        // `app/basket.rs` and `app/caravan.rs`. **Miss one here and its four
+        // modified arrows are folded to bare `Left`/`Right` before its
+        // handler ever sees them**, so Shift and Ctrl silently become plain
+        // steps and nothing fails anywhere.
         let key = match key {
-            _ if self.mode == Mode::Transfer => key,
+            _ if matches!(self.mode, Mode::Transfer | Mode::Caravan) => key,
             GameKey::ShiftLeft | GameKey::CtrlLeft => GameKey::Left,
             GameKey::ShiftRight | GameKey::CtrlRight => GameKey::Right,
             _ => key,
@@ -202,7 +206,6 @@ impl App {
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
             Mode::StackMarket => self.handle_stack_market_key(key),
             Mode::Caravan => self.handle_caravan_key(key),
-            Mode::CaravanQuantity => self.handle_caravan_quantity_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::Research => self.handle_research_key(key),
             Mode::Contracts => self.handle_contracts_key(key),

@@ -2769,6 +2769,67 @@ pub const PLAYER_UNARMED_DAMAGE: crate::battle::DamageRange =
     crate::battle::DamageRange { min: 3, max: 7 };
 
 // ---------------------------------------------------------------------------
+// The gear power reference wearer
+// ---------------------------------------------------------------------------
+//
+// One fixed wearer every gear copy in the game is rated against, so that a
+// copy's power figure is **absolute** — the same number on the inventory
+// list, the trader's shelf and the swap picker. `Game::copy_power` is the
+// one door; nothing else may read this block.
+//
+// **Derived, not invented.** A reference far from where players actually
+// stand makes every power figure in the game wrong in the same direction,
+// which is hard to notice and easy to ship. The zone is the midpoint of the
+// range `balance_sim` sweeps (1..=10), and the level is what its geared
+// sweep reports as the minimum to clear that zone's toughest ordinary
+// matchup — a player who is *there*, not one who has over-levelled. The
+// three stat figures are then `progression::stats_after_levels` of
+// `PLAYER_BASE_STATS` at that level, at `BASELINE_GROWTH_MULTIPLIER`, and
+// `the_power_reference_wearer_is_a_levelled_player` asserts exactly that
+// rather than trusting the arithmetic below.
+//
+// A retune moves the zone and the level; the three stat constants then
+// follow from them and the census says so.
+
+/// The zone the reference wearer stands in. Two jobs: it is the level a
+/// candidate copy is scaled at (`Game::equip` caps gear level at the zone,
+/// so gear level *is* the zone), and it is the zone the nominal hostile the
+/// accuracy and evasion terms are priced against is drawn at.
+pub const POWER_REFERENCE_ZONE: u32 = 5;
+
+/// The reference wearer's character level — what `balance_sim`'s geared
+/// sweep needs to clear `POWER_REFERENCE_ZONE`. Feeds the wearer's own
+/// Accuracy and Evasion through `battle::accuracy_of` / `evasion_of`, which
+/// is why it is a separate axis from the zone.
+pub const POWER_REFERENCE_LEVEL: u32 = 34;
+
+/// `stats_after_levels(PLAYER_BASE_STATS, POWER_REFERENCE_LEVEL - 1,
+/// BASELINE_GROWTH_MULTIPLIER).max_hp` — 90 + 24 x 33.
+pub const POWER_REFERENCE_MAX_HP: i32 = 882;
+
+/// The same wearer's attack — 6 + 2 x 33.
+pub const POWER_REFERENCE_ATK: i32 = 72;
+
+/// The same wearer's mitigation. Levelling never raises it (a percentage
+/// that grows per level approaches immunity), so this is
+/// `PLAYER_BASE_STATS.mitigation` unchanged.
+///
+/// **It must stay strictly below `MAX_MITIGATION_PERCENT`**: `Stats::power`
+/// divides by `1 - mitigation/100`, and keeping that denominator off zero
+/// is the whole point of the cap.
+pub const POWER_REFERENCE_MITIGATION: i32 = 2;
+
+/// The band the reference wearer swings without a weapon, and so the band a
+/// weapon's own is measured **against**. A weapon *overrides* the natural
+/// attack rather than adding to it (`Game::attack_range`), so a weapon
+/// whose band is worse than this one is worth negative offense — which is
+/// the whole reason the term is a difference and not a sum.
+///
+/// `PLAYER_UNARMED_DAMAGE` unscaled, because that is what
+/// `Game::natural_range_of` hands the player at every level.
+pub const POWER_REFERENCE_DAMAGE: crate::battle::DamageRange = PLAYER_UNARMED_DAMAGE;
+
+// ---------------------------------------------------------------------------
 // Entity memories
 // ---------------------------------------------------------------------------
 
@@ -2981,6 +3042,24 @@ pub const CARAVAN_BONUS_QUALITY_FLOOR: u8 = QUALITY_DEFAULT;
 mod tests {
     use super::*;
     use crate::resources::ZoneLevel;
+
+    /// The reference wearer must stay a *derivation* of the two axes above
+    /// it, not three hand-written numbers that drift the first time
+    /// `HP_PER_LEVEL` or `PLAYER_BASE_STATS` moves. Its whole value is that
+    /// it sits where players actually stand.
+    #[test]
+    fn the_power_reference_wearer_is_a_levelled_player() {
+        let levelled = crate::progression::stats_after_levels(
+            PLAYER_BASE_STATS,
+            POWER_REFERENCE_LEVEL - 1,
+            BASELINE_GROWTH_MULTIPLIER,
+        );
+        assert_eq!(levelled.max_hp, POWER_REFERENCE_MAX_HP);
+        assert_eq!(levelled.atk, POWER_REFERENCE_ATK);
+        assert_eq!(levelled.mitigation, POWER_REFERENCE_MITIGATION);
+        // `Stats::power` divides by `1 - mitigation/100`.
+        const { assert!(POWER_REFERENCE_MITIGATION < MAX_MITIGATION_PERCENT) };
+    }
 
     /// Seeding and maintenance must agree about how crowded a zone should
     /// be. The derivation is what makes them agree by construction, so the

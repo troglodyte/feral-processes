@@ -103,6 +103,7 @@ pub(super) fn draw_trade_action_menu(
             row_lead(menu_shortcut(idx), Some(row.qty)),
             game.item_category(&row.copy.item).short_label(),
             Some(row.copy.quality),
+            PowerCell::of_copy(game, &row.copy),
         ));
         for line in effect_lines(game, &row.copy.item) {
             rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
@@ -125,6 +126,9 @@ pub(super) fn draw_trade_action_menu(
             // Stock, not a copy: nothing has been compiled yet, so there is
             // no quality to read and the column draws as it always did.
             None,
+            // The rating is not a property of a copy the way quality is — a
+            // plain copy of the stock rates exactly what buying it gets you.
+            PowerCell::of_item(game, item),
         ));
         rows.extend(effect_lines(game, item).into_iter().map(text_row));
         idx += 1;
@@ -149,6 +153,7 @@ pub(super) fn draw_trade_action_menu(
                 row_lead(menu_shortcut(idx), Some(row.qty)),
                 game.item_category(&row.copy.item).short_label(),
                 Some(row.copy.quality),
+                PowerCell::of_copy(game, &row.copy),
             ));
             rows.extend(effect_lines(game, &row.copy.item).into_iter().map(text_row));
             idx += 1;

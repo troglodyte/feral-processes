@@ -676,6 +676,19 @@ pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<
         .collect()
 }
 
+/// Every filled rect's whole box, for a caller asking *where* something was
+/// painted rather than how wide it is.
+#[cfg(test)]
+pub(crate) fn painted_rects(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::Rect> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Rect(r) => Some(r.rect),
+            _ => None,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

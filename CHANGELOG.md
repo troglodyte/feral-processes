@@ -27,6 +27,35 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.31
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+F3 shows what a frame actually costs.
+
+### Added
+
+- **A frame-timing readout, on `F3`.** Four figures in the bottom-right over
+  the last completed second: the frame count, the mean, the worst frame, and
+  the draw pass. The renderer's shape-building pass has had a measured
+  baseline since the debug-profile work, but the rest of a frame — bevy's
+  schedule, egui's tessellator, the upload and the GPU — had never been
+  measured at all. That gap is why the map going jerky read as an animation
+  bug for months: the camera code was intact, there were simply no frames to
+  draw it in.
+- **The peak is the figure that earns its place.** Sixty frames with one at
+  90 ms still averages under 18, so a mean alone reports a stuttering game as
+  a smooth one. The draw figure is the same pass the bench measures, so the
+  two are directly comparable, and the gap between it and the mean is the
+  part nobody has seen.
+- **The meter is fed every frame whether the readout is on or not**, or the
+  first second after pressing `F3` reads as a cold start every time. A
+  function key rather than a letter for the reason backslash is, and one
+  better: letters reach the game as typed text, and `F3` produces none on any
+  layout.
+- No new `Painter` operation — `rect`, `ui` and `measure_ui` already existed,
+  so the drawing seam is untouched.
+
 ## 0.13.30
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.30
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Four more ways to hit the whole field.
+
+### Added
+
+- **Seven new routines, all data.** The Everyone tier — the top of the scope
+  ladder, where a routine reaches every hostile on the field at once — had
+  ten entries and already covered the whole effect vocabulary, so what was
+  missing was variety inside it rather than a mechanic. No engine or schema
+  change: every one of these is a `.ron` file in `assets/abilities/`, and a
+  mod can add an eighth the same way.
+- **Skim Everyone** tops off the one family that had a Single and a Group
+  rung and nothing above them. It lands exactly on the Everyone tier's floor
+  on both axes — 15 Power, four rounds — which makes it the cheapest way in
+  the game to touch the whole field, and is the whole of Skim's identity as
+  Leech's cheap sibling at every rung.
+- **Segfault grows a Group and an Everyone rung.** Its Single rungs sat
+  within a point of Packet Shred's on every axis, so the promotion needed an
+  identity of its own: the band widens with the scope. Segfault Everyone
+  rolls 16–40 against Packet Shred Everyone's 19–31 — a better top end and a
+  worse floor — paid for with a fifth round of cooldown, three more Power and
+  all but one point of aim.
+- **Row Hammer** is a new family, and it is built on the same axis from the
+  other end: low damage, high accuracy, at all three rungs. A whiff across
+  the whole field is the biggest single roll a fight ever asks for, so this
+  is the answer to Packet Shred Everyone being a gamble — chip everything,
+  every time.
+- **Snoop Everyone** is exclusive, off the Overseer at 0.30. A field-wide
+  drain at a rate the ordinary tier may not have: `cycle_harvest` is capped
+  low precisely so that reaching wider stays a trade rather than a straight
+  upgrade, and behind a boss that stops being a concern, because there is no
+  cheaper rung of it to undercut.
+
+### Changed
+
+- **The hunt-only pool widens from 28 routines to 34.** The six new ordinary
+  rungs are found on wild carriers, the path five of the ten existing
+  Everyone routines already take. That takes the pool's authored weight from
+  185 to 212, so each routine already in it now turns up about an eighth less
+  often. The census pinning that count carries the figure and the reasoning
+  now, since the pool's size is a design decision rather than an accident.
+
 ## 0.13.29
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

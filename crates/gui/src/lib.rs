@@ -17,6 +17,7 @@
 mod fx;
 mod keys;
 mod paint;
+mod perf;
 mod render;
 mod sounds;
 mod sprites;
@@ -118,6 +119,8 @@ struct Frontend {
     key_repeat: KeyRepeat,
     text_gate: TextGate,
     last_mode: Mode,
+    perf_on: bool,
+    perf: perf::PerfMeter,
 }
 
 /// Draws a brief centered readout, on top of whatever `render::draw` just
@@ -139,6 +142,33 @@ fn draw_toast(text: &str, p: &Painter) {
         y - dims.height - m.inset,
         dims.width + margin_x * 2.0,
         dims.height + m.inset + m.gap * 2.0,
+        Color::new(0.06, 0.07, 0.10, 0.85),
+    );
+    p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
+}
+
+/// Draws the frame-timing readout, on top of everything else.
+///
+/// Bottom-right rather than anywhere along the top: the stock strip claims a
+/// row off the top of the window and `draw_toast` is centred on that same
+/// row, so the top edge is the one place this cannot sit without hiding
+/// something the player asked to see.
+///
+/// The box is placed from the text's *measured* width, so it cannot run off
+/// the right edge the way an unmeasured row can — the trap the map's status
+/// column carries. `small()` rather than the body size because this is
+/// chrome, and chrome the player has to look past for most of a session.
+fn draw_perf(text: &str, p: &Painter) {
+    let m = text::ui_metrics(p.screen_h());
+    let font_size = m.small();
+    let dims = p.measure_ui(text, font_size);
+    let x = p.screen_w() - dims.width - m.pad - m.inset;
+    let y = p.screen_h() - m.pad;
+    p.rect(
+        x - m.inset,
+        y - dims.height - m.inset,
+        dims.width + m.inset * 2.0,
+        dims.height + m.inset * 2.0,
         Color::new(0.06, 0.07, 0.10, 0.85),
     );
     p.ui(text, x, y, font_size, Color::new(0.92, 0.92, 0.92, 1.0));
@@ -197,6 +227,8 @@ pub fn run(app: App) {
             key_repeat: KeyRepeat::new(),
             text_gate: TextGate::new(),
             last_mode,
+            perf_on: false,
+            perf: perf::PerfMeter::new(),
         })
         .init_resource::<sprites::Sprites>()
         .add_systems(Startup, (setup, maximize_window, sprites::load))
@@ -360,6 +392,13 @@ fn frame(
         ));
         fe.toast_until = now + TOAST_SECONDS;
     }
+    // A function key rather than a letter for the same reason backslash is
+    // one, and one better: letters reach the game as typed text, and F3
+    // produces no text at all, so it cannot collide with a binding on any
+    // screen or any keyboard layout.
+    if input.keyboard.just_pressed(KeyCode::F3) {
+        fe.perf_on = !fe.perf_on;
+    }
 
     for event in fe.app.take_sounds() {
         sounds.play(&mut commands, event, fe.volume);
@@ -380,11 +419,26 @@ fn frame(
     fe.fx.begin_frame(now, effects, in_battle);
     fe.fx.observe_log(last_log.as_ref());
 
+    // Timed whether or not the readout is on: a meter fed only while it is
+    // visible reports the first second after F3 as a cold start every time.
+    let started = std::time::Instant::now();
     render::draw(&mut fe.app, &mut fe.fx, &painter);
+    fe.perf.sample(
+        now,
+        f64::from(input.time.delta_secs()),
+        started.elapsed().as_secs_f64(),
+    );
     if let Some(text) = &fe.toast
         && now < fe.toast_until
     {
         draw_toast(text, &painter);
+    }
+    // Last, so nothing can be drawn over the figures — including the toast,
+    // which the volume keys can put on screen at any moment.
+    if fe.perf_on
+        && let Some(readout) = fe.perf.readout()
+    {
+        draw_perf(&readout.line(), &painter);
     }
     Ok(())
 }
@@ -555,6 +609,39 @@ mod tests {
             .expect("a fresh run starts the player on the anchor");
         app.game = Some(game);
         app
+    }
+
+    /// The readout is chrome painted over a live screen, so the two ways it
+    /// can be wrong are being absent and being somewhere it hides something.
+    ///
+    /// The corner is the half worth pinning: the top of the window carries
+    /// the stock strip and the volume toast, so a later edit moving these
+    /// figures up there would cover a row the player asked to see, and
+    /// nothing else in the suite would notice.
+    #[test]
+    fn the_frame_readout_paints_in_the_bottom_right_corner() {
+        let line = "58 fps   17.2 ms   peak 41.3   draw 2.1";
+        let ((w, h), shapes) = paint::with_painter(|p| {
+            draw_perf(line, p);
+            (p.screen_w(), p.screen_h())
+        });
+        assert!(
+            paint::painted_text(&shapes).iter().any(|t| t == line),
+            "the readout painted no figures at all: {:?}",
+            paint::painted_text(&shapes)
+        );
+        let box_rect = paint::painted_rects(&shapes)
+            .into_iter()
+            .find(|r| r.width() > 0.0 && r.height() > 0.0)
+            .expect("the figures sit on a backing box");
+        assert!(
+            box_rect.min.x > w / 2.0 && box_rect.min.y > h / 2.0,
+            "the readout left the bottom-right corner: {box_rect:?} in {w}x{h}"
+        );
+        assert!(
+            box_rect.min.x >= 0.0 && box_rect.max.x <= w && box_rect.max.y <= h,
+            "the readout hangs off the window: {box_rect:?} in {w}x{h}"
+        );
     }
 
     /// One turn of the real frontend loop: drain effects the way `frame`

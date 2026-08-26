@@ -46,6 +46,7 @@ Reading and housekeeping:
 - +/- — zoom
 - [/] — volume
 - \ — visual effects
+- F3 — frame timings
 
 On the companions screen, < and > move the highlighted member along the battle line; the front slot
 draws the most fire. A routine slot takes an etched disk, never a routine you merely know — on the

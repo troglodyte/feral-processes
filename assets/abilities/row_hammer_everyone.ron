@@ -1,0 +1,16 @@
+(
+    id: "row_hammer_everyone",
+    name: "Row Hammer Everyone",
+    // The rung the family exists for. Every other Everyone-scope routine
+    // aims at 2 or not at all, so a field-wide swing is the biggest single
+    // roll a fight ever asks for and the worst thing in the game to lose.
+    // This is the answer to that: chip everything, every time, and let a
+    // Packet Shred Everyone be the gamble.
+    description: "Damage 4–6 to every hostile program on the field, almost never missing",
+    target: AllEnemies,
+    effect: Damage(power: 5, spread: 1),
+    cooldown: 4,
+    accuracy: 8,
+    power_cost: 15.0,
+    wild_weight: 3,
+)

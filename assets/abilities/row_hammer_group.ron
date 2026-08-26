@@ -1,0 +1,14 @@
+(
+    id: "row_hammer_group",
+    name: "Row Hammer Group",
+    // Accuracy comes down as the scope widens, the way every other family's
+    // does — but it stays far above the rung's ordinary bonus, because
+    // reliability is the whole of what this family sells.
+    description: "Damage 5–7 to every member of one group, almost never missing",
+    target: WholeEnemyGroup,
+    effect: Damage(power: 6, spread: 1),
+    cooldown: 3,
+    accuracy: 10,
+    power_cost: 10.0,
+    wild_weight: 5,
+)

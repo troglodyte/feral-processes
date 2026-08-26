@@ -1,0 +1,15 @@
+(
+    id: "row_hammer_single",
+    name: "Row Hammer Single",
+    // The family built on the accuracy axis from the opposite end to
+    // Segfault: it barely scratches, and it very nearly cannot miss.
+    // Hammering one row until the charge bleeds into its neighbours is not
+    // a swing, so the numbers are a trickle and the aim is the point.
+    description: "Damage 6–8 to one target, almost never missing",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 7, spread: 1),
+    cooldown: 2,
+    accuracy: 12,
+    power_cost: 7.0,
+    wild_weight: 8,
+)

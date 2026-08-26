@@ -531,9 +531,17 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
     assert_eq!(game.item_value(&unpriced), tuning::DEFAULT_ITEM_VALUE);
 }
 
-/// The twenty-eight hunt-only routines are reachable exactly one way: off a wild
+/// The thirty-four hunt-only routines are reachable exactly one way: off a wild
 /// carrier. A species or research file naming one would quietly restore the
 /// "just target the species" loop this set exists to break.
+///
+/// The count is a tripwire, not a target: the pool's size is a design
+/// decision and widening it dilutes every routine already in it, since
+/// `WILD_ROUTINE_CHANCE` decides whether there is a carrier at all and
+/// `wild_weight` only decides what it holds. The six added on 2026-08-26
+/// (the Row Hammer ladder, Skim and Segfault's new upper rungs) took the
+/// total authored weight from 185 to 212, so each existing entry now turns
+/// up about an eighth less often.
 #[test]
 fn no_species_or_research_file_grants_a_wild_only_ability() {
     let game = Game::new(3301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -544,7 +552,7 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
         .into_iter()
         .map(|(d, _)| d.id.clone())
         .collect();
-    assert_eq!(wild_only.len(), 28, "twenty-eight routines are hunt-only");
+    assert_eq!(wild_only.len(), 34, "thirty-four routines are hunt-only");
 
     for species in game.species_defs() {
         for ability in &species.abilities {

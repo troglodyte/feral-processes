@@ -1,0 +1,23 @@
+(
+    id: "segfault_group",
+    name: "Segfault Group",
+    // Segfault's Single rungs sat within a point of Packet Shred's on every
+    // axis, so promoting the family without giving it an identity would
+    // have shipped a second copy of a ladder that already exists. The axis
+    // it takes is the band: a fault cascades wider the more memory it
+    // touches, so Segfault's spread grows with its scope while Packet
+    // Shred's stays tight. 6–22 against Packet Shred Group v2's 8–12, for
+    // the same Power and the same cooldown, with three fewer points of aim.
+    //
+    // Not *zero* aim, which is what this wanted to be and cannot:
+    // `every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is`
+    // refuses an unaimed `Damage` outright, on the grounds that it would be
+    // exactly as blind as a basic attack while costing Power and a cooldown.
+    description: "Damage 6–22 to every member of one group, wildly",
+    target: WholeEnemyGroup,
+    effect: Damage(power: 14, spread: 8),
+    cooldown: 3,
+    accuracy: 3,
+    power_cost: 11.0,
+    wild_weight: 5,
+)

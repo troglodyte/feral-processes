@@ -1,0 +1,18 @@
+(
+    id: "segfault_everyone",
+    name: "Segfault Everyone",
+    // The top of the widening ladder — see `segfault_group` for why the
+    // family has one. Against Packet Shred Everyone (19–31, four rounds,
+    // 15 Power, aimed at 2) this rolls 16–40: a better top end and a worse
+    // floor, paid for with a fifth round of cooldown, three more Power and
+    // all but one point of aim. Reaching the whole field is already the
+    // biggest single roll a fight asks for, and this is the version that
+    // leans into that rather than hedging it.
+    description: "Damage 16–40 to every hostile program on the field, wildly",
+    target: AllEnemies,
+    effect: Damage(power: 28, spread: 12),
+    cooldown: 5,
+    accuracy: 1,
+    power_cost: 18.0,
+    wild_weight: 3,
+)

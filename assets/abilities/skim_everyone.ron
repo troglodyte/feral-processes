@@ -1,0 +1,18 @@
+(
+    id: "skim_everyone",
+    name: "Skim Everyone",
+    // Skim is Leech's cheap sibling at every rung — less back per cycle,
+    // but sooner and for less Power. At this scope that lands it exactly on
+    // the Everyone tier floor on both axes, which makes it the cheapest way
+    // in the game to touch the whole field. The return is deliberately a
+    // fifth: `cycle_harvest` already argues why a competitive rate here
+    // would make reaching wider a straight upgrade rather than a trade, and
+    // Skim taking less than Leech is the whole of what separates them.
+    description: "Damage the whole field and restore a fifth of it to yourself",
+    target: AllEnemies,
+    effect: Drain(power: 3, spread: 1, heal_fraction: 0.2),
+    cooldown: 4,
+    accuracy: 2,
+    power_cost: 15.0,
+    wild_weight: 3,
+)

@@ -1,0 +1,22 @@
+(
+    id: "bus_snoop",
+    name: "Snoop Everyone",
+    // Exclusive: the Overseer's. `cycle_harvest` names the thing the
+    // ordinary tier may not do — a field-wide drain at a rate competitive
+    // with Leech Group would make reaching wider a straight upgrade rather
+    // than a trade — and behind a boss is exactly where that stops being
+    // true, because there is no cheaper rung of this to undercut. What it
+    // pays out is Leech *Single*'s rate taken off every hostile at once.
+    //
+    // Overseer rather than Wintermute, whose `deadman` is already an
+    // Everyone-scope damage routine; a boss's drops roll independently, so
+    // a fourth costs the other three nothing.
+    description: "Damage the whole field and keep nearly half of everything it gives up",
+    target: AllEnemies,
+    effect: Drain(power: 9, spread: 2, heal_fraction: 0.45),
+    cooldown: 5,
+    accuracy: 4,
+    power_cost: 20.0,
+    exclusive: true,
+    boss_drop: Some([("overseer", 0.30)]),
+)

@@ -2131,6 +2131,37 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
     ]
 };
 
+/// A shipped need with nothing in the base that services it is a need a
+/// program can only run down — it would announce a stall, hold a grudge and
+/// never recover, which reads as the feature being broken rather than as the
+/// player being short a building.
+///
+/// A *shipped-content* rule, `MEMORY_TRIGGERS`' kind, and it does not
+/// contradict the empty-catalogue property: zero needs and zero amenities
+/// passes, because there is nothing to walk.
+#[test]
+fn every_shipped_need_has_a_shipped_amenity() {
+    use crate::needs::NeedDb;
+    use crate::structures::StructureDb;
+
+    let (needs, _) = NeedDb::load_dir(&test_assets_dir().join("needs")).unwrap();
+    let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
+    assert!(
+        needs.iter().count() > 0,
+        "the census must walk a real catalogue"
+    );
+
+    for def in needs.iter() {
+        assert!(
+            structures
+                .all()
+                .any(|s| s.services.iter().any(|svc| svc.need == def.id)),
+            "{} ships in assets/needs but no structure services it, so a program              that runs it down can never recover",
+            def.id.as_str()
+        );
+    }
+}
+
 /// A def whose declared `subject` no trigger can satisfy is dead content:
 /// every `remember` of it is refused as `WrongSubject`, and nothing else in
 /// the build says so. A def with no trigger at all is worse — it can never be

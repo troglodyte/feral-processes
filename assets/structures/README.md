@@ -152,6 +152,27 @@ is skipped with a warning logged in-game rather than crashing startup.
         radius: 10,
     )),
 
+    // Optional; can be left out entirely (defaults to servicing nothing).
+    // What this structure does for an owned program's *needs* — see
+    // `assets/needs/README.md`. An amenity: base staff whose reserve for
+    // `need` has run below that need's `critical` leave their posts, walk
+    // here on their own, stand within `radius` until they're content, and go
+    // back to work. No assigned worker and no input item, `power_regen`'s
+    // shape — and, like it, `per_tick` is clamped: a negative rate floors at
+    // zero (a field named for refilling never drains) and a non-finite one
+    // skips the service entirely.
+    //
+    // `radius` is a Chebyshev box in tiles, as `power_regen`'s is. `0` means
+    // the program has to be standing on or beside the structure.
+    //
+    // A `need` no file in `assets/needs/` defines is inert rather than an
+    // error — the same rule that makes deleting that directory a supported
+    // way to play. A need that ships *with* no structure servicing it is the
+    // one thing refused, by a census over this repo's own assets.
+    services: [
+        (need: "coherence", per_tick: 0.6, radius: 0),
+    ],
+
     // Optional; can be left out entirely (defaults to 0). What this
     // structure needs from the base's Grid to run, summed every tick
     // against every deployed structure's `power_supply`. A machine whose

@@ -93,6 +93,39 @@ pub struct PowerRegenDef {
     pub radius: i32,
 }
 
+/// What a structure does for a program's needs — see `StructureDef::services`
+/// and `game::base::offshift`.
+///
+/// Deliberately `PowerRegenDef`'s shape: a rate and a Chebyshev radius. What
+/// differs is who it is for — that one refills the *player's* Power while
+/// they stand near it, this refills an owned program's reserve while the
+/// program stands near it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ServiceDef {
+    /// Which `needs::NeedDef` this refills. An id no file defines is inert —
+    /// the empty-catalogue rule, held at the reader rather than at load.
+    pub need: crate::needs::NeedId,
+    /// Reserve restored per tick while the program is in range.
+    pub per_tick: f32,
+    /// Chebyshev distance in tiles, `power_regen`'s form. `0` is "standing on
+    /// it or beside it", `hauling::at_station`'s reach.
+    pub radius: i32,
+}
+
+impl ServiceDef {
+    /// What this actually refills per tick.
+    ///
+    /// `per_tick` is mod-supplied, so it is **clamped at both ends rather
+    /// than trusted**, exactly as `power_regen_system` clamps: a field named
+    /// for refilling must never drain, and NaN would pin a reserve at the
+    /// ceiling forever — `f32::min` returns the non-NaN operand, so a bare
+    /// `.min(NEED_MAX)` silently yields the maximum. A non-finite rate skips
+    /// the service entirely; a negative one floors at zero.
+    pub fn rate(&self) -> Option<f32> {
+        self.per_tick.is_finite().then(|| self.per_tick.max(0.0))
+    }
+}
+
 /// A structure's trading post capability: sell any item here, and buy
 /// specific items back. Everything is priced in the
 /// `EconomyRole::TradeCurrency` item — never in the salvage the build
@@ -204,6 +237,13 @@ pub struct StructureDef {
     /// existed still parse (defaulting to no regeneration).
     #[serde(default)]
     pub power_regen: Option<PowerRegenDef>,
+    /// What this structure does for an owned program's needs — see
+    /// `needs::NeedDef` and `game::base::offshift`. An amenity: a program
+    /// whose reserve has run critical walks here and stands until it is
+    /// content. `#[serde(default)]` so every existing structure file,
+    /// including any mod, keeps parsing as a building that services nothing.
+    #[serde(default)]
+    pub services: Vec<ServiceDef>,
     /// What this structure needs from the base's Grid to run. Summed against
     /// every deployed structure's `power_supply` every tick; see
     /// `game::base::power`. A machine whose draw doesn't fit the base's
@@ -550,5 +590,44 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// An amenity declares what it refills, and the block round-trips.
+    #[test]
+    fn an_amenity_exposes_what_it_services() {
+        let db = test_db();
+        let bay = db.get("defrag_bay").expect("defrag_bay.ron should load");
+        let service = bay
+            .services
+            .first()
+            .expect("an amenity that services nothing is not an amenity");
+        assert_eq!(service.need, crate::needs::NeedId::from("coherence"));
+        assert!(service.rate().is_some_and(|r| r > 0.0));
+    }
+
+    /// Asserted against a **shipped** file rather than a fixture: the point is
+    /// that a mod's untouched `.ron` still loads, and every existing file in
+    /// this repo is exactly that.
+    #[test]
+    fn a_structure_that_services_nothing_still_parses() {
+        let db = test_db();
+        let node = db.get("mining_node").expect("mining_node.ron should load");
+        assert!(node.services.is_empty());
+    }
+
+    /// `per_tick` is mod-supplied, so it is clamped at both ends rather than
+    /// trusted — a field named for refilling must never drain, and NaN would
+    /// pin a reserve at the ceiling forever.
+    #[test]
+    fn a_nonsense_rate_is_refused_and_a_negative_one_floors() {
+        let nonsense = |per_tick| ServiceDef {
+            need: crate::needs::NeedId::from("coherence"),
+            per_tick,
+            radius: 0,
+        };
+        assert_eq!(nonsense(f32::NAN).rate(), None);
+        assert_eq!(nonsense(f32::INFINITY).rate(), None);
+        assert_eq!(nonsense(-5.0).rate(), Some(0.0));
+        assert_eq!(nonsense(0.6).rate(), Some(0.6));
     }
 }

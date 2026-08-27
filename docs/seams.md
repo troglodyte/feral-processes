@@ -884,7 +884,7 @@ denominated in entity level carries `K = 2` (`HP_PER_LEVEL` 24,
 `DECOMPILER_SKILL_PER_LEVEL` 2, both `ABILITY_*_SCALE_PER_LEVEL` doubled)
 and every constant denominated in *levels per* something carries its
 reciprocal (`PLAYER_ROUTINE_SLOT_PER_LEVEL` 5,
-`COMPANION_ROUTINE_SLOT_PER_LEVEL` 1, `CREATURE_MAX_LEVEL` 6,
+`COMPANION_ROUTINE_SLOT_PER_LEVEL` 1, `TALENT_START_LEVEL` 6,
 `WORK_XP_LEVEL_CAP` 5, `ABILITY_SCALE_LEVEL_CAP` 20).
 `XP_PER_LEVEL_STEP` carries `K^2` — 80 — and the square is the whole
 argument: cumulative XP to a level is `(STEP / 2) * L^2`, so halving the
@@ -908,39 +908,59 @@ it: `PLAYER_BASE_STATS` is an offset, not a rate.
 
 **The ring buys room; the fights buy the points.** A Privilege Ring — dropped
 by a lair guardian and by nothing else — is spent at the Develop screen to open
-a Kernel Ring on **one** companion, and `Game::companion_level_cap` is the one
-expression of what that is worth: `CREATURE_MAX_LEVEL + ring * LEVELS_PER_RING`.
-`open_kernel_ring` grants no stats, no level and no XP, which is what keeps the
-feature inside "progression is earned by fighting": the ceiling moves and the
-party still has to go and earn the levels under it.
+a Kernel Ring on **one** companion. `open_kernel_ring` grants no stats, no
+level and no XP, which is what keeps the feature inside "progression is earned
+by fighting": the room appears and the party still has to go and earn what
+fills it.
 
-Two call sites deliberately do **not** go through it, and both look like bugs
-from the outside. `systems.rs`'s cronjob payout keeps passing
-`Some(CREATURE_MAX_LEVEL)`; its own `WORK_XP_LEVEL_CAP` guard already stops a
-posted worker at 5, so leaving it alone is the whole of how a developed program
-cannot be ground up at a Mining Node — pinned by
-`a_ringed_cronjob_worker_still_stops_at_the_work_cap`, which drives real
-`task_progress_system` cycles rather than calling `add_xp`, because the guard
-under test is in `systems.rs` and calling `add_xp` would test nothing. The two
-arena sites (`arena::set_level` and app-core's level stepper) take
-`tuning::absolute_companion_level_cap()` instead, because an arena scenario
-authors its own composition and has no `KernelRing` to read — and `Ability`,
-`Affinity` and `RoutineSlot` talents are invisible to `balance_sim`, so the
-arena is the only instrument that can see them and one clamped at 6 could not
-stage the fight the trees exist to change.
+**What a ring buys changed on 2026-08-27 and the sentence above survived it
+intact**, which is the useful thing about it. It used to buy *levels*:
+`Game::companion_level_cap` was `CREATURE_MAX_LEVEL + ring * LEVELS_PER_RING`,
+so a companion's ceiling was personal and a ring raised it. `Game::level_cap`
+is the ceiling now — one number for the player and every companion, derived
+from the zone — so a ring that bought levels would buy nothing at all. It buys
+**tiers** instead: `Game::talent_points`' `earned` is
+`min(level - TALENT_START_LEVEL, rings * LEVELS_PER_RING)`, both gates live,
+and three rings are still worth exactly the tree depth `assets/talents/` is
+censused against. Migration was a non-event by arithmetic rather than by a
+migration step — a three-ring level-12 companion has 6 points under either
+rule — which is why this cost no `SAVE_FORMAT_VERSION` bump and no save field.
 
-That clamp move has a consequence worth knowing: five shipped `dev-arenas/`
-scenarios author `party: [(… level: 12 …)]` and were silently getting level 6
-after `HP_PER_LEVEL`'s `K = 2` halved the cap. They now field what they say.
-Old reports from them are not comparable to new ones — see
-`docs/measurements/2026-08-19-developed-companion-worth.md`, which also carries
-the figure that decided the sale question: every ring open is 1.95x a
-companion's power at the base cap, and a fully spent generic tree is 2.12x.
+The rename that went with it is the part to read before touching any of this.
+`CREATURE_MAX_LEVEL` stopped being a cap and became `TALENT_START_LEVEL`, the
+level talents begin at; `absolute_companion_level_cap()` stopped being the live
+ceiling and became `arena_level_ceiling()`, the arena's own. **Neither would
+have failed to compile under its old name**, which is exactly the trap the
+save-format rule warns about one level along: a constant whose meaning changes
+under a name it keeps misleads every reader after it and nothing catches it.
+
+Two call sites deliberately do **not** take the shared cap, and both look like
+bugs from the outside. `systems.rs`'s cronjob payout passes the zone cap like
+everything else but keeps its own `WORK_XP_LEVEL_CAP` guard, which stops a
+posted worker at 5 — that guard, not the cap, is the whole of how a developed
+program cannot be ground up at a Mining Node, and unifying the two deletes the
+property. It is pinned by `a_ringed_cronjob_worker_still_stops_at_the_work_cap`,
+which drives real `task_progress_system` cycles rather than calling `add_xp`,
+because the guard under test is in `systems.rs`. The two arena sites
+(`arena::set_level` and app-core's level stepper) take `arena_level_ceiling()`,
+because an arena scenario authors its own composition and has no `KernelRing`
+to read — and `Ability`, `Affinity` and `RoutineSlot` talents are invisible to
+`balance_sim`, so the arena is the only instrument that can see them.
+
+That second rename is load-bearing rather than cosmetic: five shipped
+`dev-arenas/` scenarios author `party: [(… level: 12 …)]`, and staging them
+against the zone cap would silently clamp every one — the same failure this
+repo already had once, when `HP_PER_LEVEL`'s `K = 2` halved the cap under them
+and old reports stopped being comparable with nothing saying so.
+`an_arena_scenario_still_stages_a_level_twelve_companion` is what refuses it
+now, and pointing `set_level` at `Game::level_cap` is the mutation that proves
+the test reads.
 
 ### Talent points are derived, never stored
 
 **Talent points are derived, never stored.** `Game::talent_points` reads
-`earned` off the level (`level - CREATURE_MAX_LEVEL`) and `spent` off the
+`earned` off the level and the rings
+(`min(level - TALENT_START_LEVEL, rings * LEVELS_PER_RING)`) and `spent` off the
 length of `components::Talents`. There is no count on the component and none in
 the save, and that is not tidiness: a stored count can desync from the level
 *and* from the list, and both desyncs are invisible until a player finds they
@@ -7089,3 +7109,86 @@ stands — is a reason to leave someone posted. A downed program is freed
 all: leaving it standing at a machine would post a body the assignment never
 named. `LabourDemand`'s shortfall grows while it is down, which is the same
 readout the off-shift feature already produces.
+
+### One level cap over the whole party, derived from the zone
+
+**`Game::level_cap` is the only ceiling in the game**, and it takes no entity
+on purpose: the player and every companion stop at the same number, and that
+number is `max(ZONE_LEVEL_CAP_FLOOR, 1 + ZONE_LEVEL_CAP_STEP * (zone - 1))`.
+Before it the player had no ceiling at all (`add_xp` took `None`) and a
+companion had a personal one a Kernel Ring could raise. One number is what
+makes a companion worth developing — it can now stand level with you.
+
+`tuning::zone_level_cap(zone)` is the formula and `Game::level_cap` is a call
+to it, because a bevy system holding a `ZoneLevel` needs the same answer and a
+second copy of a curve is the shape this repo has been bitten by four times.
+
+**It reads `ZoneLevel` and nothing else.** Depth deliberately does not lift
+it: a deep frame is harder because what lives in it is scaled, not because the
+party is let out of the cap to meet it. That is structural today — the formula
+names one resource — but `depth_does_not_lift_the_zone_level_cap` exists
+because the thing that would quietly break it is a depth term added to "help"
+a party four frames down.
+
+**The constants are fitted, not chosen, and the fit is the whole risk.** The
+cap must sit **at or above** `balance_sim`'s *geared* clear requirement at
+every zone: below it, a fully-equipped party cannot clear the zone at any
+level it is allowed to reach, which is not difficulty but a dead run. It
+should sit **under** the *gear-free* requirement, so a zone cannot be cleared
+by levelling alone. The spec proposed `FLOOR = 6, STEP = 5` — quoted from a
+doc comment — which caps zone 10 at 46 against a geared requirement of 77 and
+would have ended every run at zone 6. `STEP = 11` is the smallest integer
+slope that leaves no measured zone unclearable out to 16.
+
+**No straight line satisfies both bounds, and that is a property of the
+shipped curves.** Both clear curves pass near the origin and then diverge, so
+a slope steep enough for the deep zones overshoots the gear-free requirement
+in the shallow ones: zones 2-6 stay clearable by levelling alone, by at most 6
+levels. `GRIND_TOLERANCE_LEVELS` in `tests/level_up.rs` is that measured
+overshoot and **not** a slack chosen to make the test pass — tightening the
+fit lowers it. The numbers, and the surface retune this invites but does not
+make, are in `docs/measurements/2026-08-27-zone-level-cap.md`.
+
+**The party model had to move before the fit, not after it.** `balance_sim`'s
+`companion_level_for_player_level` fielded companions at `1/sqrt(2)` of the
+player's level, which was right while a companion had a ceiling of its own.
+Fitting `STEP` against that party gives 13; against the party that ships, 11.
+The plan ordered the model change last, with the constants fitted first, and
+that ordering silently sizes the cap for companions six levels down.
+
+### XP at the cap is banked, and only the player spends it
+
+**`add_xp` banks overflow instead of discarding it.** It used to return at its
+first line once `exp.level >= cap`, so XP earned at the ceiling vanished.
+It accumulates in `Experience::xp` — a field already saved and already idle up
+there — and is reported as `LevelGain::overflow`. `add_xp` stays **pure**: it
+reports, the caller spends, which is why it takes the cap as a parameter
+rather than reading the world and is testable without a `Game`.
+
+**Banking and taxing are the same accumulator**, which is the whole reason
+this cost no save field and no `SAVE_FORMAT_VERSION` bump. `Game::convert_
+overflow_xp` drains the pile into Perk Points; whatever is left when a breach
+lifts the cap becomes real levels on the spot, because it never went anywhere.
+
+**Only the player converts, and that is an omission rather than a check.** A
+companion has no `Perks` component at all, so its overflow simply sits — the
+behaviour every creature had before the cap existed.
+`a_capped_companions_overflow_is_not_spent_and_does_not_panic` pins it so it
+is not read as an oversight later.
+
+**The price must rise, and `OVERFLOW_XP_STEP` of 0 is not a safe default.**
+`xp_per_point = OVERFLOW_XP_BASE + OVERFLOW_XP_STEP * perks_held`, re-read
+after every point so one call cannot mint a run's worth at the opening rate.
+Perks are uncapped, repeatable and `Perk::Attacker` writes straight into
+`Stats`, so a flat rate turns overflow into an unbounded linear power source
+and the grind this cap exists to end returns wearing a perk's hat. A linear
+*cost* makes points grow like the square root of XP, which loses the race
+against a linear zone curve forever — and that race is the feature.
+`perks_held` is `unlocked.len()`, derived and never stored.
+
+**The trap is a fixture that supplies what the code should.** The
+breach-release test hand-wrote the banked pile into `Experience::xp` and so
+passed with the banking removed entirely; the mutation check is what caught
+it. It now *earns* the overflow and holds enough perks that the next point
+costs more than the award pays, which is the sublinear price keeping it
+unconverted.

@@ -20,6 +20,7 @@ use crate::Game;
 use crate::components::{Position, Stock, Structure};
 use crate::items::{ItemCategory, ItemId};
 use crate::items_db::ItemDb;
+use crate::structures::StructureDb;
 use crate::views::StockRow;
 
 /// Every deployed structure's output buffer, paired with the structure it
@@ -30,6 +31,39 @@ pub(crate) fn output_buffers(game: &Game) -> impl Iterator<Item = (&Structure, &
     game.world
         .iter_entities()
         .filter_map(|e| Some((e.get::<Structure>()?, e.get::<Stock>()?)))
+}
+
+/// Every item a deployed structure is set up to make — its `work.produces`
+/// or its `assembles.item`.
+///
+/// **What "unlocked" means to the strip.** A pile whose tag only exists
+/// while the buffer behind it is non-empty makes the row reshuffle every
+/// time a hauler clears a shelf, which is the same thing sorting by
+/// quantity would do and is the one thing a glanceable readout cannot
+/// afford. A machine standing in the base is the base saying it makes that
+/// item, so the tag holds its place at 0.
+///
+/// **Both halves, because an assembler declares no `work` block at all** —
+/// `AssembleDef::item` is where a crafting machine says what it makes, and
+/// a rule reading `work.produces` alone leaves every one of them off the
+/// strip until its first unit lands.
+///
+/// Deliberately narrower than "any structure": a Depot makes nothing, and
+/// seeding off what a building *could hold* would put a row on the row for
+/// every item in the game. It is equally not the researched recipe list —
+/// a bench recipe is compiled into the *player's* pack, never into a base
+/// buffer, so a row for one would be a zero that could never move.
+pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
+    let structures = game.world.resource::<StructureDb>();
+    game.world
+        .iter_entities()
+        .filter_map(|e| structures.get(&e.get::<Structure>()?.kind))
+        .flat_map(|def| {
+            def.work
+                .iter()
+                .map(|w| &w.produces)
+                .chain(def.assembles.iter().map(|a| &a.item))
+        })
 }
 
 /// Takes up to `qty` of `item` out of the base's own stores, and reports how
@@ -100,12 +134,28 @@ impl Game {
         let db = self.world.resource::<ItemDb>();
         let mut totals: std::collections::BTreeMap<&ItemId, u32> =
             std::collections::BTreeMap::new();
+        for item in producible(self) {
+            totals.entry(item).or_default();
+        }
         for (_, stock) in output_buffers(self) {
             for (item, qty) in &stock.output {
                 if *qty == 0 {
                     continue;
                 }
                 *totals.entry(item).or_default() += qty;
+            }
+        }
+        // Folded in by the flag and never by name: `deliver_payout` sends a
+        // banked item straight past its node's own `output`, so this is the
+        // one holding no buffer above could ever have reported. A pool the
+        // player has none of is *not* seeded, or every run would open on a
+        // row for a resource nothing in the base makes yet — the same rule
+        // `producible` states, applied to the one item that has no buffer to
+        // stand in for it.
+        for def in db.all().filter(|d| d.banked) {
+            let held = self.banked(&def.id);
+            if held > 0 || totals.contains_key(&def.id) {
+                *totals.entry(&def.id).or_default() += held;
             }
         }
 

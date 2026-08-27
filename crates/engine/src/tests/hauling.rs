@@ -28,7 +28,7 @@ fn base(seed: u32) -> Game {
 /// cell it must now be standing on.
 fn deploy(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Entity {
     let (px, py) = game.base_pos().expect("the fixture stands in the base");
-    game.place_structure(kind, dx, dy).unwrap();
+    place_now(game, kind, dx, dy).unwrap();
     let (x, y) = (px + dx, py + dy);
     let mut query = game.world.query::<(Entity, &Position, &Structure)>();
     query

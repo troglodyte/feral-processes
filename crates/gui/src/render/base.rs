@@ -30,6 +30,23 @@ const VIGNETTE_MIN: f32 = 0.75;
 const STAFFED_MARK: f32 = 0.28;
 const STAFFED_MARK_INSET: f32 = 2.0;
 
+/// A pending build site's slab and its edge.
+///
+/// **Grey, and deliberately colourless.** Every other channel on this map is
+/// spoken for by a hue that means something — a biome's passability, a
+/// machine's status outline, the plan's amber, the mark's green — and a site
+/// is the one cell whose whole message is *nothing is here yet*. It reads as
+/// an absence because it is one. The orange caret bouncing on top is what
+/// carries "and somebody is working on it", so the slab does not have to.
+///
+/// The edge is darker than the fill rather than lighter, which is `rock`'s
+/// `SHADE_BAND` rule in another shape: a bright rim would read as a
+/// finished, lit structure. It is opaque so the ground beneath does not show
+/// through and make the cell look half-drawn.
+const BUILD_SITE_FILL: Color = Color::new(0.30, 0.30, 0.32, 1.0);
+const BUILD_SITE_EDGE: Color = Color::new(0.16, 0.16, 0.18, 1.0);
+const BUILD_SITE_EDGE_PX: f32 = 2.0;
+
 /// The Excavation plan's three washes, all one hue so a plan reads as one
 /// thing. A committed mark's fill is dim enough to walk over without the
 /// base becoming unreadable and its edge carries the shape; the box being
@@ -888,6 +905,13 @@ fn draw_surface_map(
             // worker in and out of existence as it walked over a machine.
             let mut structure: Option<&EntityView> = None;
             let mut actor: Option<&EntityView> = None;
+            // A third category beside those two, and it has to be: a build
+            // site is not a `Structure`, so the `is_structure` test above
+            // would drop it into `actor` — where it would either be hidden
+            // by the builder standing on it or hide the builder itself. It
+            // is ground being worked, which is what the frame below draws it
+            // as.
+            let mut building: Option<&EntityView> = None;
             // The entity wearing the mark, and whether its work has hit the
             // dead end below.
             let mut mark: Option<(Entity, bool)> = None;
@@ -897,7 +921,13 @@ fn draw_surface_map(
                 if erx != rx as i32 || ery != ry as i32 {
                     continue;
                 }
-                if ev.is_structure {
+                // A machine being upgraded carries its own pending row, so
+                // `build` alone no longer means "nothing is standing here
+                // yet": tested first, a working machine would draw as a bare
+                // build slab for as long as its upgrade was on order.
+                if ev.build.is_some() && !ev.is_structure {
+                    building = Some(ev);
+                } else if ev.is_structure {
                     structure = Some(ev);
                 } else if !matches!(actor, Some(a) if a.is_player) {
                     actor = Some(ev);
@@ -905,7 +935,7 @@ fn draw_surface_map(
                 if if ev.is_structure {
                     ev.structure_attended
                 } else {
-                    ev.worker_away_from_post
+                    ev.wears_job_mark
                 } {
                     mark = Some((ev.entity, ev.output_stranded));
                 }
@@ -981,6 +1011,38 @@ fn draw_surface_map(
                 draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world);
                 draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig);
             }
+            // A structure the crew has not raised yet: a flat dark slab with
+            // a darker edge, drawn over the ground and under everything that
+            // stands on it.
+            //
+            // **A block rather than the structure's own glyph in grey.**
+            // What is going up here is not the question a player glances at
+            // this cell to answer — the caret says "work is happening", the
+            // examine page says what and how far along, and a dim `M` would
+            // read as a Mining Node that had gone dark. It also keeps the
+            // cell legible as *not yet a thing*: nothing else on this map is
+            // a filled block, so a site is never mistaken for a machine.
+            //
+            // Both take the vignette and not the tile shade, matching the
+            // glyph rule below: this is something standing on the ground,
+            // not the ground.
+            if building.is_some() {
+                painter.rect(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    at_level(BUILD_SITE_FILL, vig),
+                );
+                painter.rect_lines(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    BUILD_SITE_EDGE_PX,
+                    at_level(BUILD_SITE_EDGE, vig),
+                );
+            }
             // The glyph takes the vignette but not the shade: depth should
             // apply to everything on the map evenly, while per-tile jitter is
             // a property of the ground, not of what stands on it.
@@ -1011,6 +1073,34 @@ fn draw_surface_map(
                     let ty = py + (tile_px + dims.height) / 2.0;
                     painter.map(&glyph, tx, ty, glyph_px, color);
                 }
+            }
+            // The caret, bouncing above the slab.
+            //
+            // Drawn here rather than through the `ch` path above because
+            // that path has no vertical offset to give it — and the bounce
+            // is the whole point: a build site is the one cell on the map
+            // where *nothing is happening yet* is the wrong reading. It
+            // reuses `Fx::staffed_bob`, the same upward-only raised cosine
+            // the "someone is on this job" mark rides, so the two motions on
+            // this map agree with each other rather than being two
+            // independently-invented curves. Phase-keyed by entity for that
+            // helper's own reason: two sites side by side bounce out of step
+            // and read as two jobs rather than one animation.
+            //
+            // Over the glyph layer, so a builder standing on the cell is
+            // drawn under its own work. Under the marks and outlines below,
+            // which are all about state rather than about the tile.
+            if let Some(ev) = building {
+                let glyph = ev.glyph.to_string();
+                let dims = painter.measure_map(&glyph, glyph_px);
+                let lift = fx.staffed_bob(ev.entity);
+                painter.map(
+                    &glyph,
+                    px + (tile_px - dims.width) / 2.0,
+                    py + (tile_px + dims.height) / 2.0 - lift,
+                    glyph_px,
+                    Color::new(ORANGE.r * vig, ORANGE.g * vig, ORANGE.b * vig, ORANGE.a),
+                );
             }
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is
@@ -1598,6 +1688,136 @@ mod tests {
         assert!(
             glyphs.iter().any(|g| g == "@"),
             "the player must still be drawn as a glyph: {glyphs:?}"
+        );
+    }
+
+    /// A base with one request filed on the cell east of the party, drawn
+    /// once. Returns the shapes so a caller can ask what landed.
+    ///
+    /// The party is stood **in base space**, which is the whole point: the
+    /// site's `Position` is a base-space cell, and `view_entities` selects
+    /// on `Game::stands_in_base_space` — drawn from the surface, nothing
+    /// here would be on the pane at all.
+    fn drawn_base(at: f64, request: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+        if request {
+            // No materials are given, and none are needed: filing charges
+            // nothing. That is not incidental to this fixture — it is why a
+            // renderer test can reach a build site at all without the engine
+            // exposing its `World`.
+            game.place_structure("mining_node", 1, 0)
+                .expect("a request is filed beside the party");
+        }
+
+        let mut fx = Fx::new();
+        fx.begin_frame(at, Vec::new(), false);
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+            );
+        });
+        shapes
+    }
+
+    /// Every rect fill and every rect stroke a frame painted.
+    fn painted_fills_and_strokes(
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+    ) -> (Vec<bevy_egui::egui::Color32>, Vec<bevy_egui::egui::Color32>) {
+        let mut fills = Vec::new();
+        let mut strokes = Vec::new();
+        for cs in shapes {
+            if let bevy_egui::egui::Shape::Rect(r) = &cs.shape {
+                fills.push(r.fill);
+                if r.stroke.width > 0.0 {
+                    strokes.push(r.stroke.color);
+                }
+            }
+        }
+        (fills, strokes)
+    }
+
+    /// A request draws as a slab, an edge and a caret — all three, because
+    /// each carries a different half of the message and any one alone reads
+    /// as something else.
+    ///
+    /// The slab alone is an unlit tile; the caret alone is a glyph standing
+    /// on bare ground, which is what every *creature* on this map looks like.
+    ///
+    /// **Differential against the same base with nothing on order**, and
+    /// that is load-bearing rather than tidy. Written as "is there a greyish
+    /// rect somewhere", this test passed with the slab draw deleted
+    /// outright — the map paints plenty of grey. What only a build site can
+    /// produce is a fill and a stroke the identical frame without one never
+    /// paints at all.
+    #[test]
+    fn a_pending_build_site_draws_a_slab_an_edge_and_a_caret() {
+        let with = drawn_base(0.0, true);
+        let without = drawn_base(0.0, false);
+        let (with_fills, with_strokes) = painted_fills_and_strokes(&with);
+        let (bare_fills, bare_strokes) = painted_fills_and_strokes(&without);
+
+        assert!(
+            with_fills.iter().any(|c| !bare_fills.contains(c)),
+            "the slab is a fill the same frame without a request never paints"
+        );
+        assert!(
+            with_strokes.iter().any(|c| !bare_strokes.contains(c)),
+            "and its edge is a stroke that frame never paints either"
+        );
+        assert!(
+            crate::paint::painted_text(&with).iter().any(|g| g == "^"),
+            "the caret is what says work is happening here: {:?}",
+            crate::paint::painted_text(&with)
+        );
+        assert!(
+            !crate::paint::painted_text(&without)
+                .iter()
+                .any(|g| g == "^"),
+            "and it is drawn only where a request stands"
+        );
+    }
+
+    /// ...and the caret bounces.
+    ///
+    /// **The motion is the point**, not decoration: a build site is the one
+    /// cell on this map where "nothing is happening yet" is the wrong
+    /// reading, and a still caret says exactly that. Two frames at different
+    /// times, comparing where the glyph landed — a test that only checks the
+    /// caret exists passes against a renderer that pinned it.
+    #[test]
+    fn the_caret_over_a_build_site_bounces() {
+        fn caret_y(at: f64) -> f32 {
+            let shapes = drawn_base(at, true);
+            shapes
+                .iter()
+                .find_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Text(t) if t.galley.text() == "^" => Some(t.pos.y),
+                    _ => None,
+                })
+                .expect("the caret is drawn")
+        }
+
+        // A quarter of the bob's period apart, so the raised cosine is at
+        // genuinely different heights rather than at two points that happen
+        // to share one.
+        let (a, b) = (caret_y(0.0), caret_y(0.25));
+        assert_ne!(
+            a, b,
+            "the caret must sit at different heights across frames — a still one reads as a \
+             glyph standing on the ground"
         );
     }
 

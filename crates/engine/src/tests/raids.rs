@@ -182,7 +182,7 @@ fn deploying_a_raidable_structure_still_gives_it_a_durability_pool() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
 
     let node = {
         let mut query = game.world.query::<(Entity, &Structure)>();
@@ -1418,7 +1418,7 @@ fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 100);
         inv.add(ItemId::from(ids::POWER_CELL), 10);
     }
-    game.place_structure("patch_node", 1, 1).unwrap();
+    place_now(&mut game, "patch_node", 1, 1).unwrap();
     let node = find_structure_by_kind(&mut game, "patch_node").unwrap();
     set_zone(&mut game, 2);
     let per_tier = patch_node_per_tier(&game);
@@ -1432,7 +1432,7 @@ fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
 
     stock_upgrade_materials(&mut game, 20);
 
-    game.upgrade_structure(node)
+    upgrade_now(&mut game, node)
         .expect("a non-workable structure with an upgrade path should still upgrade");
 
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);

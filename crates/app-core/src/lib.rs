@@ -908,7 +908,8 @@ pub enum Mode {
     /// Home still routes into `Mode::RemoveConfirm`.
     RemoveDirection,
     /// Lists nearby structures that declare an upgrade path (see
-    /// `Game::upgrade_structure`); picking one advances it a tier. Anything
+    /// `Game::upgrade_structure`); picking one **files a request** for the
+    /// next tier, which the base's build crew fetches for and works. Anything
     /// un-upgradeable is filtered out rather than offered and then refused.
     Upgrade,
     Symlink,

@@ -750,7 +750,7 @@ pub struct EntityView {
     /// job and are never moved again. And at its post it belongs *under* its
     /// machine's glyph: a base at rest should read as buildings, with motion
     /// the only thing that draws the eye.
-    pub worker_away_from_post: bool,
+    pub wears_job_mark: bool,
     /// Whether this entity's `Position` is a tile the sim actually keeps up
     /// to date — the input `views::drawn_on_surface_map` takes, and the
     /// wider question `worker_away_from_post` above is one answer to.
@@ -763,7 +763,7 @@ pub struct EntityView {
     /// companion keeps the tile it was beaten on — neither is ever written
     /// again, so drawing either would claim it is somewhere it isn't.
     ///
-    /// Distinct from `worker_away_from_post`, which stayed narrow because a
+    /// Distinct from `wears_job_mark`, which stayed narrow because a
     /// frontend marks "someone is on this job" with it: an idle program is
     /// on no job, so widening that field would have put the mark on it.
     pub position_is_honest: bool,
@@ -771,7 +771,7 @@ pub struct EntityView {
     /// right now — a guard (which never moves, so always) or a worker that
     /// has not stepped off on an errand.
     ///
-    /// The other half of `worker_away_from_post`, and the two are exclusive
+    /// The other half of `wears_job_mark`, and the two are exclusive
     /// per posted program: a frontend that marks "someone is on this job"
     /// draws the mark on the program when the program is drawn, and on the
     /// structure when it isn't. Distinct from `structure_worker`, which
@@ -817,6 +817,15 @@ pub struct EntityView {
     /// anything that runs no job and so has no state to be in. Lets the map
     /// colour a machine's outline by what it is doing.
     pub machine_status: Option<MachineStatus>,
+    /// The build request this entity *is*, or `None` for everything that is
+    /// not one — see `views::BuildOrderRow`.
+    ///
+    /// `Some` here is what tells the renderer to paint a site's frame rather
+    /// than a glyph on bare floor, and it is what the examine page reads to
+    /// say what the crew is still carrying. Carried on the view rather than
+    /// asked for separately so the map and the inspector cannot come to
+    /// disagree about which cell is a pending build.
+    pub build: Option<BuildOrderRow>,
     /// The orthogonal offsets of neighbours this (structure) entity is
     /// joined to for production — the sides the map leaves un-outlined, so
     /// that a chain draws as one continuous shape and a machine that should
@@ -1642,6 +1651,13 @@ pub enum InspectTarget {
     /// on it. What the player gets instead is the trader's own line, through
     /// `Game::caravan_blurb`.
     Caravan(Entity),
+    /// A structure on order that the crew has not raised yet. Its own
+    /// variant rather than `Structure`, because there is no structure there
+    /// to inspect: no stock, no status, no tier, nothing to upgrade or
+    /// demolish. What the player gets instead is the request's own state —
+    /// what is still to be fetched and how far along the raising is —
+    /// through `Game::build_order_row`.
+    BuildSite(Entity),
 }
 
 pub enum ManifestSubject {
@@ -1897,7 +1913,91 @@ pub struct ContractRow {
     pub target: u32,
 }
 
-/// One pile the base is holding, as the stock strip lists it — see
+/// One structure on order and not yet raised — see `components::BuildSite`.
+///
+/// **The one derivation of what a build request looks like**, and it is
+/// deliberately built before there is a screen to draw it. Three readers
+/// want the same answer: the examine page, which is how a player checks
+/// what a site is still short of; the map, which needs to know a cell is a
+/// pending build at all; and the build-order screen this is shaped for.
+/// Two of those exist today. Written per-caller, the third would arrive as
+/// a fourth opinion about how far along a build is.
+///
+/// **Every figure here is a call, not a copy** — `BuildSite::outstanding`,
+/// `BuildSite::required_ticks`, `Game::structure_name`, `Game::item_name` —
+/// so a screen can never report a percentage the crew disagrees with.
+///
+/// Names rather than ids in `outstanding`: this is a view, and an `ItemId`
+/// leaking onto a screen reads as a renderer bug.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuildOrderRow {
+    pub entity: Entity,
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    /// Whether this raises a new structure or advances the one already on
+    /// the cell a tier — see `components::BuildGoal`. Read through
+    /// `BuildOrderRow::label`, which is what a screen prints.
+    pub goal: crate::components::BuildGoal,
+    /// The display name of the structure the request is about. On an upgrade
+    /// that is the machine already standing there.
+    pub structure: String,
+    /// Units of material standing on the cell, against `materials`, the
+    /// total the bill calls for. The delivery half of the job's progress.
+    pub delivered: u32,
+    pub materials: u32,
+    /// What is still to be fetched, as `(item name, quantity)` in the
+    /// structure's own recipe order. Empty once the materials are all in.
+    pub outstanding: Vec<(String, u32)>,
+    /// Ticks of construction done against `required_ticks`. Both zero-based
+    /// and both meaningless until `outstanding` is empty — nothing is raised
+    /// while anything is still being carried.
+    pub ticks: u32,
+    pub required_ticks: u32,
+    /// The program posted to this site, if one is. `None` is a real state
+    /// and not a fault: a base with no spare body leaves requests standing.
+    pub builder: Option<String>,
+}
+
+impl BuildOrderRow {
+    /// What a screen calls this request — `Lathe`, or `Lathe → Mk3`.
+    ///
+    /// Composed here rather than baked into `structure`, so the name and the
+    /// tier cannot be split back apart by a caller that wants only one.
+    pub fn label(&self) -> String {
+        match self.goal {
+            crate::components::BuildGoal::New => self.structure.clone(),
+            crate::components::BuildGoal::Upgrade { to_tier } => {
+                format!("{} → Mk{to_tier}", self.structure)
+            }
+        }
+    }
+
+    /// How far along the whole job is, 0..=100 — deliveries and
+    /// construction weighted by how much of the work each is.
+    ///
+    /// **Derived here rather than by each screen**, so the map's frame, an
+    /// examine line and a future order list cannot round the same job three
+    /// ways. A structure costing nothing at all reports 100 for the delivery
+    /// half rather than dividing by zero.
+    pub fn percent(&self) -> u32 {
+        let fetched = if self.materials == 0 {
+            1.0
+        } else {
+            self.delivered as f32 / self.materials as f32
+        };
+        let raised = if self.required_ticks == 0 {
+            1.0
+        } else {
+            (self.ticks as f32 / self.required_ticks as f32).min(1.0)
+        };
+        // Halves, because the two legs are the two halves of the job and
+        // nothing measured says otherwise yet. A weighting worth having is
+        // one taken off a play session, not invented here.
+        (((fetched + raised) / 2.0) * 100.0).round() as u32
+    }
+}
+
+/// One pile the base is holding, as the stock strip lists it — see/// One pile the base is holding, as the stock strip lists it — see
 /// `Game::base_stock`.
 ///
 /// Carries the tag *and* the name: the strip draws the tag alone, and the

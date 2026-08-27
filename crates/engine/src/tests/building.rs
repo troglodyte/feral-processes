@@ -61,7 +61,7 @@ fn a_cut_corner_is_not_buildable() {
     // Diagonally in by one, which is the first cell the chamfer leaves —
     // and the assertion that stops the cut being fixed by shrinking the
     // whole build box.
-    game.place_structure("armory", r - 1, r - 1)
+    place_now(&mut game, "armory", r - 1, r - 1)
         .expect("the cell just inside the cut is floor and should be buildable");
 }
 
@@ -149,7 +149,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
 
     assert!(
-        game.place_structure("armory", 1, 0).is_err(),
+        place_now(&mut game, "armory", 1, 0).is_err(),
         "nothing should be buildable before a Home exists"
     );
     assert_eq!(
@@ -162,7 +162,7 @@ fn place_structure_rejects_anything_but_home_until_a_home_exists() {
     );
 
     place_home(&mut game);
-    game.place_structure("armory", 1, 0).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
     assert_eq!(
         game.view_entities(10, 10)
             .into_iter()
@@ -207,41 +207,92 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
     // Pointing back into the pocket makes it buildable again.
-    game.place_structure("armory", -1, 0)
-        .expect("building back onto laid floor should succeed");
+    place_now(&mut game, "armory", -1, 0).expect("building back onto laid floor should succeed");
 }
 
-/// A refusal for want of materials is the one build refusal the player has to
-/// go and *do* something about, so it goes in the base log rather than living
-/// only in the status line, which ages out after `STATUS_LINE_SECONDS` while
-/// they are looking at the map. It names the shortfall for the same reason:
-/// "not enough" without a number sends them back to the build menu to work
+/// **A request the base cannot afford is filed, not refused**, and the crew
+/// is what says so.
+///
+/// The old contract refused the deploy outright and logged the shortfall.
+/// That refusal is gone with the verb it belonged to: a deploy is a request
+/// now, and a request the base will be able to afford in ten minutes is a
+/// perfectly good thing to file — production catches up and the crew starts
+/// carrying. What survives is the *reporting* obligation, moved to the one
+/// place that can still see a shortfall: a builder standing at a site with
+/// nothing anywhere to fetch. It is base news for the same reason the
+/// refusal was, and it names the numbers for the same reason too — "not
+/// enough" without a figure sends the player back to the build menu to work
 /// out what they were short of.
 #[test]
-fn deploying_without_the_materials_logs_the_shortfall() {
+fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_of() {
     let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
     place_home(&mut game);
+    // A body to post, or nobody ever walks to the site and nothing is ever
+    // said — the announcement belongs to the crew, not to the keypress.
+    spawn_tamed(&mut game, 10, 3);
 
     let held = count_item(&game, ids::CORE_FRAGMENT);
-    let err = game
-        .place_structure("armory", 1, 0)
-        .expect_err("an Armory costs far more than the starting kit holds");
-    assert!(err.contains("Not enough"), "unexpected error: {err}");
+    game.place_structure("armory", 1, 0)
+        .expect("a request is filed whether or not the base can afford it yet");
 
-    let last = game.message_log(1);
     assert_eq!(
-        last[0].source,
-        MessageSource::Base,
-        "a build refusal is base news, not field news"
+        count_item(&game, ids::CORE_FRAGMENT),
+        held,
+        "filing a request charges nothing — the materials are fetched by hand later"
     );
+    let site = game
+        .build_site_at(1, 0)
+        .expect("the request stands on the cell it was filed for");
+    let outstanding = game
+        .world
+        .get::<BuildSite>(site)
+        .expect("it is a build site")
+        .outstanding();
     assert!(
-        last[0].text.contains("Armory")
-            && last[0].text.contains("18 Core Fragment")
-            && last[0].text.contains(&format!("have {held}")),
-        "the log line should name what was being deployed and how short it fell: {}",
-        last[0].text
+        outstanding
+            .iter()
+            .any(|(item, qty)| item.as_str() == ids::CORE_FRAGMENT && *qty == 18),
+        "the whole bill is outstanding, since nothing has been delivered: {outstanding:?}"
+    );
+
+    // Run the crew until it has walked to the site and found the base bare.
+    for _ in 0..60 {
+        game.tick();
+    }
+    let said = game
+        .message_history(200)
+        .into_iter()
+        .find(|m| m.text.contains("nothing to raise"))
+        .expect("the crew reports a base with nothing to fetch");
+    assert_eq!(
+        said.source,
+        MessageSource::Base,
+        "a shortfall is base news, not field news"
+    );
+    // **13, not 18** — and that figure is the whole feature working. The
+    // crew walked to the party, took the five Core Fragments the starting
+    // kit holds straight out of the pack, carried them to the cell and set
+    // them down; what it reports short is what is left after everything the
+    // base could actually reach has already been delivered.
+    assert!(
+        said.text.contains("Armory") && said.text.contains(&format!("{} Core Fragment", 18 - held)),
+        "the line should name what is being raised and what is still outstanding: {}",
+        said.text
+    );
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        0,
+        "the pack was emptied into the site, one carry at a time"
+    );
+    assert_eq!(
+        game.world
+            .get::<BuildSite>(site)
+            .expect("the site is still standing, waiting on the rest")
+            .delivered_of(&ItemId::from(ids::CORE_FRAGMENT)),
+        held,
+        "and every unit that left the pack is standing on the cell"
     );
 }
 
@@ -261,9 +312,9 @@ fn the_nearby_scan_lists_entities_by_name_then_position() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("armory", 1, 0).unwrap();
-    game.place_structure("mining_node", 2, 0).unwrap();
-    game.place_structure("mining_node", -2, 0).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 2, 0).unwrap();
+    place_now(&mut game, "mining_node", -2, 0).unwrap();
 
     let listed: Vec<(String, (i32, i32))> = game
         .view_entities(10, 10)
@@ -294,7 +345,7 @@ fn remove_structure_refunds_a_percentage_of_its_build_cost() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 20);
     place_home(&mut game);
-    game.place_structure("armory", 1, 0).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
     let armory = game
         .view_entities(10, 10)
         .into_iter()
@@ -346,8 +397,8 @@ fn removing_home_cascades_to_destroy_every_other_structure_and_refunds_each() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 31);
     place_home(&mut game);
-    game.place_structure("armory", 1, 0).unwrap();
-    game.place_structure("fabricator", 0, 1).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_now(&mut game, "fabricator", 0, 1).unwrap();
     let home = game
         .view_entities(10, 10)
         .into_iter()
@@ -414,7 +465,7 @@ fn researching_and_building_an_armory_unlocks_firewall_plating() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 18);
-    game.place_structure("armory", 1, 0).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
 
     let recipe = game
         .craft_recipes()
@@ -826,7 +877,7 @@ fn upgrading_a_node_costs_materials_and_raises_its_tier() {
 
     stock_upgrade_materials(&mut game, 20);
 
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
 
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
     assert_eq!(
@@ -849,7 +900,7 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 
     assert_eq!(game.world.get::<ResourceNode>(node).unwrap().level, Some(1));
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
     assert_eq!(
         game.world.get::<ResourceNode>(node).unwrap().level,
         Some(2),
@@ -858,19 +909,26 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 }
 
 #[test]
-fn upgrading_refuses_past_max_tier_and_without_materials() {
+fn upgrading_refuses_past_max_tier() {
     let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     // Deep enough that the zone ceiling is out of the way: this test is about
-    // the def's own `max_tier` and about materials, both of which are checked
-    // after the zone gate.
+    // the def's own `max_tier`, which is checked after the zone gate.
     set_zone(&mut game, 9);
 
-    let err = game
-        .upgrade_structure(node)
-        .expect_err("no materials left after building it");
-    assert!(err.contains("Not enough"), "unexpected error: {err}");
+    // A base that cannot afford the bill is deliberately *not* refused here:
+    // upgrading files a request now, and a request the base cannot afford yet
+    // is the whole point of a queue — the crew says so from the site instead.
+    game.upgrade_structure(node)
+        .expect("filing costs nothing and checks no store");
+    let site = game
+        .build_site_at(
+            game.world.get::<Position>(node).unwrap().x,
+            game.world.get::<Position>(node).unwrap().y,
+        )
+        .expect("the request stands");
+    game.cancel_build_request(site).unwrap();
 
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -887,7 +945,7 @@ fn upgrading_refuses_past_max_tier_and_without_materials() {
         .max_tier;
     for _ in 1..max {
         stock_upgrade_materials(&mut game, 20);
-        game.upgrade_structure(node).unwrap();
+        upgrade_now(&mut game, node).unwrap();
     }
     let err = game
         .upgrade_structure(node)
@@ -931,7 +989,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
 
     set_zone(&mut game, 2);
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
 
     let err = game
@@ -962,7 +1020,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
         .max_tier;
     for _ in 1..max {
         stock_upgrade_materials(&mut game, 20);
-        game.upgrade_structure(node).unwrap();
+        upgrade_now(&mut game, node).unwrap();
     }
     let err = game
         .upgrade_structure(node)
@@ -1011,8 +1069,9 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
     set_zone(&mut game, 3);
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
+    stock_upgrade_materials(&mut game, 30);
+    upgrade_now(&mut game, node).unwrap();
 
     let path = std::env::temp_dir().join(format!("feral_tier_save_{}.bin", std::process::id()));
     game.save(&path).unwrap();
@@ -1855,7 +1914,7 @@ fn fully_grown_base(seed: u32) -> Game {
 fn a_program_walks_across_a_fully_grown_base_to_its_post() {
     let mut game = fully_grown_base(702);
     let r = GROWN_RADIUS;
-    game.place_structure("mining_node", r, 0).unwrap();
+    place_now(&mut game, "mining_node", r, 0).unwrap();
     let node = game
         .find_blocking_structure_at(r, 0)
         .expect("the node was just deployed");
@@ -1915,7 +1974,7 @@ fn a_capped_structure_refuses_the_one_past_its_limit_and_costs_nothing() {
         .filter(|&(dx, dy)| (dx, dy) != (0, 0));
     for i in 0..cap {
         let (dx, dy) = spots.next().expect("enough free floor for the cap");
-        game.place_structure("line_driver", dx, dy)
+        place_now(&mut game, "line_driver", dx, dy)
             .unwrap_or_else(|e| panic!("driver {i} refused: {e}"));
     }
 
@@ -1985,8 +2044,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     set_zone(&mut game, 2);
     game.unlock_research("cache_coherence")
         .expect("a breached run may learn it");
-    game.place_structure("cache_tap", 1, 0)
-        .expect("and then stand a Tap up");
+    place_now(&mut game, "cache_tap", 1, 0).expect("and then stand a Tap up");
 }
 
 /// The layering property, which is the whole of "a new material does not
@@ -2003,9 +2061,9 @@ fn core_fragments_keep_flowing_once_the_second_zone_material_arrives() {
     unlock_research_chain(&mut game, "cache_coherence");
     set_zone(&mut game, 3);
 
-    game.place_structure("mining_node", 1, 0)
+    place_now(&mut game, "mining_node", 1, 0)
         .expect("a Mining Node is still a thing you can build in zone 3");
-    game.place_structure("cache_tap", -1, 0)
+    place_now(&mut game, "cache_tap", -1, 0)
         .expect("and the Tap does not expire when the next zone arrives");
 
     let defs = game.structure_defs();
@@ -2041,15 +2099,31 @@ fn a_line_driver_is_refused_without_the_zone_two_material() {
     give(&mut game, &ItemId::from(ids::BLANK_SUBSTRATE), 8);
     unlock_research_chain(&mut game, "cache_coherence");
 
-    let broke = game
-        .place_structure("line_driver", 1, 0)
-        .expect_err("fragments alone do not buy one");
-    assert!(broke.contains("Cache Grain"), "{broke}");
+    // **The gate is the bill of materials, not a refusal.** A request may be
+    // filed with fragments alone — it simply never gets raised, because
+    // nothing in the base or the pack holds a unit of the material it is
+    // denominated in, and `BuildSite::outstanding` keeps saying so. That is
+    // what stops the grid growing until the run has a Tap running.
+    game.place_structure("line_driver", 1, 0)
+        .expect("a request is filed regardless of what is in stock");
+    let site = game.build_site_at(1, 0).expect("the request stands there");
+    let outstanding = game
+        .world
+        .get::<BuildSite>(site)
+        .expect("it is a build site")
+        .outstanding();
+    assert!(
+        outstanding
+            .iter()
+            .any(|(item, _)| game.item_name(item).contains("Cache Grain")),
+        "fragments alone leave the zone-2 material outstanding: {outstanding:?}"
+    );
+    game.cancel_build_request(site)
+        .expect("and it can be called off again");
 
     let (_, before) = game.base_power();
     give(&mut game, &ItemId::from("cache_grain"), 12);
-    game.place_structure("line_driver", 1, 0)
-        .expect("with the grain in hand it stands up");
+    place_now(&mut game, "line_driver", 1, 0).expect("with the grain in hand it stands up");
     let (_, after) = game.base_power();
     assert!(
         after > before,

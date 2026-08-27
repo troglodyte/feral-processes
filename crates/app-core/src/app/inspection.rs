@@ -62,6 +62,16 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::CellDescribe;
             }
+            // A build site takes the caravan's shape and for the caravan's
+            // reason: there is no structure standing there yet, so a
+            // structure sheet would draw a machine with no stock, no status
+            // and no tier. What the player wants is what is still to be
+            // carried to it, which is one line.
+            Some(InspectTarget::BuildSite(entity)) => {
+                self.pending_description = game.build_site_blurb(entity);
+                self.status_line = None;
+                self.mode = Mode::CellDescribe;
+            }
             // Nothing standing there — but in base space the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a

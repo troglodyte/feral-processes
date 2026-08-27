@@ -98,7 +98,7 @@ fn deploying_a_structure_is_a_base_action() {
             place_home(game);
             give(game, &ItemId::from(ids::CORE_FRAGMENT), 20);
         },
-        |game, ()| game.place_structure("mining_node", 1, 0),
+        |game, ()| place_now(game, "mining_node", 1, 0),
     );
 }
 
@@ -387,9 +387,9 @@ fn base_pos_answers_nowhere_but_base_space() {
 fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
     let mut game = game(3114);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
-    game.place_structure("recharger_node", 1, 0)
+    place_now(&mut game, "recharger_node", 1, 0)
         .expect("floor beside the origin is inside the starting pocket");
     assert_eq!(
         game.base_pos(),
@@ -426,9 +426,9 @@ fn a_recharger_regens_the_party_through_the_real_path_into_base_space() {
 fn a_recharger_does_not_reach_the_party_genuinely_on_the_surface() {
     let mut game = game(3117);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
-    game.place_structure("recharger_node", 1, 0)
+    place_now(&mut game, "recharger_node", 1, 0)
         .expect("floor beside the origin is inside the starting pocket");
     game.leave_base().unwrap();
     assert!(!game.in_base(), "back on the open grid");
@@ -976,7 +976,7 @@ fn a_fresh_run_deploys_its_first_home_from_the_open_grid_and_walks_in() {
         "the fixture must start on the open grid, or it teleports like the others"
     );
 
-    game.place_structure("home", 1, 0)
+    place_now(&mut game, "home", 1, 0)
         .expect("the first Home is what opens the base, so it cannot need the base to exist");
 
     let home = game.home_position().expect("a Home was just deployed");
@@ -997,8 +997,7 @@ fn a_fresh_run_deploys_its_first_home_from_the_open_grid_and_walks_in() {
 fn every_deployment_after_the_first_home_is_a_base_action() {
     let mut game = game(3131);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    game.place_structure("home", 1, 0)
-        .expect("the founding deploy is permitted from outside");
+    place_now(&mut game, "home", 1, 0).expect("the founding deploy is permitted from outside");
 
     let refused = game
         .place_structure("mining_node", 1, 0)
@@ -1026,7 +1025,7 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
     let overrides_before = game.world.resource::<WorldMap>().overrides().len();
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
 
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
 
     let grid = game.world.resource::<base_grid::BaseGrid>();
     assert_eq!(
@@ -1061,12 +1060,12 @@ fn deploying_a_home_lays_the_pocket_and_stamps_no_world_tile() {
 fn a_machine_deploys_onto_pocket_floor() {
     let mut game = game(3133);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
     game.move_player(1, 0);
     assert_eq!(game.base_pos(), Some((1, 0)), "stepped off the Home tile");
 
-    game.place_structure("mining_node", 1, 0)
+    place_now(&mut game, "mining_node", 1, 0)
         .expect("floor two cells east of the origin is inside the pocket");
 
     let node = find_structure_by_kind(&mut game, "mining_node").expect("it went up");
@@ -1084,7 +1083,7 @@ fn a_machine_deploys_onto_pocket_floor() {
 fn deploying_off_the_pocket_floor_is_refused() {
     let mut game = game(3134);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 40);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
     let edge = crate::tuning::STARTING_POCKET_RADIUS;
     game.world.insert_resource(Locale::Base { x: edge, y: 0 });
@@ -1123,7 +1122,7 @@ fn deploying_off_the_pocket_floor_is_refused() {
 fn game_with_a_broker(seed: u32) -> Game {
     let mut game = game(seed);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     spawn_machine_at(&mut game, "contract_broker", 1, 0);
     game
 }
@@ -1165,7 +1164,7 @@ fn a_broker_is_out_of_reach_off_the_floor() {
 fn no_broker_standing_is_not_the_same_as_being_off_the_base() {
     let mut game = game(3137);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
     assert_eq!(
         game.broker_reach(),
@@ -1242,12 +1241,12 @@ fn clear_the_route(game: &mut Game) {
 fn a_base_standing_does_not_wall_the_zone_surface() {
     let mut game = game(3140);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 60);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
     // Machines all around the exit cell, so the surface tiles they would
     // shadow are the ones the circuit walks over.
     for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-        game.place_structure("mining_node", dx, dy)
+        place_now(&mut game, "mining_node", dx, dy)
             .unwrap_or_else(|e| panic!("({dx}, {dy}) is pocket floor: {e}"));
     }
     game.leave_base().unwrap();
@@ -1309,9 +1308,9 @@ fn a_portal_in_the_base_does_not_breach_from_the_zone_surface() {
     let mut game = game(3141);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
     give(&mut game, &ItemId::from(ids::PORTAL_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     game.enter_base().unwrap();
-    game.place_structure("portal", 1, 0)
+    place_now(&mut game, "portal", 1, 0)
         .expect("a Portal is a structure like any other and stands on floor");
     game.leave_base().unwrap();
     clear_ground_around_the_player(&mut game, 3);
@@ -1361,7 +1360,7 @@ fn a_portal_in_the_base_does_not_breach_from_the_zone_surface() {
 fn a_reload_keeps_the_pocket() {
     let mut game = game(3142);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     assert!(
         game.home_position().is_some(),
         "the fixture must have a Home, or the load path has nothing to rebuild from"
@@ -1402,7 +1401,7 @@ fn deploying_a_home_widens_the_opening_ring_and_a_reload_keeps_it() {
     );
 
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     assert!(
         game.in_opening_ring(probe.0, probe.1),
         "a base's own reach is what widens the opening ring"
@@ -1441,7 +1440,7 @@ fn a_link_near_the_base_runs_shallower_than_one_by_a_baseless_run() {
 
     let unbased = game.frames_at(link);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     let based = game.frames_at(link);
 
     assert!(
@@ -1480,7 +1479,7 @@ fn a_link_near_the_base_runs_shallower_than_one_by_a_baseless_run() {
 fn view_tiles_synthesises_the_three_base_biomes() {
     let mut game = game(3200);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     // A cell mined but not floored, just past the starting pocket's edge —
     // `BaseGrid::open` is `pub(crate)` and unused by any gameplay path this
     // slice, so this is the only way to put one on the board at all.
@@ -1723,7 +1722,7 @@ fn the_examine_ray_does_not_name_a_program_standing_in_the_base() {
 fn game_at_the_frontier(seed: u32) -> Game {
     let mut game = game(seed);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 20);
-    game.place_structure("home", 1, 0).unwrap();
+    place_now(&mut game, "home", 1, 0).unwrap();
     stand_in_base_at(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
     game
 }

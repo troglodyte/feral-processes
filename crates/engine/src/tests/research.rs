@@ -228,7 +228,7 @@ fn a_researched_recipe_stays_hidden_until_its_bench_is_built() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("fabricator", 0, 1).unwrap();
+    place_now(&mut game, "fabricator", 0, 1).unwrap();
 
     let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
     assert!(results.contains(&ItemId::from(ids::OVERCLOCK_CORE)));
@@ -245,7 +245,7 @@ fn a_built_bench_alone_does_not_unlock_its_recipe() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("fabricator", 0, 1).unwrap();
+    place_now(&mut game, "fabricator", 0, 1).unwrap();
 
     let results: Vec<ItemId> = game.craft_recipes().into_iter().map(|r| r.result).collect();
     assert!(
@@ -277,7 +277,7 @@ fn an_item_declared_recipe_stays_hidden_until_its_bench_is_built() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("fabricator", 0, 1).unwrap();
+    place_now(&mut game, "fabricator", 0, 1).unwrap();
 
     assert!(
         game.craft_recipes().iter().any(|r| r.result == arc_lance),
@@ -359,7 +359,7 @@ fn a_researched_recipe_carries_the_cost_from_its_ron_file() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("fabricator", 0, 1).unwrap();
+    place_now(&mut game, "fabricator", 0, 1).unwrap();
 
     assert_eq!(
         game.craft_cost(&ItemId::from(ids::OVERCLOCK_CORE), false),
@@ -431,7 +431,7 @@ fn placing_an_unresearched_structure_is_rejected_even_when_called_directly() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
-    let err = game.place_structure("fabricator", 0, 1).unwrap_err();
+    let err = place_now(&mut game, "fabricator", 0, 1).unwrap_err();
     assert!(
         err.contains("researched"),
         "filtering the menu is not a gate: {err}"

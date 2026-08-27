@@ -736,6 +736,24 @@ pub enum TaskKind {
     /// and floors through `Game::floor_cell` rather than keeping a second
     /// copy of either.
     Excavate,
+    /// Posted to a `BuildSite` in base space: fetch what the structure
+    /// costs, set it down on the cell, then raise it — see
+    /// `Game::run_build_crew`.
+    ///
+    /// **The second task kind whose `target` is not a `Structure`**, and it
+    /// inherits every consequence `Excavate` documents above: neither
+    /// `task_progress_system` nor `haul_step_system` can touch it, because
+    /// each resolves its target through a query a build site cannot answer.
+    /// Its cycle is `&mut Game` work for the same reason a digger's is —
+    /// completing one ends in `Game::spawn_structure`, the one place a
+    /// structure's component list is written.
+    ///
+    /// Unlike every other kind, a body holding this one may be **carrying**
+    /// a load it fetched for the site. `schedule_base_labour`'s
+    /// never-free-a-`Carrying`-holder rule already covers that, and it has
+    /// to: freeing the body drops the `Carrying` with the `Task`, and those
+    /// units have already left the shelf they came off.
+    Construct,
 }
 
 /// A generic ongoing job: `worker` progresses `target` over multiple ticks.
@@ -1604,6 +1622,201 @@ pub struct DigSite {
     /// so a reload says both again, which is right — the run that was told
     /// is over.
     pub announced_dry: bool,
+}
+
+/// The character a pending build site draws.
+///
+/// **A caret, and orange.** The renderer paints its own dark frame around
+/// the cell and bounces this on top, but the glyph is what the examine ray
+/// reads and what any surface that draws a `Glyph` without knowing what it
+/// is will show — so it has to mean something on its own rather than be a
+/// placeholder the renderer is expected to override.
+pub const BUILD_SITE_GLYPH: char = '^';
+
+/// A structure the player has requested and the base has not stood up yet:
+/// the resolved bill of materials, what has been carried to the spot so
+/// far, and how far along the raising of it is.
+///
+/// **Its `Position` is in base space**, on the cell the finished structure
+/// will occupy — `DigSite`'s rule and `DigSite`'s warning. It is the third
+/// non-`Structure` entity to carry a base-space `Position`, so anything
+/// reading one off it must already know which locale it is in.
+///
+/// **Everything a future build-order screen needs is here or derived from
+/// here**, which is why the cost is carried rather than looked up: the
+/// screen wants a percentage and a shortfall, and both fall out of `cost`
+/// against `delivered` with no second walk of the world. It is also why the
+/// cost is *resolved at filing* rather than re-read from the
+/// `StructureDef` each tick — `ActiveContract`'s rule. A zone-portal's
+/// build cost grows with `ZoneLevel`, so a request filed in zone 3 and
+/// finished in zone 4 would otherwise silently change price underneath the
+/// crew already carrying to it.
+///
+/// **What is not here is who is building it.** That is a `Task` with
+/// `TaskKind::Construct` pointing at this entity, exactly as a digger's
+/// posting is, so "one builder at a time" is a property of the scheduler
+/// naming a site once rather than a count stored here. A second builder is
+/// a scheduler change, not a save-format change.
+/// What a `BuildSite` does when its meter fills — see `BuildSite::goal`.
+///
+/// **The axis of change is what a finished site does, and nothing else.**
+/// The bill, the fetching, the walk, the delivery, both announcement
+/// latches, the reachability check above the truncation and the refund on
+/// cancel are identical for a deploy and an upgrade, so exactly one step
+/// branches on this: `raise_one_tick`'s completion. A second component with
+/// its own crew pass would have to copy all four rules build orders
+/// established, and the copy that drifts is the one nobody runs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BuildGoal {
+    /// Raise the structure named by `BuildSite::structure` on this cell.
+    #[default]
+    New,
+    /// Advance the structure **already standing on this cell** to `to_tier`.
+    ///
+    /// The machine is named by tile and never by `Entity`: it is resolved by
+    /// position at completion, so there is nothing to dangle when it is
+    /// destroyed underneath the request and no load-order dependency between
+    /// structures and sites in the save.
+    Upgrade { to_tier: u32 },
+}
+
+#[derive(Component, Clone, Debug)]
+pub struct BuildSite {
+    /// Which structure this becomes. A `StructureId` and never a resolved
+    /// `StructureDef`, unlike `cost` above: the def is content and may be
+    /// edited or modded between the request and the raising, and the two
+    /// things a stale def would get wrong — the price and the glyph — are
+    /// respectively carried here already and wanted *fresh*.
+    pub structure: StructureId,
+    /// The bill of materials as `Game::structure_build_cost` priced it the
+    /// moment the request was filed.
+    pub cost: Vec<(ItemId, u32)>,
+    /// What has actually been carried here and set down, which is a subset
+    /// of `cost` by construction — `BuildSite::deliver` clamps against the
+    /// outstanding amount, so nothing can be over-delivered and no entry
+    /// can name an item the bill does not.
+    ///
+    /// These units have already left the shelf they came from. They are
+    /// **owed back** on a cancel, which is `Game::cancel_build_request`'s
+    /// whole job.
+    pub delivered: Vec<(ItemId, u32)>,
+    /// Ticks of construction done, against `required_ticks`. Only ever
+    /// advanced by a builder standing at the site with the materials all
+    /// in, so it is not a second progress meter racing the delivery one.
+    pub progress: u32,
+    /// Whether the crew has already said there is nothing anywhere to fetch
+    /// for this one. `DigSite::announced_dry`'s rule and its reason:
+    /// entering a state is news, staying in it is not.
+    pub announced_dry: bool,
+    /// Whether the crew has already said it cannot reach this one.
+    /// `DigSite::announced_stuck`'s counterpart, and neither latch is
+    /// saved — a reload should say both again, because the run that was
+    /// told is over.
+    pub announced_stuck: bool,
+    /// What raising this one does — stand a new structure up, or advance
+    /// the one already on this cell a tier. See `BuildGoal`.
+    pub goal: BuildGoal,
+}
+
+impl BuildSite {
+    /// A fresh request for `structure` against an already-resolved `cost`.
+    pub fn new(structure: StructureId, cost: Vec<(ItemId, u32)>) -> Self {
+        Self::filed(structure, cost, BuildGoal::New)
+    }
+
+    /// A request to advance the structure already standing on this cell to
+    /// `to_tier`, against an already-resolved `cost`.
+    pub fn upgrade(structure: StructureId, cost: Vec<(ItemId, u32)>, to_tier: u32) -> Self {
+        Self::filed(structure, cost, BuildGoal::Upgrade { to_tier })
+    }
+
+    fn filed(structure: StructureId, cost: Vec<(ItemId, u32)>, goal: BuildGoal) -> Self {
+        Self {
+            structure,
+            cost,
+            delivered: Vec::new(),
+            progress: 0,
+            announced_dry: false,
+            announced_stuck: false,
+            goal,
+        }
+    }
+
+    /// How many units of material the whole structure costs.
+    pub fn total_materials(&self) -> u32 {
+        self.cost.iter().map(|(_, qty)| qty).sum()
+    }
+
+    /// How long raising this one takes, in ticks —
+    /// `tuning::BUILD_TICKS_PER_MATERIAL` per unit of material.
+    ///
+    /// **Derived, never stored**, so retuning the rate moves every site in
+    /// every save at once rather than only the ones filed afterwards. See
+    /// that constant for the argument.
+    ///
+    /// Floored at one tick: a modded structure costing nothing at all would
+    /// otherwise have a `required` of zero and complete on the tick it was
+    /// filed, which reads as the request being ignored rather than as an
+    /// instant build.
+    pub fn required_ticks(&self) -> u32 {
+        (self.total_materials() * crate::tuning::BUILD_TICKS_PER_MATERIAL).max(1)
+    }
+
+    /// How much of `item` has been set down here.
+    pub fn delivered_of(&self, item: &ItemId) -> u32 {
+        self.delivered
+            .iter()
+            .find(|(id, _)| id == item)
+            .map(|(_, qty)| *qty)
+            .unwrap_or(0)
+    }
+
+    /// What the site still needs, in `cost` order and skipping anything
+    /// already satisfied. Empty exactly when the materials are all in.
+    ///
+    /// In `cost` order rather than sorted, so a crew fetches a structure's
+    /// ingredients in the order its `.ron` file lists them and a base
+    /// raising the same structure twice does it the same way both times.
+    pub fn outstanding(&self) -> Vec<(ItemId, u32)> {
+        self.cost
+            .iter()
+            .filter_map(|(item, want)| {
+                let short = want.saturating_sub(self.delivered_of(item));
+                (short > 0).then(|| (item.clone(), short))
+            })
+            .collect()
+    }
+
+    /// Whether everything the structure costs is standing on the cell.
+    pub fn materials_ready(&self) -> bool {
+        self.outstanding().is_empty()
+    }
+
+    /// Sets `qty` of `item` down here, clamped to what is still outstanding,
+    /// and reports how much actually landed.
+    ///
+    /// **Clamped rather than refused**, so a builder that fetched a full
+    /// carry of five against a shortfall of two sets two down and keeps
+    /// three — the caller is told the figure and owns what happens to the
+    /// remainder. Refusing the lot would strand the load.
+    pub fn deliver(&mut self, item: &ItemId, qty: u32) -> u32 {
+        let want = self
+            .cost
+            .iter()
+            .find(|(id, _)| id == item)
+            .map(|(_, qty)| *qty)
+            .unwrap_or(0);
+        let room = want.saturating_sub(self.delivered_of(item));
+        let landed = qty.min(room);
+        if landed == 0 {
+            return 0;
+        }
+        match self.delivered.iter_mut().find(|(id, _)| id == item) {
+            Some((_, held)) => *held += landed,
+            None => self.delivered.push((item.clone(), landed)),
+        }
+        landed
+    }
 }
 
 /// Which leg of its journey a caravan is on.

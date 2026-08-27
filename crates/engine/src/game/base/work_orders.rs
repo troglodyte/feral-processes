@@ -801,11 +801,21 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let mut wanted: Vec<(Entity, TaskKind)> = self
-            .settle_orders()
-            .into_iter()
-            .map(|(machine, _)| (machine, TaskKind::GatherResource))
-            .collect();
+        // **Build requests come first, ahead of every work order.** The
+        // priority *is* the position in this list — `truncate(staff.len())`
+        // below cuts from the end — so this is the whole of "a build
+        // outranks production". Its consequence is deliberate and worth
+        // stating: on a base with fewer bodies than posts, filing a request
+        // takes somebody off a machine until the structure is up. A base
+        // with a spare body never notices, because the diff below leaves
+        // every still-wanted posting exactly where it is and the idle pool
+        // is what gets handed out first.
+        let mut wanted: Vec<(Entity, TaskKind)> = self.build_wants();
+        wanted.extend(
+            self.settle_orders()
+                .into_iter()
+                .map(|(machine, _)| (machine, TaskKind::GatherResource)),
+        );
         // Standing jobs, appended after every order and therefore at
         // the lowest priority: a spare body fills one, a needed body does
         // not. A work job is still gated on `can_progress` — a standing
@@ -858,6 +868,63 @@ impl Game {
             .collect();
         wanted.retain(|post| !outsiders.contains(post));
 
+        // **An unreachable build want is dropped here, above the cut**, and
+        // that placement is the whole fix rather than a tidy-up.
+        //
+        // Every other kind tests reachability *below* the truncation, and
+        // for a dig want that is affordable: dig wants are appended last, so
+        // one that turns out to be unroutable costs only itself. A build
+        // want is prepended, so it is inside the cut by construction — and a
+        // site nobody can walk to would take the slot, be skipped when its
+        // turn came, and leave the base with an idle body and an unworked
+        // order. Every tick, for the rest of the run, in silence.
+        //
+        // Asked of the staff rather than of a fixed reference point, and
+        // short-circuited on the first body that routes: the answer is
+        // "somebody could build this", which is the question the want list
+        // is asking. In a connected base — every base, nearly always — that
+        // is one walk against the first body and no more.
+        {
+            let blocked = self.structure_tiles();
+            let pocket_radius = self.world.resource::<BaseGrid>().radius();
+            let mut unreachable: Vec<Entity> = Vec::new();
+            for &(post, kind) in wanted.iter() {
+                if kind != TaskKind::Construct {
+                    continue;
+                }
+                let anyone = staff.iter().any(|&worker| {
+                    let from = self
+                        .world
+                        .get::<Position>(worker)
+                        .copied()
+                        .unwrap_or(Position { x: 0, y: 0 });
+                    self.post_route(from, post, &blocked, pocket_radius).is_ok()
+                });
+                if !anyone {
+                    unreachable.push(post);
+                }
+            }
+            for post in &unreachable {
+                self.announce_cut_off(*post);
+            }
+            wanted
+                .retain(|(post, kind)| *kind != TaskKind::Construct || !unreachable.contains(post));
+            // A route that has opened up again clears the latch, so a player
+            // who digs through to a stranded request is told about it once
+            // more if they wall it off a second time. `set_machine_status`'
+            // rule: entering a state is news, staying in it is not.
+            let reopened: Vec<Entity> = wanted
+                .iter()
+                .filter(|(_, kind)| *kind == TaskKind::Construct)
+                .map(|(post, _)| *post)
+                .collect();
+            for post in reopened {
+                if let Some(mut build) = self.world.get_mut::<BuildSite>(post) {
+                    build.announced_stuck = false;
+                }
+            }
+        }
+
         // The staff are fewer than the posts most of the time, so the list
         // is cut to what can actually be filled — **in priority order**,
         // which is what makes an order outrank a standing job for a scarce
@@ -891,7 +958,15 @@ impl Game {
         // an item it was told to hold 10 of. A queue is an instruction, so
         // where there is one the assignment is the whole truth and a body
         // it does not name goes back to the ring.
-        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty();
+        // **A base with a build on order is a base with instructions**, so
+        // the queue is not empty for this rule's purposes even when no work
+        // order stands. Read off the work orders alone, a base whose only
+        // instruction was a build request would take the early return below
+        // on every tick where the builder was already posted — harmless —
+        // and, more to the point, would be reasoning from "nobody has told
+        // this base anything" while somebody had.
+        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
+            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct);
         let posted: Vec<(Entity, TaskKind)> = staff
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
@@ -1021,6 +1096,7 @@ impl Game {
                 TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),
                 TaskKind::Excavate => self.post_digger(worker, post),
+                TaskKind::Construct => self.post_builder(worker, post),
             }
         }
     }
@@ -1146,6 +1222,156 @@ impl Game {
     /// a second reading of what a face is, and it is the half of
     /// `NoPost::BoxedIn` that does not depend on which body is asking —
     /// which is why it can be answered before the bodies are counted.
+    /// Every build request that wants a body, in tile order.
+    ///
+    /// **Structural, never a stock count** — `dig_wants`' rule and
+    /// `feeders_for`'s. A site the base cannot afford yet is still a site
+    /// that wants somebody standing at it: the builder walks there, reports
+    /// the shortfall once, and starts carrying the moment production makes
+    /// the last unit. Gated on what is in stock, the want would flicker in
+    /// and out as shelves drained and the request would read as broken.
+    ///
+    /// Sorted by tile like `assembler_system`'s machines, so two requests
+    /// filed in the same tick are always raised in the same order.
+    ///
+    /// **Reachability is deliberately *not* tested here**, unlike
+    /// `dig_wants`, and it is not an omission — it is tested a few lines
+    /// into `schedule_base_labour`, above the truncation.
+    ///
+    /// `dig_wants` filters on `hauling::has_station` because its wants are
+    /// appended *last*, so a boxed-in one that survived to the cut would
+    /// sort ahead of nothing and cost only itself. Build wants are
+    /// *prepended*: they are inside the cut by construction, so the
+    /// question that matters is not "has this cell a face to stand at" but
+    /// "can anybody on the roster actually get there" — and that one needs
+    /// the staff list, which does not exist yet at this point in the tick.
+    /// A `has_station` pre-filter here would be strictly subsumed by that
+    /// check and would read as the guard when it is not.
+    ///
+    /// **A site with nothing to fetch is not a want**, and that is
+    /// `Game::build_is_workable` — the one place in the scheduler a want is
+    /// allowed to be a stock count rather than a structural fact. Read its
+    /// doc comment before "fixing" it back: unconditionally listed, a
+    /// request the base cannot supply holds the body that would produce the
+    /// very material it is waiting for, and a one-program base stops for the
+    /// rest of the run.
+    ///
+    /// Sorted by tile like `assembler_system`'s machines, so two requests
+    /// filed in the same tick are always raised in the same order.
+    fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+        let mut sites: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
+            query
+                .iter(&self.world)
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect()
+        };
+        sites.sort_unstable();
+        // Dropped **and reported**, in that order and in one place. The
+        // scheduler is the only thing that can see a site nobody is posted
+        // to — which a dry site now always is, since it is dropped here — so
+        // this is where the shortfall has to be said. `run_build_crew` is
+        // silent about it for the same reason `can_walk_to_dig` owns the
+        // stuck announcement: only the thing that decides not to staff a job
+        // knows the job went unstaffed.
+        let mut workable = Vec::with_capacity(sites.len());
+        for (x, y, site) in sites {
+            if self.build_is_workable(site) {
+                if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
+                    build.announced_dry = false;
+                }
+                workable.push((x, y, site));
+            } else {
+                self.announce_dry(site);
+            }
+        }
+        let sites = workable;
+        sites
+            .into_iter()
+            .map(|(_, _, e)| (e, TaskKind::Construct))
+            .collect()
+    }
+
+    /// Says once that there is nothing anywhere to fetch for `site`.
+    ///
+    /// `announce_cut_off`'s twin, and a second latch rather than a shared
+    /// one for `DigSite`'s reason: the two leave the player different
+    /// errands. No route is a wall to cut or a machine to move; nothing to
+    /// fetch is a shelf to fill.
+    ///
+    /// **The latch clears the tick a source appears**, in `build_wants`
+    /// above, and that clearing matters more here than it does for a dig
+    /// site: a build waits on a bill of several items over many trips, so
+    /// said-once-and-never-again would leave a base that ran dry early
+    /// silent about running dry later.
+    fn announce_dry(&mut self, site: Entity) {
+        if self
+            .world
+            .get::<BuildSite>(site)
+            .is_none_or(|b| b.announced_dry)
+        {
+            return;
+        }
+        if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
+            build.announced_dry = true;
+        }
+        let Some(build) = self.world.get::<BuildSite>(site) else {
+            return;
+        };
+        let (kind, short) = (build.structure.clone(), build.outstanding());
+        let at = self.world.get::<Position>(site).copied();
+        let wanted = short
+            .iter()
+            .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let name = self.structure_name(&kind);
+        if let Some(at) = at {
+            self.log_base(format!(
+                "Your crew has nothing to raise the {name} at ({}, {}) with — still needs {wanted}.",
+                at.x, at.y
+            ));
+        }
+    }
+
+    /// Says once that nobody can find a way to `site`.
+    ///
+    /// Latched on `BuildSite::announced_stuck` under
+    /// `systems::set_machine_status`' rule — entering a state is news,
+    /// staying in it is not — and cleared by `schedule_base_labour` the tick
+    /// a route reopens, so the two halves of the latch live at the one call
+    /// site that knows the answer.
+    ///
+    /// **There is no silent arm**, unlike a dig site's. A dig site's
+    /// `BoxedIn` is the normal interior of any marked block and resolves
+    /// itself as the rim comes down; a build site is a cell the player
+    /// deliberately floored and then asked for a machine on, so being unable
+    /// to reach it is news however it happened.
+    fn announce_cut_off(&mut self, site: Entity) {
+        if self
+            .world
+            .get::<BuildSite>(site)
+            .is_none_or(|b| b.announced_stuck)
+        {
+            return;
+        }
+        if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
+            build.announced_stuck = true;
+        }
+        let at = self.world.get::<Position>(site).copied();
+        let kind = self
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.structure.clone());
+        if let (Some(at), Some(kind)) = (at, kind) {
+            let name = self.structure_name(&kind);
+            self.log_base(format!(
+                "The {name} on order at {}, {} is cut off — no program can find a way to it.",
+                at.x, at.y
+            ));
+        }
+    }
+
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let blocked = self.structure_tiles();
         let marked: Vec<(Position, Entity)> = {
@@ -1346,6 +1572,15 @@ impl Game {
                 .get::<Position>(task.target)
                 .map(|p| format!("cutting the entropy at {}, {}", p.x, p.y))
                 .unwrap_or_else(|| "cutting the entropy".to_string()),
+            // A build site is not a structure either, but unlike a dig site
+            // it knows what it is going to become — so it is named by the
+            // thing being raised rather than by its tile alone, which is
+            // what tells two simultaneous builds apart on the status screen.
+            TaskKind::Construct => self
+                .world
+                .get::<BuildSite>(task.target)
+                .map(|site| format!("raising the {}", self.structure_name(&site.structure)))
+                .unwrap_or_else(|| "raising a structure".to_string()),
         }
     }
 

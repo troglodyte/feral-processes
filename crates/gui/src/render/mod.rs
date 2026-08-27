@@ -21,7 +21,7 @@ use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
     LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
-    RecipeStep, ResearchState, StructureReport,
+    RecipeStep, ResearchState, StockRow, StructureReport,
 };
 
 mod arena;
@@ -629,16 +629,61 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
 /// recipe reads `components::Inventory`, which is the tier-0 store — so
 /// summing across tiers here would promise material the compile then
 /// refuses to spend.
+/// Each line of a bill of materials as `Name (have/need)`, counting the
+/// player's own pack.
+///
+/// **The player-paid form**, and the one every verb that spends out of the
+/// pack takes: compiling at a bench, upgrading, a symlink. `build_cost_
+/// display` below is the other one, and which a screen wants is a question
+/// about *whose store pays*, which is why they are two named functions
+/// rather than one with a slice a caller can forget to fill.
 fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow]) -> Vec<String> {
-    cost.iter()
-        .map(|(item, qty)| {
-            let have = inventory
+    cost_rows(game, cost, |item| carried(inventory, item))
+}
+
+/// The build menu's form: "have" is the pack **and** the base's shelves,
+/// because both are stores a builder fetches from — see
+/// `game::base::construction::Source`.
+///
+/// Counting the pack alone made this column a claim about the player when
+/// the question is about the base: a run with sixty Core Fragments banked in
+/// a Depot and none in hand read `(0/18)` beside a structure the crew could
+/// have started on the moment it was filed.
+///
+/// The base half is `Game::base_stock`, the same walk the stock strip across
+/// the top of this very screen draws, so the two figures a player can see at
+/// once cannot disagree.
+fn build_cost_display(
+    game: &Game,
+    cost: &[(ItemId, u32)],
+    inventory: &[InventoryRow],
+    stock: &[StockRow],
+) -> Vec<String> {
+    cost_rows(game, cost, |item| {
+        carried(inventory, item)
+            + stock
                 .iter()
-                .find(|row| &row.copy.item == item && row.copy.tier == 0)
+                .find(|row| &row.item == item)
                 .map(|row| row.qty)
-                .unwrap_or(0);
-            format!("{} ({have}/{qty})", game.item_name(item))
-        })
+                .unwrap_or(0)
+    })
+}
+
+/// How many plain copies of `item` the pack holds. Tier 0 only: a fused copy
+/// is not a material.
+fn carried(inventory: &[InventoryRow], item: &ItemId) -> u32 {
+    inventory
+        .iter()
+        .find(|row| &row.copy.item == item && row.copy.tier == 0)
+        .map(|row| row.qty)
+        .unwrap_or(0)
+}
+
+/// The shared formatter, so the two forms above differ only in what they
+/// count and never in how a row reads.
+fn cost_rows(game: &Game, cost: &[(ItemId, u32)], have: impl Fn(&ItemId) -> u32) -> Vec<String> {
+    cost.iter()
+        .map(|(item, qty)| format!("{} ({}/{qty})", game.item_name(item), have(item)))
         .collect()
 }
 
@@ -814,7 +859,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
-        Mode::Upgrade => draw_upgrade_menu(&scanned, selected, refusal, painter, m),
+        Mode::Upgrade => draw_upgrade_menu(game, &scanned, selected, refusal, painter, m),
         Mode::Symlink => draw_symlink_menu(game, selected, refusal, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",

@@ -18,12 +18,19 @@ use std::collections::HashSet;
 /// the player sees inside a declaration order, where a tidy-up reorder flips
 /// it silently and nothing reads as having changed.
 const STRUCTURE_ON_TILE: u8 = 0;
-const CREATURE_ON_TILE: u8 = 1;
+/// Directly after a structure, and ahead of a creature standing on the same
+/// cell — which is a real collision, since nothing stops an idle program
+/// wandering onto a site. The map draws the site's caret *over* the glyph
+/// layer, and this rank is what keeps examine naming what the map draws.
+/// It can never collide with `STRUCTURE_ON_TILE`: `place_structure` refuses
+/// a cell that already holds either.
+const BUILD_SITE_ON_TILE: u8 = 1;
+const CREATURE_ON_TILE: u8 = 2;
 /// Last of the three, because a caravan is the only one of them that cannot
 /// share a tile with either: it walks the open sector and stands on a free
 /// base cell beside the counter. The rank is here for the *total* order the
 /// walk needs rather than to settle a collision that can happen.
-const CARAVAN_ON_TILE: u8 = 2;
+const CARAVAN_ON_TILE: u8 = 3;
 
 impl Game {
     /// Which sector the party is standing in, or `None` for a neutral one.
@@ -154,6 +161,26 @@ impl Game {
             .find(|e| e.is_structure && e.pos == target)
     }
 
+    /// The pending build request on the neighbouring tile `(dx, dy)`, if
+    /// one stands there.
+    ///
+    /// `adjacent_structure`'s counterpart for the one thing that occupies a
+    /// cell without being a structure. Separate rather than folded into that
+    /// function because the two leave the caller different verbs — a
+    /// structure is demolished for a partial refund, a request is called off
+    /// for all of it — and a single lookup returning either would make the
+    /// demolish key decide which by inspecting the view it got back.
+    ///
+    /// It carries `adjacent_structure`'s `in_base` gate for that function's
+    /// reason: base-space coordinates must never answer a surface query.
+    pub fn adjacent_build_site(&mut self, dx: i32, dy: i32) -> Option<Entity> {
+        if !self.in_base() {
+            return None;
+        }
+        let center = self.scan_center();
+        self.build_site_at(center.x + dx, center.y + dy)
+    }
+
     /// Whether `entity` is a tamed program holding a `GatherResource` post
     /// and not currently standing at it — see
     /// `EntityView::worker_away_from_post`, which is this value.
@@ -169,6 +196,30 @@ impl Game {
                         .get::<Position>(entity)
                         .zip(self.world.get::<Position>(t.target))
                         .is_some_and(|(pos, station)| !at_station(*pos, *station))
+            })
+    }
+
+    /// Whether a frontend draws the "somebody is on this job" mark on
+    /// `entity` itself — see `EntityView::wears_job_mark`.
+    ///
+    /// **Exactly one mark per posted program at every instant**, and this is
+    /// one of its two halves; `structure_attended` is the other. The mark
+    /// goes on whichever end of a posting has a glyph to wear it: a machine
+    /// wears it while its worker stands there and the worker takes it along
+    /// to deliver, and a builder on an **upgrade** wears it for the whole job
+    /// — `Excavate`'s rule and `Excavate`'s reason, since an upgrade site
+    /// carries no glyph and the machine under it is wearing its own worker's.
+    pub(crate) fn wears_job_mark(&self, entity: Entity) -> bool {
+        if self.worker_away_from_post(entity) {
+            return true;
+        }
+        self.world.get::<Tamed>(entity).is_some()
+            && self.world.get::<Task>(entity).is_some_and(|t| {
+                t.kind == TaskKind::Construct
+                    && self
+                        .world
+                        .get::<BuildSite>(t.target)
+                        .is_some_and(|site| site.goal != crate::components::BuildGoal::New)
             })
     }
 
@@ -231,7 +282,15 @@ impl Game {
         if let Some(caravan) = self.world.get::<Caravan>(entity) {
             return caravan.stage.in_base_space();
         }
-        self.world.get::<Structure>(entity).is_some() || self.world.get::<Tamed>(entity).is_some()
+        // A `BuildSite` stands in base space for the same reason a
+        // `Structure` does — it is the structure, a few hundred ticks
+        // early — and it has to be named here rather than left to fall
+        // through, because it is the first entity with a `Glyph` that is
+        // neither. Missing, the map would draw a pending Depot onto
+        // whatever zone-surface tile shared its coordinates.
+        self.world.get::<Structure>(entity).is_some()
+            || self.world.get::<BuildSite>(entity).is_some()
+            || self.world.get::<Tamed>(entity).is_some()
     }
 
     /// The first creature or structure along the row or column the player is
@@ -343,6 +402,22 @@ impl Game {
                     .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, STRUCTURE_ON_TILE, e))),
             );
         }
+        // Gathered in the same walk as the other three, for the reason that
+        // walk exists: two walks and a caller choosing between them would
+        // have to re-derive distance to compare, putting the ray rule in two
+        // places. Gated on `in_base` and not on `stands_in_base_space`
+        // because a build site is *only* ever in base space — the gate is
+        // the same one the structure arm above takes, and for the same
+        // reason: a ray across the open grid must never name one at whatever
+        // surface tile its base-space cell aliased onto.
+        if in_base {
+            let mut sites = self.world.query::<(Entity, &Position, &BuildSite)>();
+            candidates.extend(
+                sites
+                    .iter(&self.world)
+                    .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, BUILD_SITE_ON_TILE, e))),
+            );
+        }
         let creatures_on_ray: Vec<(i32, Entity)> = {
             let mut creatures = self.world.query::<(Entity, &Position, &Creature)>();
             creatures
@@ -389,6 +464,7 @@ impl Game {
             .min()
             .map(|(_, rank, entity)| match rank {
                 STRUCTURE_ON_TILE => InspectTarget::Structure(entity),
+                BUILD_SITE_ON_TILE => InspectTarget::BuildSite(entity),
                 CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
                 _ => InspectTarget::Creature(entity),
             })
@@ -424,15 +500,146 @@ impl Game {
     /// structure name for a structure, `"You"` otherwise. Shared by
     /// `view_entities` for both an entity's own label and cross-references
     /// (a worker's assigned structure, a structure's assigned worker).
+    /// What `x` says about a build site: what is going up, how far along it
+    /// is, and — the question the player actually pressed the key to ask —
+    /// what is still to be carried here.
+    ///
+    /// **Built off `build_order_row` rather than off the component**, so
+    /// this line and a future build-order screen cannot come to report
+    /// different percentages for the same job.
+    ///
+    /// The materials standing on the cell are deliberately not drawn on the
+    /// map — a pile of glyphs on a tile that is already a slab and a caret
+    /// would be three things saying one thing — so this is the only place
+    /// they are visible, which is why it names both halves rather than a
+    /// bare percentage.
+    pub fn build_site_blurb(&self, entity: Entity) -> Option<String> {
+        let row = self.build_order_row(entity)?;
+        let mut line = format!("{} — {}% raised.", row.label(), row.percent());
+        if row.outstanding.is_empty() {
+            line.push_str(&format!(
+                " Every part is on site ({}/{}); construction is {}/{} ticks in.",
+                row.delivered, row.materials, row.ticks, row.required_ticks
+            ));
+        } else {
+            let short = row
+                .outstanding
+                .iter()
+                .map(|(name, qty)| format!("{qty} {name}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            line.push_str(&format!(
+                " {}/{} parts delivered; still to fetch: {short}.",
+                row.delivered, row.materials
+            ));
+        }
+        line.push_str(&match &row.builder {
+            Some(who) => format!(" {who} is on it."),
+            // A real state and not a fault, so it is worded as a fact about
+            // the roster rather than as an error: the base has nobody spare,
+            // and the request stands until it does.
+            None => " Nobody is free to work on it.".to_string(),
+        });
+        Some(line)
+    }
+
+    /// Every structure on order right now, in tile order — what a
+    /// build-order screen lists.
+    ///
+    /// Tile order for `assembler_system`'s reason: bevy's iteration order is
+    /// not stable, and a list that reshuffled between openings is a list the
+    /// player cannot learn.
+    pub fn build_order_report(&mut self) -> Vec<crate::views::BuildOrderRow> {
+        let sites: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
+            let mut found: Vec<(i32, i32, Entity)> = query
+                .iter(&self.world)
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect();
+            found.sort_unstable();
+            found
+        };
+        sites
+            .into_iter()
+            .filter_map(|(.., e)| self.build_order_row(e))
+            .collect()
+    }
+
+    /// One build request as a screen sees it, or `None` when `entity` is not
+    /// one.
+    ///
+    /// **The one derivation**, called by `build_order_report` and by
+    /// `build_views` alike — see `views::BuildOrderRow` for why that
+    /// matters.
+    pub(crate) fn build_order_row(&self, entity: Entity) -> Option<crate::views::BuildOrderRow> {
+        let site = self.world.get::<BuildSite>(entity)?;
+        let pos = self.world.get::<Position>(entity)?;
+        let outstanding = site
+            .outstanding()
+            .into_iter()
+            .map(|(item, qty)| (self.item_name(&item).to_string(), qty))
+            .collect();
+        let delivered = site.delivered.iter().map(|(_, qty)| qty).sum();
+        // Found by walking the postings rather than stored on the site: who
+        // is building is a `Task`, exactly as who is working a machine is,
+        // so a second field here could only go stale when the scheduler
+        // moved somebody.
+        // `iter_entities` rather than a query, because this is `&self`: it
+        // is called from inside `build_views`' map over the entities it has
+        // already selected, and a `World::query` there would want the world
+        // mutably while that borrow is live.
+        let builder = self
+            .world
+            .iter_entities()
+            .find(|e| {
+                e.get::<Task>()
+                    .is_some_and(|t| t.kind == TaskKind::Construct && t.target == entity)
+            })
+            .map(|e| self.entity_label(e.id()));
+        Some(crate::views::BuildOrderRow {
+            entity,
+            pos: (pos.x, pos.y),
+            goal: site.goal,
+            structure: self.structure_name(&site.structure),
+            delivered,
+            materials: site.total_materials(),
+            outstanding,
+            ticks: site.progress,
+            required_ticks: site.required_ticks(),
+            builder,
+        })
+    }
+
+    /// A structure kind's display name, falling back to its id when no
+    /// file defines it.
+    ///
+    /// One function because four callers name a structure they hold only
+    /// the id of — `entity_label`, the build crew's log lines, the staff
+    /// activity row and a cancelled request — and an id leaking onto a
+    /// screen reads as a bug in the renderer rather than as a missing
+    /// asset.
+    pub(crate) fn structure_name(&self, kind: &crate::structures::StructureId) -> String {
+        self.world
+            .resource::<StructureDb>()
+            .get(kind)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| kind.clone())
+    }
+
     pub(crate) fn entity_label(&self, entity: Entity) -> String {
         if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
-            self.world
-                .resource::<StructureDb>()
-                .get(&s.kind)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| s.kind.clone())
+            self.structure_name(&s.kind)
+        } else if let Some(build) = self.world.get::<BuildSite>(entity) {
+            // Named as the thing being raised rather than as "a build site",
+            // because that is the question `x` is asking: the player wants to
+            // know which machine is going up here, not that a request exists
+            // — the frame around the cell already says that.
+            format!(
+                "{} (under construction)",
+                self.structure_name(&build.structure)
+            )
         } else if let Some(nest) = self.world.get::<Nest>(entity) {
             let species_name = self
                 .world
@@ -610,7 +817,24 @@ impl Game {
                     // The set is structures with somebody standing at them,
                     // and an excavation is not one.
                     TaskKind::Excavate => false,
-                    TaskKind::GatherResource => {
+                    // A *deploy* site carries a glyph, which is what makes
+                    // this the machine's answer rather than the dig site's:
+                    // there is an end of this posting that can wear the mark,
+                    // so the site wears it while the builder stands there and
+                    // the builder carries it away on every fetch. An
+                    // **upgrade** site carries none — the machine under it is
+                    // still drawing that cell — so it is the dig site's case
+                    // instead and the builder wears the mark for the whole
+                    // job. See `Game::wears_job_mark`.
+                    TaskKind::Construct
+                        if self
+                            .world
+                            .get::<BuildSite>(target)
+                            .is_some_and(|site| site.goal != crate::components::BuildGoal::New) =>
+                    {
+                        false
+                    }
+                    TaskKind::Construct | TaskKind::GatherResource => {
                         match (
                             self.world.get::<Position>(holder),
                             self.world.get::<Position>(target),
@@ -673,7 +897,7 @@ impl Game {
                 } else {
                     None
                 };
-                let worker_away_from_post = self.worker_away_from_post(entity);
+                let wears_job_mark = self.wears_job_mark(entity);
                 let position_is_honest = self.position_is_honest(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
                 let output_stranded = is_structure
@@ -723,7 +947,7 @@ impl Game {
                     can_trade,
                     issues_contracts,
                     structure_worker,
-                    worker_away_from_post,
+                    wears_job_mark,
                     position_is_honest,
                     structure_attended,
                     output_stranded,
@@ -733,6 +957,24 @@ impl Game {
                     fusions: self.fusion_count(entity),
                     rarity: self.rarity_of(entity),
                     machine_status,
+                    // A site's own row when this *is* a site, and the row of
+                    // the request standing on this cell when it is a machine
+                    // being upgraded: an upgrade site carries no glyph, so
+                    // `view_entities` never selects it and the pending row
+                    // would otherwise be visible nowhere. Found by tile,
+                    // through `iter_entities` rather than a query, for the
+                    // borrow reason `build_order_row` states above.
+                    build: self.build_order_row(entity).or_else(|| {
+                        if !is_structure {
+                            return None;
+                        }
+                        let site = self.world.iter_entities().find(|e| {
+                            e.get::<BuildSite>().is_some()
+                                && e.get::<Position>()
+                                    .is_some_and(|p| p.x == pos.x && p.y == pos.y)
+                        })?;
+                        self.build_order_row(site.id())
+                    }),
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })
@@ -1219,9 +1461,10 @@ impl Game {
                     can_trade: false,
                     issues_contracts: false,
                     structure_worker: None,
-                    worker_away_from_post: false,
+                    wears_job_mark: false,
                     position_is_honest: true,
                     structure_attended: false,
+                    build: None,
                     output_stranded: false,
                     hp_fraction: None,
                     level: None,

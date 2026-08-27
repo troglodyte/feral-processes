@@ -368,6 +368,7 @@ impl Game {
             Some((TaskKind::GatherResource, target)) => target,
             Some((TaskKind::Guard, target)) => format!("guarding {target}"),
             Some((TaskKind::Excavate, target)) => format!("cutting {target}"),
+            Some((TaskKind::Construct, target)) => format!("building {target}"),
             None => "idle".to_string(),
         }
     }
@@ -404,6 +405,7 @@ impl Game {
                 TaskKind::GatherResource => format!("stops working {target}"),
                 TaskKind::Guard => format!("stops guarding {target}"),
                 TaskKind::Excavate => format!("stops cutting {target}"),
+                TaskKind::Construct => format!("stops building {target}"),
             });
         }
         out

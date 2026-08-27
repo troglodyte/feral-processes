@@ -1087,7 +1087,7 @@ fn structure_report_lists_every_assignee_not_just_one() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
@@ -1153,7 +1153,7 @@ fn structure_report_carries_tier_durability_and_whether_the_structure_is_workabl
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
 
     let report = game.structure_report();
     let home = report.iter().find(|s| s.is_home).unwrap();
@@ -1193,7 +1193,7 @@ fn structure_report_reads_a_diagonal_neighbour_as_not_player_adjacent() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
 
     let node_at = |game: &mut Game| {
         game.structure_report()
@@ -1236,9 +1236,9 @@ fn structure_report_puts_home_first_and_groups_by_kind() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 60);
     place_home(&mut game);
-    game.place_structure("mining_node", 2, 0).unwrap();
-    game.place_structure("armory", 1, 0).unwrap();
-    game.place_structure("mining_node", 3, 0).unwrap();
+    place_now(&mut game, "mining_node", 2, 0).unwrap();
+    place_now(&mut game, "armory", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 3, 0).unwrap();
 
     let kinds: Vec<String> = game
         .structure_report()
@@ -1563,7 +1563,7 @@ fn examining_toward_a_machine_finds_it_past_its_posted_worker() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    game.place_structure("mining_node", -4, 0).unwrap();
+    place_now(&mut game, "mining_node", -4, 0).unwrap();
 
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = {
@@ -1609,7 +1609,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
 
     let start = *game.world.get::<Position>(game.player_entity()).unwrap();
     let node = {
@@ -1703,7 +1703,7 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
@@ -1724,7 +1724,7 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
         game.view_entities(40, 40)
             .into_iter()
             .find(|v| v.entity == e)
-            .map(|v| v.worker_away_from_post)
+            .map(|v| v.wears_job_mark)
     };
 
     assert_eq!(
@@ -1756,8 +1756,8 @@ fn a_structure_is_attended_only_while_its_program_is_standing_at_it() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 24);
-    game.place_structure("mining_node", 1, 0).unwrap();
-    game.place_structure("mining_node", 3, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 3, 0).unwrap();
     let nodes: Vec<Entity> = game
         .structure_report()
         .into_iter()
@@ -1806,7 +1806,7 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
@@ -1827,7 +1827,7 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
             .iter()
             .find(|v| v.entity == worker)
             .expect("the worker exists")
-            .worker_away_from_post;
+            .wears_job_mark;
         assert!(
             machine != program,
             "step {step}: machine {machine}, worker away {program} — the mark \
@@ -1853,7 +1853,7 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 48);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
     let node = game
         .structure_report()
         .into_iter()
@@ -1885,7 +1885,7 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
         "full, and no depot has been built at all"
     );
 
-    game.place_structure("depot", 1, 2).unwrap();
+    place_now(&mut game, "depot", 1, 2).unwrap();
     assert_eq!(
         stranded(&mut game, node),
         Some(false),
@@ -1954,8 +1954,8 @@ fn adjacent_structure_finds_only_the_neighbouring_tile() {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 500);
-    game.place_structure("mining_node", 1, 0).unwrap();
-    game.place_structure("mining_node", 3, 0).unwrap();
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 3, 0).unwrap();
 
     let east = game
         .adjacent_structure(1, 0)

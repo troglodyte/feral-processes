@@ -112,6 +112,61 @@ pub(crate) fn spend_from_base(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
     taken
 }
 
+/// Puts up to `qty` of `item` back onto the base's Depot shelves, and
+/// reports how much landed.
+///
+/// **Not the inverse of `spend_from_base`, and deliberately narrower.** A
+/// cost is drawn from every output buffer in the base, because that is what
+/// the stock strip counts and a strip that promised more than the base
+/// would spend is a strip lying about the base. A *refund* goes to Depots
+/// alone: a unit pushed into a Mining Node's output buffer is
+/// indistinguishable from a unit that node produced, and would be hauled
+/// away and counted as a cycle's yield. The dig crew's substrate draw
+/// already carries this same asymmetry.
+///
+/// Filled in tile order, `spend_from_base`'s reason: bevy's iteration order
+/// is not stable, and two Depots taking a refund in a different order
+/// between runs is a base that saves differently each time it is played.
+/// Clamped against each Depot's `output_room` as the fill walks them, so a
+/// full base simply returns a smaller figure and the caller decides what to
+/// do with the remainder — this never destroys a unit it could not place.
+pub(crate) fn return_to_depots(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
+    let mut depots: Vec<(i32, i32, Entity)> = {
+        let standing: Vec<(Entity, Position, crate::structures::StructureId)> = {
+            let mut query = game
+                .world
+                .query_filtered::<(Entity, &Position, &Structure), With<Stock>>();
+            query
+                .iter(&game.world)
+                .map(|(e, p, s)| (e, *p, s.kind.clone()))
+                .collect()
+        };
+        let structures = game.world.resource::<StructureDb>();
+        standing
+            .into_iter()
+            .filter(|(_, _, kind)| structures.get(kind).is_some_and(|d| d.stores))
+            .map(|(e, p, _)| (p.x, p.y, e))
+            .collect()
+    };
+    depots.sort_unstable();
+    let mut landed = 0;
+    for (.., depot) in depots {
+        if landed == qty {
+            break;
+        }
+        let Some(mut stock) = game.world.get_mut::<Stock>(depot) else {
+            continue;
+        };
+        let room = stock.output_room().min(qty - landed);
+        if room == 0 {
+            continue;
+        }
+        *stock.output.entry(item.clone()).or_insert(0) += room;
+        landed += room;
+    }
+    landed
+}
+
 impl Game {
     /// What the base's machines and depots are holding, one row per item,
     /// as the stock strip lists it.

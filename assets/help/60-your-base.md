@@ -31,6 +31,22 @@ You do not have to be there for any of it. Programs on your roster dig while you
 sector — but digging is the lowest priority the base has, below work orders and standing jobs, so a
 spare body digs and a needed one does not. Marking a corridor can never stall production.
 
+Building works the same way, and the Home is the one exception. Every other structure you pick out
+of the build menu is a *request*: it marks the cell with a dark slab and an orange caret, and one of
+your programs comes and raises it. Nothing is charged when you file it, so you may ask for a machine
+the base cannot afford yet and let production catch up — the builder will say once that it has
+nothing to fetch, and start the moment the last part exists. It gathers from anywhere the base keeps
+things: a Depot, a machine's own output shelf, or straight out of your pack if you are standing in
+there with it. It carries five at a time, so a big machine takes several trips, and the parts pile up
+on the cell as they arrive — press x at it to see what is still to come and how far along it is. A
+structure takes two ticks to raise for every part it costs.
+
+Building is the *highest* priority the base has, above work orders and standing jobs — the mirror of
+digging. A spare body takes the job if you have one; if you do not, somebody comes off a machine
+until the thing is up. If your whole roster is out fighting beside you, nothing gets built until
+somebody is free. Changing your mind costs nothing: d and a direction at a pending site calls it off
+and puts every part already carried there back on a shelf.
+
 Machines run on the Grid, and the Grid has to cover them. Every tick the base sums what it supplies
 against what its machines draw, and anything over the line is cut in a fixed order until the rest
 fit. A cut machine reads dark: no progress, no pulling from its neighbours, and nothing to be had by
@@ -60,7 +76,10 @@ The rest of what a base does:
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
-  structure at its ceiling in zone 1 stays listed and starts moving again after a breach.
+  structure at its ceiling in zone 1 stays listed and starts moving again after a breach. An upgrade
+  is a request like any other build: nothing is charged when you ask for it, your crew fetches the
+  parts out of the base and works on the spot, and the machine keeps running the whole time. Call one
+  off from the build orders screen and you get back whatever has been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. A Shield soaks damage off every sweep against everything you own, a
   Patch Node recompiles damage across the whole base, and a program posted to the structure that gets

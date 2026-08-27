@@ -660,3 +660,147 @@ fn a_base_whose_whole_crew_is_off_shift_posts_nobody() {
         assert!(game.world.get::<Task>(who).is_none());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Acting out: what a program does when the gate refuses it.
+// ---------------------------------------------------------------------------
+
+use crate::components::{Memories, MemorySubject};
+
+/// Every line the log holds, **repeats expanded**. `message_history`
+/// condenses an unbroken run into one row with a count, so a bare entry count
+/// would read a line said five times as a line said once — which is exactly
+/// the thing these tests are about.
+fn base_lines(game: &Game) -> Vec<String> {
+    game.message_history(500)
+        .into_iter()
+        .flat_map(|row| std::iter::repeat_n(row.text, row.repeats.max(1)))
+        .collect()
+}
+
+fn frayed_entries(game: &Game, who: Entity) -> Vec<MemorySubject> {
+    game.world
+        .get::<Memories>(who)
+        .map(|m| {
+            m.0.iter()
+                .filter(|m| m.def.as_str() == "frayed_here")
+                .map(|m| m.subject.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Nothing in the base answers the need: said **once**, however many beats
+/// run, and remembered against the tile it was standing on.
+#[test]
+fn a_need_nothing_services_is_announced_once_and_remembered() {
+    let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = vec![spawn_tamed(&mut game, 10, 3)];
+    let (critical, _) = threshold(&game, &coherence());
+    let at = *game.world.get::<Position>(staff[0]).unwrap();
+
+    for _ in 0..5 {
+        set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+        run_the_gate(&mut game, &staff);
+    }
+
+    let said: Vec<String> = base_lines(&game)
+        .into_iter()
+        .filter(|line| line.contains("nothing in the base"))
+        .collect();
+    assert_eq!(said.len(), 1, "once, not once a beat: {said:?}");
+    assert_eq!(
+        frayed_entries(&game, staff[0]),
+        vec![MemorySubject::BaseTile { x: at.x, y: at.y }],
+        "the grudge names the corner it was standing in"
+    );
+}
+
+/// The amenity exists but cannot be walked to. **A different sentence**,
+/// because it leaves the player a different errand.
+#[test]
+fn an_unreachable_amenity_says_something_different_from_no_amenity() {
+    let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    let bay = find_structure_by_kind(&mut game, "defrag_bay").unwrap();
+    let site = *game.world.get::<Position>(bay).unwrap();
+    {
+        let mut grid = game.world.resource_mut::<BaseGrid>();
+        for y in -6..=6 {
+            grid.revert(site.x - 2, y);
+        }
+        grid.lay_floor(site.x - 1, site.y);
+    }
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+
+    drift(&mut game, &staff);
+    drift(&mut game, &staff);
+
+    let said: Vec<String> = base_lines(&game)
+        .into_iter()
+        .filter(|line| line.contains("can't find a way"))
+        .collect();
+    assert_eq!(said.len(), 1, "once: {said:?}");
+    assert!(
+        !base_lines(&game)
+            .iter()
+            .any(|l| l.contains("nothing in the base")),
+        "an amenity that exists is not an amenity that is missing"
+    );
+    assert_eq!(frayed_entries(&game, staff[0]).len(), 1);
+}
+
+/// The latch clears on the way back up, so a need that runs down a second
+/// time complains a second time — `set_machine_status`' rule.
+#[test]
+fn a_need_that_recovers_and_runs_down_again_is_announced_again() {
+    let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = vec![spawn_tamed(&mut game, 10, 3)];
+    let (critical, _) = threshold(&game, &coherence());
+
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+    set_reserve(&mut game, staff[0], &coherence(), critical + 5.0);
+    run_the_gate(&mut game, &staff);
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+
+    let said = base_lines(&game)
+        .iter()
+        .filter(|line| line.contains("nothing in the base"))
+        .count();
+    assert_eq!(said, 2, "twice, because it went wrong twice");
+}
+
+/// The latch is not in the save: a reload should say it again.
+#[test]
+fn a_reload_re_announces_a_stalled_need() {
+    let dir = scratch_assets_dir("needs_latch_reload");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = vec![spawn_tamed(&mut game, 10, 3)];
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let reloaded = loaded.base_staff();
+    let amenities = loaded.amenities();
+    loaded.update_off_shift(&reloaded, &amenities);
+
+    assert!(
+        base_lines(&loaded)
+            .iter()
+            .any(|line| line.contains("nothing in the base")),
+        "the latch is not saved, so the complaint stands again"
+    );
+}

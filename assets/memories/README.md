@@ -130,15 +130,21 @@ but not what makes a program remember.
 | `hard_won` | + | `Nothing` | winning a fight the party was outmatched in |
 | `mauled_by` | − | `Species` | taking a single hit worth a large share of maximum Integrity |
 | `stranded_at` | − | `BaseTile` | being posted somewhere nothing can reach |
+| `frayed_here` | − | `BaseTile` | running a need down with nothing in the base that could restore it, or nothing that could be walked to |
 | `settled_in` | + | `Structure` | a stretch of service at a machine that is running |
 | `jammed_here` | − | `Structure` | a stretch of service at a machine that is backed up |
 | `cutting_rock` | − | `Activity` | a stretch of service on the dig crew |
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 
 They are chosen to cover both valences and every subject kind, not because
-these eight are the interesting content. `Nothing`, `Program`, `Species` and
-`BaseTile` are written by the four fight-and-staffing triggers; `Structure`
+these nine are the interesting content. `Nothing`, `Program`, `Species` and
+`BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
+
+`frayed_here` shares `stranded_at`'s subject and sign and is deliberately a
+separate kind: a hauler nothing can reach and a program worn down with
+nowhere to go are different complaints, and the base tells you so in
+different sentences. See `assets/needs/README.md`.
 
 **The four work kinds divide on one axis, and it is not valence.**
 `swept_here` is an **edge** — a sweep is an event, and it is remembered the

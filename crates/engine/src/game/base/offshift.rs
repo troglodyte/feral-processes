@@ -159,6 +159,13 @@ impl Game {
                 None => pressing_need(needs, db)
                     .filter(|need| amenities.has(need) && !needs.is_latched(need)),
             };
+            // The other half of failing the gate: nothing in the base answers
+            // this need at all. Collected here and acted on below, because
+            // `fray` takes `&mut self` and `needs` is a borrow of the world.
+            let unanswered = match &current {
+                Some(_) => None,
+                None => pressing_need(needs, db).filter(|need| !amenities.has(need)),
+            };
             // A reserve back above its own `critical` clears the latch, so a
             // need that recovers and runs down again complains a second time.
             let recovered: Vec<NeedId> = needs
@@ -172,6 +179,9 @@ impl Game {
                 for id in recovered {
                     store.unlatch(&id);
                 }
+            }
+            if let Some(need) = unanswered {
+                self.fray(worker, &need, false);
             }
             match (current, verdict) {
                 (Some(_), None) => {
@@ -256,6 +266,53 @@ impl Game {
         Ok(())
     }
 
+    /// **The one edge.** Latches `need` on `worker` and, if that was the
+    /// edge, says so once and writes the grudge.
+    ///
+    /// Both halves of failing the gate come through here — nothing in the
+    /// base services this need, and the amenity is walled off from where this
+    /// program stands — because they are one state as far as the program is
+    /// concerned and one latch as far as the base is. They say **different
+    /// sentences**, because they leave the player different errands: that is
+    /// `NoPost::BoxedIn`-versus-`NoRoute`'s rule one level up.
+    ///
+    /// The grudge is `MemorySubject::BaseTile` at the program's **own**
+    /// `Position`, `note_strandings`' subject and for its reason: "worn thin
+    /// here" is a claim about where the body is standing, and it is what
+    /// `drift_idle_staff` reads back.
+    pub(crate) fn fray(&mut self, worker: Entity, need: &NeedId, unreachable: bool) {
+        let Some(mut store) = self.world.get_mut::<Needs>(worker) else {
+            return;
+        };
+        if !store.latch(need) {
+            return;
+        }
+        let at = self.world.get::<Position>(worker).copied();
+        let who = self.creature_label(worker);
+        let what = self
+            .world
+            .resource::<NeedDb>()
+            .get(need)
+            .map(|def| def.name.clone())
+            .unwrap_or_else(|| need.to_string());
+        if unreachable {
+            self.log_base(format!(
+                "{who} can't find a way to anything that would restore its {what}."
+            ));
+        } else {
+            self.log_base(format!(
+                "{who} is out of {what} and there's nothing in the base that restores it."
+            ));
+        }
+        if let Some(at) = at {
+            self.remember(
+                worker,
+                "frayed_here",
+                crate::components::MemorySubject::BaseTile { x: at.x, y: at.y },
+            );
+        }
+    }
+
     /// Gives the errand up and latches the need: the amenity exists but this
     /// body cannot reach it, which is a different complaint from there being
     /// no amenity at all and leaves the player a different errand.
@@ -263,9 +320,7 @@ impl Game {
         let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
             return;
         };
-        if let Some(mut store) = self.world.get_mut::<Needs>(worker) {
-            store.latch(&need);
-        }
+        self.fray(worker, &need, true);
         self.world.entity_mut(worker).remove::<OffShift>();
     }
 }

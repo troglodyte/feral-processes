@@ -1,10 +1,10 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 24 of them.
+`assets/structures/`. 26 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-17 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-27 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed on laid floor inside the base's own pocket
@@ -16,10 +16,10 @@ base itself.
 
 | | |
 |---|---|
-| structures | 24 |
+| structures | 26 |
 | producers (make something from nothing, on a timer) | 4 |
 | assemblers (consume a neighbour's output) | 11 |
-| utility | 9 |
+| utility | 11 |
 | upgradeable | 5, all to Mk5 |
 | built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
 
@@ -50,6 +50,8 @@ base itself.
 | `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
+| `b` | Defrag Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |
+| `s` | Sandbox | 10 `core_fragment` | - | 1 | - | restores staff Slack |
 | `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node

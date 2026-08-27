@@ -36,6 +36,8 @@ S = [
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None,            0,   0),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12,              0,   0),
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
+ ("defrag_bay",     "Defrag Bay",     "b", "Cyan",   [("core_fragment", 12)],                   "utility",  "restores staff Coherence",       None, None, None,          None,            2,   0),
+ ("sandbox",        "Sandbox",        "s", "Green",  [("core_fragment", 10)],                   "utility",  "restores staff Slack",           None, None, None,          None,            1,   0),
  ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),
 ]
 K = "id name glyph color cost kind does ticks cap feeder upgrade draw supply".split()
@@ -113,7 +115,7 @@ Every shipped structure in feral-processes, charted from its own file in
 `assets/structures/`. {len(R)} of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
-`assets/structures/*.ron` on 2026-08-17 and will drift the moment one of those
+`assets/structures/*.ron` on 2026-08-27 and will drift the moment one of those
 files is edited; regenerate the page rather than trusting it blind.
 
 Everything below must be deployed on laid floor inside the base's own pocket

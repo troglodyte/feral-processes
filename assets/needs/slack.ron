@@ -1,0 +1,11 @@
+(
+    id: "slack",
+    name: "Slack",
+    blurb: "Nothing but the queue, day after day, and the edges start to show.",
+    servicing: "Idling",
+    drain_per_tick: 0.012,
+    working_multiplier: 1.4,
+    critical: 25.0,
+    content: 70.0,
+    morale_weight: -3.0,
+)

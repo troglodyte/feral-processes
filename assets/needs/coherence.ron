@@ -1,0 +1,11 @@
+(
+    id: "coherence",
+    name: "Coherence",
+    blurb: "A process that never yields comes apart at the edges.",
+    servicing: "Defragmenting",
+    drain_per_tick: 0.02,
+    working_multiplier: 2.0,
+    critical: 20.0,
+    content: 60.0,
+    morale_weight: -4.0,
+)

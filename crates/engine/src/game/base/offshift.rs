@@ -149,11 +149,13 @@ impl Game {
             };
             let current = self.world.get::<OffShift>(worker).map(|o| o.need.clone());
             let db = self.world.resource::<NeedDb>();
+            let mut finished = false;
             let verdict = match &current {
                 Some(need) => {
                     let done = db
                         .get(need)
                         .is_none_or(|def| needs.get(need).is_none_or(|v| v >= def.content));
+                    finished = done;
                     (!done && amenities.has(need)).then(|| need.clone())
                 }
                 None => pressing_need(needs, db)
@@ -182,6 +184,16 @@ impl Game {
             }
             if let Some(need) = unanswered {
                 self.fray(worker, &need, false);
+            }
+            // **The edge where servicing completes**, and the only place the
+            // social memory is written. Once per stretch, never per tick:
+            // `note_postings`' doc comment states the cost, and it applies
+            // unchanged — a per-tick writer saturates `strike_cap` in three
+            // ticks, makes `strikes` meaningless, and (because `remember`
+            // evicts at the tail of every write) makes eviction eager for
+            // exactly the programs living the most.
+            if finished && let Some(need) = current.clone() {
+                self.note_idling(worker, &need, amenities, staff);
             }
             match (current, verdict) {
                 (Some(_), None) => {
@@ -264,6 +276,53 @@ impl Game {
             *pos = tile;
         }
         Ok(())
+    }
+
+    /// Writes an `idled_with` memory naming every *other* program that was in
+    /// reach of the same amenity at the moment `worker` finished with it.
+    ///
+    /// Named by `ProgramId` and not by `Entity`, `Game::remember`'s rule: an
+    /// entity id is not stable across a save round trip and a program's
+    /// identity is.
+    fn note_idling(
+        &mut self,
+        worker: Entity,
+        need: &NeedId,
+        amenities: &Amenities,
+        staff: &[Entity],
+    ) {
+        let Some(here) = self.world.get::<Position>(worker).copied() else {
+            return;
+        };
+        let Some((site, _, radius)) = amenities.nearest(need, here) else {
+            return;
+        };
+        // A program whose reserve filled somewhere else — a mod's wide radius,
+        // or the amenity demolished under it — was not idling *with* anyone.
+        if !in_reach(here, site, radius) {
+            return;
+        }
+        let company: Vec<crate::components::ProgramId> = staff
+            .iter()
+            .filter(|&&other| other != worker)
+            .filter(|&&other| {
+                self.world
+                    .get::<Position>(other)
+                    .is_some_and(|p| in_reach(*p, site, radius))
+            })
+            .filter_map(|&other| {
+                self.world
+                    .get::<crate::components::ProgramId>(other)
+                    .copied()
+            })
+            .collect();
+        for id in company {
+            self.remember(
+                worker,
+                "idled_with",
+                crate::components::MemorySubject::Program(id),
+            );
+        }
     }
 
     /// **The one edge.** Latches `need` on `worker` and, if that was the

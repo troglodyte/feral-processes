@@ -804,3 +804,131 @@ fn a_reload_re_announces_a_stalled_need() {
         "the latch is not saved, so the complaint stands again"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Where programs notice each other.
+// ---------------------------------------------------------------------------
+
+use crate::components::ProgramId;
+
+/// A Sandbox and `n` staff standing in reach of it, all run down to critical.
+fn a_sandbox_with_company(game: &mut Game, n: usize) -> (Position, Vec<Entity>) {
+    stand_in_base(game);
+    place_home(game);
+    give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(game, "sandbox", 2, 0).expect("a Sandbox is buildable from the start");
+    let box_entity = find_structure_by_kind(game, "sandbox").expect("just built");
+    let site = *game.world.get::<Position>(box_entity).unwrap();
+    let mut staff: Vec<Entity> = (0..n).map(|_| spawn_tamed(game, 10, 3)).collect();
+    staff.sort();
+    // Every body inside the Sandbox's own reach — the point of the fixture is
+    // company, and a body one tile too far is a different test.
+    let around = [(0, 1), (-1, 0), (0, -1), (1, 1)];
+    for (i, &worker) in staff.iter().enumerate() {
+        let (dx, dy) = around[i % around.len()];
+        let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+        pos.x = site.x + dx;
+        pos.y = site.y + dy;
+    }
+    (site, staff)
+}
+
+fn slack() -> NeedId {
+    NeedId::from("slack")
+}
+
+fn idled_strikes(game: &Game, who: Entity, about: Entity) -> u32 {
+    let id = *game.world.get::<ProgramId>(about).unwrap();
+    game.world
+        .get::<Memories>(who)
+        .map(|m| {
+            m.0.iter()
+                .filter(|m| {
+                    m.def.as_str() == "idled_with" && m.subject == MemorySubject::Program(id)
+                })
+                .map(|m| m.strikes)
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Two programs finishing at one Sandbox each hold **one** memory of the
+/// other. `strikes == 1`, not merely "an entry exists".
+#[test]
+fn two_programs_servicing_together_each_remember_the_other_once() {
+    let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, staff) = a_sandbox_with_company(&mut game, 2);
+    let (critical, content) = threshold(&game, &slack());
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), critical - 1.0);
+    }
+    run_the_gate(&mut game, &staff);
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), content);
+    }
+    run_the_gate(&mut game, &staff);
+
+    assert_eq!(idled_strikes(&game, staff[0], staff[1]), 1);
+    assert_eq!(idled_strikes(&game, staff[1], staff[0]), 1);
+}
+
+/// A program that idled alone has nobody to remember.
+#[test]
+fn a_lone_program_finishing_writes_nothing() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, staff) = a_sandbox_with_company(&mut game, 1);
+    let (critical, content) = threshold(&game, &slack());
+    set_reserve(&mut game, staff[0], &slack(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+    set_reserve(&mut game, staff[0], &slack(), content);
+    run_the_gate(&mut game, &staff);
+
+    assert!(
+        game.world
+            .get::<Memories>(staff[0])
+            .unwrap()
+            .0
+            .iter()
+            .all(|m| m.def.as_str() != "idled_with")
+    );
+}
+
+/// **Once per stretch, never per tick.** A long stretch of shared servicing
+/// before either finishes is still one strike.
+#[test]
+fn a_long_stretch_of_shared_servicing_is_still_one_strike() {
+    let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, staff) = a_sandbox_with_company(&mut game, 2);
+    let (critical, content) = threshold(&game, &slack());
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), critical - 1.0);
+    }
+    for _ in 0..100 {
+        run_the_gate(&mut game, &staff);
+    }
+    for &who in &staff {
+        set_reserve(&mut game, who, &slack(), content);
+    }
+    run_the_gate(&mut game, &staff);
+
+    assert_eq!(idled_strikes(&game, staff[0], staff[1]), 1);
+}
+
+/// A program standing somewhere else entirely is not company.
+#[test]
+fn a_program_out_of_reach_is_not_named() {
+    let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (site, staff) = a_sandbox_with_company(&mut game, 2);
+    {
+        let mut pos = game.world.get_mut::<Position>(staff[1]).unwrap();
+        pos.x = site.x - 4;
+        pos.y = site.y;
+    }
+    let (critical, content) = threshold(&game, &slack());
+    set_reserve(&mut game, staff[0], &slack(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+    set_reserve(&mut game, staff[0], &slack(), content);
+    run_the_gate(&mut game, &staff);
+
+    assert_eq!(idled_strikes(&game, staff[0], staff[1]), 0);
+}

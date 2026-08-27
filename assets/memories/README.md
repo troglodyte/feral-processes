@@ -127,6 +127,7 @@ but not what makes a program remember.
 | id | | subject | formed by |
 |---|---|---|---|
 | `bonded_in_battle` | + | `Program` | surviving a won fight, about each other program that also survived |
+| `idled_with` | + | `Program` | finishing a stretch at an amenity, about each other program in reach of it at that moment |
 | `hard_won` | + | `Nothing` | winning a fight the party was outmatched in |
 | `mauled_by` | − | `Species` | taking a single hit worth a large share of maximum Integrity |
 | `stranded_at` | − | `BaseTile` | being posted somewhere nothing can reach |
@@ -137,7 +138,7 @@ but not what makes a program remember.
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 
 They are chosen to cover both valences and every subject kind, not because
-these nine are the interesting content. `Nothing`, `Program`, `Species` and
+these ten are the interesting content. `Nothing`, `Program`, `Species` and
 `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
 

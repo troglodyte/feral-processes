@@ -163,6 +163,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             program_id: 0,
             memories: Vec::new(),
             needs: Default::default(),
+            off_shift: None,
             staff: false,
         });
     }
@@ -233,6 +234,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         program_id: 0,
         memories: Vec::new(),
         needs: Default::default(),
+        off_shift: None,
         staff: false,
     });
     save::save_to_file(&path, &data).unwrap();
@@ -332,6 +334,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         program_id: 0,
         memories: Vec::new(),
         needs: Default::default(),
+        off_shift: None,
         staff: false,
     });
     data.structures.push(save::StructureSave {
@@ -427,6 +430,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         program_id: 0,
         memories: Vec::new(),
         needs: Default::default(),
+        off_shift: None,
         staff: false,
     });
     for n in 0..posts {
@@ -630,6 +634,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             program_id: 0,
             memories: Vec::new(),
             needs: Default::default(),
+            off_shift: None,
             staff: false,
         });
     }
@@ -713,6 +718,7 @@ pub(crate) fn app_with_companions_and_cargo(
             program_id: 0,
             memories: Vec::new(),
             needs: Default::default(),
+            off_shift: None,
             staff: false,
         });
     }
@@ -994,6 +1000,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             program_id: 0,
             memories: Vec::new(),
             needs: Default::default(),
+            off_shift: None,
             staff: false,
         });
     }

@@ -70,14 +70,37 @@ pub fn needs_tick_system(
 /// before this feature. With an **empty** `NeedDb` there is nothing to seed
 /// and nothing to drain, and that falls out of the loop rather than out of a
 /// branch: the pre-needs game, exactly.
+/// **The restore is here rather than in a system of its own**, after the
+/// drain: the two write the same component, and splitting them would be two
+/// systems bevy has to be told about instead of one loop that cannot disagree
+/// with itself. The index is rebuilt once a tick — `drift_idle_staff` builds
+/// its own once a beat — because two cheap builds beat one stale cached copy,
+/// and a cached one would be a new `Resource` and another iteration-order
+/// shift.
+/// What `needs_drain_system` reads off each candidate. Aliased for the same
+/// `type_complexity` reason `Wanderer` and `CronjobWorker` are.
+type Needful<'w> = (
+    Entity,
+    &'w mut Needs,
+    Option<&'w Task>,
+    &'w Tamed,
+    &'w Position,
+);
+
 pub fn needs_drain_system(
-    mut programs: Query<(Entity, &mut Needs, Option<&Task>, &Tamed), Without<Player>>,
+    mut programs: Query<Needful, Without<Player>>,
+    sites: Query<(&Structure, &Position)>,
+    structure_db: Res<StructureDb>,
     db: Res<NeedDb>,
     player: Res<crate::resources::PlayerEntity>,
     roster: Res<crate::resources::Party>,
     wielded: Res<crate::resources::WieldedProgram>,
 ) {
-    for (entity, mut needs, task, tamed) in &mut programs {
+    let amenities = crate::game::base::offshift::Amenities::build(
+        sites.iter().map(|(s, p)| (&s.kind, p)),
+        &structure_db,
+    );
+    for (entity, mut needs, task, tamed, at) in &mut programs {
         if crate::game::party::role_of(entity, tamed.owner, player.0, &roster, wielded.0)
             != Some(crate::game::party::ProgramRole::Staff)
         {
@@ -94,6 +117,22 @@ pub fn needs_drain_system(
                 def.drain_per_tick
             };
             needs.set(&def.id, current - rate);
+        }
+        // Standing in reach of an amenity refills, whatever brought the
+        // program here — a body posted beside a Sandbox is being serviced
+        // too, and a rule that only paid off-shift bodies would make that
+        // read as the amenity being broken.
+        for def in db.iter() {
+            let Some((site, rate, radius)) = amenities.nearest(&def.id, *at) else {
+                continue;
+            };
+            if !crate::game::base::offshift::in_reach(*at, site, radius) {
+                continue;
+            }
+            let Some(current) = needs.get(&def.id) else {
+                continue;
+            };
+            needs.set(&def.id, current + rate);
         }
     }
 }

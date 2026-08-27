@@ -1587,6 +1587,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             program_id: 0,
             memories: Vec::new(),
             needs: Default::default(),
+            off_shift: None,
             staff: false,
             equipment: Vec::new(),
         }],

@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
+use crate::game::base::offshift;
 use crate::game::base::stock;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
@@ -841,6 +842,12 @@ impl Game {
             wanted.push((site, kind));
         }
         let staff = self.base_staff();
+        // **Before the drift and before the assignment.** The drift is what
+        // walks an off-shift body to its amenity, so the marker has to be on
+        // it by then; and the assignment reads the same marker to decide who
+        // is on shift at all.
+        let amenities = self.amenities();
+        self.update_off_shift(&staff, &amenities);
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
@@ -851,7 +858,7 @@ impl Game {
             self.record_labour_demand(wanted.len(), 0);
             return;
         }
-        self.drift_idle_staff(&staff);
+        self.drift_idle_staff(&staff, &amenities);
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
         // program the player owns and is not fighting with is staff. A post
@@ -1414,7 +1421,11 @@ impl Game {
     /// and a rejected candidate is simply not taken: the program holds its
     /// ground for that beat rather than being nudged somewhere a rule would
     /// have refused, and the next beat offers a different tile.
-    fn drift_idle_staff(&mut self, staff: &[Entity]) {
+    ///
+    /// **An off-shift body takes the other fall-through**: it is walking
+    /// somewhere on purpose, so `step_off_shift` gets it first and the
+    /// wander is what everyone else gets.
+    fn drift_idle_staff(&mut self, staff: &[Entity], amenities: &offshift::Amenities) {
         let Some(home) = self.home_position() else {
             // No Home means no base to wander, and no origin for the
             // arrival ring to be laid out around either.
@@ -1442,6 +1453,18 @@ impl Game {
             .collect();
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
+                continue;
+            }
+            // A body with an errand walks it. `Err` is the one place a route
+            // is ever judged: it gives the post up and latches the need, so
+            // the gate does not hand it straight back on the next beat.
+            if self.world.get::<components::OffShift>(worker).is_some() {
+                if self.step_off_shift(worker, amenities).is_err() {
+                    self.strand_off_shift(worker);
+                }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
                 continue;
             }
             let here = self.world.get::<Position>(worker).copied();
@@ -1503,6 +1526,17 @@ impl Game {
                 *pos = tile;
             }
         }
+    }
+
+    /// `drift_idle_staff` for the tests, which need one beat at a time
+    /// rather than a whole scheduler pass.
+    #[cfg(test)]
+    pub(crate) fn drift_idle_staff_for_test(
+        &mut self,
+        staff: &[Entity],
+        amenities: &offshift::Amenities,
+    ) {
+        self.drift_idle_staff(staff, amenities);
     }
 
     /// Sets or clears the standing instructions on `structure` — see

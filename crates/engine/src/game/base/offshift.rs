@@ -1,0 +1,271 @@
+//! When a program leaves its post, where it goes, and what it costs the base
+//! when it cannot.
+//!
+//! A reserve that has run below its need's `critical` takes the program off
+//! shift; it walks to the nearest structure servicing that need, stands there
+//! until it is `content`, and goes back to work. **One gate decides whether a
+//! need may pull a body off a post, and failing that gate *is* acting out** —
+//! there is no third state where a program is stalled but content.
+
+use std::collections::BTreeMap;
+
+use crate::base_grid::BaseGrid;
+use crate::components::{Needs, OffShift, Position, Structure};
+use crate::game::base::hauling::{NoPost, at_station, step_to_post};
+use crate::needs::{NeedDb, NeedId};
+use crate::resources::Locale;
+use crate::structures::{StructureDb, StructureId};
+use bevy_ecs::prelude::Entity;
+
+use crate::Game;
+
+/// Where the base's amenities stand, indexed by what they service.
+///
+/// Built **once per caller pass** over the structure query, never once per
+/// program: a bevy system builds one a tick and `drift_idle_staff` one a beat.
+/// Two cheap builds beat one stale cached copy, and a cached one would be a
+/// new `Resource` and another query-iteration-order shift.
+pub(crate) struct Amenities {
+    /// `need -> (tile, rate, radius)`, each list sorted by tile so a tie
+    /// resolves the same way every run.
+    by_need: BTreeMap<NeedId, Vec<(Position, f32, i32)>>,
+}
+
+impl Amenities {
+    /// Takes an iterator so a bevy system and a `&Game` can both build one.
+    pub(crate) fn build<'a>(
+        structures: impl Iterator<Item = (&'a StructureId, &'a Position)>,
+        db: &StructureDb,
+    ) -> Self {
+        let mut by_need: BTreeMap<NeedId, Vec<(Position, f32, i32)>> = BTreeMap::new();
+        for (kind, pos) in structures {
+            let Some(def) = db.get(kind) else {
+                continue;
+            };
+            for service in &def.services {
+                // A nonsense rate is refused here rather than downstream, so
+                // an amenity that cannot refill anything is not one a program
+                // will walk across the base to stand at.
+                let Some(rate) = service.rate() else {
+                    continue;
+                };
+                by_need
+                    .entry(service.need.clone())
+                    .or_default()
+                    .push((*pos, rate, service.radius));
+            }
+        }
+        // **A total order, not bevy's iteration order.** `min_by_key` returns
+        // the first of several equal minima, so two amenities equidistant from
+        // one program must already be in a settled order before anything asks.
+        for sites in by_need.values_mut() {
+            sites.sort_by_key(|(p, _, _)| (p.x, p.y));
+        }
+        Self { by_need }
+    }
+
+    /// Whether anything in the base services this need **at all**. The second
+    /// clause of the gate: a need nothing answers is a stall, not an errand.
+    pub(crate) fn has(&self, need: &NeedId) -> bool {
+        self.by_need.contains_key(need)
+    }
+
+    /// The amenity a program at `from` would walk to, with its rate and reach.
+    ///
+    /// Ties break on a **total** `(chebyshev distance, x, y)` order — the list
+    /// is already sorted by tile, and `min_by_key` takes the first of several
+    /// equal minima, which is where bevy's unstable iteration order would
+    /// otherwise leak in.
+    pub(crate) fn nearest(&self, need: &NeedId, from: Position) -> Option<(Position, f32, i32)> {
+        self.by_need
+            .get(need)?
+            .iter()
+            .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
+            .copied()
+    }
+}
+
+/// The need furthest below its own `critical`, or `None` if none is.
+///
+/// Measured as a **fraction of `critical`** so two needs with different
+/// thresholds compare fairly — a Slack at 24 of 25 is barely short, a
+/// Coherence at 4 of 20 is desperate, and comparing the raw numbers would
+/// pick the wrong one. Ties break by id.
+pub(crate) fn pressing_need(needs: &Needs, db: &NeedDb) -> Option<NeedId> {
+    let mut best: Option<(f32, &NeedId)> = None;
+    for (id, value) in needs.iter() {
+        let Some(def) = db.get(id) else {
+            continue;
+        };
+        if def.critical <= 0.0 || value >= def.critical {
+            continue;
+        }
+        let shortfall = (def.critical - value) / def.critical;
+        // `>` and not `>=`, so the first of two equal shortfalls wins — and
+        // `Needs::iter` is id-ordered, which makes that a settled tie-break
+        // rather than a map's whim.
+        if best.is_none_or(|(worst, _)| shortfall > worst) {
+            best = Some((shortfall, id));
+        }
+    }
+    best.map(|(_, id)| id.clone())
+}
+
+impl Game {
+    /// Builds this pass's amenity index off the world's own structures.
+    pub(crate) fn amenities(&mut self) -> Amenities {
+        let mut query = self.world.query::<(&Structure, &Position)>();
+        let sites: Vec<(StructureId, Position)> = query
+            .iter(&self.world)
+            .map(|(s, p)| (s.kind.clone(), *p))
+            .collect();
+        Amenities::build(
+            sites.iter().map(|(kind, p)| (kind, p)),
+            self.world.resource::<StructureDb>(),
+        )
+    }
+
+    /// Inserts, keeps or removes `OffShift` for each of `staff`.
+    ///
+    /// **The gate, stated once so it cannot drift.** `OffShift(need)` is
+    /// inserted when all three hold:
+    ///
+    /// 1. the reserve is below the def's `critical`,
+    /// 2. `amenities.has(need)` — something in the base services it at all,
+    /// 3. the need is **not latched** in `Needs::stalled_announced`.
+    ///
+    /// It is removed when the reserve reaches `content`, when the amenity
+    /// stops existing, or when the walk reports `NoPost::NoRoute`.
+    ///
+    /// **Reachability is never asked as its own question here.** It is
+    /// discovered by the walk, and a `NoRoute` sets the latch — which is what
+    /// stops the obvious flicker of insert → failed step → remove → insert on
+    /// every beat. One Dijkstra per newly off-shift body, then nothing until
+    /// the need recovers.
+    pub(crate) fn update_off_shift(&mut self, staff: &[Entity], amenities: &Amenities) {
+        for &worker in staff {
+            let Some(needs) = self.world.get::<Needs>(worker) else {
+                continue;
+            };
+            let current = self.world.get::<OffShift>(worker).map(|o| o.need.clone());
+            let db = self.world.resource::<NeedDb>();
+            let verdict = match &current {
+                Some(need) => {
+                    let done = db
+                        .get(need)
+                        .is_none_or(|def| needs.get(need).is_none_or(|v| v >= def.content));
+                    (!done && amenities.has(need)).then(|| need.clone())
+                }
+                None => pressing_need(needs, db)
+                    .filter(|need| amenities.has(need) && !needs.is_latched(need)),
+            };
+            // A reserve back above its own `critical` clears the latch, so a
+            // need that recovers and runs down again complains a second time.
+            let recovered: Vec<NeedId> = needs
+                .iter()
+                .filter(|(id, value)| db.get(id).is_some_and(|def| *value >= def.critical))
+                .map(|(id, _)| id.clone())
+                .collect();
+            if !recovered.is_empty()
+                && let Some(mut store) = self.world.get_mut::<Needs>(worker)
+            {
+                for id in recovered {
+                    store.unlatch(&id);
+                }
+            }
+            match (current, verdict) {
+                (Some(_), None) => {
+                    self.world.entity_mut(worker).remove::<OffShift>();
+                }
+                (_, Some(need)) => {
+                    self.world.entity_mut(worker).insert(OffShift { need });
+                }
+                (None, None) => {}
+            }
+        }
+    }
+}
+
+/// Whether a program standing at `here` is being serviced by an amenity at
+/// `site` with reach `radius`.
+///
+/// `0` means `at_station`'s reach — standing beside it — rather than standing
+/// *on* it, which no program ever does: a structure's own tile is blocked.
+/// Written as an `||` rather than as a special case so the two readings agree
+/// at `radius: 1` instead of stepping over each other.
+pub(crate) fn in_reach(here: Position, site: Position, radius: i32) -> bool {
+    at_station(here, site) || ((site.x - here.x).abs().max((site.y - here.y).abs()) <= radius)
+}
+
+impl Game {
+    /// One step toward the amenity for `worker`'s `OffShift` need, or the
+    /// gate's verdict when there is no route.
+    ///
+    /// **This is the only place reachability is decided.** It is not asked as
+    /// its own question anywhere else: an `Err` here sets the latch and drops
+    /// `OffShift`, which is what stops the insert → failed step → remove →
+    /// insert flicker the gate would otherwise run on every beat.
+    ///
+    /// Rides `hauling::step_to_post`, the walk the dig crew already takes.
+    /// There is no second walk.
+    pub(crate) fn step_off_shift(
+        &mut self,
+        worker: Entity,
+        amenities: &Amenities,
+    ) -> Result<(), NoPost> {
+        let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
+            return Ok(());
+        };
+        let here = self
+            .world
+            .get::<Position>(worker)
+            .copied()
+            .ok_or(NoPost::NoRoute)?;
+        let (site, _, radius) = amenities.nearest(&need, here).ok_or(NoPost::NoRoute)?;
+        if in_reach(here, site, radius) {
+            // Arrived. It stands here until it is content — the drift's other
+            // shape would walk it straight back off again.
+            return Ok(());
+        }
+        let blocked = self.structure_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        let Some(tile) = step_to_post(
+            self.world.resource::<BaseGrid>(),
+            here,
+            site,
+            &blocked,
+            pocket_radius,
+        )?
+        else {
+            // The field admits nowhere better than where it stands. It waits,
+            // exactly as a hauler does.
+            return Ok(());
+        };
+        // An off-shift body is still a body: the party's cell is the one
+        // rejection `step_to_post` cannot make for itself, since `Locale` is
+        // where the party stands in base space and the player's `Position` is
+        // pinned to the anchor out on the surface.
+        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
+            && (x, y) == (tile.x, tile.y)
+        {
+            return Ok(());
+        }
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = tile;
+        }
+        Ok(())
+    }
+
+    /// Gives the errand up and latches the need: the amenity exists but this
+    /// body cannot reach it, which is a different complaint from there being
+    /// no amenity at all and leaves the player a different errand.
+    pub(crate) fn strand_off_shift(&mut self, worker: Entity) {
+        let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
+            return;
+        };
+        if let Some(mut store) = self.world.get_mut::<Needs>(worker) {
+            store.latch(&need);
+        }
+        self.world.entity_mut(worker).remove::<OffShift>();
+    }
+}

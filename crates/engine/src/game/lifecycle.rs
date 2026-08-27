@@ -987,6 +987,9 @@ impl Game {
                 for (id, value) in &c.needs {
                     needs.set(id, *value);
                 }
+                if let Some(need) = c.off_shift.clone() {
+                    entity.insert(crate::components::OffShift { need });
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
@@ -1225,8 +1228,14 @@ impl Game {
                 Option<&PowerReserve>,
                 Option<&Boss>,
                 Option<&ProgramId>,
-                Option<&Memories>,
-                Option<&Needs>,
+                // Nested one level further because bevy's query tuples top
+                // out at 15 and this one is full again — grouped as "what
+                // this program is, remembers and needs".
+                (
+                    Option<&Memories>,
+                    Option<&Needs>,
+                    Option<&crate::components::OffShift>,
+                ),
             ),
         )>();
         for (
@@ -1257,8 +1266,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                memories,
-                needs,
+                (memories, needs, off_shift),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1359,6 +1367,7 @@ impl Game {
                 needs: needs
                     .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
                     .unwrap_or_default(),
+                off_shift: off_shift.map(|o| o.need.clone()),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL

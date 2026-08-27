@@ -859,7 +859,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
-        Mode::Upgrade => draw_upgrade_menu(&scanned, selected, refusal, painter, m),
+        Mode::Upgrade => draw_upgrade_menu(game, &scanned, selected, refusal, painter, m),
         Mode::Symlink => draw_symlink_menu(game, selected, refusal, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",

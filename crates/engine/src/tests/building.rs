@@ -877,7 +877,7 @@ fn upgrading_a_node_costs_materials_and_raises_its_tier() {
 
     stock_upgrade_materials(&mut game, 20);
 
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
 
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
     assert_eq!(
@@ -900,7 +900,7 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 
     assert_eq!(game.world.get::<ResourceNode>(node).unwrap().level, Some(1));
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
     assert_eq!(
         game.world.get::<ResourceNode>(node).unwrap().level,
         Some(2),
@@ -909,19 +909,26 @@ fn upgrading_a_node_makes_its_extraction_more_reliable() {
 }
 
 #[test]
-fn upgrading_refuses_past_max_tier_and_without_materials() {
+fn upgrading_refuses_past_max_tier() {
     let mut game = Game::new(972, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
     // Deep enough that the zone ceiling is out of the way: this test is about
-    // the def's own `max_tier` and about materials, both of which are checked
-    // after the zone gate.
+    // the def's own `max_tier`, which is checked after the zone gate.
     set_zone(&mut game, 9);
 
-    let err = game
-        .upgrade_structure(node)
-        .expect_err("no materials left after building it");
-    assert!(err.contains("Not enough"), "unexpected error: {err}");
+    // A base that cannot afford the bill is deliberately *not* refused here:
+    // upgrading files a request now, and a request the base cannot afford yet
+    // is the whole point of a queue — the crew says so from the site instead.
+    game.upgrade_structure(node)
+        .expect("filing costs nothing and checks no store");
+    let site = game
+        .build_site_at(
+            game.world.get::<Position>(node).unwrap().x,
+            game.world.get::<Position>(node).unwrap().y,
+        )
+        .expect("the request stands");
+    game.cancel_build_request(site).unwrap();
 
     game.world
         .get_mut::<Inventory>(game.player_entity())
@@ -938,7 +945,7 @@ fn upgrading_refuses_past_max_tier_and_without_materials() {
         .max_tier;
     for _ in 1..max {
         stock_upgrade_materials(&mut game, 20);
-        game.upgrade_structure(node).unwrap();
+        upgrade_now(&mut game, node).unwrap();
     }
     let err = game
         .upgrade_structure(node)
@@ -982,7 +989,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
 
     set_zone(&mut game, 2);
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
 
     let err = game
@@ -1013,7 +1020,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
         .max_tier;
     for _ in 1..max {
         stock_upgrade_materials(&mut game, 20);
-        game.upgrade_structure(node).unwrap();
+        upgrade_now(&mut game, node).unwrap();
     }
     let err = game
         .upgrade_structure(node)
@@ -1062,8 +1069,9 @@ fn a_structures_tier_survives_a_save_and_load_round_trip() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 200);
     set_zone(&mut game, 3);
     stock_upgrade_materials(&mut game, 20);
-    game.upgrade_structure(node).unwrap();
-    game.upgrade_structure(node).unwrap();
+    upgrade_now(&mut game, node).unwrap();
+    stock_upgrade_materials(&mut game, 30);
+    upgrade_now(&mut game, node).unwrap();
 
     let path = std::env::temp_dir().join(format!("feral_tier_save_{}.bin", std::process::id()));
     game.save(&path).unwrap();

@@ -732,7 +732,8 @@ impl Game {
         }
 
         for b in data.build_sites {
-            game.world.spawn((
+            let goal = b.goal;
+            let mut site = game.world.spawn((
                 BuildSite {
                     structure: b.structure,
                     cost: b.cost,
@@ -743,16 +744,23 @@ impl Game {
                     // of the world, so a reload says it again.
                     announced_dry: false,
                     announced_stuck: false,
+                    goal,
                 },
                 Position {
                     x: b.position.0,
                     y: b.position.1,
                 },
-                Glyph {
+            ));
+            // An upgrade site is born without one, because the machine it is
+            // about is still standing on that cell and still drawing itself.
+            // Attached unconditionally, the tile would carry two views and
+            // the map would paint a build slab over a working machine.
+            if goal == crate::components::BuildGoal::New {
+                site.insert(Glyph {
                     ch: BUILD_SITE_GLYPH,
                     color: GlyphColor::Orange,
-                },
-            ));
+                });
+            }
         }
 
         for d in data.dig_sites {
@@ -1405,6 +1413,7 @@ impl Game {
                 cost: site.cost.clone(),
                 delivered: site.delivered.clone(),
                 progress: site.progress,
+                goal: site.goal,
             });
         }
 

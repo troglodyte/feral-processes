@@ -1432,7 +1432,7 @@ fn a_deployed_patch_node_upgrades_and_repairs_harder_for_it() {
 
     stock_upgrade_materials(&mut game, 20);
 
-    game.upgrade_structure(node)
+    upgrade_now(&mut game, node)
         .expect("a non-workable structure with an upgrade path should still upgrade");
 
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);

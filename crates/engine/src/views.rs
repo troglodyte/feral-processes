@@ -750,7 +750,7 @@ pub struct EntityView {
     /// job and are never moved again. And at its post it belongs *under* its
     /// machine's glyph: a base at rest should read as buildings, with motion
     /// the only thing that draws the eye.
-    pub worker_away_from_post: bool,
+    pub wears_job_mark: bool,
     /// Whether this entity's `Position` is a tile the sim actually keeps up
     /// to date — the input `views::drawn_on_surface_map` takes, and the
     /// wider question `worker_away_from_post` above is one answer to.
@@ -763,7 +763,7 @@ pub struct EntityView {
     /// companion keeps the tile it was beaten on — neither is ever written
     /// again, so drawing either would claim it is somewhere it isn't.
     ///
-    /// Distinct from `worker_away_from_post`, which stayed narrow because a
+    /// Distinct from `wears_job_mark`, which stayed narrow because a
     /// frontend marks "someone is on this job" with it: an idle program is
     /// on no job, so widening that field would have put the mark on it.
     pub position_is_honest: bool,
@@ -771,7 +771,7 @@ pub struct EntityView {
     /// right now — a guard (which never moves, so always) or a worker that
     /// has not stepped off on an errand.
     ///
-    /// The other half of `worker_away_from_post`, and the two are exclusive
+    /// The other half of `wears_job_mark`, and the two are exclusive
     /// per posted program: a frontend that marks "someone is on this job"
     /// draws the mark on the program when the program is drawn, and on the
     /// structure when it isn't. Distinct from `structure_worker`, which
@@ -1934,7 +1934,12 @@ pub struct BuildOrderRow {
     pub entity: Entity,
     /// **Base-space** coordinates.
     pub pos: (i32, i32),
-    /// The display name of the structure being raised.
+    /// Whether this raises a new structure or advances the one already on
+    /// the cell a tier — see `components::BuildGoal`. Read through
+    /// `BuildOrderRow::label`, which is what a screen prints.
+    pub goal: crate::components::BuildGoal,
+    /// The display name of the structure the request is about. On an upgrade
+    /// that is the machine already standing there.
     pub structure: String,
     /// Units of material standing on the cell, against `materials`, the
     /// total the bill calls for. The delivery half of the job's progress.
@@ -1954,6 +1959,19 @@ pub struct BuildOrderRow {
 }
 
 impl BuildOrderRow {
+    /// What a screen calls this request — `Lathe`, or `Lathe → Mk3`.
+    ///
+    /// Composed here rather than baked into `structure`, so the name and the
+    /// tier cannot be split back apart by a caller that wants only one.
+    pub fn label(&self) -> String {
+        match self.goal {
+            crate::components::BuildGoal::New => self.structure.clone(),
+            crate::components::BuildGoal::Upgrade { to_tier } => {
+                format!("{} → Mk{to_tier}", self.structure)
+            }
+        }
+    }
+
     /// How far along the whole job is, 0..=100 — deliveries and
     /// construction weighted by how much of the work each is.
     ///

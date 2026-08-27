@@ -394,11 +394,18 @@ impl Game {
     }
 
     /// How many of `kind` the base has on order but has not raised yet.
+    ///
+    /// **`BuildGoal::New` only.** An upgrade site names the machine's own
+    /// kind too — that is what `BuildSite::structure` means — so counting
+    /// every goal would let a pending upgrade eat one of that kind's
+    /// `max_deployed` slots and refuse a legitimate deploy with a figure the
+    /// player cannot account for. Nothing new stands up when an upgrade
+    /// finishes.
     fn count_build_requests(&mut self, kind: &StructureId) -> u32 {
         let mut query = self.world.query::<&BuildSite>();
         query
             .iter(&self.world)
-            .filter(|site| &site.structure == kind)
+            .filter(|site| &site.structure == kind && site.goal == BuildGoal::New)
             .count() as u32
     }
 
@@ -440,12 +447,59 @@ impl Game {
         Some((self.upgrade_ceiling(upgrade), upgrade.max_tier))
     }
 
-    /// Advances `structure` one upgrade tier, charging its `UpgradeDef`
-    /// cost scaled by the tier being reached. The new tier both multiplies
-    /// the structure's work payout (see `systems::task_progress_system`)
-    /// and becomes its `ResourceNode::level`, so extraction gets more
-    /// reliable as well as more productive — reusing the existing
-    /// `mining_success_chance` curve rather than adding a second one.
+    /// The bill the next tier would be filed against — what the upgrade menu
+    /// quotes, scaled by the tier being reached exactly as
+    /// `upgrade_structure` prices it. `None` where there is no next tier.
+    ///
+    /// Priced here rather than in the renderer for `BuildOrderRow`'s reason:
+    /// a menu that quoted its own arithmetic could disagree with the request
+    /// the player is about to file.
+    pub fn upgrade_cost(&self, structure: Entity) -> Option<Vec<(ItemId, u32)>> {
+        let kind = &self.world.get::<Structure>(structure)?.kind;
+        let upgrade = self
+            .world
+            .resource::<StructureDb>()
+            .get(kind)?
+            .upgrade
+            .as_ref()?;
+        let tier = self
+            .world
+            .get::<StructureTier>(structure)
+            .map(|t| t.0)
+            .unwrap_or(1);
+        if tier >= upgrade.max_tier {
+            return None;
+        }
+        let next = tier + 1;
+        Some(
+            upgrade
+                .cost
+                .iter()
+                .map(|(item, qty)| (item.clone(), qty * next))
+                .collect(),
+        )
+    }
+
+    /// **Files a request** to advance `structure` one upgrade tier, against
+    /// its `UpgradeDef` cost scaled by the tier being reached. The crew that
+    /// raises a deploy fetches this bill by hand and works the site until the
+    /// tier lands — see `Game::raise_one_tick`, the one step that branches on
+    /// `BuildGoal`.
+    ///
+    /// **Nothing is charged here**, `place_structure`'s rule: an upgrade the
+    /// base cannot afford yet is a legitimate thing to file, and the store
+    /// the crew draws from is the base's own shelves rather than the pack.
+    /// This was the last structure cost paid out of the player's `Inventory`.
+    ///
+    /// The tier, when it lands, both multiplies the structure's work payout
+    /// (see `systems::task_progress_system`) and becomes its
+    /// `ResourceNode::level`, so extraction gets more reliable as well as
+    /// more productive — reusing the existing `mining_success_chance` curve
+    /// rather than adding a second one.
+    ///
+    /// The machine **keeps running** while its request stands: standing it
+    /// down would bring back the deadlock class build orders closed, on a
+    /// base that files three upgrades at once.
     pub fn upgrade_structure(&mut self, structure: Entity) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -485,40 +539,59 @@ impl Game {
                 tier + 1
             ));
         }
+        let Some(pos) = self.world.get::<Position>(structure).copied() else {
+            return Err("That structure is already gone.".into());
+        };
+        // Its own sentence rather than folded into any refusal above,
+        // because it leaves the player a different errand: the others need a
+        // breach or a different machine, this one needs the standing request
+        // calling off. A deploy request can never be on an occupied cell, so
+        // a site here is always this machine's own upgrade.
+        if self.build_site_at(pos.x, pos.y).is_some() {
+            return Err(format!(
+                "Your crew is already on order to upgrade the {}. Call that request off first.",
+                def.name
+            ));
+        }
         let next = tier + 1;
+        // Resolved now and carried on the site, `BuildSite::cost`'s reason:
+        // a request filed against one price may not be silently repriced by
+        // an edited def while the crew is already hauling to it.
         let cost: Vec<(ItemId, u32)> = upgrade
             .cost
             .iter()
             .map(|(item, qty)| (item.clone(), qty * next))
             .collect();
 
-        let player = self.player_entity();
-        {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                if inv.count(item) < *qty {
-                    return Err(format!("Not enough {}.", self.item_name(item)));
-                }
-            }
-        }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                inv.take(item.clone(), *qty);
-            }
-        }
-
-        self.world.entity_mut(structure).insert(StructureTier(next));
-        // A node that opted into chance-based yield tracks its tier as its
-        // level; one that always succeeds (level None) stays that way.
-        if let Some(mut node) = self.world.get_mut::<ResourceNode>(structure)
-            && node.level.is_some()
-        {
-            node.level = Some(next);
-        }
-        self.log_base(format!("You upgrade the {} to Mk{next}.", def.name));
+        self.world
+            .spawn((BuildSite::upgrade(kind.clone(), cost, next), pos));
+        self.log_base(format!(
+            "You put the {} in for an upgrade to Mk{next} — your crew will fetch what it needs.",
+            def.name
+        ));
         self.tick();
         Ok(())
+    }
+
+    /// Despawns the pending build request standing on `(x, y)`, if one is,
+    /// and hands back whatever had already been carried to it.
+    ///
+    /// **Both destruction paths call this** — `damage_structure`'s destroyed
+    /// branch and `remove_structure`, the Home cascade included. Wired into
+    /// one alone, the other strands goods on a cell nothing occupies, and
+    /// nothing fails to compile when only one is done. The refund goes
+    /// through `return_material`, the same door `cancel_build_request` uses.
+    pub(crate) fn clear_pending_build_at(&mut self, x: i32, y: i32) {
+        let Some(site) = self.build_site_at(x, y) else {
+            return;
+        };
+        let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
+            return;
+        };
+        for (item, qty) in &build.delivered {
+            self.return_material(item, *qty);
+        }
+        self.world.despawn(site);
     }
 
     /// Demolishes `structure`, refunding `STRUCTURE_REMOVAL_REFUND_PERCENT`
@@ -598,6 +671,9 @@ impl Game {
                 // the rest of the run. `damage_structure` carries the same
                 // pair for the same reason.
                 self.world.entity_mut(worker).remove::<(Task, Carrying)>();
+            }
+            if let Some(pos) = self.world.get::<Position>(target).copied() {
+                self.clear_pending_build_at(pos.x, pos.y);
             }
             self.announce_lost_shelf(target);
             self.world.despawn(target);

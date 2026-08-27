@@ -199,6 +199,30 @@ impl Game {
             })
     }
 
+    /// Whether a frontend draws the "somebody is on this job" mark on
+    /// `entity` itself — see `EntityView::wears_job_mark`.
+    ///
+    /// **Exactly one mark per posted program at every instant**, and this is
+    /// one of its two halves; `structure_attended` is the other. The mark
+    /// goes on whichever end of a posting has a glyph to wear it: a machine
+    /// wears it while its worker stands there and the worker takes it along
+    /// to deliver, and a builder on an **upgrade** wears it for the whole job
+    /// — `Excavate`'s rule and `Excavate`'s reason, since an upgrade site
+    /// carries no glyph and the machine under it is wearing its own worker's.
+    pub(crate) fn wears_job_mark(&self, entity: Entity) -> bool {
+        if self.worker_away_from_post(entity) {
+            return true;
+        }
+        self.world.get::<Tamed>(entity).is_some()
+            && self.world.get::<Task>(entity).is_some_and(|t| {
+                t.kind == TaskKind::Construct
+                    && self
+                        .world
+                        .get::<BuildSite>(t.target)
+                        .is_some_and(|site| site.goal != crate::components::BuildGoal::New)
+            })
+    }
+
     /// Whether `entity`'s `Position` is a tile the sim keeps up to date —
     /// see `EntityView::position_is_honest`, which is this value, and
     /// `views::drawn_on_surface_map`, which is what consumes it.
@@ -491,7 +515,7 @@ impl Game {
     /// bare percentage.
     pub fn build_site_blurb(&self, entity: Entity) -> Option<String> {
         let row = self.build_order_row(entity)?;
-        let mut line = format!("{} — {}% raised.", row.structure, row.percent());
+        let mut line = format!("{} — {}% raised.", row.label(), row.percent());
         if row.outstanding.is_empty() {
             line.push_str(&format!(
                 " Every part is on site ({}/{}); construction is {}/{} ticks in.",
@@ -575,6 +599,7 @@ impl Game {
         Some(crate::views::BuildOrderRow {
             entity,
             pos: (pos.x, pos.y),
+            goal: site.goal,
             structure: self.structure_name(&site.structure),
             delivered,
             materials: site.total_materials(),
@@ -792,11 +817,23 @@ impl Game {
                     // The set is structures with somebody standing at them,
                     // and an excavation is not one.
                     TaskKind::Excavate => false,
-                    // A build site *does* carry a glyph, which is what makes
+                    // A *deploy* site carries a glyph, which is what makes
                     // this the machine's answer rather than the dig site's:
                     // there is an end of this posting that can wear the mark,
                     // so the site wears it while the builder stands there and
-                    // the builder carries it away on every fetch.
+                    // the builder carries it away on every fetch. An
+                    // **upgrade** site carries none — the machine under it is
+                    // still drawing that cell — so it is the dig site's case
+                    // instead and the builder wears the mark for the whole
+                    // job. See `Game::wears_job_mark`.
+                    TaskKind::Construct
+                        if self
+                            .world
+                            .get::<BuildSite>(target)
+                            .is_some_and(|site| site.goal != crate::components::BuildGoal::New) =>
+                    {
+                        false
+                    }
                     TaskKind::Construct | TaskKind::GatherResource => {
                         match (
                             self.world.get::<Position>(holder),
@@ -860,7 +897,7 @@ impl Game {
                 } else {
                     None
                 };
-                let worker_away_from_post = self.worker_away_from_post(entity);
+                let wears_job_mark = self.wears_job_mark(entity);
                 let position_is_honest = self.position_is_honest(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
                 let output_stranded = is_structure
@@ -910,7 +947,7 @@ impl Game {
                     can_trade,
                     issues_contracts,
                     structure_worker,
-                    worker_away_from_post,
+                    wears_job_mark,
                     position_is_honest,
                     structure_attended,
                     output_stranded,
@@ -920,7 +957,24 @@ impl Game {
                     fusions: self.fusion_count(entity),
                     rarity: self.rarity_of(entity),
                     machine_status,
-                    build: self.build_order_row(entity),
+                    // A site's own row when this *is* a site, and the row of
+                    // the request standing on this cell when it is a machine
+                    // being upgraded: an upgrade site carries no glyph, so
+                    // `view_entities` never selects it and the pending row
+                    // would otherwise be visible nowhere. Found by tile,
+                    // through `iter_entities` rather than a query, for the
+                    // borrow reason `build_order_row` states above.
+                    build: self.build_order_row(entity).or_else(|| {
+                        if !is_structure {
+                            return None;
+                        }
+                        let site = self.world.iter_entities().find(|e| {
+                            e.get::<BuildSite>().is_some()
+                                && e.get::<Position>()
+                                    .is_some_and(|p| p.x == pos.x && p.y == pos.y)
+                        })?;
+                        self.build_order_row(site.id())
+                    }),
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })
@@ -1407,7 +1461,7 @@ impl Game {
                     can_trade: false,
                     issues_contracts: false,
                     structure_worker: None,
-                    worker_away_from_post: false,
+                    wears_job_mark: false,
                     position_is_honest: true,
                     structure_attended: false,
                     build: None,

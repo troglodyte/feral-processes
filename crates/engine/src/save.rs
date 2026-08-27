@@ -517,6 +517,14 @@ pub struct BuildSiteSave {
     pub cost: Vec<(crate::items::ItemId, u32)>,
     pub delivered: Vec<(crate::items::ItemId, u32)>,
     pub progress: u32,
+    /// Whether raising this stands a new structure up or advances the one
+    /// already on the cell a tier — see `components::BuildGoal`.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump: a file written before upgrades were
+    /// filed loads every site as `New`, which is exactly what that run had.
+    #[serde(default)]
+    pub goal: crate::components::BuildGoal,
 }
 
 /// A caravan mid-journey — see `components::Caravan`.

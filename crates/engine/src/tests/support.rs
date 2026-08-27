@@ -627,6 +627,19 @@ pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result
     Ok(())
 }
 
+/// Files an upgrade through the real `Game::upgrade_structure` and then
+/// raises it, for a test that only wants a Mk2 machine rather than a crew.
+///
+/// `place_now`'s counterpart, and its reason: upgrading is a request now, so
+/// a test about what a Mk2 node *does* would otherwise have to run a crew to
+/// get one. A test about the request itself — the refusals, the site, the
+/// crew — calls `Game::upgrade_structure` directly and leaves the site alone.
+pub(super) fn upgrade_now(game: &mut Game, structure: Entity) -> Result<(), String> {
+    game.upgrade_structure(structure)?;
+    raise_pending_builds(game);
+    Ok(())
+}
+
 /// Raises every outstanding build request immediately, charging each bill of
 /// materials to the player's pack and falling back to the base's own
 /// shelves — the two stores a real crew fetches from, in the order it
@@ -639,23 +652,19 @@ pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result
 /// asserts on the pack afterwards.
 pub(super) fn raise_pending_builds(game: &mut Game) {
     loop {
-        let pending: Option<(
-            bevy_ecs::prelude::Entity,
-            Position,
-            String,
-            Vec<(ItemId, u32)>,
-        )> = {
+        let pending: Option<(bevy_ecs::prelude::Entity, Position, BuildSite)> = {
             let mut query = game
                 .world
                 .query::<(bevy_ecs::prelude::Entity, &BuildSite, &Position)>();
             query
                 .iter(&game.world)
                 .next()
-                .map(|(e, site, pos)| (e, *pos, site.structure.clone(), site.cost.clone()))
+                .map(|(e, site, pos)| (e, *pos, site.clone()))
         };
-        let Some((site, pos, kind, cost)) = pending else {
+        let Some((site, pos, build)) = pending else {
             return;
         };
+        let (kind, cost, goal) = (build.structure, build.cost, build.goal);
         for (item, qty) in &cost {
             let player = game.player_entity();
             let paid = game
@@ -674,7 +683,36 @@ pub(super) fn raise_pending_builds(game: &mut Game) {
             .cloned()
             .expect("a fixture never files a request for a structure with no file");
         game.world.despawn(site);
-        game.spawn_structure(&def, pos.x, pos.y);
+        // **Branching on the goal is not optional.** Pointed at an upgrade
+        // site, a fixture that spawns a structure for every request stands a
+        // duplicate machine on an occupied cell, and every test that files an
+        // upgrade and then places something goes strange in a way that reads
+        // as the feature being broken.
+        match goal {
+            BuildGoal::New => {
+                game.spawn_structure(&def, pos.x, pos.y);
+            }
+            BuildGoal::Upgrade { to_tier } => {
+                let machine = {
+                    let mut query = game
+                        .world
+                        .query::<(bevy_ecs::prelude::Entity, &Position, &Structure)>();
+                    query
+                        .iter(&game.world)
+                        .find(|(_, p, _)| p.x == pos.x && p.y == pos.y)
+                        .map(|(e, ..)| e)
+                        .expect("an upgrade request stands on its own machine")
+                };
+                game.world
+                    .entity_mut(machine)
+                    .insert(StructureTier(to_tier));
+                if let Some(mut node) = game.world.get_mut::<ResourceNode>(machine)
+                    && node.level.is_some()
+                {
+                    node.level = Some(to_tier);
+                }
+            }
+        }
         // The base's systems, without advancing the clock — which is the
         // ordering `tick_inner` gives a real crew-raised structure:
         // `run_build_crew` stands it up and `schedule.run` follows in the

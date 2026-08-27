@@ -666,28 +666,53 @@ fn tier_tag(s: &EntityView) -> String {
 }
 
 pub(super) fn draw_upgrade_menu(
+    game: &mut Game,
     structures: &[EntityView],
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
+    // The pack **and** the base's shelves, `build_cost_display`'s whole
+    // reason: an upgrade is fetched by the crew now, so a menu quoting the
+    // pack alone would price it against a store the verb no longer reads.
+    let status = game.player_status();
+    let stock = game.base_stock();
     let mut rows = vec![text_row(
-        "Upgrade which structure? Each tier costs more and yields more. (Esc to cancel; Up/Down + Enter also work)",
+        "Upgrade which structure? Your crew fetches the parts and does the work. (Esc to cancel; Up/Down + Enter also work)",
     )];
     if structures.is_empty() {
         rows.push(text_row("(no upgradeable structures nearby)"));
     }
     for (i, s) in structures.iter().enumerate() {
+        let cost = game
+            .upgrade_cost(s.entity)
+            .map(|cost| {
+                format!(
+                    " - {}",
+                    build_cost_display(game, &cost, &status.inventory, &stock).join(", ")
+                )
+            })
+            .unwrap_or_default();
+        // A machine being upgraded carries its own pending row. The row stays
+        // listed and refuses on pick rather than being hidden, so it has to
+        // say why.
+        let pending = s
+            .build
+            .as_ref()
+            .map(|row| format!(" - on order, {}% done", row.percent()))
+            .unwrap_or_default();
         rows.push(with_icon(
             item_row(
                 format!(
-                    "[{}] {} at ({}, {}) [{}]",
+                    "[{}] {} at ({}, {}) [{}]{}{}",
                     menu_shortcut(i),
                     s.label,
                     s.pos.0,
                     s.pos.1,
                     tier_tag(s),
+                    cost,
+                    pending,
                 ),
                 i == selected,
             ),
@@ -1007,7 +1032,7 @@ mod tests {
             can_trade: false,
             issues_contracts: false,
             structure_worker: None,
-            worker_away_from_post: false,
+            wears_job_mark: false,
             position_is_honest: true,
             structure_attended: false,
             build: None,

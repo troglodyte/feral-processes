@@ -22,7 +22,8 @@ use bevy_ecs::prelude::{Entity, With};
 
 use crate::base_grid::BaseGrid;
 use crate::components::{
-    BuildSite, Carrying, Inventory, Position, Stock, Structure, Task, TaskKind,
+    BuildGoal, BuildSite, Carrying, Inventory, Position, ResourceNode, Stock, Structure,
+    StructureTier, Task, TaskKind,
 };
 use crate::game::base::{hauling, stock};
 use crate::items::ItemId;
@@ -437,10 +438,10 @@ impl Game {
         if !done {
             return;
         }
-        let Some(kind) = self
+        let Some((kind, goal)) = self
             .world
             .get::<BuildSite>(site)
-            .map(|b| b.structure.clone())
+            .map(|b| (b.structure.clone(), b.goal))
         else {
             return;
         };
@@ -452,10 +453,62 @@ impl Game {
             // player paid for is destroyed by a file they can put back.
             return;
         };
-        self.world.despawn(site);
-        self.world.entity_mut(worker).remove::<Task>();
-        self.spawn_structure(&def, target.x, target.y);
-        self.log_base(format!("Your crew finishes the {}.", def.name));
+        // The one step that differs between the two goals, which is the whole
+        // of why `BuildGoal` is a field on one component rather than a second
+        // component with its own crew pass.
+        match goal {
+            BuildGoal::New => {
+                self.world.despawn(site);
+                self.world.entity_mut(worker).remove::<Task>();
+                self.spawn_structure(&def, target.x, target.y);
+                self.log_base(format!("Your crew finishes the {}.", def.name));
+            }
+            BuildGoal::Upgrade { to_tier } => {
+                // Resolved by **tile**, which is why the site never held an
+                // `Entity`: there is nothing to dangle when the machine is
+                // destroyed underneath the request.
+                let machine = {
+                    let mut query = self
+                        .world
+                        .query_filtered::<(Entity, &Position), With<Structure>>();
+                    query
+                        .iter(&self.world)
+                        .find(|(_, p)| p.x == target.x && p.y == target.y)
+                        .map(|(e, _)| e)
+                };
+                // Left standing rather than despawned where it cannot
+                // commit — the missing-def arm's precedent, extended to a
+                // machine that is gone and to a tier the ceiling no longer
+                // permits. The materials are still on the cell.
+                let Some(machine) = machine else {
+                    return;
+                };
+                let permitted = def
+                    .upgrade
+                    .as_ref()
+                    .is_some_and(|upgrade| to_tier <= self.upgrade_ceiling(upgrade));
+                if !permitted {
+                    return;
+                }
+                self.world
+                    .entity_mut(machine)
+                    .insert(StructureTier(to_tier));
+                // A node that opted into chance-based yield tracks its tier
+                // as its level; one that always succeeds (level None) stays
+                // that way.
+                if let Some(mut node) = self.world.get_mut::<ResourceNode>(machine)
+                    && node.level.is_some()
+                {
+                    node.level = Some(to_tier);
+                }
+                self.world.despawn(site);
+                self.world.entity_mut(worker).remove::<Task>();
+                self.log_base(format!(
+                    "Your crew finishes upgrading the {} to Mk{to_tier}.",
+                    def.name
+                ));
+            }
+        }
     }
 
     /// Puts whatever `worker` is carrying back into the base, and takes the

@@ -748,3 +748,508 @@ fn examining_a_site_says_what_is_going_up_and_what_it_is_short_of() {
         "and that there is no body on it, which is a state and not a fault: {blurb}"
     );
 }
+
+/// A Mining Node standing in a base deep enough to upgrade it, with the
+/// upgrade's second material in the pack.
+///
+/// **`set_zone` is not optional here**: `upgrade_ceiling` is
+/// `min(def.max_tier, zone)`, so every upgrade is refused at zone 1 and a
+/// fixture that skips it reads as the feature being broken.
+fn base_with_a_node(seed: u32) -> (Game, Entity) {
+    let mut game = base(seed);
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = structure_at(&mut game, 1, 0).expect("the fixture stands one up");
+    set_zone(&mut game, 2);
+    give(&mut game, &ItemId::from("cache_grain"), 20);
+    (game, node)
+}
+
+/// The upgrade headline: upgrading files a request rather than charging the
+/// pack and advancing the tier on the spot.
+#[test]
+fn filing_an_upgrade_charges_nothing_and_leaves_the_tier_alone() {
+    let (mut game, node) = base_with_a_node(1120);
+    let before = count_item(&game, ids::CORE_FRAGMENT);
+
+    game.upgrade_structure(node).unwrap();
+
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "the crew fetches the bill; nothing is charged at filing"
+    );
+    assert_eq!(
+        game.world.get::<StructureTier>(node).unwrap().0,
+        1,
+        "the tier lands when the work is done, not when it is asked for"
+    );
+    let site = site_at(&mut game, 1, 0);
+    let build = game.world.get::<BuildSite>(site).unwrap();
+    assert_eq!(
+        build.goal,
+        crate::components::BuildGoal::Upgrade { to_tier: 2 }
+    );
+    assert_eq!(build.structure, "mining_node", "the machine's own kind");
+    assert_eq!(
+        build.total_materials(),
+        22,
+        "the def's 10 Core Fragment + 1 Cache Grain, scaled by the tier being reached"
+    );
+    assert!(
+        game.world.get::<Glyph>(site).is_none(),
+        "the machine is still standing and still drawing this cell"
+    );
+}
+
+/// The whole loop for an upgrade: a body fetches the bill by hand and the
+/// tier lands when the meter fills.
+#[test]
+fn the_crew_fetches_the_bill_and_the_tier_lands() {
+    let (mut game, node) = base_with_a_node(1121);
+    builder(&mut game);
+    game.upgrade_structure(node).unwrap();
+    let (x, y) = {
+        let p = game.world.get::<Position>(node).unwrap();
+        (p.x, p.y)
+    };
+
+    for _ in 0..2000 {
+        if game.world.get::<StructureTier>(node).map(|t| t.0) == Some(2) {
+            break;
+        }
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world.get::<StructureTier>(node).unwrap().0,
+        2,
+        "the crew raises the tier"
+    );
+    assert_eq!(
+        game.world.get::<ResourceNode>(node).unwrap().level,
+        Some(2),
+        "and the node's level goes with it — the same figure drives mining_success_chance"
+    );
+    assert!(
+        game.build_site_at(x, y).is_none(),
+        "and the request is spent"
+    );
+}
+
+/// A node that always succeeds stays that way — the rule
+/// `upgrade_structure` held when it applied the tier itself.
+#[test]
+fn an_upgrade_leaves_a_level_less_node_level_less() {
+    let (mut game, node) = base_with_a_node(1122);
+    game.world.get_mut::<ResourceNode>(node).unwrap().level = None;
+    builder(&mut game);
+    game.upgrade_structure(node).unwrap();
+
+    for _ in 0..2000 {
+        if game.world.get::<StructureTier>(node).map(|t| t.0) == Some(2) {
+            break;
+        }
+        game.tick();
+    }
+
+    assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+    assert_eq!(
+        game.world.get::<ResourceNode>(node).unwrap().level,
+        None,
+        "a node with no chance-based yield does not acquire one by being upgraded"
+    );
+}
+
+/// A pending upgrade does not eat one of its kind's `max_deployed` slots.
+///
+/// `count_build_requests` counts by `structure` id, which is the machine's
+/// own kind on an upgrade site as much as on a deploy — so left counting
+/// every goal, a base upgrading a capped machine is refused a legitimate
+/// deploy with a figure the player cannot account for.
+#[test]
+fn a_pending_upgrade_does_not_consume_a_max_deployed_slot() {
+    let mut game = base(1123);
+    set_zone(&mut game, 2);
+    unlock_research_chain(&mut game, "cache_coherence");
+    give(&mut game, &ItemId::from("cache_grain"), 40);
+    // Three is this one's ceiling: one standing, one on order, and the
+    // upgrade of the standing one must not be the third.
+    place_now(&mut game, "line_driver", 1, 0).unwrap();
+    let driver = structure_at(&mut game, 1, 0).expect("one stands there");
+    let pos = *game.world.get::<Position>(driver).unwrap();
+    game.world.spawn((
+        BuildSite::upgrade("line_driver".to_string(), vec![], 2),
+        pos,
+    ));
+    game.place_structure("line_driver", -1, 0)
+        .expect("the second is inside the ceiling");
+
+    game.place_structure("line_driver", 0, 1)
+        .expect("and so is the third — the pending upgrade is not a fourth Line Driver");
+}
+
+/// A second request on a structure already being upgraded is refused, and
+/// refused *distinctly*: every other refusal leaves the player waiting on a
+/// breach or looking for a different machine, this one leaves them with a
+/// standing request to call off.
+#[test]
+fn a_second_upgrade_request_on_the_same_structure_is_refused() {
+    let (mut game, node) = base_with_a_node(1124);
+    game.upgrade_structure(node).unwrap();
+
+    let err = game
+        .upgrade_structure(node)
+        .expect_err("one request at a time");
+
+    assert!(
+        err.contains("already"),
+        "it names the standing request: {err}"
+    );
+    assert!(
+        !err.contains("fully upgraded"),
+        "and does not read as a machine that has finished: {err}"
+    );
+}
+
+/// The machine keeps running while its own upgrade stands.
+///
+/// Standing it down for the duration would bring back the deadlock class
+/// build orders closed — a base that files three upgrades at once stops
+/// producing the very materials they are waiting on.
+#[test]
+fn a_machine_keeps_producing_while_its_upgrade_stands() {
+    let (mut game, node) = base_with_a_node(1125);
+    builder(&mut game);
+    builder(&mut game);
+    let _ = game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 100));
+    // Let the base post somebody to the node before the upgrade is filed, so
+    // this cannot pass by the order simply never having been worked.
+    for _ in 0..40 {
+        game.tick();
+    }
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    game.upgrade_structure(node).unwrap();
+    let produced_before = game
+        .world
+        .get::<Stock>(node)
+        .map(|s| s.output.values().sum::<u32>())
+        .unwrap_or(0);
+
+    let mut produced_during = produced_before;
+    for _ in 0..200 {
+        if game.build_site_at(node_pos.x, node_pos.y).is_none() {
+            break;
+        }
+        produced_during = game
+            .world
+            .get::<Stock>(node)
+            .map(|s| s.output.values().sum::<u32>())
+            .unwrap_or(0);
+        game.tick();
+    }
+
+    assert!(
+        produced_during > produced_before,
+        "the node filled its buffer while the crew was fetching for its upgrade \
+         ({produced_before} -> {produced_during})"
+    );
+}
+
+/// An upgrade site is a first-class build request: cancelling one refunds
+/// the units already standing on the cell.
+///
+/// `cancel_build_request` is untouched by upgrades, which is exactly why it
+/// is asserted here — nothing else proves an upgrade request is one of these.
+#[test]
+fn cancelling_an_upgrade_request_gives_the_delivered_units_back() {
+    let (mut game, node) = base_with_a_node(1126);
+    builder(&mut game);
+    place_now(&mut game, "depot", 0, 1).unwrap();
+    let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
+    game.upgrade_structure(node).unwrap();
+    let site = site_at(&mut game, 1, 0);
+
+    let mut delivered = 0;
+    for _ in 0..600 {
+        delivered = game
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.delivered.iter().map(|(_, q)| q).sum::<u32>())
+            .unwrap_or(0);
+        if delivered > 0 {
+            break;
+        }
+        game.tick();
+    }
+    assert!(delivered > 0, "the fixture needs a part-supplied site");
+    let banked: u32 = game
+        .world
+        .get::<Stock>(depot)
+        .unwrap()
+        .output
+        .values()
+        .sum();
+
+    game.cancel_build_request(site).unwrap();
+
+    assert!(
+        game.world.get::<BuildSite>(site).is_none(),
+        "the request is gone"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .values()
+            .sum::<u32>(),
+        banked + delivered,
+        "and every unit standing on the cell went back on the shelf"
+    );
+}
+
+/// A half-supplied upgrade site survives a reload — goal, bill, delivery and
+/// progress — and comes back **without a glyph**.
+///
+/// The glyph half is asserted here rather than in its own test because the
+/// round-trip half alone passes against a load path that still attaches one,
+/// and the map would then paint a build slab over a working machine.
+#[test]
+fn a_part_supplied_upgrade_request_survives_a_reload() {
+    let mut game = base(1127);
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    game.world.spawn((
+        BuildSite {
+            structure: "mining_node".to_string(),
+            cost: vec![
+                (ItemId::from(ids::CORE_FRAGMENT), 20),
+                (ItemId::from("cache_grain"), 2),
+            ],
+            delivered: vec![(ItemId::from(ids::CORE_FRAGMENT), 5)],
+            progress: 7,
+            announced_dry: false,
+            announced_stuck: false,
+            goal: crate::components::BuildGoal::Upgrade { to_tier: 3 },
+        },
+        Position { x: px + 1, y: py },
+    ));
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_upgrade_site_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut reloaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    stand_in_base(&mut reloaded);
+    let site = reloaded
+        .build_site_at(px + 1, py)
+        .expect("the request came back on its own cell");
+    let build = reloaded.world.get::<BuildSite>(site).unwrap();
+    assert_eq!(
+        build.goal,
+        crate::components::BuildGoal::Upgrade { to_tier: 3 },
+        "what a finished site does is the one thing the save has to carry"
+    );
+    assert_eq!(build.delivered, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    assert_eq!(build.progress, 7);
+    assert_eq!(build.cost.len(), 2, "and the bill it was filed against");
+    assert!(
+        reloaded.world.get::<Glyph>(site).is_none(),
+        "an upgrade site draws nothing — the machine under it is still drawing that cell"
+    );
+}
+
+/// A machine destroyed in a sweep takes its pending upgrade with it, and
+/// hands back what had been carried there.
+#[test]
+fn a_swept_machine_refunds_its_pending_upgrade() {
+    let (mut game, node) = base_with_a_node(1128);
+    builder(&mut game);
+    place_now(&mut game, "depot", 0, 1).unwrap();
+    let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
+    game.upgrade_structure(node).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    let mut delivered = 0;
+    for _ in 0..600 {
+        delivered = game
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.delivered.iter().map(|(_, q)| q).sum::<u32>())
+            .unwrap_or(0);
+        if delivered > 0 {
+            break;
+        }
+        game.tick();
+    }
+    assert!(delivered > 0, "the fixture needs a part-supplied site");
+    let banked: u32 = game
+        .world
+        .get::<Stock>(depot)
+        .unwrap()
+        .output
+        .values()
+        .sum();
+
+    game.damage_structure(node, 100_000, "The Mining Node");
+
+    assert!(
+        game.build_site_at(node_pos.x, node_pos.y).is_none(),
+        "the request goes with the machine it was about"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .values()
+            .sum::<u32>(),
+        banked + delivered,
+        "and the units standing on the cell go back on the shelf rather than \
+         standing on ground nothing occupies"
+    );
+}
+
+/// The other destruction path: demolishing the machine yourself.
+#[test]
+fn demolishing_a_machine_refunds_its_pending_upgrade() {
+    let (mut game, node) = base_with_a_node(1129);
+    builder(&mut game);
+    game.upgrade_structure(node).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    let mut delivered = 0;
+    for _ in 0..600 {
+        delivered = game
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.delivered.iter().map(|(_, q)| q).sum::<u32>())
+            .unwrap_or(0);
+        if delivered > 0 {
+            break;
+        }
+        game.tick();
+    }
+    assert!(delivered > 0, "the fixture needs a part-supplied site");
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+
+    game.remove_structure(node).unwrap();
+
+    assert!(
+        game.build_site_at(node_pos.x, node_pos.y).is_none(),
+        "the request goes with the machine"
+    );
+    assert!(
+        count_item(&game, ids::CORE_FRAGMENT) >= held + delivered,
+        "and what was standing on the cell comes back on top of the demolition refund"
+    );
+}
+
+/// Demolishing the Home cascades to every other structure, so it has to take
+/// every pending upgrade with it too.
+#[test]
+fn demolishing_the_home_clears_a_pending_upgrade_elsewhere() {
+    let (mut game, node) = base_with_a_node(1130);
+    game.upgrade_structure(node).unwrap();
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+    let home = find_structure_by_kind(&mut game, "home").expect("the fixture founds one");
+
+    game.remove_structure(home).unwrap();
+
+    assert!(
+        game.build_site_at(node_pos.x, node_pos.y).is_none(),
+        "a request about a machine the cascade demolished cannot outlive it"
+    );
+}
+
+/// Exactly one job mark per posted program, with a machine's own worker and
+/// its builder both on the same tile.
+///
+/// The builder wears it for the whole job — `Excavate`'s rule and
+/// `Excavate`'s reason: an upgrade site carries no glyph, so there is no end
+/// of the posting *except* the body that can wear anything.
+#[test]
+fn a_builder_on_an_upgrade_wears_the_job_mark_itself() {
+    let (mut game, node) = base_with_a_node(1131);
+    let body = builder(&mut game);
+    // `spawn_tamed` leaves a program glyph-less, and every view list selects
+    // on `Glyph` — without one the roster the mark is drawn from is empty and
+    // this test measures nothing.
+    game.world.entity_mut(body).insert(Glyph {
+        ch: 'd',
+        color: GlyphColor::Cyan,
+    });
+    game.upgrade_structure(node).unwrap();
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    let mut seen_marked = 0;
+    for _ in 0..200 {
+        if game.build_site_at(node_pos.x, node_pos.y).is_none() {
+            break;
+        }
+        let posted = game
+            .world
+            .get::<Task>(body)
+            .is_some_and(|t| t.kind == TaskKind::Construct);
+        if posted {
+            let views = game.owned_program_views();
+            let view = views
+                .iter()
+                .find(|v| v.entity == body)
+                .expect("the builder is on the roster");
+            assert!(
+                view.wears_job_mark,
+                "a posted builder wears the mark wherever it is standing"
+            );
+            seen_marked += 1;
+        }
+        game.tick();
+    }
+    assert!(
+        seen_marked > 0,
+        "the fixture needs the builder actually posted at some point"
+    );
+}
+
+/// The machine keeps its own view, and the pending request hangs on it.
+#[test]
+fn a_machine_being_upgraded_draws_as_itself_and_says_what_is_coming() {
+    let (mut game, node) = base_with_a_node(1132);
+    game.upgrade_structure(node).unwrap();
+    let node_pos = *game.world.get::<Position>(node).unwrap();
+
+    let views = game.view_entities(20, 20);
+    let here: Vec<_> = views
+        .iter()
+        .filter(|v| v.pos == (node_pos.x, node_pos.y))
+        .collect();
+    assert_eq!(
+        here.len(),
+        1,
+        "one view for the cell — the site carries no glyph, so nothing selects it"
+    );
+    let view = here[0];
+    assert!(view.is_structure, "and it is still the machine");
+    assert_eq!(view.entity, node);
+    let row = view
+        .build
+        .as_ref()
+        .expect("the machine carries its own pending request");
+    assert_eq!(
+        row.goal,
+        crate::components::BuildGoal::Upgrade { to_tier: 2 }
+    );
+    assert!(
+        row.label().contains("Mk2"),
+        "a row says what tier is coming: {}",
+        row.label()
+    );
+
+    let report = game.build_order_report();
+    assert_eq!(report.len(), 1, "and the order list picks it up for free");
+    assert!(report[0].label().contains("Mk2"));
+}

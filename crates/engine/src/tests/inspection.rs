@@ -1724,7 +1724,7 @@ fn a_worker_is_only_away_from_its_post_while_it_is_actually_away() {
         game.view_entities(40, 40)
             .into_iter()
             .find(|v| v.entity == e)
-            .map(|v| v.worker_away_from_post)
+            .map(|v| v.wears_job_mark)
     };
 
     assert_eq!(
@@ -1827,7 +1827,7 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
             .iter()
             .find(|v| v.entity == worker)
             .expect("the worker exists")
-            .worker_away_from_post;
+            .wears_job_mark;
         assert!(
             machine != program,
             "step {step}: machine {machine}, worker away {program} — the mark \

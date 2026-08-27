@@ -472,6 +472,13 @@ impl Game {
                 // and this is the second of the two destruction paths.
                 self.world.entity_mut(w).remove::<(Task, Carrying)>();
             }
+            // The second of the two destruction paths — see
+            // `Game::clear_pending_build_at`. A machine swept out from under
+            // its own pending upgrade leaves the units already carried there
+            // standing on a cell nothing occupies.
+            if let Some(pos) = self.world.get::<Position>(structure).copied() {
+                self.clear_pending_build_at(pos.x, pos.y);
+            }
             self.announce_lost_shelf(structure);
             self.world.despawn(structure);
         } else {

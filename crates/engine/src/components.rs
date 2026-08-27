@@ -1657,6 +1657,29 @@ pub const BUILD_SITE_GLYPH: char = '^';
 /// posting is, so "one builder at a time" is a property of the scheduler
 /// naming a site once rather than a count stored here. A second builder is
 /// a scheduler change, not a save-format change.
+/// What a `BuildSite` does when its meter fills — see `BuildSite::goal`.
+///
+/// **The axis of change is what a finished site does, and nothing else.**
+/// The bill, the fetching, the walk, the delivery, both announcement
+/// latches, the reachability check above the truncation and the refund on
+/// cancel are identical for a deploy and an upgrade, so exactly one step
+/// branches on this: `raise_one_tick`'s completion. A second component with
+/// its own crew pass would have to copy all four rules build orders
+/// established, and the copy that drifts is the one nobody runs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BuildGoal {
+    /// Raise the structure named by `BuildSite::structure` on this cell.
+    #[default]
+    New,
+    /// Advance the structure **already standing on this cell** to `to_tier`.
+    ///
+    /// The machine is named by tile and never by `Entity`: it is resolved by
+    /// position at completion, so there is nothing to dangle when it is
+    /// destroyed underneath the request and no load-order dependency between
+    /// structures and sites in the save.
+    Upgrade { to_tier: u32 },
+}
+
 #[derive(Component, Clone, Debug)]
 pub struct BuildSite {
     /// Which structure this becomes. A `StructureId` and never a resolved
@@ -1690,11 +1713,24 @@ pub struct BuildSite {
     /// saved — a reload should say both again, because the run that was
     /// told is over.
     pub announced_stuck: bool,
+    /// What raising this one does — stand a new structure up, or advance
+    /// the one already on this cell a tier. See `BuildGoal`.
+    pub goal: BuildGoal,
 }
 
 impl BuildSite {
     /// A fresh request for `structure` against an already-resolved `cost`.
     pub fn new(structure: StructureId, cost: Vec<(ItemId, u32)>) -> Self {
+        Self::filed(structure, cost, BuildGoal::New)
+    }
+
+    /// A request to advance the structure already standing on this cell to
+    /// `to_tier`, against an already-resolved `cost`.
+    pub fn upgrade(structure: StructureId, cost: Vec<(ItemId, u32)>, to_tier: u32) -> Self {
+        Self::filed(structure, cost, BuildGoal::Upgrade { to_tier })
+    }
+
+    fn filed(structure: StructureId, cost: Vec<(ItemId, u32)>, goal: BuildGoal) -> Self {
         Self {
             structure,
             cost,
@@ -1702,6 +1738,7 @@ impl BuildSite {
             progress: 0,
             announced_dry: false,
             announced_stuck: false,
+            goal,
         }
     }
 

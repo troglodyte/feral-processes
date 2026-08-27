@@ -921,7 +921,11 @@ fn draw_surface_map(
                 if erx != rx as i32 || ery != ry as i32 {
                     continue;
                 }
-                if ev.build.is_some() {
+                // A machine being upgraded carries its own pending row, so
+                // `build` alone no longer means "nothing is standing here
+                // yet": tested first, a working machine would draw as a bare
+                // build slab for as long as its upgrade was on order.
+                if ev.build.is_some() && !ev.is_structure {
                     building = Some(ev);
                 } else if ev.is_structure {
                     structure = Some(ev);
@@ -931,7 +935,7 @@ fn draw_surface_map(
                 if if ev.is_structure {
                     ev.structure_attended
                 } else {
-                    ev.worker_away_from_post
+                    ev.wears_job_mark
                 } {
                     mark = Some((ev.entity, ev.output_stranded));
                 }

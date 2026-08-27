@@ -803,15 +803,16 @@ fn draw_surface_map(
     let entities: Vec<_> = game
         .view_entities(hw, hh)
         .into_iter()
-        // A tamed program is drawn while it is out on an errand and while it
-        // is loitering with no job at all. At its post it sits under its
-        // machine's own glyph, so a base at rest reads as buildings and
-        // motion is the only thing that draws the eye — a worker appearing
-        // *is* the news that it has left to deliver. A guard and a party
-        // member stay hidden for a harder reason: neither is ever walked,
-        // so each keeps whatever tile it was standing on when it took the
-        // job — out on the surface, or four frames down — and drawing it
-        // would claim it is somewhere it isn't.
+        // A tamed program is drawn while it is out on an errand, while it is
+        // on a job with no glyph at the far end — a builder walking its
+        // materials over and raising them, a digger cutting a wall — and
+        // while it is loitering with no job at all. At a *machine's* post it
+        // sits under that machine's own glyph, so a base at rest reads as
+        // buildings and motion is the only thing that draws the eye. A guard
+        // and a party member stay hidden for a harder reason: neither is
+        // ever walked, so each keeps whatever tile it was standing on when
+        // it took the job — out on the surface, or four frames down — and
+        // drawing it would claim it is somewhere it isn't.
         //
         // Which *space* a program stands in is a separate question and is
         // already settled inside `view_entities`

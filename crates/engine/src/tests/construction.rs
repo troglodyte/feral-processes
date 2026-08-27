@@ -1253,3 +1253,67 @@ fn a_machine_being_upgraded_draws_as_itself_and_says_what_is_coming() {
     assert_eq!(report.len(), 1, "and the order list picks it up for free");
     assert!(report[0].label().contains("Mk2"));
 }
+
+/// A posted builder is on the map for every tick of the job.
+///
+/// The bug this pins: `position_is_honest` had never been widened past
+/// `TaskKind::GatherResource`, so a body holding a `Construct` post failed
+/// `views::drawn_on_surface_map` and vanished off the map the moment it was
+/// posted — the player filed a request, a program disappeared, and a
+/// structure appeared some hundreds of ticks later with nothing having
+/// visibly walked, fetched or built.
+///
+/// Asserted on **every** posted tick rather than sampled once, because the
+/// three legs (fetch, deliver, raise) are what a single sample misses.
+#[test]
+fn a_builder_is_drawn_on_the_map_for_the_whole_job() {
+    let mut game = base(1140);
+    let body = builder(&mut game);
+    // `spawn_tamed` grants no `Glyph`, and every map-facing view selects on
+    // one — without it this test measures an empty list.
+    game.world.entity_mut(body).insert(Glyph {
+        ch: 'd',
+        color: GlyphColor::Cyan,
+    });
+
+    game.place_structure("mining_node", 1, 0).unwrap();
+
+    let mut posted_ticks = 0;
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        let posted = game
+            .world
+            .get::<Task>(body)
+            .is_some_and(|t| t.kind == TaskKind::Construct);
+        if posted {
+            posted_ticks += 1;
+            let view = game
+                .view_entities(40, 40)
+                .into_iter()
+                .find(|v| v.entity == body);
+            let drawn = view
+                .as_ref()
+                .is_some_and(|v| views::drawn_on_surface_map(v.is_tamed, v.position_is_honest));
+            assert!(
+                drawn,
+                "a posted builder is drawn wherever it is standing (tick {posted_ticks})"
+            );
+            assert!(
+                view.is_some_and(|v| v.wears_job_mark),
+                "and wears the mark for the whole job — a `BuildSite` is not a \
+                 `Structure`, so `structure_attended` can never carry it"
+            );
+        }
+        game.tick();
+    }
+    assert!(
+        posted_ticks > 3,
+        "the fixture needs the builder posted across several ticks, not one"
+    );
+    assert!(
+        structure_at(&mut game, 1, 0).is_some(),
+        "and the crew still finishes the job"
+    );
+}

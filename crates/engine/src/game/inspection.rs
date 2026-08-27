@@ -181,62 +181,82 @@ impl Game {
         self.build_site_at(center.x + dx, center.y + dy)
     }
 
-    /// Whether `entity` is a tamed program holding a `GatherResource` post
-    /// and not currently standing at it — see
-    /// `EntityView::worker_away_from_post`, which is this value.
+    /// Whether the "somebody is on this job" mark sits on the **far end** of
+    /// `holder`'s posting right now, rather than on the body itself.
     ///
-    /// A function rather than the inline expression it was, because the
-    /// frontend's "someone is on this job" mark reads the same answer.
-    pub(crate) fn worker_away_from_post(&self, entity: Entity) -> bool {
-        self.world.get::<Tamed>(entity).is_some()
-            && self.world.get::<Task>(entity).is_some_and(|t| {
-                t.kind == TaskKind::GatherResource
-                    && self
-                        .world
-                        .get::<Position>(entity)
-                        .zip(self.world.get::<Position>(t.target))
-                        .is_some_and(|(pos, station)| !at_station(*pos, *station))
-            })
+    /// **The one rule behind both halves of that mark**, and the two are
+    /// literally this answer and its negation: `wears_job_mark` is
+    /// `!mark_sits_on_the_post`, and `build_views`' `attended` set is the
+    /// targets this returns true for. Written as a comment claiming the two
+    /// agree they did not — the mark went on neither end of a build posting
+    /// and neither end of a dig.
+    ///
+    /// Exhaustive on `TaskKind`, `cell_mark`'s rule and for its reason:
+    /// spelled as `kind == GatherResource` it answered "the post wears it"
+    /// for every kind added after it, and each new kind shipped drawn
+    /// nowhere and marked nowhere at once.
+    fn mark_sits_on_the_post(&self, holder: Entity, kind: TaskKind, target: Entity) -> bool {
+        match kind {
+            // Nothing ever walks a guard to what it guards, so it is standing
+            // wherever it was when assigned and is never drawn: "at its post"
+            // is the only useful answer for it.
+            TaskKind::Guard => true,
+            // A machine's own glyph, and its worker hides under it while it
+            // is standing there — a base at rest reads as buildings, and a
+            // worker appearing *is* the news that it has left to deliver.
+            TaskKind::GatherResource => self
+                .world
+                .get::<Position>(holder)
+                .zip(self.world.get::<Position>(target))
+                .is_some_and(|(pos, station)| at_station(*pos, *station)),
+            // Neither of the two task kinds whose target is not a `Structure`
+            // has a far end that can carry it. A `DigSite` has no `Glyph` at
+            // all; a `BuildSite` has one but is not a `Structure`, and
+            // `EntityView::structure_attended` is gated on that — an upgrade
+            // site has neither, the machine under it still drawing the cell.
+            // So the body wears it for the whole job.
+            //
+            // That is also the right reading of the job: a build and a cut
+            // are one-off work with a terminal state, not a post the base
+            // holds indefinitely, so the crew moving is exactly what the
+            // player should be watching.
+            TaskKind::Excavate | TaskKind::Construct => false,
+        }
     }
 
     /// Whether a frontend draws the "somebody is on this job" mark on
     /// `entity` itself — see `EntityView::wears_job_mark`.
     ///
     /// **Exactly one mark per posted program at every instant**, and this is
-    /// one of its two halves; `structure_attended` is the other. The mark
-    /// goes on whichever end of a posting has a glyph to wear it: a machine
-    /// wears it while its worker stands there and the worker takes it along
-    /// to deliver, and a builder on an **upgrade** wears it for the whole job
-    /// — `Excavate`'s rule and `Excavate`'s reason, since an upgrade site
-    /// carries no glyph and the machine under it is wearing its own worker's.
+    /// one of its two halves; `structure_attended` is the other. Both are
+    /// `mark_sits_on_the_post` above, which is why neither can drift.
     pub(crate) fn wears_job_mark(&self, entity: Entity) -> bool {
-        if self.worker_away_from_post(entity) {
-            return true;
+        if self.world.get::<Tamed>(entity).is_none() {
+            return false;
         }
-        self.world.get::<Tamed>(entity).is_some()
-            && self.world.get::<Task>(entity).is_some_and(|t| {
-                t.kind == TaskKind::Construct
-                    && self
-                        .world
-                        .get::<BuildSite>(t.target)
-                        .is_some_and(|site| site.goal != crate::components::BuildGoal::New)
-            })
+        let Some(task) = self.world.get::<Task>(entity) else {
+            return false;
+        };
+        !self.mark_sits_on_the_post(entity, task.kind, task.target)
     }
 
     /// Whether `entity`'s `Position` is a tile the sim keeps up to date —
     /// see `EntityView::position_is_honest`, which is this value, and
     /// `views::drawn_on_surface_map`, which is what consumes it.
     ///
-    /// Wider than `worker_away_from_post` above by exactly one case: an
-    /// idle base staff member, which `schedule_base_labour` parks on a ring
-    /// around the Home every tick. A guard and a party companion keep
-    /// whatever tile they were on when they took the job, and neither is
-    /// written again.
+    /// **A drawn program and a marked program are the same set**, plus idle
+    /// base staff: `schedule_base_labour` parks one on a tile every tick, so
+    /// its position is honest while it is on no job at all and has no mark
+    /// to wear. Everything else falls out of `wears_job_mark` — a hauler
+    /// between two machines, a builder on any leg of its request, a digger
+    /// for the whole cut. A guard and a party companion keep whatever tile
+    /// they were on when they took the job and are never written again, so
+    /// drawing either would claim it is somewhere it isn't.
     pub(crate) fn position_is_honest(&self, entity: Entity) -> bool {
         if self.world.get::<Tamed>(entity).is_none() {
             return true;
         }
-        self.worker_away_from_post(entity)
+        self.wears_job_mark(entity)
             || (self.program_role(entity) == Some(ProgramRole::Staff)
                 && self.world.get::<Task>(entity).is_none())
     }
@@ -764,7 +784,7 @@ impl Game {
     /// standing — the roster, not a window onto the map.
     ///
     /// A companion's `Position` is the tile it was beaten on and is never
-    /// written again (see `worker_away_from_post` below), so a distance
+    /// written again (see `position_is_honest` above), so a distance
     /// filter over it hides programs by where they were *captured* rather
     /// than by where they are. `owned_pets` made this move already, for the
     /// fusion picker; the posting menus need the same list, and neither
@@ -794,57 +814,25 @@ impl Game {
         };
         // Structures with a posted program standing at them right now.
         //
-        // Separate from the map above, which is keyed by target and so
-        // collapses a machine's worker and its guard into whichever the
-        // query reached last — a machine whose worker has stepped out is
+        // Separate from `worker_by_structure` above, which is keyed by target
+        // and so collapses a machine's worker and its guard into whichever
+        // the query reached last — a machine whose worker has stepped out is
         // still attended by its guard, and has to survive that pairing.
+        //
+        // `Game::mark_sits_on_the_post` and not a second copy of the rule:
+        // this set is the exact complement of `wears_job_mark`, which is what
+        // makes "exactly one mark per posted program" hold by construction
+        // rather than by two comments agreeing.
         let attended: HashSet<Entity> = {
             let mut tasks = self.world.query::<(Entity, &Task)>();
-            let posted: Vec<(Entity, Entity, TaskKind)> = tasks
+            let posted: Vec<(Entity, TaskKind, Entity)> = tasks
                 .iter(&self.world)
-                .map(|(holder, task)| (holder, task.target, task.kind))
+                .map(|(holder, task)| (holder, task.kind, task.target))
                 .collect();
             posted
                 .into_iter()
-                .filter(|&(holder, target, kind)| match kind {
-                    // Nothing ever walks a guard to what it guards, so it is
-                    // standing wherever it was when assigned — and is never
-                    // drawn, which makes "at its post" the only useful
-                    // answer for it.
-                    TaskKind::Guard => true,
-                    // A dig site carries no `Glyph`, so nothing ever selects
-                    // one into `hits` and no view asks this set about it.
-                    // The set is structures with somebody standing at them,
-                    // and an excavation is not one.
-                    TaskKind::Excavate => false,
-                    // A *deploy* site carries a glyph, which is what makes
-                    // this the machine's answer rather than the dig site's:
-                    // there is an end of this posting that can wear the mark,
-                    // so the site wears it while the builder stands there and
-                    // the builder carries it away on every fetch. An
-                    // **upgrade** site carries none — the machine under it is
-                    // still drawing that cell — so it is the dig site's case
-                    // instead and the builder wears the mark for the whole
-                    // job. See `Game::wears_job_mark`.
-                    TaskKind::Construct
-                        if self
-                            .world
-                            .get::<BuildSite>(target)
-                            .is_some_and(|site| site.goal != crate::components::BuildGoal::New) =>
-                    {
-                        false
-                    }
-                    TaskKind::Construct | TaskKind::GatherResource => {
-                        match (
-                            self.world.get::<Position>(holder),
-                            self.world.get::<Position>(target),
-                        ) {
-                            (Some(w), Some(s)) => at_station(*w, *s),
-                            _ => false,
-                        }
-                    }
-                })
-                .map(|(_, target, _)| target)
+                .filter(|&(holder, kind, target)| self.mark_sits_on_the_post(holder, kind, target))
+                .map(|(_, _, target)| target)
                 .collect()
         };
 

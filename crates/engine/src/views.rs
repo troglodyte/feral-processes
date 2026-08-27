@@ -738,44 +738,43 @@ pub struct EntityView {
     /// If this is a structure, the label of the (tamed) entity currently
     /// working it via cronjob, if any.
     pub structure_worker: Option<String>,
-    /// Whether this (tamed) entity holds a `TaskKind::GatherResource` post
-    /// and is not currently standing at it — walking in to take the job,
-    /// carrying a load to a depot, or on its way back.
+    /// Whether a frontend draws the "somebody is on this job" mark on this
+    /// (tamed) entity rather than on the far end of its posting.
     ///
-    /// The one tamed program a frontend may draw, and only while this is
-    /// true. Two reasons it is this narrow. A worker is the only tamed
-    /// program whose `Position` the sim keeps honest at all —
-    /// `haul_step_system` walks it, while a guard, an idle program and a
-    /// party member each keep whatever tile they were on when they took the
-    /// job and are never moved again. And at its post it belongs *under* its
-    /// machine's glyph: a base at rest should read as buildings, with motion
-    /// the only thing that draws the eye.
+    /// True whenever the far end has no glyph to carry it — a `DigSite` has
+    /// none at all and a `BuildSite` is not a `Structure`, so a digger and a
+    /// builder each wear it for the whole job — and, for a machine's own
+    /// worker, only while it is away from its post: at it, the body belongs
+    /// *under* the machine's glyph, so a base at rest reads as buildings
+    /// with motion the only thing that draws the eye. A guard is never
+    /// walked and never drawn, so its structure keeps the mark always.
+    ///
+    /// `Game::mark_sits_on_the_post` is the rule and `structure_attended`
+    /// below is its other half — exactly one mark per posted program, by
+    /// construction rather than by two comments agreeing.
     pub wears_job_mark: bool,
     /// Whether this entity's `Position` is a tile the sim actually keeps up
-    /// to date — the input `views::drawn_on_surface_map` takes, and the
-    /// wider question `worker_away_from_post` above is one answer to.
+    /// to date — the input `views::drawn_on_surface_map` takes.
     ///
-    /// Three tamed programs have an honest tile and each for its own
-    /// reason: a worker walking to or from its post (`haul_step_system`
-    /// moves it), an idle base staff member (`schedule_base_labour` parks it
-    /// on a ring around the Home every tick), and nothing else. A guard
-    /// keeps whatever tile it was on when it took the job, and a party
-    /// companion keeps the tile it was beaten on — neither is ever written
-    /// again, so drawing either would claim it is somewhere it isn't.
-    ///
-    /// Distinct from `wears_job_mark`, which stayed narrow because a
-    /// frontend marks "someone is on this job" with it: an idle program is
-    /// on no job, so widening that field would have put the mark on it.
+    /// **A drawn program and a marked program are the same set**, plus one
+    /// case: `wears_job_mark` above, or an idle base staff member, which
+    /// `schedule_base_labour` parks on a tile every tick while it is on no
+    /// job at all and so has no mark to wear. A guard keeps whatever tile it
+    /// was on when it took the job, and a party companion keeps the tile it
+    /// was beaten on — neither is ever written again, so drawing either
+    /// would claim it is somewhere it isn't.
     pub position_is_honest: bool,
     /// If this is a structure, whether a posted program is standing at it
     /// right now — a guard (which never moves, so always) or a worker that
     /// has not stepped off on an errand.
     ///
-    /// The other half of `wears_job_mark`, and the two are exclusive
-    /// per posted program: a frontend that marks "someone is on this job"
-    /// draws the mark on the program when the program is drawn, and on the
-    /// structure when it isn't. Distinct from `structure_worker`, which
-    /// counts any `Task` wherever its holder happens to be.
+    /// The other half of `wears_job_mark`, and literally its negation: both
+    /// are `Game::mark_sits_on_the_post`, so a frontend draws the mark on
+    /// the program when the program is drawn and on the structure when it
+    /// isn't. **A build site never carries it**, because a `BuildSite` is
+    /// not a `Structure` and this field is gated on that — which is why the
+    /// builder wears it for the whole job. Distinct from `structure_worker`,
+    /// which counts any `Task` wherever its holder happens to be.
     pub structure_attended: bool,
     /// If this is a structure, whether its output buffer is full while
     /// nothing in the base can take a load — no depot built, or every depot
@@ -853,12 +852,15 @@ pub struct EntityView {
 /// it is somewhere it isn't.
 ///
 /// The second parameter widened from "is this worker away from its post" on
-/// 2026-08-14, when base staff arrived. Two kinds of tamed program now have
-/// an honest tile: one walking to or from a post, and one **idle in the
-/// base**, which `schedule_base_labour` parks on a ring around the Home
-/// every tick. A party companion still has neither — its `Position` is the
-/// tile it was beaten on, written at capture and never again — so it is
-/// still not drawn. `EntityView::position_is_honest` is the value.
+/// 2026-08-14, when base staff arrived, and again on 2026-08-27, when it
+/// turned out to have been reading `TaskKind::GatherResource` alone: a
+/// builder and a digger each held a post the sim walked them along and were
+/// drawn nowhere for the whole job, so filing a build request made a program
+/// vanish and a structure appear. It is `Game::position_is_honest` now,
+/// which is `wears_job_mark` plus idle base staff. A party companion still
+/// has neither — its `Position` is the tile it was beaten on, written at
+/// capture and never again — so it is still not drawn.
+/// `EntityView::position_is_honest` is the value.
 ///
 /// **A pure function shared by two crates rather than a condition written
 /// twice.** `render/base.rs` filters the map with it, and

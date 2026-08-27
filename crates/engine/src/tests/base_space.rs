@@ -3709,3 +3709,42 @@ fn a_swing_at_unseen_rock_meets_its_real_kind() {
         .expect("a buried cell of the hardest kind");
     assert_eq!(game.wall_at(buried.0, buried.1).durability, hard.durability);
 }
+
+/// A posted digger is on the map too, and for the same reason a builder is:
+/// a `DigSite` carries no `Glyph`, so the body is the only end of the
+/// posting there is to draw.
+///
+/// `position_is_honest` read `TaskKind::GatherResource` alone, so a digger
+/// was drawn nowhere for the whole cut — the player marked a wall and the
+/// program that went to cut it disappeared.
+#[test]
+fn a_posted_digger_is_drawn_on_the_map() {
+    let target = WALL;
+    let mut game = game_at_the_frontier(3260);
+    game.toggle_mark_box(target, target);
+    let site = game
+        .dig_site_at(target.0, target.1)
+        .expect("a marked wall has a dig site");
+
+    let digger = spawn_tamed_on_map(&mut game, crate::tuning::STARTING_POCKET_RADIUS, 0);
+    game.world.entity_mut(digger).insert(Task {
+        kind: TaskKind::Excavate,
+        target: site,
+        progress: 0,
+        required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+    });
+
+    let view = game
+        .view_entities(40, 40)
+        .into_iter()
+        .find(|v| v.entity == digger)
+        .expect("the digger is standing in base space beside the wall");
+    assert!(
+        views::drawn_on_surface_map(view.is_tamed, view.position_is_honest),
+        "a posted digger is drawn wherever it is standing"
+    );
+    assert!(
+        view.wears_job_mark,
+        "and wears the mark itself — a dig site has no glyph to wear it"
+    );
+}

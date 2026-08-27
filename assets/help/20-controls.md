@@ -32,6 +32,8 @@ Acting on the world:
 - x — examine a direction
 - d — demolish a direction
 - v — lay a VectorStasis Tile on the cell you are standing on
+- n — cutting tools out, or away again: with them out, walking into rock cuts it yourself, and your
+  own tile wears a yellow ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and floored, and drawing a plan costs no time.
 - < — phase up into the base, standing on the anchor

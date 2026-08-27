@@ -56,6 +56,11 @@ use arena::{
     draw_arena_builder, draw_arena_load, draw_arena_pick, draw_arena_result, draw_arena_save,
 };
 use base::{draw_history, draw_playing_base};
+// The one cue on the map a test outside `render` has to be able to name:
+// arming the tools is `App`-level state and the fixture that reaches base
+// space lives beside `App`.
+#[cfg(test)]
+pub(crate) use base::CUTTING_OUTLINE;
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_item_menu, draw_battle_special_menu,
     draw_battle_target_menu,

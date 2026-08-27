@@ -39,6 +39,15 @@ const MARK_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.18);
 const MARK_EDGE: Color = Color::new(0.9, 0.8, 0.2, 0.45);
 const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
 
+/// The ring the party's own tile wears while cutting tools are armed.
+///
+/// The plan's hue at full alpha, because a mark and a swing are the same
+/// job: what the tools are out *for* is the rock a plan is drawn on. Full
+/// alpha rather than the washes above since this is a mode and not a thing
+/// drawn on the ground — it has to read over whatever the party is standing
+/// on, a marked cell included.
+pub(crate) const CUTTING_OUTLINE: Color = YELLOW;
+
 /// The nemesis mark's side, as a fraction of the tile, and how far it sits
 /// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
 /// opposite corner (top-right rather than bottom-left), so a marked program
@@ -806,6 +815,13 @@ fn draw_surface_map(
     } else {
         Vec::new()
     };
+    // Read once for the whole map rather than per tile, and gated on the
+    // space rather than on the flag alone: the tools arm the player's own
+    // bump into rock, base space is the only place there is rock to bump
+    // into, and nothing disarms them on the way back out through the
+    // anchor. Ungated, the ring follows the party onto the zone map and
+    // claims something the ground there cannot answer.
+    let cutting = base_pos.is_some() && game.mining();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
     // Read once for the whole map: the sector is a property of the zone, so
@@ -1050,6 +1066,15 @@ fn draw_surface_map(
                 if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
                     painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
                 }
+            }
+            // The base-space mirror of that outline: an armed bump is a mode
+            // with no other trace on the screen — the log said so once, at
+            // the moment it was toggled, and a player who walked away and
+            // came back has nothing left to read it off. A ring rather than
+            // a colour on the `@` itself, so the sprite that stands in for
+            // that glyph carries the cue too.
+            if cutting && actor.is_some_and(|ev| ev.is_player) {
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, CUTTING_OUTLINE);
             }
             // The shield network is base-wide, not per-structure, so every
             // structure carries the same faint pulse while one is standing.

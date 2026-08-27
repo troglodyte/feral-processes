@@ -6971,3 +6971,121 @@ an amenity nothing — `per_tick` is not scaled by it — so a priced upgrade
 row would change no number the player could find. The two censuses that
 would otherwise have forced one (`every_upgrade_path_asks_for_a_zone_material`
 and its count) are satisfied by there being no path at all.
+
+### A Forgiving death benches a program, and `bench_or_dissolve` is the one door
+
+Two sites destroy an owned program when it dies: `end_battle`'s dead-party
+loop and the raid defender in `game/base/upkeep.rs`. Before this feature both
+called `dissolve_tamed_program` directly, and the obvious shape for a
+difficulty-dependent death was a `DifficultyMode` check at each of them.
+
+That is the shape `dissolve_tamed_program` itself exists to refuse. Its doc
+comment argues that sale and extraction agree about what destroying a program
+*means* by calling one function, not by a comment claiming they mirror. The
+same argument one level up gives `Game::bench_or_dissolve`: the branch is
+written once, the Permadeath arm is the old call untouched, and a third death
+site added later inherits the behaviour instead of having to remember it.
+
+On the Forgiving arm the program keeps `Tamed`, is detached from play, has its
+HP set to 1 and gains `components::Downed`. **It keeps its roster slot**, which
+is what makes a wipe cost something under Forgiving rather than being free —
+the programs come back, but `pet_capacity` is spent on them while they are down,
+and the two things that free the slot are selling the program or extracting a
+routine from it. `add_companion`'s refusal names both, so a player with a full
+roster, every program benched and no Bay standing has an errand rather than a
+dead end.
+
+`end_battle` is the only legal removal point: `BattleState::planned` indexes
+`Party` positionally and nothing may leave mid-battle. The bench is not an
+exception to that rule and must not become one.
+
+### `RecoveryDef` is `i32`, and the name it could not have is already taken
+
+A Bay's field is `recovery:`, not `repair:`, because `structures::RepairDef`
+already exists and means something else entirely — `Durability` restored to
+*structures* per upgrade tier. Two things called repair in one schema is a
+mod author reading the wrong README section, so the program-facing one took
+the other word.
+
+It is `i32` rather than `PowerRegenDef`'s `f32`, and the type is the point:
+`Stats::hp` is an integer, so this needs only half of that type's clamp —
+negatives floored in `RecoveryDef::rate()`, and no non-finite case to guard at
+all. Anyone "fixing" it back to a float for symmetry with its sibling is
+adding a NaN guard the integer form cannot need.
+
+`radius` is Chebyshev, `power_regen`'s form rather than a circle, and `0` is
+"standing on it" — which is what the shipped Bay authors.
+
+### `run_repair_bays` is a `Game` method, and the scan centre is what differs from `power_regen_system`
+
+`systems::power_regen_system` is the obvious model and was the plan's, but the
+recovery line has to **name the program**, and `Game::creature_label` is the
+one door from an entity to its name — rare tier, custom name and zone tag
+included. Rebuilt from a query's components inside a bevy system it would be a
+second copy of that formula, which is the shape this repo has been bitten by
+four times. `restore_hp` is the other door, the one place HP goes up. So it is
+a `Game` method called from `tick_inner`, `run_dig_crew`'s reason exactly.
+
+**The scan centres on each downed program's own `Position`.** That is the
+whole of what differs from `power_regen_system`, which centres on the party's
+`Locale::Base` coordinates because it serves the *player*. A program is
+wherever it is standing, so the `Locale` early return must not be copied
+across.
+
+The `Downed` query is collected and **sorted by tile** before anything is
+written, `run_build_crew`'s reason: bevy's iteration order is not stable, and
+two programs recovering in a different order between runs would put their log
+lines in a different order. `Bays` is sorted for the same reason one level
+down, so `min_by_key` — which returns the first of several equal minima —
+resolves a tie between two equidistant Bays the same way every run.
+
+The marker comes off and the line is logged **only at full Integrity**,
+`set_machine_status`' rule that entering a state is news and staying in it is
+not. That edge is free here rather than latched: a program already whole
+carries no `Downed` and is not in the query.
+
+### A downed program walks itself, and `Err` holds rather than dropping the marker
+
+`drift_idle_staff` is where a body with an errand of its own walks it, and the
+`Downed` arm sits **above the `OffShift` arm** — recovery outranks an amenity —
+and above the wander, which is what everyone else gets.
+
+It is gated on the body standing on **laid floor**, and that gate is what keeps
+`entry_tile` the one arrival path. A program downed four frames underground
+carries a *surface* tile as its `Position`; the wander's `entry_tile` arm is
+what puts such a body onto the base's ring. Taken above that gate, the `Downed`
+arm would ask for a route from a tile in a different coordinate space every
+beat forever.
+
+`Game::step_to_repair` is `step_off_shift`'s shape and rides the same walk
+(`hauling::step_to_post`) — there is no second one. **What differs is the price
+of a failure.** An off-shift body latches its need and drops `OffShift`,
+because the gate would otherwise run insert → failed step → remove → insert
+every beat forever. Nothing re-inserts `Downed`, so there is no flicker to
+stop — and dropping it would **silently heal a program that could not reach a
+Bay**, which is the one thing this feature must never do. So the caller holds
+on `Err` and leaves the marker alone, and a base with no Bay standing answers
+`NoRoute` at the first line that asks: a benched program lies where it fell,
+because it is on an errand it cannot start rather than idle.
+
+The party's own cell is the one rejection `step_to_post` cannot make for
+itself, and `step_to_repair` makes it by hand: `Locale` is where the party
+stands in base space, while the player's `Position` is pinned to the anchor out
+on the surface.
+
+### `Downed` joins the `on_shift` filter without the `Carrying` escape
+
+The scheduler's filter reads a body as available when it is not `OffShift`
+**or** it is `Carrying`. `Downed` joins it without the second half, and the
+asymmetry is deliberate: the `Carrying` exception exists because freeing a
+loaded body destroys the goods and an off-shift body may legitimately be
+mid-delivery, whereas a body that just died in a fight is going to the Bay
+regardless of what it is holding.
+
+The same asymmetry appears in the diff below. Every other keep rule — never
+free a `Carrying` holder, never free a body clogged at a machine while a Depot
+stands — is a reason to leave someone posted. A downed program is freed
+**unconditionally and ahead of all of them**, because it is not in the pool at
+all: leaving it standing at a machine would post a body the assignment never
+named. `LabourDemand`'s shortfall grows while it is down, which is the same
+readout the off-shift feature already produces.

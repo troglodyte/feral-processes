@@ -1003,6 +1003,7 @@ mod tests {
             worker_away_from_post: false,
             position_is_honest: true,
             structure_attended: false,
+            build: None,
             output_stranded: false,
             hp_fraction: None,
             level: None,

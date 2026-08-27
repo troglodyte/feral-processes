@@ -30,6 +30,23 @@ const VIGNETTE_MIN: f32 = 0.75;
 const STAFFED_MARK: f32 = 0.28;
 const STAFFED_MARK_INSET: f32 = 2.0;
 
+/// A pending build site's slab and its edge.
+///
+/// **Grey, and deliberately colourless.** Every other channel on this map is
+/// spoken for by a hue that means something — a biome's passability, a
+/// machine's status outline, the plan's amber, the mark's green — and a site
+/// is the one cell whose whole message is *nothing is here yet*. It reads as
+/// an absence because it is one. The orange caret bouncing on top is what
+/// carries "and somebody is working on it", so the slab does not have to.
+///
+/// The edge is darker than the fill rather than lighter, which is `rock`'s
+/// `SHADE_BAND` rule in another shape: a bright rim would read as a
+/// finished, lit structure. It is opaque so the ground beneath does not show
+/// through and make the cell look half-drawn.
+const BUILD_SITE_FILL: Color = Color::new(0.30, 0.30, 0.32, 1.0);
+const BUILD_SITE_EDGE: Color = Color::new(0.16, 0.16, 0.18, 1.0);
+const BUILD_SITE_EDGE_PX: f32 = 2.0;
+
 /// The Excavation plan's three washes, all one hue so a plan reads as one
 /// thing. A committed mark's fill is dim enough to walk over without the
 /// base becoming unreadable and its edge carries the shape; the box being
@@ -888,6 +905,13 @@ fn draw_surface_map(
             // worker in and out of existence as it walked over a machine.
             let mut structure: Option<&EntityView> = None;
             let mut actor: Option<&EntityView> = None;
+            // A third category beside those two, and it has to be: a build
+            // site is not a `Structure`, so the `is_structure` test above
+            // would drop it into `actor` — where it would either be hidden
+            // by the builder standing on it or hide the builder itself. It
+            // is ground being worked, which is what the frame below draws it
+            // as.
+            let mut building: Option<&EntityView> = None;
             // The entity wearing the mark, and whether its work has hit the
             // dead end below.
             let mut mark: Option<(Entity, bool)> = None;
@@ -897,7 +921,9 @@ fn draw_surface_map(
                 if erx != rx as i32 || ery != ry as i32 {
                     continue;
                 }
-                if ev.is_structure {
+                if ev.build.is_some() {
+                    building = Some(ev);
+                } else if ev.is_structure {
                     structure = Some(ev);
                 } else if !matches!(actor, Some(a) if a.is_player) {
                     actor = Some(ev);
@@ -981,6 +1007,38 @@ fn draw_surface_map(
                 draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world);
                 draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig);
             }
+            // A structure the crew has not raised yet: a flat dark slab with
+            // a darker edge, drawn over the ground and under everything that
+            // stands on it.
+            //
+            // **A block rather than the structure's own glyph in grey.**
+            // What is going up here is not the question a player glances at
+            // this cell to answer — the caret says "work is happening", the
+            // examine page says what and how far along, and a dim `M` would
+            // read as a Mining Node that had gone dark. It also keeps the
+            // cell legible as *not yet a thing*: nothing else on this map is
+            // a filled block, so a site is never mistaken for a machine.
+            //
+            // Both take the vignette and not the tile shade, matching the
+            // glyph rule below: this is something standing on the ground,
+            // not the ground.
+            if building.is_some() {
+                painter.rect(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    at_level(BUILD_SITE_FILL, vig),
+                );
+                painter.rect_lines(
+                    cell.x,
+                    cell.y,
+                    cell.w,
+                    cell.h,
+                    BUILD_SITE_EDGE_PX,
+                    at_level(BUILD_SITE_EDGE, vig),
+                );
+            }
             // The glyph takes the vignette but not the shade: depth should
             // apply to everything on the map evenly, while per-tile jitter is
             // a property of the ground, not of what stands on it.
@@ -1011,6 +1069,34 @@ fn draw_surface_map(
                     let ty = py + (tile_px + dims.height) / 2.0;
                     painter.map(&glyph, tx, ty, glyph_px, color);
                 }
+            }
+            // The caret, bouncing above the slab.
+            //
+            // Drawn here rather than through the `ch` path above because
+            // that path has no vertical offset to give it — and the bounce
+            // is the whole point: a build site is the one cell on the map
+            // where *nothing is happening yet* is the wrong reading. It
+            // reuses `Fx::staffed_bob`, the same upward-only raised cosine
+            // the "someone is on this job" mark rides, so the two motions on
+            // this map agree with each other rather than being two
+            // independently-invented curves. Phase-keyed by entity for that
+            // helper's own reason: two sites side by side bounce out of step
+            // and read as two jobs rather than one animation.
+            //
+            // Over the glyph layer, so a builder standing on the cell is
+            // drawn under its own work. Under the marks and outlines below,
+            // which are all about state rather than about the tile.
+            if let Some(ev) = building {
+                let glyph = ev.glyph.to_string();
+                let dims = painter.measure_map(&glyph, glyph_px);
+                let lift = fx.staffed_bob(ev.entity);
+                painter.map(
+                    &glyph,
+                    px + (tile_px - dims.width) / 2.0,
+                    py + (tile_px + dims.height) / 2.0 - lift,
+                    glyph_px,
+                    Color::new(ORANGE.r * vig, ORANGE.g * vig, ORANGE.b * vig, ORANGE.a),
+                );
             }
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is

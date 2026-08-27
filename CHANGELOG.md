@@ -27,6 +27,44 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.32
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+Idle staff wander the base, and armed cutting tools say so.
+
+### Changed
+
+- **An idle program drifts around the base instead of orbiting the Home.**
+  It used to be walked onto a fixed Chebyshev ring at a set distance from the
+  Home, a tile every six ticks; `wander_step` now offers it one of the eight
+  neighbours of the tile it is *standing on*, or a hold, on the same cadence.
+  Relative rather than absolute is the whole difference — a program the
+  scheduler has just freed strolls away from the post it left, rather than
+  snapping to a tile computed from its index.
+- **Laid floor is the leash, and there is no radius to tune.** Entropy
+  reverts a mined cell nobody is standing on, so a wanderer that strolled
+  into a fresh corridor could be sealed in behind it — unpostable for the
+  rest of the run. Floor never reverts, so the paving the base has actually
+  laid is exactly how far a body may roam. It still never steps onto a tile
+  another idle body holds, or onto the party's own cell.
+- The walk stays a pure, RNG-free function of its arguments, folded a byte at
+  a time so the step counter reaches the high bits the reducer reads — folded
+  whole, every program drifts in the same straight line forever.
+
+### Added
+
+- **The party's tile wears a ring while cutting tools are armed.** `n` arms
+  the player's own bump into base-space rock, and the only trace of it was
+  the log line at the moment it was toggled: walk away, come back, and there
+  was nothing left to read the mode off. The ring is the excavation plan's
+  yellow, because a mark and a swing are the same job.
+- A ring rather than a colour on the `@` itself, so the sprite that stands in
+  for that glyph carries the cue too. It is gated on base space and not on
+  the flag alone — nothing disarms the tools on the way back out through the
+  anchor, and out on the zone map there is no rock to cut.
+- The controls page had never listed `n` at all. It does now, beside `m`.
+
 ## 0.13.31
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

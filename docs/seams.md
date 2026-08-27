@@ -6719,6 +6719,29 @@ percentage the crew disagrees with. `BuildSite::required_ticks` is likewise
 could only ever drift from the bill of materials next to it after a retune,
 which is `Platform`'s radius argument reaching the save format.
 
+**An unreachable request is dropped *above* the cut, and that placement is
+the fix rather than a tidy-up.** Every other kind tests reachability below
+the truncation, which is affordable for a dig want because those are
+appended last — an unroutable one costs only itself. A build want is
+prepended and therefore inside the cut by construction, so a site nobody can
+walk to takes the slot, is skipped when its turn comes, and leaves the base
+with an idle body and an unworked order: every tick, for the rest of the
+run, in silence. The check asks the *staff*, short-circuiting on the first
+body that routes, because the question the want list is asking is "could
+anybody build this" — one walk in a connected base, which is every base
+nearly always. It is announced once, latched on `BuildSite::announced_stuck`
+and cleared the tick a route reopens, with no silent arm: unlike a dig
+site's `BoxedIn` — the normal interior of a marked block, which resolves
+itself — a build site is a cell the player deliberately floored and asked
+for a machine on. There is deliberately **no** `has_station` pre-filter in
+`build_wants` beside it; the route check subsumes it exactly, and a
+redundant filter reads as the guard when it is not. The state is reachable
+in play, not contrived: laid tile is permanent while bare cut ground is not,
+so digging out to a spot, flooring it and letting the corridor revert leaves
+a floored island. Two islands are needed to test both halves — a one-cell
+island has no standing room and a two-cell island has standing room and no
+route, and a fix for one is not a fix for the other.
+
 **Two things a future widening must not quietly break.** "One builder at a
 time" is a property of the scheduler naming a site once, not a count on the
 component — a second builder is a scheduler change and costs no save-format

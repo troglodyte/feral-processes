@@ -447,6 +447,117 @@ fn requests_count_against_the_deployment_ceiling() {
     );
 }
 
+/// A request nobody can reach must not eat a body for the rest of the run.
+///
+/// **The starvation shape, and it is silent.** `run_build_crew` gives the
+/// post up when the walk fails — that is what keeps the stall announcement
+/// honest, since the scheduler only ever looks at sites nobody is posted to
+/// — so an unreachable site posts a body, loses it in the same tick, and is
+/// handed the same body again on the next. The body never reaches the site
+/// and never does anything else either, and the production want that was
+/// truncated to make room for the build stays unfilled forever. Nothing in
+/// the log says why.
+///
+/// Walled in by *rock* rather than by structures: the pocket the Home lays
+/// is finite, so a cell outside it is solid on every side and genuinely has
+/// no station to stand at.
+#[test]
+fn a_request_no_program_can_reach_does_not_starve_the_base() {
+    let mut game = base(1112);
+    let body = builder(&mut game);
+    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    let node = structure_at(&mut game, 0, 1).expect("a node stands there");
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(body).map(|t| t.target),
+        Some(node),
+        "precondition: the body is working the order"
+    );
+
+    // An island of laid floor well outside the starting pocket, solid rock
+    // on every side of it. **Reachable in play, not a contrived state**:
+    // laid tile is permanent while bare cut ground is not, so a player who
+    // digs out to a spot, floors it, and lets the corridor behind them
+    // revert to solid has exactly this.
+    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .lay_floor(px + far, py + far);
+    game.place_structure("depot", far, far)
+        .expect("filing is not gated on reachability");
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    let task = game
+        .world
+        .get::<Task>(body)
+        .expect("the body must still be posted to something");
+    assert_eq!(
+        (task.kind, task.target),
+        (TaskKind::GatherResource, node),
+        "an unreachable request must not hold the base's only body — it should be skipped, \
+         leaving the body on the order it was already working"
+    );
+}
+
+/// The second unreachable shape, and it needs its own guard: a site with
+/// somewhere to *stand* but no way to *get* there.
+///
+/// A one-cell island is caught by `hauling::has_station` — no walkable
+/// neighbour at all. A **two**-cell island is not: there is a perfectly good
+/// tile beside the site, and it is just as cut off as the site is. Only the
+/// route check catches this, which is why both guards exist; a test with one
+/// island proves only half the fix.
+///
+/// This one **announces**, where the boxed-in case is dropped silently in
+/// `build_wants`. The player floored these cells deliberately and asked for
+/// a machine on one, so being unable to reach it is news either way.
+#[test]
+fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() {
+    let mut game = base(1113);
+    let body = builder(&mut game);
+    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    let node = structure_at(&mut game, 0, 1).expect("a node stands there");
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.tick();
+
+    let far = tuning::STARTING_POCKET_RADIUS + 6;
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        grid.lay_floor(px + far, py + far);
+        // The standing room: orthogonally beside the site, and just as cut
+        // off. Without it `has_station` catches this and the route check
+        // never runs.
+        grid.lay_floor(px + far + 1, py + far);
+    }
+    game.place_structure("depot", far, far).unwrap();
+
+    for _ in 0..20 {
+        game.tick();
+    }
+
+    let task = game
+        .world
+        .get::<Task>(body)
+        .expect("the body must still be posted to something");
+    assert_eq!(
+        (task.kind, task.target),
+        (TaskKind::GatherResource, node),
+        "a site with standing room but no route must not hold the base's only body"
+    );
+    assert!(
+        game.message_history(200)
+            .into_iter()
+            .any(|m| m.text.contains("cut off")),
+        "and the base says so, once — the player floored that cell on purpose"
+    );
+}
+
 /// Examine names the request and what is still to be carried to it.
 ///
 /// The materials standing on a site are deliberately not drawn on the map,

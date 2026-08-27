@@ -153,6 +153,11 @@ impl Game {
         // tick, and a cycle that ends in `strike_rock` or `floor_cell` is
         // `&mut Game` work no bevy system can express.
         self.run_dig_crew();
+        // Beside the dig crew and for its two reasons: a builder posted this
+        // tick works this tick, and a cycle that ends in
+        // `Game::spawn_structure` — the one place a structure's component
+        // list is written — is `&mut Game` work no bevy system can express.
+        self.run_build_crew();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an

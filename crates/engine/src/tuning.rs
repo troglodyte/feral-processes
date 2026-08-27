@@ -2277,6 +2277,27 @@ pub const BASE_ENTROPY_REFILL_TICKS: u64 = 300;
 /// it said under `docs/measurements/`.
 pub const BASE_DIG_TICKS_PER_SWING: u32 = 12;
 
+/// How many ticks of construction each unit of material in a structure's
+/// build cost is worth — see `components::BuildSite::required_ticks`.
+///
+/// **The build meter is derived from the cost, never stored beside it.** A
+/// site already carries the resolved `build_cost` it was filed against, so
+/// a second stored figure could only ever drift from it: a save written
+/// under one rate would go on counting to the old total while the base
+/// beside it counted to the new one. Deriving it makes retuning this
+/// constant a change every site in every save agrees about on the next
+/// tick, which is what a future per-structure build-time knob wants to
+/// slot into.
+///
+/// It is deliberately a rate *per unit of material* rather than a flat
+/// number of ticks: a Home-sized bill of materials should take longer to
+/// stand up than a Depot's, and pricing it off the cost is the only figure
+/// already in the site that says how big the thing is.
+///
+/// Unmeasured, like the rest of this slice. Play it and record what it said
+/// under `docs/measurements/`.
+pub const BUILD_TICKS_PER_MATERIAL: u32 = 2;
+
 /// How often (in ticks) the base's repairers restore `Durability` to
 /// damaged structures — see `Game::structure_regen`.
 ///

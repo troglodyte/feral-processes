@@ -73,12 +73,26 @@ impl Game {
         if self.find_blocking_structure_at(x, y).is_some() {
             return Err("Something is already deployed there.".into());
         }
+        // A cell already spoken for by a request nobody has raised yet. A
+        // refusal of its own rather than folded into the one above, because
+        // the two leave the player different errands: one cell needs
+        // demolishing, the other needs the crew to catch up — or the request
+        // calling off.
+        if self.build_site_at(x, y).is_some() {
+            return Err("Your crew is already set to build something there.".into());
+        }
         // Before the materials check, with the other refusals: a structure
         // whose effect accumulates is bounded by a count rather than by
         // whatever downstream constant its effect happens to clamp against,
         // because that constant is not a limit a player ever meets.
         if def.max_deployed > 0 {
-            let standing = self.count_structures(&def.id);
+            // Requests count against the ceiling alongside the structures
+            // already standing. Counting only what is built lets a player
+            // queue ten of a max-one machine, and the tenth would be refused
+            // by nothing: `spawn_structure` performs no checks, because by
+            // the time a crew finishes a request those were answered when it
+            // was filed. This is where they are answered.
+            let standing = self.count_structures(&def.id) + self.count_build_requests(&def.id);
             if standing >= def.max_deployed {
                 return Err(format!(
                     "You already have {standing} {}{} — that's as many as this grid will hold.",
@@ -98,39 +112,100 @@ impl Game {
         // `resources::Platform` — the field's one remaining reader — retires
         // in the same task.
         let build_cost = self.structure_build_cost(&def);
-        let player = self.player_entity();
-        // Every shortfall at once, and each with its numbers: the build menu
-        // is off screen by the time this fires, so one item per attempt would
-        // make finding out what a structure needs a matter of walking back and
-        // forth. Logged as well as returned because the status line carrying
-        // the refusal ages out in `STATUS_LINE_SECONDS`, and this is the one
-        // build refusal that leaves the player an errand.
-        let short: Vec<String> = {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            build_cost
-                .iter()
-                .filter(|(item, qty)| inv.count(item) < *qty)
-                .map(|(item, qty)| {
-                    format!("{qty} {} (have {})", self.item_name(item), inv.count(item))
-                })
-                .collect()
-        };
-        if !short.is_empty() {
-            let msg = format!(
-                "Not enough materials to deploy the {} — needs {}.",
-                def.name,
-                short.join(", ")
-            );
-            self.log_base(msg.clone());
-            return Err(msg);
-        }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &build_cost {
-                inv.take(item.clone(), *qty);
+
+        // **The Home is stood up by hand; everything else is a request.**
+        // Founding is the one build with nobody to ask: base space does not
+        // exist yet, so there is no roster standing in it and no shelf to
+        // fetch from. It therefore keeps the original shape entirely — every
+        // material out of the player's own pack, refused on the spot when
+        // they are short, and the structure standing on the tile before the
+        // call returns.
+        if founding {
+            let short: Vec<String> = {
+                let player = self.player_entity();
+                let inv = self.world.get::<Inventory>(player).unwrap();
+                build_cost
+                    .iter()
+                    .filter(|(item, qty)| inv.count(item) < *qty)
+                    .map(|(item, qty)| {
+                        format!("{qty} {} (have {})", self.item_name(item), inv.count(item))
+                    })
+                    .collect()
+            };
+            if !short.is_empty() {
+                let msg = format!(
+                    "Not enough materials to deploy the {} — needs {}.",
+                    def.name,
+                    short.join(", ")
+                );
+                self.log_base(msg.clone());
+                return Err(msg);
             }
+            {
+                let player = self.player_entity();
+                let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+                for (item, qty) in &build_cost {
+                    inv.take(item.clone(), *qty);
+                }
+            }
+            self.spawn_structure(&def, x, y);
+            // The Home is what opens base space, and it opens it exactly
+            // where it stands: the pocket is laid around the origin the Home
+            // was just put on.
+            self.lay_starting_pocket();
+            self.log_base(format!("You deploy a {}.", def.name));
+            self.tick();
+            return Ok(());
         }
 
+        // **Everything else is filed, not built.** The materials are not
+        // checked and not spent here: a request the base cannot afford yet
+        // is a legitimate thing to file — production catches up, and the
+        // crew starts carrying the moment the last unit exists. What would
+        // be lost by refusing is the whole point of a queue.
+        //
+        // The cost is resolved **now** and carried on the site, so a
+        // zone-portal request filed in one zone is not silently repriced by
+        // breaching into the next while the crew is already hauling to it.
+        self.world.spawn((
+            BuildSite::new(def.id.clone(), build_cost),
+            Position { x, y },
+            // A glyph, unlike a `DigSite` — which is what puts a build site
+            // on the map and under the examine ray for free, through
+            // `view_entities` and `find_target_in_direction` rather than a
+            // second draw path. The renderer paints its own frame around
+            // this; the character is what `x` reads and what a text-mode
+            // fallback would draw.
+            Glyph {
+                ch: BUILD_SITE_GLYPH,
+                color: GlyphColor::Orange,
+            },
+        ));
+        self.log_base(format!(
+            "You mark out a {} here. Your crew will raise it.",
+            def.name
+        ));
+        self.tick();
+        Ok(())
+    }
+
+    /// Spawns the finished structure `def` on base-space `(x, y)` and
+    /// returns it.
+    ///
+    /// **The one place a structure's component list is written**, and it has
+    /// two callers with nothing else in common: the player founding a Home
+    /// by hand, and the build crew finishing a request. Left inline in
+    /// `place_structure` the list would have had to be copied into
+    /// `run_build_crew`, and nothing would fail to compile when the two
+    /// drifted — a crew-built machine quietly missing its `MachineStatus`
+    /// reads as the base being broken, not as a missing line. This is
+    /// `Game::roster_parts`' argument applied to the other roster.
+    ///
+    /// It performs no checks at all. Every refusal — researched, floored,
+    /// unoccupied, under `max_deployed` — belongs to whoever decided to
+    /// build, and by the time a crew finishes a request those were answered
+    /// when it was filed.
+    pub(crate) fn spawn_structure(&mut self, def: &StructureDef, x: i32, y: i32) -> Entity {
         let mut entity = self.world.spawn((
             Structure {
                 kind: def.id.clone(),
@@ -165,15 +240,73 @@ impl Game {
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
         }
-        // The Home is what opens base space, and it opens it exactly where
-        // it stands: the pocket is laid around the origin the Home was just
-        // put on. A one-for-one replacement for the `stamp_platform` call
-        // this used to be, at the same site and with the same trigger — see
-        // `Game::lay_starting_pocket`.
-        if def.id == HOME_STRUCTURE_ID {
-            self.lay_starting_pocket();
+        entity.id()
+    }
+
+    /// Posts `worker` to raise `site`, standing it down from the party
+    /// first if it was fighting beside you.
+    ///
+    /// `post_digger`'s shape, and like it writes **no `Position`** — a
+    /// posted program sets off from its own tile, and the player's is read
+    /// nowhere in the scheduler.
+    ///
+    /// `Task::required` is set but never read: `run_build_crew` prices a
+    /// tick of construction off `BuildSite::required_ticks`, which is
+    /// derived from the bill of materials the site carries, so the meter
+    /// lives on the site and survives the body being reassigned. The field
+    /// is filled with that same figure rather than left at zero so a
+    /// `Task` read by anything generic reports something true.
+    pub(crate) fn post_builder(&mut self, worker: Entity, site: Entity) {
+        if self.world.resource::<Party>().0.contains(&worker) {
+            self.world
+                .resource_mut::<Party>()
+                .0
+                .retain(|&e| e != worker);
+            self.log_base("It stands down as your companion to raise the new structure.");
         }
-        self.log_base(format!("You deploy a {}.", def.name));
+        self.displace_task_holder(site, TaskKind::Construct);
+        let required = self
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.required_ticks())
+            .unwrap_or(1);
+        self.world.entity_mut(worker).insert(Task {
+            kind: TaskKind::Construct,
+            target: site,
+            progress: 0,
+            required,
+        });
+    }
+
+    /// Cancels the build request at `site`, returning everything already
+    /// carried there.
+    ///
+    /// **Nothing is destroyed by changing your mind.** The delivered units
+    /// left their shelves when a builder picked them up and have been
+    /// standing on the cell ever since, so a cancel is a refund of goods
+    /// that still exist rather than a rebate on goods that were consumed —
+    /// which is exactly why `run_build_crew` does not spend the materials
+    /// until the structure is raised. They go back through the same
+    /// `return_material` a stray load does: Depots first, the pack second.
+    ///
+    /// The posted builder's `Task` is left alone rather than cleared here.
+    /// `run_build_crew` finds the site gone on the next tick, puts back
+    /// whatever it was still carrying and gives the post up itself — one
+    /// place that knows how to unwind a builder, not two.
+    pub fn cancel_build_request(&mut self, site: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        self.require_base()?;
+        let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
+            return Err("That build request is already gone.".into());
+        };
+        let name = self.structure_name(&build.structure);
+        for (item, qty) in &build.delivered {
+            self.return_material(item, *qty);
+        }
+        self.world.despawn(site);
+        self.log_base(format!("You call off the {name}."));
         self.tick();
         Ok(())
     }
@@ -239,6 +372,34 @@ impl Game {
         self.log_base("You lay a VectorStasis Tile, and the cell reads as floor.");
         self.tick();
         Ok(())
+    }
+
+    /// The pending `BuildSite` standing on base-space `(x, y)`, if any.
+    ///
+    /// `find_blocking_structure_at`'s counterpart, and it carries the same
+    /// `in_base` gate for the same reason: a build site's `Position` is in
+    /// base space, so a surface-space query must never be answered by one
+    /// whose coordinates happen to coincide.
+    pub(crate) fn build_site_at(&mut self, x: i32, y: i32) -> Option<Entity> {
+        if !self.in_base() {
+            return None;
+        }
+        let mut query = self
+            .world
+            .query_filtered::<(Entity, &Position), With<BuildSite>>();
+        query
+            .iter(&self.world)
+            .find(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+    }
+
+    /// How many of `kind` the base has on order but has not raised yet.
+    fn count_build_requests(&mut self, kind: &StructureId) -> u32 {
+        let mut query = self.world.query::<&BuildSite>();
+        query
+            .iter(&self.world)
+            .filter(|site| &site.structure == kind)
+            .count() as u32
     }
 
     /// How many of `kind` are deployed right now.

@@ -231,7 +231,15 @@ impl Game {
         if let Some(caravan) = self.world.get::<Caravan>(entity) {
             return caravan.stage.in_base_space();
         }
-        self.world.get::<Structure>(entity).is_some() || self.world.get::<Tamed>(entity).is_some()
+        // A `BuildSite` stands in base space for the same reason a
+        // `Structure` does — it is the structure, a few hundred ticks
+        // early — and it has to be named here rather than left to fall
+        // through, because it is the first entity with a `Glyph` that is
+        // neither. Missing, the map would draw a pending Depot onto
+        // whatever zone-surface tile shared its coordinates.
+        self.world.get::<Structure>(entity).is_some()
+            || self.world.get::<BuildSite>(entity).is_some()
+            || self.world.get::<Tamed>(entity).is_some()
     }
 
     /// The first creature or structure along the row or column the player is
@@ -424,15 +432,36 @@ impl Game {
     /// structure name for a structure, `"You"` otherwise. Shared by
     /// `view_entities` for both an entity's own label and cross-references
     /// (a worker's assigned structure, a structure's assigned worker).
+    /// A structure kind's display name, falling back to its id when no
+    /// file defines it.
+    ///
+    /// One function because four callers name a structure they hold only
+    /// the id of — `entity_label`, the build crew's log lines, the staff
+    /// activity row and a cancelled request — and an id leaking onto a
+    /// screen reads as a bug in the renderer rather than as a missing
+    /// asset.
+    pub(crate) fn structure_name(&self, kind: &crate::structures::StructureId) -> String {
+        self.world
+            .resource::<StructureDb>()
+            .get(kind)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| kind.clone())
+    }
+
     pub(crate) fn entity_label(&self, entity: Entity) -> String {
         if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)
         } else if let Some(s) = self.world.get::<Structure>(entity) {
-            self.world
-                .resource::<StructureDb>()
-                .get(&s.kind)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| s.kind.clone())
+            self.structure_name(&s.kind)
+        } else if let Some(build) = self.world.get::<BuildSite>(entity) {
+            // Named as the thing being raised rather than as "a build site",
+            // because that is the question `x` is asking: the player wants to
+            // know which machine is going up here, not that a request exists
+            // — the frame around the cell already says that.
+            format!(
+                "{} (under construction)",
+                self.structure_name(&build.structure)
+            )
         } else if let Some(nest) = self.world.get::<Nest>(entity) {
             let species_name = self
                 .world
@@ -610,7 +639,12 @@ impl Game {
                     // The set is structures with somebody standing at them,
                     // and an excavation is not one.
                     TaskKind::Excavate => false,
-                    TaskKind::GatherResource => {
+                    // A build site *does* carry a glyph, which is what makes
+                    // this the machine's answer rather than the dig site's:
+                    // there is an end of this posting that can wear the mark,
+                    // so the site wears it while the builder stands there and
+                    // the builder carries it away on every fetch.
+                    TaskKind::Construct | TaskKind::GatherResource => {
                         match (
                             self.world.get::<Position>(holder),
                             self.world.get::<Position>(target),

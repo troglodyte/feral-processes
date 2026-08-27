@@ -485,6 +485,40 @@ pub struct DigSiteSave {
     pub marked: bool,
 }
 
+/// A structure the player has asked for that the base has not raised yet —
+/// see `components::BuildSite`.
+///
+/// A **named struct, never a positional tuple**, per the standing rule.
+///
+/// **`delivered` is the load-bearing field.** Those units left their
+/// shelves when a builder picked them up and are physically standing on the
+/// cell; dropped from the save they would be destroyed by a reload, and the
+/// crew would fetch them a second time out of a base that no longer has
+/// them. `progress` is saved beside it for the same reason a `DigSite`'s
+/// `Durability` is — a part-raised structure is work already done.
+///
+/// The two announcement latches are deliberately absent, `DigSiteSave`'s
+/// rule: they are a crew's "I already said so", true of a conversation
+/// rather than of the world, and a reload is exactly when the player should
+/// be told again.
+///
+/// `required` is absent too, and that is `BuildSite::required_ticks`'
+/// derived-never-stored argument reaching the save: the meter is priced off
+/// `cost`, which is here, so a saved figure could only ever disagree with
+/// the bill of materials beside it after a retune.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct BuildSiteSave {
+    /// **Base-space** coordinates, not a tile on the zone surface.
+    pub position: (i32, i32),
+    pub structure: crate::structures::StructureId,
+    /// The bill of materials as it was priced when the request was filed —
+    /// see `components::BuildSite::cost` for why it is carried rather than
+    /// re-read from the `StructureDef` on load.
+    pub cost: Vec<(crate::items::ItemId, u32)>,
+    pub delivered: Vec<(crate::items::ItemId, u32)>,
+    pub progress: u32,
+}
+
 /// A caravan mid-journey — see `components::Caravan`.
 ///
 /// A **named struct, never a positional tuple**, per the standing rule: a
@@ -651,6 +685,15 @@ pub struct SaveData {
     /// what that run had.
     #[serde(default)]
     pub dig_sites: Vec<DigSiteSave>,
+    /// Structures on order and not yet raised — see
+    /// `components::BuildSite`.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump and no `dev-saves/` recapture: a file
+    /// written before it existed loads with nothing on order, which is
+    /// exactly what that run had.
+    #[serde(default)]
+    pub build_sites: Vec<BuildSiteSave>,
     /// The caravan standing in the sector or in the base, if one is —
     /// see `components::Caravan`. Additive behind `#[serde(default)]`, so it
     /// costs no `SAVE_FORMAT_VERSION` bump: a file written before it existed
@@ -1191,6 +1234,7 @@ mod tests {
             structures: Vec::new(),
             nests: Vec::new(),
             dig_sites: Vec::new(),
+            build_sites: Vec::new(),
             caravans: Vec::new(),
             caravan_memory: CaravanMemorySave::default(),
             tile_overrides: Vec::new(),

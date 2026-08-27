@@ -433,6 +433,7 @@ impl crate::Game {
                     crate::components::TaskKind::GatherResource => "working a machine",
                     crate::components::TaskKind::Guard => "standing guard",
                     crate::components::TaskKind::Excavate => "cutting rock",
+                    crate::components::TaskKind::Construct => "raising a structure",
                 }
                 .to_string(),
             ),

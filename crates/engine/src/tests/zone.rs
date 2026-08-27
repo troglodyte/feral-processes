@@ -226,7 +226,7 @@ fn stepping_through_a_portal_consumes_it_so_it_never_travels() {
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
     stand_in_base(&mut game);
-    game.place_structure("portal", 1, 0).unwrap();
+    place_now(&mut game, "portal", 1, 0).unwrap();
 
     game.move_player(1, 0);
 
@@ -827,7 +827,7 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
     stand_in_base(&mut game);
-    game.place_structure("portal", 1, 0).unwrap();
+    place_now(&mut game, "portal", 1, 0).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)
@@ -848,16 +848,28 @@ fn portal_build_cost_ramps_with_current_zone_level() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 14);
-    assert!(
-        game.place_structure("portal", 1, 0).is_err(),
-        "14 fragments shouldn't be enough for a zone-2 portal"
+    // The ramp is read off the bill of materials the request is filed
+    // against, not off a refusal: a deploy no longer refuses for want of
+    // materials, so what says "14 is not enough" is the site itself
+    // reporting one fragment still outstanding.
+    game.place_structure("portal", 1, 0)
+        .expect("a request is filed whatever is in the pack");
+    let site = game.build_site_at(1, 0).expect("the request stands there");
+    assert_eq!(
+        game.world
+            .get::<crate::components::BuildSite>(site)
+            .expect("it is a build site")
+            .cost,
+        vec![(ItemId::from(ids::PORTAL_FRAGMENT), 15)],
+        "zone 2 is the base rate plus half of it again, not double"
     );
+    game.cancel_build_request(site).unwrap();
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()
         .add(ItemId::from(ids::PORTAL_FRAGMENT), 1);
     stand_in_base(&mut game);
-    game.place_structure("portal", 1, 0).unwrap();
+    place_now(&mut game, "portal", 1, 0).unwrap();
     assert_eq!(
         game.world
             .get::<Inventory>(player)

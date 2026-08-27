@@ -801,11 +801,21 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
-        let mut wanted: Vec<(Entity, TaskKind)> = self
-            .settle_orders()
-            .into_iter()
-            .map(|(machine, _)| (machine, TaskKind::GatherResource))
-            .collect();
+        // **Build requests come first, ahead of every work order.** The
+        // priority *is* the position in this list — `truncate(staff.len())`
+        // below cuts from the end — so this is the whole of "a build
+        // outranks production". Its consequence is deliberate and worth
+        // stating: on a base with fewer bodies than posts, filing a request
+        // takes somebody off a machine until the structure is up. A base
+        // with a spare body never notices, because the diff below leaves
+        // every still-wanted posting exactly where it is and the idle pool
+        // is what gets handed out first.
+        let mut wanted: Vec<(Entity, TaskKind)> = self.build_wants();
+        wanted.extend(
+            self.settle_orders()
+                .into_iter()
+                .map(|(machine, _)| (machine, TaskKind::GatherResource)),
+        );
         // Standing jobs, appended after every order and therefore at
         // the lowest priority: a spare body fills one, a needed body does
         // not. A work job is still gated on `can_progress` — a standing
@@ -891,7 +901,15 @@ impl Game {
         // an item it was told to hold 10 of. A queue is an instruction, so
         // where there is one the assignment is the whole truth and a body
         // it does not name goes back to the ring.
-        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty();
+        // **A base with a build on order is a base with instructions**, so
+        // the queue is not empty for this rule's purposes even when no work
+        // order stands. Read off the work orders alone, a base whose only
+        // instruction was a build request would take the early return below
+        // on every tick where the builder was already posted — harmless —
+        // and, more to the point, would be reasoning from "nobody has told
+        // this base anything" while somebody had.
+        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
+            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct);
         let posted: Vec<(Entity, TaskKind)> = staff
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
@@ -1021,6 +1039,7 @@ impl Game {
                 TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),
                 TaskKind::Excavate => self.post_digger(worker, post),
+                TaskKind::Construct => self.post_builder(worker, post),
             }
         }
     }
@@ -1146,6 +1165,40 @@ impl Game {
     /// a second reading of what a face is, and it is the half of
     /// `NoPost::BoxedIn` that does not depend on which body is asking —
     /// which is why it can be answered before the bodies are counted.
+    /// Every build request that wants a body, in tile order.
+    ///
+    /// **Structural, never a stock count** — `dig_wants`' rule and
+    /// `feeders_for`'s. A site the base cannot afford yet is still a site
+    /// that wants somebody standing at it: the builder walks there, reports
+    /// the shortfall once, and starts carrying the moment production makes
+    /// the last unit. Gated on what is in stock, the want would flicker in
+    /// and out as shelves drained and the request would read as broken.
+    ///
+    /// Sorted by tile like `assembler_system`'s machines, so two requests
+    /// filed in the same tick are always raised in the same order.
+    ///
+    /// **Reachability is not tested here**, unlike `dig_wants`. A dig site
+    /// is boxed in everywhere but the rim of a marked block, so listing the
+    /// unreachable ones would spend the whole labour budget on cells nobody
+    /// can stand beside; a build site sits on laid floor the player walked
+    /// to in order to file it, so the unreachable case is the rare one and
+    /// it announces itself — `run_build_crew` gives the post up and the
+    /// scheduler hands the body on next tick.
+    fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
+        let mut sites: Vec<(i32, i32, Entity)> = {
+            let mut query = self.world.query::<(Entity, &BuildSite, &Position)>();
+            query
+                .iter(&self.world)
+                .map(|(e, _, p)| (p.x, p.y, e))
+                .collect()
+        };
+        sites.sort_unstable();
+        sites
+            .into_iter()
+            .map(|(_, _, e)| (e, TaskKind::Construct))
+            .collect()
+    }
+
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let blocked = self.structure_tiles();
         let marked: Vec<(Position, Entity)> = {
@@ -1346,6 +1399,15 @@ impl Game {
                 .get::<Position>(task.target)
                 .map(|p| format!("cutting the entropy at {}, {}", p.x, p.y))
                 .unwrap_or_else(|| "cutting the entropy".to_string()),
+            // A build site is not a structure either, but unlike a dig site
+            // it knows what it is going to become — so it is named by the
+            // thing being raised rather than by its tile alone, which is
+            // what tells two simultaneous builds apart on the status screen.
+            TaskKind::Construct => self
+                .world
+                .get::<BuildSite>(task.target)
+                .map(|site| format!("raising the {}", self.structure_name(&site.structure)))
+                .unwrap_or_else(|| "raising a structure".to_string()),
         }
     }
 

@@ -608,7 +608,85 @@ pub(super) fn grant_research_data(game: &mut Game, n: u32) {
         .add(ItemId::from(ids::RESEARCH_DATA), n);
 }
 
-/// Deploys a Data Cache next to the player without going through
+/// Files a build request through `Game::place_structure` and raises it on
+/// the spot, charging the bill of materials to the player's pack.
+///
+/// **What a fixture almost always wants.** A deploy is a *request* now: the
+/// structure stands only once a posted program has carried the materials to
+/// the cell and worked there for `BuildSite::required_ticks`. A test about
+/// what a standing machine *does* should not have to run a crew to get one,
+/// and a test about the request itself — the refusals, the site, the crew —
+/// calls `place_structure` directly and leaves the site alone.
+///
+/// The Home passes straight through: `place_structure` still stands one up
+/// by hand, so there is no site left behind and `raise_pending_builds` finds
+/// nothing to do.
+pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result<(), String> {
+    game.place_structure(kind, dx, dy)?;
+    raise_pending_builds(game);
+    Ok(())
+}
+
+/// Raises every outstanding build request immediately, charging each bill of
+/// materials to the player's pack and falling back to the base's own
+/// shelves — the two stores a real crew fetches from, in the order it
+/// prefers reversed, because a fixture's materials are nearly always in the
+/// pack.
+///
+/// A shortfall is **not** an error here: `place_structure` no longer refuses
+/// a request the base cannot afford, so a fixture that never stocked
+/// anything still gets its structure. A test that cares what a build costs
+/// asserts on the pack afterwards.
+pub(super) fn raise_pending_builds(game: &mut Game) {
+    loop {
+        let pending: Option<(
+            bevy_ecs::prelude::Entity,
+            Position,
+            String,
+            Vec<(ItemId, u32)>,
+        )> = {
+            let mut query = game
+                .world
+                .query::<(bevy_ecs::prelude::Entity, &BuildSite, &Position)>();
+            query
+                .iter(&game.world)
+                .next()
+                .map(|(e, site, pos)| (e, *pos, site.structure.clone(), site.cost.clone()))
+        };
+        let Some((site, pos, kind, cost)) = pending else {
+            return;
+        };
+        for (item, qty) in &cost {
+            let player = game.player_entity();
+            let paid = game
+                .world
+                .get_mut::<Inventory>(player)
+                .map(|mut inv| inv.take(item.clone(), *qty))
+                .unwrap_or(0);
+            if paid < *qty {
+                crate::game::base::stock::spend_from_base(game, item, qty - paid);
+            }
+        }
+        let def = game
+            .world
+            .resource::<crate::structures::StructureDb>()
+            .get(&kind)
+            .cloned()
+            .expect("a fixture never files a request for a structure with no file");
+        game.world.despawn(site);
+        game.spawn_structure(&def, pos.x, pos.y);
+        // The base's systems, without advancing the clock — which is the
+        // ordering `tick_inner` gives a real crew-raised structure:
+        // `run_build_crew` stands it up and `schedule.run` follows in the
+        // same tick, so `idle_machine_system` corrects its optimistic
+        // default `MachineStatus` before anything can look. Skipped, a
+        // fixture's machine reads `Running` with nobody posted to it, which
+        // is a fact about the fixture and not about the base.
+        game.schedule.run(&mut game.world);
+    }
+}
+
+/// Deploys a Data Cache next to the player without going through/// Deploys a Data Cache next to the player without going through
 /// `place_structure`, sidestepping its Home/cost/radius requirements —
 /// those aren't what the capacity tests are about.
 pub(super) fn spawn_data_cache(game: &mut Game, offset: i32) {
@@ -930,7 +1008,7 @@ pub(super) fn place_home(game: &mut Game) {
         .add(ItemId::from(ids::CORE_FRAGMENT), 5);
     let outside = game.locale();
     game.world.insert_resource(Locale::Surface);
-    game.place_structure("home", 0, 0).unwrap();
+    place_now(game, "home", 0, 0).unwrap();
     game.world.insert_resource(outside);
 }
 
@@ -1752,7 +1830,7 @@ pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| g.place_structure("mining_node", 1, 1)).unwrap();
+    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 1)).unwrap();
     (
         find_structure_by_kind(game, "home").unwrap(),
         find_structure_by_kind(game, "mining_node").unwrap(),
@@ -1774,7 +1852,7 @@ pub(super) fn deploy_upgradeable_node(game: &mut Game) -> Entity {
         .get_mut::<Inventory>(game.player_entity())
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 12);
-    from_inside_the_base(game, |g| g.place_structure("mining_node", 1, 0)).unwrap();
+    from_inside_the_base(game, |g| place_now(g, "mining_node", 1, 0)).unwrap();
     find_structure_by_kind(game, "mining_node").unwrap()
 }
 

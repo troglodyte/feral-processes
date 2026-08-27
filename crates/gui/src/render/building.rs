@@ -956,6 +956,10 @@ fn assignee_line(a: &Assignee) -> String {
         // exhaustive, and it reads like the cronjob one for the day
         // something does.
         TaskKind::Excavate => format!("{who} — cutting {}/{}", a.progress, a.required),
+        // A build site is not a structure either, so this row is unreachable
+        // for the same reason the one above it is. It reads like the cronjob
+        // one for the day something puts a builder on this screen.
+        TaskKind::Construct => format!("{who} — building {}/{}", a.progress, a.required),
     }
 }
 

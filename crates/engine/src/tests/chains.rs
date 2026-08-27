@@ -1082,8 +1082,7 @@ fn a_deployed_assembler_gets_a_machine_status_like_any_other_machine() {
     stand_in_base(&mut game);
     place_home(&mut game);
     give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
-    game.place_structure("refinery", 1, 0)
-        .expect("a Refinery is buildable from the start");
+    place_now(&mut game, "refinery", 1, 0).expect("a Refinery is buildable from the start");
 
     let refinery = find_structure_by_kind(&mut game, "refinery").unwrap();
     // `Idle`, not `Running`: `place_structure` ticks, and a machine nobody

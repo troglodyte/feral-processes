@@ -731,6 +731,30 @@ impl Game {
             ));
         }
 
+        for b in data.build_sites {
+            game.world.spawn((
+                BuildSite {
+                    structure: b.structure,
+                    cost: b.cost,
+                    delivered: b.delivered,
+                    progress: b.progress,
+                    // Never saved, `DigSite`'s two latches' rule: a crew's
+                    // "I already said so" is true of a conversation and not
+                    // of the world, so a reload says it again.
+                    announced_dry: false,
+                    announced_stuck: false,
+                },
+                Position {
+                    x: b.position.0,
+                    y: b.position.1,
+                },
+                Glyph {
+                    ch: BUILD_SITE_GLYPH,
+                    color: GlyphColor::Orange,
+                },
+            ));
+        }
+
         for d in data.dig_sites {
             let wall = game.wall_at(d.position.0, d.position.1);
             game.world.spawn((
@@ -1218,20 +1242,30 @@ impl Game {
             // the mark is what the save carries, and `schedule_base_labour`
             // posts a body back onto it on the first tick after the load.
             // The most a reload can cost is one part-finished swing.
-            let cronjob = task.filter(|t| t.kind != TaskKind::Excavate).and_then(|t| {
-                self.world
-                    .get::<Position>(t.target)
-                    .map(|target_pos| save::CronjobSave {
-                        target_position: (target_pos.x, target_pos.y),
-                        progress: t.progress,
-                        required: t.required,
-                        kind: match t.kind {
-                            TaskKind::GatherResource => save::CronjobKind::GatherResource,
-                            TaskKind::Guard => save::CronjobKind::Guard,
-                            TaskKind::Excavate => unreachable!("filtered out above"),
-                        },
-                    })
-            });
+            // `Construct` is filtered out beside `Excavate` and for the
+            // same reason: neither is a cronjob. A `BuildSite` is saved in
+            // its own right, carrying the bill of materials and everything
+            // already delivered to it, and `schedule_base_labour` posts a
+            // body back onto it on the first tick after the load. The most a
+            // reload can cost is one part-finished tick of construction.
+            let cronjob = task
+                .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
+                .and_then(|t| {
+                    self.world
+                        .get::<Position>(t.target)
+                        .map(|target_pos| save::CronjobSave {
+                            target_position: (target_pos.x, target_pos.y),
+                            progress: t.progress,
+                            required: t.required,
+                            kind: match t.kind {
+                                TaskKind::GatherResource => save::CronjobKind::GatherResource,
+                                TaskKind::Guard => save::CronjobKind::Guard,
+                                TaskKind::Excavate | TaskKind::Construct => {
+                                    unreachable!("filtered out above")
+                                }
+                            },
+                        })
+                });
             // Same by-position resolution `cronjob` above uses: a
             // `NestGuardian`'s target entity id isn't stable across the
             // round trip, but a nest's tile is.
@@ -1361,6 +1395,19 @@ impl Game {
             });
         }
 
+        let mut build_sites = Vec::new();
+        let mut build_query = self.world.query::<(&BuildSite, &Position)>();
+        for (site, pos) in build_query.iter(&self.world) {
+            build_sites.push(save::BuildSiteSave {
+                // Base-space coordinates, exactly as a `DigSite`'s are.
+                position: (pos.x, pos.y),
+                structure: site.structure.clone(),
+                cost: site.cost.clone(),
+                delivered: site.delivered.clone(),
+                progress: site.progress,
+            });
+        }
+
         let mut caravans = Vec::new();
         let mut caravan_query = self.world.query::<(&Caravan, &Position)>();
         for (caravan, pos) in caravan_query.iter(&self.world) {
@@ -1473,6 +1520,7 @@ impl Game {
             structures,
             nests,
             dig_sites,
+            build_sites,
             caravans,
             caravan_memory: {
                 let memory = self.world.resource::<crate::resources::CaravanMemory>();

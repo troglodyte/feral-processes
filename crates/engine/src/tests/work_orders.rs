@@ -2,6 +2,7 @@
 //! turns one into postings against the other.
 
 use super::support::*;
+use crate::components::Downed;
 use crate::*;
 
 /// A scratch save path unique to this process and `tag`, so two tests in
@@ -2675,4 +2676,95 @@ fn a_base_with_nobody_in_it_reports_its_wants_against_zero() {
     );
     assert_eq!(demand.staff, 0);
     assert_eq!(demand.shortfall(), 1);
+}
+
+// ---------------------------------------------------------------------
+// Downed programs: out of the labour pool until a Bay repairs them
+// ---------------------------------------------------------------------
+
+/// A base with one order, one machine and one body, so exactly one posting
+/// is in question and there is no second body to hide the answer.
+fn a_base_with_one_body(game: &mut Game) -> (Entity, Entity) {
+    stand_in_base(game);
+    place_home(&mut *game);
+    let mine = spawn_machine_at(game, "mining_node", 2, 0);
+    let worker = hire(game, 1)[0];
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    (mine, worker)
+}
+
+/// **A second, upright body is what makes this test say anything.** With
+/// the base down to one program the want list is cut to nothing and no
+/// posting is possible whatever the scheduler thinks of it; with a body to
+/// spare there is a real vacancy, and a downed program left in the pool
+/// would be handed it.
+#[test]
+fn a_downed_program_is_never_posted() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    spawn_machine_at(&mut game, "lathe", 3, 0);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    game.tick();
+    let worker = *staff
+        .iter()
+        .find(|&&w| game.world.get::<Task>(w).map(|t| t.target) == Some(mine))
+        .expect("somebody should be on the mine");
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a downed program is off the machine and stays off it"
+    );
+}
+
+/// **No `Carrying` escape**, and that asymmetry with `OffShift` is the
+/// point: an off-shift body may legitimately be mid-delivery, and a body
+/// that just died in a fight is not carrying anything the base is waiting
+/// on. It is going to the Bay either way.
+#[test]
+fn a_downed_program_holding_a_load_is_still_taken_off_its_post() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_one_body(&mut game);
+    game.tick();
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a load is not a reason to keep a downed program working"
+    );
+}
+
+/// The shortfall *grows* while a body is down — the same readout the
+/// off-shift feature already produces, and the one that catches a filter
+/// applied after `truncate` rather than before it.
+#[test]
+fn labour_demand_counts_only_the_bodies_still_standing() {
+    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_one_body(&mut game);
+    game.tick();
+    let before = demand(&game).staff;
+    assert_eq!(before, 1, "precondition: one body to give");
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert_eq!(
+        demand(&game).staff,
+        0,
+        "a body in the Bay is a body the base does not have"
+    );
+    assert_eq!(demand(&game).shortfall(), 1);
 }

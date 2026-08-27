@@ -870,9 +870,18 @@ impl Game {
         // holder rule rather than a second one: freeing a loaded body
         // destroys the goods, and `DigErrand::Return` is the precedent for
         // walking a load home before giving the post up.
+        //
+        // **A downed program joins that filter without the `Carrying`
+        // escape**, and the asymmetry is the point rather than an oversight:
+        // the escape exists because freeing a loaded body destroys the
+        // goods, and an off-shift body may legitimately be mid-delivery. A
+        // body that just died in a fight is not carrying anything the base
+        // is waiting on — and if it somehow is, it is going to the Bay
+        // regardless.
         let on_shift: Vec<Entity> = staff
             .iter()
             .copied()
+            .filter(|&w| self.world.get::<components::Downed>(w).is_none())
             .filter(|&w| {
                 self.world.get::<components::OffShift>(w).is_none()
                     || self.world.get::<Carrying>(w).is_some()
@@ -1039,6 +1048,18 @@ impl Game {
             // the post it vacated stays in `remaining` for whoever is left.
             // A loaded one is not here at all — it is on `on_shift` until it
             // delivers.
+            // A downed program is freed unconditionally, on the same terms
+            // as the `on_shift` filter above and ahead of every rule that
+            // could keep it posted: it is not in the pool, so leaving it
+            // standing at a machine would post a body the assignment never
+            // named.
+            if self.world.get::<components::Downed>(worker).is_some() {
+                self.world
+                    .entity_mut(worker)
+                    .remove::<Task>()
+                    .remove::<Carrying>();
+                continue;
+            }
             if self.world.get::<components::OffShift>(worker).is_some()
                 && self.world.get::<Carrying>(worker).is_none()
             {

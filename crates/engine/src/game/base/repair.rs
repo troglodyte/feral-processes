@@ -6,8 +6,11 @@
 //! in the game heals it and there is no timer quietly doing the job — the
 //! way back is a structure the player chose to build.
 
+use crate::base_grid::BaseGrid;
 use crate::components::{Downed, Position, Stats, Structure};
+use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::in_reach;
+use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
 use bevy_ecs::prelude::Entity;
 
@@ -145,5 +148,61 @@ impl Game {
             sites.iter().map(|(kind, pos)| (kind, pos)),
             self.world.resource::<StructureDb>(),
         )
+    }
+
+    /// One step toward the nearest Repair Bay, or `NoPost` when there is
+    /// nowhere to go.
+    ///
+    /// `Game::step_off_shift`'s shape exactly, and it rides the same walk
+    /// (`hauling::step_to_post`) — there is no second one. **What differs is
+    /// the price of a failure.** An off-shift body latches its need and
+    /// drops `OffShift`, because the gate would otherwise re-insert it and
+    /// run insert → failed step → remove → insert every beat forever.
+    /// Nothing re-inserts `Downed`, so there is no flicker to stop — and
+    /// dropping it here would silently heal a program that could not reach a
+    /// Bay, which is the one thing this feature must never do. The caller
+    /// therefore holds on `Err` and leaves the marker alone.
+    ///
+    /// A base with no Bay standing answers `NoRoute` at the first line that
+    /// asks, which is why a benched program lies where it fell rather than
+    /// wandering: it is on an errand it cannot start, not idle.
+    pub(crate) fn step_to_repair(&mut self, worker: Entity, bays: &Bays) -> Result<(), NoPost> {
+        let here = self
+            .world
+            .get::<Position>(worker)
+            .copied()
+            .ok_or(NoPost::NoRoute)?;
+        let (site, _, radius) = bays.nearest(here).ok_or(NoPost::NoRoute)?;
+        if in_reach(here, site, radius) {
+            // Arrived. It stands here until it is whole — the drift's other
+            // shape would walk it straight back off again.
+            return Ok(());
+        }
+        let blocked = self.structure_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        let Some(tile) = step_to_post(
+            self.world.resource::<BaseGrid>(),
+            here,
+            site,
+            &blocked,
+            pocket_radius,
+        )?
+        else {
+            // The field admits nowhere better than where it stands. It waits,
+            // exactly as a hauler does.
+            return Ok(());
+        };
+        // The party is the one rejection `step_to_post` cannot make for
+        // itself: `Locale` is where the party stands in base space, and the
+        // player's `Position` is pinned to the anchor out on the surface.
+        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
+            && (x, y) == (tile.x, tile.y)
+        {
+            return Ok(());
+        }
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = tile;
+        }
+        Ok(())
     }
 }

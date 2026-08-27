@@ -162,7 +162,20 @@ impl Game {
                 self.walk_builder(worker, from, dest, blocked, pocket_radius);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
-            Errand::Fetch(item, qty, source) => self.pick_up_for_site(worker, &item, qty, source),
+            Errand::Fetch(item, qty, source) => {
+                // A source exists again, so the base is no longer dry and
+                // the next drought is news. `set_machine_status`' rule, and
+                // it needs saying explicitly here where a dig site's does
+                // not: a build waits on a bill of several items over many
+                // trips, so latched-once-forever would leave a base that ran
+                // dry in zone 2 silent about running dry in zone 6.
+                if let Some(mut build) = self.world.get_mut::<BuildSite>(site)
+                    && build.announced_dry
+                {
+                    build.announced_dry = false;
+                }
+                self.pick_up_for_site(worker, &item, qty, source)
+            }
             Errand::Raise(_) => self.raise_one_tick(worker, site, target),
         }
     }

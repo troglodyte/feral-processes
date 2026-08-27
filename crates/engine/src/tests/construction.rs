@@ -558,6 +558,64 @@ fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() 
     );
 }
 
+/// The dry report is said once per drought, not once per request.
+///
+/// **A build waits on a bill of several items over many trips**, which is
+/// what makes this different from a dig site's latch. Said once and never
+/// again, a base that ran out of Core Fragments early would go silent about
+/// running out later — and "the crew stopped and told me nothing" is the
+/// exact failure the announcement exists to prevent.
+///
+/// Mutation-proof by construction: the second half fails the moment the
+/// clearing arm is deleted, and the first half fails if the latch is
+/// dropped altogether, so neither direction passes on its own.
+#[test]
+fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
+    let mut game = base(1114);
+    builder(&mut game);
+    unlock_research_chain(&mut game, "armor_bench");
+    // Empty the pack: the base has nothing to fetch at all.
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(ItemId::from(ids::CORE_FRAGMENT), held);
+    game.place_structure("armory", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+
+    let dry_lines = |g: &Game| {
+        g.message_history(400)
+            .into_iter()
+            .filter(|m| m.text.contains("nothing to raise"))
+            .count()
+    };
+    for _ in 0..80 {
+        game.tick();
+    }
+    let first = dry_lines(&game);
+    assert_eq!(first, 1, "said once on entering the state, not once a tick");
+
+    // Restock less than the bill: the crew fetches what there is, delivers
+    // it, and runs out again.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 1);
+    for _ in 0..120 {
+        if game.world.get::<BuildSite>(site).is_none() {
+            break;
+        }
+        game.tick();
+    }
+
+    assert!(
+        dry_lines(&game) > first,
+        "and again once the crew has spent the restock and run out a second time — \
+         a latch that never clears leaves the base silent for the rest of the run"
+    );
+}
+
 /// Examine names the request and what is still to be carried to it.
 ///
 /// The materials standing on a site are deliberately not drawn on the map,

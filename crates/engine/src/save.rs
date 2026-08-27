@@ -355,6 +355,25 @@ pub struct CreatureSave {
     /// every program in it loads with an empty store.
     #[serde(default)]
     pub memories: Vec<MemorySave>,
+    /// Where this program's need reserves stand — see `components::Needs`.
+    /// Only meaningful when `tamed` is true, exactly as `memories` is.
+    ///
+    /// Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
+    /// A file written before needs existed carries no key, loads empty, and
+    /// `needs_drain_system` seeds it full on the first tick — a program is not
+    /// punished for a reload. `Needs::stalled_announced` is deliberately
+    /// **not** here: a reload should say the complaint again.
+    #[serde(default)]
+    pub needs: std::collections::BTreeMap<crate::needs::NeedId, f32>,
+    /// Which need has this program off its post, if any — see
+    /// `components::OffShift`. The one piece of this feature's state that is
+    /// not derived, because it is hysteresis: reloaded without it, a program
+    /// mid-errand at `critical + 1` would be judged content and sent straight
+    /// back to work, having fixed nothing.
+    ///
+    /// Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub off_shift: Option<crate::needs::NeedId>,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -1307,6 +1326,8 @@ mod tests {
             equipment: Vec::new(),
             program_id: 1,
             memories: Vec::new(),
+            needs: Default::default(),
+            off_shift: None,
             staff: false,
         }
     }

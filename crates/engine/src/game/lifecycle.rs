@@ -5,6 +5,7 @@
 //! set fails the economy-role check.
 
 use crate::abilities::AbilityId;
+use crate::components::Needs;
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
 use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE};
@@ -109,6 +110,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            needs: need_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -144,6 +146,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(need_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -305,6 +308,10 @@ impl Game {
         let mut schedule = Schedule::default();
         schedule.add_systems((
             (systems::power_regen_system, systems::needs_tick_system).chain(),
+            // Unchained: the only writer of `Needs` in the schedule, and what
+            // it reads — who is staff, and who holds a `Task` — nothing above
+            // it has written this tick.
+            systems::needs_drain_system,
             systems::wander_ai_system,
             // Chained: `task_progress_system` and `assembler_system` both
             // write `Task::progress` (for different targets, but bevy can
@@ -356,6 +363,7 @@ impl Game {
             descriptions: description_db,
             environment: environment_db,
             memories: memory_db,
+            needs: need_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -405,6 +413,7 @@ impl Game {
         world.insert_resource(description_db);
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
+        world.insert_resource(need_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -971,9 +980,20 @@ impl Game {
                         })
                         .collect(),
                 );
+                // A file written before needs existed carries no key and
+                // loads empty; `needs_drain_system` seeds it full on the first
+                // tick, which is the one seeding site.
+                let mut needs = Needs::default();
+                for (id, value) in &c.needs {
+                    needs.set(id, *value);
+                }
+                if let Some(need) = c.off_shift.clone() {
+                    entity.insert(crate::components::OffShift { need });
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
+                    needs,
                     Tamed { owner: player },
                     PowerReserve::new(c.power),
                     Experience {
@@ -1208,7 +1228,14 @@ impl Game {
                 Option<&PowerReserve>,
                 Option<&Boss>,
                 Option<&ProgramId>,
-                Option<&Memories>,
+                // Nested one level further because bevy's query tuples top
+                // out at 15 and this one is full again — grouped as "what
+                // this program is, remembers and needs".
+                (
+                    Option<&Memories>,
+                    Option<&Needs>,
+                    Option<&crate::components::OffShift>,
+                ),
             ),
         )>();
         for (
@@ -1239,7 +1266,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                memories,
+                (memories, needs, off_shift),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1337,6 +1364,10 @@ impl Game {
                             .collect()
                     })
                     .unwrap_or_default(),
+                needs: needs
+                    .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
+                    .unwrap_or_default(),
+                off_shift: off_shift.map(|o| o.need.clone()),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL
@@ -1790,6 +1821,7 @@ struct AssetDbs {
     descriptions: crate::descriptions::DescriptionDb,
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
+    needs: crate::needs::NeedDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
@@ -1889,6 +1921,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (memories, memory_warnings) =
         crate::memories::MemoryDb::load_dir(&assets_dir.join("memories"))?;
     warnings.extend(memory_warnings);
+    // Same absent-is-silent rule again — see `NeedDb`'s own doc. An empty
+    // catalogue seeds nothing, drains nothing and takes nobody off a post,
+    // which is the pre-needs game.
+    let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
+    warnings.extend(need_warnings);
     // Same absent-is-silent rule again — see `CaravanDb`'s own doc. An empty
     // catalogue leaves `Game::scheduled_visit` with nothing to pick, which is
     // the pre-caravan game.
@@ -1932,6 +1969,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         descriptions,
         environment,
         memories,
+        needs,
         caravans,
         nemesis,
         species,

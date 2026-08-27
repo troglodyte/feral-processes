@@ -1,0 +1,13 @@
+(
+    id: "defrag_bay",
+    name: "Defrag Bay",
+    description: "A quiet slab a program can lie down on and be put back in order. Any of your base staff whose Coherence has run critical walks here off its own bat, stands until it's whole again, and goes back to work. No worker, no input.",
+    glyph: 'b',
+    color: Cyan,
+    build_cost: [("core_fragment", 12)],
+    work: None,
+    services: [
+        (need: "coherence", per_tick: 0.6, radius: 0),
+    ],
+    power_draw: 2,
+)

@@ -27,6 +27,52 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.35
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+both fields this adds to a creature are additive behind `#[serde(default)]`,
+and a program in an older file simply comes up with full reserves.
+
+Your programs want things now. Not much, and never as a new way to lose — a
+body that has been at it too long walks off, sees to itself, and comes back.
+
+### Added
+
+- **Programs on the base staff carry reserves that fall on their own**, and
+  faster while they work. Two ship: **Coherence**, which a process spends by
+  running, and **Slack**, which it spends by running the same thing over and
+  over. Both are `.ron` files in `assets/needs/`, so a third costs two files
+  and no Rust — and deleting the directory restores the game exactly as it
+  was.
+- **Two buildings answer them.** The **Defrag Bay** puts a program back in
+  order; the **Sandbox** is scratch memory nobody is watching. Neither takes
+  a worker or an input, and a program whose reserve has run critical walks to
+  one on its own, stands there until it is whole, and goes back to work.
+- **The manifest's WORK box says where a program stands**, in words rather
+  than a number — steady, fraying, strained, critical — with what it is off
+  doing beside the need it is doing it for. The roster's activity line says
+  the same thing instead of calling a program on an errand "idle".
+- **Programs that idle together think better of each other.** A new
+  `idled_with` memory, written once when a program finishes at an amenity,
+  naming whoever else was there.
+- **A program with nowhere to go says so, once, and holds it against the
+  corner it was standing in** — the new `frayed_here` memory. Nothing in the
+  base servicing a need and nothing being able to *reach* what does are
+  different complaints, and the base tells you so in different sentences.
+
+### Changed
+
+- **A program off shift is not counted as a body the base has.** The work
+  order screen's shortfall grows while somebody is seeing to itself, which is
+  the reading you want: the base is short of hands, and the manifest says
+  why. A body already carrying a load finishes the delivery first.
+- **A run-down program extracts less reliably.** One capped term in the same
+  roll morale already rides, and it reaches extraction only. A program with
+  what it needs contributes exactly nothing, so the shipped rates are
+  untouched.
+- **The manifest's MOVES box trims at three rows instead of four**, to pay
+  for the need rows. Nothing shipped has more than two moves.
+
 ## 0.13.34
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

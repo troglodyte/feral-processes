@@ -6843,3 +6843,105 @@ bump. And `TaskKind::Construct` is the first task kind whose holder may be
 *carrying*: `schedule_base_labour`'s never-free-a-`Carrying`-holder rule
 already covers it and has to, because freeing the body drops the `Carrying`
 with the `Task` and those units have already left the shelf they came off.
+
+### What a program needs is a catalogue, and only one thing about it is stored
+
+`assets/needs/` is `assets/memories/`'s seam again: a `.ron` per need
+carrying its name, its blurb, the verb the player reads while a program is
+seeing to it, how fast it falls, and the two thresholds that decide when a
+body leaves its post and when it comes back. The catalogue is data and the
+drain, the errand and the teeth are Rust — a need's effect is a hook into a
+particular formula, which is `perks::Perk`'s argument unchanged and the
+reason `NeedDef` has no `effect` field.
+
+**An absent or empty `assets/needs/` is valid and inert.** Nothing is
+seeded, nothing drains, no program ever leaves a post, `strain` answers zero
+and the manifest omits the rows entirely. Deleting the directory restores
+the pre-needs game the way deleting `assets/memories/`, `assets/policies/`
+or `assets/environment/` does. Never gate a system or a screen on the
+database being non-empty: that is exactly how the property comes to hold by
+accident at one site and lapse at another.
+
+**`OffShift(NeedId)` is the only thing this feature stores**, and hysteresis
+is the whole reason. Everything else is derived — which amenity is nearest,
+whether the program is being serviced, what it is doing — for
+`hauling::Errand`'s reason. A rule read off the current value alone flickers
+every tick at the boundary: pulled off at 20, returned at 20.1, drained to
+20 again. So the marker goes on below `critical` and comes off at `content`,
+and the gap between the two is the feature. The reserves themselves are the
+other save field, and both are additive behind `#[serde(default)]`, so this
+cost no `SAVE_FORMAT_VERSION` bump.
+
+Seeding lives in exactly one place, `Needs::seed_missing`, called at the top
+of the drain. That one code path covers a freshly spawned program, a program
+that predates a def added between sessions, and a save written before the
+feature existed. Seeding at `roster_parts` as well would leave three ways in
+and two of them silently divergent.
+
+**One gate decides whether a need may pull a body off a post, and failing
+that gate *is* acting out.** Three clauses: the reserve is below `critical`,
+something in the base services the need at all, and the need is not already
+latched. There is deliberately no fourth state where a program is stalled
+but content — a program that cannot be answered says so once and holds a
+grudge about the corner it was standing in.
+
+**Reachability is never asked as its own question.** It is discovered by the
+walk — `step_off_shift`, riding `hauling::step_to_post` rather than a second
+Dijkstra — and an `Err(NoRoute)` latches the need and drops the marker.
+Asked up front instead, the obvious shape is insert → failed step → remove →
+insert, every beat, forever: exactly the flicker the unreachable-build-want
+fix closed one subsystem over. One walk per newly off-shift body, then
+nothing until the need recovers.
+
+The two ways of failing the gate say **different sentences**, because they
+leave the player different errands: nothing in the base services this need,
+versus the amenity is walled off from where this program stands. That is
+`NoPost::BoxedIn`-versus-`NoRoute`'s rule one level up. They share one latch
+and one grudge, because to the program they are one state.
+
+**The social memory is an edge and never a period.** `idled_with` is written
+when a serviced need reaches `content`, naming every other program in reach
+of the same amenity at that moment. `note_postings`' doc comment already
+states the cost of getting this wrong and it applies unchanged: a per-tick
+writer saturates `strike_cap` in three ticks, makes `strikes` mean nothing,
+and — because `remember` evicts at the tail of every write — makes eviction
+eager for exactly the programs living the most. This one has an edge to read
+where a posting does not, so it takes it.
+
+**An off-shift program leaves the posting half of `schedule_base_labour`,
+not the drift half.** `drift_idle_staff` keeps the whole staff list — it is
+what walks a body to its amenity — while `record_labour_demand`, the
+truncation and the standdown guard all read an `on_shift` list. The one
+exception is a body still holding a `Carrying`, and that is the existing
+never-free-a-`Carrying`-holder rule rather than a second one: freeing a
+loaded body destroys the goods, and `DigErrand::Return` is the precedent for
+walking a load home first. The shortfall the work-order header shows
+therefore *grows* while bodies are off shift. That is the readout.
+
+**`need_shift` has its own cap and the outer clamp is not it.**
+`mining_success_chance` clamps to `0.0..=1.0` because `GameRng::random_bool`
+panics outside it, which is a different job — and it would swallow an
+uncapped overshoot at the low end where no test reading the finished chance
+could tell a working cap from a missing one. `MEMORY_MORALE_MAX_SHIFT`'s
+argument, applied again, and `morale_shift`'s split-out shape copied for the
+same testability reason. `strain` is signed and baselined at **zero**, so a
+program with full reserves, the player working a node themselves, and a
+deleted catalogue all contribute exactly nothing without a branch at any
+site — `base_int`'s idiom in the same expression.
+
+**The readout cost a row somewhere else, and that is what this page always
+costs.** A NEEDS box of its own did not fit at 1280x720 even at two rows —
+the program page has the least clearance in the renderer — so the rows share
+the WORK box, which is the box about what a program is like to *post*
+anyway. `MAX_BAND_ROWS` dropped from 4 to 3 to pay for the space; nothing
+shipped has more than two moves, so it trims nothing that exists today.
+`MAX_NEED_ROWS` trims the need rows *before* the box's own cap, so a modded
+catalogue spends its "+N more" on needs rather than pushing the post row off
+the end.
+
+**Neither shipped amenity has an upgrade path**, and that is deliberate
+rather than an omission the census will catch later: a `StructureTier` buys
+an amenity nothing — `per_tick` is not scaled by it — so a priced upgrade
+row would change no number the player could find. The two censuses that
+would otherwise have forced one (`every_upgrade_path_asks_for_a_zone_material`
+and its count) are satisfied by there being no path at all.

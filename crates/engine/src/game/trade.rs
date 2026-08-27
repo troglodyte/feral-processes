@@ -364,6 +364,14 @@ impl Game {
         if self.world.resource::<Party>().0.contains(&creature) {
             return "in party".to_string();
         }
+        // Above the post, and below the party and the wield: a body off shift
+        // has no `Task` at all, so this arm is what stops "idle" being said of
+        // a program that is very much doing something. `program_errand_label`
+        // is the one derivation of the verb — the def's own `servicing`
+        // string, never a phrase built here.
+        if let Some(errand) = self.program_errand_label(creature) {
+            return errand.to_lowercase();
+        }
         match self.program_post(creature) {
             Some((TaskKind::GatherResource, target)) => target,
             Some((TaskKind::Guard, target)) => format!("guarding {target}"),

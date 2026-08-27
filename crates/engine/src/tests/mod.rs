@@ -39,6 +39,7 @@ mod level_up;
 mod listen;
 mod memories;
 mod message_log;
+mod needs;
 mod nemesis;
 mod party;
 mod perks;

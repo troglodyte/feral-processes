@@ -1180,6 +1180,7 @@ fn flat_payout_takes_a_node_off_the_tier_and_depth_curve() {
                     base_int: crate::tuning::DEFAULT_BASE_INT,
                     class: None,
                     morale: 0.0,
+                    need_strain: 0.0,
                 },
                 world.resource::<ItemDb>(),
                 &mut rng,

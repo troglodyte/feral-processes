@@ -1,0 +1,12 @@
+// Worn thin in a corner nothing answers — a grudge against the tile, not
+// against the work. Distinct from `stranded_at`: a hauler nothing reaches
+// and a program run down with nowhere to go are different complaints.
+(
+    id: "frayed_here",
+    name: "Worn thin here",
+    blurb: "Ran out of what it needed, standing right here.",
+    valence: -7.0,
+    half_life: 3000,
+    subject: BaseTile,
+    strike_cap: 3,
+)

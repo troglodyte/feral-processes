@@ -68,9 +68,25 @@ pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 /// headroom has value on its own, at the owner's explicit call. A separate
 /// constant rather than lowering `MAX_SECTION_ROWS` itself: 6 is also
 /// `COMPANION_ROUTINE_SLOT_CAP`, so shrinking it would trim a player's full
-/// 6-slot routine kit — nothing shipped has more than 2 moves, so 4 trims
+/// 6-slot routine kit — nothing shipped has more than 2 moves, so this trims
 /// nothing that exists today, only a mod.
-pub(super) const MAX_BAND_ROWS: usize = 4;
+///
+/// **Lowered from 4 to 3 to pay for the need rows in WORK.** That is the
+/// trade this page always makes: the program page has the least clearance in
+/// the renderer, so a new reading is bought out of an existing cap rather
+/// than out of the frame. The band was the one place with a row nothing
+/// shipped uses.
+pub(super) const MAX_BAND_ROWS: usize = 3;
+
+/// The NEEDS box's own cap, tighter than `MAX_SECTION_ROWS` for
+/// `MAX_AFFINITY_ROWS`' reason: the program page has the least clearance of
+/// anything in the renderer, and this box was added to a layout that was
+/// already close. `assets/needs/` is data, so a mod can grow it without
+/// bound; the shipped catalogue is two, and a third costs nothing. Above
+/// that a row is traded for the "+N more" note rather than for a page that
+/// escapes the frame — `tests::the_real_worst_case_pages_fit_the_tightest_window`
+/// is what measures which values still fit.
+pub(super) const MAX_NEED_ROWS: usize = 2;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
 /// what was dropped. A silent truncation would read as "that's all of them".
@@ -346,7 +362,12 @@ mod tests {
             // always has a class, and a posted one names the structure it
             // works, so four is the real worst case. A boss has neither and
             // sits at two.
-            section("WORK", 4, false),
+            // Speed, Analysis, Base job, the post, and one row per loaded
+            // `needs::NeedDef` up to `MAX_NEED_ROWS` — the needs share this
+            // box rather than taking one of their own, because the program
+            // page has the least clearance in the renderer and a box of its
+            // own did not fit at 1280x720.
+            section("WORK", 4 + MAX_NEED_ROWS, false),
             // Rings, ceiling and talents. Emitted only for a developed
             // program, which is exactly what a worst case is.
             section("DEVELOPMENT", 3, false),

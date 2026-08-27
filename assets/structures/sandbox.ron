@@ -1,0 +1,13 @@
+(
+    id: "sandbox",
+    name: "Sandbox",
+    description: "Scratch memory nobody is watching, where a process can run whatever it likes. Base staff worn down to no Slack at all come here to idle, and two of them idling together think better of each other afterwards. No worker, no input.",
+    glyph: 's',
+    color: Green,
+    build_cost: [("core_fragment", 10)],
+    work: None,
+    services: [
+        (need: "slack", per_tick: 0.5, radius: 1),
+    ],
+    power_draw: 1,
+)

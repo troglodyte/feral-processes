@@ -5,6 +5,7 @@ use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
 use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
+use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
@@ -1272,6 +1273,86 @@ pub struct ProgramId(pub u32);
 /// roster" rather than "remembers nothing".
 #[derive(Component, Clone, Debug, Default)]
 pub struct Memories(pub Vec<Memory>);
+
+/// What one owned program's reserves stand at. Minted empty at
+/// `Game::roster_parts` beside `Memories`, so the absence of this component
+/// means "not on the roster" rather than "needs nothing".
+///
+/// **Empty is not the same as full.** Seeding lives in one place,
+/// `seed_missing`, called at the top of the drain — one code path covers a
+/// freshly spawned program, a program that predates a new def, and a save
+/// written before this feature. Do not seed anywhere else.
+///
+/// Keyed by `NeedId` in a `BTreeMap` for `Stock`'s reason: iteration order
+/// feeds the readouts and a `HashMap` would make the save encoding differ run
+/// to run.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Needs {
+    reserves: std::collections::BTreeMap<NeedId, f32>,
+    /// Which needs have already had their "nothing services this" complaint
+    /// said. **Never saved** — a reload should say it again, `DigSite`'s
+    /// `announced_stuck` rule.
+    stalled_announced: std::collections::BTreeSet<NeedId>,
+}
+
+impl Needs {
+    pub fn get(&self, id: &NeedId) -> Option<f32> {
+        self.reserves.get(id).copied()
+    }
+
+    /// Clamps to `NEED_MIN..=NEED_MAX`. **The clamp is the type's**, exactly
+    /// as `PowerReserve`'s is: a mod's `per_tick` and a save file's number are
+    /// equally outside this crate's control, and no caller clamps.
+    pub fn set(&mut self, id: &NeedId, value: f32) {
+        self.reserves
+            .insert(id.clone(), value.clamp(NEED_MIN, NEED_MAX));
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&NeedId, f32)> {
+        self.reserves.iter().map(|(id, v)| (id, *v))
+    }
+
+    /// Any def in `db` with no entry here starts full. The one seeding site —
+    /// see the type doc.
+    pub fn seed_missing(&mut self, db: &crate::needs::NeedDb) {
+        for def in db.iter() {
+            self.reserves.entry(def.id.clone()).or_insert(NEED_MAX);
+        }
+    }
+
+    /// Whether this need's stall has already been announced.
+    pub(crate) fn is_latched(&self, id: &NeedId) -> bool {
+        self.stalled_announced.contains(id)
+    }
+
+    /// Latches the stall, and reports whether this was the **edge**. The
+    /// announcement and the grudge both hang off a `true`, which is what
+    /// makes them once each however many ways the need can fail to be met.
+    pub(crate) fn latch(&mut self, id: &NeedId) -> bool {
+        self.stalled_announced.insert(id.clone())
+    }
+
+    /// Clears the latch, so a need that recovers and runs down again
+    /// complains a second time — `set_machine_status`' rule, that entering a
+    /// state is news and staying in it is not.
+    pub(crate) fn unlatch(&mut self, id: &NeedId) {
+        self.stalled_announced.remove(id);
+    }
+}
+
+/// The one thing this feature stores about a program that is not a reserve:
+/// **which need has taken it off its post.**
+///
+/// Everything else is derived — which amenity is nearest, whether the program
+/// is being serviced, what it is doing — for `hauling::Errand`'s reason. This
+/// cannot be, because it is **hysteresis**: a rule read off the current value
+/// alone flickers every tick at the boundary, pulled off at 20, returned at
+/// 20.1, drained to 20 again. Inserted below the need's `critical`, removed at
+/// its `content`, and the gap between the two is the whole point.
+#[derive(Component, Clone, Debug)]
+pub struct OffShift {
+    pub need: NeedId,
+}
 
 /// One remembered thing: which kind it is, what it was about, when it was
 /// last reinforced, and how many times.

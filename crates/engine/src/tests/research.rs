@@ -386,6 +386,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "assembly_bay".to_string(),
             "contract_broker".to_string(),
             "data_cache".to_string(),
+            "defrag_bay".to_string(),
             "depot".to_string(),
             "home".to_string(),
             "mining_node".to_string(),
@@ -393,6 +394,7 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "recharger_node".to_string(),
             "refinery".to_string(),
             "research_node".to_string(),
+            "sandbox".to_string(),
             "winding_node".to_string(),
         ],
         "exactly the structures named by no research file start available"

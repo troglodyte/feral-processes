@@ -4,14 +4,15 @@ use rand::RngExt;
 
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
-    Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve, Pursuing,
-    ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
-    WanderAi, field_buff_power_of,
+    Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve,
+    Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task,
+    TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::memories::MemoryDb;
+use crate::needs::NeedDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
 use crate::resources::{GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
@@ -22,7 +23,10 @@ use crate::tuning::{
     MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
     MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
 };
-use crate::tuning::{HUNGER_DECAY_PER_TICK, WORK_XP_LEVEL_CAP, WORK_XP_PER_CYCLE};
+use crate::tuning::{
+    HUNGER_DECAY_PER_TICK, NEED_STRAIN_MAX_SHIFT, NEED_STRAIN_PER_POINT, WORK_XP_LEVEL_CAP,
+    WORK_XP_PER_CYCLE,
+};
 use crate::world::WorldMap;
 
 /// How much Power one tick costs, before the floor — which is
@@ -52,6 +56,86 @@ pub fn needs_tick_system(
             if !was_starving {
                 log.push("Your power reserves are critical!");
             }
+        }
+    }
+}
+
+/// Every owned program's reserves fall a little, and faster while it works.
+///
+/// **Staff only** — a party member and the wielded program are not on shift,
+/// which is the v1 scope. The query is deliberately wider than that rule and
+/// narrows through `party::role_of`, `base_entropy_system`'s idiom: the
+/// narrowing is the part that must not exist twice.
+///
+/// Seeding is the first thing it does, through `Needs::seed_missing`, and it
+/// is the only seeding site in the game — one code path covers a freshly
+/// spawned program, a program that predates a new def, and a save written
+/// before this feature. With an **empty** `NeedDb` there is nothing to seed
+/// and nothing to drain, and that falls out of the loop rather than out of a
+/// branch: the pre-needs game, exactly.
+/// **The restore is here rather than in a system of its own**, after the
+/// drain: the two write the same component, and splitting them would be two
+/// systems bevy has to be told about instead of one loop that cannot disagree
+/// with itself. The index is rebuilt once a tick — `drift_idle_staff` builds
+/// its own once a beat — because two cheap builds beat one stale cached copy,
+/// and a cached one would be a new `Resource` and another iteration-order
+/// shift.
+/// What `needs_drain_system` reads off each candidate. Aliased for the same
+/// `type_complexity` reason `Wanderer` and `CronjobWorker` are.
+type Needful<'w> = (
+    Entity,
+    &'w mut Needs,
+    Option<&'w Task>,
+    &'w Tamed,
+    &'w Position,
+);
+
+pub fn needs_drain_system(
+    mut programs: Query<Needful, Without<Player>>,
+    sites: Query<(&Structure, &Position)>,
+    structure_db: Res<StructureDb>,
+    db: Res<NeedDb>,
+    player: Res<crate::resources::PlayerEntity>,
+    roster: Res<crate::resources::Party>,
+    wielded: Res<crate::resources::WieldedProgram>,
+) {
+    let amenities = crate::game::base::offshift::Amenities::build(
+        sites.iter().map(|(s, p)| (&s.kind, p)),
+        &structure_db,
+    );
+    for (entity, mut needs, task, tamed, at) in &mut programs {
+        if crate::game::party::role_of(entity, tamed.owner, player.0, &roster, wielded.0)
+            != Some(crate::game::party::ProgramRole::Staff)
+        {
+            continue;
+        }
+        needs.seed_missing(&db);
+        for def in db.iter() {
+            let Some(current) = needs.get(&def.id) else {
+                continue;
+            };
+            let rate = if task.is_some() {
+                def.drain_per_tick * def.working_multiplier
+            } else {
+                def.drain_per_tick
+            };
+            needs.set(&def.id, current - rate);
+        }
+        // Standing in reach of an amenity refills, whatever brought the
+        // program here — a body posted beside a Sandbox is being serviced
+        // too, and a rule that only paid off-shift bodies would make that
+        // read as the amenity being broken.
+        for def in db.iter() {
+            let Some((site, rate, radius)) = amenities.nearest(&def.id, *at) else {
+                continue;
+            };
+            if !crate::game::base::offshift::in_reach(*at, site, radius) {
+                continue;
+            }
+            let Some(current) = needs.get(&def.id) else {
+                continue;
+            };
+            needs.set(&def.id, current + rate);
         }
     }
 }
@@ -163,13 +247,26 @@ pub(crate) fn mining_success_chance(
     keen_scavenger_level: u32,
     base_int: i32,
     morale: f32,
+    strain: f32,
 ) -> f64 {
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
         + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
         + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT
-        + morale_shift(morale))
+        + morale_shift(morale)
+        + need_shift(strain))
     .clamp(0.0, 1.0)
+}
+
+/// What a program's need strain is worth to a gather cycle, priced and capped
+/// in one place.
+///
+/// Split out beside `morale_shift` for `morale_shift`'s own stated reason: the
+/// property that matters is that it saturates, and asserting that through
+/// `mining_success_chance` alone cannot tell a working cap from the outer
+/// `clamp(0.0, 1.0)` swallowing the overshoot.
+pub(crate) fn need_shift(strain: f32) -> f64 {
+    (strain as f64 * NEED_STRAIN_PER_POINT).clamp(-NEED_STRAIN_MAX_SHIFT, NEED_STRAIN_MAX_SHIFT)
 }
 
 /// What `morale` is worth to a gather cycle, priced and capped in one place.
@@ -237,6 +334,15 @@ pub(crate) struct CycleModifiers {
     /// unresolvable — all three want the shipped rate back untouched, and all
     /// three get it without a branch here or at the call site.
     pub morale: f32,
+    /// `needs::strain` for whoever is standing at the machine: the signed sum
+    /// of how far its reserves have run down.
+    ///
+    /// Beside `morale` and for its reason — it belongs to the body doing the
+    /// work, and **`0.0` is the baseline and not a missing value**: a program
+    /// with full reserves, the player working a node themselves, and a deleted
+    /// `assets/needs/` all contribute exactly nothing, without a branch here
+    /// or at the call site.
+    pub need_strain: f32,
 }
 
 /// Whether the structure `node_entity` belongs to declares
@@ -287,6 +393,7 @@ pub(crate) fn resolve_gather_cycle(
             worker.keen_scavenger_level,
             worker.base_int,
             worker.morale,
+            worker.need_strain,
         ))
     {
         return None;
@@ -540,6 +647,7 @@ type CronjobWorker = (
     Option<&'static Carrying>,
     Option<&'static Stranded>,
     Option<&'static Memories>,
+    Option<&'static Needs>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -564,6 +672,11 @@ pub struct CronjobLookups<'w> {
     /// where there was none rather than shifting what the world holds.
     memories: Res<'w, MemoryDb>,
     clock: Res<'w, GameClock>,
+    /// The other half of pricing what a worker brings to a cycle — see
+    /// `CycleModifiers::need_strain`. Already a registered resource, so this
+    /// adds a read where there was none rather than shifting what the world
+    /// holds.
+    needs: Res<'w, NeedDb>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -607,6 +720,7 @@ pub fn task_progress_system(
         power: grid,
         memories: memory_db,
         clock,
+        needs: need_db,
     } = db;
     // Both of these are the player's, not the worker's: `XpBoost` is
     // `FieldScope::Run`, so every worker's cronjob XP rides the same running
@@ -635,6 +749,7 @@ pub fn task_progress_system(
         carrying,
         stranded,
         memories,
+        worker_needs,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -716,6 +831,13 @@ pub fn task_progress_system(
                 // the baseline and not a missing value.
                 morale: memories
                     .map(|m| crate::memories::sum_intensity(m, &memory_db, clock.tick, |_| true))
+                    .unwrap_or(0.0),
+                // The same fold `Game::need_strain` is, through the shared
+                // free function rather than a copy of it — `party::role_of`'s
+                // reason, and the property the empty-catalogue guarantee
+                // rests on.
+                need_strain: worker_needs
+                    .map(|n| crate::needs::strain(n, &need_db))
                     .unwrap_or(0.0),
             },
             &item_db,
@@ -896,6 +1018,7 @@ pub fn player_gather_system(
                 // figure. A player who could be demoralised into mining badly
                 // is a different game.
                 morale: 0.0,
+                need_strain: 0.0,
             },
             &item_db,
             &mut rng,
@@ -1281,6 +1404,7 @@ mod tests {
                 base_int: DEFAULT_BASE_INT,
                 class,
                 morale: 0.0,
+                need_strain: 0.0,
             },
             &shipped_items(),
             &mut rng,
@@ -1677,7 +1801,7 @@ mod tests {
             for keen in [0, 1, 4] {
                 for int_offset in [-4, 0, 3] {
                     let base_int = DEFAULT_BASE_INT + int_offset;
-                    let with_morale = mining_success_chance(level, keen, base_int, 0.0);
+                    let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0);
                     let without = (MINING_SUCCESS_BASE
                         + level as f64 * MINING_SUCCESS_PER_LEVEL
                         + keen as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
@@ -1700,9 +1824,9 @@ mod tests {
     /// rises-with-morale test just as well.
     #[test]
     fn morale_moves_the_rate_both_ways_and_by_the_same_amount() {
-        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0);
-        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0);
-        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0);
+        let baseline = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+        let content = mining_success_chance(4, 0, DEFAULT_BASE_INT, 8.0, 0.0);
+        let miserable = mining_success_chance(4, 0, DEFAULT_BASE_INT, -8.0, 0.0);
         assert!(
             content > baseline,
             "a program that remembers good things should extract more reliably"
@@ -1734,14 +1858,14 @@ mod tests {
         // And the finished chance stays inside what `random_bool` accepts,
         // which is the outer clamp's job and is asserted here so the two
         // cannot both be assumed.
-        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0);
+        let floored = mining_success_chance(1, 0, DEFAULT_BASE_INT, -10_000.0, 0.0);
         assert!((0.0..=1.0).contains(&floored));
     }
 
     #[test]
     fn mining_success_chance_rises_with_level_and_caps_at_one() {
-        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
-        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0);
+        let level_1 = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+        let level_2 = mining_success_chance(2, 0, DEFAULT_BASE_INT, 0.0, 0.0);
         assert!(
             level_1 > 0.0 && level_1 < 1.0,
             "a basic level-1 node shouldn't be a sure thing"
@@ -1751,7 +1875,7 @@ mod tests {
             "a higher-level node should succeed more reliably"
         );
         assert_eq!(
-            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0),
+            mining_success_chance(100, 0, DEFAULT_BASE_INT, 0.0, 0.0),
             1.0,
             "chance should never exceed a sure thing"
         );
@@ -1759,15 +1883,15 @@ mod tests {
 
     #[test]
     fn keen_scavenger_adds_to_the_mining_roll_and_still_caps_at_one() {
-        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
-        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0);
+        let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+        let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0, 0.0);
         assert!(
             (boosted - (plain + 3.0 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL)).abs()
                 < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(
-            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0),
+            mining_success_chance(1, 1000, DEFAULT_BASE_INT, 0.0, 0.0),
             1.0,
             "the perk must not push the roll past a sure thing either"
         );
@@ -1785,7 +1909,7 @@ mod tests {
             let expected = crate::tuning::MINING_SUCCESS_BASE
                 + level as f64 * crate::tuning::MINING_SUCCESS_PER_LEVEL;
             assert!(
-                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0) - expected).abs()
+                (mining_success_chance(level, 0, DEFAULT_BASE_INT, 0.0, 0.0) - expected).abs()
                     < f64::EPSILON,
                 "a baseline worker must contribute exactly nothing at level {level}"
             );
@@ -1794,9 +1918,9 @@ mod tests {
 
     #[test]
     fn each_point_of_base_int_moves_the_roll_by_its_tuning_constant() {
-        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0);
-        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0);
-        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0);
+        let baseline = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+        let sharp = mining_success_chance(1, 0, DEFAULT_BASE_INT + 4, 0.0, 0.0);
+        let dull = mining_success_chance(1, 0, DEFAULT_BASE_INT - 4, 0.0, 0.0);
         assert!(
             (sharp - (baseline + 4.0 * crate::tuning::MINING_SUCCESS_PER_INT)).abs() < f64::EPSILON,
             "each point above the baseline should add exactly its tuning constant"
@@ -1813,12 +1937,12 @@ mod tests {
     #[test]
     fn base_int_cannot_push_the_roll_outside_a_probability() {
         assert_eq!(
-            mining_success_chance(1, 0, 10_000, 0.0),
+            mining_success_chance(1, 0, 10_000, 0.0, 0.0),
             1.0,
             "aptitude must not push the roll past a sure thing"
         );
         assert_eq!(
-            mining_success_chance(4, 0, -10_000, 0.0),
+            mining_success_chance(4, 0, -10_000, 0.0, 0.0),
             0.0,
             "nor below an impossibility, which would panic the roll"
         );

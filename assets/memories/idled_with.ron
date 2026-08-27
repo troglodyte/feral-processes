@@ -1,0 +1,12 @@
+// Two processes with nothing to do, running in the same scratch memory.
+// The one positive thing base work can produce, and it is about the other
+// program rather than about the place.
+(
+    id: "idled_with",
+    name: "Idled with",
+    blurb: "Ran alongside it with nothing asked of either.",
+    valence: 4.0,
+    half_life: 4000,
+    subject: Program,
+    strike_cap: 4,
+)

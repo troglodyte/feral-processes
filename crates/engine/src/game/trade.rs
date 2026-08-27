@@ -1,6 +1,7 @@
 //! Buying and selling at a trader structure, including selling programs
 //! off the roster.
 
+use crate::components::Downed;
 use crate::*;
 
 impl Game {
@@ -428,6 +429,20 @@ impl Game {
     /// couldn't. Returns the label logged, since both callers still need it
     /// for their own payout line afterward.
     pub(crate) fn dissolve_tamed_program(&mut self, creature: Entity) -> String {
+        let name = self.detach_from_play(creature);
+        self.world.despawn(creature);
+        name
+    }
+
+    /// Everything a program leaving play does *before* the world decides
+    /// whether it comes back: gear returned, detachments announced, out of
+    /// the party, off its post.
+    ///
+    /// Extracted rather than copied into `bench_or_dissolve`'s Forgiving arm
+    /// for `dissolve_tamed_program`'s own reason one level up — a comment
+    /// claiming two sequences mirror each other cannot hold them in step,
+    /// and the copy that drifts is the one nobody runs.
+    fn detach_from_play(&mut self, creature: Entity) -> String {
         // Gear is the player's property; the program was only wearing it.
         // Here rather than at the callers because this is the one function
         // sale, extraction, battle death and a raid defender's death already
@@ -442,7 +457,31 @@ impl Game {
             .0
             .retain(|&e| e != creature);
         self.world.entity_mut(creature).remove::<Task>();
-        self.world.despawn(creature);
+        name
+    }
+
+    /// What becomes of an owned program that dies: destroyed under
+    /// Permadeath, benched under Forgiving.
+    ///
+    /// **One door, not a branch at each site.** Battle teardown and a raid
+    /// defender's death are the two ways an owned program can be killed, and
+    /// they agree on what a death *means* through this function rather than
+    /// through two copies of a difficulty check. Returns the label for the
+    /// same reason `dissolve_tamed_program` does — both callers still write
+    /// their own line about it afterwards.
+    ///
+    /// The benched arm leaves the program at 1 HP carrying
+    /// `components::Downed`, still `Tamed` and therefore still staff by
+    /// derivation. `systems::repair_system` is what clears it.
+    pub(crate) fn bench_or_dissolve(&mut self, creature: Entity) -> String {
+        if *self.world.resource::<DifficultyMode>() == DifficultyMode::Permadeath {
+            return self.dissolve_tamed_program(creature);
+        }
+        let name = self.detach_from_play(creature);
+        if let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
+            stats.hp = 1;
+        }
+        self.world.entity_mut(creature).insert(Downed);
         name
     }
 

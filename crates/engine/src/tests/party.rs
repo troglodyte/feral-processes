@@ -633,13 +633,18 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
                 game.player_status().companions.is_empty(),
                 "ending the battle should have stood the downed companion down"
             );
+            // Forgiving: benched, not deleted. It keeps its roster slot —
+            // that occupancy is the cost of a wipe — and the party is what
+            // it leaves.
             assert!(
-                game.world.get::<Stats>(companion).is_none(),
-                "a companion that hit 0 HP is deleted, not merely stood down"
+                game.world
+                    .get::<crate::components::Downed>(companion)
+                    .is_some(),
+                "a companion that hit 0 HP under Forgiving is benched"
             );
             assert!(
-                !game.owned_pets().iter().any(|p| p.entity == companion),
-                "and it is gone from the roster, not just the party"
+                game.owned_pets().iter().any(|p| p.entity == companion),
+                "and it is still on the roster, holding its slot"
             );
             return;
         }

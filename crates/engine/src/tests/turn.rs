@@ -780,9 +780,13 @@ fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
     );
 
     game.end_battle(player, None);
+    // Forgiving benches rather than reaps, so what says "the teardown still
+    // read this program as dead" is the marker, not an absent entity.
     assert!(
-        game.world.get::<Stats>(companion).is_none(),
-        "end_battle must still reap the dead companion; a running Regen must not save it"
+        game.world
+            .get::<crate::components::Downed>(companion)
+            .is_some(),
+        "end_battle must still treat the companion as dead; a running Regen must not save it"
     );
 }
 

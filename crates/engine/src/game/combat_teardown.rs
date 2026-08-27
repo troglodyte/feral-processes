@@ -280,7 +280,7 @@ impl Game {
         // deleted before anything could reveal them — a dead companion
         // reads its death line and then its detachment.
         for program in dead {
-            self.dissolve_tamed_program(program);
+            self.bench_or_dissolve(program);
         }
         // A Stack pack that outlived the fight — the party jacked out —
         // has nowhere to go: it stands at surface coordinates around the

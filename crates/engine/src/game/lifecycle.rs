@@ -990,6 +990,9 @@ impl Game {
                 if let Some(need) = c.off_shift.clone() {
                     entity.insert(crate::components::OffShift { need });
                 }
+                if c.downed {
+                    entity.insert(crate::components::Downed);
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
@@ -1235,6 +1238,7 @@ impl Game {
                     Option<&Memories>,
                     Option<&Needs>,
                     Option<&crate::components::OffShift>,
+                    Option<&crate::components::Downed>,
                 ),
             ),
         )>();
@@ -1266,7 +1270,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                (memories, needs, off_shift),
+                (memories, needs, off_shift, downed),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1368,6 +1372,7 @@ impl Game {
                     .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
                     .unwrap_or_default(),
                 off_shift: off_shift.map(|o| o.need.clone()),
+                downed: downed.is_some(),
                 equipment: equipment
                     .map(|eq| {
                         EquipmentSlot::ALL

@@ -1810,3 +1810,134 @@ fn a_multi_affix_copy_names_two_and_counts_the_rest() {
         game.copy_name(&off_spec)
     );
 }
+
+// --- Downed programs ----------------------------------------------------
+//
+// A Forgiving death benches an owned program instead of destroying it.
+// `Game::bench_or_dissolve` is the one door both death sites take, so these
+// tests drive `end_battle` rather than the door directly: the point is that
+// the *site* asks the door, not that the door works in isolation.
+
+/// Stands a companion in a fight and kills it, returning the entity so the
+/// caller can ask what became of it. The kill is a direct HP write rather
+/// than a resolved swing — what is under test is teardown, and a fixture
+/// that has to land a lethal blow first is a fixture about `resolve_attack`.
+fn a_companion_killed_in_battle(game: &mut Game) -> Entity {
+    let player = game.player_entity();
+    let companion = spawn_tamed(game, 10, 3);
+    game.add_companion(companion).unwrap();
+    let enemy = spawn_wild_on_player_tile(game);
+    insert_battle(game, player, vec![enemy]);
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
+    companion
+}
+
+#[test]
+fn a_forgiving_death_benches_a_companion_rather_than_destroying_it() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = a_companion_killed_in_battle(&mut game);
+
+    game.end_battle(player, None);
+
+    let stats = game
+        .world
+        .get::<Stats>(companion)
+        .expect("a Forgiving death must leave the program in the world");
+    assert_eq!(stats.hp, 1, "a benched program is downed, not healthy");
+    assert!(
+        game.world
+            .get::<crate::components::Downed>(companion)
+            .is_some(),
+        "the program should be marked Downed"
+    );
+    assert!(
+        game.world.get::<Tamed>(companion).is_some(),
+        "a benched program is still the player's"
+    );
+    assert!(
+        !game.world.resource::<Party>().0.contains(&companion),
+        "a benched program leaves the battle party"
+    );
+}
+
+#[test]
+fn a_permadeath_death_still_destroys_a_companion() {
+    let mut game = Game::new(9, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = a_companion_killed_in_battle(&mut game);
+
+    game.end_battle(player, None);
+
+    assert!(
+        game.world.get::<Stats>(companion).is_none(),
+        "Permadeath is unchanged: the program is gone"
+    );
+}
+
+#[test]
+fn gear_comes_back_to_the_player_on_both_arms_of_a_death() {
+    for mode in [DifficultyMode::Forgiving, DifficultyMode::Permadeath] {
+        let mut game = Game::new(9, mode, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        let weapon = game
+            .world
+            .resource::<ItemDb>()
+            .all()
+            .find(|d| d.equipment.is_some())
+            .map(|d| d.id.clone())
+            .expect("at least one equippable item");
+        // Geared before the fight opens: `equip` refuses mid-battle, so a
+        // fixture that wears its loadout after `insert_battle` is testing
+        // that refusal rather than the teardown.
+        let companion = spawn_tamed(&mut game, 10, 3);
+        game.add_companion(companion).unwrap();
+        wear(&mut game, companion, &weapon.0);
+        assert_eq!(
+            held_any(&game, &weapon),
+            0,
+            "the copy should be worn, not carried, before the death"
+        );
+        let enemy = spawn_wild_on_player_tile(&mut game);
+        insert_battle(&mut game, player, vec![enemy]);
+        game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
+
+        game.end_battle(player, None);
+
+        assert_eq!(
+            held_any(&game, &weapon),
+            1,
+            "gear is the player's property on both arms: {mode:?}"
+        );
+    }
+}
+
+/// A real save and load, not a RON round trip. A field that is written but
+/// never read back leaves a round-trip test green — this repo has shipped
+/// that shape before.
+#[test]
+fn a_downed_program_loads_back_downed() {
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    a_companion_killed_in_battle(&mut game);
+    game.end_battle(player, None);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_downed_test_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    // Re-fetched from `loaded`: `Entity` identity is private to the `World`
+    // that allocated it.
+    let mut query = loaded
+        .world
+        .query_filtered::<Entity, (With<Tamed>, With<crate::components::Downed>)>();
+    assert_eq!(
+        query.iter(&loaded.world).count(),
+        1,
+        "the benched program should load back benched"
+    );
+}

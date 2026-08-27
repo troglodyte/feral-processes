@@ -1055,9 +1055,13 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
     force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
+    // Benched rather than reaped: this is a Forgiving run, and gear comes
+    // back to the player on that arm exactly as it does on the other.
     assert!(
-        game.world.get::<Stats>(companion).is_none(),
-        "the dead program should have been reaped"
+        game.world
+            .get::<crate::components::Downed>(companion)
+            .is_some(),
+        "the dead program should have been benched"
     );
     assert_eq!(
         held(&game, &weapon),

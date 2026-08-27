@@ -385,6 +385,19 @@ pub struct CreatureSave {
     /// what earns a `SAVE_FORMAT_VERSION` bump, and this change earns none.
     #[serde(default)]
     pub staff: bool,
+    /// Whether this program was benched by a Forgiving death — see
+    /// `components::Downed`. Only meaningful when `tamed` is true; nothing
+    /// else can be downed.
+    ///
+    /// Additive behind `#[serde(default)]`, so it earns no
+    /// `SAVE_FORMAT_VERSION` bump — the save has been field-named RON since
+    /// v29, and a file written before this feature carries no key and loads
+    /// with every program upright, which is what it was. Unlike `staff`
+    /// above this **is** read back: the state is stored precisely because it
+    /// cannot be derived, and a reload that quietly healed a wipe would be
+    /// the feature not working.
+    #[serde(default)]
+    pub downed: bool,
 }
 
 /// A worn item on disk. Deliberately **not** `components::EquippedItem`,
@@ -1329,6 +1342,7 @@ mod tests {
             needs: Default::default(),
             off_shift: None,
             staff: false,
+            downed: false,
         }
     }
 

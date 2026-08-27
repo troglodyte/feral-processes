@@ -210,11 +210,10 @@ fn a_companion_that_died_is_still_on_the_closing_roster() {
         "the fallen companion was dropped before the roster was captured"
     );
     assert_eq!(closing.party[1].hp, 0);
-    assert!(
-        game.world.get::<Stats>(companion).is_none(),
-        "the companion should still have been dissolved — this asserts the \
-         capture is a copy, not a live read"
-    );
+    // Benched at 1 HP by the Forgiving teardown while the closing roster
+    // still reads 0 — which is a stronger statement of the same thing the
+    // dissolve used to make: the capture is a copy, not a live read.
+    assert_eq!(game.world.get::<Stats>(companion).unwrap().hp, 1);
 }
 
 #[test]

@@ -1075,18 +1075,24 @@ fn draw_surface_map(
                     painter.map(&glyph, tx, ty, glyph_px, color);
                 }
             }
-            // The caret, bouncing above the slab.
+            // The caret, bouncing in the middle of the slab.
             //
             // Drawn here rather than through the `ch` path above because
             // that path has no vertical offset to give it — and the bounce
             // is the whole point: a build site is the one cell on the map
             // where *nothing is happening yet* is the wrong reading. It
-            // reuses `Fx::staffed_bob`, the same upward-only raised cosine
-            // the "someone is on this job" mark rides, so the two motions on
-            // this map agree with each other rather than being two
-            // independently-invented curves. Phase-keyed by entity for that
-            // helper's own reason: two sites side by side bounce out of step
-            // and read as two jobs rather than one animation.
+            // reuses the raised cosine the "someone is on this job" mark
+            // rides, so the two motions on this map agree with each other
+            // rather than being two independently-invented curves.
+            // Phase-keyed by entity for that helper's own reason: two sites
+            // side by side bounce out of step and read as two jobs rather
+            // than one animation.
+            //
+            // **`centred_bob` and not `staffed_bob`**: this caret's rest
+            // position is the centre of its own slab, not an inset off the
+            // tile's bottom edge, so it has room on both sides. Riding the
+            // upward-only form it spent its whole cycle at or above centre
+            // and read as sitting high in the tile.
             //
             // Over the glyph layer, so a builder standing on the cell is
             // drawn under its own work. Under the marks and outlines below,
@@ -1094,7 +1100,7 @@ fn draw_surface_map(
             if let Some(ev) = building {
                 let glyph = ev.glyph.to_string();
                 let dims = painter.measure_map(&glyph, glyph_px);
-                let lift = fx.staffed_bob(ev.entity);
+                let lift = fx.centred_bob(ev.entity);
                 painter.map(
                     &glyph,
                     px + (tile_px - dims.width) / 2.0,
@@ -1700,6 +1706,16 @@ mod tests {
     /// on `Game::stands_in_base_space` — drawn from the surface, nothing
     /// here would be on the pane at all.
     fn drawn_base(at: f64, request: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        drawn_base_at(at, request, true)
+    }
+
+    /// `drawn_base` with the animation switch, so a test can ask where
+    /// something *rests* as well as where it is this frame.
+    fn drawn_base_at(
+        at: f64,
+        request: bool,
+        animated: bool,
+    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         game.place_structure("home", 0, 0)
@@ -1715,6 +1731,7 @@ mod tests {
         }
 
         let mut fx = Fx::new();
+        fx.enabled = animated;
         fx.begin_frame(at, Vec::new(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
@@ -1798,27 +1815,64 @@ mod tests {
     /// reading, and a still caret says exactly that. Two frames at different
     /// times, comparing where the glyph landed — a test that only checks the
     /// caret exists passes against a renderer that pinned it.
+    /// Where the caret landed in a frame.
+    fn caret_y(shapes: &[bevy_egui::egui::epaint::ClippedShape]) -> f32 {
+        shapes
+            .iter()
+            .find_map(|cs| match &cs.shape {
+                bevy_egui::egui::Shape::Text(t) if t.galley.text() == "^" => Some(t.pos.y),
+                _ => None,
+            })
+            .expect("the caret is drawn")
+    }
+
     #[test]
     fn the_caret_over_a_build_site_bounces() {
-        fn caret_y(at: f64) -> f32 {
-            let shapes = drawn_base(at, true);
-            shapes
-                .iter()
-                .find_map(|cs| match &cs.shape {
-                    bevy_egui::egui::Shape::Text(t) if t.galley.text() == "^" => Some(t.pos.y),
-                    _ => None,
-                })
-                .expect("the caret is drawn")
-        }
-
         // A quarter of the bob's period apart, so the raised cosine is at
         // genuinely different heights rather than at two points that happen
         // to share one.
-        let (a, b) = (caret_y(0.0), caret_y(0.25));
+        let (a, b) = (
+            caret_y(&drawn_base(0.0, true)),
+            caret_y(&drawn_base(0.25, true)),
+        );
         assert_ne!(
             a, b,
             "the caret must sit at different heights across frames — a still one reads as a \
              glyph standing on the ground"
+        );
+    }
+
+    /// ...and it bounces *around* the middle of its slab, not on top of it.
+    ///
+    /// The caret rides the same raised cosine the staffed mark does, and
+    /// that one is upward-only by design — its rest position is an inset off
+    /// the tile's bottom edge that a down-swing would spend. The caret's
+    /// rest position is the centre of its own slab, so anchored the same way
+    /// it spent its whole cycle at or above centre and read as sitting high
+    /// in the tile.
+    ///
+    /// Two frames **half a period** apart, whose mean is the resting
+    /// position for any phase, against a frame with animation off — which is
+    /// what puts the caret at rest. Asserting only that the two frames
+    /// straddle *each other* would pass against the old upward-only bob.
+    #[test]
+    fn the_caret_bounces_around_the_middle_of_its_slab() {
+        let rest = caret_y(&drawn_base_at(0.0, true, false));
+        // Half a period apart at the bob's 1 Hz, which is what makes the
+        // mean below the rest position for *any* entity phase.
+        let (a, b) = (
+            caret_y(&drawn_base_at(0.0, true, true)),
+            caret_y(&drawn_base_at(0.5, true, true)),
+        );
+
+        assert!(
+            ((a + b) / 2.0 - rest).abs() < 0.01,
+            "the swing must be centred on the caret's rest position: {a} and {b} about {rest}"
+        );
+        assert!(
+            (a - rest) * (b - rest) < 0.0,
+            "and it must genuinely cross that position rather than sit to one side of it: \
+             {a} and {b} about {rest}"
         );
     }
 

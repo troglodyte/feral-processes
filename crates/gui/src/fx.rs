@@ -478,6 +478,29 @@ impl Fx {
         staffed_bob_offset(self.now, entity.to_bits())
     }
 
+    /// How far to offset a mark whose rest position is the **centre** of its
+    /// tile rather than an inset off its bottom edge.
+    ///
+    /// The same curve `staffed_bob` rides — same rate, same entity phase, so
+    /// the two motions on one map still agree with each other rather than
+    /// being two independently-invented bounces — recentred on zero instead
+    /// of anchored at it. `staffed_bob` is upward-only because the staffed
+    /// mark's rest position is an inset a down-swing would spend; a build
+    /// site's caret sits in the middle of its slab with room on both sides,
+    /// and anchored upward it spends its whole cycle at or above centre and
+    /// reads as a caret sitting high in the tile rather than one bouncing
+    /// in it.
+    ///
+    /// Signed, and `STAFFED_BOB_PX` stays private to this module: doing the
+    /// subtraction at the call site would put the relationship between the
+    /// two curves in the renderer, where nothing keeps them one curve.
+    pub fn centred_bob(&self, entity: Entity) -> f32 {
+        if !self.enabled {
+            return 0.0;
+        }
+        staffed_bob_offset(self.now, entity.to_bits()) - STAFFED_BOB_PX / 2.0
+    }
+
     /// Alpha for a mark whose machine is full with nowhere to unload.
     ///
     /// Deliberately *not* phase-keyed the way `staffed_bob` is: two stranded
@@ -798,6 +821,39 @@ mod tests {
     /// rest position is held off the tile's bottom edge by an inset that
     /// `render/base.rs` documents as load-bearing, and a negative offset
     /// would spend that inset.
+    /// The build caret's bob straddles its rest position instead of sitting
+    /// on top of it.
+    ///
+    /// Asserted as a **mean of zero across half a period**, which is what
+    /// "centred" actually means and is phase-free: a raised cosine and the
+    /// same curve half a period later sum to exactly the amplitude whatever
+    /// the entity's phase, so this cannot pass by picking a lucky key. A
+    /// range check alone would pass against a curve biased anywhere inside
+    /// the band.
+    #[test]
+    fn the_centred_bob_swings_evenly_either_side_of_rest() {
+        let fx = Fx::new();
+        let half = STAFFED_BOB_PX / 2.0;
+        for key in 0..64u64 {
+            let at_rest = staffed_bob_offset(0.0, key) - half;
+            let half_period = staffed_bob_offset(0.5 / STAFFED_BOB_HZ, key) - half;
+            assert!(
+                (at_rest + half_period).abs() < 1e-4,
+                "the caret leans one way: {at_rest} and {half_period}"
+            );
+            assert!(
+                (-half..=half).contains(&at_rest),
+                "offset {at_rest} escaped the band"
+            );
+        }
+        let entity = Entity::from_raw_u32(7).unwrap();
+        assert_eq!(
+            fx.centred_bob(entity),
+            staffed_bob_offset(fx.now, entity.to_bits()) - half,
+            "and the accessor is that curve, not a second one"
+        );
+    }
+
     #[test]
     fn the_staffed_bob_only_ever_lifts_the_mark() {
         for i in 0..400 {

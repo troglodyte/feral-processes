@@ -125,6 +125,41 @@ impl Game {
             .unwrap_or(0.0)
     }
 
+    /// Where `who`'s reserves stand, one row per loaded def **in id order** —
+    /// never by value, or the labels move under the eye reading them.
+    ///
+    /// Empty for a program carrying no `Needs` and for an install with
+    /// `assets/needs/` deleted, so the manifest omits the section entirely
+    /// rather than drawing it empty.
+    pub fn need_rows(&self, who: Entity) -> Vec<crate::views::NeedRow> {
+        let Some(store) = self.world.get::<Needs>(who) else {
+            return Vec::new();
+        };
+        let errand = self.world.get::<OffShift>(who).map(|o| o.need.clone());
+        self.world
+            .resource::<NeedDb>()
+            .iter()
+            .filter_map(|def| {
+                let value = store.get(&def.id)?;
+                Some(crate::views::NeedRow {
+                    name: def.name.clone(),
+                    band: crate::views::need_band(value / crate::needs::NEED_MAX),
+                    servicing: (errand.as_ref() == Some(&def.id)).then(|| def.servicing.clone()),
+                })
+            })
+            .collect()
+    }
+
+    /// The examine line's tail: what `who` has walked off to do, or `None`
+    /// for a program that is on shift.
+    pub fn program_errand_label(&self, who: Entity) -> Option<String> {
+        let need = self.world.get::<OffShift>(who)?;
+        self.world
+            .resource::<NeedDb>()
+            .get(&need.need)
+            .map(|def| def.servicing.clone())
+    }
+
     /// Builds this pass's amenity index off the world's own structures.
     pub(crate) fn amenities(&mut self) -> Amenities {
         let mut query = self.world.query::<(&Structure, &Position)>();

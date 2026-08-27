@@ -1392,6 +1392,7 @@ impl Game {
                 base_int: species.base_int,
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
+                needs: self.need_rows(entity),
             })),
         })
     }

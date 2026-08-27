@@ -1015,3 +1015,87 @@ fn the_games_strain_reader_agrees_with_the_fold() {
     assert_eq!(game.need_strain(worker), direct);
     assert!(direct < 0.0, "an empty reserve is a drag, not a bonus");
 }
+
+// ---------------------------------------------------------------------------
+// The readout.
+// ---------------------------------------------------------------------------
+
+use crate::views::need_band;
+
+/// One row per loaded def, **in id order** — never by value, or the labels
+/// move under the eye reading them.
+#[test]
+fn the_manifest_lists_every_need_in_id_order() {
+    let mut game = Game::new(110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.tick();
+
+    let rows = game.need_rows(worker);
+
+    assert_eq!(
+        rows.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+        vec!["Coherence", "Slack"],
+        "id order, whatever the values are"
+    );
+    assert!(rows.iter().all(|r| r.servicing.is_none()));
+    assert!(rows.iter().all(|r| r.band == "steady"));
+}
+
+/// With `assets/needs/` deleted the section is absent entirely, not present
+/// and empty.
+#[test]
+fn an_empty_catalogue_draws_no_rows_at_all() {
+    let mut game = Game::new(111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.insert_resource(NeedDb::default());
+    game.tick();
+
+    assert!(game.need_rows(worker).is_empty());
+}
+
+/// The `servicing` verb appears only while the program is off shift for that
+/// need, and it is what the examine line reads too.
+#[test]
+fn the_servicing_verb_shows_only_while_off_shift() {
+    let mut game = Game::new(112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_an_amenity(&mut game, 1);
+    // One tick so the drain seeds every def — `set_reserve` only writes the
+    // one it names, and a def with no entry has no row.
+    game.tick();
+    assert_eq!(game.program_errand_label(staff[0]), None, "on shift");
+    assert_eq!(game.program_activity(staff[0]), "idle");
+
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
+    run_the_gate(&mut game, &staff);
+
+    let rows = game.need_rows(staff[0]);
+    let coherence_row = rows.iter().find(|r| r.name == "Coherence").unwrap();
+    assert_eq!(coherence_row.servicing.as_deref(), Some("Defragmenting"));
+    assert_eq!(coherence_row.band, "critical");
+    assert!(
+        rows.iter()
+            .find(|r| r.name == "Slack")
+            .unwrap()
+            .servicing
+            .is_none()
+    );
+    assert_eq!(
+        game.program_errand_label(staff[0]).as_deref(),
+        Some("Defragmenting")
+    );
+    assert_eq!(
+        game.program_activity(staff[0]),
+        "defragmenting",
+        "a body off shift is not idle"
+    );
+}
+
+/// Words, never a number — there is no player-facing float in this game.
+#[test]
+fn the_bands_run_from_steady_to_critical() {
+    assert_eq!(need_band(1.0), "steady");
+    assert_eq!(need_band(0.5), "fraying");
+    assert_eq!(need_band(0.3), "strained");
+    assert_eq!(need_band(0.0), "critical");
+}

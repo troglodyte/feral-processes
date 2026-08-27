@@ -567,6 +567,31 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if let Some((kind, structure)) = &p.post {
         work.push(stat(post_label(*kind), structure.clone()));
     }
+    // The reserves share this box rather than taking one of their own: the
+    // program page has the least clearance in the renderer, and a NEEDS box
+    // did not fit at 1280x720 even at two rows. They belong here anyway —
+    // this is the box about what the program is like to *post*, and a
+    // program that keeps walking off to defragment is exactly that.
+    //
+    // Trimmed to `MAX_NEED_ROWS` **before** the box's own cap, so a modded
+    // catalogue spends its "+N more" on needs rather than pushing the post
+    // row off the end. Absent entirely for a program carrying no reserves and
+    // for an install with `assets/needs/` deleted.
+    for row in p.needs.iter().take(MAX_NEED_ROWS) {
+        work.push(stat(
+            row.name.clone(),
+            match &row.servicing {
+                Some(verb) => format!("{} — {verb}", row.band),
+                None => row.band.to_string(),
+            },
+        ));
+    }
+    if p.needs.len() > MAX_NEED_ROWS {
+        work.push(stat(
+            "…",
+            format!("+{} more", p.needs.len() - MAX_NEED_ROWS),
+        ));
+    }
 
     sections.push(Section {
         title: "WORK",
@@ -799,6 +824,10 @@ mod tests {
             // that omits it, the same way it keeps a `work_resource` to
             // hold SPECIES at its worst case.
             base_job: None,
+            // Empty on purpose: the NEEDS box is conditional and its own
+            // test builds one, so this fixture holds every other box at its
+            // worst case without that one moving under it.
+            needs: vec![],
         }
     }
 

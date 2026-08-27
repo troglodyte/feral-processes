@@ -1813,6 +1813,41 @@ pub struct ProgramManifest {
     /// chosen ("Analysis" above is the same decision). `None` for a boss and
     /// for anything else outside the class system.
     pub base_job: Option<AffinityClass>,
+    /// Where this program's reserves stand — see `needs::NeedDef`. **Empty**
+    /// for a program that carries none, and for an install with
+    /// `assets/needs/` deleted, so the section is absent entirely rather than
+    /// present and empty.
+    pub needs: Vec<NeedRow>,
+}
+
+/// One need on the manifest: what it is called, how it is doing, and what the
+/// program is doing about it.
+///
+/// **Banded in words, never a number.** There is no player-facing float in
+/// this game and no player-facing tick count, and a reserve is neither more
+/// nor less legible for being shown as `37.4`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NeedRow {
+    pub name: String,
+    pub band: &'static str,
+    /// The def's `servicing` verb while the program is off shift for this
+    /// need, `None` otherwise.
+    pub servicing: Option<String>,
+}
+
+/// Which word a reserve reads as, as a fraction of `NEED_MAX`.
+///
+/// Four bands, and the boundaries are deliberately not the def's own
+/// `critical`/`content`: those are the *mechanism* and vary per need, while
+/// this is the player's read of a bar and has to mean the same thing on every
+/// row of the page.
+pub fn need_band(fraction: f32) -> &'static str {
+    match fraction {
+        f if f >= 0.75 => "steady",
+        f if f >= 0.45 => "fraying",
+        f if f >= 0.20 => "strained",
+        _ => "critical",
+    }
 }
 
 /// What a program is worth at a post: how fast it cycles, how reliably, and

@@ -180,6 +180,26 @@ pub const ZONE_LEVEL_CAP_FLOOR: u32 = 6;
 /// range. See `docs/measurements/2026-08-27-zone-level-cap.md`.
 pub const ZONE_LEVEL_CAP_STEP: u32 = 11;
 
+/// XP for the first Perk Point bought with overflow — what a player at the
+/// level cap pays before they hold any perks.
+///
+/// See `OVERFLOW_XP_STEP` for why the price is not flat.
+pub const OVERFLOW_XP_BASE: u32 = 400;
+
+/// How much more each Perk Point costs per perk already held, so
+/// `xp_per_point = OVERFLOW_XP_BASE + OVERFLOW_XP_STEP * perks_held`.
+///
+/// **The rise is the whole mechanism and zero is not a safe value here.**
+/// Perks are uncapped and repeatable at a flat Perk-Point price, and
+/// `Perk::Attacker` writes straight into `Stats`, so a flat exchange rate
+/// makes overflow XP a linear unbounded power source and the grind this cap
+/// exists to end comes back wearing a perk's hat. A linear *cost* makes
+/// points earned grow like the square root of XP spent, which loses the race
+/// against a linear zone curve forever — which is the point.
+///
+/// `perks_held` is `Perks::unlocked.len()`, derived and never stored.
+pub const OVERFLOW_XP_STEP: u32 = 120;
+
 /// The level cap in `zone` — the one expression of the formula.
 ///
 /// A free function rather than `Game::level_cap`'s body, because

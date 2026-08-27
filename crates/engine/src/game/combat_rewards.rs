@@ -752,6 +752,14 @@ impl Game {
             gain,
             ..XpTally::default()
         };
+        // At the cap the XP is banked rather than spent, and this is the one
+        // place it is drained. Folded into the same tally the level-up path
+        // writes, so the Perk Points a player earned show up wherever they
+        // already showed up — a point earned by overflow reads no differently
+        // from one earned by levelling, because it is not different.
+        if gain.overflow > 0 {
+            tally.perk_points += self.convert_overflow_xp();
+        }
         if gain.levels > 0 {
             // The player's tally runs longer than a companion's: a level also
             // pays a Perk Point and a point of Decompiler skill, and neither

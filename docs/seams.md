@@ -1593,10 +1593,10 @@ the other direction either**, which is why the query is
 `Or<(With<Task>, With<Tamed>)>` and then narrowed by `role_of`. A `Task` is
 what a body is *doing*; occupancy is where it is *standing*. Staff between
 postings hold none, and
-`park_idle_staff` cannot always walk one home — it declines a park tile
-that is occupied or unwalkable, and `schedule_base_labour` early-returns
-without parking anyone at all on a game over or during a battle, while
-this system keeps running from the schedule regardless. A cell reverted
+`drift_idle_staff` cannot always walk one on — it declines a candidate
+tile that is occupied or is not laid floor, and `schedule_base_labour`
+early-returns without moving anyone at all on a game over or during a
+battle, while this system keeps running from the schedule regardless. A cell reverted
 under an idle staffer is not a cosmetic loss: `hauling::post_field` gates
 its own **start** tile on `BaseGrid::walkable`, so the field is empty, the
 body reports `NoRoute` forever, and it can never be posted or walked again
@@ -3816,8 +3816,8 @@ distance* — because posting was a player action.
 
 Both halves of that premise are gone. Manual posting went with work orders,
 so no player is stood anywhere in particular when a body gets a job; and
-`park_idle_staff` (0.11.x) writes every free staff member's `Position` every
-tick, so the value is live rather than stale. What was left was one seam
+`park_idle_staff` (0.11.x, `drift_idle_staff` since) writes every free staff
+member's `Position` every tick, so the value is live rather than stale. What was left was one seam
 failing in two directions at once, both reported from play: a program
 loitering by Home **teleported onto the player** the instant the scheduler
 gave it a job and walked in from there, and — sharper, because it stops the
@@ -3826,7 +3826,7 @@ base rather than looking wrong — `post_reach` measured from the player meant
 machine**, leaving the pool stood idle beside the order it was hired to work.
 A base that only runs while you stand in it is not a base.
 
-Three things hold the new rule. `park_idle_staff` runs **before** the
+Three things hold the new rule. `drift_idle_staff` runs **before** the
 assignment, which is now load-bearing rather than incidental: it is what
 guarantees the tile a program is standing on when it *gets* a post is a real
 one. The step-5 loop **peeks** the idle pool (`idle.last()`) and only pops
@@ -3841,6 +3841,77 @@ keeps fifty tests measuring what they always measured.
 `stand_player_at_post` is still the before — but only inside that fixture.
 Nothing in the shipped game reads the player's tile to decide where a
 program starts walking.
+
+### An idle program wanders the base, and laid floor is the leash
+
+Staff with nothing to do used to be walked around a fixed Chebyshev ring at
+`IDLE_STAFF_RING_TILES` from the Home, one tile every `IDLE_STAFF_STEP_TICKS`
+— `park_tile`, a pure function of `(home, staff index, tick)`. It read as a
+picket line. What it looks like now is `wander_step`: one of the eight
+neighbours of the tile the body is **standing on**, or a hold, on the same
+cadence.
+
+**Relative rather than absolute is the whole of the difference.** A program
+the scheduler has just freed strolls away from the post it left, instead of
+snapping onto a tile computed from its index — which is also why the drift
+survives a save with no field of its own, since `Position` is already
+written and the walk resumes from wherever the body was left.
+
+**It is still a pure function of its arguments and still draws no RNG.**
+That is not fastidiousness. `CLAUDE.md` records three separate occasions
+where a shifted stream silently rewrote a seeded test in an unrelated file,
+and world generation is barred from `GameRng` outright for the same reason;
+a milling draw taken every tick for every idle program would shift it harder
+than anything else in the game. `idle_staff_take_no_rng_draws` predates the
+drift and still holds it.
+
+**The fold is a byte at a time**, following `sectors::sector_seed`, and that
+is load-bearing rather than stylistic: `derive::index` reads bit 63, one
+XOR-then-multiply round carries a difference only about the prime's own width
+upward, and a step counter differs from its predecessor in its lowest bits
+alone. Folded as a single word it never reaches the bit that decides, and
+every program drifts the same direction forever.
+`a_wanderer_uses_every_direction_and_sometimes_holds_still` is what says it
+reached — nine outcomes over 900 beats, where a fold that reached nothing
+shows one. The ninth outcome is the hold, and it is there because a body that
+never pauses reads as unnatural as one that never moves.
+
+**`park_tile` survives as `entry_tile`, and it has a job the drift cannot
+do.** A tamed program's `Position` is the surface tile it was beaten on; it
+has no base-space cell until something gives it one, and this pass is still
+what does — the property `post_worker` stopped writing a `Position` on the
+strength of. So a body not standing on laid floor takes the ring, arrives,
+and drifts from there. In an established base that fires once per program
+and never again.
+
+**Laid floor, not `walkable`, and that is the leash.** `base_entropy_system`
+reverts a mined `Open` cell nobody is standing on, and a body holds only the
+cell under its own feet — so a wanderer that strolled down a fresh corridor
+would be sealed in behind it, and `hauling::post_field` gates its own start
+tile on `walkable`, which leaves that body unpostable and unreachable for
+the rest of the run. `Floor` never reverts. Confining the drift to it closes
+that by construction, which is why there is no roam radius to tune: the
+question "how far may it go" is answered by what the player has paved.
+`a_drifting_program_stays_on_laid_floor_and_off_the_structures` carves an
+unfloored corridor off the pocket's edge on purpose — without one, `walkable`
+and `is_floor` answer the same on every tile the fixture owns and the test
+passes against either rule.
+
+**Two rejections the ring got for free.** It never put two programs on one
+tile because their ring offsets were spread by index; a drift has to be told,
+and the tiles the idle pool holds are collected at the top of the beat and
+grown with every tile written during it. Nothing is ever removed from that
+set — a vacated tile stays spoken for until the next beat, which costs a body
+one step it will be offered again and buys independence from the order the
+pool is walked in. And the party's own cell is refused, read off `Locale` and
+never the player's `Position`, which is pinned to the anchor tile out on the
+zone surface: a program standing on the party hides the `@`.
+
+**The cost, stated rather than tuned away.** A body can now be idling at the
+far side of the floor from the machine the scheduler next wants it at, where
+the ring kept the whole pool within three tiles of Home. That is real, it is
+small, and bodies walking in from wherever they were is the point of the
+feature. If it ever reads badly the fix is a leash radius, not the ring.
 
 ### `task_progress_system` and `assembler_system` both write `Task::progress`, for disjoint targets, and are `.chain()`ed anyway
 
@@ -5778,8 +5849,8 @@ It matters at both ends. `note_strandings` writes the **worker's own
 `Position`**, which for a posted program is base space — not its post, since
 a stranded body is stranded precisely because it is *not* at its post, "left
 stranded here" is a claim about where it is standing, and a memory keyed to
-the machine's tile could never be read by the parking hook it exists for
-(`park_idle_staff` already refuses a tile a `Structure` stands on). And the
+the machine's tile could never be read by the drift hook it exists for
+(`drift_idle_staff` already refuses a tile a `Structure` stands on). And the
 row renders it as base coordinates rather than as a map location.
 
 A *surface* variant, when content asks for one, is **zone-local** and has to
@@ -5865,12 +5936,13 @@ giving the page a scroll first, not editing the number. Caught in the
 building — at 12 entries over two rows each the page ran 29 rows into a
 23-row popup, which is why the blurb is on the row rather than under it.
 
-### The first hook is `park_idle_staff`, and it is a third rejection rather than a score
+### The first hook is `drift_idle_staff`, and it is a rejection rather than a score
 
-`park_idle_staff` already declines two candidate tiles — one a `Structure`
-stands on, and one `BaseGrid` calls unwalkable — and leaves the body exactly
-where it was standing when it declines. The memory hook is a third rejection
-of that shape:
+`drift_idle_staff` already declines a candidate tile on four grounds — one a
+`Structure` stands on, one that is not laid floor, the party's own cell, and
+one another idle body holds — and leaves the body exactly where it was
+standing when it declines. The memory hook is a fifth rejection of that
+shape:
 
 ```
 opinion_of(worker, BaseTile { x, y }) < MEMORY_AVOIDANCE_THRESHOLD
@@ -5878,10 +5950,10 @@ opinion_of(worker, BaseTile { x, y }) < MEMORY_AVOIDANCE_THRESHOLD
 
 So it opens no new failure mode and needs no fallback. A rejected candidate
 costs the program one beat of standing still, which is already that
-function's documented behaviour, and the ring offers a different tile on the
-next step of `IDLE_STAFF_STEP_TICKS`.
+function's documented behaviour, and the next beat of `IDLE_STAFF_STEP_TICKS`
+offers a different neighbour.
 
-**It is `park_idle_staff` and not `schedule_base_labour`, deliberately.** The
+**It is `drift_idle_staff` and not `schedule_base_labour`, deliberately.** The
 scheduler is documented as deciding the whole assignment by priority and then
 diffing it, with no sort and no score anywhere in it. A memory term there
 *is* a score, and it would also put a memory in the path of the anti-thrash
@@ -5893,16 +5965,16 @@ bolted onto a diff.
 **`opinion_of` and not `morale`.** The question is what the program holds
 against *one corner of the base*; the sum over everything would keep a
 program that has had a bad run off every tile at once, which reads as the
-parking ring being broken rather than as a grudge. The comparison is signed
+drift being broken rather than as a grudge. The comparison is signed
 rather than a magnitude, so a tile a program feels nothing about and a tile
 it feels well about both pass — a fondness must never be able to trigger an
 avoidance.
 
 **The loop closes on itself, which is what makes the hook more than
-decoration.** A body is parked on a ring tile, posted to a machine, finds no
-route, and `haul_step_system` marks it `Stranded` where it is standing — on
-the park tile. `note_strandings` writes that tile, and the next time the
-program is free the ring is refused that one candidate. That is the whole
+decoration.** A body is standing in a corner of the base, posted to a
+machine, finds no route, and `haul_step_system` marks it `Stranded` where it
+is standing. `note_strandings` writes that tile, and the next time the
+program drifts back into that corner the tile is refused. That is the whole
 mechanism: the corner it was left standing in is the corner it will not take.
 
 **`MEMORY_AVOIDANCE_THRESHOLD` is not pinned to `stranded_at`'s valence**,
@@ -5913,16 +5985,28 @@ reach it without editing the constant. At the shipped def — valence -6.0,
 half-life 3000 — one stranding keeps a program off that tile for exactly one
 half-life.
 
-**The test that nearly shipped hollow.** `a_faded_grudge_stops_keeping_a_program_away`
-advances the clock to fade the memory and then asserts the body parks on the
-tile anyway. Advancing the clock also **moves the ring**, so the first
-version of it was measuring a tile the grudge was never about — a second
-copy of `a_grudge_against_another_tile_does_not_move_a_program`, green
-against a threshold replaced by a bare `< 0.0`. It advances by a whole number
-of ring periods now (`IDLE_STAFF_STEP_TICKS * 8 * IDLE_STAFF_RING_TILES`) and
-asserts the candidate has not moved as a precondition, so a retuned ring
-fails the test rather than quietly emptying it. It was the mutation pass that
-found this, not the suite.
+**The test that nearly shipped hollow, and how the drift changed its
+shape.** `a_faded_grudge_stops_keeping_a_program_away` advances the clock to
+fade the memory and then asserts the body takes the tile anyway. Under the
+ring, advancing the clock also **moved the ring**, so the first version was
+measuring a tile the grudge was never about — a second copy of
+`a_grudge_against_another_tile_does_not_move_a_program`, green against a
+threshold replaced by a bare `< 0.0`. The ring answered that by advancing a
+whole number of ring periods. A drift has no period to advance by, so the
+tile is chosen at the **far end** of the fade and the grudge implanted
+against it before the clock moves — and the clock is *wound* rather than
+ticked, so the body does not move out from under the answer and
+`wander_step` is asked from one tile at both ends. The precondition is
+asserted out loud either way. It was the mutation pass that found this
+originally, not the suite, and the mutation still fails the test.
+
+**The whole fixture stands its bodies clear of the Home and well inside the
+starting pocket**, which is a second way this family can hollow out. Parked
+where `spawn_tamed` drops one, half the tiles a drift offers fall outside
+the pocket and are refused by the *floor* rule — so the body holds still,
+the assertion passes, and the grudge was never consulted. Eight floor
+neighbours and no structure among them is what leaves the memory as the only
+thing that can refuse.
 
 ### The second hook is morale, and it is one capped addend in one formula
 
@@ -5973,7 +6057,7 @@ expression.
 Never scaled by level, zone or depth, for `effective_mitigation`'s reason: a
 term that grows with the player approaches its cap and stops meaning anything.
 
-**`morale` here and `opinion_of` at the parking hook**, which is the mirror of
+**`morale` here and `opinion_of` at the drift hook**, which is the mirror of
 that seam's choice and deliberate at both ends. Parking asks about one corner
 of the base, so the sum over everything would keep a program that has had a
 bad run off *every* tile at once. This asks about the body, so the restriction

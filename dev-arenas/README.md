@@ -175,8 +175,11 @@ direction, so every number measured against it is soft in that direction too.
 This is a second floor alongside the Specials gap above, and unlike that one
 it is avoidable: gear the party to what the run you are modelling would have.
 
-A companion's level tops out at `CREATURE_MAX_LEVEL`; asking for more gets
-you the ceiling, because that is all play can reach.
+A companion's level tops out at `tuning::arena_level_ceiling()` — 12; asking
+for more gets you that ceiling. It is deliberately the arena's *own* number
+and not `Game::level_cap`, which is the zone-derived cap play runs under: a
+scenario authors its own composition and staging it against the zone would
+silently clamp every shipped file that asks for level 12.
 
 ### `opponents`
 

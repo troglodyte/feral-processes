@@ -524,7 +524,7 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
     }
 
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let species = game.species_defs().into_iter().next().unwrap();
     let wild = game

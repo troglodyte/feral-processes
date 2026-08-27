@@ -97,6 +97,43 @@ impl Game {
             })
     }
 
+    /// Drains banked overflow XP into Perk Points, returning how many were
+    /// minted.
+    ///
+    /// XP earned at the level cap accumulates in `Experience::xp` (see
+    /// `progression::add_xp`) instead of being discarded. This is the only
+    /// thing that spends it, and only for the player — a companion has no
+    /// `Perks` at all, so its overflow just sits there, which is the
+    /// behaviour every creature had before the cap existed.
+    ///
+    /// The price rises with perks already held, `OVERFLOW_XP_STEP`'s reason:
+    /// flat, this is an unbounded linear power source. It re-reads the price
+    /// after every point, so one call cannot mint a run's worth at the
+    /// opening rate.
+    pub(crate) fn convert_overflow_xp(&mut self) -> u32 {
+        let player = self.player_entity();
+        let mut minted = 0;
+        loop {
+            let held = match self.world.get::<Perks>(player) {
+                Some(perks) => perks.unlocked.len() as u32,
+                None => return minted,
+            };
+            let price =
+                crate::tuning::OVERFLOW_XP_BASE + crate::tuning::OVERFLOW_XP_STEP * (held + minted);
+            let Some(mut exp) = self.world.get_mut::<Experience>(player) else {
+                return minted;
+            };
+            if exp.xp < price {
+                return minted;
+            }
+            exp.xp -= price;
+            minted += 1;
+            if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
+                perks.points += 1;
+            }
+        }
+    }
+
     /// Spends Perk Points to buy another level of `perk` (see
     /// `perks::Perk`). Perks are repeatable — there's no cap on levels,
     /// only on how many Perk Points you've earned.

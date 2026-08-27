@@ -146,7 +146,7 @@ fn game_with_a_sweeper() -> (Game, Entity) {
     // slots, which is exactly what all three declared abilities need to land.
     game.world.get_mut::<Experience>(sweeper).unwrap().level = 6;
     game.install_innate_routines(sweeper);
-    game.add_companion(sweeper).unwrap();
+    enlist(&mut game, sweeper);
     (game, sweeper)
 }
 
@@ -269,7 +269,7 @@ fn a_whole_party_heal_raises_every_living_member_and_skips_the_downed() {
     let (mut game, sweeper) = game_with_a_sweeper();
     let player = game.player_entity();
     let downed = spawn_tamed(&mut game, 20, 5);
-    game.add_companion(downed).unwrap();
+    enlist(&mut game, downed);
     battle_with_a_pack_of(&mut game, 1, 200);
 
     for (entity, hp) in [(player, 10), (sweeper, 10), (downed, 0)] {

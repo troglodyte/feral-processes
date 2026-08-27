@@ -1,11 +1,11 @@
-//! Spending the levels a Kernel Ring bought.
+//! Spending levels on a tree a Kernel Ring opened.
 //!
-//! One point per level above `CREATURE_MAX_LEVEL`, spent on one of two choices
-//! in the next untaken tier of this companion's class tree
-//! (`assets/talents/`). **Points are derived, never stored**: `earned` is the
-//! level minus the base cap and `spent` is the length of `components::Talents`,
-//! so nothing here can desync from the level or from the list the way a stored
-//! count would.
+//! One point per level above `TALENT_START_LEVEL`, bounded by the tiers this
+//! program's rings have opened, spent on one of two choices in the next
+//! untaken tier of its class tree (`assets/talents/`). **Points are derived,
+//! never stored**: `earned` is that `min` and `spent` is the length of
+//! `components::Talents`, so nothing here can desync from the level, the ring
+//! count or the list the way a stored count would.
 
 use crate::talents::{TalentDb, TalentId, TalentNode, TalentStat, TalentTree};
 use crate::views::{TalentOption, TalentPoints};
@@ -28,8 +28,20 @@ impl Game {
             .get::<Experience>(entity)
             .map(|e| e.level)
             .unwrap_or(1);
+        // **Both gates, and the ring one is what a ring buys now.** It used
+        // to buy levels, and `earned` was the levels alone; everyone shares
+        // one zone-derived ceiling since, so a ring that bought levels would
+        // buy nothing at all. It opens tiers instead: `LEVELS_PER_RING` of
+        // them each, which keeps three rings worth exactly the tree depth
+        // `assets/talents/` is censused against.
+        //
+        // `saturating_sub` because a companion below the talent start level
+        // is the common case, not an edge one.
+        let rings = self.world.get::<KernelRing>(entity).map_or(0, |r| r.0);
         TalentPoints {
-            earned: level.saturating_sub(crate::tuning::CREATURE_MAX_LEVEL),
+            earned: level
+                .saturating_sub(crate::tuning::TALENT_START_LEVEL)
+                .min(rings * crate::tuning::LEVELS_PER_RING),
             spent: self
                 .world
                 .get::<Talents>(entity)
@@ -102,7 +114,7 @@ impl Game {
             return Err(format!(
                 "{} has no talent points to spend — they come from levels earned past {}.",
                 self.entity_label(entity),
-                crate::tuning::CREATURE_MAX_LEVEL
+                crate::tuning::TALENT_START_LEVEL
             ));
         }
         let next = self.next_talent_tier(entity);

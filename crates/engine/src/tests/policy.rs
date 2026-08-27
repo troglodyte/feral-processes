@@ -80,7 +80,7 @@ fn battle_against_scrapper(seed: u32, companions: &[(i32, i32)]) -> (Game, Entit
         .iter()
         .map(|(hp, max_hp)| {
             let e = spawn_tamed(&mut game, *max_hp, 3);
-            game.add_companion(e).unwrap();
+            enlist(&mut game, e);
             game.world.get_mut::<Stats>(e).unwrap().hp = *hp;
             e
         })
@@ -353,7 +353,7 @@ fn a_modded_species_with_more_moves_still_scores() {
     let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 40, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let pos = *game.world.get::<Position>(player).unwrap();
     let wild = spawn_wild_without_routine(&mut game, "sevenfold", pos.x, pos.y);
     insert_battle(&mut game, player, vec![wild]);
@@ -410,7 +410,7 @@ fn a_modded_species_with_one_move_scores() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &dir).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 40, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     // DEF 0 against ATK 0 is the other zero denominator, and the two have
     // to be exercised together: `0 / 0` is the only combination that
     // produces a NaN rather than an infinity the clamp absorbs.

@@ -5,7 +5,7 @@ use crate::abilities::AffinityKind;
 use crate::tuning::{
     ATTACKER_BONUS_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL, DECOMPILER_SKILL_PER_LEVEL,
     DEFENDER_BONUS_PER_LEVEL, DIFFICULTY_EVEN_MAX, KEEN_SCAVENGER_BONUS_PER_LEVEL,
-    LEAN_COMPILER_DISCOUNT_PER_LEVEL,
+    LEAN_COMPILER_DISCOUNT_PER_LEVEL, OVERFLOW_XP_BASE, OVERFLOW_XP_STEP,
 };
 use crate::*;
 
@@ -631,5 +631,212 @@ fn keen_scavenger_reaches_the_roll_a_cronjob_worker_runs() {
     assert_eq!(
         fizzles, 0,
         "the perk has to reach the worker's roll too: {log:?}"
+    );
+}
+
+// ---- Overflow XP ------------------------------------------------------
+//
+// XP earned at the level cap used to be discarded at `add_xp`'s first line.
+// It accumulates in `Experience::xp` — already saved, already idle at the
+// cap — and drains into Perk Points at a price that rises with the perks
+// already held.
+
+/// The accumulator half. Nothing is converted here; the XP simply stops
+/// being thrown away.
+#[test]
+fn xp_earned_at_the_cap_accumulates_instead_of_being_discarded() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let player = game.player_entity();
+    let cap = game.level_cap();
+    set_level(&mut game, player, cap);
+    let banked = game.world.get::<Experience>(player).unwrap().xp;
+
+    game.award_player_xp(player, 500);
+
+    assert!(
+        game.world.get::<Experience>(player).unwrap().xp > banked,
+        "XP earned at the cap must be kept, not dropped on the floor"
+    );
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().level,
+        cap,
+        "and it must still not buy a level"
+    );
+}
+
+/// The conversion half.
+#[test]
+fn overflow_xp_converts_into_perk_points() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let player = game.player_entity();
+    let cap = game.level_cap();
+    set_level(&mut game, player, cap);
+    game.world.get_mut::<Perks>(player).unwrap().points = 0;
+    game.world.get_mut::<Experience>(player).unwrap().xp = 0;
+
+    game.award_player_xp(player, OVERFLOW_XP_BASE * 3);
+
+    assert!(
+        game.world.get::<Perks>(player).unwrap().points > 0,
+        "overflow at the cap has to buy something or the cap is just a wall"
+    );
+}
+
+/// **The price rises with the perks already held**, which is what makes the
+/// exchange sublinear rather than an unbounded flat-rate power source.
+#[test]
+fn the_overflow_price_rises_with_perks_held() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let player = game.player_entity();
+    let cap = game.level_cap();
+    set_level(&mut game, player, cap);
+
+    let paid_when_poor = {
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+        game.world.get_mut::<Experience>(player).unwrap().xp = OVERFLOW_XP_BASE * 20;
+        game.convert_overflow_xp()
+    };
+
+    // Same bank, but with a stack of perks already bought.
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::Attacker; 8];
+    let paid_when_rich = {
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+        game.world.get_mut::<Experience>(player).unwrap().xp = OVERFLOW_XP_BASE * 20;
+        game.convert_overflow_xp()
+    };
+
+    assert!(
+        paid_when_rich < paid_when_poor,
+        "the same XP must buy fewer points once perks are held: \
+         {paid_when_rich} against {paid_when_poor}"
+    );
+}
+
+/// **Points earned grow sublinearly in XP spent**, asserted as the property
+/// rather than against a magic number. A linear cost makes points grow like
+/// the square root of XP, which loses the race against a linear zone curve
+/// forever — and that race is the whole feature.
+#[test]
+fn points_earned_are_sublinear_in_xp_spent() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let player = game.player_entity();
+    let cap = game.level_cap();
+    set_level(&mut game, player, cap);
+
+    // Feed the same bank in one go against feeding it in halves, with the
+    // perks bought along the way — twice the XP must buy strictly less than
+    // twice the points.
+    let earn = |game: &mut Game, xp: u32| -> u32 {
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+        game.world
+            .get_mut::<Perks>(player)
+            .unwrap()
+            .unlocked
+            .clear();
+        game.world.get_mut::<Experience>(player).unwrap().xp = xp;
+        let mut total = 0;
+        // Each point minted is a perk level the player can afford, so the
+        // price walks up as they spend it — mimic that by banking the perks.
+        loop {
+            let minted = game.convert_overflow_xp();
+            if minted == 0 {
+                break;
+            }
+            total += minted;
+            let mut perks = game.world.get_mut::<Perks>(player).unwrap();
+            for _ in 0..minted {
+                perks.unlocked.push(Perk::Attacker);
+            }
+        }
+        total
+    };
+
+    let single = earn(&mut game, OVERFLOW_XP_BASE * 40);
+    let double = earn(&mut game, OVERFLOW_XP_BASE * 80);
+    assert!(
+        double < single * 2,
+        "twice the XP must buy less than twice the points: {double} against {single}"
+    );
+    assert!(double > single, "but it must still buy more");
+}
+
+/// Unconverted overflow becomes real levels the moment a breach lifts the
+/// cap — banking and taxing are the same accumulator, which is why this
+/// needed no new save field.
+///
+/// The overflow is **earned**, not hand-written into `Experience::xp`: with
+/// the pile written in by the fixture this test passed with the banking
+/// removed entirely, because the fixture was supplying what the code was
+/// meant to. A deep stack of perks is what keeps it unconverted — the price
+/// of the next point is then well past what the award pays, which is the
+/// sublinear price doing its job.
+#[test]
+fn unconverted_overflow_becomes_levels_when_a_breach_lifts_the_cap() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let player = game.player_entity();
+    let cap = game.level_cap();
+    set_level(&mut game, player, cap);
+    game.world.get_mut::<Experience>(player).unwrap().xp = 0;
+    // Enough perks held that a point costs more than the award below pays,
+    // so every bit of it stays banked.
+    game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::Attacker; 200];
+    let award = 20_000;
+    assert!(
+        award < OVERFLOW_XP_BASE + OVERFLOW_XP_STEP * 200,
+        "the fixture must not be able to afford a point, or nothing stays banked"
+    );
+
+    game.award_player_xp(player, award);
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().level,
+        cap,
+        "still capped, so none of that bought a level"
+    );
+
+    game.world.insert_resource(ZoneLevel(4));
+    game.award_player_xp(player, 1);
+
+    assert!(
+        game.world.get::<Experience>(player).unwrap().level > cap,
+        "XP banked at the old cap must spend itself the moment the cap lifts"
+    );
+}
+
+/// A companion has no Perk Points, so its overflow is simply not spent —
+/// the behaviour every creature has today. Pinned so it is not read as an
+/// oversight later.
+#[test]
+fn a_capped_companions_overflow_is_not_spent_and_does_not_panic() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+    let cap = game.level_cap();
+    set_level(&mut game, companion, cap);
+    let player_points = game
+        .world
+        .get::<Perks>(game.player_entity())
+        .unwrap()
+        .points;
+
+    game.award_party_xp(100_000);
+
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        cap,
+        "a capped companion stays capped"
+    );
+    assert_eq!(
+        game.world
+            .get::<Perks>(game.player_entity())
+            .unwrap()
+            .points,
+        player_points,
+        "and its overflow does not leak into the player's Perk Points"
     );
 }

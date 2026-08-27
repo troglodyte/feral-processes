@@ -411,8 +411,9 @@ fn set_tick(game: &mut Game, tick: u64) {
 /// Runs one beat of the drift with the gate already applied.
 fn drift(game: &mut Game, staff: &[Entity]) {
     let amenities = game.amenities();
+    let bays = game.repair_bays();
     game.update_off_shift(staff, &amenities);
-    game.drift_idle_staff_for_test(staff, &amenities);
+    game.drift_idle_staff_for_test(staff, &amenities, &bays);
 }
 
 /// An off-shift program walks to its amenity rather than wandering.

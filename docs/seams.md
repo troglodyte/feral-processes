@@ -66,6 +66,9 @@ each site settled on:
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
 | `game/trade.rs` `buy_item` | `require_base` | same |
+| `game/party.rs` `add_companion` | `require_base` | who is in your party is decided at home — a wipe in the Stack is a walk out alone, not a swap |
+| `game/party.rs` `stand_down_companion` | `require_base` | the other half of the same decision, and the reason it exists at all (see below) |
+| `game/party.rs` `remove_companion` | *none* | the **mover**, not the verb: `wield_program` calls it internally, so a guard here would refuse wielding in the field |
 | `game/turn.rs` `rest` | *none* | takes no guard at all now — it **reads** the locale to price itself, see below |
 
 The test for whether a reader needs a guard at all is unchanged — not
@@ -90,6 +93,29 @@ The final review caught it: the system now measures against
 `Game::base_pos` while in base space, the same dispatch `Game::scan_center`
 makes, and refuses only the Stack — no supply underground stays a rule
 of its own, not a side effect of the surface-only guard.
+
+**The party rows are the first pair where the guarded verb and the mover
+are different functions, and that split is load-bearing.**
+`Game::remove_companion` returns `()` and is not only a player verb —
+`wield_program` calls it to stand a member down before taking the program
+as a weapon. A `require_base` inside it would refuse **wielding in the
+field** as a silent side effect, through a function the player never
+invoked. So the mover stays guard-free by construction and
+`stand_down_companion` wraps it: `take_from_adjacent` / `give_to_adjacent`'s
+exact shape one axis along, where the caller owns the refusal.
+`a_downed_program_cannot_be_put_back_in_the_party` and
+`wielding_a_program_still_works_out_in_the_field` are the two tests that
+hold the halves apart.
+
+**The screen half is deliberately *not* mirrored.** `app/group_menu.rs`'s
+"Companions" row stays `Locality::Anywhere` even though both verbs behind
+it are `require_base`, because that row is the whole roster screen — gear,
+memories, the manifest, a rename — and only the join and the stand-down
+are decided at home. Hidden off-base it would take reading your own
+programs away four frames down along with the one thing that needed
+guarding. This is the one row where the locality table and the guard list
+above are allowed to disagree, and the refusal on the status line is what
+carries the rule instead.
 
 **`rest` was the contested row twice over, and has now left the table.** It
 first kept `require_surface`, on the spec's authority
@@ -858,7 +884,7 @@ denominated in entity level carries `K = 2` (`HP_PER_LEVEL` 24,
 `DECOMPILER_SKILL_PER_LEVEL` 2, both `ABILITY_*_SCALE_PER_LEVEL` doubled)
 and every constant denominated in *levels per* something carries its
 reciprocal (`PLAYER_ROUTINE_SLOT_PER_LEVEL` 5,
-`COMPANION_ROUTINE_SLOT_PER_LEVEL` 1, `CREATURE_MAX_LEVEL` 6,
+`COMPANION_ROUTINE_SLOT_PER_LEVEL` 1, `TALENT_START_LEVEL` 6,
 `WORK_XP_LEVEL_CAP` 5, `ABILITY_SCALE_LEVEL_CAP` 20).
 `XP_PER_LEVEL_STEP` carries `K^2` — 80 — and the square is the whole
 argument: cumulative XP to a level is `(STEP / 2) * L^2`, so halving the
@@ -882,39 +908,59 @@ it: `PLAYER_BASE_STATS` is an offset, not a rate.
 
 **The ring buys room; the fights buy the points.** A Privilege Ring — dropped
 by a lair guardian and by nothing else — is spent at the Develop screen to open
-a Kernel Ring on **one** companion, and `Game::companion_level_cap` is the one
-expression of what that is worth: `CREATURE_MAX_LEVEL + ring * LEVELS_PER_RING`.
-`open_kernel_ring` grants no stats, no level and no XP, which is what keeps the
-feature inside "progression is earned by fighting": the ceiling moves and the
-party still has to go and earn the levels under it.
+a Kernel Ring on **one** companion. `open_kernel_ring` grants no stats, no
+level and no XP, which is what keeps the feature inside "progression is earned
+by fighting": the room appears and the party still has to go and earn what
+fills it.
 
-Two call sites deliberately do **not** go through it, and both look like bugs
-from the outside. `systems.rs`'s cronjob payout keeps passing
-`Some(CREATURE_MAX_LEVEL)`; its own `WORK_XP_LEVEL_CAP` guard already stops a
-posted worker at 5, so leaving it alone is the whole of how a developed program
-cannot be ground up at a Mining Node — pinned by
-`a_ringed_cronjob_worker_still_stops_at_the_work_cap`, which drives real
-`task_progress_system` cycles rather than calling `add_xp`, because the guard
-under test is in `systems.rs` and calling `add_xp` would test nothing. The two
-arena sites (`arena::set_level` and app-core's level stepper) take
-`tuning::absolute_companion_level_cap()` instead, because an arena scenario
-authors its own composition and has no `KernelRing` to read — and `Ability`,
-`Affinity` and `RoutineSlot` talents are invisible to `balance_sim`, so the
-arena is the only instrument that can see them and one clamped at 6 could not
-stage the fight the trees exist to change.
+**What a ring buys changed on 2026-08-27 and the sentence above survived it
+intact**, which is the useful thing about it. It used to buy *levels*:
+`Game::companion_level_cap` was `CREATURE_MAX_LEVEL + ring * LEVELS_PER_RING`,
+so a companion's ceiling was personal and a ring raised it. `Game::level_cap`
+is the ceiling now — one number for the player and every companion, derived
+from the zone — so a ring that bought levels would buy nothing at all. It buys
+**tiers** instead: `Game::talent_points`' `earned` is
+`min(level - TALENT_START_LEVEL, rings * LEVELS_PER_RING)`, both gates live,
+and three rings are still worth exactly the tree depth `assets/talents/` is
+censused against. Migration was a non-event by arithmetic rather than by a
+migration step — a three-ring level-12 companion has 6 points under either
+rule — which is why this cost no `SAVE_FORMAT_VERSION` bump and no save field.
 
-That clamp move has a consequence worth knowing: five shipped `dev-arenas/`
-scenarios author `party: [(… level: 12 …)]` and were silently getting level 6
-after `HP_PER_LEVEL`'s `K = 2` halved the cap. They now field what they say.
-Old reports from them are not comparable to new ones — see
-`docs/measurements/2026-08-19-developed-companion-worth.md`, which also carries
-the figure that decided the sale question: every ring open is 1.95x a
-companion's power at the base cap, and a fully spent generic tree is 2.12x.
+The rename that went with it is the part to read before touching any of this.
+`CREATURE_MAX_LEVEL` stopped being a cap and became `TALENT_START_LEVEL`, the
+level talents begin at; `absolute_companion_level_cap()` stopped being the live
+ceiling and became `arena_level_ceiling()`, the arena's own. **Neither would
+have failed to compile under its old name**, which is exactly the trap the
+save-format rule warns about one level along: a constant whose meaning changes
+under a name it keeps misleads every reader after it and nothing catches it.
+
+Two call sites deliberately do **not** take the shared cap, and both look like
+bugs from the outside. `systems.rs`'s cronjob payout passes the zone cap like
+everything else but keeps its own `WORK_XP_LEVEL_CAP` guard, which stops a
+posted worker at 5 — that guard, not the cap, is the whole of how a developed
+program cannot be ground up at a Mining Node, and unifying the two deletes the
+property. It is pinned by `a_ringed_cronjob_worker_still_stops_at_the_work_cap`,
+which drives real `task_progress_system` cycles rather than calling `add_xp`,
+because the guard under test is in `systems.rs`. The two arena sites
+(`arena::set_level` and app-core's level stepper) take `arena_level_ceiling()`,
+because an arena scenario authors its own composition and has no `KernelRing`
+to read — and `Ability`, `Affinity` and `RoutineSlot` talents are invisible to
+`balance_sim`, so the arena is the only instrument that can see them.
+
+That second rename is load-bearing rather than cosmetic: five shipped
+`dev-arenas/` scenarios author `party: [(… level: 12 …)]`, and staging them
+against the zone cap would silently clamp every one — the same failure this
+repo already had once, when `HP_PER_LEVEL`'s `K = 2` halved the cap under them
+and old reports stopped being comparable with nothing saying so.
+`an_arena_scenario_still_stages_a_level_twelve_companion` is what refuses it
+now, and pointing `set_level` at `Game::level_cap` is the mutation that proves
+the test reads.
 
 ### Talent points are derived, never stored
 
 **Talent points are derived, never stored.** `Game::talent_points` reads
-`earned` off the level (`level - CREATURE_MAX_LEVEL`) and `spent` off the
+`earned` off the level and the rings
+(`min(level - TALENT_START_LEVEL, rings * LEVELS_PER_RING)`) and `spent` off the
 length of `components::Talents`. There is no count on the component and none in
 the save, and that is not tidiness: a stored count can desync from the level
 *and* from the list, and both desyncs are invisible until a player finds they
@@ -6945,3 +6991,204 @@ an amenity nothing — `per_tick` is not scaled by it — so a priced upgrade
 row would change no number the player could find. The two censuses that
 would otherwise have forced one (`every_upgrade_path_asks_for_a_zone_material`
 and its count) are satisfied by there being no path at all.
+
+### A Forgiving death benches a program, and `bench_or_dissolve` is the one door
+
+Two sites destroy an owned program when it dies: `end_battle`'s dead-party
+loop and the raid defender in `game/base/upkeep.rs`. Before this feature both
+called `dissolve_tamed_program` directly, and the obvious shape for a
+difficulty-dependent death was a `DifficultyMode` check at each of them.
+
+That is the shape `dissolve_tamed_program` itself exists to refuse. Its doc
+comment argues that sale and extraction agree about what destroying a program
+*means* by calling one function, not by a comment claiming they mirror. The
+same argument one level up gives `Game::bench_or_dissolve`: the branch is
+written once, the Permadeath arm is the old call untouched, and a third death
+site added later inherits the behaviour instead of having to remember it.
+
+On the Forgiving arm the program keeps `Tamed`, is detached from play, has its
+HP set to 1 and gains `components::Downed`. **It keeps its roster slot**, which
+is what makes a wipe cost something under Forgiving rather than being free —
+the programs come back, but `pet_capacity` is spent on them while they are down,
+and the two things that free the slot are selling the program or extracting a
+routine from it. `add_companion`'s refusal names both, so a player with a full
+roster, every program benched and no Bay standing has an errand rather than a
+dead end.
+
+`end_battle` is the only legal removal point: `BattleState::planned` indexes
+`Party` positionally and nothing may leave mid-battle. The bench is not an
+exception to that rule and must not become one.
+
+### `RecoveryDef` is `i32`, and the name it could not have is already taken
+
+A Bay's field is `recovery:`, not `repair:`, because `structures::RepairDef`
+already exists and means something else entirely — `Durability` restored to
+*structures* per upgrade tier. Two things called repair in one schema is a
+mod author reading the wrong README section, so the program-facing one took
+the other word.
+
+It is `i32` rather than `PowerRegenDef`'s `f32`, and the type is the point:
+`Stats::hp` is an integer, so this needs only half of that type's clamp —
+negatives floored in `RecoveryDef::rate()`, and no non-finite case to guard at
+all. Anyone "fixing" it back to a float for symmetry with its sibling is
+adding a NaN guard the integer form cannot need.
+
+`radius` is Chebyshev, `power_regen`'s form rather than a circle, and `0` is
+"standing on it" — which is what the shipped Bay authors.
+
+### `run_repair_bays` is a `Game` method, and the scan centre is what differs from `power_regen_system`
+
+`systems::power_regen_system` is the obvious model and was the plan's, but the
+recovery line has to **name the program**, and `Game::creature_label` is the
+one door from an entity to its name — rare tier, custom name and zone tag
+included. Rebuilt from a query's components inside a bevy system it would be a
+second copy of that formula, which is the shape this repo has been bitten by
+four times. `restore_hp` is the other door, the one place HP goes up. So it is
+a `Game` method called from `tick_inner`, `run_dig_crew`'s reason exactly.
+
+**The scan centres on each downed program's own `Position`.** That is the
+whole of what differs from `power_regen_system`, which centres on the party's
+`Locale::Base` coordinates because it serves the *player*. A program is
+wherever it is standing, so the `Locale` early return must not be copied
+across.
+
+The `Downed` query is collected and **sorted by tile** before anything is
+written, `run_build_crew`'s reason: bevy's iteration order is not stable, and
+two programs recovering in a different order between runs would put their log
+lines in a different order. `Bays` is sorted for the same reason one level
+down, so `min_by_key` — which returns the first of several equal minima —
+resolves a tie between two equidistant Bays the same way every run.
+
+The marker comes off and the line is logged **only at full Integrity**,
+`set_machine_status`' rule that entering a state is news and staying in it is
+not. That edge is free here rather than latched: a program already whole
+carries no `Downed` and is not in the query.
+
+### A downed program walks itself, and `Err` holds rather than dropping the marker
+
+`drift_idle_staff` is where a body with an errand of its own walks it, and the
+`Downed` arm sits **above the `OffShift` arm** — recovery outranks an amenity —
+and above the wander, which is what everyone else gets.
+
+It is gated on the body standing on **laid floor**, and that gate is what keeps
+`entry_tile` the one arrival path. A program downed four frames underground
+carries a *surface* tile as its `Position`; the wander's `entry_tile` arm is
+what puts such a body onto the base's ring. Taken above that gate, the `Downed`
+arm would ask for a route from a tile in a different coordinate space every
+beat forever.
+
+`Game::step_to_repair` is `step_off_shift`'s shape and rides the same walk
+(`hauling::step_to_post`) — there is no second one. **What differs is the price
+of a failure.** An off-shift body latches its need and drops `OffShift`,
+because the gate would otherwise run insert → failed step → remove → insert
+every beat forever. Nothing re-inserts `Downed`, so there is no flicker to
+stop — and dropping it would **silently heal a program that could not reach a
+Bay**, which is the one thing this feature must never do. So the caller holds
+on `Err` and leaves the marker alone, and a base with no Bay standing answers
+`NoRoute` at the first line that asks: a benched program lies where it fell,
+because it is on an errand it cannot start rather than idle.
+
+The party's own cell is the one rejection `step_to_post` cannot make for
+itself, and `step_to_repair` makes it by hand: `Locale` is where the party
+stands in base space, while the player's `Position` is pinned to the anchor out
+on the surface.
+
+### `Downed` joins the `on_shift` filter without the `Carrying` escape
+
+The scheduler's filter reads a body as available when it is not `OffShift`
+**or** it is `Carrying`. `Downed` joins it without the second half, and the
+asymmetry is deliberate: the `Carrying` exception exists because freeing a
+loaded body destroys the goods and an off-shift body may legitimately be
+mid-delivery, whereas a body that just died in a fight is going to the Bay
+regardless of what it is holding.
+
+The same asymmetry appears in the diff below. Every other keep rule — never
+free a `Carrying` holder, never free a body clogged at a machine while a Depot
+stands — is a reason to leave someone posted. A downed program is freed
+**unconditionally and ahead of all of them**, because it is not in the pool at
+all: leaving it standing at a machine would post a body the assignment never
+named. `LabourDemand`'s shortfall grows while it is down, which is the same
+readout the off-shift feature already produces.
+
+### One level cap over the whole party, derived from the zone
+
+**`Game::level_cap` is the only ceiling in the game**, and it takes no entity
+on purpose: the player and every companion stop at the same number, and that
+number is `max(ZONE_LEVEL_CAP_FLOOR, 1 + ZONE_LEVEL_CAP_STEP * (zone - 1))`.
+Before it the player had no ceiling at all (`add_xp` took `None`) and a
+companion had a personal one a Kernel Ring could raise. One number is what
+makes a companion worth developing — it can now stand level with you.
+
+`tuning::zone_level_cap(zone)` is the formula and `Game::level_cap` is a call
+to it, because a bevy system holding a `ZoneLevel` needs the same answer and a
+second copy of a curve is the shape this repo has been bitten by four times.
+
+**It reads `ZoneLevel` and nothing else.** Depth deliberately does not lift
+it: a deep frame is harder because what lives in it is scaled, not because the
+party is let out of the cap to meet it. That is structural today — the formula
+names one resource — but `depth_does_not_lift_the_zone_level_cap` exists
+because the thing that would quietly break it is a depth term added to "help"
+a party four frames down.
+
+**The constants are fitted, not chosen, and the fit is the whole risk.** The
+cap must sit **at or above** `balance_sim`'s *geared* clear requirement at
+every zone: below it, a fully-equipped party cannot clear the zone at any
+level it is allowed to reach, which is not difficulty but a dead run. It
+should sit **under** the *gear-free* requirement, so a zone cannot be cleared
+by levelling alone. The spec proposed `FLOOR = 6, STEP = 5` — quoted from a
+doc comment — which caps zone 10 at 46 against a geared requirement of 77 and
+would have ended every run at zone 6. `STEP = 11` is the smallest integer
+slope that leaves no measured zone unclearable out to 16.
+
+**No straight line satisfies both bounds, and that is a property of the
+shipped curves.** Both clear curves pass near the origin and then diverge, so
+a slope steep enough for the deep zones overshoots the gear-free requirement
+in the shallow ones: zones 2-6 stay clearable by levelling alone, by at most 6
+levels. `GRIND_TOLERANCE_LEVELS` in `tests/level_up.rs` is that measured
+overshoot and **not** a slack chosen to make the test pass — tightening the
+fit lowers it. The numbers, and the surface retune this invites but does not
+make, are in `docs/measurements/2026-08-27-zone-level-cap.md`.
+
+**The party model had to move before the fit, not after it.** `balance_sim`'s
+`companion_level_for_player_level` fielded companions at `1/sqrt(2)` of the
+player's level, which was right while a companion had a ceiling of its own.
+Fitting `STEP` against that party gives 13; against the party that ships, 11.
+The plan ordered the model change last, with the constants fitted first, and
+that ordering silently sizes the cap for companions six levels down.
+
+### XP at the cap is banked, and only the player spends it
+
+**`add_xp` banks overflow instead of discarding it.** It used to return at its
+first line once `exp.level >= cap`, so XP earned at the ceiling vanished.
+It accumulates in `Experience::xp` — a field already saved and already idle up
+there — and is reported as `LevelGain::overflow`. `add_xp` stays **pure**: it
+reports, the caller spends, which is why it takes the cap as a parameter
+rather than reading the world and is testable without a `Game`.
+
+**Banking and taxing are the same accumulator**, which is the whole reason
+this cost no save field and no `SAVE_FORMAT_VERSION` bump. `Game::convert_
+overflow_xp` drains the pile into Perk Points; whatever is left when a breach
+lifts the cap becomes real levels on the spot, because it never went anywhere.
+
+**Only the player converts, and that is an omission rather than a check.** A
+companion has no `Perks` component at all, so its overflow simply sits — the
+behaviour every creature had before the cap existed.
+`a_capped_companions_overflow_is_not_spent_and_does_not_panic` pins it so it
+is not read as an oversight later.
+
+**The price must rise, and `OVERFLOW_XP_STEP` of 0 is not a safe default.**
+`xp_per_point = OVERFLOW_XP_BASE + OVERFLOW_XP_STEP * perks_held`, re-read
+after every point so one call cannot mint a run's worth at the opening rate.
+Perks are uncapped, repeatable and `Perk::Attacker` writes straight into
+`Stats`, so a flat rate turns overflow into an unbounded linear power source
+and the grind this cap exists to end returns wearing a perk's hat. A linear
+*cost* makes points grow like the square root of XP, which loses the race
+against a linear zone curve forever — and that race is the feature.
+`perks_held` is `unlocked.len()`, derived and never stored.
+
+**The trap is a fixture that supplies what the code should.** The
+breach-release test hand-wrote the banked pile into `Experience::xp` and so
+passed with the banking removed entirely; the mutation check is what caught
+it. It now *earns* the overflow and holds enough perks that the next point
+costs more than the award pays, which is the sublinear price keeping it
+unconverted.

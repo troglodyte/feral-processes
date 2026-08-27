@@ -27,6 +27,7 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::hauling;
 use crate::game::base::offshift;
+use crate::game::base::repair;
 use crate::game::base::stock;
 use crate::items::ItemId;
 use crate::systems::{assembly_recipe, produced_item};
@@ -847,6 +848,10 @@ impl Game {
         // it by then; and the assignment reads the same marker to decide who
         // is on shift at all.
         let amenities = self.amenities();
+        // Built here beside the amenities and for that type's reason: once
+        // per beat rather than once per program, and never cached — a cached
+        // copy would be a new `Resource` and another iteration-order shift.
+        let bays = self.repair_bays();
         self.update_off_shift(&staff, &amenities);
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
@@ -858,7 +863,7 @@ impl Game {
             self.record_labour_demand(wanted.len(), 0);
             return;
         }
-        self.drift_idle_staff(&staff, &amenities);
+        self.drift_idle_staff(&staff, &amenities, &bays);
         // **An off-shift program leaves the posting half of the scheduler,
         // not the drift half.** `drift_idle_staff` above keeps the whole list
         // — it is what walks a body to its amenity — while everything from
@@ -870,9 +875,18 @@ impl Game {
         // holder rule rather than a second one: freeing a loaded body
         // destroys the goods, and `DigErrand::Return` is the precedent for
         // walking a load home before giving the post up.
+        //
+        // **A downed program joins that filter without the `Carrying`
+        // escape**, and the asymmetry is the point rather than an oversight:
+        // the escape exists because freeing a loaded body destroys the
+        // goods, and an off-shift body may legitimately be mid-delivery. A
+        // body that just died in a fight is not carrying anything the base
+        // is waiting on — and if it somehow is, it is going to the Bay
+        // regardless.
         let on_shift: Vec<Entity> = staff
             .iter()
             .copied()
+            .filter(|&w| self.world.get::<components::Downed>(w).is_none())
             .filter(|&w| {
                 self.world.get::<components::OffShift>(w).is_none()
                     || self.world.get::<Carrying>(w).is_some()
@@ -1039,6 +1053,18 @@ impl Game {
             // the post it vacated stays in `remaining` for whoever is left.
             // A loaded one is not here at all — it is on `on_shift` until it
             // delivers.
+            // A downed program is freed unconditionally, on the same terms
+            // as the `on_shift` filter above and ahead of every rule that
+            // could keep it posted: it is not in the pool, so leaving it
+            // standing at a machine would post a body the assignment never
+            // named.
+            if self.world.get::<components::Downed>(worker).is_some() {
+                self.world
+                    .entity_mut(worker)
+                    .remove::<Task>()
+                    .remove::<Carrying>();
+                continue;
+            }
             if self.world.get::<components::OffShift>(worker).is_some()
                 && self.world.get::<Carrying>(worker).is_none()
             {
@@ -1458,10 +1484,18 @@ impl Game {
     /// ground for that beat rather than being nudged somewhere a rule would
     /// have refused, and the next beat offers a different tile.
     ///
-    /// **An off-shift body takes the other fall-through**: it is walking
-    /// somewhere on purpose, so `step_off_shift` gets it first and the
-    /// wander is what everyone else gets.
-    fn drift_idle_staff(&mut self, staff: &[Entity], amenities: &offshift::Amenities) {
+    /// **A body with an errand takes the other fall-through**: it is walking
+    /// somewhere on purpose, so the walk gets it first and the wander is
+    /// what everyone else gets. There are two such errands and **repair
+    /// outranks an amenity** — a downed program is not going back to work
+    /// whatever its reserves say, so a coherent order between the two is
+    /// the Bay first.
+    fn drift_idle_staff(
+        &mut self,
+        staff: &[Entity],
+        amenities: &offshift::Amenities,
+        bays: &repair::Bays,
+    ) {
         let Some(home) = self.home_position() else {
             // No Home means no base to wander, and no origin for the
             // arrival ring to be laid out around either.
@@ -1491,6 +1525,30 @@ impl Game {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
             }
+            // **The Bay first, and only once the body has a cell in this
+            // space to walk from.** A program beaten on the surface — or
+            // downed four frames underground — carries that surface tile as
+            // its `Position`, and the wander's `entry_tile` arm below is
+            // what puts such a body on the ring. Gating this arm on laid
+            // floor is what keeps that the *one* arrival path: taken above
+            // it, a program downed in the Stack would ask for a route from
+            // a tile in a different coordinate space every beat forever.
+            //
+            // **The result is deliberately dropped.** On `Err` it holds
+            // where it stands and **keeps `Downed`** — see
+            // `Game::step_to_repair` for why that is not `step_off_shift`'s
+            // move.
+            let on_floor = self
+                .world
+                .get::<Position>(worker)
+                .is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
+            if on_floor && self.world.get::<components::Downed>(worker).is_some() {
+                let _ = self.step_to_repair(worker, bays);
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
             // A body with an errand walks it. `Err` is the one place a route
             // is ever judged: it gives the post up and latches the need, so
             // the gate does not hand it straight back on the next beat.
@@ -1504,8 +1562,7 @@ impl Game {
                 continue;
             }
             let here = self.world.get::<Position>(worker).copied();
-            let inside = here.is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
-            let tile = match here.filter(|_| inside) {
+            let tile = match here.filter(|_| on_floor) {
                 Some(p) => match wander_step(p, index, step) {
                     Some(tile) => tile,
                     // The beat it spends standing still.
@@ -1571,8 +1628,9 @@ impl Game {
         &mut self,
         staff: &[Entity],
         amenities: &offshift::Amenities,
+        bays: &repair::Bays,
     ) {
-        self.drift_idle_staff(staff, amenities);
+        self.drift_idle_staff(staff, amenities, bays);
     }
 
     /// Sets or clears the standing instructions on `structure` — see

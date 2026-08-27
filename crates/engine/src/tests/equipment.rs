@@ -1037,7 +1037,7 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
     let mut game = Game::new(514, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let weapon = ItemId::from(ids::OVERCLOCK_CORE);
     give(&mut game, &weapon, 1);
     game.equip(companion, &gear(&weapon, 0)).unwrap();
@@ -1055,9 +1055,13 @@ fn a_companion_killed_in_battle_returns_its_gear_to_cargo() {
     force_the_next_attack_to_land(&mut game);
     player_attacks(&mut game);
 
+    // Benched rather than reaped: this is a Forgiving run, and gear comes
+    // back to the player on that arm exactly as it does on the other.
     assert!(
-        game.world.get::<Stats>(companion).is_none(),
-        "the dead program should have been reaped"
+        game.world
+            .get::<crate::components::Downed>(companion)
+            .is_some(),
+        "the dead program should have been benched"
     );
     assert_eq!(
         held(&game, &weapon),
@@ -1098,7 +1102,7 @@ fn save_path(tag: &str) -> std::path::PathBuf {
 fn a_geared_companion_survives_save_and_load() {
     let mut game = Game::new(14, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let armor = ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &armor, 2);
     game.fuse_item(&gear(&armor, 0)).unwrap(); // one tier-1 copy
@@ -1136,7 +1140,7 @@ fn a_geared_companion_survives_save_and_load() {
 fn a_geared_companion_survives_the_savetools_ron_round_trip() {
     let mut game = Game::new(15, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let weapon = ItemId::from(ids::OVERCLOCK_CORE);
     give(&mut game, &weapon, 1);
     game.equip(companion, &gear(&weapon, 0)).unwrap();
@@ -1170,7 +1174,7 @@ fn a_geared_companion_survives_the_savetools_ron_round_trip() {
 fn a_save_dump_without_the_equipment_key_still_packs() {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let path = save_path("v27");
     game.save(&path).unwrap();
@@ -1525,7 +1529,7 @@ fn a_pre_quality_save_loads_its_gear_as_designed() {
     // A companion's loadout is the third route: `EquippedItemSave`, with
     // its own `serde` default to get wrong.
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.equip(companion, &worn).unwrap();
     let carried = GearCopy {
         tier: 1,
@@ -1660,7 +1664,7 @@ fn a_companions_off_spec_copy_survives_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(216, DifficultyMode::Forgiving, &assets).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let copy = GearCopy {
         quality: QUALITY_DEFAULT + 15,
         ..GearCopy::plain(ItemId::from(ids::OVERCLOCK_CORE))
@@ -2154,7 +2158,7 @@ fn a_pre_stacking_save_keeps_the_affix_it_had_on_every_route() {
     game.add_copies(&worn, 2);
     game.equip(game.player_entity(), &worn).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.equip(companion, &worn).unwrap();
     let carried = GearCopy::with_affixes(
         plating,

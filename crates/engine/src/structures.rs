@@ -112,6 +112,40 @@ pub struct ServiceDef {
     pub radius: i32,
 }
 
+/// What a structure does for a **downed** program — see
+/// `StructureDef::recovery` and `systems::recovery_system`.
+///
+/// The third member of the `PowerRegenDef` / `ServiceDef` family: a rate and
+/// a Chebyshev radius. What differs is what it aims at — `power_regen` at
+/// the player's Power, `services` at an owned program's need reserves, this
+/// at a downed program's Integrity.
+///
+/// **Not `RepairDef`, which is already taken** and means something else
+/// entirely: how fast a Patch Node puts the base's *structures* back
+/// together. Two fields both called `repair` on one type would be read as
+/// one axis and unified by the next person through here.
+///
+/// `i32` rather than `PowerRegenDef`'s `f32` because `Stats::hp` is one, and
+/// that type choice is what deletes half the clamp: a negative rate is
+/// floored at zero and there is no non-finite case to guard. Do not "fix"
+/// it back to a float for symmetry with the other two.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct RecoveryDef {
+    /// Integrity restored per tick to a downed program within `radius`.
+    pub per_tick: i32,
+    /// Chebyshev distance in tiles, `power_regen`'s form rather than a
+    /// circle. `0` is "standing on it".
+    pub radius: i32,
+}
+
+impl RecoveryDef {
+    /// What this actually restores per tick. Mod-supplied, so floored rather
+    /// than trusted — a field named for repair must never damage.
+    pub fn rate(&self) -> i32 {
+        self.per_tick.max(0)
+    }
+}
+
 impl ServiceDef {
     /// What this actually refills per tick.
     ///
@@ -244,6 +278,18 @@ pub struct StructureDef {
     /// including any mod, keeps parsing as a building that services nothing.
     #[serde(default)]
     pub services: Vec<ServiceDef>,
+    /// If set, this structure restores a downed program's Integrity every
+    /// tick while that program stands within `radius` tiles — see
+    /// `components::Downed` and `systems::recovery_system`. No assigned
+    /// worker and no input, `power_regen`'s shape. A downed program walks
+    /// here on its own and leaves when it is whole.
+    ///
+    /// **Distinct from `repair` below**, which is about the base's
+    /// structures and not about programs at all. `#[serde(default)]` so
+    /// every existing structure file, including any mod, keeps parsing as a
+    /// building that recovers nobody — which is the pre-feature game.
+    #[serde(default)]
+    pub recovery: Option<RecoveryDef>,
     /// What this structure needs from the base's Grid to run. Summed against
     /// every deployed structure's `power_supply` every tick; see
     /// `game::base::power`. A machine whose draw doesn't fit the base's
@@ -613,6 +659,24 @@ mod tests {
         let db = test_db();
         let node = db.get("mining_node").expect("mining_node.ron should load");
         assert!(node.services.is_empty());
+        // Same rule, same file, one field along: what `#[serde(default)]` is
+        // for needs an assertion rather than an assumption.
+        assert!(node.recovery.is_none());
+    }
+
+    /// `per_tick` is mod-supplied and a field named for repair must never
+    /// damage. The `i32` is what makes this half a clamp instead of a whole
+    /// one — there is no non-finite case to guard.
+    #[test]
+    fn a_negative_recovery_rate_floors_at_zero() {
+        assert_eq!(
+            RecoveryDef {
+                per_tick: -4,
+                radius: 0,
+            }
+            .rate(),
+            0
+        );
     }
 
     /// `per_tick` is mod-supplied, so it is clamped at both ends rather than

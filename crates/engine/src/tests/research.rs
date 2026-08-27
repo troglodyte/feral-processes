@@ -393,6 +393,10 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
             "portal".to_string(),
             "recharger_node".to_string(),
             "refinery".to_string(),
+            // Ungated on purpose: recovering from a wipe is not a blueprint
+            // you have to earn, and a Bay you cannot build in the zone where
+            // the first wipe happens is a dead run rather than pressure.
+            "repair_bay".to_string(),
             "research_node".to_string(),
             "sandbox".to_string(),
             "winding_node".to_string(),

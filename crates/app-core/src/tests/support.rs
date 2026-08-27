@@ -42,6 +42,26 @@ pub(crate) fn scratch_path(fixture: &str, seed: u32) -> PathBuf {
     ))
 }
 
+/// Puts an already-built `App`'s party out of phase, in base space.
+///
+/// Through a save round trip because that is the only door app-core has
+/// onto `resources::Locale` — the engine's `World` is private to it, which
+/// is why every fixture in this file that needs base space writes
+/// `data.locale` rather than reaching in. For a test about something else
+/// that now has to be *at home* to do it: party assignment is a base verb
+/// (`Game::require_base`), so the fixture crosses the same way the player
+/// does.
+pub(crate) fn stand_inside_the_base(app: &mut App) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("into_base", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 pub(crate) fn test_app(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));
@@ -165,6 +185,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             needs: Default::default(),
             off_shift: None,
             staff: false,
+            downed: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -236,6 +257,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         needs: Default::default(),
         off_shift: None,
         staff: false,
+        downed: false,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -336,6 +358,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         needs: Default::default(),
         off_shift: None,
         staff: false,
+        downed: false,
     });
     data.structures.push(save::StructureSave {
         kind: "compiler".to_string(),
@@ -432,6 +455,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         needs: Default::default(),
         off_shift: None,
         staff: false,
+        downed: false,
     });
     for n in 0..posts {
         data.structures.push(save::StructureSave {
@@ -636,6 +660,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             needs: Default::default(),
             off_shift: None,
             staff: false,
+            downed: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -720,6 +745,7 @@ pub(crate) fn app_with_companions_and_cargo(
             needs: Default::default(),
             off_shift: None,
             staff: false,
+            downed: false,
         });
     }
     save::save_to_file(&path, &data).unwrap();
@@ -1002,6 +1028,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             needs: Default::default(),
             off_shift: None,
             staff: false,
+            downed: false,
         });
     }
     data.locale = if underground {

@@ -142,7 +142,7 @@ fn set_companion_clears_any_active_cronjob_task() {
         required: 5,
     });
 
-    game.add_companion(worker).unwrap();
+    enlist(&mut game, worker);
 
     assert!(
         game.world.get::<Task>(worker).is_none(),
@@ -160,7 +160,7 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
     let mut game = Game::new(25, DifficultyMode::Forgiving, &assets).unwrap();
     stand_in_base(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(worker).unwrap();
+    enlist(&mut game, worker);
     assert!(!game.player_status().companions.is_empty());
 
     let structure_def = game
@@ -196,7 +196,7 @@ fn assigning_cronjob_to_the_active_companion_clears_companion_status() {
 fn clear_companion_reverts_to_no_companion() {
     let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(worker).unwrap();
+    enlist(&mut game, worker);
     assert!(!game.player_status().companions.is_empty());
 
     game.remove_companion(worker);
@@ -209,8 +209,8 @@ fn moving_a_party_member_forward_swaps_it_with_the_slot_ahead() {
     let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 11, 4);
-    game.add_companion(first).unwrap();
-    game.add_companion(second).unwrap();
+    enlist(&mut game, first);
+    enlist(&mut game, second);
 
     game.move_party_member(second, SlotShift::Forward).unwrap();
 
@@ -234,8 +234,8 @@ fn a_party_member_at_either_end_cannot_move_past_it() {
     let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 11, 4);
-    game.add_companion(first).unwrap();
-    game.add_companion(second).unwrap();
+    enlist(&mut game, first);
+    enlist(&mut game, second);
 
     assert!(game.move_party_member(first, SlotShift::Forward).is_err());
     assert!(game.move_party_member(second, SlotShift::Back).is_err());
@@ -251,7 +251,7 @@ fn a_program_outside_the_party_has_no_slot_to_move() {
     let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let member = spawn_tamed(&mut game, 10, 3);
     let bystander = spawn_tamed(&mut game, 11, 4);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
 
     assert!(
         game.move_party_member(bystander, SlotShift::Forward)
@@ -264,8 +264,8 @@ fn party_order_is_frozen_during_a_battle() {
     let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 11, 4);
-    game.add_companion(first).unwrap();
-    game.add_companion(second).unwrap();
+    enlist(&mut game, first);
+    enlist(&mut game, second);
 
     let player = game.player_entity();
     let enemy = spawn_wild_on_player_tile(&mut game);
@@ -283,8 +283,8 @@ fn owned_pets_lists_the_party_first_in_slot_order() {
     let bystander = spawn_tamed(&mut game, 9, 2);
     let first = spawn_tamed(&mut game, 10, 3);
     let second = spawn_tamed(&mut game, 11, 4);
-    game.add_companion(first).unwrap();
-    game.add_companion(second).unwrap();
+    enlist(&mut game, first);
+    enlist(&mut game, second);
 
     let slots: Vec<Option<u32>> = game.owned_pets().iter().map(|p| p.party_slot).collect();
     assert_eq!(
@@ -316,7 +316,7 @@ fn owned_pets_sorts_everything_behind_the_party_by_name() {
             .entity_mut(entity)
             .insert(CustomName(name.to_string()));
     }
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
 
     let names: Vec<String> = game.owned_pets().into_iter().map(|p| p.name).collect();
     assert_eq!(
@@ -372,7 +372,7 @@ fn a_roster_row_marks_which_gear_slots_are_filled() {
 fn the_status_panel_reads_a_loadout_the_same_way_the_roster_does() {
     let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
 
     let armor = ItemId::from(ids::ABLATIVE_PLATING);
     let player = game.player_entity();
@@ -397,7 +397,7 @@ fn the_status_panel_reads_a_loadout_the_same_way_the_roster_does() {
 fn owned_pets_reports_every_owned_creature_regardless_of_location_or_job() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let far_worker = spawn_tamed(&mut game, 12, 4);
     game.world
@@ -598,7 +598,7 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let companion = spawn_tamed(&mut game, 1, 1);
-        game.add_companion(companion).unwrap();
+        enlist(&mut game, companion);
 
         let wild = game
             .world
@@ -633,13 +633,18 @@ fn a_knocked_out_companion_stands_down_once_the_battle_ends() {
                 game.player_status().companions.is_empty(),
                 "ending the battle should have stood the downed companion down"
             );
+            // Forgiving: benched, not deleted. It keeps its roster slot —
+            // that occupancy is the cost of a wipe — and the party is what
+            // it leaves.
             assert!(
-                game.world.get::<Stats>(companion).is_none(),
-                "a companion that hit 0 HP is deleted, not merely stood down"
+                game.world
+                    .get::<crate::components::Downed>(companion)
+                    .is_some(),
+                "a companion that hit 0 HP under Forgiving is benched"
             );
             assert!(
-                !game.owned_pets().iter().any(|p| p.entity == companion),
-                "and it is gone from the roster, not just the party"
+                game.owned_pets().iter().any(|p| p.entity == companion),
+                "and it is still on the roster, holding its slot"
             );
             return;
         }
@@ -652,7 +657,7 @@ fn companion_status_survives_save_and_load() {
     let assets = test_assets_dir();
     let mut game = Game::new(28, DifficultyMode::Forgiving, &assets).unwrap();
     let worker = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(worker).unwrap();
+    enlist(&mut game, worker);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_companion_test_{}.bin",
@@ -757,7 +762,7 @@ fn party_accepts_up_to_max_party_size_and_rejects_beyond_that() {
         .map(|_| spawn_tamed(&mut game, 10, 3))
         .collect();
     for &m in &members {
-        game.add_companion(m).unwrap();
+        enlist(&mut game, m);
     }
     assert_eq!(game.player_status().companions.len(), MAX_PARTY_SIZE);
 
@@ -777,7 +782,7 @@ fn pet_count_tallies_every_owned_program_regardless_of_party_membership() {
     let _b = spawn_tamed(&mut game, 10, 3);
     assert_eq!(game.pet_count(), 2, "both owned programs count as pets");
     // Adding one to the active party doesn't change the total owned.
-    game.add_companion(a).unwrap();
+    enlist(&mut game, a);
     assert_eq!(game.pet_count(), 2, "a party member is still a pet");
 }
 
@@ -857,7 +862,7 @@ fn taming_is_refused_when_the_roster_is_full_and_a_data_cache_makes_room() {
 fn adding_the_same_companion_twice_is_rejected() {
     let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     assert!(
         game.add_companion(companion).is_err(),
         "a program already in the party can't be added again"
@@ -870,8 +875,8 @@ fn removing_one_party_member_leaves_the_others_active() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(a).unwrap();
-    game.add_companion(b).unwrap();
+    enlist(&mut game, a);
+    enlist(&mut game, b);
 
     game.remove_companion(a);
 
@@ -1230,8 +1235,8 @@ fn fuse_companions_removes_fused_members_from_the_active_party() {
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(a).unwrap();
-    game.add_companion(b).unwrap();
+    enlist(&mut game, a);
+    enlist(&mut game, b);
 
     game.fuse_companions(a, b, None).unwrap();
 
@@ -1299,7 +1304,7 @@ fn fuse_companions_rejects_a_program_already_at_the_fusion_cap() {
 fn fusion_depth_survives_a_save_load_round_trip() {
     let mut game = Game::new(104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let maxed = fuse_to_depth(&mut game, MAX_FUSIONS);
-    game.add_companion(maxed).unwrap();
+    enlist(&mut game, maxed);
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_fusion_cap_test_{}.bin",
@@ -1332,7 +1337,7 @@ fn a_companion_killed_in_battle_teaches_none_of_its_routines() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["priority_boost".to_string()]));
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     assert!(
         !game.knows_routine("priority_boost"),
@@ -1358,7 +1363,7 @@ fn only_the_outcome_death_line_follows_the_player_out_of_the_battle() {
     let assets = test_assets_dir();
     let mut game = Game::new(5151, DifficultyMode::Forgiving, &assets).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let name = game.creature_label(companion);
 
     // A real `start_battle`, not `insert_battle`: only the former calls
@@ -1469,7 +1474,7 @@ fn custom_name_reports_only_a_name_the_player_chose() {
 fn a_renamed_program_keeps_its_name_across_a_save() {
     let mut game = Game::new(4206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     game.rename_companion(pet, Some("Hexed".to_string()))
         .unwrap();
 
@@ -1762,7 +1767,7 @@ fn rest_refills_a_drained_companions_reserve() {
 fn a_companions_reserve_survives_a_save_and_load() {
     let mut game = Game::new(7407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(41.0);
 
     let path = std::env::temp_dir().join(format!(
@@ -1805,7 +1810,7 @@ fn joining_the_party_takes_a_program_off_the_staff_and_leaving_returns_it() {
     let mut game = Game::new(4101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 10, 3);
 
-    game.add_companion(program).unwrap();
+    enlist(&mut game, program);
     assert_eq!(game.program_role(program), Some(ProgramRole::InParty));
     assert!(game.base_staff().is_empty());
 
@@ -1852,4 +1857,97 @@ fn a_wild_program_is_never_base_staff() {
 
     assert_eq!(game.program_role(wild), None);
     assert!(game.base_staff().is_empty());
+}
+
+// ---------------------------------------------------------------------
+// Who is in your party is decided at base
+// ---------------------------------------------------------------------
+
+/// The expedition is the unit of risk: you cannot paper over a wipe by
+/// swapping in fresh bodies four frames down.
+#[test]
+fn joining_the_party_is_refused_outside_base_space() {
+    let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+
+    assert!(
+        game.add_companion(companion).is_err(),
+        "the open grid is not where a party is picked"
+    );
+    descend(&mut game);
+    assert!(
+        game.add_companion(companion).is_err(),
+        "and neither is the Stack"
+    );
+}
+
+#[test]
+fn standing_down_is_refused_outside_base_space_too() {
+    let mut game = Game::new(3602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+
+    assert!(game.stand_down_companion(companion).is_err());
+    descend(&mut game);
+    assert!(game.stand_down_companion(companion).is_err());
+    assert!(
+        game.world.resource::<Party>().0.contains(&companion),
+        "a refused stand-down leaves the party alone"
+    );
+}
+
+#[test]
+fn both_party_verbs_work_from_inside_the_base() {
+    let mut game = Game::new(3603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    stand_in_base(&mut game);
+
+    enlist(&mut game, companion);
+    assert!(game.world.resource::<Party>().0.contains(&companion));
+    game.stand_down_companion(companion).unwrap();
+    assert!(!game.world.resource::<Party>().0.contains(&companion));
+}
+
+/// **The regression the split exists for.** `wield_program` calls
+/// `remove_companion` internally to stand a member down before taking it as
+/// a weapon, so a guard put inside the mover would refuse wielding in the
+/// field through a function the player never invoked.
+#[test]
+fn wielding_a_program_still_works_out_in_the_field() {
+    let mut game = Game::new(3604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+
+    game.wield_program(companion)
+        .expect("wielding is a field verb and stays one");
+
+    assert_eq!(game.wielded_program(), Some(companion));
+    assert!(
+        !game.world.resource::<Party>().0.contains(&companion),
+        "and it stood the member down on the way, out here"
+    );
+}
+
+/// A benched program is not a body you can press back into service by
+/// picking it off the roster. The refusal names the two things that *do*
+/// free the slot, so a player with a full roster and no Bay is not left
+/// guessing.
+#[test]
+fn a_downed_program_cannot_be_put_back_in_the_party() {
+    let mut game = Game::new(3605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(companion)
+        .insert(crate::components::Downed);
+    stand_in_base(&mut game);
+
+    let refusal = game
+        .add_companion(companion)
+        .expect_err("a downed program is benched, not available");
+
+    assert!(
+        refusal.contains("sell") || refusal.contains("extract"),
+        "the refusal should name a way out of a full roster: {refusal:?}"
+    );
+    assert!(!game.world.resource::<Party>().0.contains(&companion));
 }

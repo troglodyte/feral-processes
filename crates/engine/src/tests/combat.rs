@@ -442,7 +442,7 @@ fn battle_set_action_refuses_a_slot_that_is_not_in_the_party() {
 fn battle_set_action_refuses_an_out_of_range_ally_slot_or_ability() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 20, 5);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     game.start_battle(vec![wild]);
 
@@ -522,7 +522,7 @@ fn battle_clear_action_walks_the_active_slot_back() {
 fn a_slot_whose_member_was_knocked_out_stops_holding_the_round_open() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     game.start_battle(vec![wild]);
     assert_eq!(game.world.resource::<BattleState>().planned.len(), 2);
@@ -565,8 +565,8 @@ fn a_companion_knocked_offline_keeps_its_slot_for_the_rest_of_the_battle() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let first = spawn_tamed(&mut game, 12, 5);
     let second = spawn_tamed(&mut game, 12, 5);
-    game.add_companion(first).unwrap();
-    game.add_companion(second).unwrap();
+    enlist(&mut game, first);
+    enlist(&mut game, second);
 
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     {
@@ -629,7 +629,7 @@ fn a_companion_knocked_offline_keeps_its_slot_for_the_rest_of_the_battle() {
 fn battle_resolve_round_is_a_no_op_until_every_slot_is_planned() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 6);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let wild = game.spawn_wild_creature("construct", 5, 5).unwrap();
     game.start_battle(vec![wild]);
 
@@ -695,7 +695,7 @@ fn resolving_a_round_logs_one_round_separator_numbered_for_the_round_that_ran() 
 fn a_round_survives_its_target_dying_before_every_member_has_acted() {
     let mut game = Game::new(85, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 40, 8);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     game.start_battle(vec![wild]);
     // One HP, so whoever wins initiative ends the fight outright.
@@ -755,7 +755,7 @@ fn a_round_that_kills_the_player_ends_the_battle() {
 fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
     let mut game = Game::new(23, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
     game.start_battle(vec![wild]);
 

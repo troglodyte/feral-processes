@@ -1,7 +1,7 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 26 of them.
+`assets/structures/`. 27 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/structures/*.ron` on 2026-08-27 and will drift the moment one of those
@@ -16,10 +16,10 @@ base itself.
 
 | | |
 |---|---|
-| structures | 26 |
+| structures | 27 |
 | producers (make something from nothing, on a timer) | 4 |
 | assemblers (consume a neighbour's output) | 11 |
-| utility | 11 |
+| utility | 12 |
 | upgradeable | 5, all to Mk5 |
 | built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
 
@@ -52,6 +52,7 @@ base itself.
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
 | `b` | Defrag Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |
 | `s` | Sandbox | 10 `core_fragment` | - | 1 | - | restores staff Slack |
+| `r` | Repair Bay | 16 `core_fragment` | - | 2 | - | +1 Integrity a tick to a downed program |
 | `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node

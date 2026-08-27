@@ -18,7 +18,7 @@ fn program_activity_tells_a_guard_apart_from_a_worker() {
 
     assert_eq!(game.program_activity(idle), "idle");
 
-    game.add_companion(fighter).unwrap();
+    enlist(&mut game, fighter);
     assert_eq!(game.program_activity(fighter), "in party");
 
     game.assign_guard(guard, market).unwrap();
@@ -72,7 +72,7 @@ fn program_post_names_the_structure_and_which_job_it_is() {
     let market = spawn_market(&mut game);
 
     game.assign_guard(guard, market).unwrap();
-    game.add_companion(fighter).unwrap();
+    enlist(&mut game, fighter);
 
     assert_eq!(
         game.program_post(guard),
@@ -131,7 +131,7 @@ fn a_sale_row_carries_the_programs_activity() {
     let mut game = Game::new(132, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let market = spawn_market(&mut game);
     let fighter = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(fighter).unwrap();
+    enlist(&mut game, fighter);
 
     let options = game.program_sale_options(market);
     let row = options
@@ -263,7 +263,7 @@ fn selling_detaches_the_program_from_its_party_slot_and_its_job() {
     let market = spawn_market(&mut game);
     let worker = spawn_tamed(&mut game, 30, 5);
     let fighter = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(fighter).unwrap();
+    enlist(&mut game, fighter);
     game.assign_guard(worker, market).unwrap();
     assert!(game.world.get::<Task>(worker).is_some());
 

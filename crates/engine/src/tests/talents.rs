@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::talents::{TalentId, TalentNode};
-use crate::tuning::{CREATURE_MAX_LEVEL, KERNEL_RING_MAX, absolute_companion_level_cap};
+use crate::tuning::{KERNEL_RING_MAX, LEVELS_PER_RING, TALENT_START_LEVEL, arena_level_ceiling};
 use crate::*;
 
 /// A companion at `level`, with the rings its level implies already open so
@@ -32,11 +32,11 @@ const GEN_ATK: &str = "gen_edge";
 #[test]
 fn a_point_is_earned_per_level_above_the_base_cap() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let capped = developed(&mut game, CREATURE_MAX_LEVEL);
+    let capped = developed(&mut game, TALENT_START_LEVEL);
     assert_eq!(game.talent_points(capped).earned, 0);
     assert_eq!(game.talent_points(capped).unspent(), 0);
 
-    let past = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let past = developed(&mut game, TALENT_START_LEVEL + 2);
     let points = game.talent_points(past);
     assert_eq!(points.earned, 2);
     assert_eq!(points.spent, 0);
@@ -46,7 +46,7 @@ fn a_point_is_earned_per_level_above_the_base_cap() {
 #[test]
 fn taking_a_talent_with_no_unspent_points_is_refused_and_records_nothing() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL);
+    let pet = developed(&mut game, TALENT_START_LEVEL);
 
     assert!(game.take_talent(pet, &TalentId::from(GEN_HP)).is_err());
     assert!(taken(&game, pet).is_empty());
@@ -55,7 +55,7 @@ fn taking_a_talent_with_no_unspent_points_is_refused_and_records_nothing() {
 #[test]
 fn a_tier_cannot_be_skipped() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     let tier_two = game.talent_tree(pet).expect("a tree").tiers[1].0[0]
         .id
         .clone();
@@ -72,7 +72,7 @@ fn a_tier_cannot_be_skipped() {
 #[test]
 fn a_node_from_another_classs_tree_is_refused() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
 
     assert!(
         game.take_talent(pet, &TalentId::from("striker_edge"))
@@ -85,7 +85,7 @@ fn a_node_from_another_classs_tree_is_refused() {
 #[test]
 fn a_stat_node_raises_its_stat_once_and_cannot_be_taken_twice() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     let before = *game.world.get::<Stats>(pet).unwrap();
 
     game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
@@ -119,7 +119,7 @@ fn a_stat_node_on_a_small_program_still_gains_a_whole_point() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(pet).insert(KernelRing(1));
-    set_level(&mut game, pet, CREATURE_MAX_LEVEL + 1);
+    set_level(&mut game, pet, TALENT_START_LEVEL + 1);
     {
         let mut stats = game.world.get_mut::<Stats>(pet).unwrap();
         stats.atk = 3;
@@ -137,7 +137,7 @@ fn a_stat_node_on_a_small_program_still_gains_a_whole_point() {
 #[test]
 fn a_program_with_no_class_spends_in_the_generic_tree() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 1);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 1);
 
     let tree = game.talent_tree(pet).expect("no class is not no tree");
     assert!(tree.class.is_none());
@@ -150,7 +150,7 @@ fn a_program_with_no_class_spends_in_the_generic_tree() {
 #[test]
 fn the_options_list_offers_the_next_tier_and_marks_what_is_spent() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 1);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 1);
 
     let rows = game.talent_options(pet);
     assert!(
@@ -186,7 +186,7 @@ fn talents_survive_a_save_without_their_stats_being_applied_twice() {
     let path = dir.join("save.bin");
 
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.world
         .resource_mut::<crate::resources::Party>()
         .0
@@ -248,7 +248,7 @@ fn every_node_kind_carries_a_tag() {
 /// A `RoutineSlot` node. Its tier is the generic tree's third, so the fixture
 /// spends two points to get there.
 fn a_pet_with_a_slot_talent(game: &mut Game) -> Entity {
-    let pet = developed(game, CREATURE_MAX_LEVEL + 3);
+    let pet = developed(game, TALENT_START_LEVEL + 3);
     game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
     game.take_talent(pet, &TalentId::from("gen_interrupt"))
         .unwrap();
@@ -259,7 +259,7 @@ fn a_pet_with_a_slot_talent(game: &mut Game) -> Entity {
 #[test]
 fn a_routine_slot_talent_gives_a_companion_one_more_slot() {
     let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let plain = developed(&mut game, CREATURE_MAX_LEVEL + 3);
+    let plain = developed(&mut game, TALENT_START_LEVEL + 3);
     let baseline = game.routine_slots(plain);
 
     let widened = a_pet_with_a_slot_talent(&mut game);
@@ -291,7 +291,7 @@ fn a_slot_talent_on_the_player_changes_nothing() {
 #[test]
 fn an_ability_talent_installs_a_routine_the_companion_can_use() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.take_talent(pet, &TalentId::from(GEN_HP)).unwrap();
 
     game.take_talent(pet, &TalentId::from("gen_interrupt"))
@@ -315,7 +315,7 @@ fn an_ability_talent_installs_a_routine_the_companion_can_use() {
 #[test]
 fn an_ability_talent_does_not_evict_a_carried_routine() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.world
         .entity_mut(pet)
         .insert(Routines(vec!["core_dump".to_string()]));
@@ -337,7 +337,7 @@ fn an_ability_talent_does_not_evict_a_carried_routine() {
 #[test]
 fn an_ability_talent_for_a_known_routine_does_not_duplicate_it() {
     let mut game = Game::new(94, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.world
         .entity_mut(pet)
         .insert(Routines(vec!["interrupt_request".to_string()]));
@@ -357,7 +357,7 @@ fn an_ability_talent_for_a_known_routine_does_not_duplicate_it() {
 /// The generic tree's fourth tier is the Damage/Heal pair, so four points get
 /// there. Everything below it is bought with the cheapest node available.
 fn a_pet_with_an_affinity_talent(game: &mut Game, which: &str) -> Entity {
-    let pet = developed(game, CREATURE_MAX_LEVEL + 4);
+    let pet = developed(game, TALENT_START_LEVEL + 4);
     for id in [GEN_HP, "gen_interrupt", "gen_slot", which] {
         game.take_talent(pet, &TalentId::from(id)).unwrap();
     }
@@ -367,7 +367,7 @@ fn a_pet_with_an_affinity_talent(game: &mut Game, which: &str) -> Entity {
 #[test]
 fn an_affinity_talent_sharpens_the_category_it_names_and_no_other() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let plain = developed(&mut game, CREATURE_MAX_LEVEL + 4);
+    let plain = developed(&mut game, TALENT_START_LEVEL + 4);
     let damage = AbilityEffect::Damage {
         power: 10,
         spread: 0,
@@ -418,7 +418,7 @@ fn an_affinity_talent_is_clamped_at_the_ceiling() {
 )"#;
     let dir = assets_dir_with_talents("affinity_clamp", &[("generic.ron", tree)]);
     let mut game = Game::new(95, DifficultyMode::Forgiving, &dir).unwrap();
-    let pet = developed(&mut game, CREATURE_MAX_LEVEL + 1);
+    let pet = developed(&mut game, TALENT_START_LEVEL + 1);
 
     game.take_talent(pet, &TalentId::from("over_damage"))
         .unwrap();
@@ -465,7 +465,7 @@ fn an_affinity_talent_on_the_player_changes_nothing() {
 #[test]
 fn a_fused_program_keeps_the_dominant_parents_ring_and_talents() {
     let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let developed_pet = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let developed_pet = developed(&mut game, TALENT_START_LEVEL + 2);
     game.take_talent(developed_pet, &TalentId::from(GEN_HP))
         .unwrap();
     let carried = *game.world.get::<Stats>(developed_pet).unwrap();
@@ -509,11 +509,11 @@ fn the_consumed_programs_ring_and_talents_do_not_transfer() {
     game.world
         .entity_mut(consumed)
         .insert(KernelRing(KERNEL_RING_MAX));
-    set_level(&mut game, consumed, CREATURE_MAX_LEVEL);
+    set_level(&mut game, consumed, TALENT_START_LEVEL);
     game.world
         .entity_mut(consumed)
         .insert(Talents(vec![TalentId::from(GEN_HP)]));
-    let survivor = developed(&mut game, CREATURE_MAX_LEVEL + 2);
+    let survivor = developed(&mut game, TALENT_START_LEVEL + 2);
     game.world.entity_mut(survivor).remove::<KernelRing>();
 
     game.fuse_companions(survivor, consumed, None).unwrap();
@@ -540,7 +540,7 @@ fn the_consumed_programs_ring_and_talents_do_not_transfer() {
 #[test]
 fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
     let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let plain = developed(&mut game, absolute_companion_level_cap());
+    let plain = developed(&mut game, arena_level_ceiling());
     let baseline = game.world.get::<Stats>(plain).unwrap().power();
 
     // Every number the generic tree offers, taken as deep as its tiers allow
@@ -552,7 +552,7 @@ fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
     // a sale press however deep a tree stacks it. It is taken here so the
     // selection is still the greediest one available, not because it moves
     // the figure.
-    let stacked = developed(&mut game, absolute_companion_level_cap());
+    let stacked = developed(&mut game, arena_level_ceiling());
     for id in [
         "gen_frame",
         "gen_interrupt",
@@ -575,7 +575,7 @@ fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
         "and it has to be worth something, or the Stat nodes do nothing ({developed_power} \
          vs {baseline})"
     );
-    let capped = developed(&mut game, CREATURE_MAX_LEVEL);
+    let capped = developed(&mut game, TALENT_START_LEVEL);
     println!(
         "power at cap {} / at ring cap {baseline} / ring cap + full stat tree {developed_power}",
         game.world.get::<Stats>(capped).unwrap().power()
@@ -591,7 +591,7 @@ fn a_developed_programs_stats_stay_a_small_multiple_of_an_undeveloped_ones() {
 #[test]
 fn an_accuracy_talent_reaches_the_roll_without_touching_stats() {
     let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = developed(&mut game, absolute_companion_level_cap());
+    let pet = developed(&mut game, arena_level_ceiling());
     let target = spawn_wild_without_routine(&mut game, "scrapper", 20, 20);
     let swing = crate::battle::Swing::plain(crate::battle::DamageRange::centred(10, 0));
 
@@ -627,5 +627,118 @@ fn an_accuracy_talent_reaches_the_roll_without_touching_stats() {
         before_stats,
         "Accuracy has no `Stats` field, so nothing there may move — a node that \
          baked one would be re-applied on every load"
+    );
+}
+
+// ---- What a Kernel Ring buys now -------------------------------------
+//
+// It bought levels; the zone caps everyone at the same level, so it buys
+// tiers instead. The fixture above opens every ring on purpose, so these
+// five tests build their own rather than using it.
+
+fn ringed(game: &mut Game, level: u32, rings: u32) -> Entity {
+    let pet = spawn_tamed(game, 30, 6);
+    if rings > 0 {
+        game.world.entity_mut(pet).insert(KernelRing(rings));
+    }
+    set_level(game, pet, level);
+    pet
+}
+
+/// Points are the saturating `min` of what the levels earned and what the
+/// rings opened. **Both gates survive**: you must be developed *and* hold
+/// rings.
+#[test]
+fn talent_points_are_the_lesser_of_levels_earned_and_tiers_opened() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+
+    // Four levels past the start, one ring open: the ring is the binding
+    // half.
+    let ring_bound = ringed(&mut game, TALENT_START_LEVEL + 4, 1);
+    assert_eq!(
+        game.talent_points(ring_bound).earned,
+        LEVELS_PER_RING,
+        "one ring opens exactly LEVELS_PER_RING tiers however developed the program is"
+    );
+
+    // One level past the start, every ring open: the level is the binding
+    // half.
+    let level_bound = ringed(&mut game, TALENT_START_LEVEL + 1, KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(level_bound).earned,
+        1,
+        "rings open room, they do not fill it — the levels still have to be earned"
+    );
+}
+
+/// A companion below the talent start level yields zero rather than
+/// underflowing. `u32`, and this is the common case rather than an edge one.
+#[test]
+fn a_companion_below_the_talent_start_level_earns_no_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let young = ringed(&mut game, TALENT_START_LEVEL - 3, KERNEL_RING_MAX);
+    assert_eq!(game.talent_points(young).earned, 0);
+}
+
+/// The ring gate, which is the half this task adds. A companion at the zone
+/// cap with no ring has earned levels and can spend none of them.
+#[test]
+fn a_ringless_companion_at_the_zone_cap_earns_no_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
+    let pet = ringed(&mut game, cap, 0);
+    assert!(
+        cap > TALENT_START_LEVEL + 2,
+        "the fixture needs a zone whose cap is well past the talent start level"
+    );
+    assert_eq!(
+        game.talent_points(pet).earned,
+        0,
+        "no ring, no tier — however far the program has developed"
+    );
+}
+
+/// Three rings open exactly a full tree and no more, which is what keeps the
+/// `assets/talents/` census (`KERNEL_RING_MAX * LEVELS_PER_RING` tiers) the
+/// statement of tree depth.
+#[test]
+fn every_ring_open_buys_exactly_a_full_tree() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(5));
+    let cap = game.level_cap();
+    assert!(
+        cap > TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING,
+        "the fixture's zone must allow more levels than the tree has tiers"
+    );
+    let pet = ringed(&mut game, cap, KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(pet).earned,
+        KERNEL_RING_MAX * LEVELS_PER_RING,
+        "a full tree, and the levels above it buy nothing further"
+    );
+}
+
+/// **Migration is a non-event, and this is what says so.** A companion built
+/// to the old shape — three rings, level 12, which was the old absolute
+/// ceiling — has the same points under the new rule as under the old one,
+/// where `earned` was simply `level - TALENT_START_LEVEL`.
+#[test]
+fn a_companion_built_to_the_old_shape_keeps_its_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let pet = ringed(&mut game, arena_level_ceiling(), KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(pet).earned,
+        arena_level_ceiling() - TALENT_START_LEVEL,
+        "the old rule's answer, reached by the new rule"
+    );
+
+    let ringless = ringed(&mut game, TALENT_START_LEVEL, 0);
+    assert_eq!(
+        game.talent_points(ringless).earned,
+        0,
+        "and a ringless companion at the start level had none either way"
     );
 }

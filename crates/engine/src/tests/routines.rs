@@ -759,7 +759,7 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
     let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 50, 5);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     set_level(&mut game, companion, 4); // two slots, one free
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
     install_routine_for_test(&mut game, companion, crate::abilities::DECOMPILE_ABILITY_ID);

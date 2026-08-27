@@ -49,20 +49,33 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
                 game.equip(player, &row.copy())
                     .map_err(|e| format!("equip `{}`: {e}", row.item.as_str()))?;
             }
-            for row in &scenario.party {
-                let program = spawn_companion(&mut game, &row.species, row.level)
-                    .ok_or_else(|| format!("unknown companion species `{}`", row.species))?;
-                game.add_companion(program)
-                    .map_err(|e| format!("party `{}`: {e}", row.species))?;
-                // After the join: `Game::equip` checks the wearer is owned.
-                for gear in &row.equip {
-                    known_item(&game, &gear.item)?;
-                    game.add_copies(&gear.copy(), 1);
-                    game.equip(program, &gear.copy()).map_err(|e| {
-                        format!("equip `{}` on `{}`: {e}", gear.item.as_str(), row.species)
-                    })?;
+            // **Authored from inside base space, and back out afterwards.**
+            // `Game::add_companion` is a base verb now — who is in your
+            // party is decided at home — and a scenario's `party:` rows are
+            // a declaration of what the fight opens with rather than a
+            // player standing anywhere. A staged fight runs on the surface,
+            // which is what the restore below keeps true.
+            let outside = game.locale();
+            game.world.insert_resource(Locale::Base { x: 0, y: 0 });
+            let party = (|game: &mut Game| -> Result<(), String> {
+                for row in &scenario.party {
+                    let program = spawn_companion(game, &row.species, row.level)
+                        .ok_or_else(|| format!("unknown companion species `{}`", row.species))?;
+                    game.add_companion(program)
+                        .map_err(|e| format!("party `{}`: {e}", row.species))?;
+                    // After the join: `Game::equip` checks the wearer is owned.
+                    for gear in &row.equip {
+                        known_item(game, &gear.item)?;
+                        game.add_copies(&gear.copy(), 1);
+                        game.equip(program, &gear.copy()).map_err(|e| {
+                            format!("equip `{}` on `{}`: {e}", gear.item.as_str(), row.species)
+                        })?;
+                    }
                 }
-            }
+                Ok(())
+            })(&mut game);
+            game.world.insert_resource(outside);
+            party?;
             Ok(game)
         }
     }

@@ -1354,6 +1354,22 @@ pub struct OffShift {
     pub need: NeedId,
 }
 
+/// A program that died and was benched rather than destroyed — the
+/// Forgiving arm of `Game::bench_or_dissolve`.
+///
+/// A marker and nothing else, `OffShift`'s shape and lifetime: what a
+/// downed program *does* is derived from it every beat rather than stored
+/// beside it. It is staff by derivation (`party::role_of` — it is neither in
+/// the party nor wielded), the scheduler's posting half skips it, and
+/// `drift_idle_staff` walks it to a Repair Bay.
+///
+/// **`systems::repair_system` is the only thing that clears it**, at full
+/// HP. Nothing else may: a program that cannot reach a Bay stays downed, and
+/// dropping the marker on an unreachable Bay would silently heal it.
+/// Permadeath never inserts it, so a save from that mode carries none.
+#[derive(Component, Clone, Debug)]
+pub struct Downed;
+
 /// One remembered thing: which kind it is, what it was about, when it was
 /// last reinforced, and how many times.
 ///

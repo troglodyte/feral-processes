@@ -65,7 +65,7 @@ pub(super) fn draw_develop_program(
     let Some(subject) = game.owned_pets().into_iter().find(|p| p.entity == target) else {
         return;
     };
-    let cap = game.companion_level_cap(target);
+    let cap = game.level_cap();
     let held = game.privilege_rings_held();
 
     let points = game.talent_points(target);

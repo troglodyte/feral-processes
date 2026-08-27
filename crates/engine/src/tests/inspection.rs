@@ -1623,7 +1623,7 @@ fn a_structures_assignee_row_carries_its_workers_level_and_health() {
     };
 
     let worker = spawn_tamed(&mut game, 20, 5);
-    // Under `CREATURE_MAX_LEVEL`, which is 6: a level the fixture cannot
+    // Under `TALENT_START_LEVEL`, which is 6: a level the fixture cannot
     // actually reach would be clamped and this would assert on the clamp.
     set_level(&mut game, worker, 5);
     game.assign_cronjob(worker, node).unwrap();

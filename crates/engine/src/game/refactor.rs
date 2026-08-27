@@ -262,9 +262,12 @@ impl Game {
             .insert(KernelRing(current + 1));
 
         let name = self.entity_label(target);
-        let cap = self.companion_level_cap(target);
+        // A ring announces tiers, not a ceiling: the zone is the only thing
+        // that sets a level cap now, and saying otherwise here was the last
+        // player-facing claim that a ring made a program bigger.
+        let tiers = crate::tuning::LEVELS_PER_RING;
         self.log(format!(
-            "{name} opens kernel ring {} — it can now reach level {cap}.",
+            "{name} opens kernel ring {} — {tiers} more talent tiers to spend.",
             current + 1
         ));
         Ok(())

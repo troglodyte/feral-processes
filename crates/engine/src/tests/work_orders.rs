@@ -2,6 +2,7 @@
 //! turns one into postings against the other.
 
 use super::support::*;
+use crate::components::Downed;
 use crate::*;
 
 /// A scratch save path unique to this process and `tag`, so two tests in
@@ -41,7 +42,7 @@ fn the_base_staff_pool_survives_a_save_round_trip() {
 fn a_party_member_does_not_come_back_as_base_staff() {
     let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
 
     let path = save_path("party_roundtrip");
     game.save(&path).unwrap();
@@ -1253,7 +1254,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     // have nothing to do with this rule.
     let idle = spawn_tamed_on_map(&mut game, 5, 5);
     let companion = spawn_tamed_on_map(&mut game, 6, 5);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.tick();
     stand_in_base(&mut game);
 
@@ -2675,4 +2676,298 @@ fn a_base_with_nobody_in_it_reports_its_wants_against_zero() {
     );
     assert_eq!(demand.staff, 0);
     assert_eq!(demand.shortfall(), 1);
+}
+
+// ---------------------------------------------------------------------
+// Downed programs: out of the labour pool until a Bay repairs them
+// ---------------------------------------------------------------------
+
+/// A base with one order, one machine and one body, so exactly one posting
+/// is in question and there is no second body to hide the answer.
+fn a_base_with_one_body(game: &mut Game) -> (Entity, Entity) {
+    stand_in_base(game);
+    place_home(&mut *game);
+    let mine = spawn_machine_at(game, "mining_node", 2, 0);
+    let worker = hire(game, 1)[0];
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    (mine, worker)
+}
+
+/// **A second, upright body is what makes this test say anything.** With
+/// the base down to one program the want list is cut to nothing and no
+/// posting is possible whatever the scheduler thinks of it; with a body to
+/// spare there is a real vacancy, and a downed program left in the pool
+/// would be handed it.
+#[test]
+fn a_downed_program_is_never_posted() {
+    let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+    spawn_machine_at(&mut game, "lathe", 3, 0);
+    let staff = hire(&mut game, 2);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    game.tick();
+    let worker = *staff
+        .iter()
+        .find(|&&w| game.world.get::<Task>(w).map(|t| t.target) == Some(mine))
+        .expect("somebody should be on the mine");
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a downed program is off the machine and stays off it"
+    );
+}
+
+/// **No `Carrying` escape**, and that asymmetry with `OffShift` is the
+/// point: an off-shift body may legitimately be mid-delivery, and a body
+/// that just died in a fight is not carrying anything the base is waiting
+/// on. It is going to the Bay either way.
+#[test]
+fn a_downed_program_holding_a_load_is_still_taken_off_its_post() {
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_one_body(&mut game);
+    game.tick();
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "a load is not a reason to keep a downed program working"
+    );
+}
+
+/// The shortfall *grows* while a body is down — the same readout the
+/// off-shift feature already produces, and the one that catches a filter
+/// applied after `truncate` rather than before it.
+#[test]
+fn labour_demand_counts_only_the_bodies_still_standing() {
+    let mut game = Game::new(97, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_one_body(&mut game);
+    game.tick();
+    let before = demand(&game).staff;
+    assert_eq!(before, 1, "precondition: one body to give");
+
+    game.world.entity_mut(worker).insert(Downed);
+    game.tick();
+
+    assert_eq!(
+        demand(&game).staff,
+        0,
+        "a body in the Bay is a body the base does not have"
+    );
+    assert_eq!(demand(&game).shortfall(), 1);
+}
+
+// ---------------------------------------------------------------------
+// The walk to the Bay
+// ---------------------------------------------------------------------
+
+use crate::resources::GameClock;
+
+/// Winds the clock rather than ticking it: a thousand ticks run every
+/// background system, and what these tests are about is the drift beat.
+fn wind_to(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+/// One beat of the drift, with both errand sets gathered as the scheduler
+/// gathers them.
+fn drift(game: &mut Game, staff: &[Entity]) {
+    let amenities = game.amenities();
+    let bays = game.repair_bays();
+    game.drift_idle_staff_for_test(staff, &amenities, &bays);
+}
+
+/// A base with a Repair Bay standing at `(2, 0)` and `n` staff strung out
+/// to the west of it, mirroring `needs.rs`'s amenity fixture.
+fn a_base_with_a_bay(game: &mut Game, n: usize) -> Vec<Entity> {
+    stand_in_base(game);
+    place_home(&mut *game);
+    give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(game, "repair_bay", 2, 0).expect("a Repair Bay is buildable from the start");
+    let mut staff: Vec<Entity> = (0..n).map(|_| spawn_tamed(game, 10, 3)).collect();
+    staff.sort();
+    for (i, &worker) in staff.iter().enumerate() {
+        let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+        pos.x = -2 - i as i32;
+        pos.y = 0;
+    }
+    staff
+}
+
+fn bay_tile(game: &mut Game) -> Position {
+    let bay = find_structure_by_kind(game, "repair_bay").unwrap();
+    *game.world.get::<Position>(bay).unwrap()
+}
+
+#[test]
+fn a_downed_program_steps_toward_the_bay_rather_than_wandering() {
+    let mut game = Game::new(98, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 1);
+    let site = bay_tile(&mut game);
+    game.world.entity_mut(staff[0]).insert(Downed);
+    let before = *game.world.get::<Position>(staff[0]).unwrap();
+    let gap = |p: Position| (p.x - site.x).abs().max((p.y - site.y).abs());
+
+    for _ in 0..40 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let after = *game.world.get::<Position>(staff[0]).unwrap();
+    assert!(
+        gap(after) < gap(before),
+        "it closed on the Bay at {site:?}: {before:?} -> {after:?}"
+    );
+    assert!(
+        crate::game::base::offshift::in_reach(after, site, 0),
+        "and it arrived: {after:?} against {site:?}"
+    );
+}
+
+/// Arrived, it holds. The wander's other shape would walk it straight back
+/// out of reach — `step_off_shift` makes exactly this move.
+#[test]
+fn a_downed_program_already_at_the_bay_holds_there() {
+    let mut game = Game::new(99, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 1);
+    let site = bay_tile(&mut game);
+    game.world.entity_mut(staff[0]).insert(Downed);
+    let at = Position {
+        x: site.x - 1,
+        y: site.y,
+    };
+    *game.world.get_mut::<Position>(staff[0]).unwrap() = at;
+
+    for _ in 0..20 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    assert_eq!(
+        *game.world.get::<Position>(staff[0]).unwrap(),
+        at,
+        "a program standing at its Bay does not drift off it"
+    );
+}
+
+/// A program downed underground carries the surface tile it fell on. There
+/// is no second arrival path for it: the wander's `entry_tile` arm is what
+/// puts a body with no cell in this space onto the ring, and the walk picks
+/// it up from there.
+#[test]
+fn a_program_downed_off_the_floor_arrives_before_it_walks() {
+    let mut game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 1);
+    let site = bay_tile(&mut game);
+    game.world.entity_mut(staff[0]).insert(Downed);
+    // Far outside the pocket, which is what a surface tile looks like from
+    // in here: base space and the zone surface are the same two integers
+    // meaning different things.
+    *game.world.get_mut::<Position>(staff[0]).unwrap() = Position { x: 400, y: 400 };
+
+    for _ in 0..60 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let after = *game.world.get::<Position>(staff[0]).unwrap();
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(after.x, after.y),
+        "it should have arrived on the base's floor: {after:?}"
+    );
+    assert!(
+        crate::game::base::offshift::in_reach(after, site, 0),
+        "and then walked to the Bay: {after:?} against {site:?}"
+    );
+}
+
+/// **`Downed` is not dropped when the walk fails**, and that is deliberately
+/// not `step_off_shift`'s move. That one latches the need and drops the
+/// marker to stop an insert → failed step → remove → insert flicker; there
+/// is no flicker here, since nothing re-inserts `Downed`, and dropping it
+/// would silently heal a program that could never reach a Bay.
+#[test]
+fn a_downed_program_with_nowhere_to_walk_holds_and_stays_downed() {
+    let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let staff = hire(&mut game, 1);
+    game.world.entity_mut(staff[0]).insert(Downed);
+    *game.world.get_mut::<Position>(staff[0]).unwrap() = Position { x: -2, y: 0 };
+
+    for _ in 0..20 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    assert_eq!(
+        *game.world.get::<Position>(staff[0]).unwrap(),
+        Position { x: -2, y: 0 },
+        "with no Bay standing it lies where it fell rather than wandering"
+    );
+    assert!(
+        game.world.get::<Downed>(staff[0]).is_some(),
+        "and it is still down"
+    );
+}
+
+/// **Repair outranks an amenity**, which is the whole of why the `Downed`
+/// arm sits above the `OffShift` one. A program can be both at once — a
+/// wipe does not reset anyone's reserves — and read in the other order it
+/// walks to the Defrag Bay and lies there indefinitely, since nothing
+/// there clears `Downed`.
+#[test]
+fn a_program_that_is_both_downed_and_off_shift_walks_to_the_bay() {
+    let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // **Both buildings up before anybody is hired.** A deploy filed while
+    // staff exist posts one of them as a builder, and a body holding a
+    // `Task` never reaches the drift at all — which reads as the walk being
+    // broken.
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(&mut game, "repair_bay", 2, 0).expect("a Repair Bay is buildable from the start");
+    place_now(&mut game, "defrag_bay", -3, 0).expect("a Defrag Bay is buildable from the start");
+    let repair = bay_tile(&mut game);
+    let defrag_entity = find_structure_by_kind(&mut game, "defrag_bay").unwrap();
+    let defrag = *game.world.get::<Position>(defrag_entity).unwrap();
+    let staff = hire(&mut game, 1);
+    *game.world.get_mut::<Position>(staff[0]).unwrap() = Position { x: -2, y: 0 };
+    game.world.entity_mut(staff[0]).insert(Downed);
+    game.world
+        .entity_mut(staff[0])
+        .insert(crate::components::OffShift {
+            need: crate::needs::NeedId::from("coherence"),
+        });
+
+    for _ in 0..40 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        drift(&mut game, &staff);
+    }
+
+    let after = *game.world.get::<Position>(staff[0]).unwrap();
+    assert!(
+        crate::game::base::offshift::in_reach(after, repair, 0),
+        "it should have walked to the Repair Bay at {repair:?}, not the \
+         Defrag Bay at {defrag:?}: {after:?}"
+    );
 }

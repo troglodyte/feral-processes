@@ -39,7 +39,7 @@ use rand::rngs::StdRng;
 use crate::progression;
 use crate::resources::GameRng;
 use crate::telemetry::Record;
-use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, absolute_companion_level_cap};
+use crate::tuning::{BASELINE_GROWTH_MULTIPLIER, arena_level_ceiling};
 use crate::*;
 
 /// Raises `entity` to `level` the way play would.
@@ -52,14 +52,14 @@ use crate::*;
 ///
 /// Which multiplier and which ceiling apply is the same split
 /// `award_player_xp` and `award_companion_xp` make: a `Creature` grows on
-/// its species' curve and stops at `tuning::absolute_companion_level_cap()`,
+/// its species' curve and stops at `tuning::arena_level_ceiling()`,
 /// the player grows on the baseline and has no ceiling.
 ///
 /// The *absolute* cap rather than `Game::companion_level_cap`, and that is
 /// deliberate: an arena scenario authors its own composition and has no
 /// `KernelRing` to read. `Ability`, `Affinity` and `RoutineSlot` talents are
 /// invisible to `balance_sim`, so the arena is the only instrument that can
-/// see them, and one clamped at `CREATURE_MAX_LEVEL` could not stage the
+/// see them, and one clamped at `TALENT_START_LEVEL` could not stage the
 /// fight the talent trees exist to change.
 ///
 /// Shared with `tests/support.rs`, which re-exports it — two copies would
@@ -79,7 +79,7 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
                 .get(&species)
                 .map(|s| s.growth_multiplier)
                 .unwrap_or(BASELINE_GROWTH_MULTIPLIER);
-            (growth, Some(absolute_companion_level_cap()))
+            (growth, Some(arena_level_ceiling()))
         }
         None => (BASELINE_GROWTH_MULTIPLIER, None),
     };

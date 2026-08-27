@@ -1231,7 +1231,7 @@ mod tests {
 
     #[test]
     fn companion_slots_grow_one_per_level_up_to_the_cap() {
-        // A slot a level against `CREATURE_MAX_LEVEL` of 6 lands a companion
+        // A slot a level against `TALENT_START_LEVEL` of 6 lands a companion
         // on the same six slots it used to reach at level 12 — the ceiling
         // moved in level units and stayed put in power.
         let expected = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
@@ -1369,7 +1369,7 @@ mod tests {
         assert_eq!(ability_stat_scale(0), 1.0, "no level, no bonus");
         assert_eq!(ability_hp_scale(0), 1.0, "no level, no bonus");
         assert!(
-            (ability_stat_scale(crate::tuning::CREATURE_MAX_LEVEL) - 2.8).abs() < 1e-5,
+            (ability_stat_scale(crate::tuning::TALENT_START_LEVEL) - 2.8).abs() < 1e-5,
             "a companion at its level cap runs stat routines at 2.8x — the same \
              figure it reached at level 12 before `HP_PER_LEVEL`'s K = 2 halved \
              the cap and doubled the rate"

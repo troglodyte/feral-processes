@@ -1372,7 +1372,7 @@ impl Game {
                 max_refactors: MAX_COMPANION_REFACTORS,
                 ring: self.world.get::<KernelRing>(entity).map_or(0, |r| r.0),
                 max_ring: crate::tuning::KERNEL_RING_MAX,
-                level_cap: self.companion_level_cap(entity),
+                level_cap: self.level_cap(),
                 talents_spent: self.talent_points(entity).spent,
                 talents_earned: self.talent_points(entity).earned,
                 zone_tier: self.zone_tier(entity),

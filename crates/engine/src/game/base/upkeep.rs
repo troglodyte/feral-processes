@@ -410,7 +410,7 @@ impl Game {
             // would have `sale_detachments` add a redundant "stops working
             // the Mining Node" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
-            self.dissolve_tamed_program(worker);
+            self.bench_or_dissolve(worker);
         }
     }
 

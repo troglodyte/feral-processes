@@ -158,6 +158,12 @@ impl Game {
         // `Game::spawn_structure` — the one place a structure's component
         // list is written — is `&mut Game` work no bevy system can express.
         self.run_build_crew();
+        // Beside the two crews and for the same reason as `run_dig_crew`'s
+        // second: the recovery line has to name the program through
+        // `creature_label` and the heal through `restore_hp`, both of which
+        // are `&mut Game` doors no bevy system can reach. See
+        // `Game::run_repair_bays`.
+        self.run_repair_bays();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an

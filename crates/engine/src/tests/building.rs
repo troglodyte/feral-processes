@@ -1,6 +1,7 @@
 //! Placing, removing, upgrading, and describing structures, and the base platform they sit on.
 
 use super::support::*;
+use crate::components::Downed;
 use crate::tuning::{MAX_BUILD_DISTANCE_FROM_HOME, STARTING_POCKET_RADIUS, haul_walk_radius};
 use crate::*;
 
@@ -2129,5 +2130,164 @@ fn a_line_driver_is_refused_without_the_zone_two_material() {
     assert!(
         after > before,
         "and it feeds the grid it was bought to feed: {before} -> {after}"
+    );
+}
+
+// ---------------------------------------------------------------------
+// The Repair Bay: what brings a downed program back
+// ---------------------------------------------------------------------
+
+/// A base with a Repair Bay standing and one downed program beside it,
+/// hurt by `wound` points. The program is placed by hand rather than walked
+/// there, and these tests drive `Game::run_repair_bays` rather than a whole
+/// `tick`: the walk is `drift_idle_staff`'s half of the feature and has its
+/// own tests, and through a full tick the drift is what decides where the
+/// body is standing when the Bay looks.
+fn a_downed_program_at_a_bay(game: &mut Game, wound: i32) -> Entity {
+    stand_in_base(game);
+    place_home(&mut *game);
+    let bay = spawn_machine_at(game, "repair_bay", 2, 0);
+    let program = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(program).insert(Downed);
+    let mut stats = game.world.get_mut::<Stats>(program).unwrap();
+    stats.hp = (stats.max_hp - wound).max(1);
+    let at = *game.world.get::<Position>(bay).unwrap();
+    *game.world.get_mut::<Position>(program).unwrap() = Position {
+        x: at.x + 1,
+        y: at.y,
+    };
+    program
+}
+
+fn recovery_lines(game: &Game) -> Vec<String> {
+    game.message_log(200)
+        .into_iter()
+        .filter(|e| e.text.contains("back on its feet"))
+        .map(|e| e.text)
+        .collect()
+}
+
+#[test]
+fn a_bay_repairs_a_downed_program_and_stands_it_back_up() {
+    let mut game = Game::new(3501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_downed_program_at_a_bay(&mut game, 3);
+
+    game.run_repair_bays();
+    assert!(
+        game.world.get::<Stats>(program).unwrap().hp > 7,
+        "one pass beside a Bay should have restored something"
+    );
+    assert!(
+        game.world.get::<Downed>(program).is_some(),
+        "and it is still down while it is still hurt"
+    );
+
+    for _ in 0..10 {
+        game.run_repair_bays();
+    }
+
+    let stats = *game.world.get::<Stats>(program).unwrap();
+    assert_eq!(stats.hp, stats.max_hp, "it heals to full and no further");
+    assert!(
+        game.world.get::<Downed>(program).is_none(),
+        "and stands off the bench at full Integrity"
+    );
+}
+
+#[test]
+fn a_downed_program_out_of_reach_of_the_bay_is_not_repaired() {
+    let mut game = Game::new(3502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = a_downed_program_at_a_bay(&mut game, 3);
+    // Well outside the shipped Bay's radius, and still inside the pocket.
+    *game.world.get_mut::<Position>(program).unwrap() = Position { x: -4, y: -4 };
+    let before = game.world.get::<Stats>(program).unwrap().hp;
+
+    for _ in 0..10 {
+        game.run_repair_bays();
+    }
+
+    assert_eq!(
+        game.world.get::<Stats>(program).unwrap().hp,
+        before,
+        "a Bay reaches its own tile and its neighbours, not the whole base"
+    );
+    assert!(game.world.get::<Downed>(program).is_some());
+}
+
+/// The recovery is news once. `set_machine_status`' rule: entering a state
+/// is news, staying in it is not — and a Bay ticking every beat is exactly
+/// where a per-tick line would go unnoticed until a player read the log.
+#[test]
+fn the_recovery_is_announced_once_and_not_every_tick() {
+    let mut game = Game::new(3503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    a_downed_program_at_a_bay(&mut game, 3);
+
+    for _ in 0..30 {
+        game.run_repair_bays();
+    }
+
+    assert_eq!(
+        recovery_lines(&game).len(),
+        1,
+        "expected exactly one recovery line: {:?}",
+        recovery_lines(&game)
+    );
+}
+
+/// The player's decision, pinned: without a Bay a downed program stays down
+/// for as long as the run lasts. Nothing else heals it, and there is no
+/// timer quietly doing the job.
+#[test]
+fn a_downed_program_with_no_bay_standing_stays_down() {
+    let mut game = Game::new(3504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(program).insert(Downed);
+    game.world.get_mut::<Stats>(program).unwrap().hp = 1;
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert_eq!(game.world.get::<Stats>(program).unwrap().hp, 1);
+    assert!(
+        game.world.get::<Downed>(program).is_some(),
+        "a wipe with no Bay standing is a wipe until one is built"
+    );
+}
+
+/// `per_tick` is mod-supplied and a field named for repair must never
+/// damage. Asserted through the tick rather than on `RecoveryDef::rate`
+/// alone, because the clamp only means anything where it is applied.
+#[test]
+fn a_negative_recovery_rate_never_damages_the_program_it_names() {
+    let assets = assets_dir_with_extra_structure(
+        "negative_bay",
+        "harm_bay.ron",
+        r#"(
+            id: "harm_bay", name: "Harm Bay", glyph: 'h', color: Red,
+            build_cost: [("core_fragment", 1)],
+            work: None,
+            recovery: Some((per_tick: -5, radius: 4)),
+        )"#,
+    );
+    let mut game = Game::new(3505, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "harm_bay", 2, 0);
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(program).insert(Downed);
+    game.world.get_mut::<Stats>(program).unwrap().hp = 4;
+    *game.world.get_mut::<Position>(program).unwrap() = Position { x: 3, y: 0 };
+
+    for _ in 0..10 {
+        game.run_repair_bays();
+    }
+
+    assert_eq!(
+        game.world.get::<Stats>(program).unwrap().hp,
+        4,
+        "a negative rate floors at zero rather than draining the program"
     );
 }

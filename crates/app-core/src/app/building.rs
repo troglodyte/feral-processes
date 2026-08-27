@@ -324,6 +324,21 @@ impl App {
         };
         let Some(game) = &mut self.game else { return };
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
+            // A request the crew has not raised yet is called off by the
+            // same gesture, because it is the same question the player is
+            // asking of that tile: *stop that*. Asked only after the
+            // structure lookup, which can never collide with it —
+            // `place_structure` refuses a cell already holding either.
+            //
+            // No Home-style confirmation: calling off a request destroys
+            // nothing. The units already carried there go straight back onto
+            // a shelf, which is what `Game::cancel_build_request` is for.
+            if let Some(site) = game.adjacent_build_site(dir.0, dir.1) {
+                let outcome = game.cancel_build_request(site);
+                self.report(outcome);
+                self.mode = Mode::Playing;
+                return;
+            }
             self.refuse("Nothing to demolish that way.");
             self.mode = Mode::Playing;
             return;

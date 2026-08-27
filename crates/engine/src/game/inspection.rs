@@ -161,6 +161,26 @@ impl Game {
             .find(|e| e.is_structure && e.pos == target)
     }
 
+    /// The pending build request on the neighbouring tile `(dx, dy)`, if
+    /// one stands there.
+    ///
+    /// `adjacent_structure`'s counterpart for the one thing that occupies a
+    /// cell without being a structure. Separate rather than folded into that
+    /// function because the two leave the caller different verbs — a
+    /// structure is demolished for a partial refund, a request is called off
+    /// for all of it — and a single lookup returning either would make the
+    /// demolish key decide which by inspecting the view it got back.
+    ///
+    /// It carries `adjacent_structure`'s `in_base` gate for that function's
+    /// reason: base-space coordinates must never answer a surface query.
+    pub fn adjacent_build_site(&mut self, dx: i32, dy: i32) -> Option<Entity> {
+        if !self.in_base() {
+            return None;
+        }
+        let center = self.scan_center();
+        self.build_site_at(center.x + dx, center.y + dy)
+    }
+
     /// Whether `entity` is a tamed program holding a `GatherResource` post
     /// and not currently standing at it — see
     /// `EntityView::worker_away_from_post`, which is this value.

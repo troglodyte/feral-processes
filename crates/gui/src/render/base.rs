@@ -1687,6 +1687,136 @@ mod tests {
         );
     }
 
+    /// A base with one request filed on the cell east of the party, drawn
+    /// once. Returns the shapes so a caller can ask what landed.
+    ///
+    /// The party is stood **in base space**, which is the whole point: the
+    /// site's `Position` is a base-space cell, and `view_entities` selects
+    /// on `Game::stands_in_base_space` — drawn from the surface, nothing
+    /// here would be on the pane at all.
+    fn drawn_base(at: f64, request: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+        if request {
+            // No materials are given, and none are needed: filing charges
+            // nothing. That is not incidental to this fixture — it is why a
+            // renderer test can reach a build site at all without the engine
+            // exposing its `World`.
+            game.place_structure("mining_node", 1, 0)
+                .expect("a request is filed beside the party");
+        }
+
+        let mut fx = Fx::new();
+        fx.begin_frame(at, Vec::new(), false);
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+            );
+        });
+        shapes
+    }
+
+    /// Every rect fill and every rect stroke a frame painted.
+    fn painted_fills_and_strokes(
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+    ) -> (Vec<bevy_egui::egui::Color32>, Vec<bevy_egui::egui::Color32>) {
+        let mut fills = Vec::new();
+        let mut strokes = Vec::new();
+        for cs in shapes {
+            if let bevy_egui::egui::Shape::Rect(r) = &cs.shape {
+                fills.push(r.fill);
+                if r.stroke.width > 0.0 {
+                    strokes.push(r.stroke.color);
+                }
+            }
+        }
+        (fills, strokes)
+    }
+
+    /// A request draws as a slab, an edge and a caret — all three, because
+    /// each carries a different half of the message and any one alone reads
+    /// as something else.
+    ///
+    /// The slab alone is an unlit tile; the caret alone is a glyph standing
+    /// on bare ground, which is what every *creature* on this map looks like.
+    ///
+    /// **Differential against the same base with nothing on order**, and
+    /// that is load-bearing rather than tidy. Written as "is there a greyish
+    /// rect somewhere", this test passed with the slab draw deleted
+    /// outright — the map paints plenty of grey. What only a build site can
+    /// produce is a fill and a stroke the identical frame without one never
+    /// paints at all.
+    #[test]
+    fn a_pending_build_site_draws_a_slab_an_edge_and_a_caret() {
+        let with = drawn_base(0.0, true);
+        let without = drawn_base(0.0, false);
+        let (with_fills, with_strokes) = painted_fills_and_strokes(&with);
+        let (bare_fills, bare_strokes) = painted_fills_and_strokes(&without);
+
+        assert!(
+            with_fills.iter().any(|c| !bare_fills.contains(c)),
+            "the slab is a fill the same frame without a request never paints"
+        );
+        assert!(
+            with_strokes.iter().any(|c| !bare_strokes.contains(c)),
+            "and its edge is a stroke that frame never paints either"
+        );
+        assert!(
+            crate::paint::painted_text(&with).iter().any(|g| g == "^"),
+            "the caret is what says work is happening here: {:?}",
+            crate::paint::painted_text(&with)
+        );
+        assert!(
+            !crate::paint::painted_text(&without)
+                .iter()
+                .any(|g| g == "^"),
+            "and it is drawn only where a request stands"
+        );
+    }
+
+    /// ...and the caret bounces.
+    ///
+    /// **The motion is the point**, not decoration: a build site is the one
+    /// cell on this map where "nothing is happening yet" is the wrong
+    /// reading, and a still caret says exactly that. Two frames at different
+    /// times, comparing where the glyph landed — a test that only checks the
+    /// caret exists passes against a renderer that pinned it.
+    #[test]
+    fn the_caret_over_a_build_site_bounces() {
+        fn caret_y(at: f64) -> f32 {
+            let shapes = drawn_base(at, true);
+            shapes
+                .iter()
+                .find_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Text(t) if t.galley.text() == "^" => Some(t.pos.y),
+                    _ => None,
+                })
+                .expect("the caret is drawn")
+        }
+
+        // A quarter of the bob's period apart, so the raised cosine is at
+        // genuinely different heights rather than at two points that happen
+        // to share one.
+        let (a, b) = (caret_y(0.0), caret_y(0.25));
+        assert_ne!(
+            a, b,
+            "the caret must sit at different heights across frames — a still one reads as a \
+             glyph standing on the ground"
+        );
+    }
+
     /// Every `Biome` variant, listed the way `species.rs`'s own biome census
     /// lists them. A new variant missing from here makes the tint census
     /// below pass vacuously, which is the failure mode that census exists to

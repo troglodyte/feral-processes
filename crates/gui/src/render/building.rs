@@ -74,12 +74,13 @@ pub(super) fn draw_build_menu(
     m: &Metrics,
 ) {
     let status = game.player_status();
+    let stock = game.base_stock();
     let defs = game.buildable_structure_defs();
     let entries: Vec<BuildEntry> = defs
         .iter()
         .map(|def| {
             let raw_cost = game.structure_build_cost(def);
-            let cost = cost_display(game, &raw_cost, &status.inventory);
+            let cost = build_cost_display(game, &raw_cost, &status.inventory, &stock);
             BuildEntry {
                 label: format!("{} - {}", def.name, cost.join(", ")),
                 description: def.description.clone(),
@@ -131,7 +132,13 @@ pub(super) fn draw_build_direction(
     let rows = match def {
         Some(def) => {
             let status = game.player_status();
-            let cost = cost_display(game, &game.structure_build_cost(&def), &status.inventory);
+            let stock = game.base_stock();
+            let cost = build_cost_display(
+                game,
+                &game.structure_build_cost(&def),
+                &status.inventory,
+                &stock,
+            );
             build_direction_rows(&def.name, &def.description, &cost)
         }
         None => vec![text_row(DIRECTION_PROMPT)],

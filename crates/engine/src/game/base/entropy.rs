@@ -50,10 +50,10 @@ type Occupancy<'a> = (Entity, &'a Position, Option<&'a Task>, Option<&'a Tamed>)
 ///
 /// **A `Task` is not what makes a body occupy a cell — standing there is**,
 /// which is why staff are the other arm. Staff between postings hold
-/// no `Task`, and `park_idle_staff` cannot always move one home: it declines
-/// a park tile that is occupied or unwalkable, and `schedule_base_labour`
-/// early-returns without parking anyone at all on a game over or during a
-/// battle, while this system keeps running. A cell reverted under an idle
+/// no `Task`, and `drift_idle_staff` cannot always move one on: it declines
+/// a candidate tile that is occupied or is not laid floor, and
+/// `schedule_base_labour` early-returns without moving anyone at all on a
+/// game over or during a battle, while this system keeps running. A cell reverted under an idle
 /// staffer seals it inside solid rock, and `hauling::post_field` gates its
 /// own start tile on `BaseGrid::walkable` — so the body is unpostable and
 /// unreachable for the rest of the run.

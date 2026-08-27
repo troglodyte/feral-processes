@@ -215,8 +215,8 @@ impl crate::Game {
     /// The tile is the worker's own `Position` and not its post: a stranded
     /// body is stranded precisely because it is *not* at its post, "left
     /// stranded here" is a claim about where it is standing, and a memory
-    /// keyed to the machine's tile could never be read by the parking hook it
-    /// exists for — `park_idle_staff` already refuses a tile a `Structure`
+    /// keyed to the machine's tile could never be read by the drift hook it
+    /// exists for — `drift_idle_staff` already refuses a tile a `Structure`
     /// stands on. A posted program's `Position` is base space, which is the
     /// space `MemorySubject::BaseTile` names.
     ///

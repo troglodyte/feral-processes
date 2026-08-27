@@ -629,23 +629,22 @@ fn walk_feeders(
     }
 }
 
-/// Where the idle staff member at `index` stands at `tick`, on the
+/// Where the idle staff member at `index` arrives at `tick`, on the
 /// Chebyshev ring of `IDLE_STAFF_RING_TILES` around `center`.
 ///
-/// **A deterministic function of its three arguments and nothing else.**
-/// No `GameRng`, no local `StdRng`, no clock. That is not fastidiousness:
-/// `CLAUDE.md` records three separate occasions where a shifted RNG stream
-/// silently rewrote the outcome of a seeded test in an unrelated file, and
-/// world generation is barred from that stream outright for the same
-/// reason. A milling draw taken every tick for every idle program would
-/// shift it harder than anything currently in the game.
+/// **The way into base space, not a place to stand.** A program that has
+/// just been beaten carries the surface tile it was beaten on and has never
+/// had a base-space cell of its own; this is the tile that gives it one,
+/// and `drift_idle_staff` walks it on from there. It is asked only of a
+/// body that is not standing on laid floor, so in an established base it
+/// fires once per program and never again.
 ///
 /// Staff are spread around the ring by index and stepped together on
-/// `IDLE_STAFF_STEP_TICKS`, so two programs never share a tile and the pool
-/// reads as waiting rather than frozen. `stack::ring_offset` is this repo's
-/// single definition of a Chebyshev ring and is what is walked here rather
-/// than a second copy of the maths.
-pub(crate) fn park_tile(center: Position, index: usize, tick: u64) -> Position {
+/// `IDLE_STAFF_STEP_TICKS`, so a pool arriving at once does not pile onto
+/// one tile. `stack::ring_offset` is this repo's single definition of a
+/// Chebyshev ring and is what is walked here rather than a second copy of
+/// the maths.
+pub(crate) fn entry_tile(center: Position, index: usize, tick: u64) -> Position {
     let band = crate::tuning::IDLE_STAFF_RING_TILES.max(1);
     let perimeter = 8 * band;
     let spread = index as i64 * perimeter as i64 / 4;
@@ -656,6 +655,62 @@ pub(crate) fn park_tile(center: Position, index: usize, tick: u64) -> Position {
         x: center.x + dx,
         y: center.y + dy,
     }
+}
+
+/// The eight neighbours of a tile plus a ninth outcome that is standing
+/// still — the whole vocabulary of an idle program's drift.
+const WANDER_CHOICES: usize = 9;
+
+/// Folds `(index, step)` into a seed whose **high** bits carry both.
+///
+/// A byte at a time, following `sectors::sector_seed`, and that is not
+/// decoration: `derive::index` reads bit 63, one XOR-then-multiply round
+/// carries a difference only about the prime's own width upward, and a step
+/// counter folded in as a single word differs from its predecessor in its
+/// lowest bits alone. Folded whole it would never reach the bit that
+/// actually decides, and every program would drift the same way forever.
+fn wander_seed(index: u64, step: u64) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    for word in [index, step] {
+        for byte in word.to_le_bytes() {
+            h ^= byte as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    h
+}
+
+/// Which neighbour the idle staff member at `index` drifts onto during
+/// `step`, or `None` for a beat it spends standing where it is.
+///
+/// **A deterministic function of its three arguments and nothing else.**
+/// No `GameRng`, no local `StdRng`, no clock. That is not fastidiousness:
+/// `CLAUDE.md` records three separate occasions where a shifted RNG stream
+/// silently rewrote the outcome of a seeded test in an unrelated file, and
+/// world generation is barred from that stream outright for the same
+/// reason. A milling draw taken every tick for every idle program would
+/// shift it harder than anything currently in the game.
+///
+/// Relative rather than absolute, which is the whole difference from the
+/// ring this replaced: the body walks on from wherever it is standing, so
+/// a program the scheduler has just freed strolls away from the post it
+/// left instead of snapping to a tile computed from its index.
+///
+/// The ninth outcome is what makes a pool read as milling rather than as
+/// jittering — a body that never pauses is as unnatural as one that never
+/// moves. `stack::ring_offset` at a band of 1 is this repo's single
+/// definition of the eight neighbours and is walked here rather than a
+/// second copy of the offsets.
+pub(crate) fn wander_step(from: Position, index: usize, step: u64) -> Option<Position> {
+    let choice = crate::derive::index(wander_seed(index as u64, step), WANDER_CHOICES);
+    if choice == WANDER_CHOICES - 1 {
+        return None;
+    }
+    let (dx, dy) = crate::game::stack::ring_offset(1, choice as i32);
+    Some(Position {
+        x: from.x + dx,
+        y: from.y + dy,
+    })
 }
 
 /// How many of `item` the **base** is holding — every Depot
@@ -786,7 +841,7 @@ impl Game {
             self.record_labour_demand(wanted.len(), 0);
             return;
         }
-        self.park_idle_staff(&staff);
+        self.drift_idle_staff(&staff);
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
         // program the player owns and is not fighting with is staff. A post
@@ -916,7 +971,7 @@ impl Game {
         // appended after the order's wants and the list is not re-sorted.
         //
         // **Every question here is asked from the body's own tile**, never
-        // from the player's. `park_idle_staff` above has just put each free
+        // from the player's. `drift_idle_staff` above has just put each free
         // program on a real tile inside the base, and a program the
         // scheduler freed this tick is standing at the post it just left —
         // so the walk starts where the body is, and whether it arrives is a
@@ -1114,7 +1169,7 @@ impl Game {
             .collect()
     }
 
-    /// Walks every staff member with no post to its parking tile.
+    /// Drifts every staff member with no post one tile around the base.
     ///
     /// Runs before the assignment rather than after it, and that ordering
     /// is what makes a posting truthful: a posted program's `Position` is
@@ -1122,31 +1177,82 @@ impl Game {
     /// about, and neither is overwritten any more, so the tile a program is
     /// standing on when it *gets* a post has to already be a real one.
     ///
-    /// The ring respects the same two rules a posted worker's field does:
-    /// carved out in `BaseGrid`, and never a tile a `Structure` stands on. A
-    /// candidate that breaks either is simply not taken — the program holds
-    /// its ground for that beat rather than being nudged somewhere the rule
-    /// would have refused.
-    fn park_idle_staff(&mut self, staff: &[Entity]) {
+    /// **Two shapes, and which one a body gets is whether it is standing on
+    /// laid floor.** One that is drifts on from there, through
+    /// `wander_step`. One that is not has no cell in this space to walk
+    /// from — a freshly beaten program carries the surface tile it was
+    /// taken on — and takes `entry_tile` instead, arriving on the ring
+    /// before it walks anywhere.
+    ///
+    /// Four rejections stand between a body and the tile it is offered,
+    /// and a rejected candidate is simply not taken: the program holds its
+    /// ground for that beat rather than being nudged somewhere a rule would
+    /// have refused, and the next beat offers a different tile.
+    fn drift_idle_staff(&mut self, staff: &[Entity]) {
         let Some(home) = self.home_position() else {
-            // No Home means no base to loiter at, and no origin for the ring
-            // to be laid out around either.
+            // No Home means no base to wander, and no origin for the
+            // arrival ring to be laid out around either.
             return;
         };
         let tick = self.world.resource::<GameClock>().tick;
+        let step = tick / crate::tuning::IDLE_STAFF_STEP_TICKS;
         let occupied = structures_by_tile(self);
+        let party = match *self.world.resource::<Locale>() {
+            Locale::Base { x, y } => Some((x, y)),
+            _ => None,
+        };
+        // Where the idle pool is standing as the beat opens, grown with
+        // every tile written during it. **Nothing is ever removed**: a
+        // vacated tile stays spoken for until the next beat, which costs a
+        // body one step it will be offered again and saves this from
+        // depending on the order the pool is walked in. `hire`-style
+        // co-location — two programs beaten on the same tile — resolves
+        // itself the first time one of them moves.
+        let mut held: std::collections::HashSet<(i32, i32)> = staff
+            .iter()
+            .filter(|&&w| self.world.get::<Task>(w).is_none())
+            .filter_map(|&w| self.world.get::<Position>(w))
+            .map(|p| (p.x, p.y))
+            .collect();
         for (index, &worker) in staff.iter().enumerate() {
             if self.world.get::<Task>(worker).is_some() {
                 continue;
             }
-            let tile = park_tile(home, index, tick);
+            let here = self.world.get::<Position>(worker).copied();
+            let inside = here.is_some_and(|p| self.world.resource::<BaseGrid>().is_floor(p.x, p.y));
+            let tile = match here.filter(|_| inside) {
+                Some(p) => match wander_step(p, index, step) {
+                    Some(tile) => tile,
+                    // The beat it spends standing still.
+                    None => continue,
+                },
+                None => entry_tile(home, index, tick),
+            };
             if occupied.contains_key(&(tile.x, tile.y)) {
                 continue;
             }
-            if !self.world.resource::<BaseGrid>().walkable(tile.x, tile.y) {
+            // **Laid floor, not `walkable`.** `base_entropy_system` reverts
+            // a mined `Open` cell nobody is standing on, and a body holds
+            // only the cell under its own feet — so a wanderer that strolled
+            // into a fresh corridor would be sealed in behind it, and
+            // `hauling::post_field` gates its own start tile on `walkable`,
+            // which makes that body unpostable and unreachable for the rest
+            // of the run. Floor never reverts. This is the leash, and it is
+            // why there is no radius to tune.
+            if !self.world.resource::<BaseGrid>().is_floor(tile.x, tile.y) {
                 continue;
             }
-            // The third rejection, and the only one that is about the body
+            // The party is the other body standing in base space, read off
+            // `Locale` and never the player's `Position`, which is pinned to
+            // the anchor tile out on the zone surface. A program that steps
+            // onto the party hides the `@`.
+            if party == Some((tile.x, tile.y)) {
+                continue;
+            }
+            if held.contains(&(tile.x, tile.y)) {
+                continue;
+            }
+            // The last rejection, and the only one that is about the body
             // rather than about the ground: a program left stranded on a
             // tile holds it against that tile, and will not be stood back
             // on it while the grudge is worth anything.
@@ -1156,11 +1262,6 @@ impl Game {
             // program that has had a bad run off every tile at once. The
             // comparison is signed, so a tile it feels nothing about, and a
             // tile it feels *well* about, both pass.
-            //
-            // Costs nothing when it fires: a skipped candidate leaves the
-            // body exactly where it was standing, which is already what
-            // both rejections above do, and the ring offers a different
-            // tile on the next step.
             if self.opinion_of(
                 worker,
                 &components::MemorySubject::BaseTile {
@@ -1171,6 +1272,7 @@ impl Game {
             {
                 continue;
             }
+            held.insert((tile.x, tile.y));
             if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
                 *pos = tile;
             }

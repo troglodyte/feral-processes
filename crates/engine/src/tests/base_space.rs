@@ -2521,8 +2521,8 @@ fn ticks_to_cut(game: &Game, worker: Entity) -> usize {
     (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE
 }
 
-/// Slack for the walk from the parking ring out to the wall, which is a
-/// handful of tiles at one tile a tick.
+/// Slack for the walk from wherever an idle body was drifting out to the
+/// wall, which is a handful of tiles at one tile a tick.
 const WALK_ALLOWANCE: usize = 20;
 
 /// Raw log lines, deliberately **not** `Game::message_history`: that folds
@@ -2948,11 +2948,11 @@ fn a_cell_an_idle_base_staffer_is_standing_on_never_reverts() {
     );
 
     // The bevy schedule rather than a whole turn, because a whole turn runs
-    // `schedule_base_labour` first and `park_idle_staff` would walk the body
+    // `schedule_base_labour` first and `drift_idle_staff` would walk the body
     // off the cell before entropy could look at it. That gap is the case
     // this test is about: the labour scheduler early-returns on a game over
-    // or an active battle, and declines a park tile that is occupied or
-    // unwalkable, while the schedule holding `base_entropy_system` keeps
+    // or an active battle, and declines a candidate tile that is occupied or
+    // not laid floor, while the schedule holding `base_entropy_system` keeps
     // running regardless.
     game.world.resource_mut::<GameClock>().tick += crate::tuning::BASE_ENTROPY_REFILL_TICKS * 3;
     game.schedule.run(&mut game.world);

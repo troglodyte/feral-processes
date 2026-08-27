@@ -665,6 +665,26 @@ pub(crate) fn painted_line_count(shapes: &[egui::epaint::ClippedShape]) -> usize
         .count()
 }
 
+/// How many rect *outlines* `with_painter` recorded in exactly `color`.
+///
+/// `painted_rect_fill_count`'s companion, and not a widening of it: an
+/// outline leaves a stroke rather than a fill, so the fill count sees a
+/// `Painter::rect_lines` cue not at all.
+#[cfg(test)]
+pub(crate) fn painted_rect_stroke_count(
+    shapes: &[egui::epaint::ClippedShape],
+    color: Color,
+) -> usize {
+    let want = to_egui(color);
+    shapes
+        .iter()
+        .filter(|cs| match &cs.shape {
+            egui::Shape::Rect(r) => r.stroke.color == want,
+            _ => false,
+        })
+        .count()
+}
+
 #[cfg(test)]
 pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<f32> {
     shapes

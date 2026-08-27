@@ -774,6 +774,47 @@ mod tests {
         );
     }
 
+    /// Cutting tools are a mode the player leaves armed and then forgets,
+    /// and the only thing that ever showed it was the line in the log at
+    /// the moment it was toggled. So the party's own tile wears a ring
+    /// while the bump cuts.
+    ///
+    /// Both halves in one test for the raid flash's reason: the mode
+    /// survives a walk back out through the anchor — nothing disarms it —
+    /// so an ungated ring follows the party onto the zone map, where there
+    /// is no rock to cut and the ring is a claim about nothing.
+    #[test]
+    fn armed_cutting_tools_ring_the_party_and_only_in_base_space() {
+        let mut app = app_in_base(4245);
+        let mut fx = Fx::new();
+
+        let (_, away) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert_eq!(
+            paint::painted_rect_stroke_count(&away, render::CUTTING_OUTLINE),
+            0,
+            "tools away must ring nothing at all"
+        );
+
+        assert!(
+            app.game.as_mut().unwrap().toggle_mining(),
+            "the fixture starts with the tools away"
+        );
+        let (_, out) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert_eq!(
+            paint::painted_rect_stroke_count(&out, render::CUTTING_OUTLINE),
+            1,
+            "armed tools must ring the party's tile, and only theirs"
+        );
+
+        app.game.as_mut().unwrap().leave_base().unwrap();
+        let (_, surface) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        assert_eq!(
+            paint::painted_rect_stroke_count(&surface, render::CUTTING_OUTLINE),
+            0,
+            "the zone map has no rock to cut, so the ring claims nothing out here"
+        );
+    }
+
     /// Changing frame is the one thing that swaps the map out from under the
     /// corner inset mid-run: the party is drawn into frame 1, falls, and the
     /// very next draw is of a frame they have seen three cells of. This

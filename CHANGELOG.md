@@ -27,6 +27,49 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.33
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+The base stock strip lists banked pools, and a machine holds its row at zero.
+
+### Fixed
+
+- **The stock strip never drew the base's banked pool.** `Game::base_stock`
+  walked output buffers alone, and a banked item never reaches one —
+  `deliver_payout` sends a Research Node's yield straight past the node's own
+  `output` into the player's bank, which is the whole of what `ItemDef::banked`
+  buys. So Research Data, the only banked product in the game, had no row on
+  the strip at all, and `research_data.ron` had been carrying an `abbrev` of
+  `R` for the strip's benefit the entire time it could not be drawn. It is
+  folded in **by the flag and never by name**, and `stock::output_buffers` is
+  deliberately *not* widened to reach it — a work order for a banked item is
+  still refused on the grounds that no shelf holds it.
+
+### Changed
+
+- **A pile keeps its row while its buffer is empty.** The strip used to list
+  only what the base was holding right now, so a tag appeared and vanished as
+  haulers cleared shelves — the same reshuffling under the reader's eye that
+  sorting by quantity would cause, on a readout whose whole job is being
+  glanceable. A row now exists if the base holds any of an item **or** is set
+  up to make it: `stock::producible` seeds a zero for each deployed
+  structure's `work.produces` and its `assembles.item`. Both halves, because
+  an assembler declares no `work` block at all, so a `produces`-only rule
+  would leave every crafting machine in the base off the strip until its
+  first unit landed.
+- **Deliberately narrower than "any structure", and narrower than the recipe
+  list.** A Depot makes nothing, and seeding off what a building could *hold*
+  would put a row on a one-row readout for every item in the game. A
+  researched bench recipe is compiled into the *player's* pack and never into
+  a base buffer, so a row for one would be a zero that could never move — on
+  the shipped tree that is invisible, since all six researched recipes name
+  equipment and `ItemDef::category` already filters those off the strip, which
+  is exactly why it is written down. A banked pool the player has none of
+  takes the same rule applied to the one item with no buffer to stand in for
+  it: not seeded, or every run would open on a row for a resource nothing in
+  the base makes yet.
+
 ## 0.13.32
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -117,6 +117,75 @@ impl Game {
         }
     }
 
+    /// Whether a body posted to `site` right now would have anything to do.
+    ///
+    /// True when the materials are all in — there is a structure to raise —
+    /// or when at least one outstanding item can be picked up somewhere.
+    ///
+    /// **This is a stock count, and it is the one place a want is allowed to
+    /// be one.** `dig_wants` and `feeders_for` are both deliberately
+    /// structural, on the grounds that a want flickering as a shelf drains
+    /// walks bodies on and off a post for the rest of the run. The reason
+    /// this one is different is that the alternative is not flicker, it is a
+    /// **deadlock**: build wants outrank production, so a base with one
+    /// program posts it to the request, the request is dry, the body stands
+    /// there, and the Mining Node that would make the very material the site
+    /// is waiting for is never worked again. The crew says "nothing to raise
+    /// it with" once and the base is finished for the rest of the run — from
+    /// a player doing the supported thing, since filing a request the base
+    /// cannot afford is the whole reason filing charges nothing.
+    ///
+    /// What the flicker actually looks like here is also the behaviour you
+    /// want: a lone body mines until a unit exists, carries it to the site,
+    /// and goes back to mining. Slow, visible, and progress. A build is a
+    /// one-off job with a terminal state, not a post the base holds
+    /// indefinitely, which is what makes that acceptable where it would not
+    /// be for a machine.
+    ///
+    /// It does **not** ask whether the whole bill can be met — only whether
+    /// there is a next unit to fetch. Waiting for the full bill would put
+    /// the deadlock back for any structure costing more than the base can
+    /// hold at one time.
+    pub(crate) fn build_is_workable(&mut self, site: Entity) -> bool {
+        let Some(outstanding) = self
+            .world
+            .get::<BuildSite>(site)
+            .map(|build| build.outstanding())
+        else {
+            return false;
+        };
+        if outstanding.is_empty() {
+            return true;
+        }
+        // **A load already in a builder's hands is work in progress**, and
+        // the site is not dry while one is walking to it. Without this the
+        // base announces "nothing to fetch" the moment a builder empties the
+        // last shelf into its arms — naming the *whole* bill as outstanding,
+        // because nothing has been set down yet — and then goes quiet, so
+        // the one line the player gets is the wrong figure at the wrong
+        // moment. The want is dropped in the same breath; the carrier
+        // finishes anyway, since `schedule_base_labour` never frees a body
+        // holding a `Carrying`, but the report was already wrong.
+        let carrying_for_this = {
+            let mut query = self.world.query::<(&Task, &Carrying)>();
+            query
+                .iter(&self.world)
+                .any(|(task, _)| task.kind == TaskKind::Construct && task.target == site)
+        };
+        if carrying_for_this {
+            return true;
+        }
+        outstanding.into_iter().any(|(item, _)| {
+            if self.pack_source(&item).is_some() {
+                return true;
+            }
+            let mut query = self.world.query_filtered::<&Stock, With<Structure>>();
+            query
+                .iter(&self.world)
+                .any(|stock| stock.output.get(&item).copied().unwrap_or(0) > 0)
+        })
+    }
+
     /// One builder, one step. Split out of the loop above so the site
     /// lookup and the early returns read as the sequence they are rather
     /// than as five levels of `continue`.
@@ -150,7 +219,14 @@ impl Game {
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
         match self.builder_errand(worker, site, target) {
-            Errand::Dry => self.announce_dry(site, target),
+            // **Silent here, deliberately.** The scheduler owns this
+            // announcement, because it is the only thing that can see a site
+            // nobody is posted to — and a dry site is dropped from the want
+            // list precisely so it does not hold a body. What reaches this
+            // arm is the narrow race where a source existed when the posting
+            // was made and was emptied before this body arrived; the next
+            // tick re-derives the want and reports it if it lasts.
+            Errand::Dry => {}
             Errand::PutBack => {
                 self.put_back_load(worker);
             }
@@ -162,20 +238,13 @@ impl Game {
                 self.walk_builder(worker, from, dest, blocked, pocket_radius);
             }
             Errand::Deliver(_) => self.set_load_down(worker, site),
-            Errand::Fetch(item, qty, source) => {
-                // A source exists again, so the base is no longer dry and
-                // the next drought is news. `set_machine_status`' rule, and
-                // it needs saying explicitly here where a dig site's does
-                // not: a build waits on a bill of several items over many
-                // trips, so latched-once-forever would leave a base that ran
-                // dry in zone 2 silent about running dry in zone 6.
-                if let Some(mut build) = self.world.get_mut::<BuildSite>(site)
-                    && build.announced_dry
-                {
-                    build.announced_dry = false;
-                }
-                self.pick_up_for_site(worker, &item, qty, source)
-            }
+            // The dry latch is **not** cleared here. Both halves of it live
+            // at the one site that decides whether to staff the job —
+            // `build_wants` announces the drought and clears the latch the
+            // tick a source reappears — because a latch cleared in two
+            // places is a latch whose clearing neither place is responsible
+            // for, and the redundant one hides a broken primary.
+            Errand::Fetch(item, qty, source) => self.pick_up_for_site(worker, &item, qty, source),
             Errand::Raise(_) => self.raise_one_tick(worker, site, target),
         }
     }
@@ -387,43 +456,6 @@ impl Game {
         self.world.entity_mut(worker).remove::<Task>();
         self.spawn_structure(&def, target.x, target.y);
         self.log_base(format!("Your crew finishes the {}.", def.name));
-    }
-
-    /// Says once that there is nothing anywhere to fetch for this site.
-    ///
-    /// Latched on `BuildSite::announced_dry` under
-    /// `systems::set_machine_status`' rule — entering a state is news,
-    /// staying in it is not. **The latch clears when a source appears**,
-    /// unlike a dig site's, because a build waits on a bill of several items
-    /// over many trips: said once and never again, a base that ran dry in
-    /// zone 2 would stay silent about running dry in zone 6.
-    fn announce_dry(&mut self, site: Entity, target: Position) {
-        if self
-            .world
-            .get::<BuildSite>(site)
-            .is_some_and(|b| b.announced_dry)
-        {
-            return;
-        }
-        let (kind, short) = {
-            let Some(build) = self.world.get::<BuildSite>(site) else {
-                return;
-            };
-            (build.structure.clone(), build.outstanding())
-        };
-        if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
-            build.announced_dry = true;
-        }
-        let wanted = short
-            .iter()
-            .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let name = self.structure_name(&kind);
-        self.log_base(format!(
-            "Your crew has nothing to raise the {name} at ({}, {}) with — still needs {wanted}.",
-            target.x, target.y
-        ));
     }
 
     /// Puts whatever `worker` is carrying back into the base, and takes the

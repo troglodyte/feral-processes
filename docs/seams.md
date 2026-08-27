@@ -6742,6 +6742,38 @@ a floored island. Two islands are needed to test both halves — a one-cell
 island has no standing room and a two-cell island has standing room and no
 route, and a fix for one is not a fix for the other.
 
+**A dry request is not a want, and that is the one place in the scheduler a
+want is allowed to be a stock count.** `dig_wants` and `feeders_for` are both
+deliberately structural, because a want that flickers as a shelf drains walks
+bodies on and off a post for the rest of the run. The reason a build want is
+different is that the alternative is not flicker but a **deadlock**: build
+wants outrank production, so a base with one program posts it to the request,
+the request has nothing to fetch, the body stands there, and the Mining Node
+that would make the very material the site is waiting for is never worked
+again. The crew says "nothing to raise it with" once and the base is finished
+for the run — from a player doing the *supported* thing, since filing a
+request the base cannot afford is the whole reason filing charges nothing.
+The flicker this admits is the behaviour you want anyway: a lone body mines
+until a unit exists, carries it over, and goes back to mining. A build is a
+one-off job with a terminal state, not a post the base holds indefinitely,
+which is what makes that acceptable here and not for a machine.
+`build_is_workable` asks only whether there is a **next unit** to fetch,
+never whether the whole bill can be met — the latter puts the deadlock back
+for any structure costing more than the base can hold at once.
+
+**Two traps came out of that fix, and both are the kind that ships.** The
+announcement had to *move*: a dry site is now never posted, so no builder
+ever stands there to report it, and the report belongs where the drop
+happens — which is the codebase's existing rule that the scheduler is the
+only thing that can see a post nobody holds. `run_build_crew` is silent
+about it, exactly as `can_walk_to_dig` owns the stuck announcement.
+And `build_is_workable` must count **a load already in a builder's hands**,
+or the base announces "nothing to fetch" the instant a builder empties the
+last shelf into its arms — naming the whole bill outstanding, because
+nothing has been set down yet — and then latches quiet. The carrier still
+finishes, since a `Carrying` holder is never freed, but the one line the
+player gets is the wrong figure at the wrong moment.
+
 **Two things a future widening must not quietly break.** "One builder at a
 time" is a property of the scheduler naming a site once, not a count on the
 component — a second builder is a scheduler change and costs no save-format

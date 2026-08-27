@@ -1248,6 +1248,14 @@ impl Game {
     /// A `has_station` pre-filter here would be strictly subsumed by that
     /// check and would read as the guard when it is not.
     ///
+    /// **A site with nothing to fetch is not a want**, and that is
+    /// `Game::build_is_workable` — the one place in the scheduler a want is
+    /// allowed to be a stock count rather than a structural fact. Read its
+    /// doc comment before "fixing" it back: unconditionally listed, a
+    /// request the base cannot supply holds the body that would produce the
+    /// very material it is waiting for, and a one-program base stops for the
+    /// rest of the run.
+    ///
     /// Sorted by tile like `assembler_system`'s machines, so two requests
     /// filed in the same tick are always raised in the same order.
     fn build_wants(&mut self) -> Vec<(Entity, TaskKind)> {
@@ -1259,10 +1267,71 @@ impl Game {
                 .collect()
         };
         sites.sort_unstable();
+        // Dropped **and reported**, in that order and in one place. The
+        // scheduler is the only thing that can see a site nobody is posted
+        // to — which a dry site now always is, since it is dropped here — so
+        // this is where the shortfall has to be said. `run_build_crew` is
+        // silent about it for the same reason `can_walk_to_dig` owns the
+        // stuck announcement: only the thing that decides not to staff a job
+        // knows the job went unstaffed.
+        let mut workable = Vec::with_capacity(sites.len());
+        for (x, y, site) in sites {
+            if self.build_is_workable(site) {
+                if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
+                    build.announced_dry = false;
+                }
+                workable.push((x, y, site));
+            } else {
+                self.announce_dry(site);
+            }
+        }
+        let sites = workable;
         sites
             .into_iter()
             .map(|(_, _, e)| (e, TaskKind::Construct))
             .collect()
+    }
+
+    /// Says once that there is nothing anywhere to fetch for `site`.
+    ///
+    /// `announce_cut_off`'s twin, and a second latch rather than a shared
+    /// one for `DigSite`'s reason: the two leave the player different
+    /// errands. No route is a wall to cut or a machine to move; nothing to
+    /// fetch is a shelf to fill.
+    ///
+    /// **The latch clears the tick a source appears**, in `build_wants`
+    /// above, and that clearing matters more here than it does for a dig
+    /// site: a build waits on a bill of several items over many trips, so
+    /// said-once-and-never-again would leave a base that ran dry early
+    /// silent about running dry later.
+    fn announce_dry(&mut self, site: Entity) {
+        if self
+            .world
+            .get::<BuildSite>(site)
+            .is_none_or(|b| b.announced_dry)
+        {
+            return;
+        }
+        if let Some(mut build) = self.world.get_mut::<BuildSite>(site) {
+            build.announced_dry = true;
+        }
+        let Some(build) = self.world.get::<BuildSite>(site) else {
+            return;
+        };
+        let (kind, short) = (build.structure.clone(), build.outstanding());
+        let at = self.world.get::<Position>(site).copied();
+        let wanted = short
+            .iter()
+            .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let name = self.structure_name(&kind);
+        if let Some(at) = at {
+            self.log_base(format!(
+                "Your crew has nothing to raise the {name} at ({}, {}) with — still needs {wanted}.",
+                at.x, at.y
+            ));
+        }
     }
 
     /// Says once that nobody can find a way to `site`.

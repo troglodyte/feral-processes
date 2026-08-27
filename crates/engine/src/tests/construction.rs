@@ -584,11 +584,17 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
     game.place_structure("armory", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
+    // **Counted through `repeats`, not by counting entries.**
+    // `Game::message_history` runs `resources::condense`, which folds a
+    // repeated line into one row carrying a count — so an entry count reads
+    // a line said twice as a line said once, and this test passed against
+    // the very bug it exists to catch.
     let dry_lines = |g: &Game| {
         g.message_history(400)
             .into_iter()
             .filter(|m| m.text.contains("nothing to raise"))
-            .count()
+            .map(|m| m.repeats)
+            .sum::<usize>()
     };
     for _ in 0..80 {
         game.tick();
@@ -668,6 +674,50 @@ fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
         node.required_ticks,
         node.materials * tuning::BUILD_TICKS_PER_MATERIAL,
         "the meter is derived from the bill, never stored beside it"
+    );
+}
+
+/// **The deadlock**: a request the base cannot supply must not hold the body
+/// that would produce what it needs.
+///
+/// One program, one Mining Node, an order for Core Fragments, and a request
+/// filed for a machine that costs Core Fragments the base does not have.
+/// Build wants outrank production, so the body is posted to the site; the
+/// site is dry, so the body stands there; and the node that would make the
+/// fragments is never worked again. The crew says "nothing to raise it with"
+/// exactly once and the base is finished for the rest of the run.
+///
+/// This is not an exotic state — it is a new player filing a build they
+/// cannot afford, which is the *supported* thing to do and the whole reason
+/// filing charges nothing.
+#[test]
+fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
+    let mut game = base(1116);
+    let body = builder(&mut game);
+    place_now(&mut game, "mining_node", 0, 1).unwrap();
+    let node = structure_at(&mut game, 0, 1).expect("a node stands there");
+    // Nothing anywhere: the only way to get a Core Fragment is to mine one.
+    let held = count_item(&game, ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(ItemId::from(ids::CORE_FRAGMENT), held);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.place_structure("depot", 1, 0).unwrap();
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    let worked_the_node = game
+        .world
+        .get::<Task>(body)
+        .is_some_and(|t| t.kind == TaskKind::GatherResource && t.target == node);
+    assert!(
+        worked_the_node,
+        "the body must go back to the node that makes what the site is waiting for — \
+         held at the dry site, the base can never produce the materials to finish it"
     );
 }
 

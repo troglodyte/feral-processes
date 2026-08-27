@@ -859,6 +859,25 @@ impl Game {
             return;
         }
         self.drift_idle_staff(&staff, &amenities);
+        // **An off-shift program leaves the posting half of the scheduler,
+        // not the drift half.** `drift_idle_staff` above keeps the whole list
+        // — it is what walks a body to its amenity — while everything from
+        // here to the truncation reasons about who can actually be given a
+        // job.
+        //
+        // **Except one still holding a `Carrying`**, which stays on shift
+        // until it delivers. That is the existing never-free-a-`Carrying`-
+        // holder rule rather than a second one: freeing a loaded body
+        // destroys the goods, and `DigErrand::Return` is the precedent for
+        // walking a load home before giving the post up.
+        let on_shift: Vec<Entity> = staff
+            .iter()
+            .copied()
+            .filter(|&w| {
+                self.world.get::<components::OffShift>(w).is_none()
+                    || self.world.get::<Carrying>(w).is_some()
+            })
+            .collect();
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
         // program the player owns and is not fighting with is staff. A post
@@ -899,7 +918,7 @@ impl Game {
                 if kind != TaskKind::Construct {
                     continue;
                 }
-                let anyone = staff.iter().any(|&worker| {
+                let anyone = on_shift.iter().any(|&worker| {
                     let from = self
                         .world
                         .get::<Position>(worker)
@@ -943,8 +962,11 @@ impl Game {
         // **Before the cut, not after.** The whole point of the figure is
         // the posts that fall off the end here; taken afterwards it is
         // `staff.len()` by construction and the shortfall is always zero.
-        self.record_labour_demand(wanted.len(), staff.len());
-        wanted.truncate(staff.len());
+        // The shortfall the work-order header shows therefore *grows* while
+        // bodies are off shift, which is the intended readout and not a bug:
+        // the base is short of hands, and the reason is on the manifest.
+        self.record_labour_demand(wanted.len(), on_shift.len());
+        wanted.truncate(on_shift.len());
 
         // **The scheduler never takes a body off a post unless it has
         // somewhere better to put it — and only on a base it has been given
@@ -974,7 +996,7 @@ impl Game {
         // this base anything" while somebody had.
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct);
-        let posted: Vec<(Entity, TaskKind)> = staff
+        let posted: Vec<(Entity, TaskKind)> = on_shift
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
             .map(|t| (t.target, t.kind))
@@ -1012,6 +1034,20 @@ impl Game {
             // The Depot term is what keeps a body walking the line
             // downstream as each machine fills up, which is the behaviour on
             // a base with nowhere to deliver.
+            // A body that has left its post for an errand of its own is
+            // freed and **not** added to `idle`: it is walking somewhere, and
+            // the post it vacated stays in `remaining` for whoever is left.
+            // A loaded one is not here at all — it is on `on_shift` until it
+            // delivers.
+            if self.world.get::<components::OffShift>(worker).is_some()
+                && self.world.get::<Carrying>(worker).is_none()
+            {
+                self.world
+                    .entity_mut(worker)
+                    .remove::<Task>()
+                    .remove::<Carrying>();
+                continue;
+            }
             let shedding = a_depot_stands
                 && held.is_some_and(|(target, kind)| {
                     kind == TaskKind::GatherResource

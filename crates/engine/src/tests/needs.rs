@@ -545,3 +545,118 @@ fn an_unreachable_amenity_gives_the_errand_up_once_and_stays_given_up() {
         "the next beat must not hand it back — that flicker is what the latch is for"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Standing down: who the scheduler will still give a job to.
+// ---------------------------------------------------------------------------
+
+use crate::components::Carrying;
+use crate::game::base::work_orders::WorkOrder;
+
+/// A Home, a mining node, a Defrag Bay and one hired body, with an order
+/// standing that wants that body on the node.
+fn a_base_with_an_order_and_an_amenity(game: &mut Game) -> (Entity, Entity) {
+    stand_in_base(game);
+    place_home(game);
+    give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    place_now(game, "defrag_bay", 0, 2).expect("a Defrag Bay is buildable from the start");
+    let worker = spawn_tamed(game, 10, 3);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    (node, worker)
+}
+
+/// The point of the whole feature: a program with an errand of its own is not
+/// handed a job.
+#[test]
+fn an_off_shift_program_is_not_posted() {
+    let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (node, worker) = a_base_with_an_order_and_an_amenity(&mut game);
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "on shift it takes the post"
+    );
+
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, worker, &coherence(), critical - 1.0);
+    game.tick();
+
+    assert_eq!(off_shift(&game, worker), Some(coherence()));
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "and it is off the node while it sees to itself"
+    );
+}
+
+/// **The one exception**, and it is the existing never-free-a-`Carrying`-
+/// holder rule rather than a second one: freeing a loaded body destroys the
+/// goods.
+#[test]
+fn an_off_shift_program_holding_a_load_stays_posted_until_it_delivers() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_an_order_and_an_amenity(&mut game);
+    game.tick();
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, worker, &coherence(), critical - 1.0);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_some(),
+        "a loaded body keeps its post"
+    );
+    assert_eq!(
+        game.world.get::<Carrying>(worker).map(|c| c.qty),
+        Some(3),
+        "and its load is not destroyed"
+    );
+}
+
+/// The work-order header's shortfall *grows* while bodies are off shift.
+/// That is the intended readout: the base is short of hands, and why is on
+/// the manifest.
+#[test]
+fn labour_demand_counts_only_the_bodies_still_on_shift() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_an_order_and_an_amenity(&mut game);
+    game.tick();
+    let before = game.labour_demand().staff;
+
+    let (critical, _) = threshold(&game, &coherence());
+    set_reserve(&mut game, worker, &coherence(), critical - 1.0);
+    game.tick();
+
+    assert_eq!(
+        game.labour_demand().staff,
+        before - 1,
+        "the one body off shift is one body the base does not have"
+    );
+}
+
+/// A base whose whole crew has walked off posts nobody, and does not panic
+/// doing it.
+#[test]
+fn a_base_whose_whole_crew_is_off_shift_posts_nobody() {
+    let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_an_order_and_an_amenity(&mut game);
+    let second = spawn_tamed(&mut game, 10, 3);
+    game.tick();
+
+    let (critical, _) = threshold(&game, &coherence());
+    for who in [worker, second] {
+        set_reserve(&mut game, who, &coherence(), critical - 1.0);
+    }
+    game.tick();
+
+    assert_eq!(game.labour_demand().staff, 0);
+    for who in [worker, second] {
+        assert!(game.world.get::<Task>(who).is_none());
+    }
+}

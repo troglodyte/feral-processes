@@ -616,6 +616,61 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
     );
 }
 
+/// The list a build-order screen will page, built before the screen exists.
+///
+/// Shipped now rather than with the screen because it is already the one
+/// derivation three readers share — the map, the examine line, and this —
+/// and a fourth opinion about how far along a build is, written later
+/// against a component instead of against `BuildOrderRow`, is exactly how
+/// two screens come to disagree.
+///
+/// Tile order, `assembler_system`'s reason: bevy's iteration order is not
+/// stable, and a list that reshuffled between openings is one the player
+/// cannot learn. The fixture files its two requests in the *opposite* order
+/// to their tiles on purpose — filed in tile order the sort proves nothing.
+#[test]
+fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
+    let mut game = base(1115);
+    game.place_structure("depot", 1, 0).unwrap();
+    game.place_structure("mining_node", -1, 0).unwrap();
+
+    let report = game.build_order_report();
+    assert_eq!(report.len(), 2, "both requests are listed");
+    assert!(
+        report[0].pos.0 < report[1].pos.0,
+        "sorted by tile, not by the order they were filed: {:?}",
+        report.iter().map(|r| r.pos).collect::<Vec<_>>()
+    );
+    assert_eq!(report.iter().map(|r| r.pos).collect::<Vec<_>>(), {
+        let again = game.build_order_report();
+        again.iter().map(|r| r.pos).collect::<Vec<_>>()
+    });
+
+    let node = report
+        .iter()
+        .find(|r| r.structure.contains("Mining Node"))
+        .expect("the node is in the list under its display name, not its id");
+    assert!(
+        node.materials > 0,
+        "it carries the bill it was filed against"
+    );
+    assert_eq!(
+        node.delivered, 0,
+        "nothing has been carried to it — there is no builder in this fixture"
+    );
+    assert!(node.builder.is_none(), "and nobody is on it");
+    assert_eq!(
+        node.percent(),
+        0,
+        "so it reads as not started, rather than dividing by something"
+    );
+    assert_eq!(
+        node.required_ticks,
+        node.materials * tuning::BUILD_TICKS_PER_MATERIAL,
+        "the meter is derived from the bill, never stored beside it"
+    );
+}
+
 /// Examine names the request and what is still to be carried to it.
 ///
 /// The materials standing on a site are deliberately not drawn on the map,

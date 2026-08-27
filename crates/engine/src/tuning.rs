@@ -152,6 +152,35 @@ pub const fn absolute_companion_level_cap() -> u32 {
     CREATURE_MAX_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING
 }
 
+/// The level cap in zone 1, and the flat floor under
+/// `Game::level_cap`'s line for every zone the line would put lower.
+///
+/// It shares a value with `CREATURE_MAX_LEVEL` today and **that is a
+/// coincidence**: one answers "how far may anyone develop in the opening
+/// zone", the other "at what level do talents begin". Either may be retuned
+/// without the other, so neither is expressed in terms of the other.
+///
+/// Zone 1 is clearable at level 1 by the sim's own measurement, so the floor
+/// is not a bound the opening zone ever meets — it is room to develop in
+/// before the first breach.
+pub const ZONE_LEVEL_CAP_FLOOR: u32 = 6;
+
+/// Levels the cap rises per zone breached.
+///
+/// **Derived, not chosen.** It is the smallest integer slope that keeps
+/// `balance_sim::min_level_to_clear_zone`'s *geared* requirement reachable
+/// at every zone measured out to 16 — a cap below that requirement is not
+/// difficulty, it is a run that cannot continue. Zone 11 (needs 100, capped
+/// at 111) and zone 12 (needs 113, capped at 122) are the binding zones; a
+/// slope of 10 leaves zone 12 unclearable.
+///
+/// The consequence, recorded rather than hidden: the cap sits *above* the
+/// gear-free requirement in zones 2-6, so those can still be cleared by
+/// levelling alone. The two clear curves both pass near the origin and then
+/// diverge, so no single line can sit inside the band at both ends of the
+/// range. See `docs/measurements/2026-08-27-zone-level-cap.md`.
+pub const ZONE_LEVEL_CAP_STEP: u32 = 11;
+
 /// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes

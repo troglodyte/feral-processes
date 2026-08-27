@@ -315,6 +315,27 @@ impl Game {
             .unwrap_or(0)
     }
 
+    /// The highest level anyone in this run may reach — the player and every
+    /// companion alike.
+    ///
+    /// Linear in the zone, `ZoneLevel::stat_multiplier`'s reason: this curve
+    /// races the enemy curve in the player's favour, and two curves of
+    /// different order have an end wherever the coefficients are put.
+    ///
+    /// **It takes no entity, and that is the design.** One number for the
+    /// whole party is what makes a companion worth developing — under the
+    /// old per-entity ceiling a companion was capped six levels under the
+    /// player and a Kernel Ring bought the difference back.
+    ///
+    /// It reads `ZoneLevel` and nothing else. Depth deliberately does not
+    /// lift it: a deep frame is harder because what lives in it is scaled,
+    /// not because the party is let out of the cap to meet it.
+    pub fn level_cap(&self) -> u32 {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        crate::tuning::ZONE_LEVEL_CAP_FLOOR
+            .max(1 + crate::tuning::ZONE_LEVEL_CAP_STEP * zone.saturating_sub(1))
+    }
+
     /// The highest level `entity` may reach: `CREATURE_MAX_LEVEL` plus
     /// `LEVELS_PER_RING` for every Kernel Ring open on it (see
     /// `components::KernelRing`; absent means none).

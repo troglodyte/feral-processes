@@ -46,16 +46,25 @@ use crate::tuning::PLAYER_BASE_STATS;
 /// gap predates this constant's retuning and is not closed by it.
 const TURN_CAP: u32 = 2000;
 
-/// A companion levels at half the player's XP rate (`PARTY_XP_DIVISOR` in
-/// `crate::lib`). XP cost per level grows linearly with level
-/// (`xp_for_level`), so cumulative XP to reach a level grows with its
-/// *square* — half the XP rate therefore lands a companion at roughly
-/// `1/sqrt(2)` of the player's level over the same grinding time, not half
-/// the level.
+/// A companion is fielded at the player's own level.
+///
+/// It was `1/sqrt(2)` of it, and the argument was sound while a companion
+/// levelled against its own ceiling: a companion earns XP at half the
+/// player's rate (`PARTY_XP_DIVISOR`) and cumulative XP grows with the
+/// square of the level, so half the rate lands it at `1/sqrt(2)` of the
+/// level over the same grinding time.
+///
+/// `Game::level_cap` ended that. Player and companion now share one ceiling
+/// and every run that reaches it sits *at* it, so the level a companion is
+/// fielded at is decided by the cap and not by the grind that got there.
+/// The slower XP rate still decides how long it takes, which is a pacing
+/// question this sim does not model and never did.
+///
+/// The party this projects is therefore **stronger than the one it used to**,
+/// and every curve in the test module below moved when this changed — see
+/// `docs/measurements/2026-08-27-zone-level-cap.md`.
 fn companion_level_for_player_level(player_level: u32) -> u32 {
-    ((player_level as f64) / std::f64::consts::SQRT_2)
-        .round()
-        .max(1.0) as u32
+    player_level
 }
 
 /// `species`' `Stats` as scaled for a wild spawn in `zone`, per
@@ -186,6 +195,27 @@ pub fn toughest_ordinary_species(db: &SpeciesDb) -> &SpeciesDef {
         .filter(|s| !s.is_boss)
         .max_by_key(|s| s.base_hp + s.base_atk + s.base_mitigation)
         .expect("species db should have at least one ordinary species")
+}
+
+/// Base `EquipmentStats` of the strongest shipped weapon/armor, resolved
+/// from the item db the same way `Game` does — passed into
+/// `min_level_to_clear_zone` for the geared sweep.
+///
+/// `pub` beside `toughest_ordinary_species` and `median_ordinary_species`
+/// for their reason: a test outside this module that wants to measure
+/// against the real clear curves needs all three, and a second copy of
+/// "which gear is best" is a formula this repo keeps in one place.
+#[cfg(test)]
+pub fn best_gear_stats() -> (EquipmentStats, EquipmentStats) {
+    use crate::items::ids;
+    use crate::items_db::ItemDb;
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
+    let (abilities, _) =
+        crate::abilities::AbilityDb::load_dir(&dir.with_file_name("abilities")).unwrap();
+    let (db, _) = ItemDb::load_dir(&dir, &abilities).unwrap();
+    let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
+    let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
+    (weapon, armor)
 }
 
 /// The median non-boss species by the same flat stat total — the party
@@ -747,21 +777,6 @@ mod tests {
         )
         .unwrap()
         .0
-    }
-
-    /// Base `EquipmentStats` of the strongest shipped weapon/armor, resolved
-    /// from the item db the same way `Game` does — passed into
-    /// `min_level_to_clear_zone` for the geared sweep.
-    fn best_gear_stats() -> (EquipmentStats, EquipmentStats) {
-        use crate::items::ids;
-        use crate::items_db::ItemDb;
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/items");
-        let (abilities, _) =
-            crate::abilities::AbilityDb::load_dir(&dir.with_file_name("abilities")).unwrap();
-        let (db, _) = ItemDb::load_dir(&dir, &abilities).unwrap();
-        let weapon = db.get(ids::MONOFILAMENT_WHIP).unwrap().equipment.unwrap().1;
-        let armor = db.get(ids::ABLATIVE_PLATING).unwrap().equipment.unwrap().1;
-        (weapon, armor)
     }
 
     /// The opening ring filters the shipped roster with

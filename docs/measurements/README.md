@@ -54,6 +54,13 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-27 — Fitting the zone level cap](2026-08-27-zone-level-cap.md)
+  — the spec's proposed constants would have made every zone past 6
+  unclearable; `STEP = 11` is the smallest slope that does not, derived by
+  calling `min_level_to_clear_zone` over zones 1-16. Also records that no
+  straight line can sit under the gear-free curve at both ends of the range,
+  and that `dev-arenas/developed-companion.ron` is byte-identical to its own
+  control.
 - [2026-08-24 — What stacked affixes are worth](2026-08-24-stacked-affix-power.md)
   — fusion now unions two copies' affixes, and four of one weapon affix moved
   an on-curve fight from a **60%** win rate to **90%**, a bigger swing than

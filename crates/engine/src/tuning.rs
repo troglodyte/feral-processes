@@ -1909,25 +1909,28 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 /// against a default buffer of 20, a clog sheds a quarter and leaves the rest.
 pub const HAUL_CARRY_CAPACITY: u32 = 5;
 
-/// Chebyshev radius of the ring idle base staff loiter on, around the Home.
+/// Chebyshev radius of the ring a program *arrives* in base space on,
+/// around the Home.
 ///
-/// Small enough that the whole pool reads as *at the base* rather than
-/// scattered across it, and outside 1 so a parked program never sits on the
-/// Home's own tile. `game::base::work_orders::park_tile` clamps it to the
-/// live build radius, so a base at its starting size still parks inside its
-/// own slab.
+/// Not where idle staff live — they wander, `work_orders::wander_step`.
+/// This is the tile `work_orders::entry_tile` hands a body that has no
+/// base-space cell yet, which in an established base is a program that has
+/// just been beaten and still carries the surface tile it was taken on.
+/// Outside 1 so an arrival never lands on the Home's own tile, and inside
+/// the starting pocket so a base at its opening size has somewhere to put
+/// one.
 pub const IDLE_STAFF_RING_TILES: i32 = 3;
 
-/// How many ticks an idle program holds a tile before stepping to the next
-/// one along the ring.
+/// How many ticks an idle program holds a tile before drifting to a
+/// neighbouring one.
 ///
 /// Purely cosmetic — it is what makes a waiting pool read as *waiting*
-/// rather than as frozen. Deliberately not a random walk: the step is a
-/// function of `(tick, staff index)` and draws no RNG at all. A milling
-/// draw taken every tick for every idle program would shift the shared
-/// stream harder than anything else in the game, and `CLAUDE.md` records
-/// three separate occasions where a shifted stream silently rewrote a
-/// seeded test in an unrelated file.
+/// rather than as frozen or as jittering. Deliberately not a random walk:
+/// the direction is a function of `(staff index, step)` and draws no RNG at
+/// all. A milling draw taken every tick for every idle program would shift
+/// the shared stream harder than anything else in the game, and `CLAUDE.md`
+/// records three separate occasions where a shifted stream silently rewrote
+/// a seeded test in an unrelated file.
 pub const IDLE_STAFF_STEP_TICKS: u64 = 6;
 
 /// How far a hauling program's cost field reaches, centred on the tile it is
@@ -2881,9 +2884,10 @@ pub const MEMORY_FORGET_THRESHOLD: f32 = 0.5;
 /// that absorbed the blow is armour that stopped the scar.
 pub const MEMORY_MAUL_FRACTION: f32 = 0.35;
 
-/// Opinion of a base tile at or below which an idle program refuses to be
-/// parked there — `park_idle_staff`'s third rejection, beside a tile a
-/// `Structure` stands on and a tile `BaseGrid` calls unwalkable.
+/// Opinion of a base tile at or below which an idle program refuses to
+/// drift onto it — `drift_idle_staff`'s last rejection, beside a tile a
+/// `Structure` stands on, a tile that is not laid floor, the party's own
+/// cell, and a tile another idle body holds.
 ///
 /// **Signed, not a magnitude.** The comparison is `opinion_of(..) <` this,
 /// so a fondness never triggers it and a grudge has to be a real one. It is

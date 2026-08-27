@@ -971,7 +971,7 @@ impl Game {
         // appended after the order's wants and the list is not re-sorted.
         //
         // **Every question here is asked from the body's own tile**, never
-        // from the player's. `park_idle_staff` above has just put each free
+        // from the player's. `drift_idle_staff` above has just put each free
         // program on a real tile inside the base, and a program the
         // scheduler freed this tick is standing at the post it just left —
         // so the walk starts where the body is, and whether it arrives is a

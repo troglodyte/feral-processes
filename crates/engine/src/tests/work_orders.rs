@@ -1136,6 +1136,20 @@ fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 2);
     let node_pos = *game.world.get::<Position>(node).unwrap();
+    // A cut corridor running off the pocket's edge, mined and never
+    // floored — which is exactly the ground entropy takes back. Without
+    // it `walkable` and `is_floor` answer the same on every tile the
+    // fixture owns, and this test would pass against either rule.
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for x in 4..8 {
+            grid.open(x, 3, 0);
+        }
+        assert!(
+            grid.walkable(4, 3) && !grid.is_floor(4, 3),
+            "precondition: the corridor is walkable rock, not floor"
+        );
+    }
 
     for worker in staff {
         for (x, y) in drift_trail(&mut game, worker, 120) {
@@ -1723,16 +1737,16 @@ fn a_depot_less_base_still_refuses_a_machine_with_no_neighbour() {
 /// from that tile.
 ///
 /// The bound is two tiles rather than zero because a tick does two things
-/// to an idle body before this can be read: `park_idle_staff` may step it
-/// one along its ring, and `haul_step_system` takes the first step of the
+/// to an idle body before this can be read: `drift_idle_staff` may drift it
+/// onto a neighbour, and `haul_step_system` takes the first step of the
 /// walk in the same tick.
 ///
 /// `stand_player_at` is a decoy here, not a distance: the base is its own
 /// coordinate space now, so the player's tile has nothing to do with where
 /// a worker's walk field is. It exists to give a regression that reads the
 /// player's `Position` instead of the worker's own something to be caught
-/// jumping to — a value nowhere near the ring `park_idle_staff` parks
-/// bodies on around Home.
+/// jumping to — a value nowhere near the corner of the base
+/// `drift_idle_staff` leaves an idle body wandering in.
 #[test]
 fn a_posted_staff_member_sets_off_from_its_own_tile_and_not_the_player_s() {
     let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

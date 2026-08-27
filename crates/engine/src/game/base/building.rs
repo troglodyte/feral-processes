@@ -636,8 +636,8 @@ impl Game {
     /// on. This used to overwrite it with the player's, because a tamed
     /// program's `Position` was the tile it was beaten on and was never
     /// written again — posting was the only moment it could be made true.
-    /// `park_idle_staff` writes it every tick now, so the value is already
-    /// live and overwriting it teleported a loitering body onto the player.
+    /// `drift_idle_staff` writes it every tick now, so the value is already
+    /// live and overwriting it teleported a wandering body onto the player.
     pub(crate) fn post_worker(&mut self, worker: Entity, structure: Entity) {
         let speed = self.species_base_speed(worker);
         let ticks = self.work_ticks_for(structure, speed);

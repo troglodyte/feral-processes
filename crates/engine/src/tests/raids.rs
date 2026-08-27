@@ -1,6 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
+use crate::components::Downed;
 use crate::game::base::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{
     FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
@@ -1554,12 +1555,15 @@ fn structures_survive_save_and_load_with_their_durability() {
     assert_eq!(durability.max_hp, structure_def.durability);
 }
 
-/// Programs have no passive regen and the player is not present, so raid
+/// A posted worker on exactly one raid's worth of HP, and the raids to kill
+/// it. Programs have no passive regen and the player is not present, so raid
 /// chip damage is pure attrition: a worker left on a cronjob long enough
 /// dies unattended. That is the intended cost, not an oversight.
-#[test]
-fn a_raid_defender_brought_to_zero_is_destroyed_rather_than_standing_down() {
-    let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+///
+/// Returns the worker, whatever became of it — the two tests below differ
+/// only in what they expect a death to *mean*.
+fn a_defender_raided_to_death(mode: DifficultyMode) -> (Game, Entity) {
+    let mut game = Game::new(101, mode, &test_assets_dir()).unwrap();
     let existing: Vec<Entity> = {
         let mut query = game.world.query_filtered::<Entity, With<Durability>>();
         query.iter(&game.world).collect()
@@ -1592,20 +1596,39 @@ fn a_raid_defender_brought_to_zero_is_destroyed_rather_than_standing_down() {
 
     for _ in 0..2000 {
         game.raid_check();
-        if game.world.get::<Stats>(worker).is_none() {
+        if !game.creature_alive(worker) || game.world.get::<Downed>(worker).is_some() {
             break;
         }
     }
+    (game, worker)
+}
+
+/// Any Forgiving death of an owned program is recoverable, and a raid is a
+/// death like any other — the defender goes through the same door battle
+/// teardown does.
+#[test]
+fn a_raid_defender_brought_to_zero_under_forgiving_is_benched() {
+    let (game, worker) = a_defender_raided_to_death(DifficultyMode::Forgiving);
 
     assert!(
-        game.world.get::<Stats>(worker).is_none(),
-        "a defender knocked to 0 HP is destroyed, not stood down"
+        game.world.get::<Downed>(worker).is_some(),
+        "a defender knocked to 0 HP under Forgiving is benched, not destroyed"
     );
     assert!(
         game.message_log(200)
             .iter()
             .any(|e| e.kind == MessageKind::Raid && e.text.contains("destroyed defending")),
         "the loss is reported as a Raid line, since the player wasn't there to see it"
+    );
+}
+
+#[test]
+fn a_raid_defender_brought_to_zero_under_permadeath_is_destroyed() {
+    let (game, worker) = a_defender_raided_to_death(DifficultyMode::Permadeath);
+
+    assert!(
+        game.world.get::<Stats>(worker).is_none(),
+        "Permadeath is unchanged: a defender knocked to 0 HP is destroyed"
     );
 }
 

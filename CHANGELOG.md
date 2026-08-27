@@ -27,6 +27,104 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.34
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+a build request is a new entity in the save and every field it added is
+additive behind `#[serde(default)]`, which is exactly the case field-named
+RON was adopted to make free.
+
+Building is something the base does, not something you do. A deploy is a
+request your crew fetches for and raises, and so is an upgrade.
+
+### Added
+
+- **Every structure but the Home is now filed rather than built.**
+  `Game::place_structure` answers every refusal it always did — researched,
+  in base space, standing on laid floor, cell free, under `max_deployed` —
+  and then spawns a `components::BuildSite` on the cell carrying the resolved
+  bill of materials. `schedule_base_labour` posts a body to it ahead of every
+  work order, and that body walks to whichever shelf or pack holds what the
+  bill calls for, carries `HAUL_CARRY_CAPACITY` at a time, sets the load down
+  on the site and raises the structure over `BUILD_TICKS_PER_MATERIAL` ticks
+  per unit of material.
+- **The Home stays a player verb**, and that is not a special case to be
+  tidied away later: founding is the one build with nobody to ask, since base
+  space does not exist before a Home stands — no roster inside it, no shelf to
+  fetch from, and `require_base` refusing entry for want of the Home you are
+  building.
+- **Nothing is charged at filing.** A request the base cannot afford yet is a
+  legitimate thing to file — production catches up, and the crew starts the
+  moment the last unit exists — so the old shortfall *refusal* at the menu
+  became a shortfall *report* from the builder standing at the site, said once
+  per drought rather than once ever.
+- **`d` plus a direction calls off the request on that tile** when no
+  structure stands there: the same gesture as demolishing, because it is the
+  same question the player is asking of that cell. No confirmation step —
+  nothing is destroyed, and the units already carried there go straight back
+  onto a shelf.
+- **The map paints a site as a dark slab with a bouncing caret**, and examine
+  says what is going up, what is still to be fetched and who is on it.
+  `views::BuildOrderRow` is the one derivation all three read, so the map, the
+  examine line and the order list cannot report a percentage the crew
+  disagrees with.
+- **The build menu's `(have/need)` column counts the base's shelves as well
+  as the pack**, since both are stores a builder fetches from.
+
+### Changed
+
+- **Upgrading a structure is a build request too.** It was the last structure
+  cost paid out of the player's own pack — the complaint arrives the moment
+  you stand on a full Depot beside a Mk1 Lathe and are told "Not enough Cache
+  Grain", with the stock strip along the top of that very screen saying the
+  base is holding it. `Game::upgrade_structure` keeps every refusal it had in
+  the same order, drops the shortfall check and the charge, and files a site
+  on the machine's own tile; the crew fetches the bill and the tier lands when
+  the work is done. The upgrade menu now quotes the pack **and** the base's
+  shelves, or it would price the job against a store the verb no longer reads.
+- **The machine keeps running while its upgrade stands.** Standing it down for
+  its own upgrade brings back the deadlock closed below, on a base that files
+  three at once — the machines making the materials the requests are waiting
+  on are the ones switched off. The site carries no glyph for the same reason:
+  the machine is still there and still drawing that cell, so a build frame
+  over it would be a lie about the tile.
+- **One component covers both jobs.** `BuildSite::goal` is `New` or
+  `Upgrade { to_tier }`, and exactly one step branches on it — completion.
+  The crew, the walk, the scheduler wants, both announcement latches, the
+  reachability check and the refund on cancel are shared. A site names a
+  **tile** and never an entity, so a machine destroyed underneath its own
+  upgrade leaves nothing dangling.
+- **Materials are not spent until the structure is raised.** They leave their
+  shelf when a builder picks them up and stand on the cell until the job
+  finishes, which is what makes calling a request off a refund of goods that
+  still exist rather than a rebate.
+
+### Fixed
+
+- **A request the base could not supply deadlocked it.** Build wants outrank
+  production, so a one-program base posted its only body to a site with
+  nothing to fetch, the body stood there, and the Mining Node that would make
+  the very material the site was waiting for was never worked again. The crew
+  said "nothing to raise it with" once and the base was finished for the run
+  — reached by a player doing the supported thing, since filing a request the
+  base cannot afford is the whole reason filing charges nothing. A dry site
+  now drops out of the want list until a next unit exists; the flicker that
+  admits is the behaviour you want, mine a unit, carry it over, go back to
+  mining.
+- **An unreachable request starved the base silently.** A walled-in site
+  posted a body, lost it in the same tick when the walk failed, and was handed
+  the same body again on the next — forever, while the production want the
+  truncation cut to make room for it went unfilled and nothing was logged. The
+  reachability check now sits *above* the cut, asks the staff, and says so
+  once.
+- **The dry report is said once per drought, not once per request.** The latch
+  was documented as clearing when a source appears and never did, which for a
+  build — waiting on a bill of several items over many trips — leaves a base
+  that ran out early silent about running out later.
+- **A pending upgrade no longer eats one of its kind's deployment slots**, and
+  a machine destroyed by a sweep or demolished by the player takes its pending
+  request with it, handing back whatever had already been carried there.
+
 ## 0.13.33
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

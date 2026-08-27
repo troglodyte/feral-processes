@@ -112,6 +112,19 @@ pub(crate) fn pressing_need(needs: &Needs, db: &NeedDb) -> Option<NeedId> {
 }
 
 impl Game {
+    /// How far `who`'s reserves have run down, signed and baselined at zero
+    /// — the screens' door onto `needs::strain`, and a **caller** of it
+    /// rather than a second fold. `Game::morale`'s shape exactly.
+    ///
+    /// A body carrying no `Needs` reads zero rather than panicking: hostiles,
+    /// structures and the player are safe here without a branch.
+    pub fn need_strain(&self, who: Entity) -> f32 {
+        self.world
+            .get::<Needs>(who)
+            .map(|n| crate::needs::strain(n, self.world.resource::<NeedDb>()))
+            .unwrap_or(0.0)
+    }
+
     /// Builds this pass's amenity index off the world's own structures.
     pub(crate) fn amenities(&mut self) -> Amenities {
         let mut query = self.world.query::<(&Structure, &Position)>();

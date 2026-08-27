@@ -2958,6 +2958,23 @@ pub const MEMORY_MORALE_PER_POINT: f64 = 0.005;
 /// cap and stops meaning anything.
 pub const MEMORY_MORALE_MAX_SHIFT: f64 = 0.10;
 
+/// The most a program's need strain may shift extraction reliability.
+///
+/// **Its own cap, and the outer `clamp(0.0, 1.0)` is not it.** That clamp
+/// exists because `GameRng::random_bool` panics outside `0..=1`, and it would
+/// silently swallow an uncapped overshoot at the low end — so a test reading
+/// the finished chance could not tell a working cap from a missing one. Read
+/// `MEMORY_MORALE_MAX_SHIFT`'s argument, which is this one exactly.
+///
+/// One-directional in practice, because every shipped `morale_weight` is
+/// negative: a program that has what it needs contributes zero rather than a
+/// bonus, which is what keeps the shipped extraction rates meaning what they
+/// have always meant.
+pub const NEED_STRAIN_MAX_SHIFT: f64 = 0.15;
+
+/// How much one point of need strain is worth to an extraction roll.
+pub const NEED_STRAIN_PER_POINT: f64 = 0.01;
+
 /// How often `Game::note_postings` writes what a posted program is doing —
 /// every this many ticks, read straight off `GameClock`.
 ///

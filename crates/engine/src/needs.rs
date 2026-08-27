@@ -16,6 +16,7 @@
 //! being non-empty — that makes the property hold by accident at one site and
 //! lapse at another.
 
+use crate::components::Needs;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -135,6 +136,37 @@ impl NeedDb {
     pub fn iter(&self) -> impl Iterator<Item = &NeedDef> {
         self.defs.values()
     }
+}
+
+/// What a program's reserves are worth to morale — signed, baseline **zero**.
+///
+/// Each def's `morale_weight` scaled linearly from full at `NEED_MIN` to
+/// nothing at `content`, so a satisfied need contributes exactly zero and a
+/// program with no `Needs` at all contributes exactly zero, without a branch
+/// at either site. `base_int`'s idiom, in the same expression.
+///
+/// **A free function for `party::role_of`'s reason.** A bevy system has no
+/// `Game` to ask, and two folds would eventually disagree about whether an
+/// unresolvable def counts — which is the property the whole empty-catalogue
+/// guarantee rests on. `Game::need_strain` is a caller of this.
+///
+/// **An entry whose def no file defines is skipped**, contributing nothing,
+/// exactly as every `Memories` reader skips one.
+pub fn strain(needs: &Needs, db: &NeedDb) -> f32 {
+    needs
+        .iter()
+        .filter_map(|(id, value)| {
+            let def = db.get(id)?;
+            // At or above `content` the need is satisfied and worth nothing.
+            // Below it, the weight ramps linearly to full at `NEED_MIN`.
+            let span = def.content - NEED_MIN;
+            if span <= 0.0 {
+                return None;
+            }
+            let short = (def.content - value).clamp(0.0, span);
+            Some(def.morale_weight * (short / span))
+        })
+        .sum()
 }
 
 #[cfg(test)]

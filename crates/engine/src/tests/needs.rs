@@ -932,3 +932,86 @@ fn a_program_out_of_reach_is_not_named() {
 
     assert_eq!(idled_strikes(&game, staff[0], staff[1]), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Teeth: what a run-down program costs the base.
+// ---------------------------------------------------------------------------
+
+use crate::needs::strain;
+use crate::systems::{mining_success_chance, need_shift};
+use crate::tuning::{DEFAULT_BASE_INT, NEED_STRAIN_MAX_SHIFT};
+
+/// Full reserves are the baseline and contribute **exactly** nothing, so the
+/// shipped extraction rates mean what they have always meant.
+#[test]
+fn a_program_with_everything_it_needs_has_no_strain() {
+    let game = Game::new(100, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<NeedDb>();
+    let mut needs = Needs::default();
+    needs.seed_missing(db);
+
+    assert_eq!(strain(&needs, db), 0.0);
+}
+
+/// Deleting `assets/needs/` contributes nothing either, and by arithmetic
+/// rather than by a branch.
+#[test]
+fn an_empty_catalogue_has_no_strain() {
+    let mut needs = Needs::default();
+    needs.set(&coherence(), 0.0);
+
+    assert_eq!(strain(&needs, &NeedDb::default()), 0.0);
+}
+
+/// **The cap is asserted on `need_shift` directly.** Read off the finished
+/// chance it cannot be told from the outer `clamp(0.0, 1.0)` swallowing the
+/// overshoot, which is a different job.
+#[test]
+fn the_strain_shift_saturates_at_its_own_cap() {
+    assert!((need_shift(-10_000.0) + NEED_STRAIN_MAX_SHIFT).abs() < 1e-9);
+    assert!((need_shift(10_000.0) - NEED_STRAIN_MAX_SHIFT).abs() < 1e-9);
+}
+
+/// An entry naming a def no file defines is skipped, not counted as
+/// zero-weighted noise — the same rule every `Memories` reader follows, and
+/// the property the whole empty-catalogue guarantee rests on.
+#[test]
+fn an_unresolvable_need_is_skipped_rather_than_counted() {
+    let game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<NeedDb>();
+    let mut needs = Needs::default();
+    needs.seed_missing(db);
+    needs.set(&NeedId::from("a_mod_removed_this"), 0.0);
+
+    assert_eq!(strain(&needs, db), 0.0);
+}
+
+/// A run-down program extracts less reliably, and a program with what it
+/// needs extracts at exactly today's shipped rate.
+#[test]
+fn a_drained_program_extracts_less_reliably_and_a_full_one_is_unchanged() {
+    let full = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+    let today = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, 0.0);
+    let drained = mining_success_chance(4, 0, DEFAULT_BASE_INT, 0.0, -12.0);
+
+    assert_eq!(full, today, "zero strain is the shipped rate, untouched");
+    assert!(
+        drained < full,
+        "a program running on empty fumbles more: {drained} against {full}"
+    );
+}
+
+/// `Game::need_strain` is a caller of the fold, not a second copy of it.
+#[test]
+fn the_games_strain_reader_agrees_with_the_fold() {
+    let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    set_reserve(&mut game, worker, &coherence(), 0.0);
+
+    let direct = {
+        let needs = game.world.get::<Needs>(worker).unwrap();
+        strain(needs, game.world.resource::<NeedDb>())
+    };
+    assert_eq!(game.need_strain(worker), direct);
+    assert!(direct < 0.0, "an empty reserve is a drag, not a bonus");
+}

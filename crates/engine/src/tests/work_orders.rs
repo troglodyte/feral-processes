@@ -981,50 +981,245 @@ fn standing_jobs_survive_a_save_but_not_a_demolition() {
 // Task 6: idle staff on the map
 // ---------------------------------------------------------------------
 
-use crate::game::base::work_orders::park_tile;
+use crate::game::base::work_orders::{entry_tile, wander_step};
 
 #[test]
-fn park_tile_is_a_pure_function_of_its_arguments() {
+fn entry_tile_is_a_pure_function_of_its_arguments() {
     let home = Position { x: 4, y: 7 };
 
-    assert_eq!(park_tile(home, 0, 12), park_tile(home, 0, 12));
-    assert_eq!(park_tile(home, 3, 99), park_tile(home, 3, 99));
+    assert_eq!(entry_tile(home, 0, 12), entry_tile(home, 0, 12));
+    assert_eq!(entry_tile(home, 3, 99), entry_tile(home, 3, 99));
 }
 
 #[test]
-fn two_staff_park_on_different_tiles_at_the_same_tick() {
+fn two_staff_arrive_on_different_tiles_at_the_same_tick() {
     let home = Position { x: 0, y: 0 };
 
-    assert_ne!(park_tile(home, 0, 5), park_tile(home, 1, 5));
+    assert_ne!(entry_tile(home, 0, 5), entry_tile(home, 1, 5));
 }
 
 #[test]
-fn a_parked_staff_member_stands_inside_the_base_and_off_its_structures() {
+fn wander_step_is_a_pure_function_of_its_arguments() {
+    let here = Position { x: 4, y: 7 };
+
+    assert_eq!(wander_step(here, 0, 12), wander_step(here, 0, 12));
+    assert_eq!(wander_step(here, 3, 99), wander_step(here, 3, 99));
+}
+
+/// A drift is a step onto a neighbour or nothing at all — never a jump.
+/// The tile it lands on is the only thing three of the four rejections in
+/// `drift_idle_staff` are ever asked about, so a two-tile hop would put a
+/// body through a wall the checks all passed.
+#[test]
+fn a_wander_step_never_reaches_further_than_one_tile() {
+    let here = Position { x: 0, y: 0 };
+
+    for step in 0..500 {
+        let Some(there) = wander_step(here, 2, step) else {
+            continue;
+        };
+        assert!(
+            there.x.abs().max(there.y.abs()) == 1,
+            "step {step} offered {there:?}, which is not a neighbour"
+        );
+    }
+}
+
+/// Every direction comes up, and so does standing still.
+///
+/// The property `derive::index`'s doc comment exists for: folded as one
+/// word, a step counter differing only in its low bits never reaches the
+/// bit that decides, and this walk would be a straight line. Nine outcomes
+/// over 900 beats — a fold that reached nothing would show one.
+#[test]
+fn a_wanderer_uses_every_direction_and_sometimes_holds_still() {
+    let here = Position { x: 0, y: 0 };
+    let mut seen = std::collections::HashSet::new();
+
+    for step in 0..900 {
+        seen.insert(wander_step(here, 0, step).map(|p| (p.x, p.y)));
+    }
+
+    assert_eq!(seen.len(), 9, "eight neighbours and a hold, got {seen:?}");
+}
+
+/// Walks the base for `ticks` and reports where `worker` stood at the top
+/// of every one of them, the tile it started on included.
+fn drift_trail(game: &mut Game, worker: Entity, ticks: usize) -> Vec<(i32, i32)> {
+    let mut trail = vec![{
+        let p = *game.world.get::<Position>(worker).unwrap();
+        (p.x, p.y)
+    }];
+    for _ in 0..ticks {
+        game.tick();
+        let p = *game.world.get::<Position>(worker).unwrap();
+        trail.push((p.x, p.y));
+    }
+    trail
+}
+
+/// **The feature.** An idle program wanders the base instead of orbiting
+/// the Home at one fixed radius.
+///
+/// Both halves are asserted, and the first alone is not enough: a ring that
+/// steps around its circumference also visits many tiles. What says the
+/// body is *wandering* is that it is found at more than one distance from
+/// the Home.
+#[test]
+fn an_idle_program_wanders_the_base_rather_than_circling_the_home() {
+    let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let worker = hire(&mut game, 1)[0];
+    let home_entity = find_home(&mut game).unwrap();
+    let home = *game.world.get::<Position>(home_entity).unwrap();
+
+    let trail = drift_trail(&mut game, worker, 200);
+
+    let tiles: std::collections::HashSet<_> = trail.iter().collect();
+    assert!(
+        tiles.len() > 8,
+        "an idle program covers ground, saw {} tiles",
+        tiles.len()
+    );
+    let bands: std::collections::HashSet<i32> = trail
+        .iter()
+        .map(|(x, y)| (x - home.x).abs().max((y - home.y).abs()))
+        .collect();
+    assert!(
+        bands.len() > 1,
+        "it is a wander, not an orbit — every tile sat at distance {bands:?} from the Home"
+    );
+}
+
+/// A drift is a walk, and a walk is one tile at a time.
+///
+/// The body starts on laid floor, so no arrival is owed and every write is
+/// a step. The three rejections that guard a drift are all asked about the
+/// tile it lands on, so a two-tile hop would carry a body through a wall
+/// every check passed.
+#[test]
+fn an_idle_program_inside_the_base_only_ever_steps_to_a_neighbour() {
+    let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let worker = hire(&mut game, 1)[0];
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(3, 3),
+        "precondition: the fixture spawns onto the starting pocket, so nothing is owed an arrival"
+    );
+
+    let trail = drift_trail(&mut game, worker, 200);
+
+    for pair in trail.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        assert!(
+            (to.0 - from.0).abs().max((to.1 - from.1).abs()) <= 1,
+            "stepped from {from:?} to {to:?}"
+        );
+    }
+}
+
+/// **Laid floor is the leash, and it is not the same rule as `walkable`.**
+///
+/// `base_entropy_system` reverts a mined `Open` cell that nobody is
+/// standing on, and a body only holds the cell under its own feet. A
+/// wanderer that strolled down a fresh corridor would be sealed in behind
+/// it — unpostable and unreachable for the rest of the run, since
+/// `hauling::post_field` gates its own start tile on `BaseGrid::walkable`.
+/// Floor never reverts, so confining the drift to it closes that by
+/// construction rather than by a radius to tune.
+#[test]
+fn a_drifting_program_stays_on_laid_floor_and_off_the_structures() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     place_home(&mut game);
     let node = spawn_machine_at(&mut game, "research_node", 2, 0);
     let staff = hire(&mut game, 2);
-    let radius = game.world.resource::<crate::base_grid::BaseGrid>().radius();
-    let home_entity = find_home(&mut game).unwrap();
-    let home = *game.world.get::<Position>(home_entity).unwrap();
-
-    for _ in 0..5 {
-        game.tick();
-    }
-
     let node_pos = *game.world.get::<Position>(node).unwrap();
+
     for worker in staff {
-        let pos = *game.world.get::<Position>(worker).unwrap();
-        assert!(
-            (pos.x - home.x).abs().max((pos.y - home.y).abs()) <= radius,
-            "an idle program loiters inside the base, not off in the wild"
-        );
-        assert_ne!(
-            (pos.x, pos.y),
-            (node_pos.x, node_pos.y),
-            "and never on a tile a structure stands on"
-        );
+        for (x, y) in drift_trail(&mut game, worker, 120) {
+            assert!(
+                game.world
+                    .resource::<crate::base_grid::BaseGrid>()
+                    .is_floor(x, y),
+                "an idle program keeps to the floor, not to raw mined rock: ({x}, {y})"
+            );
+            assert_ne!(
+                (x, y),
+                (node_pos.x, node_pos.y),
+                "and never onto a tile a structure stands on"
+            );
+        }
     }
+}
+
+/// Two idle bodies on one tile draw as one glyph, and a program that
+/// appears to have vanished reads as the roster being broken. The ring got
+/// this free from its index spread; a drift has to be told.
+#[test]
+fn two_idle_programs_never_step_onto_one_another() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let staff = hire(&mut game, 2);
+    // Apart to begin with: the rule is that they never *merge*, and
+    // `hire` spawns its whole pool onto one tile.
+    game.world.get_mut::<Position>(staff[1]).unwrap().x = -3;
+
+    for _ in 0..200 {
+        game.tick();
+        let a = *game.world.get::<Position>(staff[0]).unwrap();
+        let b = *game.world.get::<Position>(staff[1]).unwrap();
+        assert_ne!((a.x, a.y), (b.x, b.y), "two programs, two tiles");
+    }
+}
+
+/// The party's own cell is the one other body standing in base space, and
+/// an idle program that steps onto it hides the `@`.
+#[test]
+fn an_idle_program_never_steps_onto_the_party() {
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let worker = hire(&mut game, 1)[0];
+    stand_in_base_at(&mut game, 3, 0);
+
+    for (x, y) in drift_trail(&mut game, worker, 300) {
+        assert_ne!((x, y), (3, 0), "that tile has the party on it");
+    }
+}
+
+/// **A tamed program's `Position` is the surface tile it was beaten on**,
+/// and this pass is still what gives it a cell of its own — the property
+/// `post_worker` stopped writing a `Position` on the strength of. A body
+/// that is not standing on floor has nothing to drift from, so it arrives
+/// on the ring first and walks from there.
+#[test]
+fn an_idle_program_standing_outside_the_base_is_brought_into_it() {
+    let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let worker = hire(&mut game, 1)[0];
+    {
+        let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+        pos.x = 40;
+        pos.y = 40;
+    }
+    assert!(
+        !game
+            .world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(40, 40),
+        "precondition: nowhere near the base"
+    );
+
+    game.tick();
+
+    let pos = *game.world.get::<Position>(worker).unwrap();
+    assert!(
+        game.world
+            .resource::<crate::base_grid::BaseGrid>()
+            .is_floor(pos.x, pos.y),
+        "one beat is enough to stand it on the floor, got {pos:?}"
+    );
 }
 
 /// The map and the inspector must stay the same set — that is the whole

@@ -8,7 +8,7 @@
 use super::support::*;
 use crate::components::MachineStatus;
 use crate::components::{Memories, Memory, MemorySubject, ProgramId};
-use crate::game::base::work_orders::park_tile;
+use crate::game::base::work_orders::wander_step;
 use crate::game::memories::Remembered;
 use crate::memories::{MemoryDef, MemoryId, MemorySubjectKind};
 use crate::resources::GameClock;
@@ -1988,39 +1988,69 @@ fn reading_the_report_evicts_nothing() {
 // Phase 5: the one hook
 // ---------------------------------------------------------------------
 
-/// A base with `n` idle programs and a Home to lay the parking ring around,
-/// returned in the order `park_idle_staff` will index them.
+/// A base with `n` idle programs and a Home to anchor base space, returned
+/// in the order `drift_idle_staff` will index them.
 ///
 /// Nothing is queued and nothing is deployed but the Home, so every body
 /// here stays idle for as long as the test runs — which is the only state
-/// the parking rejection is ever read in.
+/// the drift rejection is ever read in.
+///
+/// **Stood well inside the starting pocket and clear of the Home**, so that
+/// all eight of its neighbours are laid floor and none of them is a
+/// structure's tile. That is what leaves the grudge as the only thing that
+/// can refuse a candidate: parked where `spawn_tamed` drops a body, half
+/// the tiles the drift offers are outside the pocket and get refused by the
+/// floor rule instead, which reads as the hook firing when it has not.
 fn a_base_with_idle_staff(game: &mut Game, n: usize) -> (Position, Vec<Entity>) {
     place_home(game);
     let mut staff: Vec<Entity> = (0..n).map(|_| spawn_tamed(game, 10, 3)).collect();
     staff.sort();
+    for (i, &worker) in staff.iter().enumerate() {
+        let mut pos = game.world.get_mut::<Position>(worker).unwrap();
+        pos.x = 2 + i as i32;
+        pos.y = 0;
+    }
     let home_entity = find_home(game).expect("the fixture just placed one");
     let home = *game.world.get::<Position>(home_entity).unwrap();
     (home, staff)
 }
 
-/// Where the body at `index` would be parked on the tick that is about to
-/// run — the clock has not moved yet, and `park_idle_staff` reads it as it
-/// stands.
-fn next_park_tile(game: &Game, home: Position, index: usize) -> Position {
-    park_tile(home, index, game.current_tick())
+/// Which tile the body at `index` would be offered on `tick`, standing
+/// where it is standing now — `None` on a beat it would spend still.
+fn wander_offer(game: &Game, worker: Entity, index: usize, tick: u64) -> Option<Position> {
+    let here = *game.world.get::<Position>(worker).unwrap();
+    wander_step(here, index, tick / crate::tuning::IDLE_STAFF_STEP_TICKS)
+}
+
+/// Winds the clock forward to the next tick that offers the body at `index`
+/// a real step, and returns the tile it is offered.
+///
+/// A drift holds still on one beat in nine, and a test that implanted its
+/// grudge against a hold would be asserting nothing. Winding rather than
+/// ticking is deliberate: the world does not run, so the body does not move
+/// out from under the answer.
+fn next_wander_tile(game: &mut Game, worker: Entity, index: usize) -> Position {
+    let mut tick = game.current_tick();
+    loop {
+        if let Some(tile) = wander_offer(game, worker, index, tick) {
+            set_tick(game, tick);
+            return tile;
+        }
+        tick += 1;
+    }
 }
 
 /// **The hook.** A program that was left stranded on a tile does not get
-/// parked back onto it.
+/// stood back onto it.
 ///
-/// The grudge is implanted at full strength against the very tile the ring
+/// The grudge is implanted at full strength against the very tile the drift
 /// is about to offer, so the only thing standing between the body and that
 /// tile is the rejection.
 #[test]
-fn a_program_is_not_parked_on_a_tile_it_holds_a_grudge_against() {
+fn a_program_is_not_drifted_onto_a_tile_it_holds_a_grudge_against() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
-    let shunned = next_park_tile(&game, home, 0);
+    let (_, staff) = a_base_with_idle_staff(&mut game, 1);
+    let shunned = next_wander_tile(&mut game, staff[0], 0);
     implant(
         &mut game,
         staff[0],
@@ -2042,14 +2072,14 @@ fn a_program_is_not_parked_on_a_tile_it_holds_a_grudge_against() {
 }
 
 /// The control the test above is worthless without: with no grudge the same
-/// fixture parks the same body on the same tile. A rejection that fired on
-/// every candidate — or a `park_idle_staff` broken outright — passes the
+/// fixture walks the same body onto the same tile. A rejection that fired on
+/// every candidate — or a `drift_idle_staff` broken outright — passes the
 /// first test and fails this one.
 #[test]
-fn a_program_with_no_grudge_is_parked_on_that_same_tile() {
+fn a_program_with_no_grudge_steps_onto_that_same_tile() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
-    let candidate = next_park_tile(&game, home, 0);
+    let (_, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_wander_tile(&mut game, staff[0], 0);
 
     game.tick();
 
@@ -2057,7 +2087,7 @@ fn a_program_with_no_grudge_is_parked_on_that_same_tile() {
     assert_eq!(
         (pos.x, pos.y),
         (candidate.x, candidate.y),
-        "precondition for the sibling test: this is the tile the ring offers"
+        "precondition for the sibling test: this is the tile the drift offers"
     );
 }
 
@@ -2068,8 +2098,8 @@ fn a_program_with_no_grudge_is_parked_on_that_same_tile() {
 #[test]
 fn a_grudge_against_another_tile_does_not_move_a_program() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
-    let candidate = next_park_tile(&game, home, 0);
+    let (_, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_wander_tile(&mut game, staff[0], 0);
     implant(
         &mut game,
         staff[0],
@@ -2096,43 +2126,46 @@ fn a_grudge_against_another_tile_does_not_move_a_program() {
 /// blacklisted for the run.
 ///
 /// **The candidate must not move out from under the grudge while it
-/// fades**, or this is a second copy of the wrong-tile test above. The ring
-/// returns to the same tile every `IDLE_STAFF_STEP_TICKS * 8 *
-/// IDLE_STAFF_RING_TILES` ticks, so the clock is advanced by a whole number
-/// of those periods, and the precondition below says so out loud — a
-/// retuned ring or step must fail this test rather than quietly hollow it
-/// out. That is not hypothetical: it *was* hollow, and a mutation swapping
-/// the threshold for a bare `< 0.0` caught it passing.
+/// fades**, or this is a second copy of the wrong-tile test above. A drift
+/// offers a different neighbour every beat, so the tile is chosen at the
+/// *far* end of the fade and the grudge implanted against it before the
+/// clock is wound — and the precondition below says so out loud. Winding
+/// the clock rather than ticking is what keeps the body still, so
+/// `wander_step` is asked from the same tile at both ends. That is not
+/// hypothetical fastidiousness: this test *was* hollow once, and a
+/// mutation swapping the threshold for a bare `< 0.0` caught it passing.
 #[test]
 fn a_faded_grudge_stops_keeping_a_program_away() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
-    let candidate = next_park_tile(&game, home, 0);
-    let subject = MemorySubject::BaseTile {
-        x: candidate.x,
-        y: candidate.y,
-    };
-    implant(&mut game, staff[0], "stranded_at", subject.clone());
+    let (_, staff) = a_base_with_idle_staff(&mut game, 1);
 
-    // Two half-lives, rounded up to a whole ring period. Read off the def
-    // rather than hardcoded: the number that matters is how far the grudge
-    // has decayed, and that is authored in the `.ron`.
+    // Two half-lives. Read off the def rather than hardcoded: the number
+    // that matters is how far the grudge has decayed, and that is authored
+    // in the `.ron`.
     let half_life = game
         .world
         .resource::<crate::memories::MemoryDb>()
         .get(&MemoryId::from("stranded_at"))
         .expect("the fixture assets ship it")
         .half_life;
-    let period =
-        crate::tuning::IDLE_STAFF_STEP_TICKS * 8 * crate::tuning::IDLE_STAFF_RING_TILES as u64;
-    let elapsed = period * (2 * half_life / period + 1);
-    let faded = game.current_tick() + elapsed;
+    let mut faded = game.current_tick() + 2 * half_life;
+    let candidate = loop {
+        if let Some(tile) = wander_offer(&game, staff[0], 0, faded) {
+            break tile;
+        }
+        faded += 1;
+    };
+    let subject = MemorySubject::BaseTile {
+        x: candidate.x,
+        y: candidate.y,
+    };
+    implant(&mut game, staff[0], "stranded_at", subject.clone());
     set_tick(&mut game, faded);
 
     assert_eq!(
-        next_park_tile(&game, home, 0),
-        candidate,
-        "precondition: the ring is offering the tile the grudge is about"
+        wander_offer(&game, staff[0], 0, faded),
+        Some(candidate),
+        "precondition: the drift is offering the tile the grudge is about"
     );
     let opinion = game.opinion_of(staff[0], &subject);
     assert!(
@@ -2151,13 +2184,13 @@ fn a_faded_grudge_stops_keeping_a_program_away() {
 }
 
 /// The deleting-`assets/memories/` property at the hook: the store holds
-/// what it held, nothing can be weighed, and parking behaves exactly as it
-/// did before the feature shipped.
+/// what it held, nothing can be weighed, and the drift behaves exactly as
+/// it did before the feature shipped.
 #[test]
-fn an_empty_database_leaves_the_parking_hook_inert() {
+fn an_empty_database_leaves_the_drift_hook_inert() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (home, staff) = a_base_with_idle_staff(&mut game, 1);
-    let candidate = next_park_tile(&game, home, 0);
+    let (_, staff) = a_base_with_idle_staff(&mut game, 1);
+    let candidate = next_wander_tile(&mut game, staff[0], 0);
     implant(
         &mut game,
         staff[0],

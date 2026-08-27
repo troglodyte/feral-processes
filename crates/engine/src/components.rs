@@ -5,6 +5,7 @@ use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
 use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
+use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
@@ -1272,6 +1273,49 @@ pub struct ProgramId(pub u32);
 /// roster" rather than "remembers nothing".
 #[derive(Component, Clone, Debug, Default)]
 pub struct Memories(pub Vec<Memory>);
+
+/// What one owned program's reserves stand at. Minted empty at
+/// `Game::roster_parts` beside `Memories`, so the absence of this component
+/// means "not on the roster" rather than "needs nothing".
+///
+/// **Empty is not the same as full.** Seeding lives in one place,
+/// `seed_missing`, called at the top of the drain — one code path covers a
+/// freshly spawned program, a program that predates a new def, and a save
+/// written before this feature. Do not seed anywhere else.
+///
+/// Keyed by `NeedId` in a `BTreeMap` for `Stock`'s reason: iteration order
+/// feeds the readouts and a `HashMap` would make the save encoding differ run
+/// to run.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Needs {
+    reserves: std::collections::BTreeMap<NeedId, f32>,
+}
+
+impl Needs {
+    pub fn get(&self, id: &NeedId) -> Option<f32> {
+        self.reserves.get(id).copied()
+    }
+
+    /// Clamps to `NEED_MIN..=NEED_MAX`. **The clamp is the type's**, exactly
+    /// as `PowerReserve`'s is: a mod's `per_tick` and a save file's number are
+    /// equally outside this crate's control, and no caller clamps.
+    pub fn set(&mut self, id: &NeedId, value: f32) {
+        self.reserves
+            .insert(id.clone(), value.clamp(NEED_MIN, NEED_MAX));
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&NeedId, f32)> {
+        self.reserves.iter().map(|(id, v)| (id, *v))
+    }
+
+    /// Any def in `db` with no entry here starts full. The one seeding site —
+    /// see the type doc.
+    pub fn seed_missing(&mut self, db: &crate::needs::NeedDb) {
+        for def in db.iter() {
+            self.reserves.entry(def.id.clone()).or_insert(NEED_MAX);
+        }
+    }
+}
 
 /// One remembered thing: which kind it is, what it was about, when it was
 /// last reinforced, and how many times.

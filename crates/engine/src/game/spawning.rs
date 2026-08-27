@@ -1,7 +1,7 @@
 //! Populating a zone with wild programs, nests, and habitat-born
 //! creatures.
 
-use crate::components::Memories;
+use crate::components::{Memories, Needs};
 use crate::resources::PopulatedChunks;
 use crate::tuning::{
     BOSS_SPAWN_CHANCE, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX,
@@ -369,7 +369,7 @@ impl Game {
     /// short a component. Do not hand-write either at a call site.
     pub(crate) fn roster_parts(
         &mut self,
-    ) -> (Tamed, Experience, PowerReserve, ProgramId, Memories) {
+    ) -> (Tamed, Experience, PowerReserve, ProgramId, Memories, Needs) {
         let id = {
             let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
             let id = counter.0;
@@ -384,6 +384,7 @@ impl Game {
             PowerReserve::default(),
             ProgramId(id),
             Memories::default(),
+            Needs::default(),
         )
     }
 

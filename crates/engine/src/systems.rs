@@ -4,14 +4,15 @@ use rand::RngExt;
 
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
-    Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve, Pursuing,
-    ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task, TaskKind,
-    WanderAi, field_buff_power_of,
+    Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve,
+    Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task,
+    TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
 use crate::memories::MemoryDb;
+use crate::needs::NeedDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
 use crate::resources::{GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
@@ -52,6 +53,47 @@ pub fn needs_tick_system(
             if !was_starving {
                 log.push("Your power reserves are critical!");
             }
+        }
+    }
+}
+
+/// Every owned program's reserves fall a little, and faster while it works.
+///
+/// **Staff only** — a party member and the wielded program are not on shift,
+/// which is the v1 scope. The query is deliberately wider than that rule and
+/// narrows through `party::role_of`, `base_entropy_system`'s idiom: the
+/// narrowing is the part that must not exist twice.
+///
+/// Seeding is the first thing it does, through `Needs::seed_missing`, and it
+/// is the only seeding site in the game — one code path covers a freshly
+/// spawned program, a program that predates a new def, and a save written
+/// before this feature. With an **empty** `NeedDb` there is nothing to seed
+/// and nothing to drain, and that falls out of the loop rather than out of a
+/// branch: the pre-needs game, exactly.
+pub fn needs_drain_system(
+    mut programs: Query<(Entity, &mut Needs, Option<&Task>, &Tamed), Without<Player>>,
+    db: Res<NeedDb>,
+    player: Res<crate::resources::PlayerEntity>,
+    roster: Res<crate::resources::Party>,
+    wielded: Res<crate::resources::WieldedProgram>,
+) {
+    for (entity, mut needs, task, tamed) in &mut programs {
+        if crate::game::party::role_of(entity, tamed.owner, player.0, &roster, wielded.0)
+            != Some(crate::game::party::ProgramRole::Staff)
+        {
+            continue;
+        }
+        needs.seed_missing(&db);
+        for def in db.iter() {
+            let Some(current) = needs.get(&def.id) else {
+                continue;
+            };
+            let rate = if task.is_some() {
+                def.drain_per_tick * def.working_multiplier
+            } else {
+                def.drain_per_tick
+            };
+            needs.set(&def.id, current - rate);
         }
     }
 }

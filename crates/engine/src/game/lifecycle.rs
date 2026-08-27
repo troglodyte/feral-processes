@@ -5,6 +5,7 @@
 //! set fails the economy-role check.
 
 use crate::abilities::AbilityId;
+use crate::components::Needs;
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
 use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE};
@@ -307,6 +308,10 @@ impl Game {
         let mut schedule = Schedule::default();
         schedule.add_systems((
             (systems::power_regen_system, systems::needs_tick_system).chain(),
+            // Unchained: the only writer of `Needs` in the schedule, and what
+            // it reads — who is staff, and who holds a `Task` — nothing above
+            // it has written this tick.
+            systems::needs_drain_system,
             systems::wander_ai_system,
             // Chained: `task_progress_system` and `assembler_system` both
             // write `Task::progress` (for different targets, but bevy can
@@ -975,9 +980,17 @@ impl Game {
                         })
                         .collect(),
                 );
+                // A file written before needs existed carries no key and
+                // loads empty; `needs_drain_system` seeds it full on the first
+                // tick, which is the one seeding site.
+                let mut needs = Needs::default();
+                for (id, value) in &c.needs {
+                    needs.set(id, *value);
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
+                    needs,
                     Tamed { owner: player },
                     PowerReserve::new(c.power),
                     Experience {
@@ -1213,6 +1226,7 @@ impl Game {
                 Option<&Boss>,
                 Option<&ProgramId>,
                 Option<&Memories>,
+                Option<&Needs>,
             ),
         )>();
         for (
@@ -1244,6 +1258,7 @@ impl Game {
                 boss,
                 program_id,
                 memories,
+                needs,
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1340,6 +1355,9 @@ impl Game {
                             })
                             .collect()
                     })
+                    .unwrap_or_default(),
+                needs: needs
+                    .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
                     .unwrap_or_default(),
                 equipment: equipment
                     .map(|eq| {

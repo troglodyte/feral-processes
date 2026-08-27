@@ -173,6 +173,33 @@ is skipped with a warning logged in-game rather than crashing startup.
         (need: "coherence", per_tick: 0.6, radius: 0),
     ],
 
+    // Optional; can be left out entirely (defaults to recovering nobody,
+    // which is the game before this field existed). If set, the structure
+    // restores `per_tick` Integrity every tick to any *downed* program of
+    // the player's standing within `radius` tiles, and clears the downed
+    // state when that program is back to full. No assigned worker and no
+    // input item, `power_regen`'s shape again.
+    //
+    // A program of yours that dies in a Forgiving run is benched rather
+    // than destroyed: it survives at 1 HP, leaves your battle party, keeps
+    // its roster slot and walks to the nearest structure with this field on
+    // its own. With none standing, it stays down. (Under Permadeath a dead
+    // program is destroyed and nothing here applies.)
+    //
+    // `per_tick` is a whole number, because Integrity is: HP is an integer
+    // everywhere in the game. It is clamped rather than trusted — a
+    // negative rate floors at zero, since a field named for repair must
+    // never damage. `radius` is a Chebyshev box in tiles as `power_regen`'s
+    // is; `0` means the program has to be standing on or beside it. This is
+    // how the Repair Bay works.
+    //
+    // NOT the same field as `repair` further down, which is about patching
+    // the base's *structures* back up and has nothing to do with programs.
+    recovery: Some((
+        per_tick: 1,
+        radius: 0,
+    )),
+
     // Optional; can be left out entirely (defaults to 0). What this
     // structure needs from the base's Grid to run, summed every tick
     // against every deployed structure's `power_supply`. A machine whose

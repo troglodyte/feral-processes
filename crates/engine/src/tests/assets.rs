@@ -2399,3 +2399,55 @@ fn no_shipped_non_equipment_item_rates_a_power() {
         "these shipped items are not equipment and yet rate a combat power: {rated:?}"
     );
 }
+
+/// The Repair Bay is the one way a downed program comes back, so it has to
+/// be affordable in the zone where a wipe first happens — a gate you cannot
+/// pay for in zone 1 is a dead run, not pressure. It is also passive: no
+/// `work` block, so nothing has to be posted to it, and no research node
+/// unlocks it.
+///
+/// A census rather than a rule in Rust, `every_shipped_integrity_routine`'s
+/// shape: `StructureDef::recovery` is `#[serde(default)]` so a mod can ship
+/// a second Bay, and what this holds is the *shipped* content to the design.
+#[test]
+fn the_shipped_repair_bay_is_passive_and_affordable_in_zone_one() {
+    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bays: Vec<_> = game
+        .world
+        .resource::<crate::structures::StructureDb>()
+        .all()
+        .filter(|d| d.recovery.is_some())
+        .collect();
+    assert_eq!(
+        bays.len(),
+        1,
+        "expected exactly one shipped structure to declare `recovery`"
+    );
+    let bay = bays[0];
+    let recovery = bay.recovery.as_ref().unwrap();
+    assert!(
+        recovery.per_tick > 0,
+        "a Bay that repairs nothing per tick is a Bay a downed program never leaves"
+    );
+    assert!(
+        bay.work.is_none(),
+        "the Bay is passive — a `work` block would make it a machine wanting a body"
+    );
+    for (item, _) in &bay.build_cost {
+        assert!(
+            !ZONE_MATERIALS.contains(&item.as_str()),
+            "{} is built from {}, a zone material, so it cannot be raised in the \
+             zone where the first wipe happens",
+            bay.id.as_str(),
+            item.as_str()
+        );
+    }
+    for def in game.world.resource::<crate::research::ResearchDb>().all() {
+        assert!(
+            !def.unlocks_structures.contains(&bay.id),
+            "{} gates the Bay behind research; recovering from a wipe is not a \
+             blueprint you have to earn",
+            def.id.as_str()
+        );
+    }
+}

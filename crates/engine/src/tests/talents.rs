@@ -3,7 +3,7 @@
 
 use super::support::*;
 use crate::talents::{TalentId, TalentNode};
-use crate::tuning::{KERNEL_RING_MAX, TALENT_START_LEVEL, arena_level_ceiling};
+use crate::tuning::{KERNEL_RING_MAX, LEVELS_PER_RING, TALENT_START_LEVEL, arena_level_ceiling};
 use crate::*;
 
 /// A companion at `level`, with the rings its level implies already open so
@@ -627,5 +627,118 @@ fn an_accuracy_talent_reaches_the_roll_without_touching_stats() {
         before_stats,
         "Accuracy has no `Stats` field, so nothing there may move — a node that \
          baked one would be re-applied on every load"
+    );
+}
+
+// ---- What a Kernel Ring buys now -------------------------------------
+//
+// It bought levels; the zone caps everyone at the same level, so it buys
+// tiers instead. The fixture above opens every ring on purpose, so these
+// five tests build their own rather than using it.
+
+fn ringed(game: &mut Game, level: u32, rings: u32) -> Entity {
+    let pet = spawn_tamed(game, 30, 6);
+    if rings > 0 {
+        game.world.entity_mut(pet).insert(KernelRing(rings));
+    }
+    set_level(game, pet, level);
+    pet
+}
+
+/// Points are the saturating `min` of what the levels earned and what the
+/// rings opened. **Both gates survive**: you must be developed *and* hold
+/// rings.
+#[test]
+fn talent_points_are_the_lesser_of_levels_earned_and_tiers_opened() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+
+    // Four levels past the start, one ring open: the ring is the binding
+    // half.
+    let ring_bound = ringed(&mut game, TALENT_START_LEVEL + 4, 1);
+    assert_eq!(
+        game.talent_points(ring_bound).earned,
+        LEVELS_PER_RING,
+        "one ring opens exactly LEVELS_PER_RING tiers however developed the program is"
+    );
+
+    // One level past the start, every ring open: the level is the binding
+    // half.
+    let level_bound = ringed(&mut game, TALENT_START_LEVEL + 1, KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(level_bound).earned,
+        1,
+        "rings open room, they do not fill it — the levels still have to be earned"
+    );
+}
+
+/// A companion below the talent start level yields zero rather than
+/// underflowing. `u32`, and this is the common case rather than an edge one.
+#[test]
+fn a_companion_below_the_talent_start_level_earns_no_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let young = ringed(&mut game, TALENT_START_LEVEL - 3, KERNEL_RING_MAX);
+    assert_eq!(game.talent_points(young).earned, 0);
+}
+
+/// The ring gate, which is the half this task adds. A companion at the zone
+/// cap with no ring has earned levels and can spend none of them.
+#[test]
+fn a_ringless_companion_at_the_zone_cap_earns_no_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
+    let pet = ringed(&mut game, cap, 0);
+    assert!(
+        cap > TALENT_START_LEVEL + 2,
+        "the fixture needs a zone whose cap is well past the talent start level"
+    );
+    assert_eq!(
+        game.talent_points(pet).earned,
+        0,
+        "no ring, no tier — however far the program has developed"
+    );
+}
+
+/// Three rings open exactly a full tree and no more, which is what keeps the
+/// `assets/talents/` census (`KERNEL_RING_MAX * LEVELS_PER_RING` tiers) the
+/// statement of tree depth.
+#[test]
+fn every_ring_open_buys_exactly_a_full_tree() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(5));
+    let cap = game.level_cap();
+    assert!(
+        cap > TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING,
+        "the fixture's zone must allow more levels than the tree has tiers"
+    );
+    let pet = ringed(&mut game, cap, KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(pet).earned,
+        KERNEL_RING_MAX * LEVELS_PER_RING,
+        "a full tree, and the levels above it buy nothing further"
+    );
+}
+
+/// **Migration is a non-event, and this is what says so.** A companion built
+/// to the old shape — three rings, level 12, which was the old absolute
+/// ceiling — has the same points under the new rule as under the old one,
+/// where `earned` was simply `level - TALENT_START_LEVEL`.
+#[test]
+fn a_companion_built_to_the_old_shape_keeps_its_points() {
+    let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let pet = ringed(&mut game, arena_level_ceiling(), KERNEL_RING_MAX);
+    assert_eq!(
+        game.talent_points(pet).earned,
+        arena_level_ceiling() - TALENT_START_LEVEL,
+        "the old rule's answer, reached by the new rule"
+    );
+
+    let ringless = ringed(&mut game, TALENT_START_LEVEL, 0);
+    assert_eq!(
+        game.talent_points(ringless).earned,
+        0,
+        "and a ringless companion at the start level had none either way"
     );
 }

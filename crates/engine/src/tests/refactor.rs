@@ -486,3 +486,32 @@ fn a_pet_rows_ring_count_is_what_it_has_opened() {
     game.open_kernel_ring(pet).unwrap();
     assert_eq!(game.owned_pets()[0].ring, 1);
 }
+
+/// A ring's own announcement must not promise a level ceiling. It said "it
+/// can now reach level {cap}" for as long as a ring bought levels, and
+/// nothing but this test would notice the sentence outliving the mechanic —
+/// the number it quoted is still a real number, so it would have read as
+/// correct forever.
+#[test]
+fn opening_a_ring_announces_tiers_and_not_a_level_ceiling() {
+    let mut game = Game::new(71, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    stock(&mut game, RING, 4);
+
+    game.open_kernel_ring(pet).unwrap();
+
+    let line = game
+        .message_log(MESSAGE_LOG_CAP)
+        .into_iter()
+        .map(|e| e.text)
+        .find(|t| t.contains("kernel ring"))
+        .expect("opening a ring says so");
+    assert!(
+        !line.contains("reach level"),
+        "a ring buys talent tiers, not a level ceiling: {line}"
+    );
+    assert!(
+        line.contains("talent tiers"),
+        "and it should say what it did buy: {line}"
+    );
+}

@@ -104,3 +104,73 @@ fn the_piles_keep_one_order_however_they_fill() {
     assert_eq!(before, after, "the biggest pile does not jump to the front");
     assert_eq!(before, vec!["BB".to_string(), "CF".to_string()]);
 }
+
+/// The one pile no output buffer can ever hold. `deliver_payout` banks a
+/// Research Node's yield straight past the node's own `output`, so walking
+/// the buffers alone left the base's only banked product with no row at
+/// all — and `research_data.ron` had carried an `abbrev` of `R` for the
+/// strip's benefit the whole time it could not be drawn.
+#[test]
+fn a_banked_pool_is_a_pile_the_strip_lists() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    grant_research_data(&mut game, 30);
+
+    assert_eq!(
+        row(&game, "R"),
+        Some(30),
+        "a banked pool is the base's holding too, however it is stored"
+    );
+}
+
+/// A machine set up to make something keeps its tag on the strip while the
+/// buffer behind it is empty, so the row the player has learnt to read does
+/// not reshuffle every time a hauler clears a shelf.
+#[test]
+fn a_machine_holds_its_pile_on_the_strip_while_its_buffer_is_empty() {
+    let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    let mine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+
+    assert_eq!(
+        row(&game, "CF"),
+        Some(0),
+        "a deployed Mining Node is the base saying it makes Core Fragments"
+    );
+
+    put_output(&mut game, mine, ids::CORE_FRAGMENT, 4);
+    assert_eq!(row(&game, "CF"), Some(4), "the same row, now filling");
+}
+
+/// An assembler declares no `work` block at all — what it makes is
+/// `assembles.item` — so a rule reading only `work.produces` would leave
+/// every crafting machine in the base off the strip until its first unit
+/// landed.
+#[test]
+fn an_assembler_holds_the_pile_it_builds() {
+    let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "lathe", 2, 0);
+
+    assert_eq!(
+        row(&game, "BS"),
+        Some(0),
+        "a Lathe assembles Blank Substrate and says so before it makes one"
+    );
+}
+
+/// The rule is what the base is set up to *make*, not what it could hold.
+/// A Depot makes nothing, so it seeds no pile of its own — otherwise a
+/// storage building would put a row on the strip for every item in the game.
+#[test]
+fn a_depot_seeds_no_pile_of_its_own() {
+    let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "depot", 4, 0);
+
+    assert!(
+        game.base_stock().is_empty(),
+        "an empty Depot holds nothing and makes nothing: {:?}",
+        game.base_stock()
+    );
+}

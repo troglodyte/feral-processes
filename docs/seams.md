@@ -5746,7 +5746,47 @@ rather than dropped.
 `Game::base_stock` reads the same buffers `work_orders::base_holding`
 sums, through `stock::output_buffers` — one statement of which buffers
 are the base's, or the strip becomes a second opinion about the base
-rather than a readout of it. It is ordered by item id and not by
+rather than a readout of it.
+
+**Plus every `ItemDef::banked` pool, which is the one holding those
+buffers can never report.** `deliver_payout` sends a banked item straight
+past its own node's `output` into the player's bank — that is the whole
+of what the flag buys, and it is why a Research Node has no "full" state.
+So the base's only banked product had no row on the strip at all, and
+`research_data.ron` had been carrying an `abbrev` of `R` for the strip's
+benefit the entire time it could not be drawn. It is folded in **by the
+flag and never by name**, and `output_buffers` is deliberately *not*
+widened to reach it: a work order for a banked item is refused on the
+grounds that no shelf holds it, and that refusal is correct.
+
+**A row exists if the base holds any of it *or* is set up to make it.**
+The strip is one row wide and it is read at a glance, which is the same
+constraint that forbids sorting by quantity — and a tag that only exists
+while its buffer is non-empty breaks it the same way, by reshuffling
+every time a hauler clears a shelf. `stock::producible` seeds a zero for
+each deployed structure's `work.produces` **and** its `assembles.item`;
+both halves, because an assembler declares no `work` block at all, so a
+rule reading `produces` alone leaves every crafting machine in the base
+off the strip until its first unit lands.
+
+Two narrowings hold that rule up, and both were the alternative it was
+picked over. It is not **any structure**: a Depot makes nothing, and
+seeding off what a building could *hold* puts a row on a one-row readout
+for every item in the game. And it is not the **researched recipe list**:
+a bench recipe is compiled into the player's own pack and never into a
+base buffer, so a row for one would be a zero that could never move. On
+the shipped tree that second one is invisible — all six researched
+recipes name equipment, which `ItemDef::category` already filters off the
+strip — which is exactly why it is written down here rather than left to
+be rediscovered by the first mod that researches a material.
+
+The banked pool takes the same rule, applied to the one item that has no
+buffer to stand in for it: a pool the player has none of is **not**
+seeded, or every run would open on a row for a resource nothing in the
+base makes yet. `a_base_holding_nothing_lists_nothing` is what says so,
+and it fails against a fold that seeds unconditionally.
+
+It is ordered by item id and not by
 quantity: a strip that re-sorted as buffers filled and drained would
 move every tag under the eye of the player reading it, which is the one
 thing a glanceable row cannot do. And it makes no claim about where the

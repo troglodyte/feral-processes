@@ -734,7 +734,7 @@ fn a_companion_brought_to_zero_announces_its_deletion_and_its_lost_routines() {
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["priority_boost".to_string()]));
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let name = game.creature_label(companion);
 
     game.apply_damage(companion, 10);
@@ -783,7 +783,7 @@ fn a_hostile_brought_to_zero_is_not_announced_by_the_companion_death_path() {
 fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
     let mut game = Game::new(4244, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     game.apply_damage(companion, 4);
     assert!(
@@ -813,7 +813,7 @@ fn the_death_line_fires_once_on_the_transition_to_zero_and_never_above_it() {
 fn mitigation_field_buff_cuts_incoming_damage_by_its_percentage() {
     let mut game = Game::new(4246, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 100, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.arm_field_buff(companion, routine(FieldBuffKind::Mitigation, 25));
 
     game.apply_damage(companion, 20);
@@ -834,7 +834,7 @@ fn mitigation_field_buff_cuts_incoming_damage_by_its_percentage() {
 fn mitigation_never_reduces_a_landed_hit_below_one() {
     let mut game = Game::new(4247, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 100, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     // 3 * (1 - 0.95) = 0.15, which rounds to 0 — the case the floor exists for.
     game.arm_field_buff(companion, routine(FieldBuffKind::Mitigation, 95));
 
@@ -853,7 +853,7 @@ fn mitigation_never_reduces_a_landed_hit_below_one() {
 fn no_mitigation_buff_leaves_damage_untouched() {
     let mut game = Game::new(4248, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 100, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     game.apply_damage(companion, 20);
 
@@ -868,8 +868,8 @@ fn a_companions_own_mitigation_protects_only_that_companion() {
     let mut game = Game::new(4249, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let shielded = spawn_tamed(&mut game, 100, 3);
     let unshielded = spawn_tamed(&mut game, 100, 3);
-    game.add_companion(shielded).unwrap();
-    game.add_companion(unshielded).unwrap();
+    enlist(&mut game, shielded);
+    enlist(&mut game, unshielded);
     game.arm_field_buff(shielded, routine(FieldBuffKind::Mitigation, 25));
 
     game.apply_damage(shielded, 20);

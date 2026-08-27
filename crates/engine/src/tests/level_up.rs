@@ -86,7 +86,7 @@ fn a_companion_level_up_lists_its_stat_growth() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world
         .get_mut::<Experience>(companion)
         .unwrap()
@@ -206,7 +206,7 @@ fn a_saves_stale_xp_threshold_is_rederived_from_its_level_on_load() {
     let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     for e in [player, companion] {
         let mut exp = game.world.get_mut::<Experience>(e).unwrap();
         exp.level = 4;

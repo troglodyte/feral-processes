@@ -87,7 +87,7 @@ fn a_despawned_wielded_program_lends_nothing() {
 fn wielding_a_party_member_stands_it_down() {
     let mut game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let program = spawn_tamed(&mut game, 40, 20);
-    game.add_companion(program).unwrap();
+    enlist(&mut game, program);
 
     game.wield_program(program).unwrap();
 
@@ -104,7 +104,7 @@ fn adding_a_wielded_program_to_the_party_unwields_it() {
     let program = spawn_tamed(&mut game, 40, 20);
     game.wield_program(program).unwrap();
 
-    game.add_companion(program).unwrap();
+    enlist(&mut game, program);
 
     assert_eq!(game.wielded_program(), None, "the other door");
     assert!(game.world.resource::<Party>().0.contains(&program));
@@ -162,7 +162,7 @@ fn a_wield_refused_in_battle_changes_nothing() {
     )
     .unwrap();
     let program = spawn_tamed(&mut game, 40, 20);
-    game.add_companion(program).unwrap();
+    enlist(&mut game, program);
     let wild = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![wild]);
 
@@ -196,7 +196,7 @@ fn a_wield_refused_by_an_unequippable_weapon_leaves_the_party_alone() {
             level: 1,
         });
     let program = spawn_tamed(&mut game, 40, 20);
-    game.add_companion(program).unwrap();
+    enlist(&mut game, program);
 
     assert!(game.wield_program(program).is_err());
 
@@ -406,7 +406,7 @@ fn armed_battle_with_companions(
     for _ in 0..companions {
         let companion = spawn_tamed(&mut game, 60, 20);
         install_only(&mut game, companion, &[]);
-        game.add_companion(companion).unwrap();
+        enlist(&mut game, companion);
     }
     let wild = spawn_wild_on_player_tile(&mut game);
     {

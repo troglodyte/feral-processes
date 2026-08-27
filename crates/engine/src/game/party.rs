@@ -449,6 +449,11 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        // Who is in your party is decided at base. Losing a party in the
+        // Stack means walking out alone — that is the point of the guard,
+        // and it is only survivable because a Forgiving death benches a
+        // program rather than destroying it.
+        self.require_base()?;
         let player = self.player_entity();
         let owner = self
             .world
@@ -465,6 +470,22 @@ impl Game {
             return Err(format!(
                 "Your party is full ({MAX_PARTY_SIZE} max) — stand one down first."
             ));
+        }
+        // A benched program is not a body you can press back into service.
+        // The refusal names the two things that *do* free the roster slot
+        // it is still holding, because a player with a full roster, every
+        // program down and no Bay standing has an errand rather than a dead
+        // end — see `components::Downed`.
+        if self
+            .world
+            .get::<crate::components::Downed>(creature)
+            .is_some()
+        {
+            return Err(
+                "That program is down and needs a Repair Bay. You can still sell it \
+                 or extract a routine from it."
+                    .into(),
+            );
         }
         // The other door of the wield/party exclusion — see
         // `wield_program`, which stands a member down for the same reason.
@@ -606,6 +627,25 @@ impl Game {
     /// Stands `creature` down from the active party, if it's a member — it
     /// remains a tamed program, just no longer commandable in battle. A
     /// no-op (no log) if it wasn't in the party to begin with.
+    /// The player's own "stand this one down" — `remove_companion` with the
+    /// base guard on it, and the party screen's one door.
+    ///
+    /// **The mover stays guard-free and this wraps it**, rather than the
+    /// guard going inside: `wield_program` calls `remove_companion` to stand
+    /// a member down before taking it as a weapon, so a `require_base` in
+    /// there would refuse wielding in the field as a side effect, through a
+    /// function the player never invoked. `take_from_adjacent` /
+    /// `give_to_adjacent`'s exact shape, one axis along: the mover is
+    /// guard-free by construction and the caller owns the refusal.
+    pub fn stand_down_companion(&mut self, creature: Entity) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        self.require_base()?;
+        self.remove_companion(creature);
+        Ok(())
+    }
+
     pub fn remove_companion(&mut self, creature: Entity) {
         let was_present = {
             let mut party = self.world.resource_mut::<Party>();

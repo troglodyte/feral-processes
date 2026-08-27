@@ -222,6 +222,15 @@ const BASE_ROWS: &[GroupEntry] = &[
 
 const PARTY_ROWS: &[GroupEntry] = &[
     GroupEntry {
+        // **Not `Locality::Base`, even though the two party verbs behind it
+        // are.** This row is the whole roster screen — gear, memories, the
+        // manifest, a rename — and only the join and the stand-down are
+        // decided at home. Hidden off-base it would take reading your own
+        // programs away four frames down along with the one thing that
+        // needed guarding. `add_companion` and `stand_down_companion` carry
+        // `require_base` themselves and refuse onto the status line, which
+        // is a sentence the player can act on rather than a row that is
+        // simply gone. See `docs/seams.md`'s guard table.
         label: "Companions",
         target: Mode::Companion,
         locality: Locality::Anywhere,

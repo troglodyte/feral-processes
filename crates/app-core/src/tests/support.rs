@@ -42,6 +42,26 @@ pub(crate) fn scratch_path(fixture: &str, seed: u32) -> PathBuf {
     ))
 }
 
+/// Puts an already-built `App`'s party out of phase, in base space.
+///
+/// Through a save round trip because that is the only door app-core has
+/// onto `resources::Locale` — the engine's `World` is private to it, which
+/// is why every fixture in this file that needs base space writes
+/// `data.locale` rather than reaching in. For a test about something else
+/// that now has to be *at home* to do it: party assignment is a base verb
+/// (`Game::require_base`), so the fixture crosses the same way the player
+/// does.
+pub(crate) fn stand_inside_the_base(app: &mut App) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("into_base", 0);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.locale = Locale::Base { x: 0, y: 0 };
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 pub(crate) fn test_app(seed: u32) -> App {
     let assets_dir = test_assets_dir();
     let saves_dir = std::env::temp_dir().join(format!("feral_processes_appcore_test_{seed}_saves"));

@@ -868,8 +868,8 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
             },
         ))
         .id();
-    game.add_companion(low_roll).unwrap();
-    game.add_companion(high_roll).unwrap();
+    enlist(&mut game, low_roll);
+    enlist(&mut game, high_roll);
 
     // xp_to_next is rigged to 1 above, so any non-zero party XP levels
     // both companions up exactly once, at the same species (and so the

@@ -505,7 +505,7 @@ fn award_player_xp_also_grants_party_members_half_as_much() {
     let mut game = Game::new(36, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let in_party = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(in_party).unwrap();
+    enlist(&mut game, in_party);
     let not_in_party = spawn_tamed(&mut game, 10, 3);
 
     game.award_player_xp(player, 10);
@@ -556,7 +556,7 @@ fn award_player_xp_can_level_up_a_party_member_independently_of_the_player() {
         .get_mut::<Experience>(companion)
         .unwrap()
         .xp_to_next = 5;
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     game.award_player_xp(player, 10);
 
@@ -608,8 +608,8 @@ fn higher_growth_multiplier_species_out_grows_a_baseline_one_via_award_party_xp(
     };
     let baseline = spawn(&mut game, baseline_id);
     let boosted = spawn(&mut game, boosted_id);
-    game.add_companion(baseline).unwrap();
-    game.add_companion(boosted).unwrap();
+    enlist(&mut game, baseline);
+    enlist(&mut game, boosted);
 
     // xp_to_next is rigged to 1 above, so any non-zero party XP levels
     // both companions up exactly once.
@@ -647,7 +647,7 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let species = game
         .species_defs()
@@ -695,7 +695,7 @@ fn player_levels_past_the_creature_cap_but_companions_dont() {
     let mut game = Game::new(105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     // Party members earn half the player's award (PARTY_XP_DIVISOR),
     // so this is far past the cap for both of them.
@@ -1825,7 +1825,7 @@ fn a_multi_affix_copy_names_two_and_counts_the_rest() {
 fn a_companion_killed_in_battle(game: &mut Game) -> Entity {
     let player = game.player_entity();
     let companion = spawn_tamed(game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(game, companion);
     let enemy = spawn_wild_on_player_tile(game);
     insert_battle(game, player, vec![enemy]);
     game.world.get_mut::<Stats>(companion).unwrap().hp = 0;
@@ -1891,7 +1891,7 @@ fn gear_comes_back_to_the_player_on_both_arms_of_a_death() {
         // fixture that wears its loadout after `insert_battle` is testing
         // that refusal rather than the teardown.
         let companion = spawn_tamed(&mut game, 10, 3);
-        game.add_companion(companion).unwrap();
+        enlist(&mut game, companion);
         wear(&mut game, companion, &weapon.0);
         assert_eq!(
             held_any(&game, &weapon),

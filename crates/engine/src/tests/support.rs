@@ -137,6 +137,18 @@ pub(crate) fn from_inside_the_base<T>(game: &mut Game, act: impl FnOnce(&mut Gam
 
 /// Drops the party into depth 1 through an entrance on the tile they are
 /// standing on, which is what walking onto a link does.
+/// Puts `creature` in the party from inside base space, and comes back out
+/// to wherever the party was standing.
+///
+/// Party assignment is a base verb (`Game::require_base`), so a test about
+/// anything else has to cross twice, the same as the player does — this is
+/// `from_inside_the_base`'s reason one verb along, and it is spelled as a
+/// fixture rather than inlined 130 times.
+pub(crate) fn enlist(game: &mut Game, creature: Entity) {
+    from_inside_the_base(game, |g| g.add_companion(creature))
+        .unwrap_or_else(|e| panic!("enlisting a companion: {e}"));
+}
+
 pub(crate) fn descend(game: &mut Game) {
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     game.enter_stack(pos.x, pos.y);
@@ -1458,7 +1470,7 @@ pub(super) fn power_spent_commanding_companion(seed: u32, stunned: bool) -> f32 
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 20);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     if stunned {
         game.world.entity_mut(companion).insert(StatusEffects {
             active: Some(ActiveStatus {
@@ -1617,7 +1629,7 @@ pub(super) fn game_with_two_ability_companion() -> (Game, Entity) {
         ))
         .id();
     game.install_innate_routines(medic);
-    game.add_companion(medic).unwrap();
+    enlist(&mut game, medic);
     (game, medic)
 }
 
@@ -1680,7 +1692,7 @@ pub(super) fn game_with_contending_unlocks_companion() -> (Game, Entity) {
         ))
         .id();
     game.install_innate_routines(crowded);
-    game.add_companion(crowded).unwrap();
+    enlist(&mut game, crowded);
     (game, crowded)
 }
 
@@ -2207,7 +2219,7 @@ pub(crate) fn battle_with_a_passive_holder_prepared(
     }
 
     let ally = spawn_tamed(&mut game, 30, 3);
-    game.add_companion(ally).unwrap();
+    enlist(&mut game, ally);
     prepare(&mut game);
 
     // Enough Integrity on the hostile that a round cannot end the battle

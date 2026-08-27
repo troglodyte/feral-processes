@@ -234,6 +234,9 @@ fn in_party(app: &mut App, entity: feral_processes_engine::Entity) -> bool {
 #[test]
 fn p_stands_the_highlighted_member_down_and_puts_it_back() {
     let mut app = app_with_companions_in_the_party(780, 2);
+    // Who is in your party is decided at home now, so the fixture stands
+    // where the player has to stand to decide it.
+    stand_inside_the_base(&mut app);
     let before = roster(&mut app);
     open_via_menu(&mut app, 'p', "Companions");
     app.handle_key(GameKey::Down);
@@ -243,7 +246,7 @@ fn p_stands_the_highlighted_member_down_and_puts_it_back() {
 
     assert_eq!(
         app.status_line, None,
-        "standing a member down is never refused"
+        "standing a member down at base is never refused"
     );
     assert!(
         !in_party(&mut app, before[1]),
@@ -737,5 +740,32 @@ fn u_on_a_bare_program_says_so_rather_than_going_quiet() {
     assert!(
         app.status_line.is_some(),
         "a bare program's refusal reaches the status line"
+    );
+}
+
+/// The roster screen itself stays reachable everywhere — gear, memories and
+/// the manifest are worth reading four frames down — and it is the *verb*
+/// that refuses. A row that simply vanished would take all of that with it
+/// and tell the player nothing.
+#[test]
+fn standing_a_member_down_outside_the_base_refuses_onto_the_status_line() {
+    let mut app = app_with_companions_in_the_party(781, 2);
+    let before = roster(&mut app);
+    open_via_menu(&mut app, 'p', "Companions");
+    assert_eq!(
+        app.mode,
+        Mode::Companion,
+        "the roster is still readable out here"
+    );
+
+    app.handle_key(GameKey::Char('P'));
+
+    assert!(
+        app.status_line.is_some(),
+        "the refusal has to be said, not silently swallowed"
+    );
+    assert!(
+        in_party(&mut app, before[0]) && in_party(&mut app, before[1]),
+        "and the party is untouched"
     );
 }

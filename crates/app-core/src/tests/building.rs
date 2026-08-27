@@ -560,6 +560,12 @@ fn the_staff_screen_tells_a_party_member_from_an_unposted_staffer() {
         rows.iter().map(|r| r.doing.clone()).collect::<Vec<_>>()
     );
 
+    // Joining a party is a base verb now, so the fixture stands where the
+    // player has to stand to do it. The two entities are read back **after**
+    // the crossing, not before: it goes through a save round trip and
+    // `Entity` identity is private to the `World` that allocated it.
+    stand_inside_the_base(&mut app);
+    let rows = app.base_staff_rows();
     let (member, other) = (rows[0].program.entity, rows[1].program.entity);
     app.game.as_mut().unwrap().add_companion(member).unwrap();
 

@@ -29,7 +29,7 @@ fn wild_retaliation_can_land_on_either_the_player_or_the_companion() {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let companion = spawn_tamed(&mut game, 1000, 1);
-        game.add_companion(companion).unwrap();
+        enlist(&mut game, companion);
         let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
         let wild = game
@@ -98,7 +98,7 @@ fn a_roster_no_longer_inflates_the_players_own_attack_or_defense() {
     for _ in 0..MAX_PARTY_SIZE {
         let mate = spawn_tamed(&mut game, 10, 200);
         game.world.get_mut::<Stats>(mate).unwrap().mitigation = 40;
-        game.add_companion(mate).unwrap();
+        enlist(&mut game, mate);
     }
 
     assert_eq!(
@@ -125,9 +125,9 @@ fn a_companions_effective_defense_as_a_retaliation_target_is_its_own_raw_stats()
     let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 30);
     game.world.get_mut::<Stats>(a).unwrap().mitigation = 20;
-    game.add_companion(a).unwrap();
+    enlist(&mut game, a);
     let b = spawn_tamed(&mut game, 10, 200);
-    game.add_companion(b).unwrap();
+    enlist(&mut game, b);
 
     let raw_def = game.world.get::<Stats>(a).unwrap().mitigation;
     assert_eq!(game.effective_mitigation(a), raw_def);
@@ -145,7 +145,7 @@ fn back_slot_party_members_draw_less_fire_but_are_still_reachable() {
     for _ in 0..MAX_PARTY_SIZE {
         // Huge HP pools so nobody drops out of the pool mid-sample.
         let pet = spawn_tamed(&mut game, 100_000, 1);
-        game.add_companion(pet).unwrap();
+        enlist(&mut game, pet);
         slots.push(pet);
     }
     assert!(
@@ -181,7 +181,7 @@ fn a_bracing_member_draws_more_fire_than_it_otherwise_would() {
         let mut game = Game::new(93, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let player = game.player_entity();
         let pet = spawn_tamed(&mut game, 100_000, 1);
-        game.add_companion(pet).unwrap();
+        enlist(&mut game, pet);
         if brace {
             game.begin_defend(pet);
         }
@@ -211,7 +211,7 @@ fn party_order_survives_a_save_load_round_trip() {
     let b = spawn_tamed(&mut game, 47, 3);
     let c = spawn_tamed(&mut game, 53, 3);
     for pet in [c, a, b] {
-        game.add_companion(pet).unwrap();
+        enlist(&mut game, pet);
     }
     let path = dir.join("slot.sav");
     game.save(&path).unwrap();
@@ -270,7 +270,7 @@ fn defending_reduces_the_damage_a_party_member_takes_this_round() {
 fn a_companion_can_hold_the_buff_defend_grants() {
     let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     let raw_def = game.world.get::<Stats>(pet).unwrap().mitigation;
 
     game.begin_defend(pet);
@@ -574,8 +574,8 @@ fn a_hostile_single_target_routine_is_aggro_weighted_across_the_party() {
         let player = game.player_entity();
         let bracing = spawn_tamed(&mut game, 1000, 1);
         let other = spawn_tamed(&mut game, 1000, 1);
-        game.add_companion(bracing).unwrap();
-        game.add_companion(other).unwrap();
+        enlist(&mut game, bracing);
+        enlist(&mut game, other);
         let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
 
         let enemies = battle_with_a_pack_of(&mut game, 1, 200);

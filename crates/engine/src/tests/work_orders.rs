@@ -42,7 +42,7 @@ fn the_base_staff_pool_survives_a_save_round_trip() {
 fn a_party_member_does_not_come_back_as_base_staff() {
     let mut game = Game::new(6, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
 
     let path = save_path("party_roundtrip");
     game.save(&path).unwrap();
@@ -1254,7 +1254,7 @@ fn an_idle_staff_member_is_drawn_and_can_be_named_but_a_companion_is_neither() {
     // have nothing to do with this rule.
     let idle = spawn_tamed_on_map(&mut game, 5, 5);
     let companion = spawn_tamed_on_map(&mut game, 6, 5);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.tick();
     stand_in_base(&mut game);
 

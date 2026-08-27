@@ -4532,7 +4532,7 @@ fn the_wider_rungs_hand_over_more_disks_of_the_same_routine() {
         // were read off `Party` rather than off the constant, the roster rung
         // would hand over two disks here instead of six.
         let fielded = spawn_holder(&mut game);
-        game.add_companion(fielded).unwrap();
+        enlist(&mut game, fielded);
 
         game.buy_market_offer(index).unwrap();
         assert_eq!(

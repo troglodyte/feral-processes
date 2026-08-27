@@ -8,7 +8,7 @@ fn a_companions_special_rallies_the_player_instead_of_attacking() {
     let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 20);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let species = game
         .species_defs()
@@ -214,7 +214,7 @@ fn companion_ability_label_shows_the_ability_name_or_the_fallback() {
         ))
         .id();
     game.install_innate_routines(plain);
-    game.add_companion(plain).unwrap();
+    enlist(&mut game, plain);
     let plain_ability = game.player_status().companions[0].ability.clone();
     assert_eq!(
         plain_ability, "Hyperthread Single v1.0",
@@ -264,7 +264,7 @@ fn an_ability_above_the_companions_level_is_not_offered_yet() {
 fn a_companion_declaring_no_abilities_still_offers_exactly_the_fallback() {
     let mut game = Game::new(95, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     let options = game.battle_special_options(1);
     assert_eq!(
@@ -395,7 +395,7 @@ fn a_companion_spends_its_round_on_a_power_cell_and_charges_itself() {
     let mut game = Game::new(504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 20);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(10.0);
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(40.0);
@@ -462,7 +462,7 @@ fn a_companion_slot_is_offered_the_item_row() {
     let mut game = Game::new(505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 20);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world
         .get_mut::<Inventory>(player)
         .unwrap()

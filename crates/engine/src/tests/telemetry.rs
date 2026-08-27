@@ -172,7 +172,7 @@ fn a_party_special_records_its_ability_and_target() {
     let mut game = fresh();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 30, 5);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     let wild = wild_scrapper(&mut game, 1, 5_000);
     insert_battle(&mut game, player, vec![wild]);
     let expected = game.actor_abilities(companion)[0].id.clone();

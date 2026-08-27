@@ -7,7 +7,9 @@
 //! rather than rolled or stored.
 
 use crate::environment::{EnvironmentDb, EnvironmentEffect};
-use crate::tests::support::{ScratchAssets, assets_dir_with_environment, scratch_assets_dir};
+use crate::tests::support::{
+    ScratchAssets, assets_dir_with_environment, enlist, scratch_assets_dir,
+};
 use crate::tuning::{MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS};
 use crate::world::Biome;
 
@@ -363,7 +365,7 @@ fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
 fn attrition_never_touches_the_party() {
     let mut game = game_about_to_step("env_party", &[("cold.ron", COLD)], Biome::Deadlock);
     let member = crate::tests::support::spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
     let before = game.world.get::<Stats>(member).unwrap().hp;
     assert!(game.world.resource::<Party>().0.contains(&member));
 

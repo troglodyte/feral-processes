@@ -66,6 +66,9 @@ each site settled on:
 | `game/trade.rs` `buy_back` | `require_base` | same, and its shelf is keyed on the trader's tile |
 | `game/trade.rs` `sell_companion` | `require_base` | same |
 | `game/trade.rs` `buy_item` | `require_base` | same |
+| `game/party.rs` `add_companion` | `require_base` | who is in your party is decided at home — a wipe in the Stack is a walk out alone, not a swap |
+| `game/party.rs` `stand_down_companion` | `require_base` | the other half of the same decision, and the reason it exists at all (see below) |
+| `game/party.rs` `remove_companion` | *none* | the **mover**, not the verb: `wield_program` calls it internally, so a guard here would refuse wielding in the field |
 | `game/turn.rs` `rest` | *none* | takes no guard at all now — it **reads** the locale to price itself, see below |
 
 The test for whether a reader needs a guard at all is unchanged — not
@@ -90,6 +93,29 @@ The final review caught it: the system now measures against
 `Game::base_pos` while in base space, the same dispatch `Game::scan_center`
 makes, and refuses only the Stack — no supply underground stays a rule
 of its own, not a side effect of the surface-only guard.
+
+**The party rows are the first pair where the guarded verb and the mover
+are different functions, and that split is load-bearing.**
+`Game::remove_companion` returns `()` and is not only a player verb —
+`wield_program` calls it to stand a member down before taking the program
+as a weapon. A `require_base` inside it would refuse **wielding in the
+field** as a silent side effect, through a function the player never
+invoked. So the mover stays guard-free by construction and
+`stand_down_companion` wraps it: `take_from_adjacent` / `give_to_adjacent`'s
+exact shape one axis along, where the caller owns the refusal.
+`a_downed_program_cannot_be_put_back_in_the_party` and
+`wielding_a_program_still_works_out_in_the_field` are the two tests that
+hold the halves apart.
+
+**The screen half is deliberately *not* mirrored.** `app/group_menu.rs`'s
+"Companions" row stays `Locality::Anywhere` even though both verbs behind
+it are `require_base`, because that row is the whole roster screen — gear,
+memories, the manifest, a rename — and only the join and the stand-down
+are decided at home. Hidden off-base it would take reading your own
+programs away four frames down along with the one thing that needed
+guarding. This is the one row where the locality table and the guard list
+above are allowed to disagree, and the refusal on the status line is what
+carries the rule instead.
 
 **`rest` was the contested row twice over, and has now left the table.** It
 first kept `require_surface`, on the spec's authority

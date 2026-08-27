@@ -136,8 +136,11 @@ impl App {
             return;
         };
         if member {
-            game.remove_companion(entity);
-            self.status_line = None;
+            // The guarded verb, not the mover: `remove_companion` is what
+            // `wield_program` calls internally, and a guard inside it would
+            // refuse wielding in the field.
+            let outcome = game.stand_down_companion(entity);
+            self.report(outcome);
         } else {
             let outcome = game.add_companion(entity);
             self.report(outcome);

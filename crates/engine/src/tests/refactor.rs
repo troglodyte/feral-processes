@@ -254,7 +254,7 @@ fn the_upgrade_slots_run_out_but_the_zone_bump_never_does() {
 fn a_refactor_is_refused_mid_battle() {
     let mut game = Game::new(406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(pet).unwrap();
+    enlist(&mut game, pet);
     stock(&mut game, HP_BUFF, 1);
     let enemy = spawn_wild_on_player_tile(&mut game);
     let player = game.player_entity();

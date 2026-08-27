@@ -198,7 +198,7 @@ fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
 fn rest_also_fully_heals_the_active_companion() {
     let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     {
         let mut stats = game.world.get_mut::<Stats>(companion).unwrap();
         stats.hp = 1;
@@ -219,8 +219,8 @@ fn rest_heals_every_party_member() {
     let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let a = spawn_tamed(&mut game, 10, 3);
     let b = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(a).unwrap();
-    game.add_companion(b).unwrap();
+    enlist(&mut game, a);
+    enlist(&mut game, b);
     for e in [a, b] {
         game.world.get_mut::<Stats>(e).unwrap().hp = 1;
     }
@@ -359,7 +359,7 @@ fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
 fn tick_field_buffs_ages_buffs_on_party_members_too() {
     let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.arm_field_buff(
         companion,
         ActiveFieldBuff {
@@ -523,7 +523,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
 fn resting_drops_a_companions_until_rest_buffs_too() {
     let mut game = Game::new(623, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     stand_in_base_beside_home(&mut game);
     game.arm_field_buff(
         companion,
@@ -712,7 +712,7 @@ fn an_interval_makes_a_field_buff_fire_on_a_cadence_not_every_tick() {
 fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
     let mut game = Game::new(611, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world.get_mut::<Stats>(companion).unwrap().hp = 4;
     let player_hp_before = game.world.get::<Stats>(game.player_entity()).unwrap().hp;
     game.arm_field_buff(
@@ -751,7 +751,7 @@ fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
     let mut game = Game::new(614, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.arm_field_buff(
         companion,
         ActiveFieldBuff {
@@ -875,7 +875,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
     let mut game = Game::new(604, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
 
     game.arm_field_buff(
         player,

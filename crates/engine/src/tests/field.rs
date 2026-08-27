@@ -171,8 +171,8 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     let mut game = game_with_field_ability();
     let low = spawn_tamed(&mut game, 10, 3);
     let high = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(low).unwrap();
-    game.add_companion(high).unwrap();
+    enlist(&mut game, low);
+    enlist(&mut game, high);
     // `CREATURE_MAX_LEVEL` rather than an arbitrary 20: a companion cannot
     // level past it in play, so a fixture that did would be scaling an invocation
     // nobody can ever make.
@@ -316,7 +316,7 @@ fn field_routine_targets_excludes_an_owned_program_outside_the_party() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     let party_member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(party_member).unwrap();
+    enlist(&mut game, party_member);
     let benched = spawn_tamed(&mut game, 10, 3);
 
     let targets = game.field_routine_targets(0);
@@ -355,7 +355,7 @@ fn game_with_the_field_routine_installed() -> Game {
 fn an_ally_picker_row_carries_the_targets_stats() {
     let mut game = game_with_the_field_routine_installed();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
     let stats = *game.world.get::<Stats>(member).unwrap();
 
     let targets = game.field_routine_targets(0);
@@ -398,7 +398,7 @@ fn the_ally_pickers_player_row_carries_stats_too() {
 fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
     let mut game = game_with_the_field_routine_installed();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
     game.arm_field_buff(
         member,
         ActiveFieldBuff {
@@ -449,7 +449,7 @@ fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
 fn a_consumable_buff_of_the_same_kind_is_not_named_as_replaced() {
     let mut game = game_with_the_field_routine_installed();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
     game.arm_field_buff(
         member,
         ActiveFieldBuff {
@@ -480,7 +480,7 @@ fn a_consumable_buff_of_the_same_kind_is_not_named_as_replaced() {
 fn an_index_naming_no_field_buff_tags_nothing() {
     let mut game = game_with_the_field_routine_installed();
     let member = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(member).unwrap();
+    enlist(&mut game, member);
     game.arm_field_buff(
         member,
         ActiveFieldBuff {
@@ -745,7 +745,7 @@ fn active_buffs_reports_a_player_buff_with_no_holder_label() {
 fn active_buffs_reports_a_companion_buff_with_its_name() {
     let mut game = game_with_field_ability();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -773,7 +773,7 @@ fn active_buffs_reports_a_companion_buff_with_its_name() {
 fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     let mut game = game_with_field_ability();
     let holder = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(holder).unwrap();
+    enlist(&mut game, holder);
     set_level(&mut game, holder, CREATURE_MAX_LEVEL);
     game.world
         .entity_mut(holder)
@@ -837,7 +837,7 @@ fn a_companions_field_routine_spends_the_companions_reserve() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -871,7 +871,7 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
     let mut game = game_with_field_ability();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
-    game.add_companion(companion).unwrap();
+    enlist(&mut game, companion);
     game.world
         .entity_mut(companion)
         .insert(Routines(vec!["test_field_regen".to_string()]));

@@ -27,6 +27,50 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.36
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the one field this adds to a creature is additive behind `#[serde(default)]`,
+and nothing else in either feature is stored at all. A save written before
+this comes up with every program upright, and a program already developed
+past its zone's new cap keeps every level and every stat it earned.
+
+Two changes that meet in the middle. Losing a program in a fight is no longer
+losing it, and how far anyone can develop is now a property of how far you
+have got rather than of what you are.
+
+### Added
+
+- **A program that dies under Forgiving is benched, not destroyed.** It comes
+  out of your party downed, keeps its place on the roster, and walks itself to
+  a **Repair Bay** — a new passive building that writes it back to full
+  Integrity a tick at a time and stands it off the bench when it is whole. No
+  worker, no input, no research: 16 salvage and somewhere to put it.
+- **Without a Bay standing, a downed program stays down.** It lies where it
+  fell, off the labour pool, still holding its roster slot. Selling it or
+  extracting a routine are what free the slot in the meantime, and the refusal
+  says so rather than leaving you to guess.
+- **XP earned at the level cap buys Perk Points** instead of vanishing. The
+  price rises with every perk you already hold, so the exchange tapers rather
+  than becoming a second grind; whatever is left unspent turns into real
+  levels the moment a breach lifts the cap.
+
+### Changed
+
+- **One level cap over the whole party, and the zone sets it.** The player had
+  no ceiling at all and a companion had a personal one; both now stop at the
+  same number, which rises with every sector breached. A companion can stand
+  level with you, which is what makes developing one worth the XP.
+- **A Kernel Ring buys talent tiers rather than levels.** Every ring still
+  opens two, three rings still buy exactly one full tree, and a program you
+  built before this has precisely the points it had. What changed is what the
+  ring is *for*: depth in one program's tree, not permission to be bigger than
+  its roster-mates.
+- **Who is in your party is decided at home.** Joining and standing down both
+  need base space now. Wielding a program in the field is untouched.
+- **A raid that kills a defender benches it too**, on the same terms as a
+  fight.
+
 ## 0.13.35
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

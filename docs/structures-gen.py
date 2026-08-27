@@ -38,6 +38,7 @@ S = [
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
  ("defrag_bay",     "Defrag Bay",     "b", "Cyan",   [("core_fragment", 12)],                   "utility",  "restores staff Coherence",       None, None, None,          None,            2,   0),
  ("sandbox",        "Sandbox",        "s", "Green",  [("core_fragment", 10)],                   "utility",  "restores staff Slack",           None, None, None,          None,            1,   0),
+ ("repair_bay",     "Repair Bay",     "r", "Green",  [("core_fragment", 16)],                   "utility",  "+1 Integrity a tick to a downed program",None, None, None,   None,            2,   0),
  ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),
 ]
 K = "id name glyph color cost kind does ticks cap feeder upgrade draw supply".split()

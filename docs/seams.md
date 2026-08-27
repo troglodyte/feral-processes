@@ -6614,3 +6614,115 @@ screen and no shelf identity moves with them — `CaravanMemory` keys on it and
 together so the sort and the header cannot disagree about where a run starts,
 and it is exhaustive on `CaravanOfferKind`: two of the four kinds are not
 items and have no `ItemCategory` to head under.
+
+### A deploy is a request, and `Game::spawn_structure` is the one place a structure is written
+
+**A deploy is a request now, and the Home is the only build the player's own
+hands finish.** `Game::place_structure` answers every refusal it always
+answered — researched, in base space, standing on laid floor, cell free,
+under `max_deployed` — and then, for anything but a Home, spawns a
+`components::BuildSite` on the cell instead of the structure. A body posted
+by `schedule_base_labour` fetches the bill of materials by hand, sets it
+down there, and raises the thing over `tuning::BUILD_TICKS_PER_MATERIAL`
+ticks per unit of material.
+
+**Why the Home is exempt, and why that is not a special case to be tidied
+away.** Founding is the one build with nobody to ask. Base space does not
+exist before a Home stands: there is no roster inside it, no shelf to fetch
+from, and `require_base` refuses entry for want of the Home you are trying
+to build. A run that had to ask a program to raise its first Home could
+never start a base at all. So founding keeps the whole of the old verb — the
+pack-charging, the shortfall refusal, the structure standing before the call
+returns — and everything downstream of it is crew labour.
+
+**Nothing is charged at filing, and that is the decision the rest hangs
+off.** The alternative was to refuse a request the base could not yet afford,
+which is what the verb did for its whole life before this. What that trades
+away is the only thing a queue is for: production catches up, and a request
+filed against an empty base starts on its own the moment a Mining Node makes
+the last unit. It also makes the reporting obligation move rather than
+vanish — the old refusal logged the shortfall because it was the one build
+refusal that left the player an errand, and the errand is still there, so a
+builder standing at a site with nothing anywhere to fetch says so once,
+latched on `BuildSite::announced_dry` under `set_machine_status`'
+only-on-transition rule. The latch **clears when a source appears**, unlike a
+dig site's, because a build waits on a bill of several items over many trips:
+said once and never again, a base that ran dry in zone 2 would stay silent
+about running dry in zone 6.
+
+**The materials are not spent until the structure is raised**, and that is
+what makes a cancel a refund rather than a rebate. Units leave their shelf
+when a builder picks them up and stand on the cell from then on; they are
+consumed by the site being despawned at completion, never by an arithmetic
+step of their own. So `Game::cancel_build_request` hands back goods that
+still exist, and `save::BuildSiteSave::delivered` is the load-bearing save
+field — dropped, a reload destroys them and the crew fetches them a second
+time out of a base that no longer has them.
+
+**`Game::spawn_structure` is the one place a structure's component list is
+written**, extracted here because it acquired a second caller with nothing
+else in common: the player founding a Home, and the crew finishing a
+request. This is `Game::roster_parts`' argument applied to the other roster.
+Left inline in `place_structure`, the list would have had to be copied into
+`run_build_crew`, nothing would fail to compile when the two drifted, and a
+crew-built machine quietly missing its `MachineStatus` or its `ResourceNode`
+reads as the base being broken rather than as a missing line. It performs no
+checks at all, deliberately: every refusal belongs to whoever decided to
+build, and for a crew-finished request those were answered when it was filed
+— which is why `max_deployed` counts pending requests alongside standing
+structures, or a player could queue a whole base's worth of a capped machine
+and every one would be raised.
+
+**Build wants are prepended to `schedule_base_labour`'s want list, and that
+is the whole of "a build outranks production."** The priority *is* the
+position in that list, since `truncate(staff.len())` cuts from the end —
+dig wants are appended last for the mirror-image reason. Three properties
+fall out of the existing scheduler rather than needing anything new: a base
+with a spare body never sheds a worker, because the diff leaves every
+still-wanted posting where it is and hands out the idle pool first; a base
+short of bodies takes one off a machine, because the truncation cuts the
+lowest-priority want; and a base with nobody at all simply leaves requests
+standing, which is a state and not a fault. The one thing that did need
+changing is the empty-queue standdown guard: read off `WorkOrders` alone, a
+base whose only instruction was a build request would be reasoning from
+"nobody has told this base anything" while somebody had.
+
+**The fetch is the genuinely new machinery, and it is not the dig crew's.**
+The dig crew's substrate draw goes through `stock::spend_from_base`, which
+*teleports* a unit off a shelf; a builder has to walk there, which is what
+the feature is for. `construction::Source` is the two stores it can walk to —
+every deployed structure's output buffer, the same set the stock strip counts,
+plus the party's pack. The pack is reachable **only while the party is in base
+space**: a builder walks over and takes it out of your hands, so there has to
+be a pair of hands there, and four frames down the Stack the pack is simply
+not a source. It sorts last among equals, so a builder that can reach a shelf
+takes the shelf.
+
+**The put-back is deliberately narrower than the draw.** `stock::
+return_to_depots` is Depots alone, where `spend_from_base` is every buffer,
+because a unit pushed into a Mining Node's output is indistinguishable from a
+unit that node produced and would be hauled away and counted as a cycle's
+yield. The dig crew's substrate handling already carries this same asymmetry.
+Anything that fits nowhere is logged rather than dropped in silence — a base
+with no Depot, the party away, a build cancelled is reachable, and a player
+who is not told simply sees the stock strip fall.
+
+**`views::BuildOrderRow` exists before the screen that will draw it**, and
+that is on purpose rather than speculative generality. Three readers want
+the same answer today: the map, which needs to know a cell is a pending build
+at all; the examine line, which is the only place the materials standing on a
+site are visible; and `Game::build_order_report`, the list a build-order
+screen will page. Every figure in it is a call — `BuildSite::outstanding`,
+`required_ticks`, `structure_name`, `item_name` — so no screen can report a
+percentage the crew disagrees with. `BuildSite::required_ticks` is likewise
+**derived from the stored cost and never stored beside it**: a saved figure
+could only ever drift from the bill of materials next to it after a retune,
+which is `Platform`'s radius argument reaching the save format.
+
+**Two things a future widening must not quietly break.** "One builder at a
+time" is a property of the scheduler naming a site once, not a count on the
+component — a second builder is a scheduler change and costs no save-format
+bump. And `TaskKind::Construct` is the first task kind whose holder may be
+*carrying*: `schedule_base_labour`'s never-free-a-`Carrying`-holder rule
+already covers it and has to, because freeing the body drops the `Carrying`
+with the `Task` and those units have already left the shelf they came off.

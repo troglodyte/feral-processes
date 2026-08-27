@@ -76,7 +76,10 @@ The rest of what a base does:
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
-  structure at its ceiling in zone 1 stays listed and starts moving again after a breach.
+  structure at its ceiling in zone 1 stays listed and starts moving again after a breach. An upgrade
+  is a request like any other build: nothing is charged when you ask for it, your crew fetches the
+  parts out of the base and works on the spot, and the machine keeps running the whole time. Call one
+  off from the build orders screen and you get back whatever has been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. A Shield soaks damage off every sweep against everything you own, a
   Patch Node recompiles damage across the whole base, and a program posted to the structure that gets

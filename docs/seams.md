@@ -6673,6 +6673,68 @@ build, and for a crew-finished request those were answered when it was filed
 structures, or a player could queue a whole base's worth of a capped machine
 and every one would be raised.
 
+**Upgrading is a build request too, and `BuildSite::goal` is the whole of
+the difference.** `Game::upgrade_structure` was the last structure cost paid
+out of the player's pack. The complaint arrives the moment you stand on a
+full Depot beside a Mk1 Lathe and are told "Not enough Cache Grain": the base
+is holding it, the crew can already fetch it for a deploy, and the stock
+strip across the top of the very screen saying no is saying the base can
+build. So the verb keeps every refusal it had, in the same order, drops the
+`Inventory` shortfall check and the charge, and spawns a `BuildSite` carrying
+`BuildGoal::Upgrade { to_tier }` on the machine's own cell.
+
+**One component with a goal, not a second component.** The axis of change is
+what a *finished* site does and nothing else — the bill, the fetching, the
+walk, the delivery, both announcement latches, the reachability check above
+the truncation, the refund on cancel and the never-free-a-`Carrying`-holder
+rule are identical for both jobs. Exactly one step branches:
+`raise_one_tick`'s completion. A second `UpgradeSite` with its own crew pass
+would have had to copy all four rules build orders established, including
+the two the suite missed the first time, and the copy that drifts is the one
+nobody runs.
+
+**The site names a tile, never an `Entity`.** `BuildSite::structure` keeps
+its old meaning — which structure *kind* this is about — so the machine is
+resolved by position at completion. That is what leaves nothing to dangle
+when it is destroyed underneath the request, keeps the save field purely
+additive behind `#[serde(default)]`, and means no load-order dependency
+between structures and sites.
+
+**The machine keeps running while its upgrade stands.** Standing it down for
+its own upgrade brings back the deadlock class build orders closed, on a base
+that files three at once: the machines that make the very materials the
+requests are waiting on are the ones switched off.
+
+**Three traps, each of which passes a green suite and is reachable by a
+player doing the supported thing.** First, `count_build_requests` counts by
+`structure` id, which is the machine's own kind on an upgrade site — left
+counting every goal, a pending upgrade eats one of that kind's
+`max_deployed` slots and a legitimate deploy is refused with a figure the
+player cannot account for, so it counts `BuildGoal::New` only. Second, the
+two destruction paths: a machine swept by a raid (`damage_structure`) or
+demolished by the player (`remove_structure`, the Home cascade included)
+must take its pending site with it and refund the delivered units, so both
+call one private `Game::clear_pending_build_at` — wired into one alone, the
+other strands goods on a cell nothing occupies and nothing fails to compile.
+Third, the job mark: an upgrade site carries **no `Glyph`**, because the
+machine under it is still drawing that cell, so the `Construct` arm of
+`build_views`' `attended` set splits on the goal and the builder wears the
+mark for the whole job — `Excavate`'s rule and `Excavate`'s reason, there
+being no glyph at the other end of the posting. `Game::wears_job_mark` and
+`EntityView::structure_attended` are the two halves, exactly one per posted
+program at every instant.
+
+**What the player sees falls out of it.** The build-orders screen picks
+upgrade requests up for free, since `build_order_report` walks every
+`BuildSite` in tile order; `views::BuildOrderRow` gains the goal and
+`BuildOrderRow::label` composes `Lathe → Mk3`. The machine's own
+`EntityView::build` carries the pending row, found by tile — which is why
+`render/base.rs` tests `is_structure` *before* `build.is_some()`, or a
+working machine draws as a bare build slab for as long as its upgrade is on
+order. And the upgrade menu quotes `build_cost_display` (pack plus base
+shelves) through `Game::upgrade_cost`, or the menu prices the job against a
+store the verb no longer reads.
+
 **Build wants are prepended to `schedule_base_labour`'s want list, and that
 is the whole of "a build outranks production."** The priority *is* the
 position in that list, since `truncate(staff.len())` cuts from the end —

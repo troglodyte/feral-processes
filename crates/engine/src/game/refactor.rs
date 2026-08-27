@@ -262,7 +262,7 @@ impl Game {
             .insert(KernelRing(current + 1));
 
         let name = self.entity_label(target);
-        let cap = self.companion_level_cap(target);
+        let cap = self.level_cap();
         self.log(format!(
             "{name} opens kernel ring {} — it can now reach level {cap}.",
             current + 1

@@ -3,7 +3,7 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::Entity;
-use feral_processes_engine::tuning::CREATURE_MAX_LEVEL;
+use feral_processes_engine::tuning::TALENT_START_LEVEL;
 
 /// A program to develop and three Privilege Rings to spend on it.
 fn app_ready_to_develop(seed: u32) -> App {
@@ -98,7 +98,7 @@ fn a_refused_ring_lands_in_the_status_line_and_the_page_holds() {
 
 /// A program two levels past the base cap, so it has two points to spend.
 fn app_ready_to_spend(seed: u32) -> App {
-    let mut app = app_owning_a_developed_program(seed, CREATURE_MAX_LEVEL + 2, 1);
+    let mut app = app_owning_a_developed_program(seed, TALENT_START_LEVEL + 2, 1);
     open_via_menu(&mut app, 'p', "Develop a program");
     app.handle_key(GameKey::Char('1'));
     app
@@ -139,7 +139,7 @@ fn picking_a_takeable_node_buys_it() {
 
 #[test]
 fn picking_a_node_with_no_points_lands_in_the_status_line_and_holds_the_page() {
-    let mut app = app_owning_a_developed_program(84, CREATURE_MAX_LEVEL, 1);
+    let mut app = app_owning_a_developed_program(84, TALENT_START_LEVEL, 1);
     open_via_menu(&mut app, 'p', "Develop a program");
     app.handle_key(GameKey::Char('1'));
     let target = app.pending_develop_target.unwrap();

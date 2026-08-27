@@ -470,9 +470,9 @@ fn opening_a_ring_changes_no_stat_level_or_xp() {
         (before_exp.level, before_exp.xp, before_exp.xp_to_next)
     );
     assert_eq!(
-        game.companion_level_cap(pet),
-        crate::tuning::CREATURE_MAX_LEVEL + crate::tuning::LEVELS_PER_RING,
-        "what it bought is room to grow, and nothing else"
+        game.level_cap(),
+        crate::tuning::zone_level_cap(game.world.resource::<crate::resources::ZoneLevel>().0),
+        "a ring buys no level ceiling — the zone is the only thing that sets one"
     );
 }
 

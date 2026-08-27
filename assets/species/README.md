@@ -252,8 +252,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // `level` is optional and defaults to 1, meaning the ability installs
     // as soon as the program is tamed (or as soon as slots exist for it —
     // see below). A higher number gates it until the companion reaches
-    // that level; companions cap at `tuning::CREATURE_MAX_LEVEL`, which is
-    // 6, so anything above that is permanently unreachable.
+    // that level. Everyone is capped at `Game::level_cap`, which is derived
+    // from the zone and starts at 6, so a high number is unreachable until
+    // the run has breached far enough to lift the cap past it.
     //
     // An id that doesn't exist is dropped with a logged warning and the
     // rest of the species still loads — a program missing one ability is
@@ -471,9 +472,9 @@ the guarantee that its role is readable from its numbers.
 The third leg, and the one a player actually spends a round on. Every shipped
 non-boss species grants exactly two abilities: a **class utility** at level 2,
 shared verbatim by all three members of its class, and a **tier rung** at
-level 4 that it holds alone. Against `CREATURE_MAX_LEVEL` of 6 that puts the
-capstone two rungs below the ceiling, so a companion is still growing after
-it lands.
+level 4 that it holds alone. Against a zone-1 cap of 6 that puts the capstone
+two rungs below the ceiling, so a companion is still growing after it
+lands.
 
 | Class | Utility (level 2) | Tier rungs (level 4), 1.0 → 1.25 → 1.5 |
 |---|---|---|

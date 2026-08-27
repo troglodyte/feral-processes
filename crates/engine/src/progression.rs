@@ -174,7 +174,7 @@ pub fn apply_setback_xp_penalty(exp: &mut Experience) -> u32 {
 /// enough gain can jump more than one level at once), stopping dead at
 /// `level_cap` — an already-capped entity doesn't even accumulate the XP.
 /// `None` means no ceiling at all (the player); creatures pass
-/// `Some(CREATURE_MAX_LEVEL)`. Each level-up grows max HP/attack/defense
+/// `Some(TALENT_START_LEVEL)`. Each level-up grows max HP/attack/defense
 /// (scaled by `growth_multiplier` — see `SpeciesDef::growth_multiplier`;
 /// pass `BASELINE_GROWTH_MULTIPLIER` for the player, who has no species)
 /// and fully heals. Returns a `LevelGain` — how many levels, and the growth
@@ -223,7 +223,7 @@ pub fn add_xp(
 mod tests {
     use super::*;
     use crate::tuning::{
-        BASELINE_GROWTH_MULTIPLIER, CREATURE_MAX_LEVEL, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX,
+        BASELINE_GROWTH_MULTIPLIER, DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, TALENT_START_LEVEL,
         XP_CHALLENGE_CEIL, XP_CHALLENGE_FLOOR,
     };
 
@@ -507,9 +507,9 @@ mod tests {
     #[test]
     fn add_xp_stops_leveling_at_the_creature_cap() {
         let mut exp = Experience {
-            level: CREATURE_MAX_LEVEL,
+            level: TALENT_START_LEVEL,
             xp: 0,
-            xp_to_next: xp_for_level(CREATURE_MAX_LEVEL),
+            xp_to_next: xp_for_level(TALENT_START_LEVEL),
         };
         let mut stats = base_stats();
 
@@ -518,7 +518,7 @@ mod tests {
             &mut stats,
             10_000,
             BASELINE_GROWTH_MULTIPLIER,
-            Some(CREATURE_MAX_LEVEL),
+            Some(TALENT_START_LEVEL),
             0,
         )
         .levels;
@@ -527,7 +527,7 @@ mod tests {
             levels, 0,
             "an already-maxed creature shouldn't level up further"
         );
-        assert_eq!(exp.level, CREATURE_MAX_LEVEL);
+        assert_eq!(exp.level, TALENT_START_LEVEL);
         assert_eq!(
             exp.xp, 0,
             "XP awarded past the cap shouldn't even accumulate"
@@ -538,9 +538,9 @@ mod tests {
     #[test]
     fn add_xp_caps_a_multi_level_jump_at_the_creature_cap() {
         let mut exp = Experience {
-            level: CREATURE_MAX_LEVEL - 1,
+            level: TALENT_START_LEVEL - 1,
             xp: 0,
-            xp_to_next: xp_for_level(CREATURE_MAX_LEVEL - 1),
+            xp_to_next: xp_for_level(TALENT_START_LEVEL - 1),
         };
         let mut stats = base_stats();
 
@@ -550,7 +550,7 @@ mod tests {
             &mut stats,
             100_000,
             BASELINE_GROWTH_MULTIPLIER,
-            Some(CREATURE_MAX_LEVEL),
+            Some(TALENT_START_LEVEL),
             0,
         )
         .levels;
@@ -559,7 +559,7 @@ mod tests {
             levels, 1,
             "should only be able to gain the one level up to the cap"
         );
-        assert_eq!(exp.level, CREATURE_MAX_LEVEL);
+        assert_eq!(exp.level, TALENT_START_LEVEL);
     }
 
     /// The player passes no cap at all, so they keep leveling well past
@@ -567,9 +567,9 @@ mod tests {
     #[test]
     fn add_xp_without_a_cap_levels_past_the_creature_ceiling() {
         let mut exp = Experience {
-            level: CREATURE_MAX_LEVEL,
+            level: TALENT_START_LEVEL,
             xp: 0,
-            xp_to_next: xp_for_level(CREATURE_MAX_LEVEL),
+            xp_to_next: xp_for_level(TALENT_START_LEVEL),
         };
         let mut stats = base_stats();
 
@@ -585,7 +585,7 @@ mod tests {
 
         assert!(levels > 0, "an uncapped entity should keep leveling");
         assert!(
-            exp.level > CREATURE_MAX_LEVEL,
+            exp.level > TALENT_START_LEVEL,
             "uncapped leveling should pass the creature ceiling, got {}",
             exp.level
         );

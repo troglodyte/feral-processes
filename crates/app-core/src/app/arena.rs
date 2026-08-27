@@ -18,9 +18,7 @@ use feral_processes_engine::arena::{
 };
 use feral_processes_engine::items_db::ItemDb;
 use feral_processes_engine::species::SpeciesDb;
-use feral_processes_engine::tuning::{
-    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, absolute_companion_level_cap,
-};
+use feral_processes_engine::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, arena_level_ceiling};
 use feral_processes_engine::world::Biome;
 
 use crate::*;
@@ -581,7 +579,7 @@ impl App {
                     // scenario's party is authored, not spawned, so there is
                     // no `KernelRing` to read — and a developed companion is
                     // exactly what the arena exists to stage.
-                    c.level = step(c.level, delta, 1, absolute_companion_level_cap());
+                    c.level = step(c.level, delta, 1, arena_level_ceiling());
                 }
             }
             ArenaRowKind::Opponent(i) => {

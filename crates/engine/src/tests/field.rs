@@ -6,7 +6,7 @@ use crate::components::{
     ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Perks, PowerReserve, Routines,
 };
 use crate::resources::Party;
-use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, CREATURE_MAX_LEVEL};
+use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, TALENT_START_LEVEL};
 use crate::*;
 
 fn game_with_field_ability() -> Game {
@@ -173,10 +173,10 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     let high = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, low);
     enlist(&mut game, high);
-    // `CREATURE_MAX_LEVEL` rather than an arbitrary 20: a companion cannot
+    // `TALENT_START_LEVEL` rather than an arbitrary 20: a companion cannot
     // level past it in play, so a fixture that did would be scaling an invocation
     // nobody can ever make.
-    set_level(&mut game, high, CREATURE_MAX_LEVEL);
+    set_level(&mut game, high, TALENT_START_LEVEL);
     game.world
         .entity_mut(low)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -216,7 +216,7 @@ fn a_higher_level_holder_casts_a_larger_magnitude() {
     );
     assert_eq!(
         high_power,
-        abilities::scaled_stat_power(2, CREATURE_MAX_LEVEL, AFFINITY_NEUTRAL)
+        abilities::scaled_stat_power(2, TALENT_START_LEVEL, AFFINITY_NEUTRAL)
     );
     assert!(
         high_power > low_power,
@@ -774,7 +774,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     let mut game = game_with_field_ability();
     let holder = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, holder);
-    set_level(&mut game, holder, CREATURE_MAX_LEVEL);
+    set_level(&mut game, holder, TALENT_START_LEVEL);
     game.world
         .entity_mut(holder)
         .insert(Routines(vec!["test_field_regen".to_string()]));
@@ -791,7 +791,7 @@ fn active_buffs_magnitude_reflects_the_scaled_power_not_the_authored_one() {
     game.run_field_routine(index, FieldRoutineTarget::Ally(holder))
         .unwrap();
 
-    let scaled = abilities::scaled_stat_power(2, CREATURE_MAX_LEVEL, AFFINITY_NEUTRAL);
+    let scaled = abilities::scaled_stat_power(2, TALENT_START_LEVEL, AFFINITY_NEUTRAL);
     // The authored magnitude in `FIELD_ONLY_ABILITY` is 2 — a top-level
     // holder's invocation must scale well past that, so asserting against the
     // scaled value (rather than "2") actually exercises the distinction.

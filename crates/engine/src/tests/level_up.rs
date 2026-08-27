@@ -13,8 +13,8 @@ use crate::resources::{CONDENSE_LOOKBACK, LogLine, MessageSource, condense};
 use crate::species::SpeciesDb;
 use crate::stack::Dir;
 use crate::tuning::{
-    BASE_PET_CAPACITY, CREATURE_MAX_LEVEL, DECOMPILER_SKILL_PER_LEVEL, KERNEL_RING_MAX,
-    LEVELS_PER_RING, PERK_POINTS_PER_LEVEL, ZONE_LEVEL_CAP_FLOOR, absolute_companion_level_cap,
+    BASE_PET_CAPACITY, DECOMPILER_SKILL_PER_LEVEL, KERNEL_RING_MAX, LEVELS_PER_RING,
+    PERK_POINTS_PER_LEVEL, TALENT_START_LEVEL, ZONE_LEVEL_CAP_FLOOR, arena_level_ceiling,
 };
 use crate::*;
 
@@ -255,7 +255,7 @@ fn a_saves_stale_xp_threshold_is_rederived_from_its_level_on_load() {
 /// so a test asserting where it stopped is asserting about the *cap* rather
 /// than about how much it was fed.
 fn xp_past_every_cap() -> u32 {
-    (1..=absolute_companion_level_cap() + 4)
+    (1..=arena_level_ceiling() + 4)
         .map(crate::progression::xp_for_level)
         .sum::<u32>()
         * 2
@@ -267,42 +267,56 @@ fn a_party_member(game: &mut Game) -> Entity {
     companion
 }
 
+/// A companion's ceiling is the zone's, and a Kernel Ring is not part of the
+/// answer any more — this and the two tests below are the three that used to
+/// say the opposite.
 #[test]
-fn a_companion_with_no_ring_still_stops_at_the_base_cap() {
+fn a_companion_with_no_ring_stops_at_the_zone_cap() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
     let companion = a_party_member(&mut game);
 
     game.award_party_xp(xp_past_every_cap());
 
     assert_eq!(
         game.world.get::<Experience>(companion).unwrap().level,
-        CREATURE_MAX_LEVEL,
-        "a companion with no Kernel Ring must still stop where it always did"
+        cap,
+        "a companion with no Kernel Ring stops where everyone stops"
     );
 }
 
+/// **A ring buys no levels.** It used to buy `LEVELS_PER_RING` of ceiling;
+/// the zone is the ceiling now, and what a ring buys is the right to spend
+/// levels already earned on a talent tree.
 #[test]
-fn one_kernel_ring_lifts_a_companions_ceiling_by_its_levels() {
+fn a_kernel_ring_does_not_lift_the_level_ceiling() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let companion = a_party_member(&mut game);
-    game.world.entity_mut(companion).insert(KernelRing(1));
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
+    let ringed = a_party_member(&mut game);
+    game.world.entity_mut(ringed).insert(KernelRing(1));
+    let plain = a_party_member(&mut game);
 
     game.award_party_xp(xp_past_every_cap());
 
     assert_eq!(
-        game.world.get::<Experience>(companion).unwrap().level,
-        CREATURE_MAX_LEVEL + LEVELS_PER_RING,
-        "one ring buys exactly LEVELS_PER_RING levels, and no more"
+        game.world.get::<Experience>(ringed).unwrap().level,
+        cap,
+        "a ring must not carry a companion past the zone's cap"
     );
     assert_eq!(
-        game.companion_level_cap(companion),
-        CREATURE_MAX_LEVEL + LEVELS_PER_RING
+        game.world.get::<Experience>(plain).unwrap().level,
+        game.world.get::<Experience>(ringed).unwrap().level,
+        "and a ringed companion and a plain one now stop at the same level"
     );
 }
 
 #[test]
-fn every_ring_open_stops_at_the_absolute_cap() {
+fn every_ring_open_still_stops_at_the_zone_cap() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let cap = game.level_cap();
     let companion = a_party_member(&mut game);
     game.world
         .entity_mut(companion)
@@ -312,8 +326,8 @@ fn every_ring_open_stops_at_the_absolute_cap() {
 
     assert_eq!(
         game.world.get::<Experience>(companion).unwrap().level,
-        absolute_companion_level_cap(),
-        "the last ring is still a ceiling"
+        cap,
+        "three rings buy no more ceiling than none does"
     );
 }
 
@@ -365,10 +379,13 @@ fn a_ringed_cronjob_worker_still_stops_at_the_work_cap() {
 
 /// A **save → load → assert**, not a RON round trip: a round trip cannot tell
 /// a field that fails to travel from one that does, which is exactly what
-/// `#[serde(skip)]` looks like from its side. Both halves matter — the count
-/// survives, *and* the ceiling it bought is still lifted on the loaded game.
+/// `#[serde(skip)]` looks like from its side.
+///
+/// It used to assert the ceiling the ring bought was still lifted on the
+/// loaded game. A ring buys no ceiling now, so what is left to hold is that
+/// the count itself travels — it is what `Game::talent_points` reads.
 #[test]
-fn a_kernel_ring_survives_a_save_and_still_lifts_the_ceiling() {
+fn a_kernel_ring_survives_a_save() {
     let dir = scratch_assets_dir("ring_save");
     std::fs::create_dir_all(&*dir).unwrap();
     let path = dir.join("save.bin");
@@ -385,16 +402,12 @@ fn a_kernel_ring_survives_a_save_and_still_lifts_the_ceiling() {
         Some(2),
         "the ring count must travel"
     );
-    assert_eq!(
-        loaded.companion_level_cap(restored),
-        CREATURE_MAX_LEVEL + 2 * LEVELS_PER_RING,
-        "and the ceiling it bought must still be lifted"
-    );
 
     loaded.award_party_xp(xp_past_every_cap());
     assert_eq!(
         loaded.world.get::<Experience>(restored).unwrap().level,
-        CREATURE_MAX_LEVEL + 2 * LEVELS_PER_RING
+        loaded.level_cap(),
+        "and the loaded companion stops at the zone's cap like everyone else"
     );
 }
 
@@ -577,5 +590,144 @@ fn depth_does_not_lift_the_zone_level_cap() {
         game.level_cap(),
         on_the_surface,
         "the cap must not move with depth"
+    );
+}
+
+/// The player is capped at all now, which they never were before, and the
+/// number is the zone's.
+#[test]
+fn the_player_stops_levelling_at_the_zone_cap() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let cap = game.level_cap();
+    let player = game.player_entity();
+
+    game.award_player_xp(player, xp_past_every_cap());
+
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().level,
+        cap,
+        "the player must stop at the zone cap"
+    );
+}
+
+/// **One ceiling over the whole party.** A companion used to stop six levels
+/// under the player and buy the difference back a Kernel Ring at a time;
+/// now the two numbers are the same number, which is what makes developing
+/// a companion worth the XP.
+#[test]
+fn a_companion_stops_at_the_same_level_as_the_player() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
+    let player = game.player_entity();
+    let companion = a_party_member(&mut game);
+
+    game.award_player_xp(player, xp_past_every_cap());
+    game.award_party_xp(xp_past_every_cap());
+
+    let player_level = game.world.get::<Experience>(player).unwrap().level;
+    let companion_level = game.world.get::<Experience>(companion).unwrap().level;
+    assert_eq!(player_level, cap);
+    assert_eq!(
+        companion_level, player_level,
+        "player and companion share one ceiling"
+    );
+}
+
+/// The cap is what a breach is *for*: the zone is the dial.
+#[test]
+fn a_breach_lifts_the_cap_for_both() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+    let before = game.level_cap();
+    let player = game.player_entity();
+    let companion = a_party_member(&mut game);
+    game.award_player_xp(player, xp_past_every_cap());
+    game.award_party_xp(xp_past_every_cap());
+
+    game.world.insert_resource(ZoneLevel(3));
+    let after = game.level_cap();
+    assert!(after > before, "a breach must lift the cap");
+
+    game.award_player_xp(player, xp_past_every_cap());
+    game.award_party_xp(xp_past_every_cap());
+    assert_eq!(game.world.get::<Experience>(player).unwrap().level, after);
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        after
+    );
+}
+
+/// **Growth already spent is never clawed back**, `EquippedItem::fusion_tier`'s
+/// rule: a receipt for something already paid out must not be re-read as a
+/// live ceiling. Reachable by any save developed in a deeper zone than the
+/// one it is loaded in, and by every hand-edited save.
+///
+/// The subject is the player, because `arena::set_level` clamps a *creature*
+/// at `arena_level_ceiling()` and so cannot build the fixture — which is
+/// itself the second rename doing its job.
+#[test]
+fn an_entity_above_the_cap_keeps_its_level_and_stats() {
+    let dir = scratch_assets_dir("over_cap_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(5));
+    let player = game.player_entity();
+    set_level(&mut game, player, 30);
+    let developed = *game.world.get::<Stats>(player).unwrap();
+    game.world.insert_resource(ZoneLevel(1));
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let restored = loaded.player_entity();
+    assert!(
+        loaded.world.get::<Experience>(restored).unwrap().level > loaded.level_cap(),
+        "the fixture must actually stand above the cap or this proves nothing"
+    );
+    assert_eq!(
+        loaded.world.get::<Experience>(restored).unwrap().level,
+        30,
+        "a level already earned is not taken back by a lower cap"
+    );
+    let kept = *loaded.world.get::<Stats>(restored).unwrap();
+    assert_eq!(
+        (kept.max_hp, kept.atk, kept.mitigation),
+        (developed.max_hp, developed.atk, developed.mitigation),
+        "nor are the stats it bought"
+    );
+
+    // And it simply earns nothing further until the cap catches up.
+    loaded.award_player_xp(restored, xp_past_every_cap());
+    assert_eq!(loaded.world.get::<Experience>(restored).unwrap().level, 30);
+}
+
+/// The five shipped `dev-arenas/` scenarios author `level: 12`, and
+/// `arena::set_level` must keep staging exactly that. Pointed at the zone
+/// cap instead they would silently clamp — a failure this repo has already
+/// had once, where old reports stopped being comparable and nothing said so.
+#[test]
+fn an_arena_scenario_still_stages_a_level_twelve_companion() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(1));
+    assert!(
+        game.level_cap() < 12,
+        "the fixture needs a zone whose cap is under 12, or it proves nothing"
+    );
+    let companion = a_party_member(&mut game);
+
+    set_level(&mut game, companion, 12);
+
+    assert_eq!(
+        game.world.get::<Experience>(companion).unwrap().level,
+        12,
+        "an arena scenario stages the level it authors, not the zone's cap"
+    );
+    assert_eq!(
+        arena_level_ceiling(),
+        TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING,
+        "and the arena's own ceiling is unchanged by the zone cap"
     );
 }

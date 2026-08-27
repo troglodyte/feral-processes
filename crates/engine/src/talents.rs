@@ -1,6 +1,6 @@
 //! Per-class talent trees, loaded from `assets/talents/`.
 //!
-//! A companion earns one talent point per level above `CREATURE_MAX_LEVEL`
+//! A companion earns one talent point per level above `TALENT_START_LEVEL`
 //! (see `Game::talent_points`), and spends it on one of two choices in the
 //! next untaken tier of its class's tree. The trees are **data**, unlike
 //! `perks::Perk`: every node here is one of five shapes the engine already

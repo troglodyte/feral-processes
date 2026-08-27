@@ -47,7 +47,7 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// `DECOMPILER_SKILL_PER_LEVEL`, the two `ABILITY_*_SCALE_PER_LEVEL` rates)
 /// and the reciprocal of every constant denominated in *levels per*
 /// something (`PLAYER_ROUTINE_SLOT_PER_LEVEL`,
-/// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `CREATURE_MAX_LEVEL`,
+/// `COMPANION_ROUTINE_SLOT_PER_LEVEL`, `TALENT_START_LEVEL`,
 /// `WORK_XP_LEVEL_CAP`). Half as many level-ups, each worth twice as much,
 /// paid for by `XP_PER_LEVEL_STEP`'s matching `K^2` — so the *power* curve
 /// is where it was and only its grain changed. A level-up is meant to be an
@@ -71,57 +71,50 @@ pub const ATK_PER_LEVEL: i32 = 2;
 /// file written before that field existed keeps growing exactly as before.
 pub const BASELINE_GROWTH_MULTIPLIER: f32 = 1.0;
 
-/// Level ceiling for a *creature* (tamed or wild), regardless of XP
-/// source. `add_xp` stops leveling — and stops accumulating XP at all —
-/// once this is reached, so a maxed-out creature's `Experience::xp` just
-/// stalls instead of piling up into a huge, meaningless number.
+/// The level at which talent points begin: a companion earns one per level
+/// above this, spent on its class tree in `assets/talents/`.
 ///
-/// The player is deliberately **not** capped: they keep leveling forever,
-/// so late-game progression stays open-ended and a long run always earns
-/// something. Callers express that by passing `None` as `add_xp`'s
-/// `level_cap` for the player and `Some(CREATURE_MAX_LEVEL)` for
-/// creatures.
+/// **It was `CREATURE_MAX_LEVEL` and it was a cap.** Under that name it was
+/// the ceiling every creature stopped at, with a Kernel Ring buying levels
+/// above it. `Game::level_cap` is the ceiling now — one number for the
+/// player and every companion, read off the zone — and this constant kept
+/// only its other job. The rename is not tidying: a constant whose meaning
+/// changes under a name it keeps compiles perfectly and misleads every
+/// reader after it, and nothing here would have failed to build.
 ///
-/// This is a live-gameplay cap only: it deliberately doesn't apply to
-/// `crate::balance_sim`'s offline curve-shape projections, which search well
-/// past any level actually reachable in play on purpose (see that
-/// module's docs).
+/// It shares a value with `ZONE_LEVEL_CAP_FLOOR` and that is a coincidence;
+/// see that constant.
 ///
-/// Halved by `HP_PER_LEVEL`'s `K = 2`, so the ceiling stands at the same
-/// *power* it always did. A companion loaded from a save above it keeps both
-/// its level and its stats: `add_xp` simply stops paying it, and clawing back
-/// growth already spent would be the `EquippedItem::fusion_tier` trap — a
-/// subtraction with no record of what was added.
-pub const CREATURE_MAX_LEVEL: u32 = 6;
+/// Halved by `HP_PER_LEVEL`'s `K = 2`, so a level costs the same *power* it
+/// always did.
+pub const TALENT_START_LEVEL: u32 = 6;
 
 // ---- Companion development: rings and talents -------------------------
 //
-// `CREATURE_MAX_LEVEL` above is where a companion stops *by default*. A
-// Privilege Ring, dropped only by an underground lair guardian, opens a
-// Kernel Ring on one program and lifts that program's ceiling alone. Every
-// level earned above the base cap pays one talent point into its class tree
-// (`assets/talents/`), so the levels a ring buys are what makes a program
-// individual rather than merely bigger.
+// A Privilege Ring, dropped only by an underground lair guardian, opens a
+// Kernel Ring on one program. A ring **no longer buys levels** — the zone
+// caps everyone at the same number now — it buys the right to *spend* the
+// levels already earned above `TALENT_START_LEVEL` on that program's class
+// tree (`assets/talents/`). What makes a program individual is which nodes
+// it took, not that it is allowed to be bigger than its roster-mates.
 
 /// How many Kernel Rings a single program may have open — see
 /// `components::KernelRing`. Each one costs more Privilege Rings than the
 /// last (`Game::ring_cost`), so three is already a 1+2+3 = 6-guardian
 /// investment in one companion.
 ///
-/// It bounds two things at once: the level ceiling, via
-/// `absolute_companion_level_cap`, and the depth of every talent tree, since
+/// It bounds two things at once: how deep into its tree one program may
+/// spend (`Game::talent_points`), and the depth of every talent tree, since
 /// `assets/talents/` ships `KERNEL_RING_MAX * LEVELS_PER_RING` tiers and a
 /// census refuses a tree that does not. Raising it means authoring a tier for
 /// every class, not just changing a number.
 pub const KERNEL_RING_MAX: u32 = 3;
 
-/// How much level ceiling one Kernel Ring buys — see
-/// `Game::companion_level_cap`. Carries `HP_PER_LEVEL`'s `K = 2` like every
-/// other per-level constant, so two levels here is the same *power* four
-/// would have been before the halving.
+/// How many talent tiers one Kernel Ring opens — see `Game::talent_points`.
+/// Carries `HP_PER_LEVEL`'s `K = 2` like every other per-level constant.
 ///
-/// It is also the talent-point rate: one point per level above
-/// `CREATURE_MAX_LEVEL`, derived and never stored.
+/// It used to buy that many *levels* of ceiling as well. It no longer does:
+/// `Game::level_cap` is the one ceiling and a ring does not move it.
 pub const LEVELS_PER_RING: u32 = 2;
 
 /// Ceiling on a single `TalentNode::Stat` node's percentage — asserted over
@@ -144,18 +137,24 @@ pub const MAX_TALENT_STAT_PERCENT: f32 = 15.0;
 /// decision in its tree with it.
 pub const MAX_TALENT_ACCURACY_POINTS: i32 = 6;
 
-/// The highest level any companion can reach with every ring open. For the
-/// two arena sites, which author their own composition and have no entity to
-/// read a `KernelRing` from; everything with an entity calls
-/// `Game::companion_level_cap` instead.
-pub const fn absolute_companion_level_cap() -> u32 {
-    CREATURE_MAX_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING
+/// The level `arena::set_level` will stage a companion up to.
+///
+/// **It was `absolute_companion_level_cap` and it was the live ceiling.**
+/// `Game::level_cap` is that now; this survives as the *arena's* ceiling
+/// alone, which is why it was renamed rather than repointed. Five shipped
+/// `dev-arenas/` scenarios author `level: 12`, and staging them against the
+/// zone cap instead would silently clamp every one — a failure this repo has
+/// already had once, where the old reports stopped being comparable and
+/// nothing said so. A scenario authors its own composition and has no
+/// `KernelRing` to read, so it takes the absolute figure.
+pub const fn arena_level_ceiling() -> u32 {
+    TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING
 }
 
 /// The level cap in zone 1, and the flat floor under
 /// `Game::level_cap`'s line for every zone the line would put lower.
 ///
-/// It shares a value with `CREATURE_MAX_LEVEL` today and **that is a
+/// It shares a value with `TALENT_START_LEVEL` today and **that is a
 /// coincidence**: one answers "how far may anyone develop in the opening
 /// zone", the other "at what level do talents begin". Either may be retuned
 /// without the other, so neither is expressed in terms of the other.
@@ -180,6 +179,21 @@ pub const ZONE_LEVEL_CAP_FLOOR: u32 = 6;
 /// diverge, so no single line can sit inside the band at both ends of the
 /// range. See `docs/measurements/2026-08-27-zone-level-cap.md`.
 pub const ZONE_LEVEL_CAP_STEP: u32 = 11;
+
+/// The level cap in `zone` — the one expression of the formula.
+///
+/// A free function rather than `Game::level_cap`'s body, because
+/// `balance_sim` and any bevy system holding a `ZoneLevel` need the same
+/// answer and a second copy of a curve is what this repo has been bitten by
+/// four times. `Game::level_cap` is a call to it.
+pub const fn zone_level_cap(zone: u32) -> u32 {
+    let line = 1 + ZONE_LEVEL_CAP_STEP * zone.saturating_sub(1);
+    if line > ZONE_LEVEL_CAP_FLOOR {
+        line
+    } else {
+        ZONE_LEVEL_CAP_FLOOR
+    }
+}
 
 /// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
@@ -250,7 +264,7 @@ pub const WORK_XP_PER_CYCLE: u32 = 5;
 /// income, not a way to grind a pet's level without ever battling. Levels
 /// above this only come from combat (`Game::award_player_xp` /
 /// `award_party_xp`), up to the separate, higher ceiling every creature
-/// shares — see `CREATURE_MAX_LEVEL`.
+/// shares — see `TALENT_START_LEVEL`.
 /// Halved by `HP_PER_LEVEL`'s `K = 2`, like the ceiling above it.
 pub const WORK_XP_LEVEL_CAP: u32 = 5;
 
@@ -2474,7 +2488,7 @@ pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
 pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
 
 /// Levels a companion needs per additional routine slot. Halved by
-/// `HP_PER_LEVEL`'s `K = 2` alongside `CREATURE_MAX_LEVEL`, so a companion
+/// `HP_PER_LEVEL`'s `K = 2` alongside `TALENT_START_LEVEL`, so a companion
 /// still tops out at the same number of slots it always did.
 pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 1;
 
@@ -2552,7 +2566,7 @@ pub const ABILITY_HP_SCALE_PER_LEVEL: f32 = 0.80;
 /// Level ceiling on both ability scales. The player has no level cap
 /// (`progression::add_xp` takes `None`), so without this a long enough game
 /// multiplies every routine without bound. A companion is capped far lower
-/// by `CREATURE_MAX_LEVEL` and never reaches this.
+/// by `TALENT_START_LEVEL` and never reaches this.
 /// Halved by `HP_PER_LEVEL`'s `K = 2`, so the cap bites at the same power it
 /// used to — and doubling the rates above without halving this would have
 /// doubled the ceiling itself.
@@ -2570,7 +2584,7 @@ pub const AFFINITY_NEUTRAL: f32 = 1.0;
 /// band would make damage affinities imperceptible.
 ///
 /// These compound with whichever level scale the category uses. A companion
-/// caps at `CREATURE_MAX_LEVEL` (12), so a stat magnitude's ceiling is 2.8x
+/// caps at `TALENT_START_LEVEL` (12), so a stat magnitude's ceiling is 2.8x
 /// from level times `AFFINITY_MAX` — 5.6x an authored power — and an HP
 /// magnitude's is 5.8x times `AFFINITY_MAX`. That is the modder's choice to
 /// make, which is the moddability contract.

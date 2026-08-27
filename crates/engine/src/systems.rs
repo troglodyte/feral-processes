@@ -866,7 +866,12 @@ pub fn task_progress_system(
                 &mut stats,
                 WORK_XP_PER_CYCLE,
                 growth_multiplier,
-                Some(crate::tuning::CREATURE_MAX_LEVEL),
+                // The zone cap, like every other XP site. `WORK_XP_LEVEL_CAP`
+                // above is a *separate* and lower gate and is not folded into
+                // it: that one is what stops a developed program being ground
+                // up at a Mining Node, and unifying the two deletes the
+                // property.
+                Some(crate::tuning::zone_level_cap(zone.0)),
                 xp_boost_pct,
             )
         } else {

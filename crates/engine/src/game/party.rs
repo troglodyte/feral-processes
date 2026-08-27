@@ -336,22 +336,6 @@ impl Game {
             .max(1 + crate::tuning::ZONE_LEVEL_CAP_STEP * zone.saturating_sub(1))
     }
 
-    /// The highest level `entity` may reach: `CREATURE_MAX_LEVEL` plus
-    /// `LEVELS_PER_RING` for every Kernel Ring open on it (see
-    /// `components::KernelRing`; absent means none).
-    ///
-    /// The one expression of a companion's ceiling, so no call site
-    /// multiplies rings out itself. Two callers deliberately do *not* use it:
-    /// `systems.rs`'s cronjob payout, whose own `WORK_XP_LEVEL_CAP` guard
-    /// stops a posted worker below the base cap already — which is what keeps
-    /// a developed program from being ground up at a Mining Node — and the two
-    /// arena sites, which have no entity and take
-    /// `tuning::absolute_companion_level_cap()` instead.
-    pub fn companion_level_cap(&self, entity: Entity) -> u32 {
-        let rings = self.world.get::<KernelRing>(entity).map_or(0, |r| r.0);
-        crate::tuning::CREATURE_MAX_LEVEL + rings * crate::tuning::LEVELS_PER_RING
-    }
-
     /// Display string for `entity`'s rolled `Potential`, e.g.
     /// "Excellent (94%)" — `None` if it has no `Potential` component (an
     /// old save predating it, or a non-creature entity).

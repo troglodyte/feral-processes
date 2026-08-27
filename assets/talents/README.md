@@ -11,12 +11,17 @@ already knows how to apply, so nothing about a new tree needs Rust.
 
 ## What a tree is for
 
-A companion normally stops at level 6 (`tuning::CREATURE_MAX_LEVEL`). Spending
-Privilege Rings — dropped by lair guardians in the Stack, and by nothing else
-— opens **Kernel Rings** on one program, each raising *that program's* ceiling
-by two levels. Every level a companion earns **above** the base cap pays one
-**talent point**, spent on one of two choices in the next untaken tier of its
-class's tree.
+Every level a companion earns **above** `tuning::TALENT_START_LEVEL` (6) pays
+one **talent point**, spent on one of two choices in the next untaken tier of
+its class's tree.
+
+How far it may spend is what Privilege Rings buy — dropped by lair guardians
+in the Stack, and by nothing else. Each **Kernel Ring** opened on a program
+unlocks `LEVELS_PER_RING` (2) further tiers of that program's tree. A ring
+does **not** raise a level ceiling: everyone in the party, the player
+included, is capped at the same zone-derived number (`Game::level_cap`), so
+what a ring buys is depth in one program's tree and not the right to be
+bigger than its roster-mates.
 
 Points are derived from level, never stored: a program at level 8 has earned
 two, and spent as many as it has nodes. The ring buys room; the fights still

@@ -688,11 +688,17 @@ fn killing_a_wild_creature_in_battle_awards_the_active_companion_half_xp() {
 }
 
 /// The player has no level ceiling, while their party members stop at
-/// `crate::tuning::CREATURE_MAX_LEVEL` — one big XP award should push
+/// `crate::tuning::TALENT_START_LEVEL` — one big XP award should push
 /// the player past that ceiling and leave the companion pinned to it.
+/// **One ceiling over the party.** This test used to say the opposite — the
+/// player levelled forever and a companion stopped at the creature cap — and
+/// it is the behaviour `Game::level_cap` replaced. What is left to pin is
+/// that neither side has a ceiling of its own any more.
 #[test]
-fn player_levels_past_the_creature_cap_but_companions_dont() {
+fn the_player_and_a_companion_share_one_ceiling() {
     let mut game = Game::new(105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(3));
+    let cap = game.level_cap();
     let player = game.player_entity();
     let companion = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, companion);
@@ -703,14 +709,13 @@ fn player_levels_past_the_creature_cap_but_companions_dont() {
 
     let player_level = game.world.get::<Experience>(player).unwrap().level;
     let companion_level = game.world.get::<Experience>(companion).unwrap().level;
-    assert!(
-        player_level > crate::tuning::CREATURE_MAX_LEVEL,
-        "the player should keep leveling past the creature ceiling, got {player_level}"
+    assert_eq!(
+        player_level, cap,
+        "the player is capped now, and at the zone's number"
     );
     assert_eq!(
-        companion_level,
-        crate::tuning::CREATURE_MAX_LEVEL,
-        "a companion should still stop at the creature ceiling"
+        companion_level, player_level,
+        "and a companion stops at exactly the same level, with no ring in sight"
     );
 }
 

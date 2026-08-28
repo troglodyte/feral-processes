@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.43
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release changes what colours the map draws in and stores nothing.
+
+The map's glyphs are drawn from the HUD's palette. Phase 6, and the last of
+the Paned Command HUD: the entity colours were the one part of the screen
+still painted from the renderer's old table.
+
+### Changed
+
+- **Every entity on the map is drawn from the palette's sixteen entries.**
+  The eleven colours species and structure files author resolve through one
+  table, so a program's glyph is the same colour on the map and on every
+  screen that shows it. Nothing about authoring a colour changed: a mod names
+  the same eleven.
+- **The player's `@` has a colour nothing else can take** — br cyan, the
+  palette's player role, read off being the player rather than off the cyan
+  the player happens to spawn with.
+- **A stalled machine asks for attention in yellow instead of red.** A
+  clogged, stranded or unpowered machine is the base asking you for
+  something, and it now wears the same colour the status bar uses to say so.
+  Red on this screen means hostility and inbound harm, and nothing else. A
+  machine that is merely waiting — short of input, or with its program
+  walking back — keeps the dimmer yellow it had, because "go and fix this"
+  and "this is fine, give it a moment" are the whole information in that
+  colour.
+- **The danger ladder climbs in hue.** A creature's glyph still reads green
+  through red by how badly it would beat you, with the middle rungs moved so
+  that no two of them read as the same colour under the map's dimming.
+
 ## 0.13.42
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -442,6 +442,15 @@ pub struct CreatureSave {
     /// Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub off_shift: Option<crate::needs::NeedId>,
+    /// Whether this program has downed tools — see
+    /// `components::Disgruntled`.
+    ///
+    /// Saved for `off_shift`'s reason: the marker *is* the hysteresis, so a
+    /// reload that dropped it would put a program back to work the moment
+    /// the player looked away, at a morale that had not moved. Additive
+    /// behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub disgruntled: bool,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -1420,6 +1429,7 @@ mod tests {
             equipment: Vec::new(),
             program_id: 1,
             disposition: None,
+            disgruntled: false,
             memories: Vec::new(),
             needs: Default::default(),
             off_shift: None,

@@ -3345,3 +3345,33 @@ pub const DISPOSITION_DRAIN_SWING: f32 = 0.30;
 /// `Memory::intensity` states that rule for the decay curve; this is the same
 /// rule one level up. Held by `felt_never_flips_a_memorys_sign`.
 pub const DISPOSITION_MEMORY_SWING: f32 = 0.40;
+
+// ---------------------------------------------------------------------------
+// Acting out
+// ---------------------------------------------------------------------------
+// When a program's morale has run far enough below zero that it stops
+// working — see `components::Disgruntled`. Two thresholds and not one,
+// `NeedDef`'s `critical`/`content` pair: the gap between them is what stops a
+// body downing tools and picking them up again every tick at the boundary.
+//
+// **Both figures are unmeasured.** Morale is a signed sum of decayed memory
+// intensities with no natural scale, and nothing in `balance_sim` models base
+// production, so these were chosen against the shipped valences (which run
+// -8..+5 at strike caps of 3 and 4) and not against a run. They are the first
+// thing to revisit after a base has been watched.
+
+/// Morale at or below which a program stops taking postings altogether.
+///
+/// Roughly two maxed grudges' worth. Above zero it would fire on a program
+/// that is merely having an ordinary week, which is not acting out.
+pub const MORALE_DOWNS_TOOLS_AT: f32 = -18.0;
+
+/// Morale at which a disgruntled program goes back to work.
+///
+/// **Must stay strictly above `MORALE_DOWNS_TOOLS_AT`** — equal, the
+/// hysteresis gap closes and the marker flickers every tick, which is the
+/// whole reason there are two numbers. Held by
+/// `the_recovery_threshold_leaves_a_hysteresis_gap`. Still below zero: a
+/// program does not have to be *happy* to work again, only no longer in the
+/// hole.
+pub const MORALE_RECOVERED_AT: f32 = -6.0;

@@ -1014,6 +1014,9 @@ impl Game {
                 if c.downed {
                     entity.insert(crate::components::Downed);
                 }
+                if c.disgruntled {
+                    entity.insert(crate::components::Disgruntled);
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
@@ -1337,6 +1340,7 @@ impl Game {
                     Option<&crate::components::OffShift>,
                     Option<&crate::components::Downed>,
                     Option<&crate::disposition::Disposition>,
+                    Option<&crate::components::Disgruntled>,
                 ),
             ),
         )>();
@@ -1368,7 +1372,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                (memories, needs, off_shift, downed, disposition),
+                (memories, needs, off_shift, downed, disposition, disgruntled),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1458,6 +1462,7 @@ impl Game {
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
                 program_id: program_id.map(|p| p.0).unwrap_or(0),
                 disposition: disposition.copied(),
+                disgruntled: disgruntled.is_some(),
                 memories: memories
                     .map(|m| {
                         m.0.iter()

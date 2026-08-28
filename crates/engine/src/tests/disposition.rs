@@ -258,3 +258,351 @@ fn eviction_does_not_read_a_disposition() {
         "the store's contents must not depend on the disposition reading them"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Acting out: the morale gate, and the hysteresis it exists for.
+// ---------------------------------------------------------------------------
+
+use crate::components::{Disgruntled, Memory};
+use crate::memories::MemoryId;
+use crate::tuning::{MORALE_DOWNS_TOOLS_AT, MORALE_RECOVERED_AT};
+
+/// Drives morale to `target` by stacking maxed grudges, which is the only
+/// lever a test has on a figure that is otherwise a sum of decayed history.
+///
+/// Written straight into the store rather than through `Game::remember`,
+/// which caps strikes per def and would need a dozen distinct subjects to
+/// reach the threshold.
+fn sour_to(game: &mut Game, who: Entity, target: f32) {
+    let now = game.current_tick();
+    let mut n = 0;
+    while game.morale(who) > target {
+        game.world
+            .get_mut::<Memories>(who)
+            .expect("a roster program holds a store")
+            .0
+            .push(Memory {
+                def: MemoryId::from("frayed_here"),
+                subject: MemorySubject::BaseTile { x: n, y: 900 },
+                subject_name: None,
+                reinforced: now,
+                strikes: 3,
+            });
+        n += 1;
+        assert!(n < 400, "morale never reached {target}");
+    }
+}
+
+/// The gap between the two thresholds *is* the feature. Equal, the marker
+/// flickers every tick at the boundary, which is the whole reason
+/// `Disgruntled` is stored rather than derived.
+#[test]
+fn the_recovery_threshold_leaves_a_hysteresis_gap() {
+    assert!(
+        MORALE_RECOVERED_AT > MORALE_DOWNS_TOOLS_AT,
+        "recovery must sit strictly above the downing-tools line, got \
+         {MORALE_RECOVERED_AT} against {MORALE_DOWNS_TOOLS_AT}"
+    );
+}
+
+/// A program run far enough into the hole stops taking postings.
+#[test]
+fn a_program_deep_in_the_hole_downs_tools() {
+    let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_none(),
+        "a fresh program is not disgruntled"
+    );
+
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.update_disgruntled(&[worker]);
+
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_some(),
+        "morale {} is at or past the line",
+        game.morale(worker)
+    );
+}
+
+/// The hysteresis, asserted where it actually bites: morale recovered to
+/// **between** the two thresholds must leave the marker in place. Read off
+/// one number, this is where a body picks its tools back up a tick after
+/// dropping them.
+#[test]
+fn a_disgruntled_program_stays_disgruntled_between_the_thresholds() {
+    let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.update_disgruntled(&[worker]);
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_some(),
+        "down first"
+    );
+
+    // Back above the entry line but not yet to recovery — the gap.
+    game.world.get_mut::<Memories>(worker).unwrap().0.clear();
+    let now = game.current_tick();
+    game.world
+        .get_mut::<Memories>(worker)
+        .unwrap()
+        .0
+        .push(Memory {
+            def: MemoryId::from("frayed_here"),
+            subject: MemorySubject::BaseTile { x: 0, y: 900 },
+            subject_name: None,
+            reinforced: now,
+            strikes: 2,
+        });
+    let between = game.morale(worker);
+    assert!(
+        between > MORALE_DOWNS_TOOLS_AT && between < MORALE_RECOVERED_AT,
+        "the fixture must land inside the gap, got {between}"
+    );
+
+    game.update_disgruntled(&[worker]);
+
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_some(),
+        "inside the gap the marker is kept — this is the hysteresis"
+    );
+}
+
+/// And it clears once morale is genuinely back.
+#[test]
+fn a_recovered_program_picks_its_tools_back_up() {
+    let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.update_disgruntled(&[worker]);
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_some(),
+        "down first"
+    );
+
+    game.world.get_mut::<Memories>(worker).unwrap().0.clear();
+    assert!(game.morale(worker) >= MORALE_RECOVERED_AT, "back to zero");
+    game.update_disgruntled(&[worker]);
+
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_none(),
+        "a program whose grudges have gone goes back to work"
+    );
+}
+
+/// An `Abrasive` program reaches the line on strictly less history than an
+/// `Amiable` one, which is the whole of why the two features were built in
+/// this order — the hidden disposition becomes visible through *when*
+/// somebody breaks.
+#[test]
+fn an_abrasive_program_downs_tools_on_less_than_an_amiable_one() {
+    let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let abrasive = spawn_tamed(&mut game, 10, 3);
+    let amiable = spawn_tamed(&mut game, 10, 3);
+    set(&mut game, abrasive, Disposition::Abrasive);
+    set(&mut game, amiable, Disposition::Amiable);
+
+    // The *same* history on both, sized so it takes the amplifying one past
+    // the line and leaves the damping one short.
+    let now = game.current_tick();
+    for who in [abrasive, amiable] {
+        game.world.get_mut::<Memories>(who).unwrap().0.push(Memory {
+            def: MemoryId::from("frayed_here"),
+            subject: MemorySubject::BaseTile { x: 0, y: 900 },
+            subject_name: None,
+            reinforced: now,
+            strikes: 3,
+        });
+    }
+    // The window this test lives in, stated rather than assumed: one maxed
+    // grudge has to straddle the line once the two dispositions have scaled
+    // it. A threshold retune that closes the window fails here with the
+    // figures rather than silently proving nothing.
+    let (sour, sunny) = (game.morale(abrasive), game.morale(amiable));
+    assert!(
+        sour <= MORALE_DOWNS_TOOLS_AT && sunny > MORALE_DOWNS_TOOLS_AT,
+        "the fixture must straddle the line, got {sour} and {sunny} against          {MORALE_DOWNS_TOOLS_AT}"
+    );
+    game.update_disgruntled(&[abrasive, amiable]);
+
+    assert!(
+        game.morale(abrasive) < game.morale(amiable),
+        "the same history weighs more on Abrasive"
+    );
+    assert!(
+        game.world.get::<Disgruntled>(abrasive).is_some(),
+        "Abrasive is past the line at morale {}",
+        game.morale(abrasive)
+    );
+    assert!(
+        game.world.get::<Disgruntled>(amiable).is_none(),
+        "Amiable is still short of it at morale {}",
+        game.morale(amiable)
+    );
+}
+
+/// The marker is the hysteresis, so it has to survive a reload — dropped, a
+/// program goes back to work the moment the player looks away, at a morale
+/// that has not moved.
+#[test]
+fn downing_tools_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("disgruntled_save");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.update_disgruntled(&[worker]);
+    assert!(game.world.get::<Disgruntled>(worker).is_some());
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let down = loaded
+        .world
+        .query::<&Disgruntled>()
+        .iter(&loaded.world)
+        .count();
+    assert_eq!(down, 1, "the marker travels with the program");
+}
+
+// ---------------------------------------------------------------------------
+// The standdown itself: what downing tools actually costs the base.
+// ---------------------------------------------------------------------------
+
+use crate::components::{Carrying, Task};
+use crate::game::base::work_orders::WorkOrder;
+use crate::items::ids;
+
+/// A Home, a mining node and one body, with an order standing that wants
+/// that body on the node.
+fn a_base_with_an_order(game: &mut Game) -> (Entity, Entity) {
+    stand_in_base(game);
+    place_home(game);
+    give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    let node = spawn_machine_at(game, "mining_node", 2, 0);
+    let worker = spawn_tamed(game, 10, 3);
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
+    (node, worker)
+}
+
+/// The point of the rung: a program that has stopped caring is not handed a
+/// job. `an_off_shift_program_is_not_posted`'s shape on the other meter.
+#[test]
+fn a_disgruntled_program_is_not_posted() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (node, worker) = a_base_with_an_order(&mut game);
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "content, it takes the post"
+    );
+
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.tick();
+
+    assert!(
+        game.world.get::<Disgruntled>(worker).is_some(),
+        "the gate fired inside the tick"
+    );
+    assert!(
+        game.world.get::<Task>(worker).is_none(),
+        "and it is off the node while it will not work"
+    );
+}
+
+/// **The one exception, kept**: the never-free-a-`Carrying`-holder rule. A
+/// body that has stopped caring is still standing in the base holding
+/// something the line is waiting on, and freeing it destroys the goods.
+/// Only `Downed` overrides this.
+#[test]
+fn a_disgruntled_program_holding_a_load_keeps_its_post() {
+    let mut game = Game::new(73, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_an_order(&mut game);
+    game.tick();
+    game.world.entity_mut(worker).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(worker).is_some(),
+        "a loaded body keeps its post even disgruntled"
+    );
+    assert_eq!(
+        game.world.get::<Carrying>(worker).map(|c| c.qty),
+        Some(3),
+        "and its load is not destroyed"
+    );
+}
+
+/// The other half of downing tools, and the half the `Task` removal cannot
+/// prove: a disgruntled body leaves the **pool**, so the base stops planning
+/// work for hands it does not have. Without it `wanted` is still cut to a
+/// count that includes the body refusing to work, and the shortfall the work
+/// order header shows reads one short of the truth.
+#[test]
+fn labour_demand_counts_only_the_bodies_still_willing() {
+    let mut game = Game::new(74, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (_, worker) = a_base_with_an_order(&mut game);
+    game.tick();
+    let before = game.labour_demand().staff;
+    assert!(before > 0, "somebody was counted to begin with");
+
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.tick();
+
+    assert_eq!(
+        game.labour_demand().staff,
+        before - 1,
+        "the one body that has downed tools is one body the base does not have"
+    );
+}
+
+/// The third thing downing tools has to do, and the one a single-body base
+/// cannot show: **a disgruntled body already standing at a post is freed
+/// from it**, rather than being left there because its post happened to
+/// survive the truncation.
+///
+/// With one worker the pool filter alone looks sufficient — `wanted` is cut
+/// to zero, the held post falls out of `remaining`, and the body is freed as
+/// a side effect. Add a second, willing body and that stops being true: the
+/// post survives the cut, the disgruntled body matches it, and without the
+/// explicit free it keeps working a machine it has refused to work. The
+/// willing body then gets nothing, which is a base with an idle hand and a
+/// sulking one on the node.
+#[test]
+fn a_disgruntled_body_is_freed_so_a_willing_one_can_take_the_post() {
+    let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (node, first) = a_base_with_an_order(&mut game);
+    let second = spawn_tamed(&mut game, 10, 3);
+    game.tick();
+    // Which body the scheduler picked is not something this test may assume
+    // — `idle` is walked deepest-first and the order is its business. Sour
+    // whichever one actually holds the post.
+    let holds = |g: &Game, w: Entity| g.world.get::<Task>(w).map(|t| t.target) == Some(node);
+    let (sour, willing) = if holds(&game, first) {
+        (first, second)
+    } else {
+        assert!(holds(&game, second), "somebody took the post");
+        (second, first)
+    };
+
+    sour_to(&mut game, sour, MORALE_DOWNS_TOOLS_AT);
+    game.tick();
+
+    assert!(
+        game.world.get::<Task>(sour).is_none(),
+        "the disgruntled body is off the node even though the post survived \
+         the cut"
+    );
+    assert_eq!(
+        game.world.get::<Task>(willing).map(|t| t.target),
+        Some(node),
+        "and the willing body has it instead"
+    );
+}

@@ -853,6 +853,10 @@ impl Game {
         // copy would be a new `Resource` and another iteration-order shift.
         let bays = self.repair_bays();
         self.update_off_shift(&staff, &amenities);
+        // Beside the needs gate and before `on_shift` is read below: a body
+        // that downs tools this tick must not also be handed a job this
+        // tick.
+        self.update_disgruntled(&staff);
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
@@ -889,6 +893,17 @@ impl Game {
             .filter(|&w| self.world.get::<components::Downed>(w).is_none())
             .filter(|&w| {
                 self.world.get::<components::OffShift>(w).is_none()
+                    || self.world.get::<Carrying>(w).is_some()
+            })
+            // **A disgruntled program keeps the `Carrying` escape**, unlike a
+            // downed one. The escape exists because freeing a loaded body
+            // destroys the goods, and that is just as true of a body that has
+            // stopped caring as of one that is off servicing a need — it is
+            // still standing in the base holding something the line is
+            // waiting on. Only `Downed` overrides it, because a body going to
+            // the Bay is going regardless.
+            .filter(|&w| {
+                self.world.get::<components::Disgruntled>(w).is_none()
                     || self.world.get::<Carrying>(w).is_some()
             })
             .collect();
@@ -1083,7 +1098,8 @@ impl Game {
                     .remove::<Carrying>();
                 continue;
             }
-            if self.world.get::<components::OffShift>(worker).is_some()
+            if (self.world.get::<components::OffShift>(worker).is_some()
+                || self.world.get::<components::Disgruntled>(worker).is_some())
                 && self.world.get::<Carrying>(worker).is_none()
             {
                 self.world

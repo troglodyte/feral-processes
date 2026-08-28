@@ -1389,6 +1389,22 @@ pub struct OffShift {
     pub need: NeedId,
 }
 
+/// A program whose morale has run far enough below zero that it has stopped
+/// working — the `OffShift` shape on a different meter.
+///
+/// **Hysteresis is why this is stored and not derived**, exactly as
+/// `OffShift` is: read off the current morale alone a body downs tools and
+/// picks them up again every tick at the boundary. It is inserted below
+/// `MORALE_DOWNS_TOOLS_AT` and removed at `MORALE_RECOVERED_AT`, and the gap
+/// between the two is the feature.
+///
+/// A marker and nothing else. What a disgruntled program *does* is derived
+/// every beat — it leaves the `on_shift` filter in `schedule_base_labour`,
+/// which is one line and covers the posting, the standdown and the
+/// `LabourDemand` shortfall at once. `hauling::Errand`'s rule.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Disgruntled;
+
 /// A program that died and was benched rather than destroyed — the
 /// Forgiving arm of `Game::bench_or_dissolve`.
 ///

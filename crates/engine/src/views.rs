@@ -1008,6 +1008,46 @@ pub struct StructureReport {
     pub assignees: Vec<Assignee>,
 }
 
+impl StructureReport {
+    /// A workable structure with nobody posted to it — the one thing on
+    /// either structure screen the player can immediately act on, which is
+    /// why both colour it yellow and why `Game::attention` counts it.
+    ///
+    /// Here rather than spelled out at each reader: the renderer's copy of
+    /// this lived in `render/building.rs` and the attention model is in the
+    /// engine, so the two are in different crates and nothing would fail to
+    /// compile when one drifted.
+    pub fn is_idle(&self) -> bool {
+        self.workable && self.assignees.is_empty()
+    }
+}
+
+/// Which condition an [`AttentionRow`] reports.
+///
+/// Carried so a frontend can sort a row into a pane without matching on its
+/// prose or its keycap. The match on this is exhaustive, `cell_mark`'s rule:
+/// a `_ =>` arm is how a new condition ships with no marker anywhere.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum AttentionKind {
+    StructureDamaged,
+    IdleStructures,
+    PerkPoints,
+    RosterFull,
+}
+
+/// One thing that needs the player right now — see `Game::attention`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AttentionRow {
+    pub kind: AttentionKind,
+    /// Player-facing, built in the engine and never in a renderer.
+    pub text: String,
+    /// The map key that opens the screen this is acted on from.
+    pub key: char,
+    /// Drawn in br red rather than br yellow: hostility or inbound harm,
+    /// never an ordinary error.
+    pub threat: bool,
+}
+
 /// One program assigned to a structure — see `StructureReport::assignees`.
 #[derive(Clone)]
 pub struct Assignee {

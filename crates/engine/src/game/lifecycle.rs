@@ -159,6 +159,7 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
+        world.insert_resource(TransitQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
@@ -433,6 +434,7 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
+        world.insert_resource(TransitQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());

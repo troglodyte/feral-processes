@@ -1342,3 +1342,215 @@ fn a_returning_trip_does_not_skip_the_one_behind_it() {
         "the second must still have been advanced this tick"
     );
 }
+
+// ------------------------------------------------------------- the walk
+
+/// Stands every body of `squad` on a floored cell of the starting pocket,
+/// clear of the Home, the Relay and the Depot.
+///
+/// `adopt_program` writes the tile a program was beaten on, which is a
+/// *surface* coordinate and is solid rock read as base space more often than
+/// not — `entry_tile` is what normally gives a tamed program a base cell, on
+/// its first drift. A fixture that skips that stands its bodies inside the
+/// wall, where a walk is refused by design and the test proves nothing.
+fn stand_squad_in_the_pocket(game: &mut Game, squad: &[Entity]) {
+    for (i, &member) in squad.iter().enumerate() {
+        game.world.entity_mut(member).insert(Position {
+            x: 2,
+            y: -1 - i as i32,
+        });
+    }
+}
+
+/// Every cell of `path` is walkable base space, and each step is one
+/// Chebyshev move from the last — a walker interpolating between two cells
+/// that are not neighbours slides, and one crossing a solid cell walks
+/// through the wall.
+fn assert_walkable_and_contiguous(game: &Game, path: &[(i32, i32)]) {
+    let grid = game.world.resource::<crate::base_grid::BaseGrid>();
+    for &(x, y) in path {
+        assert!(grid.walkable(x, y), "({x}, {y}) is not walkable base space");
+    }
+    for pair in path.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        assert!(
+            (a.0 - b.0).abs() <= 1 && (a.1 - b.1).abs() <= 1 && a != b,
+            "{a:?} and {b:?} are not neighbouring cells"
+        );
+    }
+}
+
+/// A dispatch queues one walk per member, from the tile it was standing on
+/// to base space's one door.
+#[test]
+fn a_dispatch_queues_one_walk_out_per_member() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4620, 4, 500);
+    let squad = &staff[..2];
+    stand_squad_in_the_pocket(&mut game, squad);
+    let from: Vec<(i32, i32)> = squad
+        .iter()
+        .map(|&e| {
+            let p = game.world.get::<Position>(e).unwrap();
+            (p.x, p.y)
+        })
+        .collect();
+
+    game.dispatch_sortie(&site, squad)
+        .expect("a legal dispatch");
+
+    let walks = game.take_transits();
+    assert_eq!(walks.len(), squad.len(), "one walk per body sent out");
+    for (walk, start) in walks.iter().zip(&from) {
+        assert_eq!(
+            walk.path.first(),
+            Some(start),
+            "a body sets off from its own tile"
+        );
+        assert_eq!(
+            walk.path.last(),
+            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            "base space has one door and the walk ends at it"
+        );
+        assert_walkable_and_contiguous(&game, &walk.path);
+    }
+}
+
+/// The queue is drained, not accumulated: a cue mid-flight has nothing to
+/// say to the frame after the one that drew it.
+#[test]
+fn taking_the_walks_drains_them() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4621, 4, 500);
+    stand_squad_in_the_pocket(&mut game, &staff);
+    game.dispatch_sortie(&site, &staff[..2])
+        .expect("a legal dispatch");
+
+    assert!(!game.take_transits().is_empty());
+    assert!(game.take_transits().is_empty(), "the queue drains on take");
+}
+
+/// The walk follows the dug ground rather than the straight line to the
+/// door. A body down a corridor that bends has to come back along it, and a
+/// straight interpolation would take it through the rock in between.
+#[test]
+fn a_walk_bends_around_solid_rock() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4622, 4, 500);
+    let member = staff[0];
+    // A corridor east out of the pocket and then north, ending at a cell
+    // whose straight line back to the door crosses unmined rock.
+    let corridor: Vec<(i32, i32)> = (3..=8)
+        .map(|x| (x, 3))
+        .chain((-2..3).map(|y| (8, y)))
+        .collect();
+    {
+        let mut grid = game.world.resource_mut::<crate::base_grid::BaseGrid>();
+        for &(x, y) in &corridor {
+            grid.lay_floor(x, y);
+        }
+    }
+    let end = (8, -2);
+    game.world
+        .entity_mut(member)
+        .insert(Position { x: end.0, y: end.1 });
+    stand_squad_in_the_pocket(&mut game, &staff[1..]);
+
+    game.dispatch_sortie(&site, &[member])
+        .expect("a legal dispatch");
+
+    let walks = game.take_transits();
+    assert_eq!(walks.len(), 1);
+    let path = &walks[0].path;
+    assert_eq!(path.first(), Some(&end));
+    assert_eq!(path.last(), Some(&crate::game::base_space::BASE_EXIT_CELL));
+    assert_walkable_and_contiguous(&game, path);
+    let straight = end.0.abs().max(end.1.abs()) as usize + 1;
+    assert!(
+        path.len() > straight,
+        "a walk that is no longer than the straight line went through the wall: {path:?}"
+    );
+}
+
+/// A body whose tile is not walkable base space gets no walk at all. An
+/// adopted program's `Position` is the surface tile it was beaten on until
+/// its first drift, so this is reachable in play and not a corner case.
+#[test]
+fn a_body_standing_in_rock_walks_nowhere() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4623, 4, 500);
+    let member = staff[0];
+    game.world
+        .entity_mut(member)
+        .insert(Position { x: 40, y: 40 });
+    stand_squad_in_the_pocket(&mut game, &staff[1..]);
+
+    game.dispatch_sortie(&site, &[member])
+        .expect("a legal dispatch");
+
+    assert!(
+        game.take_transits().is_empty(),
+        "no walk can be drawn out of solid rock"
+    );
+}
+
+/// The return is the same cue with its ends swapped — in through the door
+/// and back to the tile the body left from. Direction needs no field.
+#[test]
+fn a_return_walks_them_back_in_through_the_door() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4624, 4, 500);
+    let squad = &staff[..2];
+    stand_squad_in_the_pocket(&mut game, squad);
+    let from: Vec<(i32, i32)> = squad
+        .iter()
+        .map(|&e| {
+            let p = game.world.get::<Position>(e).unwrap();
+            (p.x, p.y)
+        })
+        .collect();
+    game.dispatch_sortie(&site, squad)
+        .expect("a legal dispatch");
+    let _ = game.take_transits();
+
+    {
+        let record = &mut game.world.resource_mut::<Sorties>().0[0];
+        record.ticks_elapsed = record.ticks_total - 1;
+        record.battles_done = record.battles_total;
+    }
+    game.run_sorties();
+
+    let walks = game.take_transits();
+    assert_eq!(walks.len(), squad.len(), "one walk per body coming home");
+    for (walk, home) in walks.iter().zip(&from) {
+        assert_eq!(
+            walk.path.first(),
+            Some(&crate::game::base_space::BASE_EXIT_CELL),
+            "a returning body comes in through the door"
+        );
+        assert_eq!(walk.path.last(), Some(home), "and back to its own tile");
+        assert_walkable_and_contiguous(&game, &walk.path);
+    }
+}
+
+/// A program that did not come back does not walk in. Under Permadeath its
+/// entity is gone by the time the report is drawn, so this falls out of
+/// there being no tile to walk to rather than out of a check.
+#[test]
+fn a_casualty_does_not_walk_home() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4625, 4, 500);
+    let squad = &staff[..2];
+    stand_squad_in_the_pocket(&mut game, squad);
+    game.dispatch_sortie(&site, squad)
+        .expect("a legal dispatch");
+    let _ = game.take_transits();
+
+    game.world.entity_mut(squad[0]).remove::<Position>();
+    {
+        let record = &mut game.world.resource_mut::<Sorties>().0[0];
+        record.ticks_elapsed = record.ticks_total - 1;
+        record.battles_done = record.battles_total;
+    }
+    game.run_sorties();
+
+    assert_eq!(
+        game.take_transits().len(),
+        1,
+        "only the body that came home walks in"
+    );
+}

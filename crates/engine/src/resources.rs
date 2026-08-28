@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::battle::{AttackOutcome, BattleAction, EnemyGroup};
+use crate::components::GlyphColor;
 use crate::items::GearCopy;
 use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
@@ -500,6 +501,54 @@ impl EffectQueue {
 
     pub fn take(&mut self) -> Vec<VisualEffect> {
         std::mem::take(&mut self.effects)
+    }
+}
+
+/// A program walking from one base-space cell to another, for a frontend to
+/// animate.
+///
+/// **Purely cosmetic.** Nothing in the simulation is standing at any of
+/// these cells: by the time this is queued the walk has already happened as
+/// far as the engine is concerned, and the body is either away on a sortie
+/// or home and idle. A frontend that ignores these draws the game exactly as
+/// it did before they existed.
+///
+/// A separate value from `VisualEffect` rather than a fourth `EffectKind`,
+/// because that one's whole shape is a *tile* — "something happened here",
+/// pinned to one cell — and this is a path over time carrying the glyph to
+/// walk along it. The glyph is carried because the walker cannot be looked
+/// up: a departing program is `ProgramRole::Sortie` the moment the record is
+/// pushed, and every view drops it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransitCue {
+    pub glyph: char,
+    pub color: GlyphColor,
+    /// Cell by cell, origin first and destination last. Never empty, and
+    /// every consecutive pair are neighbours — a frontend interpolates
+    /// between them and would slide across the map if they were not.
+    pub path: Vec<(i32, i32)>,
+}
+
+/// Walks queued since the last `Game::take_transits` — `EffectQueue`'s
+/// counterpart, capped and drained the same way, and deliberately not
+/// serialized for the same reason: a body mid-walk has nothing to say to a
+/// reloaded save.
+#[derive(Resource, Default)]
+pub struct TransitQueue {
+    cues: Vec<TransitCue>,
+}
+
+impl TransitQueue {
+    pub(crate) fn push(&mut self, cue: TransitCue) {
+        self.cues.push(cue);
+        if self.cues.len() > EFFECT_QUEUE_CAP {
+            let excess = self.cues.len() - EFFECT_QUEUE_CAP;
+            self.cues.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<TransitCue> {
+        std::mem::take(&mut self.cues)
     }
 }
 

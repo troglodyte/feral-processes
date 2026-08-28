@@ -7,7 +7,8 @@
 use bevy_ecs::prelude::*;
 
 use crate::Game;
-use crate::components::Structure;
+use crate::components::{Stats, Structure};
+use crate::items::ItemId;
 
 /// Whether the player can read the board, and whether they can sign for a
 /// squad.
@@ -21,6 +22,35 @@ pub enum SortieReach {
     NoRelay,
     OffBase,
     AtRelay,
+}
+
+/// Why a dispatch was refused.
+///
+/// Typed rather than a `String`, `ContractRefusal`'s reason: each of these
+/// leaves the player a different errand, and app-core words them for the
+/// screen. `NotStaff` and `Downed` are distinct for that reason too — the
+/// first wants the program unpartied, the second wants it repaired.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SortieRefusal {
+    NotAtRelay,
+    /// This site is not on the current board. Kept apart from `NotAtRelay`
+    /// because one is a walk and the other is a wait.
+    NotOffered,
+    NoSquad,
+    /// One program named twice. Refused rather than silently deduped: the
+    /// squad size is what the provisioning is priced off, so a quiet dedupe
+    /// would charge for a body that never went.
+    Duplicate,
+    NotStaff(String),
+    Downed(String),
+    Wounded(String),
+    /// The base would be left with nobody in it.
+    WouldEmptyTheBase,
+    Unprovisioned {
+        item: ItemId,
+        need: u32,
+        held: u32,
+    },
 }
 
 impl Game {
@@ -152,6 +182,126 @@ impl Game {
             h = crate::game::contracts::fold(h, &word.to_le_bytes());
         }
         h
+    }
+
+    /// What the provisioning for a squad of `squad` bodies running
+    /// `battles` fights costs the base.
+    ///
+    /// Priced per battle *and* per body, because both are what provisions
+    /// have to cover. Denominated in the **build currency**, which is
+    /// role-derived rather than named in Rust and is what the base's shelves
+    /// actually hold — the figure the stock strip is already showing.
+    pub fn sortie_provision_cost(&self, battles: u32, squad: usize) -> Vec<(ItemId, u32)> {
+        let units = crate::tuning::SORTIE_PROVISION_PER_BATTLE * battles * squad as u32;
+        vec![(self.currency(), units)]
+    }
+
+    /// Sends `members` to the site `id` names on the current board.
+    ///
+    /// Every refusal lands **before anything is spent**,
+    /// `commit_caravan_basket`'s rule. Only once every one of them has
+    /// passed does the provisioning leave the shelves, through
+    /// `stock::spend_from_base` — a teleport off the shelf is right here:
+    /// this is a base cost paid at the Relay, not a build a body walks to.
+    ///
+    /// The record stores the **whole resolved site**, never the id or a
+    /// board index. A board that rotates while the squad is out, or an
+    /// `assets/sorties/` file edited between sessions, must not be able to
+    /// rewrite or strand a trip already in flight — `ActiveContract` stores
+    /// a whole `ContractDef` for exactly that reason.
+    pub fn dispatch_sortie(
+        &mut self,
+        id: &crate::sorties::SortieId,
+        members: &[Entity],
+    ) -> Result<(), SortieRefusal> {
+        if self.sortie_reach() != SortieReach::AtRelay {
+            return Err(SortieRefusal::NotAtRelay);
+        }
+        let Some(row) = self
+            .sortie_board()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|r| &r.id == id)
+        else {
+            return Err(SortieRefusal::NotOffered);
+        };
+        if members.is_empty() {
+            return Err(SortieRefusal::NoSquad);
+        }
+        let mut seen: Vec<Entity> = members.to_vec();
+        seen.sort();
+        seen.dedup();
+        if seen.len() != members.len() {
+            return Err(SortieRefusal::Duplicate);
+        }
+        for &member in members {
+            if self.program_role(member) != Some(crate::game::party::ProgramRole::Staff) {
+                return Err(SortieRefusal::NotStaff(self.creature_label(member)));
+            }
+            if self
+                .world
+                .get::<crate::components::Downed>(member)
+                .is_some()
+            {
+                return Err(SortieRefusal::Downed(self.creature_label(member)));
+            }
+            let Some(stats) = self.world.get::<Stats>(member) else {
+                return Err(SortieRefusal::NotStaff(self.creature_label(member)));
+            };
+            if (stats.hp as f32) < stats.max_hp as f32 * crate::tuning::SORTIE_MIN_HP_FRACTION {
+                return Err(SortieRefusal::Wounded(self.creature_label(member)));
+            }
+        }
+        // The base is never emptied. Production stops dead and a sweep lands
+        // on an empty base — the same category of guard as `max_deployed`.
+        if self.base_staff().len() <= members.len() {
+            return Err(SortieRefusal::WouldEmptyTheBase);
+        }
+        let cost = self.sortie_provision_cost(row.battles, members.len());
+        for (item, qty) in &cost {
+            if crate::game::base::work_orders::base_holding(self, item) < *qty {
+                return Err(SortieRefusal::Unprovisioned {
+                    item: item.clone(),
+                    need: *qty,
+                    held: crate::game::base::work_orders::base_holding(self, item),
+                });
+            }
+        }
+
+        for (item, qty) in &cost {
+            crate::game::base::stock::spend_from_base(self, item, *qty);
+        }
+        let site = self
+            .world
+            .resource::<crate::sorties::SortieDb>()
+            .get(id)
+            .cloned()
+            .expect("a board row names a site the catalogue holds");
+        let names: Vec<String> = members.iter().map(|&e| self.creature_label(e)).collect();
+        self.world
+            .resource_mut::<crate::resources::Sorties>()
+            .0
+            .push(crate::resources::Sortie {
+                risk: site.risk,
+                site,
+                members: members.to_vec(),
+                ticks_total: row.ticks,
+                ticks_elapsed: 0,
+                battles_total: row.battles,
+                battles_done: 0,
+                aborted: false,
+                loot: Vec::new(),
+                xp: 0,
+                kills: 0,
+                casualties: Vec::new(),
+            });
+        self.log_base(format!(
+            "{} {} out for {}.",
+            names.join(", "),
+            if names.len() == 1 { "ships" } else { "ship" },
+            row.name
+        ));
+        Ok(())
     }
 
     /// How long a trip to a site of this risk offset, running this many

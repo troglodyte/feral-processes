@@ -7,7 +7,7 @@ use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
 use crate::components::{Glyph, GlyphColor, Position, Structure};
 use crate::game::party::ProgramRole;
-use crate::game::sortie::SortieReach;
+use crate::game::sortie::{SortieReach, SortieRefusal};
 use crate::resources::DifficultyMode;
 use crate::resources::{Sortie, Sorties};
 use crate::sorties::SortieDb;
@@ -432,4 +432,261 @@ fn the_sector_does_not_lengthen_a_trip() {
 fn no_relay_means_no_board() {
     let mut game = Game::new(4504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(game.sortie_board().is_none());
+}
+
+// --------------------------------------------------------- dispatch
+
+/// A base with a Home, a Relay and a Depot holding `provisions` of the
+/// build currency, plus `bodies` idle staff on the roster.
+///
+/// Returns the game, the id of the first site on the board, and the staff.
+fn a_base_ready_to_dispatch(
+    seed: u32,
+    bodies: usize,
+    provisions: u32,
+) -> (Game, crate::sorties::SortieId, Vec<Entity>) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let depot = deploy(&mut game, "depot", 0, 1);
+    let currency = game.currency();
+    game.world
+        .entity_mut(depot)
+        .insert(crate::components::Stock {
+            output: [(currency, provisions)].into_iter().collect(),
+            capacity: 9_999,
+            ..Default::default()
+        });
+    let staff: Vec<Entity> = (0..bodies)
+        .map(|i| {
+            game.adopt_program("scrapper", 4 + i as i32, 4, 1.0)
+                .expect("test roster program")
+        })
+        .collect();
+    let site = game.sortie_board().expect("a Relay stands")[0].id.clone();
+    (game, site, staff)
+}
+
+/// Sums what the base's shelves hold, so a refusal can be shown to have
+/// spent nothing.
+fn stock_total(game: &Game) -> u32 {
+    game.base_stock().iter().map(|r| r.qty).sum()
+}
+
+/// Every refusal lands before anything is spent. Asserted per refusal: a
+/// single test over one of them passes against eight paths where seven
+/// spend.
+#[test]
+fn every_refusal_spends_nothing() {
+    // (name, builder) — each builds a base whose dispatch must be refused.
+    #[allow(clippy::type_complexity)]
+    let cases: Vec<(
+        &str,
+        Box<dyn Fn() -> (Game, crate::sorties::SortieId, Vec<Entity>)>,
+    )> = vec![
+        (
+            "off base",
+            Box::new(|| {
+                let (mut game, site, staff) = a_base_ready_to_dispatch(4600, 4, 500);
+                game.world
+                    .insert_resource(crate::resources::Locale::Surface);
+                (game, site, staff[..2].to_vec())
+            }),
+        ),
+        (
+            "not on the board",
+            Box::new(|| {
+                let (game, _, staff) = a_base_ready_to_dispatch(4601, 4, 500);
+                (
+                    game,
+                    crate::sorties::SortieId::from("no_such_site"),
+                    staff[..2].to_vec(),
+                )
+            }),
+        ),
+        (
+            "empty squad",
+            Box::new(|| {
+                let (game, site, _) = a_base_ready_to_dispatch(4602, 4, 500);
+                (game, site, Vec::new())
+            }),
+        ),
+        (
+            "a duplicate body",
+            Box::new(|| {
+                let (game, site, staff) = a_base_ready_to_dispatch(4603, 4, 500);
+                (game, site, vec![staff[0], staff[0]])
+            }),
+        ),
+        (
+            "a party member",
+            Box::new(|| {
+                let (mut game, site, staff) = a_base_ready_to_dispatch(4604, 4, 500);
+                super::support::enlist(&mut game, staff[0]);
+                (game, site, vec![staff[0], staff[1]])
+            }),
+        ),
+        (
+            "a downed body",
+            Box::new(|| {
+                let (mut game, site, staff) = a_base_ready_to_dispatch(4605, 4, 500);
+                game.world
+                    .entity_mut(staff[0])
+                    .insert(crate::components::Downed);
+                (game, site, vec![staff[0], staff[1]])
+            }),
+        ),
+        (
+            "a wounded body",
+            Box::new(|| {
+                let (mut game, site, staff) = a_base_ready_to_dispatch(4606, 4, 500);
+                let mut stats = game
+                    .world
+                    .get_mut::<crate::components::Stats>(staff[0])
+                    .unwrap();
+                stats.hp = 1;
+                (game, site, vec![staff[0], staff[1]])
+            }),
+        ),
+        (
+            "the whole roster",
+            Box::new(|| {
+                let (game, site, staff) = a_base_ready_to_dispatch(4607, 2, 500);
+                (game, site, staff)
+            }),
+        ),
+        (
+            "nothing to provision with",
+            Box::new(|| {
+                let (game, site, staff) = a_base_ready_to_dispatch(4608, 4, 0);
+                (game, site, staff[..2].to_vec())
+            }),
+        ),
+    ];
+
+    for (name, build) in cases {
+        let (mut game, site, members) = build();
+        let before = stock_total(&game);
+        let away = game.world.resource::<Sorties>().0.len();
+        assert!(
+            game.dispatch_sortie(&site, &members).is_err(),
+            "{name} should have been refused"
+        );
+        assert_eq!(stock_total(&game), before, "{name} spent something");
+        assert_eq!(
+            game.world.resource::<Sorties>().0.len(),
+            away,
+            "{name} filed a record anyway"
+        );
+    }
+}
+
+/// Party and wielded programs are refused by name, so seconding one is an
+/// explicit act rather than a side effect of a dispatch screen.
+#[test]
+fn a_party_member_cannot_be_dispatched() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4610, 4, 500);
+    super::support::enlist(&mut game, staff[0]);
+    assert!(matches!(
+        game.dispatch_sortie(&site, &[staff[0], staff[1]]),
+        Err(SortieRefusal::NotStaff(_))
+    ));
+}
+
+/// A hurt program is refused: sending one on a twenty-fight trip is the
+/// mistake the abort rule cannot save you from, because it fires on the
+/// first battle.
+#[test]
+fn a_wounded_program_is_refused() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4611, 4, 500);
+    let max_hp = game
+        .world
+        .get::<crate::components::Stats>(staff[0])
+        .unwrap()
+        .max_hp;
+    // Just under the threshold, so the test is about the threshold and not
+    // about a body at 1 HP.
+    let hurt = (max_hp as f32 * crate::tuning::SORTIE_MIN_HP_FRACTION) as i32 - 1;
+    game.world
+        .get_mut::<crate::components::Stats>(staff[0])
+        .unwrap()
+        .hp = hurt;
+    assert!(matches!(
+        game.dispatch_sortie(&site, &[staff[0], staff[1]]),
+        Err(SortieRefusal::Wounded(_))
+    ));
+
+    // And one unit of Integrity higher is fine, or the threshold is not
+    // where the test says it is.
+    game.world
+        .get_mut::<crate::components::Stats>(staff[0])
+        .unwrap()
+        .hp = hurt + 1;
+    assert!(game.dispatch_sortie(&site, &[staff[0], staff[1]]).is_ok());
+}
+
+/// The base is never emptied. Production stops dead and a sweep lands on an
+/// empty base — the same category of guard as `max_deployed`.
+#[test]
+fn a_dispatch_may_not_empty_the_roster() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4612, 3, 500);
+    assert_eq!(
+        game.dispatch_sortie(&site, &staff),
+        Err(SortieRefusal::WouldEmptyTheBase)
+    );
+    // One short of everyone is allowed, or the guard is off by one and the
+    // feature is unusable on a small roster.
+    assert!(game.dispatch_sortie(&site, &staff[..2]).is_ok());
+}
+
+/// A successful dispatch charges the provisioning and takes the bodies off
+/// the labour pool in the same call.
+#[test]
+fn a_dispatch_charges_and_takes_the_bodies() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4613, 4, 500);
+    let squad = &staff[..2];
+    let battles = game
+        .sortie_board()
+        .unwrap()
+        .iter()
+        .find(|r| r.id == site)
+        .unwrap()
+        .battles;
+    let cost: u32 = game
+        .sortie_provision_cost(battles, squad.len())
+        .iter()
+        .map(|(_, q)| q)
+        .sum();
+    assert!(cost > 0, "the provisioning must actually cost something");
+
+    let before = stock_total(&game);
+    game.dispatch_sortie(&site, squad)
+        .expect("a legal dispatch");
+
+    assert_eq!(stock_total(&game), before - cost);
+    for &member in squad {
+        assert_eq!(game.program_role(member), Some(ProgramRole::Sortie));
+    }
+    for &staying in &staff[2..] {
+        assert_eq!(game.program_role(staying), Some(ProgramRole::Staff));
+    }
+}
+
+/// The record stores the whole resolved site, never the id: a board that
+/// rotates while the squad is out must not be able to rewrite the trip.
+#[test]
+fn the_record_outlives_the_board_that_offered_it() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4614, 4, 500);
+    game.dispatch_sortie(&site, &staff[..2])
+        .expect("a legal dispatch");
+    let signed = game.world.resource::<Sorties>().0[0].clone();
+
+    // Roll the board on several epochs; whatever it now offers, the trip in
+    // flight is unchanged.
+    game.world
+        .resource_mut::<crate::resources::GameClock>()
+        .tick += crate::tuning::SORTIE_BOARD_ROTATION_TICKS * 5;
+    let now = game.world.resource::<Sorties>().0[0].clone();
+    assert_eq!(now.site, signed.site);
+    assert_eq!(now.battles_total, signed.battles_total);
+    assert_eq!(now.ticks_total, signed.ticks_total);
 }

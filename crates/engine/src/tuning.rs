@@ -3061,6 +3061,85 @@ pub const NEED_STRAIN_PER_POINT: f64 = 0.01;
 pub const MEMORY_POSTING_PERIOD: u64 = 250;
 
 // ---------------------------------------------------------------------------
+// Sorties
+// ---------------------------------------------------------------------------
+
+/// Ticks of travel every sortie pays regardless of where it is going.
+///
+/// Travel deliberately dominates the trip: a fight is quick and getting
+/// there is not. With the two terms below, the shipped middling site lands
+/// near half a `CARAVAN_VISIT_INTERVAL_TICKS` — a reference point and not a
+/// derivation; nothing computes one from the other.
+pub const SORTIE_TRAVEL_BASE_TICKS: u64 = 150;
+
+/// Extra travel ticks per step of a site's risk **offset** — never its
+/// absolute danger band. Read against the absolute band, every trip in a
+/// deep sector would take enormously longer for no reason the player could
+/// name, and the feature would quietly stop being usable late in a run.
+pub const SORTIE_TRAVEL_PER_RISK_TICKS: u64 = 75;
+
+/// Ticks each battle adds to a trip.
+///
+/// There is deliberately no term for squad size, level or power anywhere in
+/// the duration: a stronger squad shows up as better outcomes and never as a
+/// faster cycle, or the feature becomes a throughput multiplier that scales
+/// with itself. Duration is a property of the place, the way
+/// `BASE_ROCK_DURABILITY` is never scaled by the player.
+pub const SORTIE_TICKS_PER_BATTLE: u64 = 20;
+
+/// How long one board of offers stands before it rotates.
+///
+/// **Longer than the longest trip** the shipped catalogue can quote, so a
+/// board cannot rotate twice while the player is deliberating over it.
+pub const SORTIE_BOARD_ROTATION_TICKS: u64 = 1200;
+
+/// Offers on a board.
+pub const SORTIE_BOARD_SLOTS: usize = 3;
+
+/// The board's own salt. Its own constant and never a reused one, following
+/// `CARAVAN_SALT`.
+pub const SORTIE_SALT: u64 = 0xE7ED_1710_5EED_0003;
+
+/// A program below this fraction of max Integrity is refused at dispatch.
+///
+/// Sending a hurt program on a twenty-fight trip is the mistake the
+/// abort-on-first-casualty rule cannot save you from, because it fires on
+/// the first battle.
+pub const SORTIE_MIN_HP_FRACTION: f32 = 0.5;
+
+/// Fraction of `max_hp` restored to each member between battles, paid for by
+/// the provisioning charged at dispatch.
+///
+/// A **fraction** rather than flat Integrity, so provisioning keeps meaning
+/// something at the level cap. This is the single dial that decides whether
+/// a twenty-fight trip is survivable.
+pub const SORTIE_PROVISION_HEAL_FRACTION: f32 = 0.15;
+
+/// Units of the build currency the provisioning costs, per battle per body.
+///
+/// The "materials" leg of the four ways a sortie pays for itself. Priced per
+/// battle *and* per body because both are what the provisions have to cover:
+/// a long trip and a big squad each eat more of them. Charged from base
+/// stock at dispatch through `stock::spend_from_base` — a base cost paid at
+/// the Relay, not a build a body walks to.
+pub const SORTIE_PROVISION_PER_BATTLE: u32 = 1;
+
+/// What a sortie kill pays against what the same kill pays with the player
+/// in the fight.
+///
+/// Below 1.0 deliberately: this is the one *tuned* lever on the yield, and
+/// it exists so the cap can move without disturbing the two mechanisms that
+/// earn it — Power not recovering in the field, and no rest out there.
+pub const SORTIE_XP_MULTIPLIER: f32 = 0.6;
+
+/// Rounds one off-screen battle may run before it is called a draw.
+///
+/// A backstop and not a mechanic: two sides that cannot finish each other
+/// would otherwise loop forever inside a single tick, which is a hang rather
+/// than a long fight. Generous enough that no shipped matchup reaches it.
+pub const SORTIE_MAX_BATTLE_ROUNDS: u32 = 60;
+
+// ---------------------------------------------------------------------------
 // Caravan traders
 // ---------------------------------------------------------------------------
 

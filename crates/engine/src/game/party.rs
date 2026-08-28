@@ -369,9 +369,7 @@ impl Game {
     /// lift it: a deep frame is harder because what lives in it is scaled,
     /// not because the party is let out of the cap to meet it.
     pub fn level_cap(&self) -> u32 {
-        let zone = self.world.resource::<ZoneLevel>().0;
-        crate::tuning::ZONE_LEVEL_CAP_FLOOR
-            .max(1 + crate::tuning::ZONE_LEVEL_CAP_STEP * zone.saturating_sub(1))
+        crate::tuning::zone_level_cap(self.world.resource::<ZoneLevel>().0)
     }
 
     /// Display string for `entity`'s rolled `Potential`, e.g.

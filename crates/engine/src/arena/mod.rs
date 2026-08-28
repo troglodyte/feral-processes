@@ -52,7 +52,8 @@ use crate::*;
 ///
 /// Which multiplier and which ceiling apply is the same split
 /// `award_player_xp` and `award_companion_xp` make: a `Creature` grows on
-/// its species' curve and stops at `tuning::arena_level_ceiling()`,
+/// its species' curve and stops at the higher of the scenario's zone cap
+/// and `tuning::arena_level_ceiling()`,
 /// the player grows on the baseline and has no ceiling.
 ///
 /// The *absolute* cap rather than `Game::companion_level_cap`, and that is
@@ -79,7 +80,7 @@ pub(crate) fn set_level(game: &mut Game, entity: Entity, level: u32) {
                 .get(&species)
                 .map(|s| s.growth_multiplier)
                 .unwrap_or(BASELINE_GROWTH_MULTIPLIER);
-            (growth, Some(arena_level_ceiling()))
+            (growth, Some(game.level_cap().max(arena_level_ceiling())))
         }
         None => (BASELINE_GROWTH_MULTIPLIER, None),
     };

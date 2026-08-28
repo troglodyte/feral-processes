@@ -4,7 +4,7 @@
 use crate::abilities::{AbilityId, AffinityKind};
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
-    PLAYER_BASE_SPEED,
+    MAX_PACK_BODIES, PLAYER_BASE_SPEED,
 };
 use crate::*;
 
@@ -203,6 +203,19 @@ impl Game {
         if groups.len() > max_groups {
             groups.sort_by_key(|g| std::cmp::Reverse(g.members.len()));
             groups.truncate(max_groups);
+        }
+        // The product the two ceilings above never bounded. Trimmed off the
+        // largest group each pass, so a mixed pack keeps its variety and
+        // loses its depth — the shape a fight against four species should
+        // have. `max_by_key` takes the last of several equal maxima, which
+        // is stable for a given input order, so a seeded fight composes the
+        // same way every run.
+        while groups.iter().map(|g| g.members.len()).sum::<usize>() > MAX_PACK_BODIES as usize {
+            let Some(biggest) = groups.iter_mut().max_by_key(|g| g.members.len()) else {
+                break;
+            };
+            biggest.members.pop();
+            groups.retain(|g| !g.members.is_empty());
         }
         groups
     }

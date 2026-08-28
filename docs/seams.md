@@ -4642,6 +4642,68 @@ that does not goes straight to `begin_battle`. The two ceiling helpers are
 `pub(crate)` solely so the arena can *warn* that a composition exceeds
 them, which is the "no silent caps" rule — they decide nothing there.
 
+### A fight is bounded by bodies, not just by groups
+
+**`MAX_PACK_BODIES` bounds the whole pack, and it exists because the two
+ceilings that came before it bounded a fight per group and per group count
+and never their product.** `group_pack` caps members against
+`group_size_ceiling()` and groups against `enemy_group_ceiling()`, so what a
+fight could field was those two multiplied — 400 programs in principle, and
+33 against a party of four at zone 3 depth 5 in practice.
+
+Nothing noticed for two reasons. The **surface never reaches the product**:
+a surface fight is whoever `gather_pack` found standing together, which
+measures 2.6 bodies at zone 3 against the ceiling's 12, so the bound that
+was missing was also the bound nothing tested. And `balance_sim` has no
+Stack term at all, while its surface clearability projection takes **one**
+group at `zone_group_cap` rather than the four-group total — so the one
+automated gate over difficulty cannot see this axis from either side.
+
+`Game::stack_encounter_pack` is what walks into it. It takes one species
+pick and one full group roll **per group slot the curve allows**, which is
+the right shape for what it is doing — a pick per group, because
+`group_pack` groups by species and a single draw is a single group however
+many the curve permits — and it means the Stack fills a ceiling the surface
+only approaches. The same curve therefore produced a shallow-Stack fight
+four times the size of the surface fight beside it.
+
+The 2026-08-24 `danger_steps` change is what made that fatal rather than
+merely large. It added the zone step to the depth step underground, aimed at
+the species window; `danger_steps` also feeds `max_group_size` and
+`max_enemy_groups`, so an ordinary zone-3 Stack ambush went from a handful of
+bodies to a horde. Its lair half was measured at the time and its
+ordinary-ambush half was not, and the Stack became unwinnable from **depth
+3** down — 2.0% at depth 3, 0.0% at depth 5, for a party at the zone level
+cap.
+
+Three things about the bound are deliberate:
+
+- **It is a ceiling on the fight, not a cull.** The bodies it turns away
+  stay standing on the map exactly as `MAX_ENEMY_GROUPS`' surplus does, and
+  are met on the next bump. A capped pack in play is two fights, not one.
+- **It trims the largest group each pass**, so a mixed pack keeps its
+  variety and loses its depth — four species two deep rather than one
+  species eight deep. `max_by_key` takes the last of several equal maxima,
+  which is stable for a given input order, so a seeded fight composes the
+  same way every run.
+- **It sits in `group_pack`, so it bounds every fight in the game**, the
+  surface's included. That is where the missing bound belongs: the surface
+  is currently bounded only by how many bodies happened to wander together,
+  and the same measurement records a zone-6 surface fight at 17.5 bodies.
+
+The value is fitted, not chosen: 8 puts an ordinary Stack ambush at 100 /
+93.5 / 67 / 39.5 across depths 2-5 for a party at the zone level cap, which
+is a curve that descends; 12 leaves depth 5 at 0%. The sweep, the isolation
+of the three terms that feed this fight (volume, the species window, the
+per-body stat step) and what the numbers are blind to are in
+`docs/measurements/2026-08-28-stack-depth-curve-after-danger-steps.md`.
+
+**The trap is that the species window is a threshold, not a gradient.**
+Pulling the band back one step or two changes nothing, because the window
+still admits the tier-2 species; three steps drops them and takes a capped
+pack from 8% to 64%. Anyone tuning this by nudging `TIER_ENTRY_STEPS` will
+measure no effect twice and then a cliff.
+
 ### There are two battle rosters, and which one a caller wants is decided by whether it *draws* or *acts*
 
 **There are two battle rosters, and which one a caller wants is decided

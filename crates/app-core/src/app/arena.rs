@@ -18,7 +18,9 @@ use feral_processes_engine::arena::{
 };
 use feral_processes_engine::items_db::ItemDb;
 use feral_processes_engine::species::SpeciesDb;
-use feral_processes_engine::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, arena_level_ceiling};
+use feral_processes_engine::tuning::{
+    MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, arena_level_ceiling, zone_level_cap,
+};
 use feral_processes_engine::world::Biome;
 
 use crate::*;
@@ -574,12 +576,22 @@ impl App {
                 }
             }
             ArenaRowKind::Party(i) => {
+                // The same rule `arena::set_level` stages by: the higher of
+                // the scenario's zone cap and the absolute figure. A
+                // scenario's party is authored, not spawned, so there is no
+                // `KernelRing` to read — and a developed companion is
+                // exactly what the arena exists to stage, which past zone 1
+                // means a companion at that zone's cap. A `Save` or a
+                // `Template` brings its own zone across at stage time, so
+                // the dial offers the absolute figure and the stage clamps.
+                let ceiling = match &s.player {
+                    PlayerSource::Fresh { zone, .. } => {
+                        zone_level_cap(*zone).max(arena_level_ceiling())
+                    }
+                    _ => arena_level_ceiling(),
+                };
                 if let Some(c) = s.party.get_mut(i) {
-                    // The absolute cap, not `Game::companion_level_cap`: a
-                    // scenario's party is authored, not spawned, so there is
-                    // no `KernelRing` to read — and a developed companion is
-                    // exactly what the arena exists to stage.
-                    c.level = step(c.level, delta, 1, arena_level_ceiling());
+                    c.level = step(c.level, delta, 1, ceiling);
                 }
             }
             ArenaRowKind::Opponent(i) => {

@@ -28,10 +28,16 @@
         (item: "bastion_lattice", tier: 0),
         (item: "singularity_matrix", tier: 0),
     ],
+    // Zone 3's own level cap, `tuning::zone_level_cap(3)`. It read `12`
+    // until 2026-08-28, which was `arena_level_ceiling()` and so the most
+    // the arena could stage whatever the file said — half the level the
+    // game permits a zone-3 party, which is most of why this fight read as
+    // hopeless rather than hard. Numbers from before that date are not
+    // comparable to numbers from after it.
     party: [
-        (species: "scrapper", level: 12),
-        (species: "scrapper", level: 12),
-        (species: "scrapper", level: 12),
+        (species: "scrapper", level: 23),
+        (species: "scrapper", level: 23),
+        (species: "scrapper", level: 23),
     ],
     encounter: Some(Stack(biome: NullSector, depth: 5)),
     reps: 50,

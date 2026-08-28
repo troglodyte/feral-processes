@@ -263,7 +263,7 @@ fn eviction_does_not_read_a_disposition() {
 // Acting out: the morale gate, and the hysteresis it exists for.
 // ---------------------------------------------------------------------------
 
-use crate::components::{Disgruntled, Memory};
+use crate::components::{Disgruntled, Grievance, Memory};
 use crate::memories::MemoryId;
 use crate::tuning::{MORALE_DOWNS_TOOLS_AT, MORALE_RECOVERED_AT};
 
@@ -286,7 +286,10 @@ fn sour_to(game: &mut Game, who: Entity, target: f32) {
                 subject: MemorySubject::BaseTile { x: n, y: 900 },
                 subject_name: None,
                 reinforced: now,
-                strikes: 3,
+                // One strike at a time, not the def's cap: a maxed grudge is
+                // -21 in a single step, which vaults straight past the mild
+                // rung and makes the ladder untestable.
+                strikes: 1,
             });
         n += 1;
         assert!(n < 400, "morale never reached {target}");
@@ -429,14 +432,16 @@ fn an_abrasive_program_downs_tools_on_less_than_an_amiable_one() {
         game.morale(abrasive) < game.morale(amiable),
         "the same history weighs more on Abrasive"
     );
-    assert!(
-        game.world.get::<Disgruntled>(abrasive).is_some(),
+    assert_eq!(
+        game.world.get::<Disgruntled>(abrasive).map(|d| d.grievance),
+        Some(Grievance::DownedTools),
         "Abrasive is past the line at morale {}",
         game.morale(abrasive)
     );
     assert!(
-        game.world.get::<Disgruntled>(amiable).is_none(),
-        "Amiable is still short of it at morale {}",
+        !game.has_downed_tools(amiable),
+        "Amiable is still short of it at morale {} — it may be sulking, but \
+         it has not downed tools",
         game.morale(amiable)
     );
 }
@@ -604,5 +609,168 @@ fn a_disgruntled_body_is_freed_so_a_willing_one_can_take_the_post() {
         game.world.get::<Task>(willing).map(|t| t.target),
         Some(node),
         "and the willing body has it instead"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The sulking rung: works, but not there.
+// ---------------------------------------------------------------------------
+
+/// The ladder has to climb in order, or a program goes straight from content
+/// to useless and the mild rung is unreachable.
+#[test]
+fn the_ladder_climbs_in_order() {
+    assert!(
+        crate::tuning::MORALE_RECOVERED_AT > crate::tuning::MORALE_SULKS_AT,
+        "recovery sits above sulking"
+    );
+    assert!(
+        crate::tuning::MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT,
+        "sulking sits above downing tools"
+    );
+}
+
+/// The mild rung is reached first, and it is a *different* state — the body
+/// is still in the pool.
+#[test]
+fn a_mildly_sour_program_sulks_rather_than_downing_tools() {
+    let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, crate::tuning::MORALE_SULKS_AT);
+    assert!(
+        game.morale(worker) > MORALE_DOWNS_TOOLS_AT,
+        "the fixture must stop at the mild rung, got {}",
+        game.morale(worker)
+    );
+
+    game.update_disgruntled(&[worker]);
+
+    assert_eq!(
+        game.world.get::<Disgruntled>(worker).map(|d| d.grievance),
+        Some(Grievance::Sulking)
+    );
+    assert!(!game.has_downed_tools(worker), "still in the labour pool");
+}
+
+/// Severity ratchets while the marker is held. Easing it would give the
+/// boundary between the rungs its own flicker, restarting a cronjob's
+/// progress every other tick.
+#[test]
+fn severity_ratchets_and_never_eases() {
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, MORALE_DOWNS_TOOLS_AT);
+    game.update_disgruntled(&[worker]);
+    assert!(game.has_downed_tools(worker), "down first");
+
+    // Back up into the sulking band, but not to recovery.
+    game.world.get_mut::<Memories>(worker).unwrap().0.clear();
+    let now = game.current_tick();
+    game.world
+        .get_mut::<Memories>(worker)
+        .unwrap()
+        .0
+        .push(Memory {
+            def: MemoryId::from("frayed_here"),
+            subject: MemorySubject::BaseTile { x: 0, y: 901 },
+            subject_name: None,
+            reinforced: now,
+            strikes: 2,
+        });
+    let between = game.morale(worker);
+    assert!(
+        between > MORALE_DOWNS_TOOLS_AT && between < MORALE_RECOVERED_AT,
+        "the fixture must land in the gap, got {between}"
+    );
+
+    game.update_disgruntled(&[worker]);
+
+    assert!(
+        game.has_downed_tools(worker),
+        "a body that downed tools does not ease back to sulking on a wobble \
+         — it recovers or it does not"
+    );
+}
+
+/// The point of the rung: a sulking program is passed over for the machine
+/// it resents and a willing body takes it instead. **Rotated, not skipped**
+/// — skipping would leave a machine unstaffed because of whoever happened to
+/// be last in the idle list.
+#[test]
+fn a_sulking_program_is_passed_over_for_a_machine_it_resents() {
+    let mut game = Game::new(78, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (node, first) = a_base_with_an_order(&mut game);
+    let second = spawn_tamed(&mut game, 10, 3);
+    game.tick();
+    let holds = |g: &Game, w: Entity| g.world.get::<Task>(w).map(|t| t.target) == Some(node);
+    let (sour, willing) = if holds(&game, first) {
+        (first, second)
+    } else {
+        assert!(holds(&game, second), "somebody took the post");
+        (second, first)
+    };
+
+    // One maxed grudge against this machine's kind does both jobs at once:
+    // -12 lands in the sulking band, and it is the resentment the refusal
+    // reads. Pre-souring on top of it vaults the body to `DownedTools`,
+    // where it leaves the pool and this rung is never exercised.
+    let kind = game
+        .world
+        .get::<crate::components::Structure>(node)
+        .expect("a mining node is a structure")
+        .kind
+        .clone();
+    let now = game.current_tick();
+    game.world
+        .get_mut::<Memories>(sour)
+        .unwrap()
+        .0
+        .push(Memory {
+            def: MemoryId::from("jammed_here"),
+            subject: MemorySubject::Structure(kind),
+            subject_name: None,
+            reinforced: now,
+            strikes: 3,
+        });
+    game.tick();
+
+    assert_eq!(
+        game.world.get::<Disgruntled>(sour).map(|d| d.grievance),
+        Some(Grievance::Sulking),
+        "the mild rung, not the severe one"
+    );
+    assert!(
+        !holds(&game, sour),
+        "it will not work the machine it resents"
+    );
+    assert!(
+        holds(&game, willing),
+        "and the machine is staffed anyway — the body is rotated, not the \
+         post skipped"
+    );
+}
+
+/// A sulking program is **not** stood down: it takes a post it has no
+/// grudge against. This is what separates the two rungs, and a
+/// `Disgruntled`-presence check in the `on_shift` filter would collapse them.
+#[test]
+fn a_sulking_program_still_works_somewhere_it_does_not_resent() {
+    let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (node, worker) = a_base_with_an_order(&mut game);
+    game.tick();
+    assert!(game.world.get::<Task>(worker).is_some(), "posted first");
+
+    // Sulking, but the grudge names a machine kind that is not this one.
+    sour_to(&mut game, worker, crate::tuning::MORALE_SULKS_AT);
+    game.tick();
+
+    assert_eq!(
+        game.world.get::<Disgruntled>(worker).map(|d| d.grievance),
+        Some(Grievance::Sulking)
+    );
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "it holds no grudge against this machine, so it keeps working it"
     );
 }

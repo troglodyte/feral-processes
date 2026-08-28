@@ -450,7 +450,7 @@ pub struct CreatureSave {
     /// the player looked away, at a morale that had not moved. Additive
     /// behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
-    pub disgruntled: bool,
+    pub disgruntled: Option<crate::components::Grievance>,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -1429,7 +1429,7 @@ mod tests {
             equipment: Vec::new(),
             program_id: 1,
             disposition: None,
-            disgruntled: false,
+            disgruntled: None,
             memories: Vec::new(),
             needs: Default::default(),
             off_shift: None,

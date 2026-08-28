@@ -1014,8 +1014,8 @@ impl Game {
                 if c.downed {
                     entity.insert(crate::components::Downed);
                 }
-                if c.disgruntled {
-                    entity.insert(crate::components::Disgruntled);
+                if let Some(grievance) = c.disgruntled {
+                    entity.insert(crate::components::Disgruntled { grievance });
                 }
                 entity.insert((
                     ProgramId(program_id),
@@ -1462,7 +1462,7 @@ impl Game {
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
                 program_id: program_id.map(|p| p.0).unwrap_or(0),
                 disposition: disposition.copied(),
-                disgruntled: disgruntled.is_some(),
+                disgruntled: disgruntled.map(|d| d.grievance),
                 memories: memories
                     .map(|m| {
                         m.0.iter()

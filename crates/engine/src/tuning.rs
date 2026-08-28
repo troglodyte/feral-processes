@@ -3360,6 +3360,14 @@ pub const DISPOSITION_MEMORY_SWING: f32 = 0.40;
 // -8..+5 at strike caps of 3 and 4) and not against a run. They are the first
 // thing to revisit after a base has been watched.
 
+/// Morale at or below which a program will still work, but not at a machine
+/// it holds a grudge against.
+///
+/// The mild rung. **Must sit above `MORALE_DOWNS_TOOLS_AT`** or the ladder
+/// has no first step and a program goes straight from content to useless —
+/// held by `the_ladder_climbs_in_order`.
+pub const MORALE_SULKS_AT: f32 = -8.0;
+
 /// Morale at or below which a program stops taking postings altogether.
 ///
 /// Roughly two maxed grudges' worth. Above zero it would fire on a program
@@ -3368,7 +3376,7 @@ pub const MORALE_DOWNS_TOOLS_AT: f32 = -18.0;
 
 /// Morale at which a disgruntled program goes back to work.
 ///
-/// **Must stay strictly above `MORALE_DOWNS_TOOLS_AT`** — equal, the
+/// **Must stay strictly above `MORALE_SULKS_AT`** — equal, the
 /// hysteresis gap closes and the marker flickers every tick, which is the
 /// whole reason there are two numbers. Held by
 /// `the_recovery_threshold_leaves_a_hysteresis_gap`. Still below zero: a

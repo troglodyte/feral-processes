@@ -27,6 +27,51 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.42
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release draws the right-hand column differently and stores nothing new.
+
+The column's three tabs get real contents, and the old status panel comes
+out. Phase 5 of the Paned Command HUD, and the end of the ~250-line
+undifferentiated text dump the whole design was aimed at.
+
+### Added
+
+- **BASE, CREW and PACK have bodies of their own.** BASE lists the base's
+  structures with the program on each and what it is holding, then
+  production, defence, the build queue and the programs the roster has
+  spare; CREW lists the roster against its capacity and then every program
+  with its level, Integrity and what it is doing, party members first,
+  followed by the routines currently running; PACK lists what the party is
+  carrying.
+- **What does not fit is counted.** The column does not scroll, so a pane
+  that runs past its body says `+N more` on the last row rather than
+  drawing off the bottom edge in silence. The notice is itself a row and
+  is budgeted for, so it cannot be the thing that overflows.
+- **A collapsed tab says what its pane holds** — the base's structure
+  count, the crew's headcount, the units in the pack — instead of
+  `nominal`. A condition still outranks the summary, and both are built
+  from the same data as the open pane's rows, so a bar and the pane it
+  stands for cannot disagree.
+
+### Changed
+
+- **The four stats, the bars, the zone and the stock strip are no longer
+  drawn twice.** The vitals strip has carried them since phase 2 and the
+  status bar since phase 1, so what the old panel drew was a second copy.
+  The rows that had nowhere else to be — the roster, the running routines
+  and the pack — are what the three panes are.
+- **A companion's buff row names its holder on its own line** in the
+  column, as it already did, and the battle screen keeps naming it inline.
+  The column is a fixed slice of the window and cannot widen for a tag.
+
+### Removed
+
+- **`draw_status_panel`.** The column it drew is now the info column's open
+  tab, and every row it held is either in one of the three panes or was
+  already on the status bar or the vitals strip.
+
 ## 0.13.41
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

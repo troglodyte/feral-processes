@@ -560,6 +560,11 @@ pub(super) fn draw_playing_base(
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
+    // One call, shared by every surface that reads it — the status bar's
+    // badge here, and the info column's tab markers and collapsed bars once
+    // phase 4's column lands. A second derivation is what would make "a
+    // closed pane cannot hide an actionable state" a coincidence.
+    let attention = game.attention();
     let status = game.player_status();
     // `Game::active_buffs` needs `&mut self`; fetched here rather than
     // inside `draw_status_panel`, which only ever needed `&Game` before
@@ -622,6 +627,7 @@ pub(super) fn draw_playing_base(
             position: game.base_pos().unwrap_or(status.position),
             tick: game.current_tick(),
             stock: &stock_rows,
+            attention: &attention,
         },
         painter,
         m,

@@ -301,9 +301,12 @@ the game playable and independently revertible.
 | 5 | BASE / CREW / PACK contents; `draw_status_panel` deleted | the column |
 | 6 | Palette sweep across map glyph colours | colour |
 
-Phases 1-4 run with both the new chrome and the old status panel on
-screen. That is ugly for four releases and it is the price of each
-phase being revertible on its own.
+There is no doubled-chrome period. Phase 1 makes the geometry live for
+all five regions at once and **repoints** the existing status panel and
+log pane into the new `info_column` and `log_pane` rects; phases 2-5
+then replace those regions' contents one at a time. The old panel looks
+cramped in its narrower column until phase 5, which is the visible cost,
+and it is what buys each phase being revertible on its own.
 
 ## Out of scope
 

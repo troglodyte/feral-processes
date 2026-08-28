@@ -325,4 +325,10 @@ and it is what buys each phase being revertible on its own.
 - Whether the BASE tab's five blocks fit a 44-cell column at 1280x720
   without a scroll. Phase 5 may come back asking to cut one; the
   census in Part 6 is what will say so.
-- Whether the keybar has slack for `t` and `s`.
+- ~~Whether the keybar has slack for `t` and `s`.~~ **Answered in phase 3: no.**
+  `the_keybar_fits_the_log_pane` measures twelve segments fitting at 1280x720
+  and thirteen at 1920x1080 — the bar is near enough size-invariant, because
+  `ui_metrics` ramps the face with the window. The measurement also moved the
+  keybar's order off the handoff's: under that reading order `? help` and
+  `q menu` fell past the cut, stranding every key the bar had to drop, so the
+  order is priority and a named `ESSENTIAL` set says what may never go.

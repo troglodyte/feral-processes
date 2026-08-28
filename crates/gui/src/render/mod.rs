@@ -315,19 +315,7 @@ pub(super) fn refactor_tag(refactors: u32) -> String {
 /// drift, and a program would read as one colour on the grid and another on
 /// its own sheet.
 pub(super) fn glyph_color(c: GlyphColor) -> Color {
-    match c {
-        GlyphColor::White => WHITE,
-        GlyphColor::Gray => GRAY,
-        GlyphColor::Green => GREEN,
-        GlyphColor::DarkGreen => Color::new(0.0, 0.4, 0.0, 1.0),
-        GlyphColor::Red => RED,
-        GlyphColor::Yellow => YELLOW,
-        GlyphColor::Blue => BLUE,
-        GlyphColor::Magenta => MAGENTA,
-        GlyphColor::Cyan => CYAN,
-        GlyphColor::Brown => Color::new(0.55, 0.27, 0.07, 1.0),
-        GlyphColor::Orange => Color::new(1.0, 0.55, 0.0, 1.0),
-    }
+    hud::palette::glyph(c)
 }
 
 /// Pulls `color` toward its own grey, for drawing something that's present
@@ -1464,21 +1452,24 @@ mod tests {
     #[test]
     fn the_tier_colours_are_separable_from_their_neighbours() {
         let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
-        // Everything a tier bar can end up sitting against: the five
-        // `difficulty_color` outputs, the neutrals, and the other tier.
-        let neighbours = [
-            ("GREEN", GREEN),
-            ("YELLOW", YELLOW),
-            ("ORANGE", ORANGE),
-            ("RED", RED),
-            ("MAGENTA", MAGENTA),
-            ("CYAN", CYAN),
-            ("BLUE", BLUE),
-            ("TEXT", TEXT),
-            ("TEXT_DIM", TEXT_DIM),
-            ("GRAY", GRAY),
-            ("WHITE", WHITE),
-        ];
+        // Everything a tier bar can end up sitting against: every hue the
+        // glyph under it can be drawn in, the player's own role colour, and
+        // the neutrals a tier could read as a dimmed version of.
+        //
+        // Walked through `glyph_color` rather than naming the constants a
+        // creature *used* to be painted in — named, this went on measuring
+        // `render/mod.rs`'s old palette after the map had moved to
+        // `hud::palette`, which is the same failure it already caught once
+        // in the tier list below.
+        let neighbours: Vec<(String, Color)> = GlyphColor::ALL
+            .into_iter()
+            .map(|c| (format!("{c:?}"), glyph_color(c)))
+            .chain([
+                ("PLAYER".to_string(), hud::palette::PLAYER),
+                ("TEXT".to_string(), TEXT),
+                ("TEXT_DIM".to_string(), TEXT_DIM),
+            ])
+            .collect();
         // Walks `Rarity::ALL` through `rarity_color` rather than naming the
         // colour constants: named, this checked exactly the two rungs that
         // existed when it was written and went on passing when two more were
@@ -1493,12 +1484,12 @@ mod tests {
             "every rung above Ordinary needs a colour"
         );
         for (tier, colour) in &tiers {
-            for (other_name, other) in neighbours {
+            for (other_name, other) in &neighbours {
                 assert!(
-                    dist(*colour, other) > 0.25,
+                    dist(*colour, *other) > 0.25,
                     "{tier:?} is only {:.2} from {other_name} — it would read \
                      as that colour in a two-pixel bar",
-                    dist(*colour, other)
+                    dist(*colour, *other)
                 );
             }
         }

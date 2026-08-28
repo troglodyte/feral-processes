@@ -625,6 +625,42 @@ pub(crate) fn painted_runs_in(
         .collect()
 }
 
+/// Every run `with_painter` recorded in the **map** face, with the colour it
+/// was painted in.
+///
+/// `painted_runs_in` filters on an exact colour and would find nothing here:
+/// the map dims everything it draws by `vignette` and by a per-tile shade, so
+/// a glyph's colour is its role's colour multiplied by something just under
+/// one. A caller wants the distance, which means it needs the colour back.
+#[cfg(test)]
+pub(crate) fn painted_map_glyphs(shapes: &[egui::epaint::ClippedShape]) -> Vec<(String, Color)> {
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Text(t) => Some(&t.galley.job),
+            _ => None,
+        })
+        .flat_map(|job| {
+            job.sections
+                .iter()
+                .filter(|section| section.format.font_id.family == Face::Map.family())
+                .map(|section| {
+                    let c = section.format.color;
+                    (
+                        job.text[section.byte_range.start.0..section.byte_range.end.0].to_string(),
+                        Color::new(
+                            c.r() as f32 / 255.0,
+                            c.g() as f32 / 255.0,
+                            c.b() as f32 / 255.0,
+                            c.a() as f32 / 255.0,
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 /// The width of every `Shape::Rect` `with_painter` recorded. `render/`
 /// deliberately never names the graphics library directly (see this file's
 /// module doc) — this stays that boundary's one exception, so a test that

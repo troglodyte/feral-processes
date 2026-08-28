@@ -16,27 +16,20 @@
 //! these constants for a raw colour is how a reservation lapses, and a
 //! lapsed reservation is invisible until the screen stops meaning anything.
 //!
+//! **This is the handoff's table minus what the game does not draw.** It was
+//! transcribed whole and carried a `dead_code` allow while the phases
+//! consumed it; with the last of them landed, the four entries still
+//! suppressed — an idle log channel, an alert row's background tint, a
+//! keycap chip's, and a second body grey — were dropped rather than left
+//! standing as colour nothing paints. The handoff still documents them if
+//! anything ever wants them.
+//!
 //! Scope is the HUD and the map's entity glyphs. The popup screens keep
 //! `render/mod.rs`'s colours; they draw *over* the HUD, so the seam between
 //! the two palettes is not visible in play.
 
-// The table is transcribed whole rather than grown a phase at a time, and
-// that is a deliberate exception to this repo's delete-what-is-unused rule.
-// The reservations below are the load-bearing part of the design, and the
-// two tests that hold them — `the_reserved_roles_are_separable` and
-// `every_content_role_is_opaque` — can only assert them over the complete
-// set. Trimming to what phase 1 paints would delete THREAT and ATTENTION,
-// and with them the only thing checking that "act" and "harm" stay
-// distinguishable.
-//
-// This allow is self-liquidating: phases 2, 3 and 4 have consumed
-// PANE_TITLE, the CH_* channels and KEYBAR_DIVIDER, and ATTENTION, THREAT,
-// HEALTHY and DIVIDER; phase 5 takes ALERT_ROW_BG and KEYCAP_BG, phase 6
-// PLAYER and MAP_FLOOR. **Delete this attribute when phase 6 lands** — if it still suppresses anything then,
-// that entry is genuinely unused and should go instead.
-#![allow(dead_code)]
-
 use crate::paint::Color;
+use feral_processes_engine::components::GlyphColor;
 
 /// One opaque colour from the hex form the handoff writes.
 const fn rgb(hex: u32) -> Color {
@@ -58,6 +51,10 @@ pub(in crate::render) const ATTENTION: Color = rgb(0xe3b341);
 pub(in crate::render) const THREAT: Color = rgb(0xf26d6d);
 /// green — a healthy bar fill, and the calm `ALL NOMINAL` state.
 pub(in crate::render) const HEALTHY: Color = rgb(0x4fa65b);
+/// yellow — a caution that resolves itself. A machine short of input, a
+/// worker walking to its post: the dimmer of the two yellows, because
+/// waiting fixes it and [`ATTENTION`] is what the player must get up for.
+pub(in crate::render) const WARN: Color = rgb(0xb8943f);
 /// br cyan — pane titles on their borders.
 pub(in crate::render) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.
@@ -77,7 +74,6 @@ pub(in crate::render) const CH_FIELD: Color = rgb(0x3fa9b5);
 pub(in crate::render) const CH_GAIN: Color = rgb(0x4a7fd0);
 pub(in crate::render) const CH_BASE: Color = rgb(0x7ee787);
 pub(in crate::render) const CH_DEFEND: Color = rgb(0xf26d6d);
-pub(in crate::render) const CH_IDLE: Color = rgb(0xe3b341);
 
 // ---------------------------------------------------------------------------
 // Chrome — fills, rules and troughs. Outside the 16 content entries.
@@ -88,13 +84,66 @@ pub(in crate::render) const PANE_BORDER: Color = rgb(0x1d2a36);
 pub(in crate::render) const BAR_TROUGH: Color = rgb(0x1b2733);
 pub(in crate::render) const DIVIDER: Color = rgb(0x141e26);
 pub(in crate::render) const KEYBAR_DIVIDER: Color = rgb(0x243040);
-pub(in crate::render) const ALERT_ROW_BG: Color = rgb(0x141410);
-pub(in crate::render) const KEYCAP_BG: Color = rgb(0x20241a);
-pub(in crate::render) const MAP_FLOOR: Color = rgb(0x1c2c3a);
-/// A field's label, as against [`SECONDARY`] for its value.
+/// A field's label, as against `BODY` for its value.
 pub(in crate::render) const FIELD_LABEL: Color = rgb(0x5c6773);
-pub(in crate::render) const SECONDARY: Color = rgb(0x8b97a5);
 pub(in crate::render) const FAINT: Color = rgb(0x4a5563);
+
+// ---------------------------------------------------------------------------
+// The map's content hues
+// ---------------------------------------------------------------------------
+
+/// What a `GlyphColor` is drawn in — the map's entity glyphs, and the same
+/// program's glyph wherever a screen shows it.
+///
+/// Addressed by the authored hue rather than by a colour, which is what keeps
+/// the two reservations above intact: [`ATTENTION`] appears nowhere in this
+/// table, since a hostile that would beat you is not a thing you must get up
+/// and do, and [`THREAT`] is reached only by the rung `difficulty_color`
+/// paints a creature that would.
+///
+/// `components::GlyphColor` is content's vocabulary — every species and
+/// structure file authors one of these eleven names — so this is a hue table
+/// and not a role table, and it is exhaustive for `cell_mark`'s reason: a
+/// twelfth hue must not compile until someone has said what it looks like.
+///
+/// Nine of the eleven are entries in the handoff's sixteen. **Brown and
+/// orange are not in it**, and stand outside it the way the chrome greys do:
+/// collapsing either onto its nearest entry would make two authored hues
+/// indistinguishable, and a Mining Node that reads as a Lathe — or a con
+/// ladder whose top two rungs read alike — is worse than a hue outside the
+/// table. Both are drawn at the table's saturation, which is what keeps them
+/// from reading as louder than the sixteen they sit among.
+pub(in crate::render) fn glyph(c: GlyphColor) -> Color {
+    match c {
+        // br white and white: the two neutral glyph entries, in the order
+        // the handoff assigns them — `H` and `&` bright, `R`/`T`/`o` body.
+        GlyphColor::White => EMPHASIS,
+        GlyphColor::Gray => BODY,
+        // The two greens, brighter first: br green is the handoff's own pet
+        // glyph, and green the bar fill a dark-green thing sits nearest.
+        GlyphColor::Green => rgb(0x7ee787),
+        GlyphColor::DarkGreen => HEALTHY,
+        GlyphColor::Red => THREAT,
+        GlyphColor::Yellow => WARN,
+        // `difficulty_color`'s third rung, between a caution and the thing
+        // that will kill you, and it has to stay clear of both. The table's
+        // other red — entry 1, its damage-number red — is far enough from br
+        // red by channel distance and is still the wrong colour here: the
+        // two are the same *hue* and differ mostly in lightness, which the
+        // map's vignette is free to eat, so the top two rungs of the ladder
+        // would read as one. This one climbs in hue, and
+        // `the_con_ladder_gets_hotter_at_every_rung` is what says by how
+        // much.
+        GlyphColor::Orange => rgb(0xe07a3c),
+        // The loud halves of blue and magenta: both are `difficulty_color`
+        // spending a creature's whole colour on one fact — a nemesis, a boss
+        // — so neither may read as ordinary ground.
+        GlyphColor::Blue => rgb(0x4a7fd0),
+        GlyphColor::Magenta => rgb(0xcf8ee0),
+        GlyphColor::Cyan => rgb(0x3fa9b5),
+        GlyphColor::Brown => rgb(0x8a6a3a),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -106,6 +155,102 @@ mod tests {
             (c.g * 255.0).round() as u8,
             (c.b * 255.0).round() as u8,
         )
+    }
+
+    fn dist(a: Color, b: Color) -> f32 {
+        (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs()
+    }
+
+    /// **The reservation, asserted where content could take it.** Every hue
+    /// in [`glyph`] is authored in an asset file, by anyone, for anything —
+    /// so if br yellow were reachable from that table, a modded structure
+    /// could wear the colour the status bar uses for "you must act" and the
+    /// badge would stop meaning anything.
+    ///
+    /// br red is reachable, from exactly one hue: the rung
+    /// `difficulty_color` paints a creature that would beat you, which is
+    /// hostility and is what the colour is for.
+    #[test]
+    fn no_content_hue_takes_a_reserved_role_by_accident() {
+        for c in GlyphColor::ALL {
+            assert_ne!(
+                glyph(c),
+                ATTENTION,
+                "{c:?} wears ATTENTION, which is the HUD's alone"
+            );
+            if glyph(c) == THREAT {
+                assert_eq!(
+                    c,
+                    GlyphColor::Red,
+                    "{c:?} wears THREAT, which only the deadly rung may"
+                );
+            }
+        }
+    }
+
+    /// Eleven hues authored by content, drawn one glyph to a tile over a
+    /// tinted biome and dimmed by a vignette — two that read alike are two
+    /// things the player cannot tell apart on the map.
+    ///
+    /// The separation and not the literals, `the_tier_colours_are_separable
+    /// _from_their_neighbours`' rule, so a retune is free to move any of
+    /// them. `PLAYER` is in the walk because the map draws it as a glyph
+    /// beside the rest.
+    #[test]
+    fn every_content_hue_is_separable_from_the_others() {
+        let mut hues: Vec<(String, Color)> = GlyphColor::ALL
+            .into_iter()
+            .map(|c| (format!("{c:?}"), glyph(c)))
+            .collect();
+        hues.push(("PLAYER".to_string(), PLAYER));
+        for (i, (name, colour)) in hues.iter().enumerate() {
+            for (other_name, other) in hues.iter().skip(i + 1) {
+                assert!(
+                    dist(*colour, *other) > 0.25,
+                    "{name} is only {:.2} from {other_name}",
+                    dist(*colour, *other)
+                );
+            }
+        }
+    }
+
+    /// `difficulty_color`'s four rungs are one read — "can I win this fight"
+    /// — and a ladder has to climb. Warmth is the axis it climbs on, so each
+    /// rung carries more red over green than the one below it, **by a
+    /// margin**: the bare inequality passes against two reds that differ
+    /// only in lightness, which is what the map's vignette is free to eat.
+    /// That is the assertion `every_content_hue_is_separable_from_the_others`
+    /// cannot make — channel distance cannot see that two colours are the
+    /// same hue.
+    ///
+    /// Named rather than walked, because the order *is* the assertion: the
+    /// engine's ladder runs easy → even → tough → deadly, and this says the
+    /// colours agree with it.
+    #[test]
+    fn the_con_ladder_gets_hotter_at_every_rung() {
+        /// The smallest step the shipped ladder takes is 0.12, and entry 1's
+        /// red as the third rung would take one of 0.06.
+        const MARGIN: f32 = 0.10;
+        let warmth = |c: GlyphColor| {
+            let c = glyph(c);
+            c.r - c.g
+        };
+        let rungs = [
+            GlyphColor::Green,
+            GlyphColor::Yellow,
+            GlyphColor::Orange,
+            GlyphColor::Red,
+        ];
+        for pair in rungs.windows(2) {
+            assert!(
+                warmth(pair[1]) - warmth(pair[0]) > MARGIN,
+                "{:?} ({:.2}) is not clearly hotter than {:?} ({:.2})",
+                pair[1],
+                warmth(pair[1]),
+                pair[0],
+                warmth(pair[0])
+            );
+        }
     }
 
     /// The one thing `rgb` can get wrong: a shifted or masked channel. Every
@@ -167,8 +312,14 @@ mod tests {
             ("CH_GAIN", CH_GAIN),
             ("CH_BASE", CH_BASE),
             ("CH_DEFEND", CH_DEFEND),
-            ("CH_IDLE", CH_IDLE),
-        ] {
+            ("WARN", WARN),
+        ]
+        .into_iter()
+        .chain(
+            GlyphColor::ALL
+                .into_iter()
+                .map(|c| ("a content hue", glyph(c))),
+        ) {
             assert_eq!(c.a, 1.0, "{name} is not opaque");
         }
     }

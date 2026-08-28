@@ -82,7 +82,7 @@ pub(super) fn draw_build_menu(
             let raw_cost = game.structure_build_cost(def);
             let cost = build_cost_display(game, &raw_cost, &status.inventory, &stock);
             BuildEntry {
-                label: format!("{} - {}", def.name, cost.join(", ")),
+                label: format!("{} - {}", def.name, build_cost_label(&cost)),
                 description: def.description.clone(),
                 category: def.category(),
             }
@@ -103,13 +103,32 @@ pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String
         Row::TextColored(name.to_string(), YELLOW),
         Row::TextColored(description.to_string(), TEXT_DIM),
         text_row(""),
-        text_row(format!("Costs {}", cost.join(", "))),
+        // A waived bill is empty rather than zeroed (see
+        // `StructureDef::first_free`), so the sentence is phrased here and
+        // not filled in from nothing: `Costs ` with the figures missing
+        // reads as the screen having failed to load them.
+        text_row(if cost.is_empty() {
+            "Free to deploy".to_string()
+        } else {
+            format!("Costs {}", cost.join(", "))
+        }),
         text_row(""),
         text_row(DIRECTION_PROMPT),
     ]
 }
 
 const DIRECTION_PROMPT: &str = "Choose a direction to deploy (arrows/hjkl), Esc to cancel";
+
+/// What the build menu writes after a structure's name. A waived bill (see
+/// `StructureDef::first_free`) has no rows at all, and a row that trailed
+/// off after the dash read as a structure whose cost had failed to load.
+fn build_cost_label(cost: &[String]) -> String {
+    if cost.is_empty() {
+        "free".to_string()
+    } else {
+        cost.join(", ")
+    }
+}
 
 /// The compass the build menu hands off to. Drawn `Large` rather than `Small`
 /// like the other direction prompts because it carries a structure's
@@ -1076,6 +1095,31 @@ mod tests {
             "the cost carries the have/need figures the refusal would otherwise be the first news of: {text:?}"
         );
         assert!(text.contains(&DIRECTION_PROMPT), "{text:?}");
+    }
+
+    /// A waived bill has no rows to join, and both screens that quote one
+    /// have to say so in words. Left to `join`, the menu row trailed off
+    /// after its dash and the prompt read "Costs " — which is what a screen
+    /// that failed to load a price looks like, not a free structure.
+    #[test]
+    fn a_waived_bill_reads_as_free_on_both_screens_that_quote_it() {
+        assert_eq!(build_cost_label(&[]), "free");
+        assert_eq!(
+            build_cost_label(&["Core Fragment (5/12)".to_string()]),
+            "Core Fragment (5/12)",
+            "and a bill that exists is still quoted in full"
+        );
+
+        let rows = build_direction_rows("Contract Broker", "Posts work.", &[]);
+        let text: Vec<&str> = rows.iter().map(row_text).collect();
+        assert!(
+            text.contains(&"Free to deploy"),
+            "the deploy prompt says it in a sentence rather than quoting an empty bill: {text:?}"
+        );
+        assert!(
+            !text.iter().any(|t| t.starts_with("Costs")),
+            "and does not also quote a cost: {text:?}"
+        );
     }
 
     #[test]

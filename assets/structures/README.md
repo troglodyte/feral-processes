@@ -245,6 +245,24 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (fused copies included) and supplies.
     zone_portal: true,
 
+    // Optional; can be left out entirely (defaults to false). If true, the
+    // run's *first* one of these costs nothing: `build_cost` above is waived
+    // until one has actually been raised, and charged in full for every one
+    // after that. The shipped Contract Broker is the one structure that sets
+    // it — contracts are what onboards a new run, so the board comes free.
+    //
+    // The waiver is spent when a structure is *raised*, not when the deploy
+    // is filed, so a request the player cancels does not burn it. A request
+    // still standing as a build site counts against it too, exactly as it
+    // counts against `max_deployed` below: two filed side by side are not
+    // both free.
+    //
+    // One per run, and not per zone — the base travels through a breach and
+    // so does whatever is standing in it. Removing a free structure still
+    // refunds the usual share of what the def says it costs, which is the
+    // one place a player is handed something for a bill nobody paid.
+    first_free: true,
+
     // Optional; can be left out entirely (defaults to false). If true, this
     // structure is a Contract Broker: standing near it opens the contracts
     // screen with what the sector is currently offering, and it is where a

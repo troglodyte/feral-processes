@@ -362,6 +362,44 @@ fn every_shipped_assembler_recipe_is_a_single_ingredient() {
     );
 }
 
+/// `StructureDef::first_free` is authored by exactly one shipped structure,
+/// and it is the Broker.
+///
+/// A `#[serde(default)]` schema field can be documented, read and tested
+/// while no shipped file authors it — which is how `AbilityDef::spread`
+/// shipped across several releases used by none of 77 ability files. The
+/// waiver is only reachable in a real run through this one asset, so the
+/// asset is what the census is over.
+///
+/// The bill it waives is asserted alongside: `first_free` on a structure
+/// that costs nothing is a flag with nothing to do, and the free half of
+/// `construction::the_first_broker_is_free_and_the_next_one_is_not` would
+/// pass against it.
+#[test]
+fn the_broker_is_the_one_structure_the_first_of_which_is_free() {
+    let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let free: Vec<String> = game
+        .structure_defs()
+        .into_iter()
+        .filter(|def| def.first_free)
+        .map(|def| def.id)
+        .collect();
+    assert_eq!(
+        free,
+        vec!["contract_broker".to_string()],
+        "the Broker is the run's onboarding, and nothing else is handed out"
+    );
+    let broker = game
+        .structure_defs()
+        .into_iter()
+        .find(|def| def.id == "contract_broker")
+        .expect("the shipped assets carry a Contract Broker");
+    assert!(
+        !broker.build_cost.is_empty(),
+        "a waiver over an empty bill waives nothing"
+    );
+}
+
 /// The other half of that press, and the one the recipe ceiling above can't
 /// see: a `work.produces` structure makes its item out of nothing on a
 /// timer, so the item's *value* is a Credit-per-tick rate. The Compiler

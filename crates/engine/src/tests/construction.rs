@@ -706,14 +706,23 @@ fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
     game.place_structure("depot", 1, 0).unwrap();
 
+    // Sampled across the window, never at its end. The moment the node makes
+    // a unit the site stops being dry, so one body alternates between the two
+    // — mine one, carry it over, go back — which is the behaviour this feature
+    // wants and not something to assert a phase of. Which leg tick 200 lands
+    // on moves with anything that shifts the RNG stream by a draw, including
+    // changes nowhere near the scheduler; the deadlock itself does not move,
+    // because it posts the body to the dry site on the first schedule and
+    // never frees it. *Ever* working the node is what tells the two apart.
+    let mut worked_the_node = false;
     for _ in 0..200 {
         game.tick();
+        worked_the_node |= game
+            .world
+            .get::<Task>(body)
+            .is_some_and(|t| t.kind == TaskKind::GatherResource && t.target == node);
     }
 
-    let worked_the_node = game
-        .world
-        .get::<Task>(body)
-        .is_some_and(|t| t.kind == TaskKind::GatherResource && t.target == node);
     assert!(
         worked_the_node,
         "the body must go back to the node that makes what the site is waiting for — \

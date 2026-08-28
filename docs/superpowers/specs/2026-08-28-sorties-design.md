@@ -1,4 +1,4 @@
-# Expedition groups
+# Sorties
 
 **Status:** approved, not implemented
 **Date:** 2026-08-28
@@ -15,11 +15,11 @@ faucet.
 
 ## The thesis
 
-Progression is earned by fighting. An expedition pays out without the player
+Progression is earned by fighting. A sortie pays out without the player
 in the fight, so it has to pay for itself four ways at once, and the design
 was chosen with all four live:
 
-1. **Bodies.** An expedition program is not `Staff`, so it works no machine,
+1. **Bodies.** A sortie program is not `Staff`, so it works no machine,
    hauls nothing and digs nothing for the whole trip.
 2. **Materials.** Provisioning is charged from base stock at dispatch.
 3. **Real risk.** The programs take real damage from real swings and can be
@@ -30,26 +30,27 @@ was chosen with all four live:
 
 ## Naming
 
-`expedition` is already used in prose in this repo to mean *the player's own
-outing from base* — `difficulty.rs:140` and `:281` ("a reboot ends the
-expedition"), `components.rs:1138`, and the Repair Bay spec's "the expedition
-is the unit of risk". It is not an identifier anywhere, so this is a prose
-collision rather than a compile-time one, and it is weaker than the
-`run`/`runner` collision `CLAUDE.md` records.
+The word is **sortie** throughout — the type is `Sortie`, the role variant is
+`ProgramRole::Sortie`, the catalogue is `assets/sorties/`.
 
-It is still worth settling before implementation, because this feature would
-make the word ambiguous in exactly the documents that currently use it
-loosely. **Recommendation: `Sortie`**, which has no existing meaning here and
-fits the register. This spec is written in `expedition` because that is the
-word the request used; a rename is a find-and-replace on a spec, and a
-nightmare on a shipped feature.
+It is deliberately *not* `expedition`, which this repo already uses in prose
+to mean **the player's own outing from base**: `difficulty.rs:140` and `:281`
+("a reboot ends the expedition"), `components.rs:1138`, and the Repair Bay
+spec's "the expedition is the unit of risk". None of those is an identifier,
+so the collision was prose-only and weaker than the `run`/`runner` case
+`CLAUDE.md` records — but it sits in exactly the documents that would have to
+stay unambiguous once a squad you dispatch is also called an expedition.
+Settled before implementation for that reason; a rename is a find-and-replace
+on a spec and a nightmare on a shipped feature.
+
+Those existing prose uses are left alone. They are correct as written.
 
 ## Part 1 — The role
 
 `ProgramRole` gains a fourth variant:
 
 ```
-Wielded, InParty, Expedition, Staff
+Wielded, InParty, Sortie, Staff
 ```
 
 ordered after `InParty` and ahead of the `Staff` fallback, keeping the rule
@@ -77,7 +78,7 @@ The last row is the "bodies" cost made visible, and it costs no code.
 
 **Needs keep draining while a program is away and nothing services them.**
 This is deliberate and also free: `step_off_shift` is reached only from
-`drift_idle_staff`, which no longer sees them, so an off-shift expedition
+`drift_idle_staff`, which no longer sees them, so an off-shift sortie
 member simply never walks anywhere. A long trip returns frayed programs that
 then want an amenity. No exclusion is needed and none should be added.
 
@@ -97,7 +98,7 @@ the engine.
 
 ### Reach
 
-`Game::expedition_reach` mirrors `Game::broker_reach`, returning three states:
+`Game::sortie_reach` mirrors `Game::broker_reach`, returning three states:
 
 ```
 NoRelay | OffBase | AtRelay
@@ -115,18 +116,18 @@ stale on this point. It does not measure the distance to the Relay: a Relay
 stands on laid floor by construction, so its tile says nothing the base does
 not.
 
-The base menu's row test calls `expedition_reach`, **not** `expedition_board`
+The base menu's row test calls `sortie_reach`, **not** `sortie_board`
 — the board rolls a full set of sites before it can answer, which is the
 exact trap `CLAUDE.md` records for the Broker's own row test.
 
 ## Part 3 — The board
 
-`Game::expedition_board` is **derived, never stored** — the Broker board's
+`Game::sortie_board` is **derived, never stored** — the Broker board's
 rule, and for the Broker board's reasons.
 
 It is recomputed on every read from three values already in the save: the
-world seed, `ZoneLevel`, and `clock / EXPEDITION_BOARD_ROTATION_TICKS`,
-folded with `EXPEDITION_SALT`. Consequences:
+world seed, `ZoneLevel`, and `clock / SORTIE_BOARD_ROTATION_TICKS`,
+folded with `SORTIE_SALT`. Consequences:
 
 - **No save field.** Nothing about the board is written.
 - **No save-scumming.** Reloading reproduces the identical board, because the
@@ -135,31 +136,31 @@ folded with `EXPEDITION_SALT`. Consequences:
 - **No `GameRng` draw.** A draw here would not survive a reload and would
   shift every later roll in the run — `stack::generate`'s rule.
 
-Sites come from `assets/expeditions/*.ron`, each authoring a name, a blurb,
+Sites come from `assets/sorties/*.ron`, each authoring a name, a blurb,
 a **risk offset** (steps above the zone baseline) and a **battle-count range**. The board rolls three per
 epoch, and rolls each site's battle count within its range off the same
 board seed — so the count is fixed the moment the offer appears, not at
 dispatch, and the screen can quote it.
 
-**An absent `assets/expeditions/` directory loads silently empty**, which
+**An absent `assets/sorties/` directory loads silently empty**, which
 means no board and no feature — `assets/needs/` and `assets/memories/`'
 property, and the same rule applies: never gate a system or a screen on the
-directory being non-empty. Deleting it restores the pre-expedition game.
+directory being non-empty. Deleting it restores the pre-sortie game.
 
 ## Part 4 — Dispatch
 
-`Game::dispatch_expedition(row, members)`.
+`Game::dispatch_sortie(row, members)`.
 
 **Every refusal lands before anything is spent** — `commit_caravan_basket`'s
 rule. In order:
 
-1. `expedition_reach() != AtRelay`.
+1. `sortie_reach() != AtRelay`.
 2. A named member is not `ProgramRole::Staff` — party and wielded programs are
    refused, so the player unparties first. This is deliberate: seconding a
    party member should be an explicit act, not a side effect of a dispatch
    screen.
 3. A named member is `Downed`.
-4. A named member is below `EXPEDITION_MIN_HP_FRACTION` of max HP. Sending a
+4. A named member is below `SORTIE_MIN_HP_FRACTION` of max HP. Sending a
    hurt program on a twenty-fight trip is the mistake the abort rule below
    cannot save you from, because it fires on the first battle.
 5. The dispatch would leave the base with **no** staff at all. Production
@@ -175,12 +176,12 @@ line is logged.
 **The record stores the whole resolved target**, never a board index or an
 id. `ActiveContract` stores the whole resolved `ContractDef` for exactly this
 reason: a board that rotates while the squad is out, or an
-`assets/expeditions/` file edited between sessions, must not be able to
+`assets/sorties/` file edited between sessions, must not be able to
 rewrite or strand a trip already in flight.
 
 ## Part 5 — The trip
 
-`Game::run_expedition` is a **`Game` method, not a bevy system** —
+`Game::run_sortie` is a **`Game` method, not a bevy system** —
 `run_dig_crew` and `run_repair_bays`' reason. It names programs through
 `creature_label`, it logs, and it damages through `apply_damage`; a bevy
 system would have to be a second copy of all three.
@@ -191,9 +192,9 @@ Derived, never authored — `BuildSite::required_ticks`' rule, which comes off
 the stored cost and is never written beside it.
 
 ```
-duration = EXPEDITION_TRAVEL_BASE_TICKS
-         + EXPEDITION_TRAVEL_PER_RISK_TICKS * risk_offset
-         + EXPEDITION_TICKS_PER_BATTLE      * battles
+duration = SORTIE_TRAVEL_BASE_TICKS
+         + SORTIE_TRAVEL_PER_RISK_TICKS * risk_offset
+         + SORTIE_TICKS_PER_BATTLE      * battles
 ```
 
 **`risk_offset` is the site's own step above the zone baseline, never the
@@ -221,8 +222,8 @@ the other.
 **Two guards on the formula.**
 
 *The board quotes the duration through the same call the trip uses.* One
-`Game::expedition_duration(...)`, read by the Relay screen and by
-`dispatch_expedition` alike — `views::BuildOrderRow`'s rule that every figure
+`Game::sortie_duration(...)`, read by the Relay screen and by
+`dispatch_sortie` alike — `views::BuildOrderRow`'s rule that every figure
 on a screen is a call rather than a copy. A screen quoting one number while
 the countdown runs another is precisely the failure that rule exists for.
 
@@ -239,7 +240,7 @@ Battles fire at even intervals across the middle of the trip, with travel
 split half out and half back.
 
 **Each battle resolves atomically inside a single tick**: spawn, fight,
-despawn, all before `run_expedition` returns. This is the load-bearing
+despawn, all before `run_sortie` returns. This is the load-bearing
 decision of the whole feature. No bevy system runs mid-method, so the
 hostiles are never observed by the map, the examine ray, `cull_to_cap`,
 `ensure_local_population` or anything else — which means the feature does not
@@ -302,14 +303,14 @@ The cap is earned rather than tuned, from two mechanisms already in the game:
 - **No rest out there.** HP persists across the whole run of battles, offset
   only by provisions.
 
-An explicit `EXPEDITION_XP_MULTIPLIER` below 1.0 is the third lever and the
+An explicit `SORTIE_XP_MULTIPLIER` below 1.0 is the third lever and the
 only tuned one. It exists so the cap can be adjusted without disturbing the
 two mechanisms above.
 
 ### Attrition and the abort rule
 
 **Provisions restore HP between battles** at a flat rate
-(`EXPEDITION_PROVISION_HEAL`), through `restore_hp`. This gives the
+(`SORTIE_PROVISION_HEAL_FRACTION`), through `restore_hp`. This gives the
 provisioning cost a mechanical role instead of being a toll, and it is the
 single dial that decides whether a twenty-fight trip is survivable.
 
@@ -346,13 +347,13 @@ Loot lands through `stock::return_to_depots`. **What does not fit is logged,
 never dropped in silence** — that function's existing rule.
 
 Dispatch and return each log one line. The summary is
-`views::ExpeditionReport`, derived from the stored record: who went, what they
+`views::SortieReport`, derived from the stored record: who went, what they
 fought, what came back, who was hurt. Every figure a call, `BuildOrderRow`'s
 rule.
 
 ## Part 7 — Save format
 
-`resources::Expeditions` is a new saved resource holding the in-flight
+`resources::Sorties` is a new saved resource holding the in-flight
 records: members, the fully resolved target, ticks elapsed and total, battles
 done and total, and accumulated loot.
 
@@ -367,34 +368,34 @@ does not save you from.
 
 All in `tuning.rs`, in a labelled section, never inline in a formula:
 
-`EXPEDITION_SALT` is its own constant and never a reused one, following
-`CARAVAN_SALT`'s idiom. `EXPEDITION_PROVISION_HEAL_FRACTION` is a fraction of
+`SORTIE_SALT` is its own constant and never a reused one, following
+`CARAVAN_SALT`'s idiom. `SORTIE_PROVISION_HEAL_FRACTION` is a fraction of
 `max_hp` rather than flat HP, so provisioning keeps meaning something at the
-level cap. `EXPEDITION_BOARD_ROTATION_TICKS` is longer than the longest trip,
+level cap. `SORTIE_BOARD_ROTATION_TICKS` is longer than the longest trip,
 so a board cannot rotate twice while you are deliberating over it.
 
 ```
-EXPEDITION_TRAVEL_BASE_TICKS        = 150
-EXPEDITION_TRAVEL_PER_RISK_TICKS    =  75
-EXPEDITION_TICKS_PER_BATTLE         =  20
-EXPEDITION_BOARD_ROTATION_TICKS     = 1200
-EXPEDITION_BOARD_SLOTS              =    3
-EXPEDITION_SALT                     = 0xE7ED_1710_5EED_0003
-EXPEDITION_MIN_HP_FRACTION          = 0.5
-EXPEDITION_PROVISION_HEAL_FRACTION  = 0.15
-EXPEDITION_XP_MULTIPLIER            = 0.6
+SORTIE_TRAVEL_BASE_TICKS        = 150
+SORTIE_TRAVEL_PER_RISK_TICKS    =  75
+SORTIE_TICKS_PER_BATTLE         =  20
+SORTIE_BOARD_ROTATION_TICKS     = 1200
+SORTIE_BOARD_SLOTS              =    3
+SORTIE_SALT                     = 0xE7ED_1710_5EED_0003
+SORTIE_MIN_HP_FRACTION          = 0.5
+SORTIE_PROVISION_HEAL_FRACTION  = 0.15
+SORTIE_XP_MULTIPLIER            = 0.6
 ```
 
 ## Part 9 — Testing
 
 Beyond per-function unit tests, the properties worth pinning:
 
-**Role.** An expedition member is never posted by `schedule_base_labour`,
+**Role.** A sortie member is never posted by `schedule_base_labour`,
 never moved by `drift_idle_staff`, never sealed by `base_entropy_system`, and
 not drawn on the surface map or nameable by the examine ray. Five assertions,
 because each is a different mechanism.
 
-**Atomicity.** Entity count before and after `run_expedition` is equal, and
+**Atomicity.** Entity count before and after `run_sortie` is equal, and
 no `Creature` exists at the sentinel position afterwards. This is the one
 that catches the whole "which space is this?" bug class.
 
@@ -413,13 +414,13 @@ not earlier.
 **Difficulty split.** The same wipe benches under Forgiving and dissolves
 under Permadeath, and the Forgiving casualty keeps its roster slot.
 
-**Empty catalogue.** With `assets/expeditions/` absent, the game runs, the
+**Empty catalogue.** With `assets/sorties/` absent, the game runs, the
 Relay row does not offer, and nothing panics.
 
-**Balance.** Expedition XP per tick must sit below what the same programs
+**Balance.** Sortie XP per tick must sit below what the same programs
 earn fighting alongside the player. `balance_sim` models no base production
 and no abilities, so it cannot gate this — the assertion belongs in the
-expedition tests, over the real assets.
+sortie tests, over the real assets.
 
 ## Part 10 — Deliberately not in scope
 
@@ -435,11 +436,11 @@ expedition tests, over the real assets.
 
 ## Open decisions
 
-1. **The name.** `expedition` versus `Sortie` — see Naming. Settle before
-   implementation.
-2. **The risk axis.** The board varies sites by a risk offset applied to
-   `Game::danger_steps`, reusing the existing curve. The alternative is an authored per-site risk
-   tier mapping onto a band, which gives finer authoring control at the cost
-   of a second difficulty vocabulary. This spec assumes `danger_band`.
-3. **The Relay's own name and cost**, and which research node gates it —
-   content decisions, settled in the `.ron` files rather than here.
+None outstanding. Two were settled at approval:
+
+- **The name** is `Sortie` — see Naming.
+- **The risk axis** is an offset applied to `Game::danger_steps`, reusing the
+  existing curve, rather than a second authored difficulty vocabulary.
+
+One content decision remains, and belongs in the `.ron` files rather than
+here: the Relay's own cost, and which research node gates it.

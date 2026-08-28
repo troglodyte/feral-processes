@@ -1,7 +1,5 @@
 //! The map screen: terrain, entities, effects, and the status panel beside them.
 
-use super::bars::*;
-use super::field::draw_status_buffs;
 use super::stack::draw_stack;
 use super::*;
 use feral_processes_engine::views::drawn_on_surface_map;
@@ -620,19 +618,63 @@ pub(super) fn draw_playing_base(
         );
     }
 
+    // The BASE blocks are base-space only, and `structure_report` walks
+    // every structure — gathered behind the same test the pane draws them
+    // behind rather than every frame the party spends on the surface.
+    let in_base = game.in_base();
+    let (structures, builds, labour) = if in_base {
+        (
+            game.structure_report(),
+            game.build_order_report(),
+            game.labour_demand(),
+        )
+    } else {
+        (Vec::new(), Vec::new(), Default::default())
+    };
+    let pets = game.owned_pets();
+    // `Game::copy_name` is the one place a copy's name is built, and it needs
+    // the borrow this data outlives — so the names are resolved here rather
+    // than the pane being handed a `Game`.
+    let pack: Vec<hud::panes::PackRow> = status
+        .inventory
+        .iter()
+        .map(|row| hud::panes::PackRow {
+            qty: row.qty,
+            name: game.copy_name(&row.copy),
+            tier: row.copy.tier,
+        })
+        .collect();
+    let pane = hud::panes::PaneData {
+        roster: (status.pet_count, status.pet_capacity),
+        carrying: status.inventory_used,
+        buffs: &buffs,
+        pack: &pack,
+        pets: &pets,
+        structures: &structures,
+        stock: &stock_rows,
+        builds: &builds,
+        labour,
+        shielded: game.raid_defense_active(),
+        in_base,
+    };
+
     // The column draws its own fill and frame and hands back the body rect;
-    // the panel then draws its rows into that. Phase 5 replaces the panel
-    // with the BASE/CREW/PACK contents and this call goes with it.
+    // the open pane's rows are then fitted to it and drawn. The column does
+    // not scroll, so `fitting_rows` counts what did not fit rather than
+    // letting it fall off the bottom edge in silence.
     let body = hud::column::draw_info_column(
         regions.info_column,
         &hud::column::ColumnState {
             tab: info_tab,
             attention: &attention,
+            pane: &pane,
         },
         painter,
         m,
     );
-    draw_status_panel(body, &status, &buffs, game, painter, m);
+    let pane_rows = hud::panes::rows(info_tab, &pane);
+    let (shown, cut) = hud::panes::fitting_rows(&pane_rows, body.h, m);
+    hud::panes::draw_rows(body, &shown, cut, painter, m);
 
     hud::status_bar::draw_status_bar(
         regions.status_bar,
@@ -1390,209 +1432,6 @@ fn machine_color(status: MachineStatus) -> Color {
     }
 }
 
-/// The player's own figures in the status column: what they hit for, and
-/// what they take.
-///
-/// Built here rather than inline so their width is measurable without a
-/// window — see `the_stat_lines_fit_the_status_column`. The column cannot
-/// grow horizontally and `Painter::ui` clips nothing, so a line too wide is
-/// drawn off the panel in silence.
-///
-/// `Mitigation`, not `Defense`, and with the percent sign: it is percentage
-/// points (`components::Stats::mitigation`), the manifest sheet has always
-/// called it that, and a bare `Defense 12` beside a `Mitigation 12%` on the
-/// next screen is two words for one number.
-///
-/// **The regrouping is what pays for the longer word.** `Attack 1234
-/// Mitigation 75%  Strength 1234` runs 38px past the column at its widest,
-/// so the three figures no longer share a line and `Decompiler` — which had
-/// a line to itself — takes the second one in. A fifth line was the other
-/// way out and is worse: the column clips vertically against the keybind
-/// footer, so a row added here is a row taken off the buff and inventory
-/// lists below it.
-fn stat_lines(atk: i32, mitigation: i32, strength: i32, decompiler: i32) -> [String; 2] {
-    [
-        format!("Attack {atk}  Strength {strength}"),
-        format!("Mitigation {mitigation}%  Decompiler {decompiler}"),
-    ]
-}
-
-/// One party member's line in the status column, indented under the
-/// `Party: n/m` heading it belongs to.
-///
-/// The `w|a|m` loadout cell trails the stats rather than leading them: the
-/// panel's job while you are walking is the numbers, and the cell is here so
-/// an unequipped member is noticeable without opening the roster — see
-/// `Game::gear_tag`, which is where both screens get it from.
-fn party_row(companion: &feral_processes_engine::CompanionInfo) -> String {
-    format!(
-        "  {} (HP {}/{}, PWR {}) {}",
-        companion.name, companion.hp, companion.max_hp, companion.power, companion.gear
-    )
-}
-
-fn draw_status_panel(
-    rect: Rect,
-    status: &feral_processes_engine::PlayerStatus,
-    buffs: &[feral_processes_engine::ActiveBuffView],
-    game: &Game,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    // No fill and no border: `hud::column` draws both and hands this the
-    // body rect inside them. Drawing a second frame here would put one
-    // border inside another.
-    let Rect { x, y, w, h } = rect;
-
-    // Clears the panel border by one inset, then drops to the first
-    // baseline; both terms grow with the font the rows are drawn in.
-    let mut cy = y + m.inset + m.font_size as f32 / 2.0;
-    cy = draw_bar(
-        BarGeometry {
-            x: x + m.inset,
-            y: cy,
-            w: w - m.inset * 2.0,
-        },
-        &format!("Integrity {}/{}", status.hp, status.max_hp.max(1)),
-        status.hp as f32,
-        status.max_hp.max(1) as f32,
-        BarStyle::plain(RED),
-        painter,
-        m,
-    );
-    cy = draw_bar(
-        BarGeometry {
-            x: x + m.inset,
-            y: cy,
-            w: w - m.inset * 2.0,
-        },
-        &format!("Power {:.0}/100", status.power),
-        status.power,
-        100.0,
-        BarStyle::plain(YELLOW),
-        painter,
-        m,
-    );
-    cy += m.gap;
-
-    let mut lines = vec![
-        format!(
-            "Level {}  (XP {}/{})  Perk Pts {}",
-            status.level, status.xp, status.xp_to_next, status.perk_points
-        ),
-        format!("Zone {}", status.zone),
-        {
-            // The pinned surface tile, same as `status.position` always was,
-            // except in base space — where the number that has any meaning
-            // to a player walking around inside it is `Game::base_pos`, not
-            // the anchor tile they stepped through to get there.
-            let (x, y) = game.base_pos().unwrap_or(status.position);
-            format!("Position: ({x}, {y})")
-        },
-    ];
-    lines.extend(stat_lines(
-        status.atk,
-        status.mitigation,
-        status.strength,
-        status.decompiler,
-    ));
-    for line in &lines {
-        painter.ui(line, x + m.inset, cy, m.font_size, TEXT);
-        cy += m.line_height;
-    }
-    // Base space only: out on the surface there is no rock to cut, so the
-    // row would be a mode readout for a mode that cannot fire. Eleven cells
-    // at its widest, well inside the column's ceiling — the status column
-    // cannot grow horizontally and an over-wide row is drawn off the panel
-    // in silence.
-    if game.in_base() {
-        let armed = game.mining();
-        painter.ui(
-            format!("Mining: {}", if armed { "on" } else { "off" }),
-            x + m.inset,
-            cy,
-            m.font_size,
-            if armed { GREEN } else { TEXT_DIM },
-        );
-        cy += m.line_height;
-    }
-    painter.ui(
-        format!(
-            "Party: {}/{}",
-            status.companions.len(),
-            feral_processes_engine::tuning::MAX_PARTY_SIZE
-        ),
-        x + m.inset,
-        cy,
-        m.font_size,
-        GREEN,
-    );
-    cy += m.line_height;
-    // Drawn between the two counts rather than after both: the rows carry no
-    // label of their own, so the only thing saying they are party members and
-    // not pets is which heading they follow.
-    for companion in &status.companions {
-        painter.ui(party_row(companion), x + m.inset, cy, m.font_size, GREEN);
-        cy += m.line_height;
-    }
-    painter.ui(
-        format!("Pets: {}/{}", status.pet_count, status.pet_capacity),
-        x + m.inset,
-        cy,
-        m.font_size,
-        GREEN,
-    );
-    cy += m.line_height;
-    cy += m.gap;
-
-    // The column's floor. Computed ahead of the routines section (rather
-    // than just above the inventory loop, which is the only place that used
-    // to need it) so `draw_status_buffs` can clip its own rows against the
-    // same footer the inventory list already does — a party running routines
-    // on every slot of every holder can outgrow the column exactly the way a
-    // full inventory can.
-    //
-    // This used to sit above a four-line block naming eighteen keys. That
-    // block is now one row on the log pane's bottom border
-    // (`hud::log_frame`), and the rows it cost the column go to the
-    // inventory list.
-    let keys_y = y + h - m.inset;
-
-    cy = draw_status_buffs(buffs, x + m.inset, cy, keys_y, painter, m);
-    painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
-    cy += m.line_height;
-    if status.inventory.is_empty() {
-        painter.ui("(empty)", x + m.inset, cy, m.font_size, TEXT_DIM);
-        cy += m.line_height;
-    }
-
-    for row in &status.inventory {
-        if cy > keys_y - m.line_height {
-            break;
-        }
-        // Not a menu row, so no `fusion_row` here — the pane's own dim is
-        // what the fusion colour replaces. The tier is spelled out beside
-        // it because this pane has no room for the equip tag the inventory
-        // screen carries, and colour alone doesn't say how deep.
-        let tier = match row.copy.tier {
-            0 => String::new(),
-            tier => format!(" {}", item_fusion_note(tier)),
-        };
-        painter.ui(
-            format!(
-                "{} {}{tier}",
-                qty_column(row.qty),
-                game.copy_name(&row.copy)
-            ),
-            x + m.inset,
-            cy,
-            m.font_size,
-            fusion_color(row.copy.tier).unwrap_or(TEXT_DIM),
-        );
-        cy += m.line_height;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2247,117 +2086,6 @@ mod tests {
             text: text.to_string(),
             repeats,
         }
-    }
-
-    fn companion(name: &str) -> feral_processes_engine::CompanionInfo {
-        feral_processes_engine::CompanionInfo {
-            entity: Entity::PLACEHOLDER,
-            name: name.to_string(),
-            hp: 22,
-            max_hp: 30,
-            atk: 8,
-            mitigation: 5,
-            power: 41,
-            status: None,
-            ability: "Rally".to_string(),
-            gear: "w|.|.".to_string(),
-        }
-    }
-
-    /// One word and one unit for the stat, across every screen that names
-    /// it: the manifest sheet and the two pickers say `Mitigation` /
-    /// `MIT %`, and this column said `Defense 12` for the same number.
-    #[test]
-    fn the_stat_lines_name_mitigation_in_the_unit_it_is_measured_in() {
-        let joined = stat_lines(9, 12, 44, 3).join("\n");
-        assert!(joined.contains("Mitigation 12%"), "{joined}");
-        assert!(
-            !joined.contains("Defense"),
-            "one word for one number: {joined}"
-        );
-    }
-
-    /// The regrouping may not lose a figure: `Decompiler` had a line of its
-    /// own before it took the second half of the mitigation line.
-    #[test]
-    fn the_stat_lines_still_carry_all_four_figures() {
-        let joined = stat_lines(9, 12, 44, 3).join("\n");
-        for figure in ["Attack 9", "Mitigation 12%", "Strength 44", "Decompiler 3"] {
-            assert!(joined.contains(figure), "lost {figure}:\n{joined}");
-        }
-    }
-
-    /// The status column cannot grow horizontally and `Painter::ui` clips
-    /// nothing, so an over-wide line is drawn off the panel in silence —
-    /// which is exactly what a rename that lengthens a label risks. The
-    /// three-figure line this replaced overflowed by 38px at these values.
-    ///
-    /// Nothing caps attack, the strength scalar or the decompiler, so all
-    /// three take four digits here; mitigation is capped by
-    /// `Game::effective_mitigation` at `MAX_MITIGATION_PERCENT`, so that
-    /// constant is its widest reading and not a guess.
-    #[test]
-    fn the_stat_lines_fit_the_status_column() {
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // The status column is `hud::layout::regions`' `info_column`,
-            // drawn one inset in, against the 1440x900 geometry `ui_metrics`
-            // is calibrated for.
-            let char_w = p.measure_ui_advance("M", m.font_size);
-            let room = hud::layout::regions(1440.0, 900.0, char_w, &m)
-                .info_column
-                .w
-                - m.inset * 2.0;
-            for line in stat_lines(
-                1234,
-                feral_processes_engine::tuning::MAX_MITIGATION_PERCENT,
-                1234,
-                1234,
-            ) {
-                let drawn = p.measure_ui_advance(line.clone(), m.font_size);
-                assert!(
-                    drawn <= room,
-                    "a stat line overflows the status column by {:.0}px \
-                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
-            }
-        });
-    }
-
-    /// The panel is the only companion list on screen while you are walking
-    /// around, so it is where a player notices a party member is still
-    /// wearing nothing without stopping to open the roster.
-    #[test]
-    fn a_party_row_shows_which_gear_slots_are_filled() {
-        let row = party_row(&companion("Sparkgrub"));
-        assert!(row.contains("w|.|."), "{row}");
-        assert!(
-            row.find("PWR").unwrap() < row.find("w|.|.").unwrap(),
-            "the cell trails the stats it annotates: {row}"
-        );
-    }
-
-    /// The row's own word for what it is was redundant against the
-    /// `Party: n/m` heading it now sits under, and cost the width the stats
-    /// need in a 30%-wide column.
-    #[test]
-    fn a_party_row_names_the_program_without_labelling_it() {
-        let row = party_row(&companion("Sparkgrub"));
-        assert!(!row.contains("Companion"), "{row}");
-        assert!(row.contains("Sparkgrub"), "{row}");
-        assert!(row.contains("HP 22/30"), "{row}");
-        assert!(row.contains("PWR 41"), "{row}");
-    }
-
-    /// Without the prefix the rows are bare names, so the indent is what
-    /// keeps them reading as the heading's contents rather than as further
-    /// headings.
-    #[test]
-    fn a_party_row_is_indented_under_its_heading() {
-        let row = party_row(&companion("Hexweave"));
-        assert!(row.starts_with("  "), "{row:?}");
-        assert!(!row.trim_start().starts_with(' '));
     }
 
     fn suffix_of(row: &Row) -> Option<&str> {

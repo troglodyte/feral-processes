@@ -135,40 +135,6 @@ fn draw_buff_list(rows: &[Row], x: f32, mut y: f32, painter: &Painter, m: &Metri
     y
 }
 
-/// The map screen's copy of the panel — folded into the status column
-/// between the party roster and the inventory list, rather than a floating
-/// box of its own, since that column already is one. Draws nothing at all
-/// when nothing is running, heading included, so the panel disappears
-/// rather than leaving "Routines:" over an empty list. Returns the y
-/// coordinate the caller's next section should start from.
-///
-/// `max_y` is the same bound the inventory list right below this already
-/// clips its own rows against (the status column's keybind footer) — a
-/// well-buffed party with routines running on every slot of every holder
-/// can outgrow the column same as a full inventory can, and this section
-/// used to have no guard of its own where that one does. Requires room for
-/// the heading plus at least one more line before drawing anything at all,
-/// so there's never a heading left standing over nothing: the routines
-/// section is dropped whole rather than left half-drawn.
-pub(super) fn draw_status_buffs(
-    buffs: &[ActiveBuffView],
-    x: f32,
-    y: f32,
-    max_y: f32,
-    painter: &Painter,
-    m: &Metrics,
-) -> f32 {
-    let entries = buff_entries(buffs, TagStyle::OwnLine);
-    if entries.is_empty() || y + m.line_height * 2.0 > max_y {
-        return y;
-    }
-    painter.ui("Routines:", x, y, m.font_size, TEXT);
-    let heading_bottom = y + m.line_height;
-    let slots = ((max_y - heading_bottom) / m.line_height).floor() as usize;
-    let cy = draw_buff_list(&cap_entries(entries, slots), x, heading_bottom, painter, m);
-    cy + m.gap
-}
-
 /// Pixel width a boxed buff panel needs for `rows` against `title` — the
 /// widest of the two, measured rather than guessed. `buff_rows` bounds the
 /// name column, but a companion's holder tag is a player-chosen name with

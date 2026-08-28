@@ -982,7 +982,7 @@ impl Game {
         depth: Option<u32>,
         allow_boss: bool,
     ) -> Option<(String, bool)> {
-        let (candidates, boss_candidates) = self.habitat_pools(x, y, depth)?;
+        let (candidates, boss_candidates) = self.habitat_pools(x, y, depth, 0)?;
         // The ring turns a boss away the same way it turns a rare tier away:
         // a `BOSS_STAT_MULT` spawn in the nursery falsifies
         // `balance_sim::beatable_by_a_fresh_player`. This sits exactly where
@@ -1039,17 +1039,26 @@ impl Game {
     /// consulted sit *after* the pools are built, so it stays with the draw.
     /// That is also why this split changes `pick_habitat_species`'s RNG draw
     /// order not at all, which the seeded spawn tests depend on.
+    ///
+    /// `step_bonus` raises the window above whatever the place and the depth
+    /// already say — a sortie site's risk offset, and nothing else today.
+    /// **Widened here rather than copied**: this is the shared seam for the
+    /// biome rules, the opening ring and the per-biome fallback, and a
+    /// second pool-builder is how a caller ends up with a different set of
+    /// them. Zero is exactly today's behaviour, which is what let every
+    /// existing call site pass it and nothing move.
     pub(crate) fn habitat_pools(
         &mut self,
         x: i32,
         y: i32,
         depth: Option<u32>,
+        step_bonus: u32,
     ) -> Option<(Vec<String>, Vec<String>)> {
         let tile = self.world.resource_mut::<WorldMap>().tile(x, y);
         if !tile.walkable {
             return None;
         }
-        let step = self.danger_steps(depth);
+        let step = self.danger_steps(depth).saturating_add(step_bonus);
         let species_db = self.world.resource::<SpeciesDb>();
         let mut candidates: Vec<String> = species_db
             .windowed_matches(tile.biome, step)
@@ -1165,7 +1174,7 @@ impl Game {
     /// surface roll its own, `rouse_lair` the Stack entrance it read), so
     /// this is the right pool for either.
     fn pick_escort_species(&mut self, x: i32, y: i32, depth: Option<u32>) -> Option<String> {
-        let (candidates, _) = self.habitat_pools(x, y, depth)?;
+        let (candidates, _) = self.habitat_pools(x, y, depth, 0)?;
         if candidates.is_empty() {
             return None;
         }

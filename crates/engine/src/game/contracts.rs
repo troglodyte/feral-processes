@@ -351,7 +351,7 @@ impl Game {
             let mut species: Vec<String> = Vec::new();
             for i in 0..samples {
                 let (dx, dy) = crate::game::stack::ring_offset(band, i * perimeter / samples);
-                if let Some((ordinary, _bosses)) = self.habitat_pools(cx + dx, cy + dy, None) {
+                if let Some((ordinary, _bosses)) = self.habitat_pools(cx + dx, cy + dy, None, 0) {
                     species.extend(ordinary);
                 }
             }

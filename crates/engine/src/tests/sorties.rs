@@ -170,3 +170,58 @@ fn an_inverted_battle_range_is_refused_at_load() {
     assert!(db.is_empty());
     assert_eq!(warnings.len(), 2);
 }
+
+// ------------------------------------------------- the risk offset
+
+/// A risk offset reaches the same window `depth` does, so a sortie can ask
+/// for tougher opposition without the caller re-deriving the biome rules.
+#[test]
+fn a_risk_offset_raises_the_habitat_window() {
+    let mut game = Game::new(4300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(crate::resources::ZoneLevel(1));
+    // Well clear of the opening ring, which filters the pool down to what a
+    // fresh player can beat and would mask the window moving at all.
+    let (x, y) = (400, 400);
+
+    let Some((base, _)) = game.habitat_pools(x, y, None, 0) else {
+        panic!("this tile should be habitable");
+    };
+    let Some((raised, _)) = game.habitat_pools(x, y, None, 4) else {
+        panic!("a raised window should still resolve");
+    };
+
+    assert_ne!(
+        base, raised,
+        "a four-step offset must move the window, or the parameter is inert"
+    );
+}
+
+/// Zero is exactly today's behaviour, which is what lets every existing
+/// caller pass it and nothing move. Asserted against a hand-rolled window at
+/// the same step rather than against itself — comparing one call to another
+/// passes against an offset that does nothing at all.
+#[test]
+fn a_zero_offset_is_todays_window() {
+    let mut game = Game::new(4301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(crate::resources::ZoneLevel(3));
+    let (x, y) = (400, 400);
+
+    let step = game.danger_steps(None);
+    let biome = game
+        .world
+        .resource_mut::<crate::world::WorldMap>()
+        .tile(x, y)
+        .biome;
+    let expected: Vec<String> = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .windowed_matches(biome, step)
+        .into_iter()
+        .map(|s| s.id.clone())
+        .collect();
+
+    let (ordinary, _) = game
+        .habitat_pools(x, y, None, 0)
+        .expect("this tile should be habitable");
+    assert_eq!(ordinary, expected);
+}

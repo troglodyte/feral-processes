@@ -11,6 +11,7 @@ pub mod contracts;
 pub(crate) mod derive;
 pub mod descriptions;
 pub mod difficulty;
+pub mod disposition;
 pub mod environment;
 mod game;
 pub mod help;

@@ -380,6 +380,25 @@ pub struct CreatureSave {
     /// documents just above.
     #[serde(default)]
     pub nemesis_grudges: u32,
+    /// This program's hidden temperament — see
+    /// `crate::disposition::Disposition`. Only meaningful for an owned
+    /// program; a wild creature's is written `None` and read back nowhere,
+    /// exactly as its `memories` is.
+    ///
+    /// **`Option`, and the `None` is load-bearing.** It is not "no
+    /// personality" — it is *this file predates dispositions*, and the load
+    /// path answers it by deriving one from `program_id` through
+    /// `Disposition::seed`, the same formula `roster_parts` uses for a fresh
+    /// program. So an existing save gains exactly the roster it would have
+    /// had, rather than a base full of neutral programs. Stored rather than
+    /// derived on every read so that editing `Disposition::ALL` later cannot
+    /// silently reshuffle a personality the player has already learned to
+    /// work around.
+    ///
+    /// Additive on a field-named RON struct, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub disposition: Option<crate::disposition::Disposition>,
     /// This program's stable identity — see `components::ProgramId`. Only
     /// meaningful when `tamed` is true; a wild creature's is written as the
     /// sentinel and ignored.
@@ -1400,6 +1419,7 @@ mod tests {
             nemesis_grudges: 0,
             equipment: Vec::new(),
             program_id: 1,
+            disposition: None,
             memories: Vec::new(),
             needs: Default::default(),
             off_shift: None,

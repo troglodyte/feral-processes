@@ -88,6 +88,7 @@ type Needful<'w> = (
     Option<&'w Task>,
     &'w Tamed,
     &'w Position,
+    Option<&'w crate::disposition::Disposition>,
 );
 
 pub fn needs_drain_system(
@@ -101,7 +102,7 @@ pub fn needs_drain_system(
         sites.iter().map(|(s, p)| (&s.kind, p)),
         &structure_db,
     );
-    for (entity, mut needs, task, tamed, at) in &mut programs {
+    for (entity, mut needs, task, tamed, at, disposition) in &mut programs {
         if roles.of(entity, tamed.owner) != Some(crate::game::party::ProgramRole::Staff) {
             continue;
         }
@@ -110,10 +111,16 @@ pub fn needs_drain_system(
             let Some(current) = needs.get(&def.id) else {
                 continue;
             };
+            // The program's own temperament, and the whole of how a
+            // `Languid` body reads as lazy in play: it crosses `critical`
+            // sooner, goes off shift sooner, and spends more of the run
+            // walking to an amenity. A program with no disposition at all —
+            // a hand-built fixture — takes the neutral 1.0 without a branch.
+            let temperament = disposition.copied().unwrap_or_default().need_drain();
             let rate = if task.is_some() {
-                def.drain_per_tick * def.working_multiplier
+                def.drain_per_tick * def.working_multiplier * temperament
             } else {
-                def.drain_per_tick
+                def.drain_per_tick * temperament
             };
             needs.set(&def.id, current - rate);
         }
@@ -644,6 +651,7 @@ type CronjobWorker = (
     Option<&'static Stranded>,
     Option<&'static Memories>,
     Option<&'static Needs>,
+    Option<&'static crate::disposition::Disposition>,
 );
 
 /// The read-only lookups `task_progress_system` needs, bundled so bevy's
@@ -746,6 +754,7 @@ pub fn task_progress_system(
         stranded,
         memories,
         worker_needs,
+        disposition,
     ) in &mut tasks
     {
         if !matches!(task.kind, TaskKind::GatherResource) {
@@ -826,7 +835,15 @@ pub fn task_progress_system(
                 // `Memories` sums nothing and reads exactly `0.0`, which is
                 // the baseline and not a missing value.
                 morale: memories
-                    .map(|m| crate::memories::sum_intensity(m, &memory_db, clock.tick, |_| true))
+                    .map(|m| {
+                        crate::memories::sum_intensity(
+                            m,
+                            &memory_db,
+                            clock.tick,
+                            disposition.copied().unwrap_or_default(),
+                            |_| true,
+                        )
+                    })
                     .unwrap_or(0.0),
                 // The same fold `Game::need_strain` is, through the shared
                 // free function rather than a copy of it — `party::role_of`'s

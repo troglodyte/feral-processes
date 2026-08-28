@@ -3317,3 +3317,31 @@ mod tests {
         assert_eq!(zones_to_saturate, 12);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Dispositions
+// ---------------------------------------------------------------------------
+// A program's hidden temperament — see `crate::disposition::Disposition`.
+// Two constants and not a dozen, because the five dispositions are symmetric
+// pole pairs on two axes: whatever one pole adds, its opposite subtracts.
+// Giving a single pole its own number is what `the_poles_are_symmetric_about
+// _neutral` fails on.
+
+/// How far `Languid` and `Dogged` move `NeedDef::drain_per_tick`, as a
+/// fraction either side of neutral.
+///
+/// **Must stay below 1.0**: at 1.0 a `Dogged` program's reserves stop
+/// draining entirely and it never leaves a post for an amenity again, which
+/// is not a personality but a broken need. Held by
+/// `every_disposition_still_drains`.
+pub const DISPOSITION_DRAIN_SWING: f32 = 0.30;
+
+/// How far `Amiable` and `Abrasive` scale a memory's intensity, as a fraction
+/// either side of neutral — amplifying one pole and damping the other.
+///
+/// **Must stay below 1.0**, and for a sharper reason than the drain swing: at
+/// or above 1.0 the damped pole reaches zero or crosses it, and a memory that
+/// changed sign would read as a program cheering up because it was hurt.
+/// `Memory::intensity` states that rule for the decay curve; this is the same
+/// rule one level up. Held by `felt_never_flips_a_memorys_sign`.
+pub const DISPOSITION_MEMORY_SWING: f32 = 0.40;

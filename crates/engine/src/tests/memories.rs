@@ -950,8 +950,17 @@ fn by_id(game: &mut Game, id: ProgramId) -> Entity {
 /// every creature against `SpeciesDb` and drops what it cannot name, so a
 /// `spawn_tamed` fixture never survives a save.
 fn adopt(game: &mut Game, species: &str, x: i32) -> Entity {
-    game.adopt_program(species, x, 4, 1.0)
-        .expect("a shipped species")
+    let who = game
+        .adopt_program(species, x, 4, 1.0)
+        .expect("a shipped species");
+    // Pinned neutral for `spawn_tamed`'s reason: every test in this file
+    // asserts an exact intensity or an exact morale sum, and a disposition
+    // seeded off the program's id would scale both. A test about a
+    // disposition inserts one.
+    game.world
+        .entity_mut(who)
+        .insert(crate::disposition::Disposition::Steady);
+    who
 }
 
 /// The def, the subject, the strike count and the tick it last landed on all

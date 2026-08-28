@@ -164,13 +164,14 @@ pub(crate) fn sum_intensity(
     store: &Memories,
     db: &MemoryDb,
     now: u64,
+    felt_as: crate::disposition::Disposition,
     keep: impl Fn(&Memory) -> bool,
 ) -> f32 {
     store
         .0
         .iter()
         .filter(|m| keep(m))
-        .filter_map(|m| Some(m.intensity(db.get(&m.def)?, now)))
+        .filter_map(|m| Some(felt_as.felt(m.intensity(db.get(&m.def)?, now))))
         .sum()
 }
 

@@ -27,6 +27,7 @@ mod construction;
 mod contracts;
 mod crafting;
 mod descriptions;
+mod disposition;
 mod easter_eggs;
 mod environment;
 mod equipment;

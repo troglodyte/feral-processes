@@ -380,6 +380,25 @@ pub struct CreatureSave {
     /// documents just above.
     #[serde(default)]
     pub nemesis_grudges: u32,
+    /// This program's hidden temperament — see
+    /// `crate::disposition::Disposition`. Only meaningful for an owned
+    /// program; a wild creature's is written `None` and read back nowhere,
+    /// exactly as its `memories` is.
+    ///
+    /// **`Option`, and the `None` is load-bearing.** It is not "no
+    /// personality" — it is *this file predates dispositions*, and the load
+    /// path answers it by deriving one from `program_id` through
+    /// `Disposition::seed`, the same formula `roster_parts` uses for a fresh
+    /// program. So an existing save gains exactly the roster it would have
+    /// had, rather than a base full of neutral programs. Stored rather than
+    /// derived on every read so that editing `Disposition::ALL` later cannot
+    /// silently reshuffle a personality the player has already learned to
+    /// work around.
+    ///
+    /// Additive on a field-named RON struct, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub disposition: Option<crate::disposition::Disposition>,
     /// This program's stable identity — see `components::ProgramId`. Only
     /// meaningful when `tamed` is true; a wild creature's is written as the
     /// sentinel and ignored.
@@ -423,6 +442,15 @@ pub struct CreatureSave {
     /// Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub off_shift: Option<crate::needs::NeedId>,
+    /// Whether this program has downed tools — see
+    /// `components::Disgruntled`.
+    ///
+    /// Saved for `off_shift`'s reason: the marker *is* the hysteresis, so a
+    /// reload that dropped it would put a program back to work the moment
+    /// the player looked away, at a morale that had not moved. Additive
+    /// behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub disgruntled: Option<crate::components::Grievance>,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -1400,6 +1428,8 @@ mod tests {
             nemesis_grudges: 0,
             equipment: Vec::new(),
             program_id: 1,
+            disposition: None,
+            disgruntled: None,
             memories: Vec::new(),
             needs: Default::default(),
             off_shift: None,

@@ -367,6 +367,11 @@ impl crate::Game {
         };
         let db = self.world.resource::<MemoryDb>();
         let now = self.world.resource::<GameClock>().tick;
+        // The page shows what this program feels, not what a neutral one
+        // would: an `Abrasive` body's grudges genuinely read heavier, and
+        // that is the whole channel a hidden disposition has to reach the
+        // player through.
+        let felt_as = self.felt_as(who);
         let mut rows: Vec<crate::views::MemoryRow> = store
             .0
             .iter()
@@ -376,7 +381,7 @@ impl crate::Game {
                     name: def.name.clone(),
                     blurb: def.blurb.clone(),
                     subject: self.subject_name(m),
-                    intensity: m.intensity(def, now),
+                    intensity: felt_as.felt(m.intensity(def, now)),
                     age: age_phrase(now.saturating_sub(m.reinforced), def.half_life),
                 })
             })
@@ -461,6 +466,22 @@ impl crate::Game {
     /// `assets/memories/` deleted every entry is unresolvable and every reader
     /// answers zero, without a load-time purge and without the entries being
     /// lost if the directory comes back.
+    /// How hard what `who` remembers lands on it — its `Disposition`, or the
+    /// neutral `Steady` for anything that has none.
+    ///
+    /// **Deliberately not consulted by `evict`.** A disposition scales what a
+    /// program *feels*; which memories it *keeps* is bookkeeping, and scaling
+    /// the eviction weight too would make an `Abrasive` program drop its
+    /// fondnesses first and fill its store with grudges — a compounding loop
+    /// on top of an axis that already compounds through `morale`. The store's
+    /// contents stay disposition-independent; only the reading of them moves.
+    fn felt_as(&self, who: Entity) -> crate::disposition::Disposition {
+        self.world
+            .get::<crate::disposition::Disposition>(who)
+            .copied()
+            .unwrap_or_default()
+    }
+
     fn memory_sum(&self, who: Entity, keep: impl Fn(&Memory) -> bool) -> f32 {
         let Some(store) = self.world.get::<Memories>(who) else {
             return 0.0;
@@ -469,6 +490,7 @@ impl crate::Game {
             store,
             self.world.resource::<MemoryDb>(),
             self.world.resource::<GameClock>().tick,
+            self.felt_as(who),
             keep,
         )
     }

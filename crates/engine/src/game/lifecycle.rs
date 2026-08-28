@@ -1014,10 +1014,20 @@ impl Game {
                 if c.downed {
                     entity.insert(crate::components::Downed);
                 }
+                if let Some(grievance) = c.disgruntled {
+                    entity.insert(crate::components::Disgruntled { grievance });
+                }
                 entity.insert((
                     ProgramId(program_id),
                     memories,
                     needs,
+                    // The one seeding site for a file written before
+                    // dispositions existed, `Needs::seed_missing`'s role.
+                    // Derived from the id rather than defaulted to `Steady`,
+                    // so an existing roster gains the personalities it would
+                    // have had instead of a base full of neutral programs.
+                    c.disposition
+                        .unwrap_or_else(|| crate::disposition::Disposition::seed(program_id)),
                     Tamed { owner: player },
                     PowerReserve::new(c.power),
                     Experience {
@@ -1329,6 +1339,8 @@ impl Game {
                     Option<&Needs>,
                     Option<&crate::components::OffShift>,
                     Option<&crate::components::Downed>,
+                    Option<&crate::disposition::Disposition>,
+                    Option<&crate::components::Disgruntled>,
                 ),
             ),
         )>();
@@ -1360,7 +1372,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                (memories, needs, off_shift, downed),
+                (memories, needs, off_shift, downed, disposition, disgruntled),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1449,6 +1461,8 @@ impl Game {
                 rarity: rarity.copied().unwrap_or_default(),
                 nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
                 program_id: program_id.map(|p| p.0).unwrap_or(0),
+                disposition: disposition.copied(),
+                disgruntled: disgruntled.map(|d| d.grievance),
                 memories: memories
                     .map(|m| {
                         m.0.iter()

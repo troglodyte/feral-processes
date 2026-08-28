@@ -19,6 +19,7 @@ pub(crate) mod construction;
 pub(crate) mod deposit;
 pub(crate) mod entropy;
 pub(crate) mod hauling;
+mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod repair;

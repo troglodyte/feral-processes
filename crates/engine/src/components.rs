@@ -1389,6 +1389,39 @@ pub struct OffShift {
     pub need: NeedId,
 }
 
+/// A program whose morale has run far enough below zero that it has stopped
+/// working — the `OffShift` shape on a different meter.
+///
+/// **Hysteresis is why this is stored and not derived**, exactly as
+/// `OffShift` is: read off the current morale alone a body downs tools and
+/// picks them up again every tick at the boundary. It is inserted below
+/// `MORALE_DOWNS_TOOLS_AT` and removed at `MORALE_RECOVERED_AT`, and the gap
+/// between the two is the feature.
+///
+/// It carries how far past the line the program went, because the ladder has
+/// two rungs and the boundary between them needs the same protection as the
+/// boundary at the bottom. Severity **ratchets** while the marker is held: a
+/// body that has downed tools does not go back to merely sulking as morale
+/// wobbles, it goes back to work or it does not. One hysteresis gap, not two.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Disgruntled {
+    pub grievance: Grievance,
+}
+
+/// How far a program has gone. Ordered least to worst; see `Disgruntled`.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Grievance {
+    /// Still works, but not at a machine it holds a grudge against — the
+    /// posting-time counterpart of `drift_idle_staff`'s tile avoidance,
+    /// against the same `MEMORY_AVOIDANCE_THRESHOLD`.
+    Sulking,
+    /// Takes no posting at all. Leaves the `on_shift` filter, which covers
+    /// the posting, the standdown and the `LabourDemand` shortfall at once.
+    DownedTools,
+}
+
 /// A program that died and was benched rather than destroyed — the
 /// Forgiving arm of `Game::bench_or_dissolve`.
 ///

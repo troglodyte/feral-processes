@@ -853,6 +853,10 @@ impl Game {
         // copy would be a new `Resource` and another iteration-order shift.
         let bays = self.repair_bays();
         self.update_off_shift(&staff, &amenities);
+        // Beside the needs gate and before `on_shift` is read below: a body
+        // that downs tools this tick must not also be handed a job this
+        // tick.
+        self.update_disgruntled(&staff);
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody
@@ -891,6 +895,14 @@ impl Game {
                 self.world.get::<components::OffShift>(w).is_none()
                     || self.world.get::<Carrying>(w).is_some()
             })
+            // **A disgruntled program keeps the `Carrying` escape**, unlike a
+            // downed one. The escape exists because freeing a loaded body
+            // destroys the goods, and that is just as true of a body that has
+            // stopped caring as of one that is off servicing a need — it is
+            // still standing in the base holding something the line is
+            // waiting on. Only `Downed` overrides it, because a body going to
+            // the Bay is going regardless.
+            .filter(|&w| !self.has_downed_tools(w) || self.world.get::<Carrying>(w).is_some())
             .collect();
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
@@ -1083,7 +1095,8 @@ impl Game {
                     .remove::<Carrying>();
                 continue;
             }
-            if self.world.get::<components::OffShift>(worker).is_some()
+            if (self.world.get::<components::OffShift>(worker).is_some()
+                || self.has_downed_tools(worker))
                 && self.world.get::<Carrying>(worker).is_none()
             {
                 self.world
@@ -1112,6 +1125,27 @@ impl Game {
                 {
                     remaining.remove(index);
                 }
+                continue;
+            }
+            // **A sulking body is freed from a post it resents**, and this is
+            // the one place the anti-thrash rule is deliberately not
+            // applied. Everything above keeps a body wherever the assignment
+            // still wants it, which is what stops a cronjob restarting from
+            // zero every tick — but a body that has refused this machine is
+            // not "still wanted here", it is the wrong body for this post.
+            // Left standing it works the machine it refused and the rung
+            // does nothing at all.
+            //
+            // The post stays in `remaining` rather than being consumed, so
+            // the willing body below picks it up on the same tick.
+            if let Some((target, kind)) = held
+                && self.refuses_post(worker, target, kind)
+            {
+                self.world
+                    .entity_mut(worker)
+                    .remove::<Task>()
+                    .remove::<Carrying>();
+                idle.push(worker);
                 continue;
             }
             match held.and_then(|post| remaining.iter().position(|&p| p == post)) {
@@ -1144,10 +1178,23 @@ impl Game {
         let blocked = self.structure_tiles();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         for (post, kind) in remaining {
-            // Peeked rather than popped, so a skipped post costs no body.
-            let Some(&worker) = idle.last() else {
+            if idle.is_empty() {
                 break;
+            }
+            // **The sulking rung**, and the one refusal here that is a
+            // property of the *body* rather than of the base. Every other
+            // question below is about whether the post can be reached at
+            // all, which is very nearly the same answer for everyone — so
+            // those skip the post and keep the body. This one cannot: a
+            // machine one program resents is a machine another will happily
+            // work, and skipping the post would leave it unstaffed because
+            // of whoever happened to be last in the list. So the body is
+            // rotated instead, and only a post *nobody* left will take is
+            // skipped.
+            let Some(chosen) = self.willing_index(&idle, post, kind) else {
+                continue;
             };
+            let worker = idle[chosen];
             let from = self
                 .world
                 .get::<Position>(worker)
@@ -1178,7 +1225,7 @@ impl Game {
                 // goes to the next want instead.
                 continue;
             }
-            idle.pop();
+            idle.remove(chosen);
             match kind {
                 TaskKind::GatherResource => self.post_worker(worker, post),
                 TaskKind::Guard => self.post_guard(worker, post),

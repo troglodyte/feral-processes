@@ -369,7 +369,15 @@ impl Game {
     /// short a component. Do not hand-write either at a call site.
     pub(crate) fn roster_parts(
         &mut self,
-    ) -> (Tamed, Experience, PowerReserve, ProgramId, Memories, Needs) {
+    ) -> (
+        Tamed,
+        Experience,
+        PowerReserve,
+        ProgramId,
+        Memories,
+        Needs,
+        crate::disposition::Disposition,
+    ) {
         let id = {
             let mut counter = self.world.resource_mut::<crate::resources::NextProgramId>();
             let id = counter.0;
@@ -385,6 +393,11 @@ impl Game {
             ProgramId(id),
             Memories::default(),
             Needs::default(),
+            // Derived from the id just minted, not drawn: a `GameRng` draw
+            // would not survive a save/load and would shift every later roll
+            // in the run. Stored from here on, so editing `Disposition::ALL`
+            // later cannot reshuffle an existing roster.
+            crate::disposition::Disposition::seed(id),
         )
     }
 

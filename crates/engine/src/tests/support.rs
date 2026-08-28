@@ -1322,6 +1322,15 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
             parts,
         ))
         .id();
+    // Pinned neutral, `Potential::NEUTRAL`'s reason. `roster_parts` mints a
+    // disposition derived from the program's id, so four fixtures in a row
+    // take four different temperaments — and every test asserting an
+    // authored need-drain rate or an exact morale figure would then be
+    // measuring a multiplier it never asked for. A test about a disposition
+    // says so by inserting one; every other test wants the base formula.
+    game.world
+        .entity_mut(entity)
+        .insert(crate::disposition::Disposition::Steady);
     game.install_innate_routines(entity);
     entity
 }

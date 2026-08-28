@@ -20,6 +20,22 @@
 //! `render/mod.rs`'s colours; they draw *over* the HUD, so the seam between
 //! the two palettes is not visible in play.
 
+// The table is transcribed whole rather than grown a phase at a time, and
+// that is a deliberate exception to this repo's delete-what-is-unused rule.
+// The reservations below are the load-bearing part of the design, and the
+// two tests that hold them — `the_reserved_roles_are_separable` and
+// `every_content_role_is_opaque` — can only assert them over the complete
+// set. Trimming to what phase 1 paints would delete THREAT and ATTENTION,
+// and with them the only thing checking that "act" and "harm" stay
+// distinguishable.
+//
+// This allow is self-liquidating: phase 2 consumes PANE_TITLE, phase 3 the
+// CH_* channels and KEYBAR_DIVIDER, phase 4 ATTENTION and THREAT, phase 5
+// ALERT_ROW_BG and KEYCAP_BG, phase 6 PLAYER and MAP_FLOOR. **Delete this
+// attribute when phase 6 lands** — if it still suppresses anything then,
+// that entry is genuinely unused and should go instead.
+#![allow(dead_code)]
+
 use crate::paint::Color;
 
 /// One opaque colour from the hex form the handoff writes.

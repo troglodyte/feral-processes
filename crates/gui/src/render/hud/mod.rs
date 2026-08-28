@@ -13,3 +13,4 @@
 //! See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
 
 pub(super) mod layout;
+pub(super) mod palette;

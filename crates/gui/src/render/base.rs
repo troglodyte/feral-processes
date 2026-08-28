@@ -1333,6 +1333,21 @@ fn draw_surface_map(
                 pane,
             )
         });
+        // Behind the same gate as the debris, and for a sharper version of
+        // the same reason: a walk names base-space cells, and a squad drawn
+        // filing out of the anchor while the pane is showing the zone
+        // surface would be walking across open ground the party is standing
+        // on. Over the tiles, since a body walks on top of the floor.
+        fx.draw_walkers(painter, tile_px, glyph_px, |world| {
+            tile_origin_px(
+                world,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        });
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
     entities
@@ -1901,7 +1916,7 @@ mod tests {
 
         let mut fx = Fx::new();
         fx.enabled = animated;
-        fx.begin_frame(at, Vec::new(), false);
+        fx.begin_frame(at, Vec::new(), Vec::new(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();

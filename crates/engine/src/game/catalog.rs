@@ -780,7 +780,32 @@ impl Game {
     /// `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base rate per zone level for
     /// a zone-portal structure (see `StructureDef::zone_portal`) — breaching
     /// deeper costs more raw material each time.
+    ///
+    /// A `StructureDef::first_free` structure is quoted at nothing until the
+    /// run has one, and that waiver is resolved **here** rather than at the
+    /// deploy: this is the one door the build menu, the deploy prompt, the
+    /// filed request's stored bill and the removal refund all read, so a
+    /// second site pricing it would be a second opinion about what the
+    /// player owes.
+    ///
+    /// Free needs *both* halves of the count. `FreeBuilds` says what has
+    /// been raised, because that is the moment a freebie is genuinely spent
+    /// — a request the player cancels must not burn it. On its own that
+    /// prices two requests filed side by side at nothing and raises both, so
+    /// a pending request counts against the freebie alongside a standing
+    /// structure, exactly as `max_deployed` counts them together and for the
+    /// same reason.
     pub fn structure_build_cost(&self, def: &StructureDef) -> Vec<(ItemId, u32)> {
+        if def.first_free
+            && !self
+                .world
+                .resource::<crate::resources::FreeBuilds>()
+                .0
+                .contains(&def.id)
+            && self.count_build_requests(&def.id) == 0
+        {
+            return Vec::new();
+        }
         if !def.zone_portal {
             return def.build_cost.clone();
         }

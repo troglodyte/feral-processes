@@ -334,6 +334,22 @@ pub struct StructureDef {
     /// plain, non-portal structure).
     #[serde(default)]
     pub zone_portal: bool,
+    /// Whether the run's *first* one of these costs nothing —
+    /// `build_cost` is waived until one has actually been raised, and
+    /// charged in full for every one after it.
+    ///
+    /// The other modifier on `build_cost` beside `zone_portal` above, and
+    /// resolved in the same one place: `Game::structure_build_cost`, which
+    /// every quote, every filed request's stored bill and the removal
+    /// refund all read. Data rather than an id in Rust because *which*
+    /// structure onboards a run is a content decision — the shipped Broker
+    /// is behind no research precisely so contracts can carry a new run,
+    /// and its price was the last thing in the way.
+    ///
+    /// `#[serde(default)]` so every existing structure file, mods included,
+    /// keeps parsing as a structure that is never free.
+    #[serde(default)]
+    pub first_free: bool,
     /// If set, this structure is a trading post: `Game::sell_item` and
     /// `Game::buy_item` work against it. `#[serde(default)]` so existing
     /// structure files written before this field existed still parse

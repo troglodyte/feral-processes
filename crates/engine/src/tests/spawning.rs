@@ -1507,6 +1507,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     let data = save::SaveData {
         seed: game.world.resource::<WorldMap>().seed(),
         mining: false,
+        free_builds: crate::resources::FreeBuilds::default(),
         tick: 0,
         difficulty: DifficultyMode::Forgiving,
         player: save::PlayerSave {

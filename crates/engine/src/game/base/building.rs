@@ -206,6 +206,17 @@ impl Game {
     /// build, and by the time a crew finishes a request those were answered
     /// when it was filed.
     pub(crate) fn spawn_structure(&mut self, def: &StructureDef, x: i32, y: i32) -> Entity {
+        // The freebie is spent **here**, where a structure actually stands,
+        // rather than at the deploy that asked for one. Both callers claim
+        // it identically for free that way, and a request the player files
+        // and then cancels — or one wiped with the cell it stood on — costs
+        // the run nothing, which is what "the first one you *build*" means.
+        if def.first_free {
+            self.world
+                .resource_mut::<crate::resources::FreeBuilds>()
+                .0
+                .insert(def.id.clone());
+        }
         let mut entity = self.world.spawn((
             Structure {
                 kind: def.id.clone(),
@@ -401,10 +412,15 @@ impl Game {
     /// `max_deployed` slots and refuse a legitimate deploy with a figure the
     /// player cannot account for. Nothing new stands up when an upgrade
     /// finishes.
-    fn count_build_requests(&mut self, kind: &StructureId) -> u32 {
-        let mut query = self.world.query::<&BuildSite>();
-        query
-            .iter(&self.world)
+    /// `iter_entities` rather than a query, for `game::base::collect`'s
+    /// reason: `Game::structure_build_cost` is `&self` — a screen quotes a
+    /// price — and a `World::query` would make this the one figure in that
+    /// expression it could not ask for. A second, `&self` copy of the rule
+    /// beside a `&mut self` one is how the two goals drift.
+    pub(crate) fn count_build_requests(&self, kind: &StructureId) -> u32 {
+        self.world
+            .iter_entities()
+            .filter_map(|e| e.get::<BuildSite>())
             .filter(|site| &site.structure == kind && site.goal == BuildGoal::New)
             .count() as u32
     }

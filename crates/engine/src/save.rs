@@ -776,6 +776,16 @@ pub struct SaveData {
     /// preference should not arm a tool that destroys terrain.
     #[serde(default)]
     pub mining: bool,
+    /// Which `StructureDef::first_free` structures this run has already had
+    /// for nothing — see `resources::FreeBuilds`.
+    ///
+    /// Additive behind a default, so a save written before the waiver
+    /// existed loads with its freebie unspent. That is the generous reading
+    /// and the only one available: nothing in an older file records whether
+    /// a Broker already standing in it was paid for, and a save that cannot
+    /// answer should not be charged twice.
+    #[serde(default)]
+    pub free_builds: crate::resources::FreeBuilds,
     /// The anchor's tile on the zone surface — see `components::BaseAnchor`.
     /// Persisted rather than derived from `spawn_point` on load: the two
     /// agree today (the anchor is auto-placed at each zone's spawn point and
@@ -1280,6 +1290,7 @@ mod tests {
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
             mining: false,
+            free_builds: crate::resources::FreeBuilds::default(),
             anchor: None,
             zone: 1,
             spawn_point: (0, 0),

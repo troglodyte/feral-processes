@@ -1,6 +1,8 @@
 # The Paned Command HUD
 
-**Status:** approved, not implemented
+**Status:** phases 1-4 shipped (v0.13.37, .38, .40, and this one); phases 5
+and 6 outstanding. Corrections found while building are folded into the text
+below rather than appended.
 **Date:** 2026-08-27
 
 The main HUD's right-hand column is one undifferentiated text dump —
@@ -27,7 +29,7 @@ argument for making the column tabbed rather than longer.
 
 ## What the handoff gets wrong about this game
 
-Three blocks in the reference render are, by its own admission,
+Four blocks in the reference render are, by its own admission,
 plausible inventions. Verified against the source:
 
 - **There is no raid countdown.** `Game::raid_check` is a per-tick
@@ -38,6 +40,13 @@ plausible inventions. Verified against the source:
   its own doc comment calls itself "the seam frontends use to show the
   shield network as active", so `shields holding` is real and is the
   honest half of the `DEFENCE` block.
+- **There is no pack capacity.** `components::Inventory` is an unbounded
+  `Vec<(ItemId, u32)>`, and `PlayerStatus::inventory_used`'s own doc comment
+  says "The Buffer is unbounded, so this is just how much is stored." A
+  `pack full` row is not derivable. The container that *can* fill is the
+  roster — `pet_count` against `pet_capacity` — and that is what the fourth
+  attention row reports. Anyone "restoring" the pack row is inventing a
+  limit the simulation does not have.
 - **`PROGRAMS AVAILABLE` and `BUILD QUEUE` have real models** —
   `Game::labour_demand` and `Game::build_order_report` — which the
   handoff guessed at. Use the real ones.
@@ -127,7 +136,10 @@ a row drawn 360px off the panel in silence.
 One new engine derivation, in `views.rs`:
 
 ```rust
+pub enum AttentionKind { StructureDamaged, IdleStructures, PerkPoints, RosterFull }
+
 pub struct AttentionRow {
+    pub kind: AttentionKind,
     pub text: String,
     pub key: char,
     pub threat: bool,
@@ -135,17 +147,29 @@ pub struct AttentionRow {
 // Game::attention(&mut self) -> Vec<AttentionRow>
 ```
 
-Rows, in this order:
+Rows, **threat first and then in this order**:
 
 | Condition | Text | Key | Threat |
 |---|---|---|---|
-| idle workable structures | `N nodes without a program` | `a` | no |
-| unspent perk points | `N perk points unspent` | `k` | no |
-| pack at capacity | `pack full` | `i` | no |
-| a structure below full `Durability` | `<name> damaged` | `m` | yes |
+| a structure below full `Durability` | `<name> damaged` | `b` | yes |
+| idle workable structures | `N nodes without a program` | `b` | no |
+| unspent perk points | `N perk points unspent` | `p` | no |
+| roster at capacity | `roster full (n/n)` | `p` | no |
 
-No countdown row: see "What the handoff gets wrong". `threat` selects
-br red over br yellow, per the handoff's colour reservations.
+No countdown row and no pack row: see "What the handoff gets wrong".
+`threat` selects br red over br yellow, per the handoff's colour
+reservations, and it **sorts** as well as colouring — the badge shows the
+leading row, and a raid eating the base reading second to an unspent perk
+point is wrong on a HUD.
+
+The keys are this game's, not the handoff's: `k` walks west and `m` opens
+the Excavation plan. Perks live behind the party menu and both structure
+rows behind the base menu, so a chip names the **top-level map key that
+starts the journey**.
+
+`kind` is carried so a frontend sorts a row into a pane by an exhaustive
+match rather than off its prose or its keycap — `cell_mark`'s rule, and as
+a `_ =>` arm a fifth condition ships with no marker on any tab.
 
 **Three consumers, one call.** The status bar's badge, the info
 column's tab `!`/`·` markers, and the two collapsed bars all read the
@@ -175,11 +199,14 @@ the existing screen. Nothing moves out of a popup.
 `App` gains exactly one field, `info_tab: InfoTab`, and the keys
 `1`/`2`/`3`.
 
-> **The trap.** Those keys must be bound in **both**
-> `handle_playing_key` and `handle_stack_key`. `handle_stack_key` ends
-> in `_ => {}`, so a key bound in only one dispatch is a swallowed
-> keypress with no refusal and nothing in the log — which is exactly
-> how `r` (rest) shipped broken underground.
+> **The trap.** Those keys have to work underground. `handle_stack_key`
+> ends in `_ => {}`, so a key it never sees is a swallowed keypress with
+> no refusal and nothing in the log — which is exactly how `r` (rest)
+> shipped broken. **In the event one binding does it**:
+> `handle_playing_key`'s top match runs *before* the hand-off to
+> `handle_stack_key`, which is where `f` already sits, so a second arm
+> down there would only be able to drift. What has to exist is the
+> assertion, `the_digits_work_underground`, not the second binding.
 
 ### Pane contents
 
@@ -297,7 +324,7 @@ the game playable and independently revertible.
 | 1 | `hud::layout`, `hud::palette`, status bar absorbing the stock strip | geometry + top row |
 | 2 | Map pane frame, `strip.rs`, SECTOR MAP / THREAT / vitals | the signature move |
 | 3 | Log pane frame, channel gutter, filter strip, keybar | old key block deleted |
-| 4 | Column shell: tabs, `1`/`2`/`3` in both dispatches, collapsed bars, `Game::attention` | the attention model |
+| 4 | Column shell: tabs, `1`/`2`/`3`, collapsed bars, `Game::attention` | the attention model |
 | 5 | BASE / CREW / PACK contents; `draw_status_panel` deleted | the column |
 | 6 | Palette sweep across map glyph colours | colour |
 

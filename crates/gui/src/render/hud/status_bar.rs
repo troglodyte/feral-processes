@@ -5,23 +5,24 @@
 //! position, tick. The **centre** is what the base is holding, which is the
 //! stock strip this bar absorbed rather than reimplemented: `stock::fits` is
 //! still the one answer to how many piles fit, and it is simply handed a
-//! narrower budget than the whole window. The **right** is reserved for the
-//! attention badge and is deliberately empty until the attention model
-//! exists — a calm `ALL NOMINAL` drawn here before anything derives it is a
-//! claim about the base that nothing checked.
+//! narrower budget than the whole window. The **right** carries the attention
+//! badge — the first row of `Game::attention` and its keycap, or
+//! `ALL NOMINAL` when nothing holds. It is one of that call's three
+//! readouts, alongside the info column's tab markers and its collapsed
+//! bars, and it derives nothing of its own.
 //!
 //! The centre is the only elastic zone. The identity block is measured and
-//! subtracted first and the right zone is reserved at a fixed fraction, so
-//! adding the badge later does not re-lay the bar out.
+//! subtracted first and the badge zone is reserved at a fixed fraction, so
+//! the badge appearing does not re-lay the bar out.
 //!
 //! The row has no wrap and no clip — `Painter` clips vertically and never
 //! horizontally — so what does not fit is **counted**, not drawn off the
 //! end. That is `stock::fits`' rule and the reason this module has a width
 //! census.
 
-use feral_processes_engine::StockRow;
+use feral_processes_engine::{AttentionRow, StockRow};
 
-use super::palette;
+use super::{palette, strip};
 use crate::paint::{Color, Painter, Rect, TextRun};
 use crate::render::stock;
 use crate::text::Metrics;
@@ -39,6 +40,9 @@ pub(in crate::render) struct StatusBarState<'a> {
     pub position: (i32, i32),
     pub tick: u64,
     pub stock: &'a [StockRow],
+    /// `Game::attention`, called once by the caller and shared with the
+    /// info column. This never derives its own.
+    pub attention: &'a [AttentionRow],
 }
 
 /// The identity block, as coloured runs. Pure, so the census can measure
@@ -65,6 +69,39 @@ fn identity_text(state: &StatusBarState) -> String {
         .into_iter()
         .map(|(t, _, _)| t)
         .collect()
+}
+
+/// The badge, as coloured pieces: the leading condition upper-cased, its
+/// keycap, and a dim `+N` for the rest — or `ALL NOMINAL` when nothing
+/// holds.
+///
+/// The calm state is a real state and is drawn, not an empty gap. The count
+/// rides as a suffix rather than as a list because this is one row on a bar
+/// that already has two other zones on it; the column is where the rest of
+/// the conditions are read.
+///
+/// The keycap stays `palette::EMPHASIS` in both colourings — a keycap is a
+/// keycap, and running it in the row's own colour would make a reservation
+/// decorative.
+fn badge_pieces(attention: &[AttentionRow]) -> Vec<strip::Piece> {
+    let Some(first) = attention.first() else {
+        return vec![("ALL NOMINAL".to_string(), palette::HEALTHY, true)];
+    };
+    let color = if first.threat {
+        palette::THREAT
+    } else {
+        palette::ATTENTION
+    };
+    let mut pieces = vec![
+        (first.text.to_uppercase(), color, true),
+        (" ".to_string(), palette::FAINT, false),
+        (format!("[{}]", first.key), palette::EMPHASIS, false),
+    ];
+    let rest = attention.len() - 1;
+    if rest > 0 {
+        pieces.push((format!(" +{rest}"), palette::FAINT, false));
+    }
+    pieces
 }
 
 /// How much room the stock piles have, once the identity block and the
@@ -101,6 +138,11 @@ pub(in crate::render) fn draw_status_bar(
         })
         .collect();
     painter.ui_runs(&runs, at.x + m.inset, baseline, m.font_size);
+
+    // Above the stock half's early return, for the identity block's reason
+    // one zone along: whether anything needs the player is not conditional
+    // on the base holding cargo.
+    draw_badge(at, state.attention, baseline, painter, m);
 
     // Drawn unconditionally, and before any early return the stock half
     // might want: the identity block is not conditional on the base holding
@@ -158,12 +200,57 @@ pub(in crate::render) fn draw_status_bar(
     painter.ui_runs(&stock_runs, stock_x, baseline, m.font_size);
 }
 
+/// Right-aligns the badge inside its reserved zone. What does not fit is
+/// dropped from the end through `strip::fitting`, never clipped — the row's
+/// rule, and `stock::fits`' before it.
+fn draw_badge(at: Rect, attention: &[AttentionRow], baseline: f32, painter: &Painter, m: &Metrics) {
+    // Piece by piece rather than all or nothing, so a long condition sheds
+    // its `+N` and then its keycap rather than vanishing entirely. Not
+    // `strip::fitting`, which joins its segments with ` · ` — a badge is one
+    // phrase, not a list of them.
+    let avail = at.w * BADGE_FRAC - m.inset;
+    let mut taken: Vec<strip::Piece> = Vec::new();
+    for piece in badge_pieces(attention) {
+        let mut next = taken.clone();
+        next.push(piece);
+        let text: String = next.iter().map(|(t, _, _)| t.as_str()).collect();
+        if painter.measure_ui_advance(&text, m.font_size) > avail {
+            break;
+        }
+        taken = next;
+    }
+    if taken.is_empty() {
+        return;
+    }
+    let text: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
+    let w = painter.measure_ui_advance(&text, m.font_size);
+    let runs: Vec<TextRun> = taken
+        .iter()
+        .map(|(text, color, bold)| TextRun {
+            text,
+            bold: *bold,
+            color: *color,
+        })
+        .collect();
+    painter.ui_runs(&runs, at.x + at.w - m.inset - w, baseline, m.font_size);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::paint::{painted_text, with_painter};
     use crate::text::ui_metrics;
     use feral_processes_engine::items::ItemId;
+    use feral_processes_engine::{AttentionKind, AttentionRow};
+
+    fn nagging(kind: AttentionKind, text: &str, threat: bool) -> AttentionRow {
+        AttentionRow {
+            kind,
+            text: text.to_string(),
+            key: 'b',
+            threat,
+        }
+    }
 
     fn stock_rows(piles: &[(String, u32)]) -> Vec<StockRow> {
         piles
@@ -194,6 +281,7 @@ mod tests {
             position: (-9999, -9999),
             tick: 9_999_999,
             stock,
+            attention: &[],
         }
     }
 
@@ -270,5 +358,149 @@ mod tests {
         assert!(text.contains("ZONE"), "zone missing from {text:?}");
         assert!(text.contains("16"), "zone number missing from {text:?}");
         assert!(text.contains("tick"), "tick missing from {text:?}");
+    }
+
+    /// The calm state is a real state and is drawn, not an empty gap.
+    #[test]
+    fn a_calm_base_reads_all_nominal() {
+        let pieces = badge_pieces(&[]);
+        let text: String = pieces.iter().map(|(t, _, _)| t.as_str()).collect();
+        assert_eq!(text, "ALL NOMINAL");
+        assert_eq!(pieces[0].1, palette::HEALTHY);
+    }
+
+    #[test]
+    fn the_badge_names_the_first_row_and_its_key() {
+        let rows = [nagging(
+            AttentionKind::IdleStructures,
+            "4 nodes without a program",
+            false,
+        )];
+        let text: String = badge_pieces(&rows)
+            .iter()
+            .map(|(t, _, _)| t.as_str())
+            .collect();
+        assert_eq!(text, "4 NODES WITHOUT A PROGRAM [b]");
+    }
+
+    /// One row on a bar that already has two other zones on it: the column
+    /// is where the rest of the conditions are read.
+    #[test]
+    fn a_second_condition_is_counted_not_listed() {
+        let rows = [
+            nagging(
+                AttentionKind::IdleStructures,
+                "4 nodes without a program",
+                false,
+            ),
+            nagging(AttentionKind::PerkPoints, "2 perk points unspent", false),
+            nagging(AttentionKind::RosterFull, "roster full (3/3)", false),
+        ];
+        let text: String = badge_pieces(&rows)
+            .iter()
+            .map(|(t, _, _)| t.as_str())
+            .collect();
+        assert_eq!(text, "4 NODES WITHOUT A PROGRAM [b] +2");
+        assert!(
+            !text.contains("PERK"),
+            "the badge listed a second condition: {text:?}"
+        );
+    }
+
+    /// Both halves in one test: either alone passes against a badge drawing
+    /// one constant colour.
+    #[test]
+    fn a_threat_badge_is_red() {
+        let hostile = [nagging(
+            AttentionKind::StructureDamaged,
+            "Mining Node damaged",
+            true,
+        )];
+        let calm = [nagging(
+            AttentionKind::IdleStructures,
+            "1 node without a program",
+            false,
+        )];
+        assert_eq!(badge_pieces(&hostile)[0].1, palette::THREAT);
+        assert_eq!(badge_pieces(&calm)[0].1, palette::ATTENTION);
+        // The keycap is a keycap either way.
+        assert_eq!(badge_pieces(&hostile)[2].1, palette::EMPHASIS);
+        assert_eq!(badge_pieces(&calm)[2].1, palette::EMPHASIS);
+    }
+
+    /// The row has no wrap and no clip, so a badge wider than its zone is
+    /// drawn over the stock piles rather than cut off.
+    #[test]
+    fn the_badge_stays_inside_its_zone() {
+        let m = ui_metrics(720.0);
+        let rows: Vec<AttentionRow> = (0..4)
+            .map(|i| {
+                nagging(
+                    AttentionKind::IdleStructures,
+                    &format!("{i} interminably named structures without a program"),
+                    false,
+                )
+            })
+            .collect();
+        let stock = crowded();
+        let state = StatusBarState {
+            attention: &rows,
+            ..wide_state(&stock)
+        };
+        let at = Rect::new(0.0, 0.0, 1280.0, m.line_height + m.inset);
+        let avail = at.w * BADGE_FRAC - m.inset;
+        let (_, shapes) = with_painter(|p| {
+            let baseline = at.y + m.inset + m.font_size as f32 / 2.0;
+            let whole: String = badge_pieces(state.attention)
+                .iter()
+                .map(|(t, _, _)| t.as_str())
+                .collect();
+            assert!(
+                p.measure_ui_advance(&whole, m.font_size) > avail,
+                "the fixture must overflow the badge zone or it proves nothing"
+            );
+            draw_badge(at, state.attention, baseline, p, &m);
+        });
+        // Nothing else was drawn into this painter, so every glyph is the
+        // badge's.
+        let drawn = painted_text(&shapes).join("");
+        with_painter(|p| {
+            assert!(
+                p.measure_ui_advance(&drawn, m.font_size) <= avail,
+                "the badge drew {:.1}px into a {avail:.1}px zone: {drawn:?}",
+                p.measure_ui_advance(&drawn, m.font_size)
+            );
+        });
+    }
+
+    /// The claim the module doc has been making since phase 1 with nothing
+    /// checking it: the badge appearing does not re-lay the bar out.
+    #[test]
+    fn the_badge_does_not_move_the_stock_strip() {
+        let m = ui_metrics(900.0);
+        let stock = stock_rows(&[("CF".to_string(), 12)]);
+        let rows = [nagging(
+            AttentionKind::IdleStructures,
+            "4 nodes without a program",
+            false,
+        )];
+        let calm = wide_state(&stock);
+        let nagged = StatusBarState {
+            attention: &rows,
+            ..wide_state(&stock)
+        };
+        with_painter(|p| {
+            let at = Rect::new(0.0, 0.0, p.screen_w(), m.line_height + m.inset);
+            let identity_w = p.measure_ui_advance(identity_text(&calm), m.font_size);
+            assert_eq!(
+                stock_avail(at, identity_w, p, &m),
+                stock_avail(
+                    at,
+                    p.measure_ui_advance(identity_text(&nagged), m.font_size),
+                    p,
+                    &m
+                )
+            );
+        });
     }
 }

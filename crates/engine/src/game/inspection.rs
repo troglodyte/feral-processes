@@ -1151,6 +1151,83 @@ impl Game {
         (ledger.draw, ledger.supply)
     }
 
+    /// What needs the player right now, most urgent first.
+    ///
+    /// **One derivation, three readouts.** The HUD's status-bar badge, the
+    /// info column's tab markers and its two collapsed bars are all handed
+    /// this one `Vec` by the renderer's single call. A second derivation
+    /// beside it is what would make "a closed pane cannot hide an
+    /// actionable state" a coincidence rather than a construction.
+    ///
+    /// In the engine and not in app-core or the renderer because every row
+    /// is a claim about game state, and because a renderer-local version
+    /// would be three derivations that can disagree.
+    ///
+    /// **Threat rows lead**, then the rest in the order written here. The
+    /// badge shows the first row, and a raid eating the base reading second
+    /// to an unspent perk point is wrong on a HUD.
+    ///
+    /// There is deliberately **no "pack full" row**: `components::Inventory`
+    /// is an unbounded `Vec`, so the pack has no capacity to be at. The
+    /// container that *can* fill is the roster.
+    pub fn attention(&mut self) -> Vec<AttentionRow> {
+        // Walked once and read twice — it resolves a def per structure, and
+        // this is called every frame.
+        let structures = self.structure_report();
+        let mut rows = Vec::new();
+
+        // Ordered Home first, then by def id, then nearest, so "the first
+        // damaged structure" is stable across runs without a second sort.
+        if let Some(hurt) = structures
+            .iter()
+            .find(|s| s.durability.is_some_and(|(cur, max)| cur < max))
+        {
+            rows.push(AttentionRow {
+                kind: AttentionKind::StructureDamaged,
+                text: format!("{} damaged", hurt.label),
+                key: 'b',
+                threat: true,
+            });
+        }
+
+        let idle = structures.iter().filter(|s| s.is_idle()).count();
+        if idle > 0 {
+            let noun = if idle == 1 { "node" } else { "nodes" };
+            rows.push(AttentionRow {
+                kind: AttentionKind::IdleStructures,
+                text: format!("{idle} {noun} without a program"),
+                key: 'b',
+                threat: false,
+            });
+        }
+
+        let points = self
+            .world
+            .get::<Perks>(self.player_entity())
+            .map_or(0, |p| p.points);
+        if points > 0 {
+            let noun = if points == 1 { "point" } else { "points" };
+            rows.push(AttentionRow {
+                kind: AttentionKind::PerkPoints,
+                text: format!("{points} perk {noun} unspent"),
+                key: 'p',
+                threat: false,
+            });
+        }
+
+        let (count, capacity) = (self.pet_count(), self.pet_capacity());
+        if capacity > 0 && count >= capacity {
+            rows.push(AttentionRow {
+                kind: AttentionKind::RosterFull,
+                text: format!("roster full ({count}/{capacity})"),
+                key: 'p',
+                threat: false,
+            });
+        }
+
+        rows
+    }
+
     /// A species' affinities, or `None` if no such species loaded.
     pub fn species_affinities(&self, id: &str) -> Option<Affinities> {
         self.world

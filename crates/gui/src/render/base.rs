@@ -546,6 +546,8 @@ pub(super) fn draw_playing_base(
     let log_capacity = ((regions.log_pane.h - m.line_height) / m.line_height).max(1.0) as usize;
     let log_lines = app.visible_log(log_capacity);
     let log_filter = app.log_filter;
+    // Before the `game` borrow, like `log_filter` above.
+    let info_tab = app.info_tab;
     let filtered_out = app.filtered_out_log_lines();
     // Before the `game` borrow, like `status_line` above. `None` outside
     // `Mode::Excavate`, which is what keeps the cursor off the map the rest
@@ -560,6 +562,11 @@ pub(super) fn draw_playing_base(
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
+    // One call, shared by every surface that reads it — the status bar's
+    // badge here, and the info column's tab markers and collapsed bars once
+    // phase 4's column lands. A second derivation is what would make "a
+    // closed pane cannot hide an actionable state" a coincidence.
+    let attention = game.attention();
     let status = game.player_status();
     // `Game::active_buffs` needs `&mut self`; fetched here rather than
     // inside `draw_status_panel`, which only ever needed `&Game` before
@@ -613,7 +620,19 @@ pub(super) fn draw_playing_base(
         );
     }
 
-    draw_status_panel(regions.info_column, &status, &buffs, game, painter, m);
+    // The column draws its own fill and frame and hands back the body rect;
+    // the panel then draws its rows into that. Phase 5 replaces the panel
+    // with the BASE/CREW/PACK contents and this call goes with it.
+    let body = hud::column::draw_info_column(
+        regions.info_column,
+        &hud::column::ColumnState {
+            tab: info_tab,
+            attention: &attention,
+        },
+        painter,
+        m,
+    );
+    draw_status_panel(body, &status, &buffs, game, painter, m);
 
     hud::status_bar::draw_status_bar(
         regions.status_bar,
@@ -622,6 +641,7 @@ pub(super) fn draw_playing_base(
             position: game.base_pos().unwrap_or(status.position),
             tick: game.current_tick(),
             stock: &stock_rows,
+            attention: &attention,
         },
         painter,
         m,
@@ -1419,9 +1439,10 @@ fn draw_status_panel(
     painter: &Painter,
     m: &Metrics,
 ) {
+    // No fill and no border: `hud::column` draws both and hands this the
+    // body rect inside them. Drawing a second frame here would put one
+    // border inside another.
     let Rect { x, y, w, h } = rect;
-    painter.rect(x, y, w, h, PANEL_BG);
-    painter.rect_lines(x, y, w, h, 2.0, BORDER);
 
     // Clears the panel border by one inset, then drops to the first
     // baseline; both terms grow with the font the rows are drawn in.
@@ -1663,6 +1684,108 @@ mod tests {
             "the map's background painted at {map_bg}, SECTOR MAP at {title} — \
              the frame drew before the map, so its own fill painted over the label"
         );
+    }
+
+    /// **The census the design names.** The badge, the tab marker and the
+    /// collapsed bar are three readouts of one call, so they cannot
+    /// disagree — and both halves are asserted, because either alone passes
+    /// against a surface drawing a constant.
+    ///
+    /// The nagging half is reached through the save round-trip rather than
+    /// by writing a component: `Game`'s `world` is private from out here and
+    /// deliberately stays that way (`CLAUDE.md`'s architectural rule), so a
+    /// renderer test reaches game state the way a player would — through a
+    /// save.
+    #[test]
+    fn attention_drives_all_three_markers() {
+        let m = ui_metrics(900.0);
+        let mut fx = Fx::new();
+
+        let mut calm = playing_app();
+        assert!(
+            calm.game.as_mut().unwrap().attention().is_empty(),
+            "the calm fixture has something to say"
+        );
+        let (_, shapes) = with_painter(|p| {
+            draw_playing_base(&mut calm, &mut fx, None, p, &m);
+        });
+        let text = painted_text(&shapes).join(" ");
+        assert!(text.contains("ALL NOMINAL"), "no calm badge: {text:?}");
+        assert!(
+            crate::paint::painted_runs_in(&shapes, hud::palette::ATTENTION, true).is_empty(),
+            "a calm base wears a mark with nothing to mark"
+        );
+
+        let path = std::env::temp_dir().join(format!(
+            "fp_gui_attention_census_{}.sav",
+            std::process::id()
+        ));
+        calm.game.as_mut().unwrap().save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        data.player.perk_points = 4;
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        let mut nagged = playing_app();
+        nagged.game = Some(Game::load(&path, &test_assets()).unwrap());
+        let _ = std::fs::remove_file(&path);
+
+        let row = nagged
+            .game
+            .as_mut()
+            .unwrap()
+            .attention()
+            .into_iter()
+            .next()
+            .expect("four unspent perk points is something to say");
+        // A perk point lands in CREW, so open BASE and read the *closed*
+        // pane's marker and bar — the state the whole design is about.
+        nagged.info_tab = feral_processes_app_core::InfoTab::Base;
+
+        let (_, shapes) = with_painter(|p| {
+            draw_playing_base(&mut nagged, &mut fx, None, p, &m);
+        });
+        let text = painted_text(&shapes).join(" ");
+        assert!(
+            text.contains(&row.text.to_uppercase()),
+            "the badge is silent: {text:?}"
+        );
+        assert!(
+            text.contains(&row.text),
+            "the closed pane hid the condition: {text:?}"
+        );
+        assert!(
+            !crate::paint::painted_runs_in(&shapes, hud::palette::ATTENTION, true).is_empty(),
+            "no tab wears a mark"
+        );
+        assert!(
+            !text.contains("ALL NOMINAL"),
+            "the bar claims calm while nagging: {text:?}"
+        );
+    }
+
+    /// The column does not scroll, so a row past the bottom is dropped in
+    /// silence — `the_tallest_gear_page_fits_its_popup`'s trap in a taller
+    /// box. Measured at the smallest supported window, against the fixed
+    /// head of the panel: the bars, the stat block, the party and pet
+    /// headings and every party row. The inventory list below them clips
+    /// itself against the same floor and is not part of this.
+    #[test]
+    fn the_tallest_column_pane_fits_its_column() {
+        let m = ui_metrics(720.0);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let r = hud::layout::regions(1280.0, 720.0, char_w, &m);
+            let body = hud::column::regions(r.info_column, &m).body;
+
+            // Two bars, the level/zone/position block, four stat rows, the
+            // mining row, the two headings, and a full party under them.
+            let head =
+                2.0 + 3.0 + 4.0 + 1.0 + 2.0 + feral_processes_engine::tuning::MAX_PARTY_SIZE as f32;
+            let rows = (body.h - m.inset) / m.line_height;
+            assert!(
+                rows >= head,
+                "the column fits {rows:.1} rows and the panel's head is {head} —                  the overflow is dropped in silence"
+            );
+        });
     }
 
     /// `draw_playing_base` no longer computes its own rects — it reads them

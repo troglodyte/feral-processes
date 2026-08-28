@@ -8,6 +8,7 @@ pub(crate) mod support;
 mod achievements;
 mod affixes;
 mod assets;
+mod attention;
 mod base_grid;
 mod base_space;
 mod battle_timeline;

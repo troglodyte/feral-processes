@@ -176,6 +176,31 @@ impl App {
                 self.log_filter = self.log_filter.next();
                 return;
             }
+            // The info column's three panes. A `return` for `f`'s reason:
+            // changing which pane you are reading is not an action and must
+            // not cost a turn.
+            //
+            // **One binding covers both locales.** This match runs before
+            // the `is_underground()` hand-off to `handle_stack_key` below,
+            // so there is no second arm to write down there — and there must
+            // not be, or the two would drift. The design spec asks for two
+            // bindings; what it is actually asking for is that the keys work
+            // underground, which `the_digits_work_underground` is what says.
+            // A key that reached `handle_stack_key` instead would fall
+            // through its `_ => {}` as a swallowed keypress with no refusal
+            // and nothing in the log, which is how `r` shipped broken.
+            GameKey::Char('1') => {
+                self.info_tab = InfoTab::Base;
+                return;
+            }
+            GameKey::Char('2') => {
+                self.info_tab = InfoTab::Crew;
+                return;
+            }
+            GameKey::Char('3') => {
+                self.info_tab = InfoTab::Pack;
+                return;
+            }
             GameKey::Char('s') => {
                 self.save_game();
                 return;

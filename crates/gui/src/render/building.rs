@@ -905,8 +905,12 @@ fn grid_header_row(draw: u32, supply: u32) -> Row {
 /// A workable structure with nobody posted to it — the one thing on either
 /// structure screen the player can immediately act on, which is why both
 /// colour it yellow.
+///
+/// A call and not a second copy: `Game::attention` counts the same thing in
+/// the engine, so the two readers are in different crates and nothing would
+/// fail to compile if one drifted.
 pub(super) fn structure_is_idle(s: &StructureReport) -> bool {
-    s.workable && s.assignees.is_empty()
+    s.is_idle()
 }
 
 /// The one-line summary of a structure: what it is, where, how far, and how

@@ -36,6 +36,7 @@ impl App {
             game: None,
             status_line: profile_warning,
             log_filter: LogFilter::default(),
+            info_tab: InfoTab::default(),
             history_written: false,
             assets_dir,
             saves_dir,

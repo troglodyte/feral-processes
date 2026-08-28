@@ -14,7 +14,7 @@
 //! prevents, which is why `border_strip` is a function and not a convention.
 
 use super::palette;
-use crate::paint::{Painter, Rect, TextRun};
+use crate::paint::{Color, Painter, Rect, TextRun};
 use crate::text::Metrics;
 
 /// Which border a strip rides, and which end of it the strip starts from.
@@ -28,6 +28,78 @@ pub(in crate::render) enum Mount {
 /// Pad either side of the label, inside the background quad. What makes the
 /// border read as *broken by* a label rather than overwritten by one.
 const PAD_RATIO: f32 = 0.5;
+
+/// The separator between two segments of a strip.
+const SEP: &str = " · ";
+
+/// One piece of a strip: text, colour, weight.
+///
+/// A tuple rather than a struct because every producer builds these by the
+/// dozen inline and no consumer names a field — `fitting` reads the text and
+/// `draw_pieces` turns the three straight into a [`TextRun`].
+pub(in crate::render) type Piece = (String, Color, bool);
+
+pub(in crate::render) fn label(text: &str) -> Piece {
+    (text.to_string(), palette::FIELD_LABEL, false)
+}
+
+pub(in crate::render) fn value(text: String) -> Piece {
+    (text, palette::BODY, false)
+}
+
+pub(in crate::render) fn sep() -> Piece {
+    (SEP.to_string(), palette::FAINT, false)
+}
+
+/// Flattens the longest prefix of `segments` that fits `avail`, separators
+/// included.
+///
+/// **This is `stock::fits`' rule applied to segments**: a strip is one row on
+/// a border with no wrap and no clip, so what does not fit is dropped from
+/// the end, measured, rather than drawn off the pane in silence. Both the
+/// vitals strip and the keybar degrade this way, which is why the rule lives
+/// here beside [`border_strip`] rather than in either of them.
+pub(in crate::render) fn fitting(
+    segments: &[Vec<Piece>],
+    avail: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> Vec<Piece> {
+    let size = m.small();
+    let mut taken: Vec<Piece> = Vec::new();
+    for segment in segments {
+        let mut next = taken.clone();
+        if !next.is_empty() {
+            next.push(sep());
+        }
+        next.extend(segment.iter().cloned());
+        let text: String = next.iter().map(|(t, _, _)| t.as_str()).collect();
+        if painter.measure_ui_advance(&text, size) > avail {
+            break;
+        }
+        taken = next;
+    }
+    taken
+}
+
+/// Mounts `pieces` on a border and returns the advance consumed.
+pub(in crate::render) fn draw_pieces(
+    pane: Rect,
+    mount: Mount,
+    pieces: &[Piece],
+    painter: &Painter,
+    m: &Metrics,
+) -> f32 {
+    let runs: Vec<TextRun> = pieces
+        .iter()
+        .map(|(text, color, bold)| TextRun {
+            text,
+            bold: *bold,
+            color: *color,
+        })
+        .collect();
+    border_strip(pane, mount, &runs, painter, m)
+}
 
 /// A baseline this far below the border line puts the text's visual centre
 /// on it. Caps run about 0.7em, so their centre sits ~0.35em above the

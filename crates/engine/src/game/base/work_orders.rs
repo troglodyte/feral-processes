@@ -1369,10 +1369,11 @@ impl Game {
     /// fetch is a shelf to fill.
     ///
     /// **The latch clears the tick a source appears**, in `build_wants`
-    /// above, and that clearing matters more here than it does for a dig
-    /// site: a build waits on a bill of several items over many trips, so
-    /// said-once-and-never-again would leave a base that ran dry early
-    /// silent about running dry later.
+    /// above — `dig_wants`' `substrate_in_stock` is the same idea applied
+    /// to `DigSite::announced_dry`, because the same failure mode reaches
+    /// both: said once and never again, a base that ran dry early would
+    /// stay silent about running dry later, whether the drought is a bill
+    /// of several items over many trips or a single dig plan's many cells.
     fn announce_dry(&mut self, site: Entity) {
         if self
             .world
@@ -1441,6 +1442,29 @@ impl Game {
         }
     }
 
+    /// Every marked dig site that wants a body, in tile order.
+    ///
+    /// **Clears `DigSite::announced_dry` the tick a Blank Substrate source
+    /// exists**, the one place that can see every marked site every tick
+    /// regardless of whose turn it is to swing. `Game::crew_lays_tile` is
+    /// where the latch is *set* because that is the only place that knows
+    /// a lay actually failed, but it cannot be where the latch clears: it
+    /// runs once per site per `BASE_DIG_TICKS_PER_SWING` ticks, so a unit
+    /// that appears and is claimed by a different site (or a build
+    /// request) before this one's own cycle comes around would never be
+    /// seen from inside it, and the latch would stay set forever even
+    /// though the base *did* restock. A dig plan is many cells, so — unlike
+    /// the reasoning that once stood here — a base running dry more than
+    /// once over a run is the common case, not an edge one.
+    ///
+    /// **Global, not per-site**, unlike `build_wants`' `build_is_workable`:
+    /// every dig site wants the same one item, so there is one question to
+    /// ask rather than one bill per site. It is read-only and never used to
+    /// drop a site from the list below — `dig_wants` stays structural,
+    /// never a stock count, so a dry site keeps its body standing there and
+    /// reporting rather than being freed to work something else. Whether it
+    /// *should* be dropped, the way a dry `BuildSite` is, is a real and
+    /// separate question this does not answer.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let blocked = self.structure_tiles();
         let marked: Vec<(Position, Entity)> = {
@@ -1451,6 +1475,13 @@ impl Game {
                 .map(|(e, _, p)| (*p, e))
                 .collect()
         };
+        if self.substrate_in_stock() {
+            for (_, site) in &marked {
+                if let Some(mut dig) = self.world.get_mut::<DigSite>(*site) {
+                    dig.announced_dry = false;
+                }
+            }
+        }
         let grid = self.world.resource::<BaseGrid>();
         let mut sites: Vec<(i32, i32, Entity)> = marked
             .into_iter()
@@ -1462,6 +1493,21 @@ impl Game {
             .into_iter()
             .map(|(_, _, e)| (e, TaskKind::Excavate))
             .collect()
+    }
+
+    /// Whether a Blank Substrate exists anywhere `Game::crew_lays_tile`
+    /// could reach it — the base's own stores, then the player's pack —
+    /// without spending one. `dig_wants`' read, kept separate from
+    /// `Game::spend_one_substrate` because that one has to remove the unit
+    /// it finds and this one must not.
+    fn substrate_in_stock(&self) -> bool {
+        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+        if base_holding(self, &substrate) > 0 {
+            return true;
+        }
+        self.world
+            .get::<Inventory>(self.player_entity())
+            .is_some_and(|inv| inv.count(&substrate) > 0)
     }
 
     /// Drifts every staff member with no post one tile around the base.

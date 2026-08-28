@@ -12,6 +12,9 @@
 //!
 //! See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
 
+pub(super) mod bar;
 pub(super) mod layout;
+pub(super) mod map_frame;
 pub(super) mod palette;
 pub(super) mod status_bar;
+pub(super) mod strip;

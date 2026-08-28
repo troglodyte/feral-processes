@@ -696,6 +696,35 @@ pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<
         .collect()
 }
 
+/// A shape's kind, coarsely, for a test that cares which of two things was
+/// painted first rather than what either of them was.
+#[cfg(test)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Painted {
+    Rect,
+    Text,
+    Line,
+    Other,
+}
+
+/// Paint order as a sequence of kinds.
+///
+/// Exists so a test outside this module can ask an ordering question without
+/// naming a graphics library — `render/` is held to that rule and a test in
+/// it is still in it.
+#[cfg(test)]
+pub(crate) fn paint_order(shapes: &[egui::epaint::ClippedShape]) -> Vec<Painted> {
+    shapes
+        .iter()
+        .map(|cs| match &cs.shape {
+            egui::Shape::Rect(_) => Painted::Rect,
+            egui::Shape::Text(_) => Painted::Text,
+            egui::Shape::LineSegment { .. } => Painted::Line,
+            _ => Painted::Other,
+        })
+        .collect()
+}
+
 /// Every filled rect's whole box, for a caller asking *where* something was
 /// painted rather than how wide it is.
 #[cfg(test)]

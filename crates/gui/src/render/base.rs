@@ -975,8 +975,8 @@ fn draw_surface_map(
                 // the wash is the building's condition, not the walker's.
                 bg_source = dimmed;
                 // A machine's glyph is its state: the `$` of a Mining
-                // Node reads green running, yellow starved, red clogged,
-                // grey idle. Which structure it is stays legible from the
+                // Node reads green running, dim yellow starved, the
+                // attention yellow when it is asking for you, grey idle. Which structure it is stays legible from the
                 // glyph itself, so the authored colour is only carrying
                 // identity a machine can spare. Anything that runs no job
                 // keeps its authored colour.
@@ -1249,10 +1249,13 @@ fn draw_surface_map(
                 // Orange as well as still: colour and motion say the same
                 // thing at once, so a stranded machine is legible from a
                 // paused screenshot and not only from watching it. It is
-                // deliberately not the `RED` a clogged outline already
-                // wears — being full is the machine's own problem and
-                // recoverable by collecting, while this is the base having
-                // nowhere left to put anything.
+                // deliberately not the yellow a clogged or stranded glyph
+                // already wears — being full is the machine's own problem
+                // and recoverable by collecting, while this is the base
+                // having nowhere left to put anything. The mark stays a raw
+                // hue: phase 6's sweep went as far as the map's *glyphs*,
+                // and these overlays are quads that answer to the glyph
+                // under them rather than to a palette role.
                 let (lift, alpha, base) = if stranded {
                     (0.0, fx.stranded_blink(), ORANGE)
                 } else {

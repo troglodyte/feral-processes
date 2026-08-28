@@ -919,8 +919,8 @@ impl Game {
             return AFFINITY_NEUTRAL;
         };
         if actor == self.player_entity() {
-            let affinity = AFFINITY_NEUTRAL
-                + kind.perk_bonus_per_level() * self.player_perk_level(kind.perk()) as f32;
+            let affinity =
+                AFFINITY_NEUTRAL + crate::perks::affinity_bonus(self.player_perks(), kind);
             return affinity.min(AFFINITY_MAX);
         }
         let species = self

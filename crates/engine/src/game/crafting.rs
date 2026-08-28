@@ -2,8 +2,7 @@
 //! unequip, fuse, and erase.
 
 use crate::tuning::{
-    LEAN_COMPILER_DISCOUNT_PER_LEVEL, QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS,
-    QUALITY_CAREFUL_COST_PERCENT, QUALITY_PERK_PER_LEVEL,
+    QUALITY_BASE, QUALITY_BENCH_PER_TIER, QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT,
 };
 use crate::*;
 
@@ -64,11 +63,15 @@ impl Game {
     /// `ItemDb` directly, so a perk of the player's cannot reach into what a
     /// structure consumes.
     pub fn craft_recipes(&self) -> Vec<CraftRecipe> {
-        let discount =
-            LEAN_COMPILER_DISCOUNT_PER_LEVEL * self.player_perk_level(Perk::LeanCompiler);
+        let perks = self.player_perks();
         let charged = |cost: &[(ItemId, u32)]| -> Vec<(ItemId, u32)> {
             cost.iter()
-                .map(|(item, qty)| (item.clone(), qty.saturating_sub(discount).max(1)))
+                .map(|(item, qty)| {
+                    (
+                        item.clone(),
+                        crate::perks::discounted_craft_cost(perks, *qty),
+                    )
+                })
                 .collect()
         };
         let mut recipes: Vec<CraftRecipe> = self
@@ -206,7 +209,7 @@ impl Game {
     /// `max_tier` saturates rather than wrapping.
     pub(crate) fn craft_quality_floor(&self, order: &CraftOrder) -> u8 {
         let bench = order.bench_tier.saturating_sub(1) * QUALITY_BENCH_PER_TIER as u32;
-        let perk = order.perk_level * QUALITY_PERK_PER_LEVEL as u32;
+        let perk = crate::perks::quality_floor_bonus(order.perk_level);
         let care = if order.careful {
             QUALITY_CAREFUL_BONUS as u32
         } else {

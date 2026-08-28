@@ -2,9 +2,7 @@
 //! decompiling a defeated program into a companion.
 
 use crate::progression::StatRow;
-use crate::tuning::{
-    DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, TEARDOWN_SALVAGE_PER_LEVEL, WORK_RESOURCE_DROP,
-};
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, WORK_RESOURCE_DROP};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
@@ -531,7 +529,7 @@ impl Game {
             .get(&species_id)?
             .work_resource
             .clone()?;
-        let bonus = TEARDOWN_SALVAGE_PER_LEVEL * self.player_perk_level(Perk::Teardown);
+        let bonus = crate::perks::salvage_bonus(self.player_perks());
         let qty = {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(WORK_RESOURCE_DROP) + bonus

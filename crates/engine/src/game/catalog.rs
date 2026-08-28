@@ -1,7 +1,6 @@
 //! Read-only lookups against the loaded asset databases — item, structure,
 //! and species metadata, plus the capacity checks that gate them.
 
-use crate::tuning::PROCESS_POOL_SLOTS_PER_LEVEL;
 use crate::*;
 
 impl Game {
@@ -740,9 +739,7 @@ impl Game {
             .filter_map(|k| db.get(k.as_str()))
             .map(|def| def.pet_slot_bonus)
             .sum();
-        BASE_PET_CAPACITY
-            + bonus as usize
-            + self.player_perk_level(Perk::ProcessPool) as usize * PROCESS_POOL_SLOTS_PER_LEVEL
+        BASE_PET_CAPACITY + bonus as usize + crate::perks::roster_slot_bonus(self.player_perks())
     }
 
     /// How many tamed programs the player currently owns, wherever they are —

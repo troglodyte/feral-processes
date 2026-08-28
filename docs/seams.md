@@ -2715,18 +2715,20 @@ count is pinned so a path that goes missing cannot drop out of the scan.
 `Perk::TightenTolerances` is the player's, and the second gatherer the
 `CraftOrder` seam exists for is a base-roster program, which has no perks of
 its own — so `player_craft_order` asks `player_perk_level` and
-`craft_quality_floor` never learns whose levels these are. Reading the
+`craft_quality_floor` never learns whose levels these are — which is why
+`perks::quality_floor_bonus` takes a bare level where most of that module's
+queries take the player's `Perks`. Reading the
 player's perks inside the floor would compile just as well and would quietly
 hand a program the player's investment the moment the second gatherer lands,
 which is the failure the type was built to make impossible.
 
 **It is read at the compile rather than applied at purchase**, unlike
 `Attacker`, `Defender` and `Buffer`, which write straight to `Stats` in
-`unlock_perk` and so need an arm in its match. What a quality perk is worth
+`unlock_perk` and so need an arm in `perks::purchase_stat_gain`. What a quality perk is worth
 is a property of each copy compiled *after* it, and gear already carried
 keeps the quality it was compiled at — a copy is a record of the moment it
 was made, the same reading that puts an orphan's stats outside its frame
-seed. So the hook is one addend and the `_ => {}` arm covers the purchase.
+seed. So the hook is one addend and `purchase_stat_gain` answers `None`.
 Priced at one `QUALITY_STEP`, the same as a bench tier, so the two read as
 the same size of investment from opposite directions: fragments spent on the
 base against Perk Points spent on the player. Player *level* is deliberately

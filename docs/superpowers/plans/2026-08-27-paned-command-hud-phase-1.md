@@ -360,15 +360,15 @@ evidence of correctness.
 
 - [ ] **Step 5: `cargo clippy --workspace` and `cargo fmt`**
 
-- [ ] **Step 6: Look at it**
+- [ ] **Step 6: Prove the repointing with a test, not with your eyes**
 
-`cargo run -- --template chains`
-
-Confirm: the status bar spans the top with identity, zone, position, tick and the
-stock piles; the map pane is left of a full-height right column; the log pane
-stops at the column's left edge and does not run under it. The right column's
-*contents* are still the old status panel and will look cramped — that is
-expected and is Phase 5's job.
+There is no playtest available on this project, so the geometry has to be
+asserted rather than looked at. Add one test in `base.rs`'s existing
+`#[cfg(test)] mod tests`, `the_playing_screen_draws_inside_its_regions`: build
+the regions at 1440x900 through `hud::layout::regions`, and assert the map pane's
+right edge does not cross `info_column.x` and that `map_pane.y` is at or below
+`status_bar`'s bottom edge. That is the "a literal 0.0 draws under the strip and
+no test sees it" trap, which is a real one in this file.
 
 - [ ] **Step 7: Commit**
 

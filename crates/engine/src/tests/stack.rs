@@ -661,7 +661,7 @@ fn resting_underground_is_bought_with_an_outlet() {
         .count(&ItemId::from(ids::OUTLET));
     let before = game.current_tick();
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),

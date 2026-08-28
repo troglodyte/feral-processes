@@ -138,7 +138,7 @@ fn rest_fully_heals_and_restores_power() {
     }
     stand_in_base_beside_home(&mut game);
 
-    game.rest();
+    game.rest().unwrap();
 
     let stats = *game.world.get::<Stats>(player).unwrap();
     let needs = *game.world.get::<PowerReserve>(player).unwrap();
@@ -176,7 +176,7 @@ fn a_pursuer_beside_the_anchor_cannot_interrupt_a_rest() {
     let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
     spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert!(
         !game.has_active_battle(),
@@ -205,7 +205,7 @@ fn rest_also_fully_heals_the_active_companion() {
     }
     stand_in_base_beside_home(&mut game);
 
-    game.rest();
+    game.rest().unwrap();
 
     let stats = *game.world.get::<Stats>(companion).unwrap();
     assert_eq!(
@@ -226,7 +226,7 @@ fn rest_heals_every_party_member() {
     }
     stand_in_base_beside_home(&mut game);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(game.world.get::<Stats>(a).unwrap().hp, 10);
     assert_eq!(game.world.get::<Stats>(b).unwrap().hp, 10);
@@ -255,7 +255,11 @@ fn rest_refused_by_game_over_consumes_no_outlet() {
     stand_in_base_beside_home(&mut game);
     game.world.resource_mut::<GameOver>().reason = Some("test".to_string());
 
-    game.rest();
+    let refusal = game.rest();
+    assert!(
+        refusal.is_err(),
+        "a rest that does not happen must say why, not fall silent"
+    );
 
     assert_eq!(
         game.world
@@ -274,7 +278,11 @@ fn rest_refused_by_active_battle_consumes_no_outlet() {
     stand_in_base_beside_home(&mut game);
     start_battle_with_a_wild_program(&mut game);
 
-    game.rest();
+    let refusal = game.rest();
+    assert!(
+        refusal.is_err(),
+        "a rest that does not happen must say why, not fall silent"
+    );
 
     assert_eq!(
         game.world
@@ -496,7 +504,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
         },
     );
 
-    game.rest();
+    game.rest().unwrap();
 
     let active = game.world.get::<FieldBuff>(player).unwrap().active.clone();
     assert_eq!(
@@ -537,7 +545,7 @@ fn resting_drops_a_companions_until_rest_buffs_too() {
         },
     );
 
-    game.rest();
+    game.rest().unwrap();
 
     assert!(
         game.world
@@ -574,7 +582,11 @@ fn a_refused_rest_keeps_until_rest_buffs() {
         let held = inv.count(&ItemId::from(ids::OUTLET));
         inv.take(ItemId::from(ids::OUTLET), held);
     }
-    game.rest();
+    let refusal = game.rest();
+    assert!(
+        refusal.is_err(),
+        "a rest that does not happen must say why, not fall silent"
+    );
 
     assert_eq!(
         game.world.get::<FieldBuff>(player).unwrap().active.len(),
@@ -1593,7 +1605,7 @@ fn resting_in_base_space_spends_nothing() {
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
     stand_in_base(&mut game);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
@@ -1622,7 +1634,7 @@ fn a_rest_in_base_space_does_not_advance_the_clock() {
     stand_in_base(&mut game);
     let before = game.current_tick();
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
@@ -1645,7 +1657,7 @@ fn resting_on_the_surface_spends_one_outlet() {
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
     let before = game.current_tick();
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
@@ -1677,7 +1689,7 @@ fn resting_underground_spends_one_outlet() {
     descend(&mut game);
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
@@ -1707,19 +1719,22 @@ fn resting_outside_the_base_with_no_outlet_is_refused() {
     }
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
 
-    game.rest();
+    let refusal = game
+        .rest()
+        .expect_err("a rest that does not happen must say why, not fall silent");
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
         10.0,
         "a refused rest restores nothing"
     );
+    // Read off the returned sentence rather than the log: the caller is what
+    // puts a refusal on the map's status banner, and a rest whose only
+    // account of itself was an `Info` line the log filter can hide is the
+    // hole this whole path was widened to close.
     assert!(
-        game.message_log(5)
-            .iter()
-            .any(|e| e.text.to_lowercase().contains("outlet")),
-        "and says why: {:?}",
-        game.message_log(5)
+        refusal.to_lowercase().contains("outlet"),
+        "and says why: {refusal:?}"
     );
 }
 
@@ -1751,7 +1766,7 @@ fn any_item_flagged_enables_rest_can_buy_a_field_rest() {
     }
     *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(player).unwrap().get(),
@@ -1781,4 +1796,63 @@ fn the_power_outlet_is_a_rest_charge() {
             .enables_rest,
         "the Power Outlet is the shipped rest charge"
     );
+}
+
+/// The reported bug, and the one shape of it that reproduces: `r` in the
+/// Stack doing *literally nothing* — no heal, no charge spent, and not one
+/// word about why.
+///
+/// `Inventory::add(item, 0)` pushes a `(item, 0)` slot when no slot exists,
+/// and `rest_charge_in_pack` matched on `ItemDef::enables_rest` alone
+/// without ever asking how many were in the stack. So an empty outlet slot
+/// *was* a charge as far as the gate was concerned: the "you have none"
+/// refusal was skipped, `Inventory::take` came back with 0, and `rest` took
+/// its silent `return`. Nothing on screen, nothing in the log, nothing to
+/// diagnose from — which is what a bug report saying outlets don't work in
+/// the Stack looks like from the inside.
+///
+/// A charge is a *unit you can spend*, not a key that happens to be in the
+/// map, so the quantity belongs in the predicate rather than in a second
+/// check downstream of it.
+#[test]
+fn an_empty_rest_charge_slot_is_not_a_charge() {
+    let mut game = Game::new(3216, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    descend(&mut game);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&ItemId::from(ids::OUTLET));
+        inv.take(ItemId::from(ids::OUTLET), held);
+        // The state the silent return needs: the slot is present and empty.
+        inv.add(ItemId::from(ids::OUTLET), 0);
+    }
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(10.0);
+
+    let refusal = game.rest().expect_err("an empty slot cannot buy a rest");
+
+    assert!(
+        refusal.to_lowercase().contains("outlet"),
+        "and it must name the charge it wanted: {refusal:?}"
+    );
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        10.0,
+        "a refused rest restores nothing"
+    );
+}
+
+/// The other two silent exits. Both are unreachable from the map screen
+/// today, which is exactly why they were written as bare `return`s — and
+/// exactly why a report of "`r` does nothing" could not be told apart from
+/// them. A refusal that is never spoken is indistinguishable from a dead
+/// key, so `rest` now has no exit that says nothing.
+#[test]
+fn resting_mid_intrusion_says_why_instead_of_nothing() {
+    let mut game = Game::new(3217, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    start_battle_with_a_wild_program(&mut game);
+    assert!(game.has_active_battle(), "fixture: a fight must be open");
+
+    let refusal = game.rest().expect_err("a rest mid-fight is refused");
+
+    assert!(!refusal.is_empty(), "and it is not silence");
 }

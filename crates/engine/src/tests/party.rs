@@ -1755,7 +1755,7 @@ fn rest_refills_a_drained_companions_reserve() {
     *game.world.get_mut::<PowerReserve>(companion).unwrap() = PowerReserve::new(3.0);
     stand_in_base_beside_home(&mut game);
 
-    game.rest();
+    game.rest().unwrap();
 
     assert_eq!(
         game.world.get::<PowerReserve>(companion).map(|r| r.get()),

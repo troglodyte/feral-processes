@@ -561,3 +561,52 @@ fn e_restores_power_underground_and_burns_a_power_cell() {
         game.message_log(5)
     );
 }
+
+/// The half the 0.13.21 binding fix left open, and the reason the report
+/// outlived it: `r` reached `Game::rest` and was refused, and this screen
+/// said nothing about it.
+///
+/// `Game::rest` announced its one refusal with a plain `log()` — an `Info`
+/// line on the field channel, which `App::log_filter` can hide outright and
+/// which is three rows down the pane rather than under the cursor. Every
+/// other refused verb on this screen (`o`, `<`, `>`, `v`) hands its sentence
+/// back and lands on the status banner. So a Stack rest that could not
+/// happen was indistinguishable from a key that was never bound — the exact
+/// symptom the binding fix was supposed to have retired.
+#[test]
+fn a_refused_underground_rest_says_so_on_the_status_banner() {
+    let mut app = app_underground_with_no_rest_charge(909);
+    assert_eq!(
+        held(&app, feral_processes_engine::items::ids::OUTLET),
+        0,
+        "the fixture must hold no rest charge"
+    );
+
+    app.handle_key(GameKey::Char('r'));
+
+    let banner = app
+        .status_line
+        .as_deref()
+        .expect("a refused rest must reach the banner, not only the log");
+    assert!(
+        banner.to_lowercase().contains("outlet"),
+        "and it must name the charge it wanted: {banner:?}"
+    );
+}
+
+/// The other side of the same rule: a rest that *happens* leaves no refusal
+/// standing. `after_world_action` clears the line on any real action, so
+/// this pins that the success path still counts as one — a rest that
+/// reported `false` would keep a stale sentence over the map.
+#[test]
+fn a_successful_underground_rest_leaves_no_refusal_standing() {
+    let mut app = app_underground(910);
+    app.status_line = Some("stale".to_string());
+
+    app.handle_key(GameKey::Char('r'));
+
+    assert_eq!(
+        app.status_line, None,
+        "a rest that happened is an action and clears the line"
+    );
+}

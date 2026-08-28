@@ -41,6 +41,24 @@ pub struct GameClock {
 #[derive(Resource, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct MiningMode(pub bool);
 
+/// Which `StructureDef::first_free` structures this run has already had for
+/// nothing. Written by `Game::spawn_structure` — the one place a structure's
+/// component list is written, and so the one moment a freebie is genuinely
+/// spent rather than merely asked for. A filed request that is cancelled, or
+/// wiped with the cell it stood on, costs the run nothing.
+///
+/// Not wiped in `Game::enter_next_zone`: the base travels through a breach
+/// and the Broker standing in it travels too, so a freebie that reset per
+/// zone would be one per breach rather than one per run.
+///
+/// A `BTreeSet` for `KnownRoutines`' reason — the save writes it out, and a
+/// `HashSet`'s iteration order would make the encoded bytes differ run to
+/// run. Additive behind a `#[serde(default)]`, so it costs no
+/// `SAVE_FORMAT_VERSION` bump and a save written before it existed loads
+/// with its freebies unspent.
+#[derive(Resource, Default, Clone, Serialize, Deserialize)]
+pub struct FreeBuilds(pub std::collections::BTreeSet<crate::structures::StructureId>);
+
 #[derive(Resource)]
 pub struct GameRng(pub StdRng);
 

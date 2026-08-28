@@ -1317,3 +1317,135 @@ fn a_builder_is_drawn_on_the_map_for_the_whole_job() {
         "and the crew still finishes the job"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The first one free
+// ---------------------------------------------------------------------------
+
+/// The Contract Broker's def, straight out of the shipped catalogue.
+fn broker(game: &Game) -> StructureDef {
+    game.world
+        .resource::<StructureDb>()
+        .get("contract_broker")
+        .cloned()
+        .expect("the shipped assets carry a Contract Broker")
+}
+
+/// A `first_free` structure is quoted at nothing until the run has raised
+/// one, and at its authored bill for the rest of the run after that.
+///
+/// Both halves in one test on purpose: the free half alone passes against a
+/// def whose `build_cost` is simply empty, which is a different feature —
+/// what makes this one *first* is the second quote.
+#[test]
+fn the_first_broker_is_free_and_the_next_one_is_not() {
+    let mut game = base(1150);
+    builder(&mut game);
+    let def = broker(&game);
+    assert!(
+        !def.build_cost.is_empty(),
+        "the fixture is worthless unless the Broker authors a bill to waive"
+    );
+
+    assert!(
+        game.structure_build_cost(&def).is_empty(),
+        "the run's first Broker is quoted free"
+    );
+
+    game.place_structure("contract_broker", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    assert!(
+        game.world.get::<BuildSite>(site).unwrap().cost.is_empty(),
+        "and the filed request carries the price it was quoted, not the def's"
+    );
+
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    structure_at(&mut game, 1, 0).expect("the crew raises a free request like any other");
+
+    assert_eq!(
+        game.structure_build_cost(&def),
+        def.build_cost,
+        "the freebie is spent the moment one stands, so the next costs what it says"
+    );
+}
+
+/// The freebie is spent when the structure is **raised**, not when the
+/// request is filed — a cancelled request must not burn it.
+#[test]
+fn cancelling_the_free_request_gives_the_freebie_back() {
+    let mut game = base(1151);
+    let def = broker(&game);
+
+    game.place_structure("contract_broker", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    game.cancel_build_request(site).unwrap();
+
+    assert!(
+        game.structure_build_cost(&def).is_empty(),
+        "nothing was ever raised, so the run has not spent its free Broker"
+    );
+}
+
+/// A second request filed while the free one is still standing as a site is
+/// quoted in full. `max_deployed`'s rule — a pending request counts
+/// alongside a standing structure — applied to the other half of the bill:
+/// without it a player files two before either is up and gets both free.
+#[test]
+fn a_second_request_alongside_the_free_one_pays_full_price() {
+    let mut game = base(1152);
+    let def = broker(&game);
+
+    game.place_structure("contract_broker", 1, 0).unwrap();
+    assert_eq!(
+        game.structure_build_cost(&def),
+        def.build_cost,
+        "one free request is already outstanding, so the next is priced"
+    );
+
+    game.place_structure("contract_broker", 0, 1).unwrap();
+    let second = site_at(&mut game, 0, 1);
+    assert_eq!(
+        game.world.get::<BuildSite>(second).unwrap().cost,
+        def.build_cost,
+        "and it carries the full bill"
+    );
+}
+
+/// The spent freebie survives a real `Game::save`/`Game::load`. A RON round
+/// trip alone cannot catch a `#[serde(skip)]` or a load path that forgets to
+/// insert the resource, and either one hands a reloading player a second
+/// free Broker.
+#[test]
+fn the_spent_freebie_survives_a_save_and_load() {
+    let mut game = base(1153);
+    builder(&mut game);
+    let def = broker(&game);
+
+    game.place_structure("contract_broker", 1, 0).unwrap();
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    structure_at(&mut game, 1, 0).expect("the crew raises it");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_free_build_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.structure_build_cost(&def),
+        def.build_cost,
+        "a reload does not hand the run its free Broker back"
+    );
+}

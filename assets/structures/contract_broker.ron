@@ -5,6 +5,7 @@
     glyph: '!',
     color: Yellow,
     build_cost: [("core_fragment", 5)],
+    first_free: true,
     work: None,
     issues_contracts: true,
 )

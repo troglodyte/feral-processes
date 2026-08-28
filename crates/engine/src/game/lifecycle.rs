@@ -186,6 +186,9 @@ impl Game {
         // Off when a run starts: the player's bump has to be armed before it
         // destroys terrain. See `resources::MiningMode`.
         world.init_resource::<crate::resources::MiningMode>();
+        // Empty at the start of a run: nothing has been built yet, so every
+        // `first_free` structure is still owed. See `resources::FreeBuilds`.
+        world.init_resource::<crate::resources::FreeBuilds>();
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -465,6 +468,7 @@ impl Game {
         world.insert_resource(ZoneLevel(data.zone));
         world.insert_resource(data.base_grid);
         world.insert_resource(crate::resources::MiningMode(data.mining));
+        world.insert_resource(data.free_builds);
         world.insert_resource(Locale::default());
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
@@ -1577,6 +1581,10 @@ impl Game {
             tile_overrides,
             base_grid,
             mining: self.world.resource::<crate::resources::MiningMode>().0,
+            free_builds: self
+                .world
+                .resource::<crate::resources::FreeBuilds>()
+                .clone(),
             anchor: self.anchor_position(),
             zone: self.world.resource::<ZoneLevel>().0,
             spawn_point: {

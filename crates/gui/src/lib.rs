@@ -412,11 +412,15 @@ fn frame(
     // Effects are drained every frame whether or not they'll be drawn,
     // so a disabled `Fx` can't leave the engine's queue at its cap.
     let in_battle = fe.app.mode.is_battle();
-    let (effects, last_log) = match &mut fe.app.game {
-        Some(game) => (game.take_effects(), game.message_log(1).pop()),
-        None => (Vec::new(), None),
+    let (effects, transits, last_log) = match &mut fe.app.game {
+        Some(game) => (
+            game.take_effects(),
+            game.take_transits(),
+            game.message_log(1).pop(),
+        ),
+        None => (Vec::new(), Vec::new(), None),
     };
-    fe.fx.begin_frame(now, effects, in_battle);
+    fe.fx.begin_frame(now, effects, transits, in_battle);
     fe.fx.observe_log(last_log.as_ref());
 
     // Timed whether or not the readout is on: a meter fed only while it is
@@ -446,8 +450,9 @@ fn frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::items::{ItemId, ids};
-    use feral_processes_engine::resources::{EffectKind, Locale, VisualEffect};
+    use feral_processes_engine::resources::{EffectKind, Locale, TransitCue, VisualEffect};
     use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
     use feral_processes_engine::{DifficultyMode, Game, save};
     use std::path::PathBuf;
@@ -648,11 +653,15 @@ mod tests {
     /// does, then draw whatever mode the app is now in.
     fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
         let in_battle = app.mode.is_battle();
-        let (effects, last_log) = match &mut app.game {
-            Some(game) => (game.take_effects(), game.message_log(1).pop()),
-            None => (Vec::new(), None),
+        let (effects, transits, last_log) = match &mut app.game {
+            Some(game) => (
+                game.take_effects(),
+                game.take_transits(),
+                game.message_log(1).pop(),
+            ),
+            None => (Vec::new(), Vec::new(), None),
         };
-        fx.begin_frame(now, effects, in_battle);
+        fx.begin_frame(now, effects, transits, in_battle);
         fx.observe_log(last_log.as_ref());
         paint::with_painter(|p| render::draw(app, fx, p));
     }
@@ -725,6 +734,7 @@ mod tests {
                 pos: in_base,
                 kind: EffectKind::Hit,
             }],
+            Vec::new(),
             false,
         );
         let flash = fx
@@ -747,6 +757,7 @@ mod tests {
                 pos: on_surface,
                 kind: EffectKind::Hit,
             }],
+            Vec::new(),
             false,
         );
         let flash = fx
@@ -764,13 +775,59 @@ mod tests {
         // the guard has to be on both — a rect count alone would leave the
         // sparks free to keep landing on open ground.
         let mut quiet = Fx::new();
-        quiet.begin_frame(0.0, Vec::new(), false);
+        quiet.begin_frame(0.0, Vec::new(), Vec::new(), false);
         let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p));
         assert_eq!(
             paint::painted_line_count(&shapes),
             paint::painted_line_count(&bare),
             "an effect queued while the party is on the surface must change nothing \
              the pane paints, sparks included"
+        );
+    }
+
+    /// A squad's departure walk is base-space too, and the gate it sits
+    /// behind is the flash's.
+    ///
+    /// A `TransitCue` names base-space cells, so a walk drawn while the pane
+    /// is showing the zone surface files a squad of glyphs across whatever
+    /// unrelated ground shares those numbers — the party's own tile among
+    /// them. Both halves in one test for the flash's reason: the base half
+    /// alone passes against a draw pass that is never gated at all.
+    #[test]
+    fn a_departure_walk_draws_in_base_space_and_never_on_the_surface() {
+        /// A glyph nothing on either map draws, so counting it needs no
+        /// control draw to subtract.
+        const MARK: char = 'Ж';
+        let cue = || TransitCue {
+            glyph: MARK,
+            color: GlyphColor::Cyan,
+            path: vec![(0, 0), (1, 0), (2, 0), (3, 0)],
+        };
+        let painted = |app: &mut App| {
+            let mut fx = Fx::new();
+            fx.begin_frame(0.0, Vec::new(), vec![cue()], false);
+            // A frame in, so the body is off its first cell and being drawn
+            // by the interpolating pass rather than sitting on a tile.
+            fx.begin_frame(0.06, Vec::new(), Vec::new(), false);
+            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p));
+            paint::painted_text(&shapes)
+                .iter()
+                .filter(|t| t.contains(MARK))
+                .count()
+        };
+
+        let mut app = app_in_base(4246);
+        assert_eq!(
+            painted(&mut app),
+            1,
+            "a body walking out of the base is drawn"
+        );
+
+        app.game.as_mut().unwrap().leave_base().unwrap();
+        assert_eq!(
+            painted(&mut app),
+            0,
+            "the zone map is not base space, so a walk across it must draw nothing"
         );
     }
 

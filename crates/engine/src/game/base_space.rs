@@ -28,6 +28,59 @@ use crate::*;
 /// was somewhere else would be a different space rather than a retuned one.
 pub(crate) const BASE_EXIT_CELL: (i32, i32) = (0, 0);
 
+/// The cells a body walks through to get from `from` to `to` inside base
+/// space — `from` first, `to` last — or nothing at all when there is no walk
+/// between them.
+///
+/// Cosmetic, and its one caller is the sortie departure and arrival cue. Two
+/// things about it are deliberate.
+///
+/// It pathfinds on `BaseGrid::walkable` **alone and admits no blocked set**,
+/// unlike `hauling::post_field`, which refuses tiles other things stand on.
+/// `BASE_EXIT_CELL` is where the Home stands, so a walk that refused occupied
+/// tiles could never reach its own destination. A walker ghosting past a
+/// machine for a fraction of a second is invisible; one ghosting through rock
+/// reads as a rendering fault, which is the whole reason a path is computed
+/// rather than the two ends being interpolated between.
+///
+/// And a walk that does not exist is **nothing**, never a straight line: a
+/// body whose tile is not walkable base space at all is the common case for a
+/// program adopted on the surface that has not drifted yet, since
+/// `entry_tile` is what gives one a base cell.
+pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    if !grid.walkable(from.0, from.1) || !grid.walkable(to.0, to.1) {
+        return Vec::new();
+    }
+    if from == to {
+        return vec![from];
+    }
+    let reach = crate::tuning::haul_walk_radius(grid.radius());
+    let field = crate::game::pursuit::walk_field(to, reach, |p| grid.walkable(p.0, p.1));
+    let Some(&start) = field.get(&from) else {
+        return Vec::new();
+    };
+    let mut path = vec![from];
+    let (mut here, mut cost) = (from, start);
+    while here != to {
+        // `min` over the whole tuple is a total order, `find_target_in_direction`'s
+        // rule: cost first and the coordinate as the tie-break, so a body
+        // offered two equally short ways round a machine takes the same one
+        // every run.
+        let Some((next, x, y)) = crate::world::NEIGHBOURS
+            .iter()
+            .map(|(dx, dy)| (here.0 + dx, here.1 + dy))
+            .filter_map(|n| field.get(&n).map(|&c| (c, n.0, n.1)))
+            .min()
+            .filter(|&(next, ..)| next < cost)
+        else {
+            return Vec::new();
+        };
+        (here, cost) = ((x, y), next);
+        path.push(here);
+    }
+    path
+}
+
 impl Game {
     /// Steps through the anchor and out of phase, landing on
     /// `BASE_EXIT_CELL`.

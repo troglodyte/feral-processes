@@ -16,7 +16,7 @@ use crate::paint::{Color, Painter};
 use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, VisualEffect};
+use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, TransitCue, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
@@ -73,6 +73,17 @@ const CAMERA_DECAY: f32 = 12.0;
 /// a teleport — breaching a zone, taking a portal — arrives as a snap rather
 /// than a long pan across unrelated terrain, with no separate threshold for it.
 const CAMERA_MAX_LAG: f32 = 1.0;
+
+/// How long a body takes to cross one cell of base space on its way out
+/// through the anchor, and how far apart a squad's bodies set off.
+///
+/// A walk is drawn in wall-clock seconds and not in ticks, because nothing
+/// in the simulation is walking: the engine queued the whole path in one
+/// call and the bodies are already away. The stagger is what makes four
+/// programs read as a file leaving rather than as one glyph with a smear
+/// behind it.
+const TRANSIT_SECONDS_PER_CELL: f64 = 0.12;
+const TRANSIT_STAGGER_SECONDS: f64 = 0.18;
 
 const FLOAT_SECONDS: f64 = 0.6;
 const FLOAT_RISE_PX: f32 = 24.0;
@@ -279,6 +290,27 @@ fn spark_alpha(t: f32) -> f32 {
     (1.0 - t).clamp(0.0, 1.0)
 }
 
+/// How long a walk of `cells` cells is on screen. Zero for a walk with
+/// nowhere to go, which is what retires it on the frame it arrives.
+fn walk_seconds(cells: usize) -> f64 {
+    cells.saturating_sub(1) as f64 * TRANSIT_SECONDS_PER_CELL
+}
+
+/// Which leg of a walk a body is on `elapsed` seconds in, and how far along
+/// that leg — or `None` when it has not set off yet (its stagger has not
+/// come round) or has already reached the far end.
+fn walk_progress(elapsed: f64, cells: usize) -> Option<(usize, f32)> {
+    if elapsed < 0.0 || cells < 2 {
+        return None;
+    }
+    let t = elapsed / TRANSIT_SECONDS_PER_CELL;
+    let leg = t.floor() as usize;
+    if leg >= cells - 1 {
+        return None;
+    }
+    Some((leg, t.fract() as f32))
+}
+
 fn effect_duration(kind: EffectKind) -> f64 {
     match kind {
         EffectKind::Hit | EffectKind::Deflected => HIT_FLASH_SECONDS,
@@ -297,6 +329,16 @@ fn effect_color(kind: EffectKind) -> Color {
 struct TileFlash {
     pos: (i32, i32),
     kind: EffectKind,
+    start: f64,
+}
+
+/// A body walking across base space, drawn from a `TransitCue` the engine
+/// queued and forgot. `start` may be in the future — a squad's bodies are
+/// staggered so they leave one after another.
+struct Walker {
+    glyph: char,
+    color: GlyphColor,
+    path: Vec<(i32, i32)>,
     start: f64,
 }
 
@@ -327,6 +369,7 @@ pub struct Fx {
     pub enabled: bool,
     now: f64,
     flashes: Vec<TileFlash>,
+    walkers: Vec<Walker>,
     floats: Vec<FloatingNumber>,
     bars: HashMap<u64, BarTracking>,
     camera: Option<(f32, f32)>,
@@ -340,6 +383,7 @@ impl Fx {
             enabled: true,
             now: 0.0,
             flashes: Vec::new(),
+            walkers: Vec::new(),
             floats: Vec::new(),
             bars: HashMap::new(),
             camera: None,
@@ -349,10 +393,16 @@ impl Fx {
     }
 
     /// Called once per frame before drawing: stamps the frame's time,
-    /// takes in newly queued engine effects, and retires expired ones.
-    /// `effects` is always consumed, even when disabled, so the engine's
-    /// queue can't sit permanently at its cap.
-    pub fn begin_frame(&mut self, now: f64, effects: Vec<VisualEffect>, in_battle: bool) {
+    /// takes in newly queued engine effects and walks, and retires expired
+    /// ones. Both queues are always consumed, even when disabled, so the
+    /// engine's cannot sit permanently at its cap.
+    pub fn begin_frame(
+        &mut self,
+        now: f64,
+        effects: Vec<VisualEffect>,
+        transits: Vec<TransitCue>,
+        in_battle: bool,
+    ) {
         self.now = now;
         if self.enabled {
             for e in effects {
@@ -362,9 +412,19 @@ impl Fx {
                     start: now,
                 });
             }
+            for (index, cue) in transits.into_iter().enumerate() {
+                self.walkers.push(Walker {
+                    glyph: cue.glyph,
+                    color: cue.color,
+                    path: cue.path,
+                    start: now + index as f64 * TRANSIT_STAGGER_SECONDS,
+                });
+            }
         }
         self.flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
+        self.walkers
+            .retain(|w| now - w.start < walk_seconds(w.path.len()));
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
             self.clear_bars();
@@ -442,6 +502,43 @@ impl Fx {
                     color,
                 );
             }
+        }
+    }
+
+    /// Draws every body currently walking across base space, interpolated
+    /// between the two cells of the leg it is on.
+    ///
+    /// Outside the caller's tile loop for `draw_bursts`' reason: a walker
+    /// spends most of its life between two tiles and belongs to neither.
+    ///
+    /// It is drawn from the same measured-ink centring the map's own glyphs
+    /// use, so a body mid-walk sits exactly where it would if it were
+    /// standing — `Painter::map` takes a *baseline*, and reading it as a
+    /// top-left is a half-cell offset that reads as a camera fault.
+    pub fn draw_walkers(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        glyph_px: u16,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        for walker in &self.walkers {
+            let Some((leg, along)) = walk_progress(self.now - walker.start, walker.path.len())
+            else {
+                continue;
+            };
+            let (ax, ay) = to_px(walker.path[leg]);
+            let (bx, by) = to_px(walker.path[leg + 1]);
+            let (px, py) = (ax + (bx - ax) * along, ay + (by - ay) * along);
+            let glyph = walker.glyph.to_string();
+            let dims = painter.measure_map(&glyph, glyph_px);
+            painter.map(
+                &glyph,
+                px + (tile_px - dims.width) / 2.0,
+                py + (tile_px + dims.height) / 2.0,
+                glyph_px,
+                palette::glyph(walker.color),
+            );
         }
     }
 
@@ -644,6 +741,81 @@ mod tests {
     /// are one vocabulary: a deflection is the shield answering, which is not
     /// harm landing, and a destroyed structure is the loudest thing the
     /// screen can say rather than a fourth colour.
+    /// A body that has not set off yet, one part way along, and one that
+    /// has arrived. The stagger is what makes the first case reachable: a
+    /// squad's second body is stamped with a start in the future, so the
+    /// walk it is on has a negative elapsed until its turn comes round.
+    #[test]
+    fn a_walk_reports_the_leg_it_is_on_and_nothing_outside_it() {
+        assert_eq!(walk_progress(-0.05, 4), None, "its stagger has not come up");
+        assert_eq!(walk_progress(0.0, 4), Some((0, 0.0)));
+
+        let (leg, along) = walk_progress(TRANSIT_SECONDS_PER_CELL * 1.5, 4).expect("mid-walk");
+        assert_eq!(leg, 1, "one and a half cells along is the second leg");
+        assert!((along - 0.5).abs() < 1e-5, "and halfway across it: {along}");
+
+        assert_eq!(
+            walk_progress(walk_seconds(4), 4),
+            None,
+            "a body that has reached the far end is not on any leg of the walk"
+        );
+        assert_eq!(walk_progress(0.0, 1), None, "a walk with nowhere to go");
+    }
+
+    /// A walker is drawn *between* its two cells, and is gone once it has
+    /// arrived.
+    ///
+    /// The interpolation is the whole feature: asserting only that the glyph
+    /// was painted passes against a walker that teleports cell to cell, so
+    /// this reads the position back and pins it between the two ends.
+    #[test]
+    fn a_walker_is_drawn_between_the_cells_of_its_leg() {
+        const CELL: f32 = 20.0;
+        let to_px = |world: (i32, i32)| (world.0 as f32 * CELL, world.1 as f32 * CELL);
+        let cue = TransitCue {
+            glyph: 'W',
+            color: GlyphColor::Cyan,
+            path: vec![(0, 0), (1, 0), (2, 0)],
+        };
+
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), vec![cue.clone()], false);
+        // Half a cell in, so the body is between (0, 0) and (1, 0).
+        fx.begin_frame(
+            TRANSIT_SECONDS_PER_CELL * 0.5,
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_walkers(p, CELL, 16, to_px));
+
+        let drawn: Vec<(String, f32)> = shapes
+            .iter()
+            .filter_map(|cs| match &cs.shape {
+                bevy_egui::egui::Shape::Text(t) => Some((t.galley.text().to_string(), t.pos.x)),
+                _ => None,
+            })
+            .collect();
+        let (_, x) = drawn
+            .iter()
+            .find(|(text, _)| text == "W")
+            .unwrap_or_else(|| panic!("the walker must be painted: {drawn:?}"));
+        assert!(
+            *x > 0.0 && *x < CELL,
+            "a body half a cell along must be drawn between the two, not on either: {x}"
+        );
+
+        // Past the end of the walk it is retired rather than parked on the
+        // last cell — an away program has left, and one that is home is
+        // drawn by the map itself.
+        fx.begin_frame(walk_seconds(3) + 1.0, Vec::new(), Vec::new(), false);
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_walkers(p, CELL, 16, to_px));
+        assert!(
+            !crate::paint::painted_text(&shapes).iter().any(|t| t == "W"),
+            "a finished walk must leave nothing behind"
+        );
+    }
+
     #[test]
     fn a_raid_flash_is_drawn_from_the_palette() {
         assert_eq!(effect_color(EffectKind::Hit), palette::THREAT);
@@ -907,7 +1079,7 @@ mod tests {
     #[test]
     fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), false);
         let worker = Entity::from_raw_u32(7).unwrap();
         let before = fx.staffed_bob(worker);
         // Same entity, same frame — the only thing a step changes is the
@@ -1113,7 +1285,7 @@ mod tests {
     #[test]
     fn the_staffed_mark_holds_still_while_effects_are_disabled() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), false);
         fx.enabled = false;
         assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }

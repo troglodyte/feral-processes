@@ -194,6 +194,21 @@ impl Game {
         self.world.resource_mut::<EffectQueue>().take()
     }
 
+    /// Drains every `TransitCue` queued since the last call — `take_effects`'
+    /// counterpart for a body walking across base space rather than something
+    /// happening on one tile.
+    ///
+    /// A frontend that draws no walks must still call it so the queue does
+    /// not sit at its cap, and one that is not currently drawing base space
+    /// drops what it gets: a cue names base-space cells, and painting it over
+    /// the zone surface is the cross-space aliasing `base_pos` already gates
+    /// raid flashes against.
+    pub fn take_transits(&mut self) -> Vec<crate::resources::TransitCue> {
+        self.world
+            .resource_mut::<crate::resources::TransitQueue>()
+            .take()
+    }
+
     /// Queues `kind` at `structure`'s tile, if it has one. Raid targets are
     /// selected by `With<Durability>`, which doesn't imply `Position` —
     /// a flash on the wrong tile would be worse than none, so a positionless

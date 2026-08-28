@@ -7,7 +7,7 @@
 use bevy_ecs::prelude::*;
 
 use crate::Game;
-use crate::components::{Stats, Structure};
+use crate::components::{Glyph, Position, Stats, Structure};
 use crate::items::ItemId;
 
 /// Whether the player can read the board, and whether they can sign for a
@@ -278,6 +278,7 @@ impl Game {
             .cloned()
             .expect("a board row names a site the catalogue holds");
         let names: Vec<String> = members.iter().map(|&e| self.creature_label(e)).collect();
+        self.queue_squad_walk(members, true);
         self.world
             .resource_mut::<crate::resources::Sorties>()
             .0
@@ -302,6 +303,47 @@ impl Game {
             row.name
         ));
         Ok(())
+    }
+
+    /// Queues the walk a squad is *seen* to make: out through base space's
+    /// one door, or in through it.
+    ///
+    /// **Direction needs no field** — a departure and an arrival are the same
+    /// cue with its ends swapped, `hauling::Errand`'s rule. The glyph is read
+    /// off the body here rather than looked up by the frontend because a
+    /// departing program is `ProgramRole::Sortie` the moment the record is
+    /// pushed, and every view drops it from that instant.
+    ///
+    /// Three bodies queue nothing, all by omission rather than by a check: one
+    /// whose entity is gone (a Permadeath casualty, despawned before the
+    /// report is drawn), one standing somewhere that is not walkable base
+    /// space (an adopted program that has not drifted yet), and one already
+    /// standing on the door, which has no walk to draw.
+    fn queue_squad_walk(&mut self, members: &[Entity], outbound: bool) {
+        for &member in members {
+            let Some((ch, color)) = self.world.get::<Glyph>(member).map(|g| (g.ch, g.color)) else {
+                continue;
+            };
+            let Some(tile) = self.world.get::<Position>(member).map(|p| (p.x, p.y)) else {
+                continue;
+            };
+            let door = crate::game::base_space::BASE_EXIT_CELL;
+            let (from, to) = if outbound { (tile, door) } else { (door, tile) };
+            let path = {
+                let grid = self.world.resource::<crate::base_grid::BaseGrid>();
+                crate::game::base_space::transit_path(grid, from, to)
+            };
+            if path.len() < 2 {
+                continue;
+            }
+            self.world
+                .resource_mut::<crate::resources::TransitQueue>()
+                .push(crate::resources::TransitCue {
+                    glyph: ch,
+                    color,
+                    path,
+                });
+        }
     }
 
     /// One tick of every trip currently in flight.
@@ -574,6 +616,7 @@ impl Game {
                 ));
             }
         }
+        self.queue_squad_walk(&sortie.members, false);
         let names: Vec<String> = sortie
             .members
             .iter()

@@ -631,6 +631,37 @@ pub enum SoundEvent {
     Defeat,
 }
 
+/// Which pane of the HUD's info column is open.
+///
+/// UI state, exactly as [`LogFilter`] is: not saved, not part of any run, and
+/// so no `SAVE_FORMAT_VERSION` bump. The column is read-only — every verb
+/// stays on the screen it already lives on — so this decides what is drawn
+/// and nothing else.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum InfoTab {
+    #[default]
+    Base,
+    Crew,
+    Pack,
+}
+
+impl InfoTab {
+    /// Every tab, in the order the column draws them and the digits select
+    /// them — `1` is `ALL[0]`. The two have to agree or a digit would open a
+    /// pane other than the one under the label it was pressed for, which is
+    /// `LogFilter::ALL`'s reason one screen along.
+    pub const ALL: [InfoTab; 3] = [InfoTab::Base, InfoTab::Crew, InfoTab::Pack];
+
+    /// What the tab row calls it.
+    pub fn label(self) -> &'static str {
+        match self {
+            InfoTab::Base => "BASE",
+            InfoTab::Crew => "CREW",
+            InfoTab::Pack => "PACK",
+        }
+    }
+}
+
 /// Which of the log's two channels the map's pane is showing. View state, not
 /// game state: not saved, and cycling it costs no turn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1469,6 +1500,8 @@ pub struct App {
     /// Which of the log's two channels the map's pane shows. Cycled with `F`;
     /// see `LogFilter`.
     pub log_filter: LogFilter,
+    /// Which pane of the HUD's info column is open — see [`InfoTab`].
+    pub info_tab: InfoTab,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,

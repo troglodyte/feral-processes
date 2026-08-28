@@ -602,7 +602,7 @@ impl Game {
             {
                 self.strike_rock(worker, target.x, target.y);
             } else {
-                self.crew_lays_tile(site, target.x, target.y);
+                self.crew_lays_tile(target.x, target.y);
             }
         }
     }
@@ -620,38 +620,22 @@ impl Game {
     /// unchanged and still pays from the pack alone — a player verb, paid the
     /// way every other player verb is.
     ///
-    /// **Says so once when there is nothing anywhere**, latched on
-    /// `DigSite::announced_dry` under `systems::set_machine_status`' rule.
-    /// Silence was the whole of this bug: the mark stays, the body stays
-    /// posted, the tile goes down the moment a substrate exists — and none
-    /// of that is visible from a cell that simply never becomes floor.
-    ///
-    /// **The clearing branch is not here.** A tile that resolves does
-    /// despawn the `DigSite` holding the latch, but a resolved site is not
-    /// the only way this function returns without one — a dry attempt
-    /// leaves the site standing, and a base digs many cells over a run, so
-    /// a second drought after the first is the common case, not an edge
-    /// one. `Game::dig_wants` clears it instead: the scheduler is asked
-    /// every tick regardless of whose turn it is to swing, where this
-    /// function only runs once per `BASE_DIG_TICKS_PER_SWING` ticks for the
-    /// one site currently due.
-    fn crew_lays_tile(&mut self, site: Entity, x: i32, y: i32) {
+    /// **A dry attempt here is silent**, `run_build_crew`'s `Errand::Dry`
+    /// rule. `Game::dig_wants` decides whether a body is even posted to a
+    /// floor job — it will not post one to a site it just judged dry, and
+    /// it is the one place that both sets and clears `DigSite::announced_dry`
+    /// now, asked every tick regardless of whose turn it is to swing. So a
+    /// site reaching this function has already been judged workable a
+    /// moment ago; the one way this can still fail is two floor jobs
+    /// finishing on the same tick against a single surviving unit, a race
+    /// `dig_wants`'s `substrate_in_stock` cannot see because it only asks
+    /// whether *one* exists, not one for every job about to ask. That race
+    /// needs no second announcement — `dig_wants` will see the shortage
+    /// itself on the very next tick — and the mark stays either way, so the
+    /// job is simply retried.
+    fn crew_lays_tile(&mut self, x: i32, y: i32) {
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
         if !self.spend_one_substrate(&substrate) {
-            if !self
-                .world
-                .get::<DigSite>(site)
-                .is_some_and(|d| d.announced_dry)
-            {
-                if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
-                    dig.announced_dry = true;
-                }
-                let line = format!(
-                    "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {} in store.",
-                    self.item_name(&substrate)
-                );
-                self.log_base(line);
-            }
             return;
         }
         self.floor_cell(x, y);

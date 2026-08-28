@@ -1008,8 +1008,26 @@ impl Game {
         // on every tick where the builder was already posted — harmless —
         // and, more to the point, would be reasoning from "nobody has told
         // this base anything" while somebody had.
+        //
+        // **A marked dig site is the same instruction one subsystem over**,
+        // and here the omission was not harmless. `dig_wants` now drops a
+        // dry floor job, so a base whose only want was that one job sees
+        // `wanted` go from one entry to none the tick the drought hits —
+        // and `wanted.iter().all(posted.contains)` is vacuously true against
+        // an *empty* `wanted` whatever `posted` still holds. Read off
+        // `wanted` alone, the guard would fire on exactly that tick, and
+        // the digger's stale `Task` would never be seen again: not stood
+        // down, not reassigned, just left naming a want that no longer
+        // exists. Asked of every marked site rather than only the ones
+        // still in `wanted`, because a site can be the base's only
+        // instruction precisely by having just been dropped from that list.
+        let any_dig_marked = {
+            let mut query = self.world.query::<&DigSite>();
+            query.iter(&self.world).any(|dig| dig.marked)
+        };
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
-            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct);
+            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
+            && !any_dig_marked;
         let posted: Vec<(Entity, TaskKind)> = on_shift
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
@@ -1444,27 +1462,39 @@ impl Game {
 
     /// Every marked dig site that wants a body, in tile order.
     ///
-    /// **Clears `DigSite::announced_dry` the tick a Blank Substrate source
-    /// exists**, the one place that can see every marked site every tick
-    /// regardless of whose turn it is to swing. `Game::crew_lays_tile` is
-    /// where the latch is *set* because that is the only place that knows
-    /// a lay actually failed, but it cannot be where the latch clears: it
-    /// runs once per site per `BASE_DIG_TICKS_PER_SWING` ticks, so a unit
-    /// that appears and is claimed by a different site (or a build
-    /// request) before this one's own cycle comes around would never be
-    /// seen from inside it, and the latch would stay set forever even
-    /// though the base *did* restock. A dig plan is many cells, so — unlike
-    /// the reasoning that once stood here — a base running dry more than
-    /// once over a run is the common case, not an edge one.
+    /// **A dry floor job is not a want**, `build_is_workable`'s rule crossed
+    /// over: a body pinned to a cut cell it cannot floor is a body that
+    /// cannot go run the Lathe that would press it a Blank Substrate, and a
+    /// one-program base stops for the rest of the run exactly the way an
+    /// unconditionally-listed `BuildSite` used to. This reverses this
+    /// function's own earlier doc, which called that "a real and separate
+    /// question this does not answer" — it is answered now, the same way.
     ///
-    /// **Global, not per-site**, unlike `build_wants`' `build_is_workable`:
-    /// every dig site wants the same one item, so there is one question to
-    /// ask rather than one bill per site. It is read-only and never used to
-    /// drop a site from the list below — `dig_wants` stays structural,
-    /// never a stock count, so a dry site keeps its body standing there and
-    /// reporting rather than being freed to work something else. Whether it
-    /// *should* be dropped, the way a dry `BuildSite` is, is a real and
-    /// separate question this does not answer.
+    /// **A marked *solid* cell needs no substrate at all** — cutting spends
+    /// none, only flooring does — so the check reads the grid, not the
+    /// mark. Gate it unconditionally on `substrate_in_stock` instead and the
+    /// day the base runs dry of Blank Substrate is the day every cut job in
+    /// it stops too, which reads as the whole excavation crew being broken
+    /// rather than one shelf being empty.
+    ///
+    /// **The report moves here too, and with it the whole of
+    /// `DigSite::announced_dry`'s upkeep** — one latch, one writer, rather
+    /// than split across this function and `Game::crew_lays_tile` the way
+    /// the prerequisite to this change left them. `build_wants`' reasoning
+    /// carries over unchanged: a dropped site is never posted, so
+    /// `crew_lays_tile` never runs for it and nobody else is left to say the
+    /// base is dry. `Game::announce_dig_dry` is `Game::announce_dry`'s twin
+    /// and owns both the setting and the clearing of the latch, asked fresh
+    /// every tick regardless of whose turn it is to swing — which is what
+    /// lets a later drought at the same site still be news, the property
+    /// the prerequisite branch added and this one must not lose.
+    /// `crew_lays_tile` keeps its own `spend_one_substrate` call for the one
+    /// race this cannot see — two floor jobs completing on the same tick
+    /// against a single surviving unit, since `substrate_in_stock` only
+    /// answers "does one exist", not "one for every job about to ask" — but
+    /// that failure is silent now, `run_build_crew`'s `Errand::Dry` rule:
+    /// this function already said the bulk of what there was to say, from
+    /// the one place that can see every site every tick.
     fn dig_wants(&mut self) -> Vec<(Entity, TaskKind)> {
         let blocked = self.structure_tiles();
         let marked: Vec<(Position, Entity)> = {
@@ -1475,13 +1505,7 @@ impl Game {
                 .map(|(e, _, p)| (*p, e))
                 .collect()
         };
-        if self.substrate_in_stock() {
-            for (_, site) in &marked {
-                if let Some(mut dig) = self.world.get_mut::<DigSite>(*site) {
-                    dig.announced_dry = false;
-                }
-            }
-        }
+        let substrate = self.substrate_in_stock();
         let grid = self.world.resource::<BaseGrid>();
         let mut sites: Vec<(i32, i32, Entity)> = marked
             .into_iter()
@@ -1489,10 +1513,43 @@ impl Game {
             .map(|(p, e)| (p.x, p.y, e))
             .collect();
         sites.sort_unstable();
-        sites
-            .into_iter()
-            .map(|(_, _, e)| (e, TaskKind::Excavate))
-            .collect()
+        let mut wants = Vec::with_capacity(sites.len());
+        for (x, y, site) in sites {
+            let needs_floor = !self.world.resource::<BaseGrid>().is_solid(x, y);
+            if needs_floor && !substrate {
+                self.announce_dig_dry(site, x, y);
+                continue;
+            }
+            if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                dig.announced_dry = false;
+            }
+            wants.push((site, TaskKind::Excavate));
+        }
+        wants
+    }
+
+    /// Says once that there is nothing anywhere to floor `site`'s cut cell
+    /// with. `Game::announce_dry`'s twin — the same latch rule, on
+    /// `DigSite::announced_dry` rather than `BuildSite::announced_dry` — and
+    /// a second function rather than a shared one because a dig site names
+    /// a cell, not a bill of materials: there is no `outstanding()` to read
+    /// back and format, only the one item every floor job spends.
+    fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32) {
+        if self
+            .world
+            .get::<DigSite>(site)
+            .is_none_or(|d| d.announced_dry)
+        {
+            return;
+        }
+        if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+            dig.announced_dry = true;
+        }
+        let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
+        let name = self.item_name(&substrate).to_string();
+        self.log_base(format!(
+            "Your crew has nothing to floor the cut cell at ({x}, {y}) with — no {name} in store."
+        ));
     }
 
     /// Whether a Blank Substrate exists anywhere `Game::crew_lays_tile`

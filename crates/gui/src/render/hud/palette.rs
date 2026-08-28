@@ -9,7 +9,7 @@
 //! **Two reservations are the design, not a convention.**
 //!
 //! - [`ATTENTION`] means *the player must act*. An idle structure, an
-//!   unspent perk point, a full pack. It is never decorative.
+//!   unspent perk point, a full roster. It is never decorative.
 //! - [`THREAT`] means *hostility or inbound harm*. Never an ordinary error.
 //!
 //! A role addressed by name is what keeps those two true. Reaching past
@@ -29,10 +29,10 @@
 // and with them the only thing checking that "act" and "harm" stay
 // distinguishable.
 //
-// This allow is self-liquidating: phase 2 consumes PANE_TITLE, phase 3 the
-// CH_* channels and KEYBAR_DIVIDER, phase 4 ATTENTION and THREAT, phase 5
-// ALERT_ROW_BG and KEYCAP_BG, phase 6 PLAYER and MAP_FLOOR. **Delete this
-// attribute when phase 6 lands** — if it still suppresses anything then,
+// This allow is self-liquidating: phases 2, 3 and 4 have consumed
+// PANE_TITLE, the CH_* channels and KEYBAR_DIVIDER, and ATTENTION, THREAT,
+// HEALTHY and DIVIDER; phase 5 takes ALERT_ROW_BG and KEYCAP_BG, phase 6
+// PLAYER and MAP_FLOOR. **Delete this attribute when phase 6 lands** — if it still suppresses anything then,
 // that entry is genuinely unused and should go instead.
 #![allow(dead_code)]
 

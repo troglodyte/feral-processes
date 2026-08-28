@@ -13,6 +13,7 @@
 //! See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
 
 pub(super) mod bar;
+pub(super) mod column;
 pub(super) mod layout;
 pub(super) mod log_frame;
 pub(super) mod map_frame;

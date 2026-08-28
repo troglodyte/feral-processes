@@ -46,47 +46,56 @@ const fn rgb(hex: u32) -> Color {
 // ---------------------------------------------------------------------------
 
 /// br yellow — **the player must act**. Reserved; never decorative.
-pub(in crate::render) const ATTENTION: Color = rgb(0xe3b341);
+pub(crate) const ATTENTION: Color = rgb(0xe3b341);
 /// br red — **hostility and inbound harm**. Reserved; never an ordinary error.
-pub(in crate::render) const THREAT: Color = rgb(0xf26d6d);
+pub(crate) const THREAT: Color = rgb(0xf26d6d);
 /// green — a healthy bar fill, and the calm `ALL NOMINAL` state.
-pub(in crate::render) const HEALTHY: Color = rgb(0x4fa65b);
+pub(crate) const HEALTHY: Color = rgb(0x4fa65b);
 /// yellow — a caution that resolves itself. A machine short of input, a
 /// worker walking to its post: the dimmer of the two yellows, because
 /// waiting fixes it and [`ATTENTION`] is what the player must get up for.
-pub(in crate::render) const WARN: Color = rgb(0xb8943f);
+pub(crate) const WARN: Color = rgb(0xb8943f);
+/// br blue — **the player's own plan drawn on the ground**: a marked dig box,
+/// the box being previewed under the cursor, the ring the party's tile wears
+/// while cutting tools are armed.
+///
+/// Deliberately not a yellow, which is what these were. A plan is the player
+/// having *acted*; [`ATTENTION`] is the base asking them to, and the plan's
+/// washes sat 0.11 from it — close enough that a cell the player had marked
+/// and a machine that had stalled read as the same news.
+pub(crate) const PLAN: Color = rgb(0x4a7fd0);
 /// br cyan — pane titles on their borders.
-pub(in crate::render) const PANE_TITLE: Color = rgb(0x56d4dd);
+pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.
-pub(in crate::render) const PLAYER: Color = rgb(0x56d4dd);
+pub(crate) const PLAYER: Color = rgb(0x56d4dd);
 /// br white — a keycap letter, or a value being emphasised. Only those.
-pub(in crate::render) const EMPHASIS: Color = rgb(0xe8eef4);
+pub(crate) const EMPHASIS: Color = rgb(0xe8eef4);
 /// white — body text and table rows.
-pub(in crate::render) const BODY: Color = rgb(0xa8b3bf);
+pub(crate) const BODY: Color = rgb(0xa8b3bf);
 /// br black — dim labels, sub-heads, inert hints.
-pub(in crate::render) const LABEL: Color = rgb(0x3a4550);
+pub(crate) const LABEL: Color = rgb(0x3a4550);
 
 // ---------------------------------------------------------------------------
 // Log channels
 // ---------------------------------------------------------------------------
 
-pub(in crate::render) const CH_FIELD: Color = rgb(0x3fa9b5);
-pub(in crate::render) const CH_GAIN: Color = rgb(0x4a7fd0);
-pub(in crate::render) const CH_BASE: Color = rgb(0x7ee787);
-pub(in crate::render) const CH_DEFEND: Color = rgb(0xf26d6d);
+pub(crate) const CH_FIELD: Color = rgb(0x3fa9b5);
+pub(crate) const CH_GAIN: Color = rgb(0x4a7fd0);
+pub(crate) const CH_BASE: Color = rgb(0x7ee787);
+pub(crate) const CH_DEFEND: Color = rgb(0xf26d6d);
 
 // ---------------------------------------------------------------------------
 // Chrome — fills, rules and troughs. Outside the 16 content entries.
 // ---------------------------------------------------------------------------
 
-pub(in crate::render) const STATUS_BG: Color = rgb(0x0b1117);
-pub(in crate::render) const PANE_BORDER: Color = rgb(0x1d2a36);
-pub(in crate::render) const BAR_TROUGH: Color = rgb(0x1b2733);
-pub(in crate::render) const DIVIDER: Color = rgb(0x141e26);
-pub(in crate::render) const KEYBAR_DIVIDER: Color = rgb(0x243040);
+pub(crate) const STATUS_BG: Color = rgb(0x0b1117);
+pub(crate) const PANE_BORDER: Color = rgb(0x1d2a36);
+pub(crate) const BAR_TROUGH: Color = rgb(0x1b2733);
+pub(crate) const DIVIDER: Color = rgb(0x141e26);
+pub(crate) const KEYBAR_DIVIDER: Color = rgb(0x243040);
 /// A field's label, as against `BODY` for its value.
-pub(in crate::render) const FIELD_LABEL: Color = rgb(0x5c6773);
-pub(in crate::render) const FAINT: Color = rgb(0x4a5563);
+pub(crate) const FIELD_LABEL: Color = rgb(0x5c6773);
+pub(crate) const FAINT: Color = rgb(0x4a5563);
 
 // ---------------------------------------------------------------------------
 // The map's content hues
@@ -113,7 +122,7 @@ pub(in crate::render) const FAINT: Color = rgb(0x4a5563);
 /// ladder whose top two rungs read alike — is worse than a hue outside the
 /// table. Both are drawn at the table's saturation, which is what keeps them
 /// from reading as louder than the sixteen they sit among.
-pub(in crate::render) fn glyph(c: GlyphColor) -> Color {
+pub(crate) const fn glyph(c: GlyphColor) -> Color {
     match c {
         // br white and white: the two neutral glyph entries, in the order
         // the handoff assigns them — `H` and `&` bright, `R`/`T`/`o` body.

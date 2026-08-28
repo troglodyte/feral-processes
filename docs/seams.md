@@ -7415,3 +7415,40 @@ waiting for its turn.
 states, `GlyphColor::ALL`'s reason: the renderer's match is exhaustive and so
 cannot miss a new status, but a census that names them can, and the status
 just added is exactly the one that would inherit red by accident.
+
+### The map's overlays take palette roles, and the build slab is the one that cannot
+
+Phase 6 swept the map's *glyphs*; the marks and washes drawn over them were
+left as raw hues, and the follow-up took them too. What each one wanted was
+already decided by what it means, so most of it was routing:
+
+- the staffed mark is `HEALTHY` and the stranded one `ATTENTION` — the same
+  role the stranded machine's own glyph wears, because they are saying the
+  same thing. What separates a stranded mark from a staffed one is the blink
+  and the green, never the hue;
+- the plan cursor is `EMPHASIS`, the spawn-point ring and the nemesis mark
+  the table's magenta and cyan.
+
+**The Excavation plan is the one that changed colour rather than moving.**
+Its three washes and the cutting ring were an amber sitting 0.11 from
+`ATTENTION`, which is nothing at 18% alpha over tinted rock — so a cell the
+player had marked and a machine that had stalled were two different pieces of
+news drawn in one colour. `palette::PLAN` is br blue instead, and the
+distinction is the argument: a plan is the player having *acted*, and the
+attention yellow is the base asking them to. The three washes are built off
+that one constant by alpha (`wash`), since three literals are three chances
+for a plan to stop reading as one thing.
+
+**The build site's two greys stay outside the palette**, alone among the
+overlays. That file is addressed by role and has no word for "unfinished
+construction"; its nearest entries are a pane border and a bar trough, and
+reaching for one of those is addressing a chrome grey by its value — the one
+thing the palette forbids. A colour with no role is better named where it is
+drawn.
+
+`fx.rs` became the palette's second consumer, which is why `hud::palette` is
+`pub(crate)` while every other module under `hud` is the renderer's alone. A
+raid's flash is painted by the effects layer, and a structure taking a hit is
+the most literal thing "hostility and inbound harm" describes on this screen
+— so painted in a red of its own, the one cue the `THREAT` reservation exists
+for would have been the one cue not drawn from it.

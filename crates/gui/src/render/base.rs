@@ -33,6 +33,12 @@ const STAFFED_MARK_INSET: f32 = 2.0;
 /// `SHADE_BAND` rule in another shape: a bright rim would read as a
 /// finished, lit structure. It is opaque so the ground beneath does not show
 /// through and make the cell look half-drawn.
+///
+/// **The two greys stay outside `hud::palette`**, alone among the map's
+/// overlays. The palette is addressed by role and has no word for
+/// "unfinished construction"; the nearest entries are a pane border and a
+/// bar trough, and reaching for one of those would be addressing a chrome
+/// grey by its value, which is the one thing that file forbids.
 const BUILD_SITE_FILL: Color = Color::new(0.30, 0.30, 0.32, 1.0);
 const BUILD_SITE_EDGE: Color = Color::new(0.16, 0.16, 0.18, 1.0);
 const BUILD_SITE_EDGE_PX: f32 = 2.0;
@@ -42,9 +48,21 @@ const BUILD_SITE_EDGE_PX: f32 = 2.0;
 /// base becoming unreadable and its edge carries the shape; the box being
 /// previewed is brighter than either, because it is the thing about to
 /// happen and has to read over a mark it may be drawn across.
-const MARK_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.18);
-const MARK_EDGE: Color = Color::new(0.9, 0.8, 0.2, 0.45);
-const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
+///
+/// The hue is `palette::PLAN`, and the three are built off it rather than
+/// written out, so the alpha is the only thing that varies — three literals
+/// is three chances for a plan to stop being one colour.
+const fn wash(alpha: f32) -> Color {
+    Color::new(
+        hud::palette::PLAN.r,
+        hud::palette::PLAN.g,
+        hud::palette::PLAN.b,
+        alpha,
+    )
+}
+const MARK_FILL: Color = wash(0.18);
+const MARK_EDGE: Color = wash(0.45);
+const PREVIEW_FILL: Color = wash(0.35);
 
 /// The ring the party's own tile wears while cutting tools are armed.
 ///
@@ -53,7 +71,7 @@ const PREVIEW_FILL: Color = Color::new(0.9, 0.8, 0.2, 0.35);
 /// alpha rather than the washes above since this is a mode and not a thing
 /// drawn on the ground — it has to read over whatever the party is standing
 /// on, a marked cell included.
-pub(crate) const CUTTING_OUTLINE: Color = YELLOW;
+pub(crate) const CUTTING_OUTLINE: Color = hud::palette::PLAN;
 
 /// The nemesis mark's side, as a fraction of the tile, and how far it sits
 /// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
@@ -1168,7 +1186,7 @@ fn draw_surface_map(
                     mark.y,
                     mark.w,
                     mark.h,
-                    Color::new(CYAN.r * vig, CYAN.g * vig, CYAN.b * vig, CYAN.a),
+                    at_level(hud::palette::glyph(GlyphColor::Cyan), vig),
                 );
             }
             // Marks where the player materialized on breaching into this
@@ -1183,7 +1201,14 @@ fn draw_surface_map(
                 let spawn_rx = spawn_point.0 - center.0 + hw;
                 let spawn_ry = spawn_point.1 - center.1 + hh;
                 if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
-                    painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, MAGENTA);
+                    painter.rect_lines(
+                        px,
+                        py,
+                        tile_px - 1.0,
+                        tile_px - 1.0,
+                        2.0,
+                        hud::palette::glyph(GlyphColor::Magenta),
+                    );
                 }
             }
             // The base-space mirror of that outline: an armed bump is a mode
@@ -1246,20 +1271,19 @@ fn draw_surface_map(
             // blinks in place instead — see `Fx::stranded_blink`.
             if let Some((marked, stranded)) = mark {
                 let size = (tile_px - 1.0) * STAFFED_MARK;
-                // Orange as well as still: colour and motion say the same
-                // thing at once, so a stranded machine is legible from a
-                // paused screenshot and not only from watching it. It is
-                // deliberately not the yellow a clogged or stranded glyph
-                // already wears — being full is the machine's own problem
-                // and recoverable by collecting, while this is the base
-                // having nowhere left to put anything. The mark stays a raw
-                // hue: phase 6's sweep went as far as the map's *glyphs*,
-                // and these overlays are quads that answer to the glyph
-                // under them rather than to a palette role.
+                // The attention colour as well as still: colour and motion
+                // say the same thing at once, so a stranded machine is
+                // legible from a paused screenshot and not only from
+                // watching it. It wears the same role its glyph does,
+                // because they are saying the same thing — what separates
+                // this from a staffed mark is the blink and the green, and
+                // what separates it from a clogged machine was never the
+                // mark's hue but the fact that a clogged one still has a
+                // worker to bob.
                 let (lift, alpha, base) = if stranded {
-                    (0.0, fx.stranded_blink(), ORANGE)
+                    (0.0, fx.stranded_blink(), hud::palette::ATTENTION)
                 } else {
-                    (fx.staffed_bob(marked), 1.0, GREEN)
+                    (fx.staffed_bob(marked), 1.0, hud::palette::HEALTHY)
                 };
                 painter.rect(
                     px + STAFFED_MARK_INSET,
@@ -1379,7 +1403,7 @@ fn draw_excavation_plan(
             }
         }
     }
-    tile(plan.cursor, None, Some((2.0, WHITE)));
+    tile(plan.cursor, None, Some((2.0, hud::palette::EMPHASIS)));
 }
 
 /// Where a world tile's top-left corner falls in the map pane.
@@ -1573,6 +1597,46 @@ mod tests {
                 machine_color(status),
                 hud::palette::THREAT,
                 "{status:?} is not hostility, and THREAT is reserved for it"
+            );
+        }
+    }
+
+    /// A plan is the player having acted; the attention yellow is the base
+    /// asking them to. Drawn in the same family they were two different
+    /// pieces of news in one colour — the washes sat 0.11 from `ATTENTION`,
+    /// which is nothing at 18% alpha over tinted rock.
+    ///
+    /// All four are checked against the same rule, because the plan is one
+    /// hue at four alphas and a retune that moves only the one being read
+    /// here is exactly what this is for.
+    #[test]
+    fn a_plan_cannot_be_read_as_a_machine_asking_for_you() {
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        for (name, c) in [
+            ("MARK_FILL", MARK_FILL),
+            ("MARK_EDGE", MARK_EDGE),
+            ("PREVIEW_FILL", PREVIEW_FILL),
+            ("CUTTING_OUTLINE", CUTTING_OUTLINE),
+        ] {
+            assert!(
+                dist(c, hud::palette::ATTENTION) > 0.25,
+                "{name} is only {:.2} from ATTENTION",
+                dist(c, hud::palette::ATTENTION)
+            );
+            assert!(
+                dist(c, hud::palette::WARN) > 0.25,
+                "{name} is only {:.2} from WARN",
+                dist(c, hud::palette::WARN)
+            );
+            assert_eq!(
+                (c.r, c.g, c.b),
+                (
+                    hud::palette::PLAN.r,
+                    hud::palette::PLAN.g,
+                    hud::palette::PLAN.b
+                ),
+                "{name} is not the plan's hue — a plan reads as one thing or \
+                 it reads as several"
             );
         }
     }

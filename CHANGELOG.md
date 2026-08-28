@@ -27,6 +27,43 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.41
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+which pane of the info column is open is view state, exactly as the log's
+filter is, and nothing here is written to a save.
+
+The info column wears three tabs and hides nothing behind them. Phase 4 of
+the Paned Command HUD, and the one it is really about: a single derivation
+answers "what needs the player right now", and every surface that could
+report it reads that same answer.
+
+### Added
+
+- **A status-bar badge saying what needs you** — the most urgent condition,
+  upper-cased, with the key that opens the screen it is acted on from. When
+  nothing holds it reads `ALL NOMINAL` in green, because the calm state is a
+  real state and is drawn rather than left as a gap.
+- **The info column is tabbed: `1` BASE, `2` CREW, `3` PACK.** One pane is
+  open and the other two collapse to a summary row each. The keys work
+  underground as well as on the surface.
+- **A closed pane can never hide something you need to act on.** Its tab
+  wears a `!` and its collapsed row says what the condition is, in yellow
+  for work and red for harm. The badge, the tab marks and the collapsed
+  rows are three readouts of one derivation, so they cannot disagree about
+  what is going on.
+- **Four conditions are reported**: a structure below full Integrity, nodes
+  standing without a program, unspent Perk Points, and a roster at capacity.
+  A damaged structure sorts above the rest, since the badge shows only the
+  leading one.
+
+### Changed
+
+- **The status column is now the open tab's body**, drawn inside the
+  column's frame rather than drawing its own. What it holds has not moved
+  yet — that is the next phase — so it reads as it did, in a slightly
+  shorter box.
+
 ## 0.13.40
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

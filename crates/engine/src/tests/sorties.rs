@@ -1292,3 +1292,53 @@ fn a_sortie_kill_pays_less_than_fighting_it_yourself() {
     }
     assert!(priced > 0, "no species priced, so this asserted nothing");
 }
+
+/// Two trips in flight, and the first coming home must not cost the second
+/// a tick.
+///
+/// The record behind a returning one slides into its index, so the walk has
+/// to read whether it stepped rather than compare `index` to the new
+/// length — which only catches a removal at the tail, and so lost the
+/// second trip a tick in silence every time the first came home.
+#[test]
+fn a_returning_trip_does_not_skip_the_one_behind_it() {
+    let mut game = Game::new(4903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let depot = deploy(&mut game, "depot", 0, 1);
+    let currency = game.currency();
+    game.world
+        .entity_mut(depot)
+        .insert(crate::components::Stock {
+            output: [(currency, 5_000)].into_iter().collect(),
+            capacity: 9_999,
+            ..Default::default()
+        });
+    let staff: Vec<Entity> = (0..6)
+        .map(|i| {
+            game.adopt_program("scrapper", 4 + i, 4, 1.0)
+                .expect("test roster program")
+        })
+        .collect();
+    let board = game.sortie_board().expect("a Relay stands");
+    assert!(board.len() >= 2, "this needs two sites to sign for");
+    game.dispatch_sortie(&board[0].id, &staff[..2]).unwrap();
+    game.dispatch_sortie(&board[1].id, &staff[2..4]).unwrap();
+
+    // The first is one tick from home; the second is barely out. Both are
+    // parked before any battle is due, so nothing but the countdown moves.
+    {
+        let records = &mut game.world.resource_mut::<Sorties>().0;
+        records[0].ticks_elapsed = records[0].ticks_total - 1;
+        records[0].battles_done = records[0].battles_total;
+        records[1].ticks_elapsed = 0;
+        records[1].battles_done = records[1].battles_total;
+    }
+    game.run_sorties();
+
+    let left = game.world.resource::<Sorties>().0.clone();
+    assert_eq!(left.len(), 1, "the first came home");
+    assert_eq!(
+        left[0].ticks_elapsed, 1,
+        "the second must still have been advanced this tick"
+    );
+}

@@ -329,18 +329,23 @@ impl Game {
         }
         let mut index = 0;
         while index < self.world.resource::<crate::resources::Sorties>().0.len() {
-            self.step_sortie(index);
-            // A trip that came home dropped its own record, so the index
-            // already names the next one.
-            if self.returned_sortie(index) {
-                continue;
+            // A trip that came home removed its own record, so the record
+            // behind it has slid into this index and must not be skipped.
+            // **Read off the step rather than off the length**: comparing
+            // `index` to the new length only catches a removal at the tail,
+            // so a first trip returning while a second was still out cost
+            // the second a tick, every time, in silence.
+            if !self.step_sortie(index) {
+                index += 1;
             }
-            index += 1;
         }
     }
 
     /// Advances one trip by a tick, fighting a battle if one is due.
-    fn step_sortie(&mut self, index: usize) {
+    ///
+    /// Returns whether the trip came home — i.e. whether the record at
+    /// `index` is gone and something else has slid into it.
+    fn step_sortie(&mut self, index: usize) -> bool {
         let (elapsed, total, due) = {
             let sortie = &mut self.world.resource_mut::<crate::resources::Sorties>().0[index];
             sortie.ticks_elapsed += 1;
@@ -365,13 +370,9 @@ impl Game {
         }
         if elapsed >= total {
             self.return_sortie(index);
+            return true;
         }
-    }
-
-    /// Whether the record at `index` is gone — i.e. the trip came home.
-    fn returned_sortie(&self, index: usize) -> bool {
-        index >= self.world.resource::<crate::resources::Sorties>().0.len()
-            || self.world.resource::<crate::resources::Sorties>().0.len() < index + 1
+        false
     }
 
     /// One battle, **entirely inside this call**: spawn, fight, despawn.

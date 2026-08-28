@@ -15,3 +15,4 @@
 pub(super) mod layout;
 pub(super) mod palette;
 pub(super) mod status_bar;
+pub(super) mod strip;

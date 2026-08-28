@@ -7883,3 +7883,63 @@ in silence.
 Deliberately *not* shared: the rest of `award_loot`. Trace, the `Terminate`
 contract feat, the boss records and the fragment payouts all belong to a
 fight the player was in, and a sortie is not one.
+
+### The departure walk is a cue the engine forgets, and it is base space's
+
+A squad you dispatch used to vanish from the map on the frame it left, which
+is exactly correct as simulation and reads as a bug. `ProgramRole::Sortie`'s
+whole design is that an away program is unobservable — it leaves the labour
+pool, the drift, the occupancy set, the needs drain and the surface map by
+five omissions rather than five checks — so the fix could not be to give a
+departing body a live `Position` for a few ticks. That is the "which space is
+this?" bug class the role was built to stay out of, and it would have cost a
+`Sortie` phase, a save field, and a second look at `position_is_honest` and
+`base_entropy_system`.
+
+So the walk is **cosmetic and the engine forgets it in the same call**.
+`dispatch_sortie` and `return_sortie` each queue one `resources::TransitCue`
+per body — a glyph, and the cells it walks through — into a `TransitQueue`
+that `Game::take_transits` drains, `take_effects`' counterpart. Nothing in
+the simulation stands at any of those cells at any point: by the time a cue
+exists the body is either away or home and idle, and a frontend that ignores
+the queue draws the game exactly as it did before.
+
+**Departure and arrival are the same cue with its ends swapped**, which is
+why `queue_squad_walk` takes a bool and `TransitCue` has no direction field —
+`hauling::Errand`'s rule. The glyph is carried on the cue rather than looked
+up, because a departing program is `ProgramRole::Sortie` the instant the
+record is pushed and every view drops it from that moment.
+
+A cue is **a separate value from `VisualEffect`, not a fourth `EffectKind`**.
+That one's whole shape is a tile — "something happened here", pinned to one
+cell so a frontend can keep it there as the player moves — and this is a path
+over time carrying the glyph to walk along it. "One variant is not an axis"
+cuts the other way here.
+
+`base_space::transit_path` pathfinds on `BaseGrid::walkable` **alone and
+admits no blocked set**, unlike `hauling::post_field`, which refuses tiles
+other things stand on. `BASE_EXIT_CELL` is where the Home stands, so a walk
+that refused occupied tiles could never reach its own destination. A walker
+ghosting past a machine for a fraction of a second is invisible; one ghosting
+through rock reads as a rendering fault, which is the whole reason a path is
+computed at all rather than the two ends being interpolated between — and
+that is what `a_walk_bends_around_solid_rock` pins, verified by mutation
+against a straight `vec![from, to]`.
+
+**A walk that does not exist is nothing, never a straight line.** A body
+whose tile is not walkable base space is the ordinary state of a program
+adopted on the surface that has not drifted yet — `entry_tile` is what gives
+one a base cell — so a fixture that skips that stands its bodies inside the
+wall, where the walk is refused by design and a test proves nothing.
+
+**The draw sits behind `show_effects`**, the gate a raid's flash already sits
+behind, and for a sharper version of the same reason: a cue names base-space
+cells, so a walk drawn while the pane is showing the zone surface files a
+squad of glyphs across whatever unrelated ground shares those numbers, the
+party's own tile among them. Both halves are asserted in one test, since the
+base half alone passes against a draw pass that is never gated at all.
+
+The consequence worth knowing: a cue is drained on the frame it is queued, so
+a return walk the player is not home to see is dropped rather than saved for
+later. That matches raid flashes and is the price of the whole feature being
+free.

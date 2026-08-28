@@ -27,6 +27,56 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.50
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32,
+and this release adds no save field, changes no formula and moves no number.
+`Perk`'s variant order is save format — bincode encodes an enum positionally,
+so `PlayerSave::unlocked_perks` holds indices into it — and nothing here
+touches that order.
+
+An internal change with no gameplay effect, recorded because the seam it
+moves is one somebody will have to reason about later.
+
+Every perk's effect was a hook written at the formula that used it: the
+mining roll, the hunger multiplier, a decompile's HP term, recipe costs, a
+Trace rise, roster capacity, a kill's salvage, the base repair rate, a
+compiled copy's quality floor, a direct `Stats` write. So the question "which
+formula does this perk touch" was answerable only from the enum's doc
+comments — prose, which cannot be kept in step with the code beside it.
+
+`perks.rs` now holds one named query per perk and the call sites read them:
+the module owns the answer, the caller owns the application, which is the
+inversion `needs::strain` and `party::role_of` already use. Ten perk tuning
+constants went dead at their old call sites in the process, which is the
+evidence the hooks actually moved rather than being renamed in place.
+
+- **The queries come in two families, and the difference is load-bearing.**
+  Most take the player's `Perks` and name their own variant, so no call site
+  says `Perk::` at all any more. `mining_roll_bonus` and
+  `quality_floor_bonus` take a bare **level** instead, because
+  `CycleModifiers` and `CraftOrder` carry that level to a formula whose
+  subject may be a program rather than the player — a `Perks` argument there
+  would quietly hand a program the player's investment, which is the exact
+  failure `CraftOrder` was built to make impossible.
+- **Three perks are applied at purchase rather than read at a formula**, so
+  they get the only shape they can. `purchase_stat_gain` says what buying
+  `Attacker`, `Defender` or `Buffer` grants — including `Buffer`'s
+  percentage-of-current-max and its floor — while `unlock_perk` stays the one
+  writer of `Stats`.
+- **The floors moved with their perks.** Power may be switched off entirely
+  by enough levels of Low Power Mode, because a Recharger Node already
+  deletes that pressure; Trace never may, because it is the Stack's only
+  escalation and descending has to keep costing something; and a recipe line
+  never reaches zero, which is the infinite-Credit fault the caravan's price
+  floor guards from the other side. Each of those used to live at the call
+  site, where it read as an implementation detail rather than as the design.
+- **The module is a census, and it is enforced.**
+  `every_perk_has_a_query_that_answers_what_it_is_worth` is exhaustive on
+  `Perk`, so a nineteenth variant fails to compile until it has a home there,
+  and each arm asserts the query actually *moves* — a perk wired to a zero
+  constant fails as loudly as one with no query at all.
+
 ## 0.13.49
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

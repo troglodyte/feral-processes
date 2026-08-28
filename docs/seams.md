@@ -7249,9 +7249,85 @@ binding: `the_digits_work_underground` is what stops these going the way `r`
 nothing in the log.
 
 `hud::column::draw_info_column` returns the open pane's **body rect** and
-draws the column's fill and frame itself; `draw_status_panel` lost both of
-its own chrome calls and now draws its rows into that rect. The column does
-not scroll, so that rect's height is a layout constraint —
-`the_tallest_column_pane_fits_its_column` measures the panel's fixed head
-against it at 1280x720, the same trap `the_tallest_gear_page_fits_its_popup`
-closes in a shorter box.
+draws the column's fill and frame itself. The column does not scroll, so
+that rect's height is a layout constraint — the same trap
+`the_tallest_gear_page_fits_its_popup` closes in a shorter box.
+
+### A pane body is rows, and what does not fit is counted
+
+The three pane bodies are pure functions of a `PaneData`: `hud::panes`
+builds `Vec<Row>` and `fitting_rows` walks it against the body rect's
+height. That indirection buys one thing, and it is the thing the no-scroll
+rule needs. `fitting_rows` is `strip::fitting`'s rule turned ninety degrees
+— what does not fit is **counted**, never drawn past the bottom edge in
+silence, `stock::fits`' rule on the vertical axis — and it is written once
+rather than once per pane, where three panes would be three sites agreeing
+rather than one fact.
+
+Taking no `Painter` is the second half of it. A census can read the rows a
+pane *would* draw at a given window size without standing a renderer up,
+which is the property `hud::layout` already rests on one scale up.
+
+**The trap is that `+N more` is itself a row.** A fitter that spends the
+whole budget on content draws its own overflow notice past the bottom edge,
+which is the exact silence the count was added to break — so the reserve is
+subtracted before the walk, and only in the branch where it will be needed
+(measured against the full list, a pane that fits exactly would be cut by
+the space reserved to say so). `the_overflow_line_has_room_to_be_drawn`
+holds it, and was checked by deleting the reserve.
+
+A trailing `Row::Rule` is dropped rather than counted: a divider with
+nothing under it is not information the player lost.
+
+### The status panel's rows had mostly already moved
+
+`draw_status_panel` was ~250 lines and the thing this whole design
+replaces, but by the time phase 5 came to delete it most of what it drew
+was a **second copy**. The vitals strip has carried Integrity, Power, level
+and XP, the four stats and the mining flag since phase 2; the status bar has
+carried zone, position and the stock strip since phase 1. What had nowhere
+else to be was the roster, the running routines and the pack — which is
+what the three panes are, and why the phase reads as a deletion with three
+small additions rather than as a rewrite.
+
+`PaneData` takes `roster`, `carrying` and the view lists rather than a
+`&PlayerStatus`. Those two scalars are **every field of it the three panes
+read**, and the narrower dependency is what makes the fixture a struct
+literal instead of twenty-three fields — `PlayerStatus` derives nothing, so
+a census that needed a whole one would have been a census nobody wrote.
+
+CREW's routine rows call `buff_entries` rather than restating what a buff
+row says; `TagStyle::OwnLine` survives its old caller because the reason
+does — the column is a fixed slice of the window and cannot widen to carry
+a holder tag inline. **The ceiling that rule was measured against moves
+here with the buffs.** `no_column_row_overflows_the_column` measures a row's
+left run and its right tail **joined**, `caravan.rs`' rule, because
+`draw_line` right-aligns the tail into the same width the left run starts
+in — measuring the head alone budgets for a row narrower than the one that
+is drawn. The failure this is aimed at has already shipped once: a
+companion's `(holder)` tag drawn 360px off the panel in silence.
+
+**`the_tallest_column_pane_fits_its_column` changed meaning rather than
+moving.** Overflow is counted now, not silent, so the census is no longer
+about silence — it is about the count being *rare*. A base under load has to
+fit whole at 1280x720, or "+N more" becomes the HUD's normal state and the
+figure stops meaning anything. Both censuses were checked by mutation: a
+widened row for the first, a halved body for the second.
+
+The spec's one open question is answered. The BASE tab's five blocks fit a
+44-cell column at 1280x720 with room to spare — the body is 30.5 rows there
+against 21 content rows and five dividers — so nothing was cut, and the
+handoff's block list ships whole.
+
+### A collapsed bar carries a live summary, and a condition outranks it
+
+The two closed tabs' bars stopped saying `nominal`. With something needing
+the player the bar still says *that*, in the attention colour; calm, it
+carries `panes::summary` — built from the same `PaneData` the open pane's
+rows are, so a bar and the pane it stands for cannot disagree about what
+the base is holding. `summary` is exhaustive on `InfoTab` for `rows`'
+reason: a fourth tab would otherwise collapse to a blank bar, which is the
+one state the collapsed bars exist to prevent.
+
+PACK summarises to **units carried and not a fraction**, the pack trap one
+entry up: there is no capacity to be a denominator.

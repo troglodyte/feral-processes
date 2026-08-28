@@ -21,6 +21,7 @@ use feral_processes_app_core::InfoTab;
 use feral_processes_engine::{AttentionKind, AttentionRow};
 
 use super::palette;
+use super::panes::{PaneData, summary};
 use crate::paint::{Color, Painter, Rect, TextRun};
 use crate::text::Metrics;
 
@@ -39,6 +40,10 @@ pub(in crate::render) struct ColumnState<'a> {
     /// `Game::attention`, called once by the caller and shared with the
     /// status bar.
     pub attention: &'a [AttentionRow],
+    /// What the two closed tabs summarise. The same struct the open pane's
+    /// rows are built from, so a collapsed bar and the pane it stands for
+    /// can never disagree about what the base is holding.
+    pub pane: &'a PaneData<'a>,
 }
 
 /// Where the column's three fixed pieces sit. Pure arithmetic, so the tiling
@@ -136,7 +141,7 @@ pub(in crate::render) fn draw_info_column(
     );
     let closed = InfoTab::ALL.iter().filter(|t| **t != state.tab);
     for (tab, rect) in closed.zip(r.bars.iter()) {
-        draw_collapsed_bar(*rect, *tab, state.attention, painter, m);
+        draw_collapsed_bar(*rect, *tab, state, painter, m);
     }
 
     painter.rect_lines(at.x, at.y, at.w, at.h, 2.0, palette::PANE_BORDER);
@@ -179,22 +184,16 @@ fn draw_tab_row(at: Rect, state: &ColumnState, painter: &Painter, m: &Metrics) {
 
 /// One closed tab's summary row.
 ///
-/// The `!` half is what the design rests on and is already correct; the calm
-/// half is a placeholder for the live summary phase 5 puts here — crew pips,
-/// a pack count — and says `nominal` rather than nothing so the row is
-/// visibly a row.
-fn draw_collapsed_bar(
-    at: Rect,
-    tab: InfoTab,
-    attention: &[AttentionRow],
-    painter: &Painter,
-    m: &Metrics,
-) {
+/// **A condition outranks a headcount.** With something to say the bar says
+/// it, in the attention colour; calm, it carries `panes::summary` — the
+/// closed pane's live figure, built from the same `PaneData` the open pane's
+/// rows are, so the two can never disagree.
+fn draw_collapsed_bar(at: Rect, tab: InfoTab, state: &ColumnState, painter: &Painter, m: &Metrics) {
     let size = m.small();
     let baseline = at.y + size as f32 / 2.0;
-    let (mark, text, color) = match leading(attention, tab) {
+    let (mark, text, color) = match leading(state.attention, tab) {
         Some(row) => (MARK_ACT, row.text.clone(), mark_color(row)),
-        None => (MARK_CALM, "nominal".to_string(), palette::FAINT),
+        None => (MARK_CALM, summary(tab, state.pane), palette::FAINT),
     };
     let label = format!("{} ", tab.label());
     let runs = [
@@ -284,6 +283,7 @@ mod tests {
                 &ColumnState {
                     tab: InfoTab::Crew,
                     attention: &[],
+                    pane: &PaneData::default(),
                 },
                 p,
                 &m,
@@ -314,6 +314,7 @@ mod tests {
                 &ColumnState {
                     tab: InfoTab::Crew,
                     attention: &rows,
+                    pane: &PaneData::default(),
                 },
                 p,
                 &m,
@@ -331,15 +332,25 @@ mod tests {
         );
     }
 
+    /// A calm tab is not an empty tab. With nothing needing the player the
+    /// collapsed bars carry `panes::summary` — the closed pane's live
+    /// figures, built from the same `PaneData` the open pane's rows are, so a
+    /// bar and the pane it stands for cannot disagree.
     #[test]
-    fn a_calm_column_reads_nominal() {
+    fn a_calm_column_reads_its_live_summary() {
         let m = ui_metrics(900.0);
+        let pane = PaneData {
+            roster: (9, 33),
+            carrying: 14,
+            ..Default::default()
+        };
         let (_, shapes) = with_painter(|p| {
             draw_info_column(
                 column(),
                 &ColumnState {
                     tab: InfoTab::Base,
                     attention: &[],
+                    pane: &pane,
                 },
                 p,
                 &m,
@@ -353,11 +364,14 @@ mod tests {
             painted_runs_in(&shapes, palette::THREAT, true).is_empty(),
             "a calm column drew a threat mark"
         );
-        let calm = painted_runs_in(&shapes, palette::FAINT, false);
-        assert_eq!(
-            calm.iter().filter(|s| s.trim() == "nominal").count(),
-            2,
-            "both collapsed bars say so: {calm:?}"
+        let text = painted_text(&shapes).join(" ");
+        assert!(
+            text.contains("9/33"),
+            "the CREW bar hid the roster count: {text:?}"
+        );
+        assert!(
+            text.contains("14 units"),
+            "the PACK bar hid what is carried: {text:?}"
         );
     }
 
@@ -375,6 +389,7 @@ mod tests {
                 &ColumnState {
                     tab: InfoTab::Crew,
                     attention: &rows,
+                    pane: &PaneData::default(),
                 },
                 p,
                 &m,
@@ -407,6 +422,7 @@ mod tests {
                 &ColumnState {
                     tab: InfoTab::Base,
                     attention: &[],
+                    pane: &PaneData::default(),
                 },
                 p,
                 &m,

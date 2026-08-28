@@ -18,5 +18,6 @@ pub(super) mod layout;
 pub(super) mod log_frame;
 pub(super) mod map_frame;
 pub(super) mod palette;
+pub(super) mod panes;
 pub(super) mod status_bar;
 pub(super) mod strip;

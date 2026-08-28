@@ -1,8 +1,8 @@
 # The Paned Command HUD
 
-**Status:** phases 1-4 shipped (v0.13.37, .38, .40, and this one); phases 5
-and 6 outstanding. Corrections found while building are folded into the text
-below rather than appended.
+**Status:** phases 1-5 shipped (v0.13.37, .38, .40, .41 and this one); phase
+6 (the palette sweep across map glyph colours) is outstanding. Corrections
+found while building are folded into the text below rather than appended.
 **Date:** 2026-08-27
 
 The main HUD's right-hand column is one undifferentiated text dump —
@@ -349,9 +349,14 @@ and it is what buys each phase being revertible on its own.
 
 ## Open questions, to be answered by building
 
-- Whether the BASE tab's five blocks fit a 44-cell column at 1280x720
-  without a scroll. Phase 5 may come back asking to cut one; the
-  census in Part 6 is what will say so.
+- ~~Whether the BASE tab's five blocks fit a 44-cell column at 1280x720
+  without a scroll.~~ **Answered in phase 5: yes, with room to spare.** The
+  column body is 30.5 rows at that size against the handoff's 21 content
+  rows and five dividers, so nothing was cut and the block list ships whole.
+  What the census now measures is not silence but *rarity*: overflow is
+  counted rather than dropped, so `the_tallest_column_pane_fits_its_column`
+  asserts a base under load fits whole, or `+N more` becomes the HUD's
+  normal state and the figure stops meaning anything.
 - ~~Whether the keybar has slack for `t` and `s`.~~ **Answered in phase 3: no.**
   `the_keybar_fits_the_log_pane` measures twelve segments fitting at 1280x720
   and thirteen at 1920x1080 — the bar is near enough size-invariant, because

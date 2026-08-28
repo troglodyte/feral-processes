@@ -184,8 +184,19 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
         painter.ui(s, text_x, y, m.font_size, palette::THREAT);
         y += m.line_height;
     }
+    // The keybar is mounted *on* the bottom border and its glyphs stand half
+    // a line above it, so the body's floor is that border rather than the
+    // pane's inner edge.
+    //
+    // At every supported window size the caller's capacity figure already
+    // stops short of this, so the guard does not fire in play. It is here
+    // because that figure is computed in `draw_playing_base` off the same
+    // geometry this function is handed, in a different file — nothing makes
+    // the two move together, and a drift between them lands on the keys
+    // rather than anywhere a reader would look.
+    let floor = pane.y + pane.h - m.inset;
     for entry in log.entries {
-        if y > pane.y + pane.h - m.gap {
+        if y > floor {
             break;
         }
         let (tag, color) = channel_tag(entry);
@@ -461,6 +472,64 @@ mod tests {
             "the pane's fill painted at {fill}, after the strip label at {label} — \
              the label is cut in half"
         );
+    }
+
+    /// Nothing else would catch a row drawn through the keys: the line and
+    /// the keybar are both painted, both look right in isolation, and the
+    /// keybar draws last, so it sits on top of a half-covered line rather
+    /// than under one.
+    ///
+    /// **The fixture over-asks on purpose.** Handed exactly the capacity
+    /// `draw_playing_base` computes, the rows clear the border on the
+    /// arithmetic alone and this test passes with the floor deleted — which
+    /// is a test that reads as coverage and holds nothing. Handed more than
+    /// fits, it is the floor that stops them, and removing the floor fails it
+    /// at y=706 against a 694 ceiling. Over-asking is also the drift the
+    /// floor exists for: that capacity figure lives in another file.
+    #[test]
+    fn no_log_line_reaches_the_keybar() {
+        let m = ui_metrics(SMALLEST.1);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m).log_pane;
+            // `draw_playing_base`'s own figure. Kept in step by hand, so if
+            // that expression moves this test is measuring the wrong pane.
+            let capacity = ((pane.h - m.line_height) / m.line_height).max(1.0) as usize;
+            let entries: Vec<LogEntry> = (0..capacity + 3)
+                .map(|_| entry(MessageKind::Info, MessageSource::Field))
+                .collect();
+            let (_, shapes) = with_painter(|q| {
+                draw_log_pane(
+                    pane,
+                    &LogPane {
+                        entries: &entries,
+                        filter: LogFilter::All,
+                        filtered_out: 0,
+                        refusal: Some("Nothing to collect."),
+                        border: palette::PANE_BORDER,
+                    },
+                    q,
+                    &m,
+                );
+            });
+
+            // The keybar's glyphs are centred on the border and rise about
+            // half their size above it; a body row must stay clear of that.
+            let ceiling = pane.y + pane.h - m.small() as f32 / 2.0;
+            for cs in &shapes {
+                if let bevy_egui::egui::Shape::Text(t) = &cs.shape {
+                    let text = t.galley.text();
+                    if text.contains("a line") || text.contains("Nothing to collect.") {
+                        assert!(
+                            t.pos.y < ceiling,
+                            "a body row drew at y={} against a {ceiling} floor — it \
+                             runs through the keybar",
+                            t.pos.y
+                        );
+                    }
+                }
+            }
+        });
     }
 
     /// Both of the pane's borders carry a strip, and the gutter tags the one

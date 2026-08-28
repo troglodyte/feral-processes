@@ -541,9 +541,12 @@ pub(super) fn draw_playing_base(
     let regions = hud::layout::regions(painter.screen_w(), painter.screen_h(), char_w, m);
     // The pane's rows, chosen by app-core (see `pane_rows`), and the header
     // that says which channel they are. Both read before the `game` borrow.
+    // No `- 1` for the header any more: it rides the pane's top border, so
+    // every row of the body is a log line.
     let log_capacity = ((regions.log_pane.h - m.line_height) / m.line_height).max(1.0) as usize;
-    let log_lines = app.visible_log(log_capacity.saturating_sub(1));
-    let log_header = log_pane_header(app.log_filter, app.filtered_out_log_lines());
+    let log_lines = app.visible_log(log_capacity);
+    let log_filter = app.log_filter;
+    let filtered_out = app.filtered_out_log_lines();
     // Before the `game` borrow, like `status_line` above. `None` outside
     // `Mode::Excavate`, which is what keeps the cursor off the map the rest
     // of the time without the renderer having to know the mode's rules.
@@ -624,97 +627,18 @@ pub(super) fn draw_playing_base(
         m,
     );
 
-    let log_x = regions.log_pane.x;
-    let log_y = regions.log_pane.y;
-    let log_w = regions.log_pane.w;
-    let log_h = regions.log_pane.h;
-    painter.rect(log_x, log_y, log_w, log_h, PANEL_BG);
-    painter.rect_lines(log_x, log_y, log_w, log_h, 2.0, fx.log_border(BORDER));
-    let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
-    if let Some(s) = &status_line {
-        painter.ui(s, log_x + m.inset, ly, m.font_size, RED);
-        ly += m.line_height;
-    }
-    // Drawn even under `LogFilter::All`, so the key is discoverable from the
-    // screen rather than only from the help popup.
-    let runs: Vec<TextRun> = log_header
-        .iter()
-        .map(|p| TextRun {
-            text: &p.text,
-            bold: p.bold,
-            color: p.color,
-        })
-        .collect();
-    painter.ui_runs(&runs, log_x + m.inset, ly, m.font_size);
-    ly += m.line_height;
-    for e in &log_lines {
-        if ly > log_y + log_h - m.gap {
-            break;
-        }
-        draw_message_line(e, log_x + m.inset, ly, painter, m);
-        ly += m.line_height;
-    }
-}
-
-/// One styled stretch of the log pane's header. Owned rather than
-/// `paint::TextRun`, which borrows: the pieces are built from a formatted
-/// count that has to outlive the call, and the caller turns them into runs at
-/// the point it draws.
-struct HeaderPiece {
-    text: String,
-    bold: bool,
-    color: Color,
-}
-
-impl HeaderPiece {
-    fn dim(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            bold: false,
-            color: GRAY,
-        }
-    }
-}
-
-/// The log pane's one-line header: every filter with the active one picked
-/// out, the key that cycles them, and — when a channel is being suppressed —
-/// how much of it is going unread. That last part is what stops a raid alert
-/// landing unseen while the pane is showing only field news.
-///
-/// All three are listed rather than only the active one, which is what the
-/// header used to do: named alone, "Field" says nothing about what the other
-/// settings are or which way the key steps, and a player reading a base line
-/// under a header they thought said otherwise has no way to tell whether the
-/// filter or the tagging is wrong. The order is `LogFilter::ALL`, which is the
-/// order the key walks.
-fn log_pane_header(filter: LogFilter, filtered_out: usize) -> Vec<HeaderPiece> {
-    let mut pieces = vec![HeaderPiece::dim("LOG  ")];
-    for (i, option) in LogFilter::ALL.iter().enumerate() {
-        if i > 0 {
-            pieces.push(HeaderPiece::dim(" · "));
-        }
-        pieces.push(if *option == filter {
-            HeaderPiece {
-                text: option.label().to_string(),
-                bold: true,
-                color: GREEN,
-            }
-        } else {
-            HeaderPiece::dim(option.label())
-        });
-    }
-    // Lower case because the binding is: `App::handle_playing_key` matches
-    // `'f'` and nothing matches `'F'`, so the old wording sent anyone reaching
-    // for shift to a key that does nothing.
-    pieces.push(HeaderPiece::dim("   f to cycle"));
-    if let Some(channel) = filter.hidden_channel()
-        && filtered_out > 0
-    {
-        pieces.push(HeaderPiece::dim(format!(
-            "   {filtered_out} {channel} hidden"
-        )));
-    }
-    pieces
+    hud::log_frame::draw_log_pane(
+        regions.log_pane,
+        &hud::log_frame::LogPane {
+            entries: &log_lines,
+            filter: log_filter,
+            filtered_out,
+            refusal: status_line.as_deref(),
+            border: fx.log_border(hud::palette::PANE_BORDER),
+        },
+        painter,
+        m,
+    );
 }
 
 /// The message log in full — everything the pane at the bottom of the map
@@ -1600,21 +1524,18 @@ fn draw_status_panel(
     cy += m.line_height;
     cy += m.gap;
 
-    // Computed ahead of the routines section (rather than just above the
-    // inventory loop, which is the only place that used to need it) so
-    // `draw_status_buffs` can clip its own rows against the same footer
-    // the inventory list already does — a party running routines on every
-    // slot of every holder can outgrow the column exactly the way a full
-    // inventory can.
-    let keys = [
-        "hjkl/arrows move  . wait  e drain  r recharge",
-        "b base menu   p party menu   i pack   n mine",
-        "c collect  t trade  a routine  u symlink  x examine  v tile",
-        "L history  f filter  s save  q main menu  ? help  +/- zoom",
-    ];
-    let keys_line_height = m.line_height - m.gap;
-    let keys_block_h = keys.len() as f32 * keys_line_height + m.inset;
-    let keys_y = y + h - keys_block_h;
+    // The column's floor. Computed ahead of the routines section (rather
+    // than just above the inventory loop, which is the only place that used
+    // to need it) so `draw_status_buffs` can clip its own rows against the
+    // same footer the inventory list already does — a party running routines
+    // on every slot of every holder can outgrow the column exactly the way a
+    // full inventory can.
+    //
+    // This used to sit above a four-line block naming eighteen keys. That
+    // block is now one row on the log pane's bottom border
+    // (`hud::log_frame`), and the rows it cost the column go to the
+    // inventory list.
+    let keys_y = y + h - m.inset;
 
     cy = draw_status_buffs(buffs, x + m.inset, cy, keys_y, painter, m);
     painter.ui("Inventory:", x + m.inset, cy, m.font_size, TEXT);
@@ -1648,12 +1569,6 @@ fn draw_status_panel(
             fusion_color(row.copy.tier).unwrap_or(TEXT_DIM),
         );
         cy += m.line_height;
-    }
-
-    let mut ky = keys_y;
-    for k in keys {
-        painter.ui(k, x + m.inset, ky, m.small(), TEXT_DIM);
-        ky += keys_line_height;
     }
 }
 
@@ -2200,74 +2115,6 @@ mod tests {
                 assert_eq!(rim(a, b), rim(b, a), "rim is not symmetric for {a:?}/{b:?}");
             }
         }
-    }
-
-    fn header_text(filter: LogFilter, filtered_out: usize) -> String {
-        log_pane_header(filter, filtered_out)
-            .iter()
-            .map(|p| p.text.as_str())
-            .collect()
-    }
-
-    /// The header is the only place the filter key is advertised, so it draws
-    /// under `All` too — a filter you can only discover from the help popup is
-    /// one nobody turns on. Lower case `f`, because that is the key that is
-    /// bound; `F` reaches nothing.
-    #[test]
-    fn the_unfiltered_header_still_names_the_key_and_counts_nothing() {
-        let header = header_text(LogFilter::All, 0);
-        assert!(header.contains("All"), "{header}");
-        assert!(header.contains("f to cycle"), "{header}");
-        assert!(!header.contains("hidden"), "nothing is hidden: {header}");
-    }
-
-    /// The whole set is listed whichever one is active, which is the point of
-    /// the row: "Field" alone says nothing about what else there is.
-    #[test]
-    fn the_header_lists_every_filter_in_cycle_order() {
-        for filter in LogFilter::ALL {
-            let header = header_text(filter, 0);
-            let labels: Vec<&str> = LogFilter::ALL.iter().map(|f| f.label()).collect();
-            let mut cursor = 0;
-            for label in &labels {
-                let at = header[cursor..]
-                    .find(label)
-                    .unwrap_or_else(|| panic!("{label} missing from {header:?} under {filter:?}"));
-                cursor += at + label.len();
-            }
-        }
-    }
-
-    /// Bold green is the only thing distinguishing the active filter from the
-    /// two it sits between, so it has to land on exactly one piece.
-    #[test]
-    fn only_the_active_filter_is_picked_out() {
-        for filter in LogFilter::ALL {
-            let pieces = log_pane_header(filter, 0);
-            let picked: Vec<&str> = pieces
-                .iter()
-                .filter(|p| p.bold && p.color == GREEN)
-                .map(|p| p.text.as_str())
-                .collect();
-            assert_eq!(picked, [filter.label()], "under {filter:?}");
-        }
-    }
-
-    /// The count is what stops a raid landing unseen while the pane is showing
-    /// only field news.
-    #[test]
-    fn a_filtered_header_counts_the_channel_it_is_hiding() {
-        let header = header_text(LogFilter::Field, 3);
-        assert!(header.contains("Field"), "{header}");
-        assert!(header.contains("3 base hidden"), "{header}");
-    }
-
-    /// A channel with no traffic in it has nothing to report, so the header
-    /// stays quiet rather than saying "0 base".
-    #[test]
-    fn a_filtered_header_with_an_empty_channel_says_nothing() {
-        let header = header_text(LogFilter::Base, 0);
-        assert!(!header.contains("hidden"), "{header}");
     }
 
     fn entry(text: &str, repeats: usize) -> LogEntry {

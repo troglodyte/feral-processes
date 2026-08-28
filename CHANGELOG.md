@@ -27,6 +27,37 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.46
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release changes what a battle sounds like and what the dig crew does when
+it runs out of substrate, and stores nothing.
+
+A swing you can hear the shape of, and a dig crew that stops standing over a
+cell it has nothing to floor with.
+
+### Added
+
+- **Hits, crits and misses sound different**, and each cue plays as that
+  swing's own line is revealed in the log rather than all at once the moment
+  the round resolves — so what you hear tracks what you are reading. A fumble
+  sounds like a miss, since the line already narrates how badly it went.
+
+### Fixed
+
+- **A dig crew that runs out of Blank Substrate no longer strands the
+  program.** A body posted to floor a cut cell stayed on it for the rest of
+  the run, waiting on a material only a Lathe makes — which that same body
+  would have had to go and run. A floor job with nothing to lay is set aside
+  until the substrate exists, and the program goes back to useful work.
+  Cutting is unaffected: a marked wall still comes down with an empty store.
+- **A base that runs dry twice now says so twice.** The crew named an empty
+  substrate store once per cell and then never again, so a shortage that came
+  back was silent.
+- **A base whose last job just became unworkable stands its worker down.** The
+  quiet-base check could pass while a program still held a posting that had
+  stopped existing, leaving it parked there.
+
 ## 0.13.45
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

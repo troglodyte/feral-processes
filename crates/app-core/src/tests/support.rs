@@ -146,6 +146,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
     for (i, species) in species.iter().enumerate() {
         let i = i as i32;
         data.creatures.push(CreatureSave {
+            sortie_index: None,
             boss: false,
             species: species.clone(),
             position: (px + MENU_SCAN_RADIUS + 10 + i, py),
@@ -218,6 +219,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
     data.creatures
         .retain(|c| !(c.position.1 == py && c.position.0 > px));
     data.creatures.push(CreatureSave {
+        sortie_index: None,
         boss: false,
         species,
         position: (px + east, py),
@@ -319,6 +321,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         .extend(cargo.iter().map(|(item, qty)| (ItemId::from(*item), *qty)));
     let (px, py) = data.player.position;
     data.creatures.push(CreatureSave {
+        sortie_index: None,
         boss: false,
         species,
         position: (px + 1, py),
@@ -416,6 +419,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         .collect();
     let (px, py) = data.player.position;
     data.creatures.push(CreatureSave {
+        sortie_index: None,
         boss: false,
         species,
         position: (px + 2, py),
@@ -621,6 +625,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
     let (px, py) = data.player.position;
     for (offset, tamed) in [(1, true), (2, false)] {
         data.creatures.push(CreatureSave {
+            sortie_index: None,
             boss: false,
             species: species.clone(),
             position: (px + offset, py),
@@ -706,6 +711,7 @@ pub(crate) fn app_with_companions_and_cargo(
     let (px, py) = data.player.position;
     for slot in 0..count {
         data.creatures.push(CreatureSave {
+            sortie_index: None,
             boss: false,
             species: species.clone(),
             position: (px, py),
@@ -989,6 +995,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
+            sortie_index: None,
             boss: false,
             species: species.clone(),
             position: (px, py),

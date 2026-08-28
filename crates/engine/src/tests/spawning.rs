@@ -1549,6 +1549,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             gear_copies: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
+            sorties: Vec::new(),
         },
         creatures: vec![save::CreatureSave {
             species: "scrapper".to_string(),
@@ -1564,6 +1565,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             xp_to_next: 20,
             cronjob: None,
             party_slot: None,
+            sortie_index: None,
             wielded: false,
             zone: 1,
             custom_name: None,

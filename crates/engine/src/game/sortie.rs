@@ -451,9 +451,11 @@ impl Game {
             }
         }
 
-        // Priced while the fallen are still standing there: `kill_xp` reads
-        // the victim's own `Stats`, so this cannot move below the despawn.
+        // Priced while the fallen are still standing there: `kill_xp` and
+        // `roll_work_resource_drop` both read the victim's own components,
+        // so neither can move below the despawn.
         let mut earned = 0;
+        let mut haul: Vec<(ItemId, u32)> = Vec::new();
         for &hostile in &hostiles {
             if self.creature_alive(hostile) {
                 continue;
@@ -463,6 +465,16 @@ impl Game {
             for &member in &members {
                 if self.creature_alive(member) {
                     self.award_companion_xp(member, paid);
+                }
+            }
+            // The same drop a kill in front of the player pays, through the
+            // same roll — accumulated into the record rather than granted,
+            // because the party is not there to pick it up. It goes to a
+            // Depot when the squad walks back in.
+            if let Some((item, qty)) = self.roll_work_resource_drop(hostile) {
+                match haul.iter_mut().find(|(held, _)| *held == item) {
+                    Some((_, held)) => *held += qty,
+                    None => haul.push((item, qty)),
                 }
             }
         }
@@ -491,6 +503,12 @@ impl Game {
         sortie.battles_done += 1;
         sortie.kills += kills as u32;
         sortie.xp += earned;
+        for (item, qty) in haul {
+            match sortie.loot.iter_mut().find(|(held, _)| *held == item) {
+                Some((_, held)) => *held += qty,
+                None => sortie.loot.push((item, qty)),
+            }
+        }
         if let Some((entity, name)) = downed {
             sortie.aborted = true;
             sortie.casualties.push(name);
@@ -502,6 +520,31 @@ impl Game {
             // cannot do while it is still away.
             sortie.members.retain(|&e| e != entity);
         }
+    }
+
+    /// Every trip currently away, worded for a screen.
+    ///
+    /// `&self` and **derives nothing back into the world** — a screen that
+    /// rewrote what it draws would make the trip depend on whether anyone
+    /// looked, which is `Game::memory_report`'s rule.
+    pub fn sortie_reports(&self) -> Vec<crate::views::SortieReport> {
+        self.world
+            .resource::<crate::resources::Sorties>()
+            .0
+            .iter()
+            .map(|s| crate::views::SortieReport {
+                site: s.site.name.clone(),
+                members: s.members.iter().map(|&e| self.creature_label(e)).collect(),
+                casualties: s.casualties.clone(),
+                kills: s.kills,
+                xp: s.xp,
+                loot: s.loot.clone(),
+                battles_done: s.battles_done,
+                battles_total: s.battles_total,
+                ticks_left: s.ticks_total.saturating_sub(s.ticks_elapsed),
+                aborted: s.aborted,
+            })
+            .collect()
     }
 
     /// A trip reaching its last tick: the record is dropped, the loot is put

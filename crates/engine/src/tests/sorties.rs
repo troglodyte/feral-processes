@@ -892,18 +892,17 @@ fn a_casualty_is_benched_under_forgiving_and_dissolved_under_permadeath() {
 fn provisions_restore_integrity_between_battles() {
     let (mut game, squad) = a_dispatched_sortie(4704, DifficultyMode::Forgiving);
     let total = game.world.resource::<Sorties>().0[0].ticks_total;
-    // Hurt but well clear of dropping, so the trip does not abort and the
-    // heal has room to land.
+    // Deep bars, hurt to half, so the squad cannot drop in one battle and
+    // the heal (a fraction of `max_hp`) is comfortably larger than anything
+    // a sector-1 pack can take off them. Both halves matter: at their real
+    // Integrity the trip aborts on the first battle and no heal ever runs.
     for &member in &squad {
-        let max_hp = game
+        let mut stats = game
             .world
-            .get::<crate::components::Stats>(member)
-            .unwrap()
-            .max_hp;
-        game.world
             .get_mut::<crate::components::Stats>(member)
-            .unwrap()
-            .hp = max_hp / 2;
+            .unwrap();
+        stats.max_hp = 4_000;
+        stats.hp = 2_000;
     }
     let hurt: Vec<i32> = squad
         .iter()
@@ -992,4 +991,199 @@ fn a_returned_program_is_staff_again() {
             "the record is gone, so nothing can still call it away"
         );
     }
+}
+
+// ------------------------------------------- return, report and save
+
+/// An in-flight sortie survives a save and load: the same members, the same
+/// site, the same countdown.
+#[test]
+fn an_in_flight_sortie_survives_a_save_and_load() {
+    let scratch = scratch_assets_dir("sortie_inflight_roundtrip");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let (mut game, squad) = a_dispatched_sortie(4800, DifficultyMode::Forgiving);
+    for _ in 0..40 {
+        game.wait();
+    }
+    let before = game.world.resource::<Sorties>().0[0].clone();
+    assert!(before.ticks_elapsed > 0, "the countdown must have moved");
+    let names: Vec<String> = squad.iter().map(|&e| game.creature_label(e)).collect();
+
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let after = &loaded.world.resource::<Sorties>().0[0];
+    assert_eq!(after.site, before.site, "the whole resolved site travels");
+    assert_eq!(after.risk, before.risk);
+    assert_eq!(after.ticks_total, before.ticks_total);
+    assert_eq!(after.ticks_elapsed, before.ticks_elapsed);
+    assert_eq!(after.battles_total, before.battles_total);
+    assert_eq!(after.battles_done, before.battles_done);
+    assert_eq!(after.kills, before.kills);
+    assert_eq!(after.xp, before.xp);
+    assert_eq!(after.loot, before.loot);
+    assert_eq!(after.aborted, before.aborted);
+    assert_eq!(after.casualties, before.casualties);
+
+    let reloaded: Vec<String> = after
+        .members
+        .iter()
+        .map(|&e| loaded.creature_label(e))
+        .collect();
+    assert_eq!(reloaded, names, "the same bodies are still away");
+}
+
+/// Membership rides `CreatureSave`, `party_slot`'s precedent — entity ids
+/// are not stable across a save, which is exactly why the party does it
+/// this way. Asserted through the *role*, since that is what every consumer
+/// of membership actually reads.
+#[test]
+fn membership_is_restored_from_the_creature_side() {
+    let scratch = scratch_assets_dir("sortie_membership");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let (mut game, _) = a_dispatched_sortie(4801, DifficultyMode::Forgiving);
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let away: Vec<Entity> = loaded.world.resource::<Sorties>().0[0].members.clone();
+    assert_eq!(away.len(), 3);
+    for member in away {
+        assert_eq!(
+            loaded.program_role(member),
+            Some(ProgramRole::Sortie),
+            "a restored member is out of the labour pool again"
+        );
+    }
+    // And the bodies that stayed are staff, or the index was read off by one.
+    assert_eq!(loaded.base_staff().len(), 2);
+}
+
+/// The save format is not bumped: the fields are additive behind
+/// `#[serde(default)]`, so a save written before sorties loads with none.
+#[test]
+fn a_pre_sortie_save_loads_with_no_sorties() {
+    let scratch = scratch_assets_dir("sortie_pre_save");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let (mut game, _) = a_dispatched_sortie(4802, DifficultyMode::Forgiving);
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+
+    // Emptied first so both keys serialise on one line, then stripped
+    // outright — which is what a file written before they existed looks
+    // like. Packed back into a **real save** rather than left as RON: a
+    // round trip alone leaves a `#[serde(skip)]` green while the save a
+    // player actually reloads has lost the field.
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.player.sorties.clear();
+    for c in &mut data.creatures {
+        c.sortie_index = None;
+    }
+    let text = crate::save::to_ron(&data).unwrap();
+    let stripped: String = text
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !t.starts_with("sorties:") && !t.starts_with("sortie_index:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        stripped.lines().count() < text.lines().count(),
+        "the keys must have been there to strip, or this proves nothing"
+    );
+    let old_path = scratch.join("old.bin");
+    let stripped_data = crate::save::from_ron(&stripped).expect("a pre-sortie save still parses");
+    crate::save::save_to_file(&old_path, &stripped_data).unwrap();
+
+    let loaded = Game::load(&old_path, &test_assets_dir()).unwrap();
+    assert!(
+        loaded.world.resource::<Sorties>().0.is_empty(),
+        "a pre-sortie save has nobody away"
+    );
+    assert_eq!(loaded.base_staff().len(), 5, "and everyone is staff again");
+}
+
+/// Loot lands in depots; what does not fit is logged rather than dropped in
+/// silence — `return_to_depots`' existing rule.
+#[test]
+fn overflow_loot_is_logged_rather_than_lost() {
+    let (mut game, _) = a_dispatched_sortie(4803, DifficultyMode::Forgiving);
+    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
+    {
+        let record = &mut game.world.resource_mut::<Sorties>().0[0];
+        record.loot = vec![(scrap.clone(), 100_000)];
+        record.battles_done = record.battles_total;
+        record.ticks_elapsed = record.ticks_total - 1;
+    }
+
+    let before = game.message_history(400).len();
+    game.run_sorties();
+
+    assert!(game.world.resource::<Sorties>().0.is_empty());
+    let said: Vec<String> = game.message_history(400)[before..]
+        .iter()
+        .map(|l| l.text.clone())
+        .collect();
+    assert!(
+        said.iter().any(|l| l.contains("no shelf to stand on")),
+        "what did not fit must be said out loud: {said:?}"
+    );
+}
+
+/// Loot that does fit lands on a Depot shelf, so the base is actually paid.
+#[test]
+fn returned_loot_lands_on_a_shelf() {
+    let (mut game, _) = a_dispatched_sortie(4804, DifficultyMode::Forgiving);
+    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
+    let before = game
+        .base_stock()
+        .iter()
+        .find(|r| r.item == scrap)
+        .map(|r| r.qty)
+        .unwrap_or(0);
+    {
+        let record = &mut game.world.resource_mut::<Sorties>().0[0];
+        record.loot = vec![(scrap.clone(), 7)];
+        // Every battle already fought, or the last tick fires all of them at
+        // once and the haul under test is buried in what they dropped.
+        record.battles_done = record.battles_total;
+        record.ticks_elapsed = record.ticks_total - 1;
+    }
+    game.run_sorties();
+
+    let after = game
+        .base_stock()
+        .iter()
+        .find(|r| r.item == scrap)
+        .map(|r| r.qty)
+        .unwrap_or(0);
+    assert_eq!(after, before + 7);
+}
+
+/// The report is derived off the record and evicts nothing — a screen that
+/// rewrote what it draws would make the trip depend on whether anyone
+/// looked.
+#[test]
+fn the_report_reads_the_record_without_changing_it() {
+    let (mut game, squad) = a_dispatched_sortie(4805, DifficultyMode::Forgiving);
+    for _ in 0..50 {
+        game.wait();
+    }
+    let before = game.world.resource::<Sorties>().0[0].clone();
+
+    let reports = game.sortie_reports();
+    assert_eq!(reports.len(), 1);
+    let report = &reports[0];
+    assert_eq!(report.site, before.site.name);
+    assert_eq!(report.members.len(), squad.len() - before.casualties.len());
+    assert_eq!(report.kills, before.kills);
+    assert_eq!(report.xp, before.xp);
+    assert_eq!(report.battles_total, before.battles_total);
+    assert_eq!(report.ticks_left, before.ticks_total - before.ticks_elapsed);
+
+    let after = game.world.resource::<Sorties>().0[0].clone();
+    assert_eq!(after.ticks_elapsed, before.ticks_elapsed);
+    assert_eq!(after.battles_done, before.battles_done);
 }

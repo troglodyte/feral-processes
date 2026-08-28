@@ -27,6 +27,35 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.39
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the run's spent freebies are a new save field behind a `#[serde(default)]`,
+so a save written before this loads with its free Broker still owed.
+
+The run's first Contract Broker costs nothing. Contracts are what onboards a
+run — the Broker has always been behind no research for that reason — and
+its five Core Fragments were the last thing standing between a new player
+and the board.
+
+### Added
+
+- **A Contract Broker is free to deploy until you have one.** The build menu
+  quotes it as `free` and the deploy prompt says `Free to deploy`. The
+  waiver is spent when the crew actually raises it, so filing a request and
+  then cancelling does not burn it, and a second request filed alongside the
+  free one is quoted in full.
+- **Structures can be authored free-the-first-time**, a `first_free` flag in
+  `assets/structures/*.ron`. One per run rather than one per zone: the base
+  travels through a breach and so does whatever is standing in it. The
+  shipped Broker is the only structure that sets it.
+
+### Changed
+
+- **A structure removed for a bill nobody paid still refunds the usual
+  share** of what its file says it costs — one Core Fragment, once, for a
+  demolished free Broker.
+
 ## 0.13.38
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

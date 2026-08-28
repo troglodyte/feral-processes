@@ -7192,3 +7192,66 @@ passed with the banking removed entirely; the mutation check is what caught
 it. It now *earns* the overflow and holds enough perks that the next point
 costs more than the award pays, which is the sublinear price keeping it
 unconverted.
+
+### `Game::attention` is the one derivation of what needs the player
+
+The HUD's status-bar badge, the info column's three tab markers and its two
+collapsed bars are all readouts of one call. `draw_playing_base` calls
+`Game::attention` once, beside `base_stock` and `player_status`, and hands
+the same slice to `hud::status_bar` and `hud::column`; neither derives
+anything of its own, and neither can — both take a `&[AttentionRow]` and
+have no `Game` to ask.
+
+That is the whole argument for making the column tabbed rather than longer.
+A closed pane must never hide an actionable state, and with three surfaces
+reading one `Vec` that is true by construction. Written as three derivations
+it would be true only for as long as three sites agreed, which in this repo
+is the failure mode with the longest half-life: nothing fails to compile and
+the screen simply stops meaning anything.
+
+**`AttentionRow::kind` exists so the renderer sorts a row into a pane by an
+exhaustive match.** `hud::column::tab_of` is that match. Without the field
+the only thing a renderer could route on is the row's keycap or its prose,
+and a `_ =>` arm — or a key that moved — would ship a condition with no
+marker on any tab and no line in any bar, silently. `cell_mark`'s rule, and
+it is worth more here than there, because this is the one screen whose
+entire purpose is not to hide things.
+
+**The trap is the pack.** The design's fourth row was `pack full`, keyed
+`i`. There is no pack capacity: `components::Inventory` is an unbounded
+`Vec<(ItemId, u32)>`, and `PlayerStatus::inventory_used`'s own doc comment
+says so — "The Buffer is unbounded, so this is just how much is stored."
+The row is therefore the *roster's* capacity, `pet_count` against
+`pet_capacity`, which is real, bounded, and something the player can act on
+by selling, decompiling or standing a program down. Anyone "restoring" the
+pack row from the handoff is inventing a limit the simulation does not have
+— the same class of invention as the raid countdown the design already
+struck out, and it would draw as a permanent nag that nothing could ever
+clear.
+
+Two smaller things the build settled, both against the design's own text.
+The **keys** are the top-level map keys that start the journey — `b` for the
+two structure rows, `p` for the two player ones — because the handoff's `k`
+walks west here and its `m` opens the Excavation plan; a chip naming a key
+that does something else is worse than no chip. And **threat rows sort
+first** rather than sitting last in the table's order, because the badge
+shows only the leading row: a raid eating the base reading second to "3 perk
+points unspent" is wrong on a HUD, and the sort is one rule stated once
+rather than a second ordering in the badge.
+
+**One binding covers both locales**, and the design's request for two is
+what to read past. `1`/`2`/`3` sit in `handle_playing_key`'s top match,
+where `f` already is, and that match runs *before* the hand-off to
+`handle_stack_key` — so a second arm down there could only drift out of step
+with this one. What has to exist is the assertion rather than the second
+binding: `the_digits_work_underground` is what stops these going the way `r`
+(rest) did, swallowed by `handle_stack_key`'s `_ => {}` with no refusal and
+nothing in the log.
+
+`hud::column::draw_info_column` returns the open pane's **body rect** and
+draws the column's fill and frame itself; `draw_status_panel` lost both of
+its own chrome calls and now draws its rows into that rect. The column does
+not scroll, so that rect's height is a layout constraint —
+`the_tallest_column_pane_fits_its_column` measures the panel's fixed head
+against it at 1280x720, the same trap `the_tallest_gear_page_fits_its_popup`
+closes in a shorter box.

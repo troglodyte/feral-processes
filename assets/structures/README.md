@@ -275,6 +275,19 @@ is skipped with a warning logged in-game rather than crashing startup.
     // all show the same board.
     issues_contracts: true,
 
+    // Optional; can be left out entirely (defaults to false). If true, this
+    // structure is a Dispatch Relay: standing in the base with one built
+    // opens the sortie board, and it is where a squad of idle base staff is
+    // signed for. They fight a run of battles at the chosen site off-screen
+    // over a number of ticks and come home with loot, or with fewer bodies.
+    // See `assets/sorties/README.md` for what a site is.
+    //
+    // A plain flag rather than a block, and for `issues_contracts`' reason:
+    // a Relay has nothing to configure either — what it offers is derived
+    // from the world seed, the sector and the clock. Several Relays all show
+    // the same board.
+    dispatches_sorties: true,
+
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t`) with
     // it to sell any inventory item (except the trade currency itself), or

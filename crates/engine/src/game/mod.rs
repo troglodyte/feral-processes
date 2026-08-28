@@ -33,6 +33,7 @@ pub(crate) mod passives;
 pub(crate) mod pursuit;
 pub(crate) mod refactor;
 pub(crate) mod routines;
+pub(crate) mod sortie;
 pub(crate) mod spawning;
 pub(crate) mod stack;
 pub(crate) mod stack_features;

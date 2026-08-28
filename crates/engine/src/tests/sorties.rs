@@ -1,9 +1,13 @@
 //! Sorties: the role, the catalogue, the board, dispatch, the trip and the
 //! return.
 
+use bevy_ecs::prelude::Entity;
+
 use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
+use crate::components::{Glyph, GlyphColor, Position, Structure};
 use crate::game::party::ProgramRole;
+use crate::game::sortie::SortieReach;
 use crate::resources::DifficultyMode;
 use crate::resources::{Sortie, Sorties};
 use crate::sorties::SortieDb;
@@ -224,4 +228,64 @@ fn a_zero_offset_is_todays_window() {
         .habitat_pools(x, y, None, 0)
         .expect("this tile should be habitable");
     assert_eq!(ordinary, expected);
+}
+
+// ------------------------------------------------------------ the Relay
+
+/// Stands a Home and a Relay up in base space and puts the party on the
+/// laid floor beside them, `deploy_broker`'s shape. A Relay without a Home
+/// does not survive a save the test later loads.
+fn deploy_relay(game: &mut Game) {
+    game.lay_starting_pocket();
+    deploy(game, "home", 0, 0);
+    deploy(game, "relay", 1, 0);
+    super::support::stand_in_base_at(game, 1, 1);
+}
+
+/// A structure of `kind` standing at `(x, y)` in base space.
+fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            Glyph {
+                ch: 'K',
+                color: GlyphColor::Magenta,
+            },
+        ))
+        .id()
+}
+
+/// Three states rather than two booleans, `NoPost::BoxedIn`'s rule: "no
+/// Relay built" and "not standing in base" leave the player different
+/// errands, and a screen that cannot tell them apart says the wrong
+/// sentence.
+#[test]
+fn sortie_reach_reports_the_three_states() {
+    let mut game = Game::new(4400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.sortie_reach(), SortieReach::NoRelay);
+
+    deploy_relay(&mut game);
+    assert_eq!(game.sortie_reach(), SortieReach::AtRelay);
+
+    // Out of base space entirely — on the open grid, where no floor can
+    // answer for the party.
+    game.world
+        .insert_resource(crate::resources::Locale::Surface);
+    assert_eq!(game.sortie_reach(), SortieReach::OffBase);
+}
+
+/// It measures the base and not the distance to the mast: a Relay stands on
+/// laid floor by construction, so its own tile says nothing the base does
+/// not. The far edge of the pocket is the case the rule exists for.
+#[test]
+fn the_far_side_of_the_base_still_reaches_the_relay() {
+    let mut game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let edge = crate::tuning::STARTING_POCKET_RADIUS;
+    assert!(edge - 1 > 2, "the far edge must be beyond arm's length");
+    super::support::stand_in_base_at(&mut game, edge, 0);
+    assert_eq!(game.sortie_reach(), SortieReach::AtRelay);
 }

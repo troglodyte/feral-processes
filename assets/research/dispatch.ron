@@ -1,0 +1,9 @@
+(
+    id: "dispatch",
+    name: "Dispatch Protocol",
+    description: "Routing that holds past the sector's edge. Unlocks the Dispatch Relay, which sends idle base programs out to fight a site on their own.",
+    cost: 45,
+    min_zone: 2,
+    requires: ["power_grid"],
+    unlocks_structures: ["relay"],
+)

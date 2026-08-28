@@ -178,6 +178,179 @@ impl Perk {
     }
 }
 
+/// What buying a level of a stat perk grants, for the three perks whose
+/// effect is applied **at purchase** rather than read at a formula.
+///
+/// The gain is returned rather than written so the magnitudes — including
+/// `Buffer`'s percentage-of-current-max and its floor — live beside the
+/// perk, while the `Stats` write stays at the one site that owns it
+/// (`Game::unlock_perk`). Composition, not a second writer of `Stats`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatGain {
+    Atk(i32),
+    Mitigation(i32),
+    /// Raised max Integrity. The buyer is healed to the new maximum, the
+    /// same way a level-up does — that is the caller's half.
+    MaxHp(i32),
+}
+
+/// How many levels of `perk` these perks are held at — 0 with no component
+/// at all, which is what makes every query below safe to ask of an entity
+/// that has never bought anything.
+fn level(perks: Option<&crate::components::Perks>, perk: Perk) -> u32 {
+    perks.map(|p| p.level(perk)).unwrap_or(0)
+}
+
+// ─── What each perk is worth ────────────────────────────────────────────
+//
+// One named query per perk, and **the whole list of them is the census**:
+// this is the one place that answers "which formula does this perk touch",
+// which the enum's doc comments above describe but cannot keep in step.
+// The module owns the answer and the call site owns the application —
+// `needs::strain` and `party::role_of`'s shape.
+//
+// Two signature families, and the difference is not arbitrary. Most take
+// the player's `Perks` and name their own variant, so no call site says
+// `Perk::` at all. Two take a bare **level** instead, because the level
+// travels to a formula the player may not be the subject of: a program
+// compiling at a bench (`CraftOrder`) and a program working a node
+// (`CycleModifiers`) each carry the player's level to a place that has no
+// player to read. Giving those two a `Perks` argument would quietly make a
+// program's cycle read the player's perks.
+//
+// The three `StatGain` perks are here too, in the only shape they can
+// take: they are applied once at purchase and never read again.
+
+/// The multiplier on Power (hunger) drain — `Perk::LowPowerMode`.
+///
+/// **Floored at 0**, so enough levels stop hunger draining entirely. That
+/// is deliberate and unlike `trace_after_obfuscation` below: Power already
+/// has a structural answer in a Recharger Node, so a perk reaching the same
+/// place buys nothing the game did not already sell.
+pub fn power_drain_multiplier(perks: Option<&crate::components::Perks>) -> f32 {
+    (1.0 - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL
+        * level(perks, Perk::LowPowerMode) as f32)
+        .max(0.0)
+}
+
+/// `amount` of Trace after `Perk::Obfuscation`'s reduction, **floored at 1
+/// whenever there was anything to reduce**.
+///
+/// The floor is the design, and the reason this is a whole-value query
+/// rather than a multiplier: Trace is the Stack's only escalation pressure,
+/// so however many levels are stacked, descending still costs something. A
+/// level count past the point the reduction reaches 1.0 saturates the
+/// conversion to 0 and the clamp lifts it back to 1, which is why the
+/// arithmetic needs no ceiling of its own.
+pub fn trace_after_obfuscation(perks: Option<&crate::components::Perks>, amount: u32) -> u32 {
+    let level = level(perks, Perk::Obfuscation);
+    if level == 0 || amount == 0 {
+        return amount;
+    }
+    let kept = 1.0 - crate::tuning::OBFUSCATION_REDUCTION_PER_LEVEL * level as f32;
+    ((amount as f32 * kept).round() as u32).clamp(1, amount)
+}
+
+/// What one line of a recipe costs after `Perk::LeanCompiler`, **floored at
+/// 1** — a recipe line the perk erased entirely would make the item free.
+///
+/// A whole-value query for `trace_after_obfuscation`'s reason: the floor is
+/// per line, so a caller handed a bare discount has to remember to apply it.
+pub fn discounted_craft_cost(perks: Option<&crate::components::Perks>, qty: u32) -> u32 {
+    let discount =
+        crate::tuning::LEAN_COMPILER_DISCOUNT_PER_LEVEL * level(perks, Perk::LeanCompiler);
+    qty.saturating_sub(discount).max(1)
+}
+
+/// What `Perk::ExploitFocus` shaves off a decompile target's remaining-HP
+/// penalty.
+pub fn decompile_hp_penalty_reduction(perks: Option<&crate::components::Perks>) -> f32 {
+    crate::tuning::EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL
+        * level(perks, Perk::ExploitFocus) as f32
+}
+
+/// Extra roster slots from `Perk::ProcessPool` — the one term in
+/// `Game::pet_capacity` a raid cannot take back.
+pub fn roster_slot_bonus(perks: Option<&crate::components::Perks>) -> usize {
+    level(perks, Perk::ProcessPool) as usize * crate::tuning::PROCESS_POOL_SLOTS_PER_LEVEL
+}
+
+/// What `Perk::Teardown` adds to a kill's work-resource drop.
+///
+/// Added to the roll rather than drawn for — see the variant's doc: a second
+/// draw would shift the shared `GameRng` stream on essentially every fight.
+pub fn salvage_bonus(perks: Option<&crate::components::Perks>) -> u32 {
+    crate::tuning::TEARDOWN_SALVAGE_PER_LEVEL * level(perks, Perk::Teardown)
+}
+
+/// What `Perk::Failover` adds to the base-wide repair rate, so a base with
+/// no repairer standing still mends.
+pub fn repair_rate_bonus(perks: Option<&crate::components::Perks>) -> u32 {
+    crate::tuning::FAILOVER_REPAIR_PER_LEVEL * level(perks, Perk::Failover)
+}
+
+/// Flat Accuracy from `Perk::TargetLock`, added to every attack the player
+/// makes. Uncapped, and safe to leave uncapped — `HIT_CHANCE_MAX` keeps the
+/// benefit short of a guaranteed landing however many levels are bought.
+pub fn accuracy_bonus(perks: Option<&crate::components::Perks>) -> i32 {
+    crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL * level(perks, Perk::TargetLock) as i32
+}
+
+/// What the player's affinity perk for `kind` is worth, raw — the caller
+/// adds it to `AFFINITY_NEUTRAL` and applies `AFFINITY_MAX`, since the
+/// neutral point and the ceiling belong to the affinity system rather than
+/// to the perk.
+///
+/// The five affinity perks are the one family with a common shape, so they
+/// get one query rather than five, mapping through `AffinityKind` in both
+/// directions.
+pub fn affinity_bonus(
+    perks: Option<&crate::components::Perks>,
+    kind: crate::abilities::AffinityKind,
+) -> f32 {
+    kind.perk_bonus_per_level() * level(perks, kind.perk()) as f32
+}
+
+/// What `level` levels of `Perk::KeenScavenger` add to a mining node's
+/// per-cycle success roll.
+///
+/// Takes a level rather than the component: the roll belongs to whoever is
+/// working the node, and the player's level reaches it through
+/// `CycleModifiers`.
+pub fn mining_roll_bonus(level: u32) -> f64 {
+    level as f64 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL
+}
+
+/// What `level` levels of `Perk::TightenTolerances` add to the floor a
+/// compiled copy rolls its quality off.
+///
+/// Takes a level for `mining_roll_bonus`' reason — a program compiling at a
+/// bench has none of its own, and `CraftOrder` is what carries the player's.
+pub fn quality_floor_bonus(level: u32) -> u32 {
+    level * crate::tuning::QUALITY_PERK_PER_LEVEL as u32
+}
+
+/// What buying a level of `perk` writes straight into the buyer's `Stats`,
+/// or `None` for the fifteen perks read at a formula instead.
+///
+/// `current_max_hp` is only read by `Buffer`, whose gain is a percentage of
+/// what the buyer already has — **floored at
+/// `BUFFER_MIN_BONUS_PER_LEVEL`**, so an early purchase is worth taking.
+pub fn purchase_stat_gain(perk: Perk, current_max_hp: i32) -> Option<StatGain> {
+    match perk {
+        Perk::Attacker => Some(StatGain::Atk(crate::tuning::ATTACKER_BONUS_PER_LEVEL)),
+        Perk::Defender => Some(StatGain::Mitigation(
+            crate::tuning::DEFENDER_BONUS_PER_LEVEL,
+        )),
+        Perk::Buffer => Some(StatGain::MaxHp(
+            ((current_max_hp as f32 * crate::tuning::BUFFER_BONUS_PERCENT_PER_LEVEL).round()
+                as i32)
+                .max(crate::tuning::BUFFER_MIN_BONUS_PER_LEVEL),
+        )),
+        _ => None,
+    }
+}
+
 /// The authored half of a perk: what it's called, how it reads, and what it
 /// costs. Everything a player sees in the picker, and nothing the engine
 /// computes from — see `Perk` for why the effect stays in Rust.
@@ -329,6 +502,7 @@ impl PerkDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::Perks;
 
     fn perk_assets_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/perks")
@@ -570,5 +744,146 @@ mod tests {
             "a free perk would be buyable without limit"
         );
         assert_eq!(db.catalogue().count(), 1);
+    }
+
+    /// Every perk, and the one query that answers what it is worth.
+    ///
+    /// **This match is the census.** It is exhaustive on purpose —
+    /// `cell_mark`'s rule — so a nineteenth perk fails to compile here until
+    /// it has a home in the module above, which is what keeps this file the
+    /// answer to "which formula does this perk touch" rather than a list
+    /// that was true once. The enum's own doc comments say the same thing in
+    /// prose, and prose is exactly what cannot be kept in step.
+    ///
+    /// Each arm asserts the query *moves*, so a perk wired to the wrong
+    /// constant — or to one that is zero — fails as loudly as a missing one.
+    fn one_level_is_worth_something(perk: Perk) -> bool {
+        let bought = Perks {
+            points: 0,
+            unlocked: vec![perk],
+        };
+        let one = Some(&bought);
+        let none = None;
+        match perk {
+            Perk::LowPowerMode => power_drain_multiplier(one) < power_drain_multiplier(none),
+            Perk::Obfuscation => {
+                trace_after_obfuscation(one, 100) < trace_after_obfuscation(none, 100)
+            }
+            Perk::LeanCompiler => discounted_craft_cost(one, 5) < discounted_craft_cost(none, 5),
+            Perk::ExploitFocus => {
+                decompile_hp_penalty_reduction(one) > decompile_hp_penalty_reduction(none)
+            }
+            Perk::ProcessPool => roster_slot_bonus(one) > roster_slot_bonus(none),
+            Perk::Teardown => salvage_bonus(one) > salvage_bonus(none),
+            Perk::Failover => repair_rate_bonus(one) > repair_rate_bonus(none),
+            Perk::TargetLock => accuracy_bonus(one) > accuracy_bonus(none),
+            Perk::DamageAffinity
+            | Perk::HealAffinity
+            | Perk::BuffAffinity
+            | Perk::DebuffAffinity
+            | Perk::DrainAffinity => {
+                let kind = perk
+                    .affinity_kind()
+                    .expect("an affinity perk names its kind");
+                affinity_bonus(one, kind) > affinity_bonus(none, kind)
+            }
+            // The two that travel as a bare level, because the formula's
+            // subject may be a program rather than the player.
+            Perk::KeenScavenger => mining_roll_bonus(1) > mining_roll_bonus(0),
+            Perk::TightenTolerances => quality_floor_bonus(1) > quality_floor_bonus(0),
+            // The three applied once at purchase and never read again.
+            Perk::Attacker | Perk::Defender | Perk::Buffer => {
+                purchase_stat_gain(perk, 100).is_some()
+            }
+        }
+    }
+
+    #[test]
+    fn every_perk_has_a_query_that_answers_what_it_is_worth() {
+        for perk in Perk::all() {
+            assert!(
+                one_level_is_worth_something(perk),
+                "{perk:?} buys nothing its query can see"
+            );
+        }
+    }
+
+    /// Power is the one meter a perk may switch off entirely: a Recharger
+    /// Node already deletes it, so the perk reaching the same place sells
+    /// nothing new. Contrast `obfuscation_never_cancels_a_trace_rise`.
+    #[test]
+    fn low_power_mode_can_stop_hunger_draining_altogether() {
+        let maxed = Perks {
+            points: 0,
+            unlocked: vec![Perk::LowPowerMode; 500],
+        };
+        assert_eq!(
+            power_drain_multiplier(Some(&maxed)),
+            0.0,
+            "the multiplier floors at 0 rather than going negative and refilling"
+        );
+    }
+
+    /// Trace is the Stack's only escalation pressure, so descending always
+    /// costs something however many levels are stacked — the floor is the
+    /// design, not a rounding artefact.
+    #[test]
+    fn obfuscation_never_cancels_a_trace_rise() {
+        let maxed = Perks {
+            points: 0,
+            unlocked: vec![Perk::Obfuscation; 500],
+        };
+        assert_eq!(trace_after_obfuscation(Some(&maxed), 40), 1);
+        assert_eq!(
+            trace_after_obfuscation(Some(&maxed), 0),
+            0,
+            "a rise of nothing stays nothing — the floor lifts a reduction, \
+             not an absence"
+        );
+    }
+
+    /// A recipe line the discount erased would make the item free, which is
+    /// the infinite-Credit fault `caravan_unit_cost` guards from the other
+    /// side.
+    #[test]
+    fn lean_compiler_never_takes_a_recipe_line_to_zero() {
+        let maxed = Perks {
+            points: 0,
+            unlocked: vec![Perk::LeanCompiler; 500],
+        };
+        assert_eq!(discounted_craft_cost(Some(&maxed), 8), 1);
+    }
+
+    /// `Buffer`'s gain is a percentage of what the buyer already has, so an
+    /// early purchase would be worth almost nothing without the floor.
+    #[test]
+    fn buffer_is_worth_taking_at_a_low_maximum() {
+        assert_eq!(
+            purchase_stat_gain(Perk::Buffer, 10),
+            Some(StatGain::MaxHp(crate::tuning::BUFFER_MIN_BONUS_PER_LEVEL)),
+            "the percentage is worth 0 here; the floor is what it pays"
+        );
+        let big = purchase_stat_gain(Perk::Buffer, 10_000);
+        assert!(
+            matches!(big, Some(StatGain::MaxHp(n)) if n > crate::tuning::BUFFER_MIN_BONUS_PER_LEVEL),
+            "and a developed player is paid the percentage, not the floor: {big:?}"
+        );
+    }
+
+    /// The queries answer for an entity that has never bought anything, so
+    /// no call site needs a branch — the property every `Option` in the
+    /// signatures is there for.
+    #[test]
+    fn no_perks_at_all_is_worth_exactly_nothing() {
+        assert_eq!(power_drain_multiplier(None), 1.0);
+        assert_eq!(trace_after_obfuscation(None, 12), 12);
+        assert_eq!(discounted_craft_cost(None, 3), 3);
+        assert_eq!(roster_slot_bonus(None), 0);
+        assert_eq!(salvage_bonus(None), 0);
+        assert_eq!(repair_rate_bonus(None), 0);
+        assert_eq!(accuracy_bonus(None), 0);
+        assert_eq!(decompile_hp_penalty_reduction(None), 0.0);
+        assert_eq!(mining_roll_bonus(0), 0.0);
+        assert_eq!(quality_floor_bonus(0), 0);
     }
 }

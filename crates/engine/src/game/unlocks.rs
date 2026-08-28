@@ -3,21 +3,22 @@
 
 use crate::game::inspection::power_ratio;
 use crate::taming::{DecompilerBonuses, TargetResistance};
-use crate::tuning::{
-    ATTACKER_BONUS_PER_LEVEL, BUFFER_BONUS_PERCENT_PER_LEVEL, BUFFER_MIN_BONUS_PER_LEVEL,
-    DEFAULT_TAMING_DIFFICULTY, DEFENDER_BONUS_PER_LEVEL,
-    EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL,
-};
+use crate::tuning::DEFAULT_TAMING_DIFFICULTY;
 use crate::*;
 
 impl Game {
     /// How many levels of `perk` the player has bought — 0 if none.
     pub fn player_perk_level(&self, perk: Perk) -> u32 {
-        let player = self.player_entity();
-        self.world
-            .get::<Perks>(player)
-            .map(|p| p.level(perk))
-            .unwrap_or(0)
+        self.player_perks().map(|p| p.level(perk)).unwrap_or(0)
+    }
+
+    /// The player's bought perks, for the `perks::` queries to read.
+    ///
+    /// `None` rather than a default is what those queries expect: every one
+    /// of them answers 0 for an entity that has never bought anything, so
+    /// no caller needs a branch of its own.
+    pub(crate) fn player_perks(&self) -> Option<&Perks> {
+        self.world.get::<Perks>(self.player_entity())
     }
 
     /// Everything the player brings to a decompile attempt: their real
@@ -35,8 +36,7 @@ impl Game {
                 .get::<Decompiler>(player)
                 .map(|d| d.skill)
                 .unwrap_or(0),
-            hp_penalty_reduction: EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL
-                * self.player_perk_level(Perk::ExploitFocus) as f32,
+            hp_penalty_reduction: crate::perks::decompile_hp_penalty_reduction(self.player_perks()),
             capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost),
         }
     }
@@ -169,27 +169,25 @@ impl Game {
             perks.unlocked.push(perk);
             perks.level(perk)
         };
-        match perk {
-            Perk::Attacker => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
-                    stats.atk += ATTACKER_BONUS_PER_LEVEL;
-                }
-            }
-            Perk::Defender => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
-                    stats.mitigation += DEFENDER_BONUS_PER_LEVEL;
-                }
-            }
-            Perk::Buffer => {
-                if let Some(mut stats) = self.world.get_mut::<Stats>(player) {
-                    let bonus = ((stats.max_hp as f32 * BUFFER_BONUS_PERCENT_PER_LEVEL).round()
-                        as i32)
-                        .max(BUFFER_MIN_BONUS_PER_LEVEL);
-                    stats.max_hp += bonus;
+        // What the gain *is* belongs to the perk; writing it belongs here,
+        // so `Stats` keeps one writer. `Buffer` reads the current maximum,
+        // which is why the gain is asked for after the purchase.
+        let max_hp = self
+            .world
+            .get::<Stats>(player)
+            .map(|s| s.max_hp)
+            .unwrap_or(0);
+        if let Some(gain) = crate::perks::purchase_stat_gain(perk, max_hp)
+            && let Some(mut stats) = self.world.get_mut::<Stats>(player)
+        {
+            match gain {
+                crate::perks::StatGain::Atk(n) => stats.atk += n,
+                crate::perks::StatGain::Mitigation(n) => stats.mitigation += n,
+                crate::perks::StatGain::MaxHp(n) => {
+                    stats.max_hp += n;
                     stats.hp = stats.max_hp;
                 }
             }
-            _ => {}
         }
         self.log(format!("You buy the {name} perk (level {level})."));
         Ok(())

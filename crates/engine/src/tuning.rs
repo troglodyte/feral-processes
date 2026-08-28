@@ -2441,14 +2441,14 @@ pub const BUFFER_MIN_BONUS_PER_LEVEL: i32 = 10;
 /// its cheap half.
 ///
 /// The rate has to clear rounding to be worth anything, which is what sets
-/// it: `Game::obfuscated` rounds, so a level shows up only once the source
+/// it: `perks::trace_after_obfuscation` rounds, so a level shows up only once the source
 /// times the reduction reaches a half. At 0.10 that is one level against a
 /// cache (10) or a breakpoint (25) and three against a kill (2). At 0.05 a
 /// cache took two levels to move at all — the first purchase bought
 /// literally nothing on every source but the breakpoint, which is not a
 /// perk anyone would buy a second level of.
 ///
-/// `Game::obfuscated` floors the result at 1, so however many levels are
+/// `perks::trace_after_obfuscation` floors the result at 1, so however many levels are
 /// stacked a source still costs something — see `Perk::Obfuscation` for why
 /// that floor is not the same call `LOW_POWER_MODE_REDUCTION_PER_LEVEL` makes.
 /// Ten levels is where every source reaches that floor, which at

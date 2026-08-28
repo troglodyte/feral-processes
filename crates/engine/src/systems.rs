@@ -19,9 +19,9 @@ use crate::resources::{GameClock, GameRng, Locale, MessageKind, MessageLog, Powe
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
-    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, KEEN_SCAVENGER_BONUS_PER_LEVEL, LEECH_YIELD_BONUS,
-    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
-    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
+    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS, MEMORY_MORALE_MAX_SHIFT,
+    MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL,
+    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
     HUNGER_DECAY_PER_TICK, NEED_STRAIN_MAX_SHIFT, NEED_STRAIN_PER_POINT, WORK_XP_LEVEL_CAP,
@@ -45,10 +45,7 @@ pub fn needs_tick_system(
     mut log: ResMut<MessageLog>,
 ) {
     for (mut needs, mut stats, perks) in &mut query {
-        let low_power_level = perks.map(|p| p.level(Perk::LowPowerMode)).unwrap_or(0);
-        let hunger_multiplier = (1.0
-            - crate::tuning::LOW_POWER_MODE_REDUCTION_PER_LEVEL * low_power_level as f32)
-            .max(0.0);
+        let hunger_multiplier = crate::perks::power_drain_multiplier(perks);
         let was_starving = needs.get() <= POWER_MIN;
         needs.spend(power_drain_per_tick(hunger_multiplier));
         if needs.get() <= POWER_MIN {
@@ -254,7 +251,7 @@ pub(crate) fn mining_success_chance(
 ) -> f64 {
     (MINING_SUCCESS_BASE
         + level as f64 * MINING_SUCCESS_PER_LEVEL
-        + keen_scavenger_level as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
+        + crate::perks::mining_roll_bonus(keen_scavenger_level)
         + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT
         + morale_shift(morale)
         + need_shift(strain))
@@ -1822,7 +1819,7 @@ mod tests {
                     let with_morale = mining_success_chance(level, keen, base_int, 0.0, 0.0);
                     let without = (MINING_SUCCESS_BASE
                         + level as f64 * MINING_SUCCESS_PER_LEVEL
-                        + keen as f64 * KEEN_SCAVENGER_BONUS_PER_LEVEL
+                        + crate::perks::mining_roll_bonus(keen)
                         + (base_int - DEFAULT_BASE_INT) as f64 * MINING_SUCCESS_PER_INT)
                         .clamp(0.0, 1.0);
                     assert_eq!(
@@ -1904,8 +1901,7 @@ mod tests {
         let plain = mining_success_chance(1, 0, DEFAULT_BASE_INT, 0.0, 0.0);
         let boosted = mining_success_chance(1, 3, DEFAULT_BASE_INT, 0.0, 0.0);
         assert!(
-            (boosted - (plain + 3.0 * crate::tuning::KEEN_SCAVENGER_BONUS_PER_LEVEL)).abs()
-                < f64::EPSILON,
+            (boosted - (plain + crate::perks::mining_roll_bonus(3))).abs() < f64::EPSILON,
             "each perk level should add exactly its tuning constant to the roll"
         );
         assert_eq!(

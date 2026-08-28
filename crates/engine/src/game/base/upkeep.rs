@@ -4,8 +4,8 @@
 use crate::components::MemorySubject;
 use crate::species::AffinityClass;
 use crate::tuning::{
-    BASTION_DEF_MULTIPLIER, FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL,
-    RAID_CHANCE_PER_TICK, RAID_DAMAGE, RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
+    BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
+    RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -114,7 +114,7 @@ impl Game {
     /// invalidation step, the same way `pet_capacity` handles a lost Data
     /// Cache.
     pub(crate) fn total_repair_rate(&mut self) -> u32 {
-        let perk = FAILOVER_REPAIR_PER_LEVEL * self.player_perk_level(Perk::Failover);
+        let perk = crate::perks::repair_rate_bonus(self.player_perks());
         let repairers: Vec<(StructureId, u32)> = {
             let mut query = self.world.query::<(&Structure, Option<&StructureTier>)>();
             query

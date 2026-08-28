@@ -84,9 +84,7 @@ impl Game {
     pub(crate) fn accuracy_bonus(&self, entity: Entity) -> i32 {
         let gear = self.gear_bonus(entity).accuracy;
         if entity == self.player_entity() {
-            return gear
-                + crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL
-                    * self.player_perk_level(crate::perks::Perk::TargetLock) as i32;
+            return gear + crate::perks::accuracy_bonus(self.player_perks());
         }
         gear + self.talent_accuracy(entity)
     }

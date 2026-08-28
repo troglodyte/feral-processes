@@ -15,8 +15,8 @@ use feral_processes_engine::PlayerStatus;
 
 use super::bar::bar;
 use super::palette;
-use super::strip::{Mount, border_strip};
-use crate::paint::{Color, Painter, Rect, TextRun};
+use super::strip::{Mount, Piece, draw_pieces, fitting, label, sep, value};
+use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 
 const INTEG_CELLS: usize = 16;
@@ -25,8 +25,6 @@ const XP_CELLS: usize = 14;
 /// `POWER_MAX` — the reserve's ceiling is fixed forever and does not scale
 /// with the player, unlike `max_hp`.
 const POWER_MAX: f32 = 100.0;
-
-const SEP: &str = " · ";
 
 /// What the vitals strip reads.
 pub(in crate::render) struct Vitals<'a> {
@@ -44,21 +42,6 @@ pub(in crate::render) struct Vitals<'a> {
 pub(in crate::render) struct Threat {
     pub hostiles: usize,
     pub shielded: bool,
-}
-
-/// One piece of a strip: text, colour, weight.
-type Piece = (String, Color, bool);
-
-fn label(text: &str) -> Piece {
-    (text.to_string(), palette::FIELD_LABEL, false)
-}
-
-fn value(text: String) -> Piece {
-    (text, palette::BODY, false)
-}
-
-fn sep() -> Piece {
-    (SEP.to_string(), palette::FAINT, false)
 }
 
 /// A meter as three pieces: label, filled cells, trough cells.
@@ -144,38 +127,6 @@ fn threat_pieces(t: Threat) -> Vec<Piece> {
         ("no defence".to_string(), palette::ATTENTION, false)
     });
     out
-}
-
-/// Flattens the longest prefix of `segments` that fits `avail`, separators
-/// included.
-fn fitting(segments: &[Vec<Piece>], avail: f32, painter: &Painter, m: &Metrics) -> Vec<Piece> {
-    let size = m.small();
-    let mut taken: Vec<Piece> = Vec::new();
-    for segment in segments {
-        let mut next = taken.clone();
-        if !next.is_empty() {
-            next.push(sep());
-        }
-        next.extend(segment.iter().cloned());
-        let text: String = next.iter().map(|(t, _, _)| t.as_str()).collect();
-        if painter.measure_ui_advance(&text, size) > avail {
-            break;
-        }
-        taken = next;
-    }
-    taken
-}
-
-fn draw_pieces(pane: Rect, mount: Mount, pieces: &[Piece], painter: &Painter, m: &Metrics) -> f32 {
-    let runs: Vec<TextRun> = pieces
-        .iter()
-        .map(|(text, color, bold)| TextRun {
-            text,
-            bold: *bold,
-            color: *color,
-        })
-        .collect();
-    border_strip(pane, mount, &runs, painter, m)
 }
 
 /// Frame, title, threat readout and vitals.

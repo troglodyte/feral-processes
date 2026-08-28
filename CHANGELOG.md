@@ -27,6 +27,60 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.49
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+The two new save fields are additive behind `#[serde(default)]`, and the one
+a pre-existing file cannot carry is answered by deriving it rather than
+defaulting it — see below.
+
+Every program on your base roster is now somebody in particular, and none of
+them will tell you who.
+
+A program is born with one of five **dispositions**, derived from its own id
+and then kept. Nothing draws it and no screen names it. You find out the way
+you find out about people: one body is always the first to wander off to the
+Sandbox, another grinds on long after everyone else has gone; one lets a bad
+week go and another is still sore about a machine that jammed on it a
+thousand ticks ago.
+
+It moves two things and nothing else — how fast a program runs its reserves
+down, and how hard what it remembers lands on it. `Languid` and `Dogged` are
+the poles of the first, `Amiable` and `Abrasive` of the second, and `Steady`
+is neutral on both. There is no work-rate dial: a Languid program does not
+mine any slower per tick, it is simply off being seen to more of the time,
+which is what "doesn't want to finish tasks" actually looks like from the
+outside.
+
+On top of that, a program can now **have had enough**. Morale — the signed
+sum of everything it remembers — has two lines under it. Cross the first and
+the program sulks: it still works, but not at a machine it holds a grudge
+against, and if it is already standing at one it walks off and a willing body
+takes the post on the same tick. Cross the second and it downs tools
+altogether, leaves the labour pool, and the work order screen's shortfall
+grows by one with the reason sitting on its manifest.
+
+It comes back when its grudges have faded and better days have landed on top
+— there is no amenity to walk to for this one, and nothing you can build that
+fixes it directly. The gap between going out and coming back is deliberate:
+one number would have a body dropping its tools and picking them up again on
+alternate ticks.
+
+The two features are the same feature. An Abrasive program's grudges are
+scaled up, so it reaches the line on strictly less history than an Amiable
+one — which is how a hidden temperament becomes something you can actually
+see, through *when* somebody breaks rather than through a label.
+
+An existing save gains all of this. A file written before dispositions
+carries no disposition, and the load path derives one from each program's id
+through the same formula a fresh program takes — so your base comes back with
+the roster it would always have had, not a crew of identical neutral bodies.
+
+**Both morale thresholds are unmeasured.** Morale has no natural scale and
+the balance simulator models no base production at all, so the two numbers
+were chosen against the shipped memory valences rather than against a played
+run. They are the first thing to revisit.
+
 ## 0.13.48
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32,

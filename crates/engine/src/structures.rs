@@ -318,6 +318,19 @@ pub struct StructureDef {
     /// including any mod, keeps parsing.
     #[serde(default)]
     pub issues_contracts: bool,
+    /// Whether a squad can be dispatched from this structure — see
+    /// `Game::sortie_reach`. `issues_contracts`' shape and for its reason: a
+    /// Relay has no per-structure configuration either, since what it offers
+    /// is derived from the world seed, the sector and the clock rather than
+    /// authored on the building.
+    ///
+    /// **A flag rather than the engine naming `"relay"`.** Hardcoding the
+    /// shipped id would put game content in Rust and make a mod's second
+    /// dispatch structure impossible; this way the gate, the building and
+    /// the board are all data. `#[serde(default)]` so every existing
+    /// structure file, including any mod, keeps parsing.
+    #[serde(default)]
+    pub dispatches_sorties: bool,
     /// If set, this structure is a symlink target: `Game::use_symlink` can
     /// teleport the player to it for this item cost, from anywhere on the
     /// map. `#[serde(default)]` so existing structure files written before

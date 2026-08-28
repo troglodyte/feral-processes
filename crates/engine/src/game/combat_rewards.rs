@@ -508,6 +508,37 @@ impl Game {
     /// structure. Its only other reader is the inspection view. So changing
     /// a species' `work_resource` changes what killing it drops and nothing
     /// else.
+    /// What `wild`'s species pays in raw material, rolled.
+    ///
+    /// Split out of `award_loot` rather than copied, because a sortie's
+    /// kills pay the same drop and the perk term is easy to leave out of a
+    /// second copy — which would make `Perk::Teardown` silently worth
+    /// nothing off-screen. **Reports rather than grants**: `award_loot`
+    /// hands it to the player, a sortie accumulates it into the record and
+    /// carries it home to a Depot.
+    ///
+    /// The perk is added to the roll rather than drawn for: a second draw
+    /// here would shift the shared `GameRng` stream on essentially every
+    /// fight in the game, `grant_gear_drop`'s early-return trap.
+    pub(crate) fn roll_work_resource_drop(&mut self, wild: Entity) -> Option<(ItemId, u32)> {
+        let species_id = self
+            .world
+            .get::<Creature>(wild)
+            .map(|c| c.species.clone())?;
+        let resource = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&species_id)?
+            .work_resource
+            .clone()?;
+        let bonus = TEARDOWN_SALVAGE_PER_LEVEL * self.player_perk_level(Perk::Teardown);
+        let qty = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(WORK_RESOURCE_DROP) + bonus
+        };
+        Some((resource, qty))
+    }
+
     pub(crate) fn award_loot(&mut self, wild: Entity) {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;
@@ -516,18 +547,9 @@ impl Game {
             return;
         };
 
-        if let Some(resource) = &species.work_resource {
-            // Added to the roll rather than drawn for: a second draw here
-            // would shift the shared `GameRng` stream on essentially every
-            // fight in the game, which is the same trap
-            // `grant_gear_drop`'s early return exists to avoid.
-            let bonus = TEARDOWN_SALVAGE_PER_LEVEL * self.player_perk_level(Perk::Teardown);
-            let qty = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(WORK_RESOURCE_DROP) + bonus
-            };
+        if let Some((resource, qty)) = self.roll_work_resource_drop(wild) {
             let landed = self.grant_loot(resource.clone(), qty);
-            self.record_drop(GearCopy::plain(resource.clone()), landed);
+            self.record_drop(GearCopy::plain(resource), landed);
         }
 
         for (item, chance) in self.equipment_drops_for(&species) {
@@ -812,66 +834,81 @@ impl Game {
         if amount == 0 {
             return;
         }
-        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
-            let species_growth = self
-                .world
-                .get::<Creature>(companion)
-                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-                .map(|s| s.growth_multiplier)
-                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-            let individual_roll = self
-                .world
-                .get::<Potential>(companion)
-                .map(|p| p.growth_roll)
-                .unwrap_or(Potential::NEUTRAL.growth_roll);
-            let growth_multiplier = species_growth * individual_roll;
-            let before_level = self
-                .world
-                .get::<Experience>(companion)
-                .map(|e| e.level)
-                .unwrap_or(1);
-            let level_cap = self.level_cap();
-            let gain = {
-                let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
-                let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
-                    continue;
-                };
-                progression::add_xp(
-                    &mut exp,
-                    &mut stats,
-                    amount,
-                    growth_multiplier,
-                    Some(level_cap),
-                    xp_boost_pct,
-                )
+            self.award_companion_xp(companion, amount);
+        }
+    }
+
+    /// One owned program's share of a kill, grown, levelled and announced.
+    ///
+    /// Split out of `award_party_xp` rather than copied beside it: a sortie
+    /// pays its squad the same way a fight beside the player pays the party,
+    /// and a second copy of the growth roll, the cap and the tally is
+    /// exactly the drifted-formula trap this repo keeps falling into. What
+    /// differs between the two callers is *who* is paid and how much, which
+    /// is what the parameters are.
+    pub(crate) fn award_companion_xp(&mut self, companion: Entity, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
+        let species_growth = self
+            .world
+            .get::<Creature>(companion)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.growth_multiplier)
+            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+        let individual_roll = self
+            .world
+            .get::<Potential>(companion)
+            .map(|p| p.growth_roll)
+            .unwrap_or(Potential::NEUTRAL.growth_roll);
+        let growth_multiplier = species_growth * individual_roll;
+        let before_level = self
+            .world
+            .get::<Experience>(companion)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let level_cap = self.level_cap();
+        let gain = {
+            let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
+            let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
+                return;
             };
-            let level = self
-                .world
-                .get::<Experience>(companion)
-                .map(|e| e.level)
-                .unwrap_or(before_level);
-            let tally = XpTally {
-                xp: amount,
-                gain,
-                ..XpTally::default()
-            };
-            let stored = self.record_companion_xp(companion, &tally);
-            if !stored {
-                for (kind, line) in self.companion_xp_lines(companion, &tally) {
-                    self.log_kind(kind, line);
-                }
-            } else if gain.levels > 0 {
-                let name = self.creature_label(companion);
-                self.log_kind(
-                    MessageKind::LevelUp,
-                    format!("{name} reaches level {level}!"),
-                );
+            progression::add_xp(
+                &mut exp,
+                &mut stats,
+                amount,
+                growth_multiplier,
+                Some(level_cap),
+                xp_boost_pct,
+            )
+        };
+        let level = self
+            .world
+            .get::<Experience>(companion)
+            .map(|e| e.level)
+            .unwrap_or(before_level);
+        let tally = XpTally {
+            xp: amount,
+            gain,
+            ..XpTally::default()
+        };
+        let stored = self.record_companion_xp(companion, &tally);
+        if !stored {
+            for (kind, line) in self.companion_xp_lines(companion, &tally) {
+                self.log_kind(kind, line);
             }
-            if gain.levels > 0 {
-                self.install_unlocked_routines(companion, before_level, level);
-            }
+        } else if gain.levels > 0 {
+            let name = self.creature_label(companion);
+            self.log_kind(
+                MessageKind::LevelUp,
+                format!("{name} reaches level {level}!"),
+            );
+        }
+        if gain.levels > 0 {
+            self.install_unlocked_routines(companion, before_level, level);
         }
     }
 

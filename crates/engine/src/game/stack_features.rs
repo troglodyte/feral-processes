@@ -519,7 +519,7 @@ impl Game {
     pub(crate) fn orphan_species(&mut self, pos: StackPos) -> Option<String> {
         let (ex, ey) = pos.entrance;
         let spec = self.frame_spec(pos.depth, pos.frames, pos.entrance);
-        let (candidates, _) = self.habitat_pools(ex, ey, Some(pos.depth))?;
+        let (candidates, _) = self.habitat_pools(ex, ey, Some(pos.depth), 0)?;
         if candidates.is_empty() {
             return None;
         }

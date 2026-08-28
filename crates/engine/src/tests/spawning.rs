@@ -455,7 +455,7 @@ fn past_the_opening_ring_the_full_habitat_roster_spawns_again() {
             if dx.abs() <= OPENING_RING_TILES && dy.abs() <= OPENING_RING_TILES {
                 continue;
             }
-            let Some((ordinary, _)) = game.habitat_pools(x, y, None) else {
+            let Some((ordinary, _)) = game.habitat_pools(x, y, None, 0) else {
                 continue;
             };
             let db = game.world.resource::<SpeciesDb>();
@@ -1549,6 +1549,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             gear_copies: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
+            sorties: Vec::new(),
         },
         creatures: vec![save::CreatureSave {
             species: "scrapper".to_string(),
@@ -1564,6 +1565,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             xp_to_next: 20,
             cronjob: None,
             party_slot: None,
+            sortie_index: None,
             wielded: false,
             zone: 1,
             custom_name: None,
@@ -2834,7 +2836,7 @@ fn zone_one_fields_only_the_easiest_band() {
     let mut checked = 0;
     for dx in -30..=30 {
         for dy in -30..=30 {
-            let Some((ordinary, _)) = game.habitat_pools(dx, dy, None) else {
+            let Some((ordinary, _)) = game.habitat_pools(dx, dy, None, 0) else {
                 continue;
             };
             let biome = game.world.resource_mut::<WorldMap>().tile(dx, dy).biome;
@@ -2859,7 +2861,7 @@ fn zone_one_never_fields_an_apex_species() {
     let mut game = Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     for dx in -30..=30 {
         for dy in -30..=30 {
-            if let Some((_, apex)) = game.habitat_pools(dx, dy, None) {
+            if let Some((_, apex)) = game.habitat_pools(dx, dy, None, 0) {
                 assert!(
                     apex.is_empty(),
                     "zone 1 offered apex species {apex:?} at ({dx}, {dy})"
@@ -2886,8 +2888,8 @@ fn the_stack_window_follows_depth_not_the_surface_zone() {
     for dx in -30..=30 {
         for dy in -30..=30 {
             let (Some((deep, _)), Some((shallow, _))) = (
-                game.habitat_pools(dx, dy, Some(6)),
-                game.habitat_pools(dx, dy, None),
+                game.habitat_pools(dx, dy, Some(6), 0),
+                game.habitat_pools(dx, dy, None, 0),
             ) else {
                 continue;
             };

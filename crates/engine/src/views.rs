@@ -1990,6 +1990,54 @@ pub struct ContractRow {
     pub target: u32,
 }
 
+/// One site standing on the Relay's board — see `Game::sortie_board`.
+///
+/// Every figure on it is a **call** rather than a copy: `ticks` is
+/// `Game::sortie_duration(risk, battles)`, the same computation the
+/// countdown runs, `views::BuildOrderRow`'s rule. A screen quoting one
+/// number while the trip runs another is the failure that rule exists for.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SortieRow {
+    pub id: crate::sorties::SortieId,
+    pub name: String,
+    pub description: String,
+    /// Steps above the sector baseline — the site's own offset, which is
+    /// also what `ticks` is priced off.
+    pub risk: u32,
+    /// Fixed the moment the offer appeared, not rolled at dispatch, so this
+    /// row can be quoted before the player signs for it.
+    pub battles: u32,
+    pub ticks: u64,
+}
+
+/// One trip currently away, as the Relay screen lists it — see
+/// `Game::sortie_reports`.
+///
+/// Every figure is derived off the stored record at the moment it is read;
+/// nothing here is a second tally kept in step by hand. Members and
+/// casualties are rendered here and not by the renderer, `MemoryRow`'s
+/// reason: a Permadeath casualty's entity is gone by the time this is drawn,
+/// so its name has to be the one captured when it fell.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SortieReport {
+    pub site: String,
+    /// Who is still out there, by display name.
+    pub members: Vec<String>,
+    /// Who did not come back, named at the moment they fell.
+    pub casualties: Vec<String>,
+    pub kills: u32,
+    pub xp: u32,
+    pub loot: Vec<(crate::items::ItemId, u32)>,
+    pub battles_done: u32,
+    pub battles_total: u32,
+    /// Ticks still to run. A trip that has aborted still runs this out —
+    /// the countdown was always going to take that long, and there is no
+    /// teleport home.
+    pub ticks_left: u64,
+    /// A member has gone down and the remaining battles are being skipped.
+    pub aborted: bool,
+}
+
 /// One structure on order and not yet raised — see `components::BuildSite`.
 ///
 /// **The one derivation of what a build request looks like**, and it is

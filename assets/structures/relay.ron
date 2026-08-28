@@ -1,0 +1,10 @@
+(
+    id: "relay",
+    name: "Dispatch Relay",
+    description: "A long-range routing mast. Stand beside it to see which sites are reachable this cycle, and to send a squad of idle programs out to one. They fight their way through it off-screen and come home with what they could carry — or with fewer bodies than they left with.",
+    glyph: 'K',
+    color: Magenta,
+    build_cost: [("core_fragment", 22), ("charge_coil", 3)],
+    work: None,
+    dispatches_sorties: true,
+)

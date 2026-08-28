@@ -1395,3 +1395,77 @@ pub struct ZoneSpawnPoint {
 /// flight without a `SAVE_FORMAT_VERSION` bump.
 #[derive(Resource, Default)]
 pub struct EnemyPolicy(pub Option<crate::policy::PolicyWeights>);
+
+/// A squad of base staff currently away from the base.
+///
+/// **The site is stored resolved, never as an id or a board index.** A
+/// board that rotates while the squad is out, or an `assets/sorties/` file
+/// edited between sessions, must not be able to rewrite or strand a trip
+/// already in flight — `ActiveContract` stores a whole `ContractDef` for
+/// exactly this reason.
+///
+/// Not `Serialize`: the save form is `save::SortieSave`, which carries no
+/// member list at all. Entity ids are not stable across a save, so
+/// membership rides `CreatureSave::sortie_index` from the creature side,
+/// which is `party_slot`'s precedent.
+#[derive(Clone, Debug)]
+pub struct Sortie {
+    pub site: crate::sorties::SortieDef,
+    /// Steps above the zone baseline this site was offered at. Kept beside
+    /// the def because the board is what applies it, and because a def
+    /// reloaded from an edited file must not be able to change what a trip
+    /// already in flight is fighting.
+    pub risk: u32,
+    pub members: Vec<Entity>,
+    pub ticks_total: u64,
+    pub ticks_elapsed: u64,
+    pub battles_total: u32,
+    pub battles_done: u32,
+    /// Set when a member goes down. Remaining battles are skipped; the
+    /// return travel still runs, because the countdown was always going to
+    /// take that long and there is no teleport home.
+    pub aborted: bool,
+    pub loot: Vec<(crate::items::ItemId, u32)>,
+    pub xp: u32,
+    pub kills: u32,
+    /// Who did not come back, named at the moment they fell — a Permadeath
+    /// casualty's entity is gone by the time the report is drawn.
+    pub casualties: Vec<String>,
+}
+
+/// Every sortie currently away. Saved; see `save::SortieSave`.
+#[derive(Resource, Default, Clone, Debug)]
+pub struct Sorties(pub Vec<Sortie>);
+
+impl Sorties {
+    /// Whether `creature` is away. The one accessor the feature needs:
+    /// `party::role_of` asks it, and everything else about an away program
+    /// falls out of the role by omission.
+    pub(crate) fn contains(&self, creature: Entity) -> bool {
+        self.0.iter().any(|s| s.members.contains(&creature))
+    }
+}
+
+#[cfg(test)]
+impl Sortie {
+    /// A minimal in-flight record for tests that only care about
+    /// membership. Goes through the real struct so a new field is a compile
+    /// error here rather than a silently unset default — `work_node_parts`'
+    /// rule.
+    pub(crate) fn test_stub(members: Vec<Entity>) -> Self {
+        Self {
+            site: crate::sorties::SortieDef::test_stub(),
+            risk: 0,
+            members,
+            ticks_total: 100,
+            ticks_elapsed: 0,
+            battles_total: 1,
+            battles_done: 0,
+            aborted: false,
+            loot: Vec::new(),
+            xp: 0,
+            kills: 0,
+            casualties: Vec::new(),
+        }
+    }
+}

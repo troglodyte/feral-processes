@@ -95,18 +95,14 @@ pub fn needs_drain_system(
     sites: Query<(&Structure, &Position)>,
     structure_db: Res<StructureDb>,
     db: Res<NeedDb>,
-    player: Res<crate::resources::PlayerEntity>,
-    roster: Res<crate::resources::Party>,
-    wielded: Res<crate::resources::WieldedProgram>,
+    roles: crate::game::party::Roles,
 ) {
     let amenities = crate::game::base::offshift::Amenities::build(
         sites.iter().map(|(s, p)| (&s.kind, p)),
         &structure_db,
     );
     for (entity, mut needs, task, tamed, at) in &mut programs {
-        if crate::game::party::role_of(entity, tamed.owner, player.0, &roster, wielded.0)
-            != Some(crate::game::party::ProgramRole::Staff)
-        {
+        if roles.of(entity, tamed.owner) != Some(crate::game::party::ProgramRole::Staff) {
             continue;
         }
         needs.seed_missing(&db);

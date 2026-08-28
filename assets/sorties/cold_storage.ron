@@ -1,0 +1,8 @@
+(
+    id: "cold_storage",
+    name: "Cold Storage",
+    description: "A decommissioned archive on the sector's edge. Whatever still runs in there has not been told the lights went out.",
+    risk: 0,
+    battles_min: 5,
+    battles_max: 7,
+)

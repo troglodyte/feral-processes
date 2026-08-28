@@ -116,6 +116,46 @@ pub struct PlayerSave {
     /// `components::FieldBuff`. Player state, not zone-local, so
     /// `Game::enter_next_zone` must never clear it.
     pub field_buffs: Vec<ActiveFieldBuff>,
+    /// Every squad currently away from the base — see `resources::Sorties`.
+    ///
+    /// Additive behind `#[serde(default)]`, so a save written before sorties
+    /// existed loads with none and costs no `SAVE_FORMAT_VERSION` bump. Run
+    /// state and not zone-local: the base travels through a breach and so
+    /// does anything it has sent out, so `Game::enter_next_zone` must never
+    /// clear it.
+    #[serde(default)]
+    pub sorties: Vec<SortieSave>,
+}
+
+/// One trip in flight.
+///
+/// **Carries no member list.** Entity ids are not stable across a save, so
+/// membership rides `CreatureSave::sortie_index` from the creature side and
+/// is reassembled on load — `party_slot`'s precedent, and it exists for
+/// exactly the same reason.
+///
+/// A **named struct, never a positional tuple**: RON matches a tuple by
+/// exact arity and refuses a widened one, which is the one shape field-named
+/// RON does not save you from. The next field added here is free; on a tuple
+/// it would cost a legacy field and a version bump.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SortieSave {
+    /// The whole resolved site, not its id. A board that rotates while the
+    /// squad is out, or an `assets/sorties/` file edited between sessions,
+    /// must not be able to rewrite or strand a trip already in flight —
+    /// `ActiveContract` stores a whole `ContractDef` for that reason, and
+    /// this is the same rule reaching the save format.
+    pub site: crate::sorties::SortieDef,
+    pub risk: u32,
+    pub ticks_total: u64,
+    pub ticks_elapsed: u64,
+    pub battles_total: u32,
+    pub battles_done: u32,
+    pub aborted: bool,
+    pub loot: Vec<(ItemId, u32)>,
+    pub xp: u32,
+    pub kills: u32,
+    pub casualties: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -155,6 +195,15 @@ pub struct CreatureSave {
     /// Supersedes the old `is_companion` flag, which `party_slot.is_some()`
     /// now says.
     pub party_slot: Option<u32>,
+    /// Which in-flight sortie this program is away on — an index into
+    /// `PlayerSave::sorties`, or `None` for a program that is at the base.
+    ///
+    /// Written per creature rather than as a member list on the sortie side,
+    /// `party_slot`'s reason: entity ids are not stable across a save/load
+    /// round trip. Additive behind `#[serde(default)]`, so a save written
+    /// before sorties existed loads with every program at home.
+    #[serde(default)]
+    pub sortie_index: Option<u32>,
     /// Whether this program is the one equipped as the player's weapon (see
     /// `resources::WieldedProgram`). Written per creature rather than as a
     /// player-side entity id for the same reason `party_slot` is: entity ids
@@ -1279,6 +1328,7 @@ mod tests {
                 unlocked_perks: Vec::new(),
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
+                sorties: Vec::new(),
             },
             creatures: Vec::new(),
             structures: Vec::new(),
@@ -1327,6 +1377,7 @@ mod tests {
             xp_to_next: 20,
             cronjob: None,
             party_slot: None,
+            sortie_index: None,
             wielded: false,
             zone: 1,
             custom_name: None,

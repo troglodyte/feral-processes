@@ -111,6 +111,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -147,6 +148,7 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -193,6 +195,9 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        // Empty at both doors. `Game::load` refills it from the save below,
+        // once every creature has an entity to name — see `SortieSave`.
+        world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -367,6 +372,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -417,6 +423,7 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -473,6 +480,9 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        // Empty at both doors. `Game::load` refills it from the save below,
+        // once every creature has an entity to name — see `SortieSave`.
+        world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -816,6 +826,10 @@ impl Game {
         // back in whatever order they were written, which is no longer the
         // roster order, and roster order is now mechanically meaningful.
         let mut party_slots: Vec<(u32, Entity)> = Vec::new();
+        // Membership comes back from the creature side, `party_slots`'
+        // reason: entity ids are not stable across a save, so `SortieSave`
+        // carries no member list to read.
+        let mut sortie_members: Vec<(u32, Entity)> = Vec::new();
         // At most one creature may claim the weapon hand. Taken defensively
         // — the first wins and any others are ignored — rather than trusting
         // the file, the same way `party_slots` is truncated below.
@@ -851,6 +865,7 @@ impl Game {
                 ));
             }
             let party_slot = c.party_slot;
+            let sortie_index = c.sortie_index;
             let mut entity = game.world.spawn((
                 Creature {
                     species: species.id.clone(),
@@ -1019,6 +1034,9 @@ impl Game {
                 if let Some((item, qty)) = c.carrying.clone() {
                     entity.insert(Carrying { item, qty });
                 }
+                if let Some(index) = sortie_index {
+                    sortie_members.push((index, creature_id));
+                }
                 if let Some(slot) = party_slot {
                     party_slots.push((slot, creature_id));
                 } else if let Some(cronjob) = c.cronjob {
@@ -1060,6 +1078,42 @@ impl Game {
         // the program travels with you across a breach exactly as the party
         // does, so `enter_next_zone` must not wipe it.
         game.world.insert_resource(WieldedProgram(wielded));
+        // A record whose members all failed to load — a species file deleted
+        // between sessions — is dropped rather than restored empty: an empty
+        // squad is a countdown nothing comes home from, and a base is better
+        // off short a trip than waiting forever on one.
+        let sorties: Vec<crate::resources::Sortie> = data
+            .player
+            .sorties
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, s)| {
+                let members: Vec<Entity> = sortie_members
+                    .iter()
+                    .filter(|&&(i, _)| i as usize == index)
+                    .map(|&(_, e)| e)
+                    .collect();
+                if members.is_empty() {
+                    return None;
+                }
+                Some(crate::resources::Sortie {
+                    site: s.site,
+                    risk: s.risk,
+                    members,
+                    ticks_total: s.ticks_total,
+                    ticks_elapsed: s.ticks_elapsed,
+                    battles_total: s.battles_total,
+                    battles_done: s.battles_done,
+                    aborted: s.aborted,
+                    loot: s.loot,
+                    xp: s.xp,
+                    kills: s.kills,
+                    casualties: s.casualties,
+                })
+            })
+            .collect();
+        game.world
+            .insert_resource(crate::resources::Sorties(sorties));
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for s in data.structures {
@@ -1198,6 +1252,36 @@ impl Game {
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let wielded = self.wielded_program();
+        // Gathered here for `party_entities`' reason, and written per
+        // creature for the same one: entity ids are not stable across the
+        // round trip, so a member list on the sortie side could not be read
+        // back. `SortieSave` carries none.
+        let away: Vec<Vec<Entity>> = self
+            .world
+            .resource::<crate::resources::Sorties>()
+            .0
+            .iter()
+            .map(|s| s.members.clone())
+            .collect();
+        let sorties: Vec<save::SortieSave> = self
+            .world
+            .resource::<crate::resources::Sorties>()
+            .0
+            .iter()
+            .map(|s| save::SortieSave {
+                site: s.site.clone(),
+                risk: s.risk,
+                ticks_total: s.ticks_total,
+                ticks_elapsed: s.ticks_elapsed,
+                battles_total: s.battles_total,
+                battles_done: s.battles_done,
+                aborted: s.aborted,
+                loot: s.loot.clone(),
+                xp: s.xp,
+                kills: s.kills,
+                casualties: s.casualties.clone(),
+            })
+            .collect();
         // Gathered up front rather than queried per creature: the creature
         // query below is at bevy's 15-element ceiling already, and this is
         // the same shape `party_entities` and `wielded` take for it.
@@ -1335,6 +1419,10 @@ impl Game {
                 party_slot: party_entities
                     .iter()
                     .position(|&e| e == entity)
+                    .map(|i| i as u32),
+                sortie_index: away
+                    .iter()
+                    .position(|members| members.contains(&entity))
                     .map(|i| i as u32),
                 wielded: wielded == Some(entity),
                 zone: spawn_zone.map(|z| z.0).unwrap_or(1),
@@ -1564,6 +1652,7 @@ impl Game {
                 unlocked_perks: perks.unlocked,
                 routines,
                 field_buffs,
+                sorties,
             },
             creatures,
             structures,
@@ -1835,6 +1924,7 @@ struct AssetDbs {
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
+    sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
@@ -1939,6 +2029,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
+    // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
+    // catalogue leaves `Game::sortie_board` with nothing to offer, which is
+    // the pre-sortie game.
+    let (sorties, sortie_warnings) =
+        crate::sorties::SortieDb::load_dir(&assets_dir.join("sorties"))?;
+    warnings.extend(sortie_warnings);
     // Same absent-is-silent rule again — see `CaravanDb`'s own doc. An empty
     // catalogue leaves `Game::scheduled_visit` with nothing to pick, which is
     // the pre-caravan game.
@@ -1983,6 +2079,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         environment,
         memories,
         needs,
+        sorties,
         caravans,
         nemesis,
         species,

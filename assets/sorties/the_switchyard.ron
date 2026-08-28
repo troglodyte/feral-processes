@@ -1,0 +1,8 @@
+(
+    id: "the_switchyard",
+    name: "The Switchyard",
+    description: "Freight routing, abandoned mid-shift. The traffic never stopped; it just stopped being scheduled.",
+    risk: 1,
+    battles_min: 10,
+    battles_max: 14,
+)

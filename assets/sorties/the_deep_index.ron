@@ -1,0 +1,8 @@
+(
+    id: "the_deep_index",
+    name: "The Deep Index",
+    description: "Nobody who files a route through the Index files a short one. Send bodies you can spare and provisions you cannot.",
+    risk: 2,
+    battles_min: 18,
+    battles_max: 22,
+)

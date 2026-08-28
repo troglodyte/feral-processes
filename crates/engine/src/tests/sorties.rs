@@ -1187,3 +1187,108 @@ fn the_report_reads_the_record_without_changing_it() {
     assert_eq!(after.ticks_elapsed, before.ticks_elapsed);
     assert_eq!(after.battles_done, before.battles_done);
 }
+
+// --------------------------------------------------------- the censuses
+
+/// Deleting `assets/sorties/` restores the pre-sortie game rather than
+/// breaking one — `NeedDb` and `MemoryDb`'s property. Never gate a system or
+/// a screen on the catalogue being non-empty.
+#[test]
+fn an_empty_catalogue_is_a_supported_install() {
+    let scratch = scratch_assets_dir("sortie_empty");
+    std::fs::create_dir_all(&*scratch).unwrap();
+    super::support::copy_shipped_assets(&scratch, &[]);
+    assert!(
+        !scratch.join("sorties").exists(),
+        "this install must genuinely have no catalogue, or the test is vacuous"
+    );
+
+    let mut game = Game::new(4900, DifficultyMode::Forgiving, &scratch).unwrap();
+    deploy_relay(&mut game);
+    assert_eq!(
+        game.sortie_board(),
+        Some(Vec::new()),
+        "an empty catalogue is an empty board, not the absence of a Relay"
+    );
+    // And the game keeps running. `run_sorties` has nothing to do and the
+    // rest of the base carries on.
+    for _ in 0..200 {
+        game.wait();
+    }
+}
+
+/// Every shipped site's risk is inside a window `habitat_pools` can actually
+/// serve — a site nothing can be drawn for is an offer that fights nothing
+/// when it is taken.
+#[test]
+fn every_shipped_site_can_be_populated() {
+    let (db, _) = SortieDb::load_dir(&test_assets_dir().join("sorties")).unwrap();
+    assert!(!db.is_empty(), "the shipped catalogue must not be empty");
+    let sites: Vec<crate::sorties::SortieDef> = db.iter().cloned().collect();
+
+    // Across the run's whole span, not just sector 1: a risk offset is
+    // applied on top of the sector's own step, and the top band never exits,
+    // so a site that empties late would empty silently.
+    for zone in [1u32, 4, 8, 12] {
+        let mut game = Game::new(4901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world
+            .insert_resource(crate::resources::ZoneLevel(zone));
+        let (ax, ay) = game.anchor_position().expect("a run has an anchor");
+        for site in &sites {
+            let pools = game.habitat_pools(ax, ay, None, site.risk);
+            let Some((candidates, _)) = pools else {
+                panic!("{} has no habitat at all in sector {zone}", site.id);
+            };
+            assert!(
+                !candidates.is_empty(),
+                "{} draws an empty pool in sector {zone}",
+                site.id
+            );
+        }
+    }
+}
+
+/// A sortie kill pays less than the same kill taken with the player in the
+/// fight. `balance_sim` models no abilities and no base production, so it
+/// cannot gate this — the assertion lives here, over the real assets.
+///
+/// It pins the **lever**, not the rate: what actually earns the lower yield
+/// is Power not recovering in the field and no rest out there, neither of
+/// which is a number this can read. What it catches is a retune that takes
+/// the multiplier to 1.0 or above, and the rounding corner where a cheap
+/// kill would pay the same either way.
+#[test]
+fn a_sortie_kill_pays_less_than_fighting_it_yourself() {
+    assert!(
+        crate::tuning::SORTIE_XP_MULTIPLIER < 1.0,
+        "the whole point of the lever is that it is below 1"
+    );
+
+    let mut game = Game::new(4902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species: Vec<String> = game
+        .world
+        .resource::<crate::species::SpeciesDb>()
+        .all()
+        .map(|s| s.id.clone())
+        .collect();
+    assert!(!species.is_empty());
+
+    let mut priced = 0;
+    for id in species {
+        let Some(victim) = game.spawn_wild_creature(&id, 300, 300) else {
+            continue;
+        };
+        let full = game.kill_xp(victim);
+        game.world.entity_mut(victim).despawn();
+        if full == 0 {
+            continue;
+        }
+        let paid = (full as f32 * crate::tuning::SORTIE_XP_MULTIPLIER) as u32;
+        assert!(
+            paid < full,
+            "{id} pays {paid} off-screen against {full} in a fight — the lever is not biting"
+        );
+        priced += 1;
+    }
+    assert!(priced > 0, "no species priced, so this asserted nothing");
+}

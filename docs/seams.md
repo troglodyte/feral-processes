@@ -7681,3 +7681,205 @@ raid's flash is painted by the effects layer, and a structure taking a hit is
 the most literal thing "hostility and inbound harm" describes on this screen
 — so painted in a red of its own, the one cue the `THREAT` reservation exists
 for would have been the one cue not drawn from it.
+
+### `ProgramRole` has a fourth variant, and almost everything a sortie needs falls out of it as an omission
+
+A squad away from the base has to be out of the scheduler, out of the drift
+pass, out of the entropy pass's occupancy set, out of the needs drain and off
+the surface map. Written as five checks, that is five places to forget one,
+and forgetting the entropy pass in particular seals a body into solid rock
+for the rest of the run.
+
+`ProgramRole::Sortie` sits **between `InParty` and `Staff`**, keeping the
+rule that `Staff` is *what is left over* rather than something assigned. All
+five consequences then come for free, because every one of those five sites
+already narrows through `party::role_of` and every one of them wants `Staff`
+exactly. The surface map is the least obvious of them:
+`position_is_honest` is `wears_job_mark` **plus idle base staff**, and an
+away program is neither — so `drawn_on_surface_map` drops it with no new
+rule at all.
+
+**The spec was wrong about one of the five, and the code is right.** It says
+needs keep draining while a program is away. They do not:
+`needs_drain_system` gates on `role_of == Staff`, so an away program's
+reserves freeze exactly as a party member's do. That is the more consistent
+reading — needs are a base-staff mechanic — and it is left as it is.
+
+Widening `role_of` deliberately fails to compile at all three appliers,
+which is the forcing function that stops a second copy of the rule existing.
+That put both bevy appliers over clippy's argument limit, and the fix is the
+signal rather than an `allow`: **`party::Roles` is a `SystemParam` bundling
+the four resources that decide a role**, a thin adapter whose `of` is one
+call to the free function. A fifth role source is now one edit rather than
+three signatures, and the rule still lives in exactly one place.
+
+### A sortie battle is spawn, fight and despawn inside a single call
+
+This is the load-bearing decision of the whole feature, and it is what keeps
+it out of the "which space is this?" bug class rather than mitigating it.
+
+The alternative — opposition that lives on the map for the duration of a
+fight — needs a fourth space, and then `view_entities`,
+`find_target_in_direction`, `cull_to_cap` and `ensure_local_population` all
+have to learn about it. Base space cost this repo a run of position-space
+bugs already; a second one bought nothing here, because nobody is watching
+an off-screen fight.
+
+So `Game::resolve_sortie_battle` spawns a pack at a fixed off-map sentinel,
+runs the rounds, and **despawns every hostile unconditionally — living or
+dead — as the last thing it does**. No bevy system runs mid-method, so the
+opposition is never observed by anything. A hostile that outlives its battle
+is a defect, not a tuning question.
+
+**Both tests for it were mutation-checked, and one of them was wrong.**
+Narrowing the despawn to corpses only left
+`the_entity_count_is_unchanged_across_a_battle` green, because in that
+fixture the squad killed the opposition outright and there were no survivors
+to leak. It now drops its own bodies first so the battle ends with hostiles
+still standing; both tests go red against the narrowed despawn.
+
+`run_sorties` is a `Game` method and not a bevy system, `run_dig_crew` and
+`run_repair_bays`' reason: it names programs through `creature_label`,
+damages through `apply_damage` and logs. It carries `run_dig_crew`'s guard
+too — `nest_aggro_tick`'s obligation, that anything changing the world from
+inside a tick inherits the battle check — because a squad's fight resolving
+mid-battle would spend the player's own `GameRng` draws underneath the round
+they are looking at.
+
+### The fights are real by construction, and the trained policy is deliberately not used
+
+`Game::resolve_and_apply_attack` takes only entities, and `combat_damage.rs`
+names `BattleState` twice, neither on the swing path. `Game::use_ability` is
+likewise `BattleState`-free. So hit chance, the crit/hit/fumble/miss ladder,
+the fumble rungs, damage bands, mitigation, affinity scaling, Power costs and
+cooldowns are all the ones a fight in front of the player uses — by
+construction rather than by a comment.
+
+What *is* coupled to `BattleState` is the trained enemy policy's
+**selection**: `choose_wild_action_at` reaches `basic_attacks_that_reach`,
+`living_targets` and `roll_enemy_target`, all of which read it. The policy is
+therefore not used here, and that is a design decision rather than a
+shortcut — it exists to make fights against *the player* interesting and
+ships with three features pinned to zero specifically to stop it learning to
+hunt them. Off-screen it would be modelling an audience that is not present.
+
+Both sides instead run one stated rule: the highest-priority Special the
+actor can afford that is off cooldown, else a basic attack, targeting the
+front. `field_only`, passive and `Decompile` routines are excluded — the
+first two have nothing to resolve, and `use_ability`'s `Decompile` arm is an
+`unreachable!`.
+
+**An attack/defence bonus derived from a program's routine loadout was
+considered and rejected.** It would be a second model of what routines are
+worth, with a player-facing surface: the Relay screen would price three
+Specials one way while the battle screen priced them another, and no test
+could catch the drift. Since `use_ability` is free, such a bonus would be
+inventing an approximation of something that can simply be called.
+
+### A Relay is identified by a flag, and the plan was wrong that the gate cost no Rust
+
+The research gate really is pure data — `ResearchDef::unlocks_structures`
+already existed, so `assets/research/dispatch.ron` needed nothing. But
+`has_relay` has to ask *something* whether a standing structure dispatches,
+and asking for the id `"relay"` would put game content in Rust and make a
+mod's second dispatch structure impossible.
+
+`StructureDef::dispatches_sorties` is `issues_contracts`' shape and its
+argument: a plain `bool` rather than a block, because a Relay has no
+per-structure configuration — what it offers is derived from the world seed,
+the sector and the clock. Behind `#[serde(default)]`, so every existing
+structure file and every mod keeps parsing.
+
+`Game::sortie_reach` measures the **base**, never the distance to the mast,
+and that was verified against `broker_reach` live rather than remembered:
+`base_pos()` for the party's base-space coordinates, then
+`BaseGrid::is_floor`. It is emphatically not `Platform::covers` —
+`resources::Platform` no longer exists. Floor and not merely `walkable`, so
+the desk is reachable from the base's laid ground and not from a corridor
+mined out past its edge. Three states rather than two booleans for
+`NoPost::BoxedIn`'s reason: "no Relay built" and "not standing in the base"
+leave the player different errands.
+
+### The board is derived, and the whole record travels rather than an id
+
+`Game::sortie_board` is recomputed on every read from the world seed,
+`ZoneLevel` and the clock epoch, the Broker board's rule and for its
+reasons: no save field, no roll to scum, and it rotates on its own. It draws
+no `GameRng` at all — a draw would not survive a reload and would shift
+every later roll in the run — which is asserted **by comparing the stream**,
+since a test that only checks the board is stable passes against a board
+that draws and discards.
+
+Selection and each site's battle count fold their own seed and reduce it
+through `derive::index`, never `%`: for a four-site pool `%` reads nothing
+but the seed's lowest bit. A separate fold per draw, `FrameSpec::salted`'s
+rule, so adding a site to the catalogue cannot reshuffle what the sites
+around it were offered at. The draw is **without replacement**, so one
+epoch's board never offers the same site twice — which a test comparing only
+lengths would not see.
+
+An empty catalogue gives an empty `Vec` and **not** `None`, which means "no
+Relay": the two leave the player different errands, `SortieReach`'s own
+argument one level down.
+
+`resources::Sortie` stores the **whole resolved `SortieDef`**, never an id or
+a board index, and so does `save::SortieSave`. A board that rotates while the
+squad is out, or an `assets/sorties/` file edited between sessions, must not
+be able to rewrite or strand a trip already in flight — `ActiveContract`
+stores a whole `ContractDef` for exactly that reason, and this is the same
+rule reaching the save format.
+
+**Duration reads the risk offset and never the absolute band.** Read against
+the band, every trip in a deep sector would take enormously longer for no
+reason the player could name, and the feature would quietly stop being usable
+late in a run. There is no term for squad size, level or power either: a
+stronger squad shows up as better outcomes and never as a faster cycle, or
+the feature becomes a throughput multiplier that scales with itself.
+`Game::sortie_duration` is the one place the figure is computed, quoted by
+the board and run by the countdown — `views::BuildOrderRow`'s rule that every
+figure on a screen is a call.
+
+### Membership rides the creature side, and both save fields are additive
+
+`SortieSave` carries **no member list**. Entity ids are not stable across a
+save, so `CreatureSave::sortie_index` names which trip a program is on and
+`Game::load` reassembles the squads — `party_slot`'s precedent, and it exists
+for exactly the same reason.
+
+`SortieSave` is a **named struct, never a positional tuple**: RON matches a
+tuple by exact arity and refuses a widened one, which is the one shape
+field-named RON does not save you from. Both new fields are additive behind
+`#[serde(default)]`, so `SAVE_FORMAT_VERSION` stays at 32 — verified by
+mutation, since dropping the attribute makes the pre-sortie load fail with
+`MissingStructField`. The test packs the stripped RON back into a **real
+save** before loading it: a round trip alone leaves a `#[serde(skip)]` green
+while the file a player actually reloads has lost the field.
+
+A record whose members all failed to load — a species file deleted between
+sessions — is dropped rather than restored empty. An empty squad is a
+countdown nothing ever comes home from.
+
+`Sorties` is **not** wiped by `enter_next_zone`, unlike `BuybackLedger` and
+`StackMemory`. The base travels through a breach and so does anything it has
+sent out.
+
+### Two formulas were extracted rather than copied, and both had a term worth losing
+
+`award_companion_xp` came out of `award_party_xp` because a sortie pays its
+squad the same way a fight beside the player pays the party. A second copy
+would hold the growth roll, the level cap, the XP-boost buff, the tally and
+the routine unlocks — five things to drift.
+
+`roll_work_resource_drop` came out of `award_loot` for a narrower reason: the
+roll carries a `Perk::Teardown` term added to it rather than drawn for, and
+that term is the easiest thing in the game to leave out of a second copy —
+which would make the perk silently worth nothing off-screen. It **reports
+rather than grants**, which is the whole of what differs between the two
+callers: `award_loot` hands the drop to the player, and a sortie accumulates
+it into the record and carries it home to a Depot through
+`stock::return_to_depots`, so what does not fit is logged rather than dropped
+in silence.
+
+Deliberately *not* shared: the rest of `award_loot`. Trace, the `Terminate`
+contract feat, the boss records and the fragment payouts all belong to a
+fight the player was in, and a sortie is not one.

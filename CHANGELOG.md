@@ -27,6 +27,29 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.44
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release changes what colours the map draws in and stores nothing.
+
+The marks and washes drawn over the map's glyphs are drawn from the HUD's
+palette too. The tail of the previous release, which swept the glyphs and
+left the overlays on top of them alone.
+
+### Changed
+
+- **An Excavation plan is blue.** Its washes, the box being previewed and the
+  ring the party wears with cutting tools armed were an amber close enough to
+  the machine-attention yellow that a cell you had marked and a machine that
+  had stalled read as the same news. A plan is you having acted; the yellow is
+  the base asking you to.
+- **A stranded machine's mark is the attention colour**, the same one its
+  glyph wears, and a staffed machine's is the green a running one has. What
+  separates the two marks is still the blink and the colour together.
+- **A raid's flash is the same red the rest of the screen uses for harm.**
+  Every cue about something being attacked now comes from one place, so a
+  retune moves all of them at once.
+
 ## 0.13.43
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

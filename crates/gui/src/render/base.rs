@@ -6,14 +6,6 @@ use super::stack::draw_stack;
 use super::*;
 use feral_processes_engine::views::drawn_on_surface_map;
 
-/// Fraction of the window the map pane occupies — the zone map or, while the
-/// party is underground, the first-person corridor. Named rather than inline
-/// because the corner map inset is placed and sized inside this rect, and
-/// `frame_map`'s tests have to be able to build the pane the real one draws
-/// into rather than a plausible-looking copy of it.
-pub(super) const PANE_W: f32 = 0.7;
-pub(super) const PANE_H: f32 = 0.72;
-
 /// How far a bare tile's background may stray from its biome's flat colour,
 /// as a fraction either side. Enough to break up a field of identical tiles,
 /// not enough to read as two different biomes.
@@ -542,10 +534,14 @@ pub(super) fn draw_playing_base(
     let status_line = refusal.map(str::to_string);
     // Read before the `game` borrow, like `status_line` above.
     let stack_zoom = app.stack_zoom;
+    // The one derivation of the five regions this screen draws into. Reads
+    // no `Game`, so it is computed before the borrow below like every other
+    // value gathered here.
+    let char_w = painter.measure_ui_advance("M", m.font_size);
+    let regions = hud::layout::regions(painter.screen_w(), painter.screen_h(), char_w, m);
     // The pane's rows, chosen by app-core (see `pane_rows`), and the header
     // that says which channel they are. Both read before the `game` borrow.
-    let log_h = painter.screen_h() - painter.screen_h() * PANE_H;
-    let log_capacity = ((log_h - m.line_height) / m.line_height).max(1.0) as usize;
+    let log_capacity = ((regions.log_pane.h - m.line_height) / m.line_height).max(1.0) as usize;
     let log_lines = app.visible_log(log_capacity.saturating_sub(1));
     let log_header = log_pane_header(app.log_filter, app.filtered_out_log_lines());
     // Before the `game` borrow, like `status_line` above. `None` outside
@@ -560,57 +556,55 @@ pub(super) fn draw_playing_base(
         });
     let Some(game) = &mut app.game else { return };
 
-    // The stock strip claims a row off the top of the window and every pane
-    // below it starts clear of it. Taken out of the map's height rather than
-    // added to the window's, so the log pane below keeps the position it has
-    // always had.
-    let strip_h = stock::strip_height(m);
-    let map_w = painter.screen_w() * PANE_W;
-    let map_h = painter.screen_h() * PANE_H - strip_h;
     let stock_rows = game.base_stock();
-
     let status = game.player_status();
     // `Game::active_buffs` needs `&mut self`; fetched here rather than
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
-    let map_pane = Rect::new(0.0, strip_h, map_w, map_h);
     if let Some(view) = game.stack_view() {
-        draw_stack(&view, painter, map_pane, m);
+        draw_stack(&view, painter, regions.map_pane, m);
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
-            draw_map_inset(&map, stack_zoom, painter, map_pane, m);
+            draw_map_inset(&map, stack_zoom, painter, regions.map_pane, m);
         }
     } else {
         draw_surface_map(
-            game, fx, painter, map_pane, tile_px, glyph_px, &status, plan,
+            game,
+            fx,
+            painter,
+            regions.map_pane,
+            tile_px,
+            glyph_px,
+            &status,
+            plan,
         );
     }
 
-    draw_status_panel(
-        Rect::new(map_w, strip_h, painter.screen_w() - map_w, map_h),
-        &status,
-        &buffs,
-        game,
+    draw_status_panel(regions.info_column, &status, &buffs, game, painter, m);
+
+    hud::status_bar::draw_status_bar(
+        regions.status_bar,
+        &hud::status_bar::StatusBarState {
+            zone: status.zone,
+            position: game.base_pos().unwrap_or(status.position),
+            tick: game.current_tick(),
+            stock: &stock_rows,
+        },
         painter,
         m,
     );
-    stock::draw_stock_strip(&stock_rows, painter, m);
 
-    let log_y = strip_h + map_h;
-    painter.rect(0.0, log_y, painter.screen_w(), log_h, PANEL_BG);
-    painter.rect_lines(
-        0.0,
-        log_y,
-        painter.screen_w(),
-        log_h,
-        2.0,
-        fx.log_border(BORDER),
-    );
+    let log_x = regions.log_pane.x;
+    let log_y = regions.log_pane.y;
+    let log_w = regions.log_pane.w;
+    let log_h = regions.log_pane.h;
+    painter.rect(log_x, log_y, log_w, log_h, PANEL_BG);
+    painter.rect_lines(log_x, log_y, log_w, log_h, 2.0, fx.log_border(BORDER));
     let mut ly = log_y + m.inset + m.font_size as f32 / 2.0;
     if let Some(s) = &status_line {
-        painter.ui(s, m.inset, ly, m.font_size, RED);
+        painter.ui(s, log_x + m.inset, ly, m.font_size, RED);
         ly += m.line_height;
     }
     // Drawn even under `LogFilter::All`, so the key is discoverable from the
@@ -623,13 +617,13 @@ pub(super) fn draw_playing_base(
             color: p.color,
         })
         .collect();
-    painter.ui_runs(&runs, m.inset, ly, m.font_size);
+    painter.ui_runs(&runs, log_x + m.inset, ly, m.font_size);
     ly += m.line_height;
     for e in &log_lines {
-        if ly > painter.screen_h() - m.gap {
+        if ly > log_y + log_h - m.gap {
             break;
         }
-        draw_message_line(e, m.inset, ly, painter, m);
+        draw_message_line(e, log_x + m.inset, ly, painter, m);
         ly += m.line_height;
     }
 }
@@ -1642,6 +1636,28 @@ mod tests {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
     }
 
+    /// `draw_playing_base` no longer computes its own rects — it reads them
+    /// from `hud::layout::regions` once, at the top. This is the trap named
+    /// in the module's own doc comment: a literal `0.0` for a y-origin draws
+    /// under the status bar and no test sees it, so the regions are asserted
+    /// against each other here rather than trusted by eye.
+    #[test]
+    fn the_playing_screen_draws_inside_its_regions() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let r = hud::layout::regions(1440.0, 900.0, char_w, &m);
+            assert!(
+                r.map_pane.x + r.map_pane.w <= r.info_column.x,
+                "the map pane runs into the info column"
+            );
+            assert!(
+                r.map_pane.y >= r.status_bar.y + r.status_bar.h,
+                "the map pane starts above the status bar's bottom edge"
+            );
+        });
+    }
+
     /// Draws one surface map and reports what landed: the textured meshes,
     /// and the text of every glyph painted.
     fn drawn_map(sprites: SpriteTable) -> (usize, Vec<String>) {
@@ -2200,10 +2216,14 @@ mod tests {
     fn the_stat_lines_fit_the_status_column() {
         with_painter(|p| {
             let m = ui_metrics(900.0);
-            // The status panel is the window's width less the map pane's
-            // `PANE_W`, drawn one inset in, against the 1440x900 geometry
-            // `ui_metrics` is calibrated for.
-            let room = 1440.0 * (1.0 - PANE_W) - m.inset * 2.0;
+            // The status column is `hud::layout::regions`' `info_column`,
+            // drawn one inset in, against the 1440x900 geometry `ui_metrics`
+            // is calibrated for.
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let room = hud::layout::regions(1440.0, 900.0, char_w, &m)
+                .info_column
+                .w
+                - m.inset * 2.0;
             for line in stat_lines(
                 1234,
                 feral_processes_engine::tuning::MAX_MITIGATION_PERCENT,

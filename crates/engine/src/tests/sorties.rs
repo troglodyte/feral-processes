@@ -289,3 +289,147 @@ fn the_far_side_of_the_base_still_reaches_the_relay() {
     super::support::stand_in_base_at(&mut game, edge, 0);
     assert_eq!(game.sortie_reach(), SortieReach::AtRelay);
 }
+
+// ------------------------------------------------------------ the board
+
+/// Derived, never stored: reloading reproduces the identical board, because
+/// the inputs are identical and there is no stored roll to reroll.
+#[test]
+fn the_board_survives_a_save_and_load_unchanged() {
+    let scratch = scratch_assets_dir("sortie_board_roundtrip");
+    let mut game = Game::new(4500, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+
+    let before = game.sortie_board().expect("a Relay stands");
+    assert!(!before.is_empty(), "the shipped catalogue offers something");
+
+    std::fs::create_dir_all(&*scratch).unwrap();
+    let path = scratch.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        loaded.sortie_board().expect("a Relay stands"),
+        before,
+        "a reload must not reroll the board"
+    );
+}
+
+/// Drawing the board spends no `GameRng`. A draw would not survive a reload
+/// and would shift every later roll in the run — `stack::generate`'s rule.
+/// Asserted by comparing the stream, since a test that only checks the board
+/// is stable passes against a board that draws and discards.
+#[test]
+fn drawing_the_board_spends_no_rng() {
+    let mut game = Game::new(4501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+
+    fn peek(g: &mut Game) -> u64 {
+        use rand::RngExt;
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    super::support::reseed_rng(&mut game, 77);
+    let without = peek(&mut game);
+
+    super::support::reseed_rng(&mut game, 77);
+    let _ = game.sortie_board();
+    let with = peek(&mut game);
+
+    assert_eq!(without, with, "the board must not touch the run's stream");
+}
+
+/// It rotates on its own as the epoch advances — which is what makes "no
+/// save-scumming" a property rather than a lockout.
+#[test]
+fn the_board_rotates_with_the_clock() {
+    let mut game = Game::new(4502, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+
+    let first = game.sortie_board().unwrap();
+    // Several epochs on rather than one: the shipped catalogue is four
+    // sites into three slots, so a single step can legitimately land on the
+    // same set. What is asserted is that the board is not frozen.
+    let turned = (1..=12).any(|epoch| {
+        game.world
+            .resource_mut::<crate::resources::GameClock>()
+            .tick = crate::tuning::SORTIE_BOARD_ROTATION_TICKS * epoch;
+        game.sortie_board().unwrap() != first
+    });
+    assert!(turned, "twelve epochs on, the offers have turned over");
+}
+
+/// The screen and the trip quote the same number, `BuildOrderRow`'s rule
+/// that every figure is a call.
+#[test]
+fn a_row_quotes_the_duration_the_trip_will_run() {
+    let mut game = Game::new(4503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+
+    for row in game.sortie_board().unwrap() {
+        assert_eq!(row.ticks, Game::sortie_duration(row.risk, row.battles));
+    }
+}
+
+/// A row's battle count is inside its own authored range, so the offer can
+/// be quoted before it is signed for and the trip cannot run a different
+/// number of fights than the board said.
+#[test]
+fn a_rows_battle_count_is_inside_the_sites_range() {
+    let mut game = Game::new(4505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let db = SortieDb::load_dir(&test_assets_dir().join("sorties"))
+        .unwrap()
+        .0;
+
+    for row in game.sortie_board().unwrap() {
+        let def = db.get(&row.id).expect("a board row names a shipped site");
+        assert!(
+            (def.battles_min..=def.battles_max).contains(&row.battles),
+            "{} was offered at {} fights, outside {}..={}",
+            row.id,
+            row.battles,
+            def.battles_min,
+            def.battles_max
+        );
+    }
+}
+
+/// One epoch's board never offers the same site twice — it is drawn without
+/// replacement, which a test comparing only lengths would not see.
+#[test]
+fn a_board_never_offers_one_site_twice() {
+    let mut game = Game::new(4506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    for epoch in 0..40u64 {
+        game.world
+            .resource_mut::<crate::resources::GameClock>()
+            .tick = crate::tuning::SORTIE_BOARD_ROTATION_TICKS * epoch;
+        let rows = game.sortie_board().unwrap();
+        let mut ids: Vec<String> = rows.iter().map(|r| r.id.0.clone()).collect();
+        let offered = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), offered, "epoch {epoch} offered a duplicate site");
+    }
+}
+
+/// Duration reads the risk **offset**, never the absolute band — so a deep
+/// sector does not silently make every trip enormous.
+#[test]
+fn the_sector_does_not_lengthen_a_trip() {
+    assert_eq!(
+        Game::sortie_duration(0, 6),
+        crate::tuning::SORTIE_TRAVEL_BASE_TICKS + crate::tuning::SORTIE_TICKS_PER_BATTLE * 6
+    );
+}
+
+/// No board without a Relay, and no panic either.
+#[test]
+fn no_relay_means_no_board() {
+    let mut game = Game::new(4504, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(game.sortie_board().is_none());
+}

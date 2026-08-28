@@ -1990,6 +1990,26 @@ pub struct ContractRow {
     pub target: u32,
 }
 
+/// One site standing on the Relay's board — see `Game::sortie_board`.
+///
+/// Every figure on it is a **call** rather than a copy: `ticks` is
+/// `Game::sortie_duration(risk, battles)`, the same computation the
+/// countdown runs, `views::BuildOrderRow`'s rule. A screen quoting one
+/// number while the trip runs another is the failure that rule exists for.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SortieRow {
+    pub id: crate::sorties::SortieId,
+    pub name: String,
+    pub description: String,
+    /// Steps above the sector baseline — the site's own offset, which is
+    /// also what `ticks` is priced off.
+    pub risk: u32,
+    /// Fixed the moment the offer appeared, not rolled at dispatch, so this
+    /// row can be quoted before the player signs for it.
+    pub battles: u32,
+    pub ticks: u64,
+}
+
 /// One structure on order and not yet raised — see `components::BuildSite`.
 ///
 /// **The one derivation of what a build request looks like**, and it is

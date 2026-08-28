@@ -78,6 +78,82 @@ impl Game {
             .is_some_and(|def| def.dispatches_sorties)
     }
 
+    /// The offers standing at the Relay, or `None` with no Relay built.
+    ///
+    /// **Derived, never stored** — the Broker board's rule and for its
+    /// reasons: recomputed on every read from the world seed, `ZoneLevel`
+    /// and the clock epoch, so there is no save field, no roll to scum, and
+    /// it rotates on its own as the epoch advances.
+    ///
+    /// Draws **no** `GameRng` at all. A draw here would not survive a reload
+    /// and would shift every later roll in the run — `stack::generate`'s
+    /// rule. Selection and each site's battle count both fold their own seed
+    /// and reduce it through `derive::index`, never `%`: for a small pool `%`
+    /// reads nothing but the seed's lowest bit and silently anti-correlates
+    /// two draws taken off one fold.
+    ///
+    /// An empty catalogue gives an empty `Vec` and **not** `None`, which
+    /// means "no Relay" — the two leave the player different errands, which
+    /// is `SortieReach`'s own argument one level down.
+    pub fn sortie_board(&mut self) -> Option<Vec<crate::views::SortieRow>> {
+        if self.sortie_reach() == SortieReach::NoRelay {
+            return None;
+        }
+        let seed = self.sortie_board_seed();
+        let mut pool: Vec<crate::sorties::SortieDef> = self
+            .world
+            .resource::<crate::sorties::SortieDb>()
+            .iter()
+            .cloned()
+            .collect();
+        let mut rows = Vec::new();
+        // Drawn without replacement, so one epoch's board never offers the
+        // same site twice. `swap_remove` is what makes the walk O(slots)
+        // and is safe for reproducibility because the pool it starts from
+        // is id-sorted and every index is derived, not rolled.
+        for slot in 0..crate::tuning::SORTIE_BOARD_SLOTS {
+            if pool.is_empty() {
+                break;
+            }
+            let pick = crate::derive::index(salt(seed, b"slot", slot as u64), pool.len());
+            let def = pool.swap_remove(pick);
+            let span = (def.battles_max - def.battles_min + 1) as usize;
+            let battles = def.battles_min
+                + crate::derive::index(salt(seed, def.id.as_str().as_bytes(), slot as u64), span)
+                    as u32;
+            rows.push(crate::views::SortieRow {
+                id: def.id.clone(),
+                name: def.name.clone(),
+                description: def.description.clone(),
+                risk: def.risk,
+                battles,
+                ticks: Self::sortie_duration(def.risk, battles),
+            });
+        }
+        Some(rows)
+    }
+
+    /// The board's seed: the world seed, the sector and the epoch, folded
+    /// FNV-1a a byte at a time.
+    ///
+    /// Byte-at-a-time rather than one XOR-and-multiply per word, for
+    /// `FrameSpec::salted`'s measured reason and `Game::board_seed`'s: a
+    /// whole-word XOR leaves low output bits a fixed function of the input,
+    /// and consecutive epochs differ in exactly one low bit.
+    fn sortie_board_seed(&self) -> u64 {
+        let epoch = self.current_tick() / crate::tuning::SORTIE_BOARD_ROTATION_TICKS;
+        let mut h = 0xcbf2_9ce4_8422_2325_u64;
+        for word in [
+            self.world.resource::<crate::world::WorldMap>().seed() as u64,
+            self.world.resource::<crate::resources::ZoneLevel>().0 as u64,
+            epoch,
+            crate::tuning::SORTIE_SALT,
+        ] {
+            h = crate::game::contracts::fold(h, &word.to_le_bytes());
+        }
+        h
+    }
+
     /// How long a trip to a site of this risk offset, running this many
     /// battles, takes.
     ///
@@ -97,4 +173,16 @@ impl Game {
             + crate::tuning::SORTIE_TRAVEL_PER_RISK_TICKS * risk as u64
             + crate::tuning::SORTIE_TICKS_PER_BATTLE * battles as u64
     }
+}
+
+/// One draw's own seed, folded off the board's.
+///
+/// A separate fold per draw rather than one stream, `FrameSpec::salted`'s
+/// rule: a site added to or removed from the catalogue must not reshuffle
+/// which battle count the sites around it were offered at. Folded a byte at
+/// a time and ending on the counter, because `derive::index` reads bit 63
+/// and a value folded in as one whole word never reaches it.
+fn salt(seed: u64, tag: &[u8], n: u64) -> u64 {
+    let h = crate::game::contracts::fold(seed, tag);
+    crate::game::contracts::fold(h, &n.to_le_bytes())
 }

@@ -1875,6 +1875,67 @@ never register from inside it.
 alone. It is a player verb, paid the way every other player verb is — the
 asymmetry *is* the rule.
 
+### A dry floor job is not a want either, and dropping it needed the scheduler's own guard fixed
+
+**`Game::dig_wants` now asks `build_is_workable`'s question, on the half of
+the one verb that spends anything.** A body pinned to a dry floor job cannot
+go run the Lathe that would press it the very Blank Substrate it is waiting
+for, which is `build_wants`' deadlock one subsystem over: a one-program base
+posts its only body to the floor job, the job has nothing to fetch, and the
+Mining Node and the Lathe both go unworked for the rest of the run. See "A
+dry request is not a want" above for the shared argument; this entry is the
+three ways the dig side's own version of that fix differs.
+
+**The first trap the build side does not have: cutting and flooring share
+one `TaskKind` and one `DigSite`, and only one of the two halves ever
+touches substrate.** A workability check that reads the drought alone —
+`substrate_in_stock` and nothing else — drops every cut job in the base the
+moment the shelf runs dry, standing the whole excavation crew down over jobs
+that were never going to ask for a unit. The check has to read the cell,
+`grid.is_solid(x, y)`, not just the mark: solid means cut, gated on nothing;
+`Open` means floor, gated on `substrate_in_stock`.
+
+**The second is that this had to reconcile with the drought-clearing fix
+that landed just ahead of it, rather than stack a second mechanism beside
+it.** `Game::dig_wants` already cleared `DigSite::announced_dry` the tick a
+substrate source reappeared, because `Game::crew_lays_tile` only runs once
+per site per `BASE_DIG_TICKS_PER_SWING` ticks and cannot see a unit that is
+claimed by someone else before its own cycle comes back around. Dropping a
+dry site needed the same announcement moved to the same place, for the same
+reason `build_wants`' report moved to the scheduler: a dropped site is never
+posted, so `crew_lays_tile` never runs for it and nobody else is left to say
+the base is dry. `Game::announce_dig_dry` is now the *one* writer of the
+latch — both the set and the clear — where the drought-clearing fix and
+`crew_lays_tile` had them split across two functions. `crew_lays_tile` keeps
+its own `spend_one_substrate` call, for the one race `dig_wants` cannot see:
+two floor jobs finishing on the same tick against a single surviving unit,
+since `substrate_in_stock` only answers "does one exist", not "one for every
+job about to ask". That failure is silent now, `build_wants`'s
+`Errand::Dry` rule — the scheduler already said the bulk of what there was
+to say, and the mark stays either way, so the job is simply retried next
+cycle.
+
+**The third is a trap the build side never had to name, because a `BuildSite`
+is never the only thing a base wants**: `schedule_base_labour`'s own "quiet
+base" guard read a dropped want as nothing having changed. The guard exists
+to skip re-diffing a want list that looks the same tick to tick —
+`wanted.iter().all(|p| posted.contains(p))` under a `queue_is_empty` base —
+and that containment check only ever reads one direction: "is everything
+still wanted also posted", never "is everything posted still wanted". A dry
+floor job dropped from `dig_wants` shrinks `wanted` by one; if that was the
+base's only want, `wanted` goes empty and the check is vacuously true
+whatever `posted` still holds, so the guard fires and the digger's stale
+`Task` is never seen again — not stood down, not reassigned, just left
+naming a site the scheduler had already stopped asking for. Found by a test
+built to catch exactly this: a body hand-posted to a floor job, ticked a
+few swings into its cycle, and only then run dry, so the transition — not
+merely "always dry from the start" — is what the guard has to survive.
+`queue_is_empty` now also reads whether any `DigSite` is `marked` at all,
+the same carve-out already documented for a `BuildSite` on order — "a base
+with a marked dig plan is a base with instructions" — because a site can be
+the base's *only* instruction precisely by having just been dropped from
+the list that would otherwise prove it.
+
 ### Every routine that moves Integrity rolls a band
 
 **Every routine that moves Integrity rolls a band, and the census is what

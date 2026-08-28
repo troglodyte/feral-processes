@@ -2750,6 +2750,146 @@ fn a_crew_reports_a_later_drought_at_the_same_site() {
     );
 }
 
+/// **The deadlock this closes**: a body pinned to a dry floor job cannot go
+/// dig anything else, even when there is something else to dig right next
+/// to it. Two marked cells and one body — one already cut and dry, one
+/// still solid and free of the substrate question entirely — prove the fix
+/// does more than drop a `Task`: the freed body picks up the other job on
+/// its own, `a_request_the_base_cannot_supply_does_not_deadlock_production`'s
+/// shape one subsystem over.
+#[test]
+fn a_dry_floor_job_frees_the_body_to_dig_something_else() {
+    let (mut game, staff) = base_with_a_crew(3284, 1);
+    let cut_cell = (WALL.0, WALL.1 + 1);
+    assert!(
+        game.world
+            .resource::<base_grid::BaseGrid>()
+            .is_solid(cut_cell.0, cut_cell.1),
+        "the fixture needs a second solid cell beside WALL for this test to mean anything"
+    );
+    // WALL is opened directly rather than cut by the crew — this test is
+    // about what happens once a floor job is dry, not about how it got cut.
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(WALL.0, WALL.1, tick);
+    mark(&mut game, WALL);
+    mark(&mut game, cut_cell);
+
+    let swings = swings_for(&game, staff[0], cut_cell);
+    let wait = (swings * crate::tuning::BASE_DIG_TICKS_PER_SWING) as usize + WALK_ALLOWANCE;
+    pass(&mut game, wait);
+
+    assert!(
+        matches!(
+            cell(&game, cut_cell),
+            Some(base_grid::BaseCell::Open { .. })
+        ),
+        "the freed body must cut the other marked cell, not merely stand idle \
+         while a job it could actually finish goes untouched"
+    );
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the dry floor job is still there, waiting on substrate — dropping it \
+         from the want list must not touch the mark or the cut"
+    );
+}
+
+/// **The trap**: only a floor job needs Blank Substrate — cutting spends
+/// none. A workability check that reads the drought alone, and not the
+/// cell, would drop every cut job in the base the moment the shelf ran
+/// dry, standing the whole excavation crew down over jobs that never
+/// touched substrate to begin with.
+#[test]
+fn a_marked_solid_cell_still_cuts_with_no_substrate_anywhere() {
+    let (mut game, staff) = base_with_a_crew(3285, 1);
+    assert_eq!(
+        count_item(&game, ids::BLANK_SUBSTRATE),
+        0,
+        "the fixture must start with no substrate anywhere for the trap to bite"
+    );
+    mark(&mut game, WALL);
+
+    let wait = ticks_to_cut(&game, staff[0]);
+    pass(&mut game, wait);
+
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "a marked solid cell must still be cut with zero substrate in the base"
+    );
+}
+
+/// The dropped want has to reach the body, not merely stop being listed —
+/// and the case that actually exercises the difference is a site that was
+/// *already posted* going dry, not one that was dry from the moment it was
+/// marked. With nothing else in the base, `wanted` goes from one entry to
+/// none the tick the drought hits: `schedule_base_labour`'s "quiet base"
+/// guard exists to skip re-diffing a want list that looks the same tick to
+/// tick, and `wanted.iter().all(|p| posted.contains(p))` is vacuously true
+/// against an *empty* `wanted` whatever `posted` holds — so an emptied want
+/// list is exactly the state that guard must not mistake for "nothing
+/// changed": the body's stale `Task` still names the site.
+///
+/// Posted by hand rather than walked into place: `post_digger` and
+/// `dig_site_at` are `pub(crate)`, and a walk of unknown length racing a
+/// twelve-tick swing cycle cannot pin the moment progress starts without
+/// either finishing the cut early (and despawning the very site this test
+/// needs to still exist) or never quite catching it posted at all — the
+/// first draft of this test did exactly the former.
+#[test]
+fn a_floor_job_that_dries_up_mid_cycle_still_frees_its_body() {
+    let (mut game, staff) = base_with_a_crew(3287, 1);
+    let tick = game.current_tick();
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(WALL.0, WALL.1, tick);
+    mark(&mut game, WALL);
+    let substrate = ItemId::from(ids::BLANK_SUBSTRATE);
+    give(&mut game, &substrate, 1);
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("marking an open cell spawns its dig site");
+
+    let worker = staff[0];
+    if let Some(mut pos) = game.world.get_mut::<Position>(worker) {
+        *pos = Position {
+            x: WALL.0,
+            y: WALL.1,
+        };
+    }
+    game.post_digger(worker, site);
+    // A few swings in, well short of `BASE_DIG_TICKS_PER_SWING` — the site
+    // must still be mid-cycle, not yet due to attempt the lay.
+    pass(&mut game, 3);
+    let progress = game.world.get::<Task>(worker).map(|t| t.progress);
+    assert!(
+        matches!(progress, Some(p) if p > 0 && p < crate::tuning::BASE_DIG_TICKS_PER_SWING),
+        "sanity: the body must still be mid-swing for the transition below \
+         to mean anything, got {progress:?}"
+    );
+
+    // The one substrate vanishes before this site's own cycle comes back
+    // around to spend it — the same race `a_crew_reports_a_later_drought_at_the_same_site`
+    // stands in for, but with nothing else in the base to fall back on.
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(substrate, 1);
+
+    pass(
+        &mut game,
+        crate::tuning::BASE_DIG_TICKS_PER_SWING as usize + WALK_ALLOWANCE,
+    );
+
+    assert_eq!(
+        posted_at(&game, worker),
+        None,
+        "a body posted to a want that dried up and vanished is not freed, \
+         it is merely unlisted"
+    );
+}
+
 /// Settled decision 7, and the reason digging cannot starve production: dig
 /// wants are appended last, so `truncate(staff.len())` cuts them first.
 #[test]

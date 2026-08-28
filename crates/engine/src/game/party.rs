@@ -4,11 +4,11 @@
 use crate::tuning::{FUSION_LESSER_STAT_DIVISOR, MAX_FUSIONS};
 use crate::*;
 
-/// Which of the three roles a program you own is filling.
+/// Which of the four roles a program you own is filling.
 ///
 /// The roles are **disjoint and exhaustive**: every program on the roster
-/// is in exactly one, and there is no fourth "owned but doing nothing"
-/// state — that is the whole of the auto-staffing rule. Derived through
+/// is in exactly one, and there is no "owned but doing nothing" state —
+/// that is the whole of the auto-staffing rule. Derived through
 /// `Game::program_role` and never stored, so the party roster and the wield
 /// stay the only things that decide it.
 ///
@@ -24,6 +24,12 @@ pub enum ProgramRole {
     Wielded,
     /// Fighting alongside the player — `resources::Party`.
     InParty,
+    /// Away from the base on a sortie — `resources::Sorties`. Ranked
+    /// between the party and the labour pool: a dispatched program is not
+    /// staff, which is what takes it out of `schedule_base_labour`,
+    /// `drift_idle_staff`, `base_entropy_system`, `needs_drain_system` and
+    /// the surface map in one edit rather than five.
+    Sortie,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
     Staff,
@@ -42,6 +48,7 @@ pub(crate) fn role_of(
     player: Entity,
     party: &Party,
     wielded: Option<Entity>,
+    sorties: &crate::resources::Sorties,
 ) -> Option<ProgramRole> {
     if owner != player {
         return None;
@@ -52,7 +59,38 @@ pub(crate) fn role_of(
     if party.0.contains(&creature) {
         return Some(ProgramRole::InParty);
     }
+    if sorties.contains(creature) {
+        return Some(ProgramRole::Sortie);
+    }
     Some(ProgramRole::Staff)
+}
+
+/// The four resources that decide a role, as one system parameter.
+///
+/// A bevy system that narrows through `role_of` needs every one of them and
+/// nothing else out of them, so they travel together — which is what keeps
+/// a fifth role source from being three signature edits and a lint. A thin
+/// adapter and never a second copy of the rule: `of` is one call to the
+/// free function above.
+#[derive(bevy_ecs::system::SystemParam)]
+pub struct Roles<'w> {
+    player: Res<'w, PlayerEntity>,
+    party: Res<'w, Party>,
+    wielded: Res<'w, WieldedProgram>,
+    sorties: Res<'w, crate::resources::Sorties>,
+}
+
+impl Roles<'_> {
+    pub(crate) fn of(&self, creature: Entity, owner: Entity) -> Option<ProgramRole> {
+        role_of(
+            creature,
+            owner,
+            self.player.0,
+            &self.party,
+            self.wielded.0,
+            &self.sorties,
+        )
+    }
 }
 
 impl Game {
@@ -536,6 +574,7 @@ impl Game {
             self.player_entity(),
             self.world.resource::<Party>(),
             self.wielded_program(),
+            self.world.resource::<crate::resources::Sorties>(),
         )
     }
 

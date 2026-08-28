@@ -12,8 +12,8 @@ use bevy_ecs::prelude::*;
 
 use crate::base_grid::{BaseCell, BaseGrid};
 use crate::components::{Player, Position, Tamed, Task};
-use crate::game::party::{ProgramRole, role_of};
-use crate::resources::{GameClock, Locale, Party, PlayerEntity, WieldedProgram};
+use crate::game::party::ProgramRole;
+use crate::resources::{GameClock, Locale};
 use crate::tuning::BASE_ENTROPY_REFILL_TICKS;
 
 /// "A body that might be standing in base space", as the coarse filter for
@@ -61,9 +61,7 @@ pub(crate) fn base_entropy_system(
     mut grid: ResMut<BaseGrid>,
     clock: Res<GameClock>,
     locale: Res<Locale>,
-    player: Res<PlayerEntity>,
-    roster: Res<Party>,
-    wielded: Res<WieldedProgram>,
+    roles: crate::game::party::Roles,
     occupants: Query<Occupancy, BaseOccupant>,
 ) {
     // A body occupies a base cell if it is posted at one, or if it is staff
@@ -73,10 +71,7 @@ pub(crate) fn base_entropy_system(
         .iter()
         .filter(|(entity, _, task, tamed)| {
             task.is_some()
-                || tamed.is_some_and(|t| {
-                    role_of(*entity, t.owner, player.0, &roster, wielded.0)
-                        == Some(ProgramRole::Staff)
-                })
+                || tamed.is_some_and(|t| roles.of(*entity, t.owner) == Some(ProgramRole::Staff))
         })
         .map(|(_, pos, _, _)| pos)
         .collect();

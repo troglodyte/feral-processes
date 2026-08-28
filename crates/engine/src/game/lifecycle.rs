@@ -111,6 +111,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -147,6 +148,7 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -193,6 +195,9 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        // Empty at both doors. `Game::load` refills it from the save below,
+        // once every creature has an entity to name — see `SortieSave`.
+        world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -367,6 +372,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
             nemesis: nemesis_db,
@@ -417,6 +423,7 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
         world.insert_resource(nemesis_db);
@@ -473,6 +480,9 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        // Empty at both doors. `Game::load` refills it from the save below,
+        // once every creature has an entity to name — see `SortieSave`.
+        world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
@@ -1835,6 +1845,7 @@ struct AssetDbs {
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
+    sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
     species: SpeciesDb,
@@ -1939,6 +1950,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
+    // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
+    // catalogue leaves `Game::sortie_board` with nothing to offer, which is
+    // the pre-sortie game.
+    let (sorties, sortie_warnings) =
+        crate::sorties::SortieDb::load_dir(&assets_dir.join("sorties"))?;
+    warnings.extend(sortie_warnings);
     // Same absent-is-silent rule again — see `CaravanDb`'s own doc. An empty
     // catalogue leaves `Game::scheduled_visit` with nothing to pick, which is
     // the pre-caravan game.
@@ -1983,6 +2000,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         environment,
         memories,
         needs,
+        sorties,
         caravans,
         nemesis,
         species,

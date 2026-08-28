@@ -27,6 +27,39 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.38
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+Nothing here is stored — this is what the HUD draws, not what it keeps.
+
+The map pane is framed, and it wears the player's vitals on its own borders
+rather than spending map rows on them.
+
+### Added
+
+- **`SECTOR MAP` and a threat readout ride the map pane's top border.** The
+  threat line says how many hostiles are on the map and whether anything in
+  the base is contributing raid defence.
+- **The vitals strip rides its bottom border** — Integrity, Power, level and
+  XP as meters, then unspent perk points, mitigation, attack, strength,
+  decompiler and whether mining is armed. On a narrow window the strip drops
+  from the end rather than running off the pane, so the meters are always the
+  part that survives.
+- **Unspent perk points are called out in the attention colour**, and the row
+  is absent entirely when there are none to spend.
+
+### Changed
+
+- **The frame is the same underground.** The Stack corridor draws into the
+  same framed pane and carries the same vitals; only the map's contents
+  change.
+
+### Known rough edge
+
+- Integrity and Power are drawn twice for now — once on the new vitals strip
+  and once in the old right-hand panel. That panel is replaced outright in a
+  coming release and the duplication goes with it.
+
 ## 0.13.37
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

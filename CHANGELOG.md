@@ -27,6 +27,57 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.47
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release adds two save fields, both additive, so a save written before it
+loads with nobody away from the base.
+
+The idle half of the roster gets a second front. A developed program you are
+not fielding has done exactly one thing until now, which is work the base;
+this is the engine for sending a squad of them out to fight somewhere instead.
+
+**There is no screen for it yet.** Everything below is reachable from the
+engine and covered by tests; the Relay's board and the dispatch picker are a
+second piece of work. Nothing in a running game changes until those land.
+
+### Added
+
+- **Sorties.** A squad of base staff can be dispatched from a Dispatch Relay
+  to a named site, where it fights a run of real battles off-screen over a
+  number of ticks and comes home with what it could carry — or with fewer
+  bodies than it left with. The fights use the same swing and routine
+  resolution a fight in front of you does: the same hit ladder, the same
+  damage bands, the same mitigation, the same Power costs.
+- **A trip pays for itself four ways.** The bodies work no machine for the
+  whole trip and the base reads as short-handed while they are gone;
+  provisioning is charged from base stock at dispatch; the programs take real
+  damage and can be lost; and a kill off-screen pays less than the same kill
+  with you in the fight. Power does not recover in the field and there is no
+  rest out there, so Specials taper across a long trip — which is what makes
+  a twenty-fight site genuinely harder rather than merely longer.
+- **The trip aborts on the first casualty.** Remaining battles are skipped,
+  the survivors keep what they earned, and the return travel still runs —
+  there is no teleport home. Under Forgiving the program that dropped comes
+  back benched and walks itself to a Repair Bay; under Permadeath it is gone,
+  but the abort caps the disaster at one.
+- **`assets/sorties/` is a new content directory** — one `.ron` file per
+  site, naming it, how dangerous it is relative to the sector you are in, and
+  how many fights it takes. Four ship. Deleting the directory restores the
+  pre-sortie game exactly, the same supported way deleting `assets/needs/`
+  does. `assets/sorties/README.md` is the schema.
+- **The Dispatch Relay and its research node**, both data. `StructureDef`
+  gains `dispatches_sorties`, so a mod can add a second dispatch structure or
+  move the gate without touching the engine.
+
+### Changed
+
+- **The Relay's board is derived, never stored**, the way a Broker's is: it
+  is recomputed from the world seed, the sector and the clock, so reloading
+  reproduces the same offers, there is nothing to re-roll, and it rotates on
+  its own. Each offer's fight count is fixed the moment it appears, which is
+  what lets the trip's length be quoted before you sign for it.
+
 ## 0.13.46
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

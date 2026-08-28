@@ -36,7 +36,7 @@ mod field;
 mod frame_map;
 mod group_menu;
 mod help;
-mod hud;
+pub(crate) mod hud;
 mod inventory;
 mod manifest;
 mod manifest_layout;

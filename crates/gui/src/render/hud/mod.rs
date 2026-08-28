@@ -17,7 +17,11 @@ pub(super) mod column;
 pub(super) mod layout;
 pub(super) mod log_frame;
 pub(super) mod map_frame;
-pub(super) mod palette;
+// `pub(crate)`, alone among these: the effects layer draws onto the map too,
+// and a raid's flash is the palette's own reserved meaning — inbound harm —
+// painted by `fx.rs` rather than by anything under `render/`. Every other
+// module here is the renderer's alone.
+pub(crate) mod palette;
 pub(super) mod panes;
 pub(super) mod status_bar;
 pub(super) mod strip;

@@ -13,7 +13,9 @@
 use std::collections::HashMap;
 
 use crate::paint::{Color, Painter};
+use crate::render::hud::palette;
 use crate::text::Metrics;
+use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, VisualEffect};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -135,9 +137,17 @@ const SPARK_SPEED_SALT: u32 = 0x5BF0_3635;
 
 // Local copies of the palette `render.rs` draws with, rather than
 // macroquad's harsher primaries.
-const FLASH_RED: Color = Color::new(0.9, 0.25, 0.25, 1.0);
-const FLASH_CYAN: Color = Color::new(0.25, 0.85, 0.85, 1.0);
-const FLASH_WHITE: Color = Color::new(0.95, 0.95, 0.95, 1.0);
+/// A raid's three flashes, from the HUD's palette rather than from three
+/// values beside it — the only place outside `render/` that reaches for it.
+///
+/// `THREAT` is the whole reason: the palette reserves br red for hostility
+/// and inbound harm, and a structure taking a hit in a raid is the most
+/// literal thing that phrase describes on this screen. Painted in a red of
+/// its own, the one cue the reservation exists for would have been the one
+/// cue not drawn from it.
+const FLASH_RED: Color = palette::THREAT;
+const FLASH_CYAN: Color = palette::glyph(GlyphColor::Cyan);
+const FLASH_WHITE: Color = palette::EMPHASIS;
 
 fn flash_alpha(elapsed: f64, duration: f64) -> f32 {
     if elapsed >= duration || duration <= 0.0 {
@@ -624,6 +634,24 @@ impl Fx {
 
 #[cfg(test)]
 mod tests {
+    /// **The reservation, at the one cue it was written for.** br red means
+    /// hostility and inbound harm; a structure taking a hit in a raid is
+    /// that, and the flash is what says so on the map. Asserted against the
+    /// palette rather than against a literal, so the whole family moves
+    /// together when the palette is retuned.
+    ///
+    /// The deflection and the destruction are checked too, because the three
+    /// are one vocabulary: a deflection is the shield answering, which is not
+    /// harm landing, and a destroyed structure is the loudest thing the
+    /// screen can say rather than a fourth colour.
+    #[test]
+    fn a_raid_flash_is_drawn_from_the_palette() {
+        assert_eq!(effect_color(EffectKind::Hit), palette::THREAT);
+        assert_ne!(effect_color(EffectKind::Deflected), palette::THREAT);
+        assert_ne!(effect_color(EffectKind::Destroyed), palette::THREAT);
+        assert_eq!(effect_color(EffectKind::Destroyed), palette::EMPHASIS);
+    }
+
     use super::*;
 
     /// The ghost trail used to track exactly two HP scalars. A roster has

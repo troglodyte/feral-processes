@@ -27,6 +27,46 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.37
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+Nothing here is stored: the HUD work is layout and colour, and the two fixes
+below change what is drawn rather than what is kept.
+
+Groundwork for a redesigned HUD, plus two base-space drawing fixes that had
+not yet been released.
+
+### Added
+
+- **The status bar.** One row across the top of every screen that draws the
+  world behind it, carrying who and where you are — identity, zone, position
+  and tick — alongside what the base is holding. It absorbs the stock strip
+  rather than sitting above it, so the readout costs no extra row.
+
+### Changed
+
+- **The HUD's geometry is derived in one place.** The map pane, the log pane
+  and the right-hand column are no longer three independent fractions of the
+  window. They come from one calculation, which is what lets the column run
+  to the bottom edge and the log stop at the column's left edge instead of
+  passing underneath it.
+- **The right-hand column is narrower and full height.** Its contents are
+  unchanged for now and will look cramped; the panes that belong in it land
+  over the next few releases.
+
+### Fixed
+
+- **A builder and a digger are drawn while they work.** A tamed program
+  holding a build or dig post disappeared off the map for the whole job, so
+  filing a build request made a program vanish and a structure appear a few
+  hundred ticks later with nothing having visibly walked, fetched or built.
+  Marking a wall did the same to whoever went to cut it. The "somebody is on
+  this job" mark was missing from both ends of a build posting, and is back.
+- **The build caret bounces in the middle of its slab** instead of sitting
+  high in the tile. It was riding the staffed mark's upward-only curve, whose
+  rest position is an inset off the tile's bottom edge rather than the centre
+  of a slab.
+
 ## 0.13.36
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

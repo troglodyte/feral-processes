@@ -696,9 +696,6 @@ pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<
         .collect()
 }
 
-/// Every filled rect's whole box, for a caller asking *where* something was
-/// painted rather than how wide it is.
-#[cfg(test)]
 /// A shape's kind, coarsely, for a test that cares which of two things was
 /// painted first rather than what either of them was.
 #[cfg(test)]
@@ -728,6 +725,9 @@ pub(crate) fn paint_order(shapes: &[egui::epaint::ClippedShape]) -> Vec<Painted>
         .collect()
 }
 
+/// Every filled rect's whole box, for a caller asking *where* something was
+/// painted rather than how wide it is.
+#[cfg(test)]
 pub(crate) fn painted_rects(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::Rect> {
     shapes
         .iter()

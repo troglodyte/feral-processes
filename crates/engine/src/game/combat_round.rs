@@ -405,7 +405,7 @@ impl Game {
                 }
             }
         };
-        self.log_kind(MessageKind::PartyDamage, line);
+        self.log_swing(MessageKind::PartyDamage, outcome, line);
 
         if !self.creature_alive(front) && self.finish_group_member(live, player) {
             return true;
@@ -1080,7 +1080,7 @@ impl Game {
                             self.fumble_line_for_other(name, "the routine", rung)
                         }
                     };
-                    self.log_kind(hit_kind, line);
+                    self.log_swing(hit_kind, outcome, line);
                     // The rider lands on a hit only. This branch cannot live
                     // inside `apply_damage`, which has no notion of a miss.
                     if outcome.damage_to_defender() > 0
@@ -1120,7 +1120,7 @@ impl Game {
                             // the two read as one another's outcomes.
                             _ => format!("{name} siphons nothing from {on}."),
                         };
-                        self.log_kind(hit_kind, line);
+                        self.log_swing(hit_kind, outcome, line);
                         continue;
                     }
                     // Off the damage actually dealt, not the authored power:
@@ -1134,8 +1134,9 @@ impl Game {
                     // so the half the line is read for. It keeps the number
                     // emphasis `PartyDamage` gave it because `Heal` shares
                     // that styling — see `render/mod.rs::draw_message_line`.
-                    self.log_kind(
+                    self.log_swing(
                         heal_kind,
+                        outcome,
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),
                     );
                 }

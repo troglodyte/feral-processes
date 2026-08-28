@@ -4,18 +4,22 @@
 use crate::*;
 
 impl App {
-    /// Shared tail of every battle-turn key handler: queues the sound for
-    /// the action just taken, then — once `check_game_over` has had a
-    /// chance to move `self.mode` to `Mode::GameOver` — queues whichever
-    /// outcome sound actually applies. A `Flee` action never gets a
-    /// `Victory` sound layered on top of it even though it also ends the
-    /// battle, since jacking out isn't a win.
-    fn push_battle_outcome_sounds(&mut self, action_sound: SoundEvent, still_active: bool) {
-        self.pending_sounds.push(action_sound);
+    /// Shared tail of every battle-turn key handler: queues an immediate cue
+    /// for the action just taken — `None` for a plain swing, which now earns
+    /// its cue from `App::advance_reveal` as its own narration line scrolls
+    /// in rather than the instant the round resolves — then, once
+    /// `check_game_over` has had a chance to move `self.mode` to
+    /// `Mode::GameOver`, queues whichever outcome sound actually applies. A
+    /// `Flee` action never gets a `Victory` sound layered on top of it even
+    /// though it also ends the battle, since jacking out isn't a win.
+    fn push_battle_outcome_sounds(&mut self, action_sound: Option<SoundEvent>, still_active: bool) {
+        if let Some(sound) = action_sound {
+            self.pending_sounds.push(sound);
+        }
         self.check_game_over();
         if self.mode == Mode::GameOver {
             self.pending_sounds.push(SoundEvent::Defeat);
-        } else if !still_active && action_sound != SoundEvent::Flee {
+        } else if !still_active && action_sound != Some(SoundEvent::Flee) {
             self.pending_sounds.push(SoundEvent::Victory);
         }
     }
@@ -134,14 +138,15 @@ impl App {
                 // restart is guarded on the fight being over.
                 self.settle_after_round(still_active);
                 // A pinned attempt is not an escape: what the player hears
-                // is the volley it drew, not the jack-out that didn't
-                // happen. The engine logs why, so there's nothing to add to
-                // the status line.
-                let sound = if escaped {
-                    SoundEvent::Flee
-                } else {
-                    SoundEvent::Attack
-                };
+                // is the retaliation it drew, and that retaliation is real
+                // swing narration (`Game::battle_flee` calls
+                // `all_wild_retaliate` on a refusal) — so it earns its cue
+                // the same way any other round's swings do, from
+                // `advance_reveal` as each line scrolls in, and there is
+                // nothing immediate to queue here. The engine logs why the
+                // escape failed, so there's nothing to add to the status
+                // line either.
+                let sound = escaped.then_some(SoundEvent::Flee);
                 self.push_battle_outcome_sounds(sound, still_active);
             }
             PartyCommandKind::AllDefend => self.plan_every_slot(BattleAction::Defend),
@@ -173,7 +178,7 @@ impl App {
         game.battle_resolve_round();
         let still_active = game.has_active_battle();
         self.settle_after_round(still_active);
-        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+        self.push_battle_outcome_sounds(None, still_active);
     }
 
     /// Picks which enemy group the action chosen in `Mode::Battle` hits —
@@ -430,7 +435,7 @@ impl App {
         game.battle_resolve_round();
         let still_active = game.has_active_battle();
         self.settle_after_round(still_active);
-        self.push_battle_outcome_sounds(SoundEvent::Attack, still_active);
+        self.push_battle_outcome_sounds(None, still_active);
     }
 
     /// The shared tail of every action that can end a battle.

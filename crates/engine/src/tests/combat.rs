@@ -926,3 +926,72 @@ fn a_party_members_hit_is_logged_as_party_damage() {
         game.message_log(200)
     );
 }
+
+/// Sets up the same one-sided battle `a_party_members_hit_is_logged_as_
+/// party_damage` does — enough wild HP that the round runs to completion
+/// either way — so the four tests below only have to force a band and read
+/// the party's own line back.
+fn battle_for_swing_outcomes(seed: u32) -> (Game, Entity, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let wild = game.spawn_wild_creature("glitch", 5, 5).unwrap();
+    game.world.get_mut::<Stats>(wild).unwrap().hp = 500;
+    game.world.get_mut::<Stats>(wild).unwrap().max_hp = 500;
+    insert_battle(&mut game, player, vec![wild]);
+    (game, player, wild)
+}
+
+fn partys_swing_outcome(game: &Game) -> Option<SwingOutcome> {
+    game.message_log(50)
+        .into_iter()
+        .find(|l| l.kind == MessageKind::PartyDamage)
+        .expect("the player's swing logs a PartyDamage line")
+        .outcome
+}
+
+/// Which band a party member's swing landed on rides along on the log line
+/// (`resources::SwingOutcome`), which is what lets a frontend fire a
+/// per-swing sound cue as the reveal releases that exact line rather than
+/// one blip for the whole round. Four bands, four tests: three forced
+/// through `support`'s matchup-independent fixtures, and the plain miss
+/// through the matchup-aware one — `force_the_next_attack_to_miss` actually
+/// forces a *fumble* (see its doc comment), so it is not a substitute for
+/// the fourth.
+///
+/// All four resolve the swing through `support::player_swings_at_group`
+/// rather than a full `resolve_round_with` round: `Game::roll_initiative`
+/// draws once per living actor ahead of anyone's attack roll, which would
+/// spend the forced draw on an initiative die instead of on the swing these
+/// tests are pinning down.
+#[test]
+fn a_partys_crit_carries_the_swing_outcome() {
+    let (mut game, ..) = battle_for_swing_outcomes(52);
+    force_the_next_attack_to_crit(&mut game);
+    player_swings_at_group(&mut game, 0);
+    assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Crit));
+}
+
+#[test]
+fn a_partys_hit_carries_the_swing_outcome() {
+    let (mut game, ..) = battle_for_swing_outcomes(52);
+    force_the_next_attack_to_land(&mut game);
+    player_swings_at_group(&mut game, 0);
+    assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Hit));
+}
+
+#[test]
+fn a_partys_fumble_carries_the_swing_outcome() {
+    let (mut game, ..) = battle_for_swing_outcomes(52);
+    force_the_next_attack_to_miss(&mut game);
+    player_swings_at_group(&mut game, 0);
+    assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Fumble));
+}
+
+#[test]
+fn a_partys_plain_miss_carries_the_swing_outcome() {
+    let (mut game, player, wild) = battle_for_swing_outcomes(52);
+    let range = game.attack_range(player, crate::tuning::PLAYER_UNARMED_DAMAGE);
+    force_the_next_attack_to_miss_plainly(&mut game, player, wild, battle::Swing::plain(range));
+    player_swings_at_group(&mut game, 0);
+    assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Miss));
+}

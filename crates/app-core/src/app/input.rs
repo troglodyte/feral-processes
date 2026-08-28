@@ -3,6 +3,20 @@
 
 use crate::*;
 
+/// Which cue a swing's band plays. Three clips, not four: `Fumble` plays
+/// `Miss` rather than a fourth sound, since both are "the swing failed" to
+/// the ear and the log line already carries the extra severity narration
+/// (a plain miss glances off; a fumble backfires, or worse) — a distinct
+/// fumble clip would be the one cue in the game keyed to something the
+/// player has to read the log to tell apart from a miss by sound alone.
+fn swing_sound(outcome: SwingOutcome) -> SoundEvent {
+    match outcome {
+        SwingOutcome::Crit => SoundEvent::Crit,
+        SwingOutcome::Hit => SoundEvent::Hit,
+        SwingOutcome::Miss | SwingOutcome::Fumble => SoundEvent::Miss,
+    }
+}
+
 /// The transitions that re-enter a list the player was already in, and so
 /// must not have their highlight reset to the top of it. Every other mode
 /// change starts fresh — see `App::handle_key`.
@@ -251,13 +265,24 @@ impl App {
     /// rather than landing as a block. A frontend calls this once a frame
     /// with that frame's delta.
     ///
+    /// **Also where a per-swing sound cue fires**, one line at a time as the
+    /// reveal releases it, rather than once for the whole round the instant
+    /// it resolves. `revealed` is a count of *raw* lines into
+    /// `Game::battle_log` — the same figure `battle_rows` truncates by and
+    /// `condense` folds only *after* — so indexing `lines` with it, rather
+    /// than reading a folded display row, is what keeps a wipe that condenses
+    /// three kills into one row from silently dropping two cues: each raw
+    /// line still gets counted here even though the pane draws it as part of
+    /// someone else's row.
+    ///
     /// Takes the delta rather than reading a clock: the suite forbids
     /// wall-clock dependence, and an injected `dt` is what makes the pacing
     /// testable without a sleep.
     pub fn advance_reveal(&mut self, dt: f32) {
         let Some(game) = &self.game else { return };
         let generation = game.battle_log_generation();
-        let total = game.battle_log().len();
+        let lines = game.battle_log();
+        let total = lines.len();
         if self.reveal.generation != generation {
             self.reveal = BattleReveal {
                 generation,
@@ -270,6 +295,9 @@ impl App {
         self.reveal.accumulated += dt * REVEAL_LINES_PER_SECOND;
         while self.reveal.accumulated >= 1.0 && self.reveal.revealed < total {
             self.reveal.accumulated -= 1.0;
+            if let Some(outcome) = lines[self.reveal.revealed].outcome {
+                self.pending_sounds.push(swing_sound(outcome));
+            }
             self.reveal.revealed += 1;
         }
         // Credit left over once the last line is out would otherwise be

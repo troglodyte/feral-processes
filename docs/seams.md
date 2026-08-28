@@ -4136,6 +4136,165 @@ default, so `log`/`log_kind` are untouched and only the base-side sites use
 follows you into the Stack. A new tagging decision goes in the table in
 `MessageSource`'s doc comment, not in a caller's head.
 
+### A swing's outcome is a third axis on `LogLine`, `resources::SwingOutcome`, and it is keyed to the raw line the reveal releases, never to a condensed row
+
+**A swing's outcome is a third axis on `LogLine`, `resources::SwingOutcome`,
+and it is keyed to the raw line the reveal releases, never to a condensed
+row.** 2026-08-28. The problem: battle had one sound for everything that
+wasn't a flee/victory/defeat, `SoundEvent::Attack`, pushed once per *round*
+the instant `battle_resolve_round` returned — while the log pane was still
+scrolling that round's lines in one at a time at `REVEAL_LINES_PER_SECOND`.
+A round resolving several swings on both sides got one blip standing for all
+of them, fired before the player had read a word of what happened.
+
+**The interface question was where the classification lives**, and the two
+candidates were a third field on `LogLine` (beside `kind` and `source`, which
+already exist for the same reason: `MessageKind` has three consumers that
+disagree about what it means) or a parallel record keyed by line index — a
+second `BattleTimeline`. The timeline was rejected on inspection:
+`resources::BattleTimeline` stores *rendered roster snapshots* keyed to a
+line **count** rather than an index (`frame_at` walks forward), built for
+replaying what the roster looked like at a point in the reveal, not for
+tagging one line with a fact about itself. A parallel structure would also
+have to independently agree with every one of `MessageLog`'s own drops and
+drains (`retain_outcomes_since_battle`, the `MESSAGE_LOG_CAP` trim) on what
+index means what — two sources of truth for the same sequence. A field on
+`LogLine` costs nothing extra to keep in sync, because `Game::battle_log`
+already returns lines in the exact raw order the reveal counts through.
+`SwingOutcome` is deliberately **not** `battle::AttackOutcome` reused
+directly — it strips the damage figure and the four-way `FumbleRung` detail,
+because the one reader is a sound cue picking one of three clips, and the
+damage number is already in the line's own `text` for anyone who wants it.
+`From<AttackOutcome> for SwingOutcome` is the one reduction, and
+`swing_outcome_reduces_every_attack_outcome_band` in `tests/message_log.rs`
+pins every `FumbleRung` variant collapsing to the same cue.
+
+**Confirmed the struct is not saved.** `MessageLog` is `#[derive(Resource,
+Default)]` with no `Serialize`/`Deserialize` and no entry in `save.rs` — logs
+are transient, never written to a save file — so adding a field to `LogLine`
+costs no `SAVE_FORMAT_VERSION` bump regardless of whether it's wrapped in
+`#[serde(default)]`, and it isn't. This was checked rather than assumed;
+CLAUDE.md's moddability rules exist precisely because "it's probably fine"
+about a save-adjacent struct has bitten this repo before.
+
+**The keying trap, and why it is the load-bearing half.** `App::advance_reveal`
+already had a `revealed: usize` counter pacing the narration, one raw line at
+a time. The temptation is to fire a cue off whatever the *pane* is about to
+draw — but the pane's rows go through two more transforms after the raw
+count: `battle_rows` truncates to `revealed` and **then** drops anything not
+`MessageSource::Field`, and `resources::condense` folds repeated lines
+together **after** that truncation, both deliberately in that order (see the
+`MessageSource` and "three log surfaces fold repeats" entries below and in
+CLAUDE.md). A cue keyed to a condensed *row* index would file one cue for a
+round that kills seven identical hostiles in one blow-by-blow, rather than
+seven — silently desyncing the audio from the log the instant a wipe folds.
+A cue keyed to a *filtered* row index would drift the moment a base line
+landed inside the round's range (the trailing `tick` in
+`battle_resolve_round` can push production news into `since_round`'s slice —
+see the entry above). The fix: index `Game::battle_log()` — the raw,
+per-line, unfiltered, unfolded `Vec<LogLine>` — with the same `revealed`
+counter that already paces the pane, inside the `while` loop that increments
+it, one line at a time. `a_swings_cue_fires_exactly_when_its_own_line_is_revealed`
+in `crates/app-core/src/tests/battle.rs` pins the timing: no cue before the
+swing's own line, one that matches once it lands.
+
+**Three cues, not four.** The four bands `battle::resolve_attack` draws are
+crit, hit, fumble, miss (see "One draw, four bands" above), but the sound
+design settled on three: `SwingOutcome::Fumble` plays the same clip as
+`Miss` (`app::input::swing_sound`, a private `fn` rather than a method, since
+nothing else needs to call it). Considered and rejected: a fourth,
+distinct "fumble" clip. The log line already narrates a fumble's severity in
+words (`fumble_line_for_player`/`_for_other`, four rungs from "wide open" to
+"hard-faults"), so a fourth *sound* would be the one cue in the game keyed to
+something the player has to read the log to tell apart from a miss by ear
+alone — and a miss and a fumble are both, to the ear, "the swing failed."
+
+**What happened to `SoundEvent::Attack`.** Nothing pushes it any more, so it
+was deleted — variant, wav, and the `attack` field in `gui::SoundBank` — per
+CLAUDE.md's no-cruft rule. Two of its three old call sites
+(`plan_every_slot`, `commit_battle_action`) now pass `None` to
+`push_battle_outcome_sounds`, whose `action_sound` parameter became
+`Option<SoundEvent>` for exactly this: a plain swing earns nothing
+*immediate* any more, only what the reveal fires later. The third,
+`run_party_command`'s `JackOut` arm, is the one CLAUDE.md flagged as worth
+reasoning through explicitly: a *refused* jack-out still resolves a round
+(`Game::battle_flee` calls `self.all_wild_retaliate(player)` on failure,
+before bumping the round counter and ticking), and that retaliation is real
+swing narration running through `wild_retaliate`'s own `log_swing` calls —
+so it already earns a cue from the reveal exactly like any other round's
+swings, and there is nothing left for `run_party_command` to push
+immediately. `a_refused_jack_out_still_earns_a_swing_cue_from_the_reveal`
+pins it. A *successful* escape keeps its own `SoundEvent::Flee`, pushed
+immediately as before — fleeing has no swing to wait for and reads as its
+own discrete outcome, the same footing as `Victory`/`Defeat`.
+
+**A skip silences the cues it skipped past, and that falls out of the
+mechanism rather than needing a special case.** `App::finish_reveal` (the
+"any key during a reveal dumps the rest" path in `handle_key`) sets
+`revealed` straight to the total without walking `advance_reveal`'s `while`
+loop, so it never touches `pending_sounds` at all. A skip means "show me the
+end," not "play every blow I skipped past in one burst" —
+`skipping_a_reveal_silences_the_swing_cues_it_skipped_past` pins the
+behaviour, not because anyone had to gate it, but so a future change to
+`finish_reveal` that *did* start walking the loop would have a test to
+answer to.
+
+**The testing trap this surfaced, worth knowing before writing another
+seeded battle-band test.** `crate::tests::support::force_the_next_attack_to_land`
+and friends work by scanning for a `GameRng` seed whose very first `f64`
+draw lands in a target band, then installing it. That is exactly right for
+a test that resolves one swing directly. It is **not** right for a test
+that drives the swing through `Game::battle_resolve_round` (or
+`support::resolve_round_with`, which calls it): `Game::roll_initiative`
+draws once per living actor, through `Rng::random_range`, before anyone's
+`resolve_attack` roll — so even a one-party-member, one-wild-creature fixture
+burns two draws on initiative dice before the swing that matters, and the
+"forced" roll lands on an initiative die instead. The three new
+`force_the_next_attack_to_*` fixtures added here (`_to_crit`, and the
+matchup-aware `_to_miss_plainly` — `_to_miss` was already forcing a
+*fumble*, not a plain miss, and stayed that way) would have been just as
+broken driven through a full round; `support::player_swings_at_group` sets
+up `BattleState::round_targets` by hand (the one thing
+`battle_resolve_round` does before `roll_initiative` that
+`Game::party_member_attacks` needs) and calls the swing directly, skipping
+initiative and every other actor's turn. Discovered by two tests
+(crit, fumble) both landing as `Hit` regardless of which band was forced —
+the tell was that they agreed with each other rather than with the band
+requested, which is what a downstream, uncontrolled draw looks like rather
+than a wiring bug.
+
+**The plain-miss band is not matchup-independent, unlike its three
+siblings.** `hit_chance` clamps to `[HIT_CHANCE_MIN, HIT_CHANCE_MAX]`
+(0.25..0.95), so the crit band `[0, CRIT_CHANCE)` and the fumble band
+`[1 - FUMBLE_CHANCE, 1)` are guaranteed non-empty for *any* matchup — the
+floor sits above `CRIT_CHANCE` and the ceiling below `1 - FUMBLE_CHANCE` by
+construction. The plain-miss band `[h, 1 - FUMBLE_CHANCE)` has no such
+guarantee: a lopsided-enough matchup can clamp `h` all the way to
+`HIT_CHANCE_MAX`, closing the band to nothing. `force_the_next_attack_to_miss_plainly`
+takes the actual pairing and reads `h` off `combatant_profile` — the same
+call `resolve_and_apply_attack` makes — rather than assuming a fixed band,
+and asserts the band is non-empty before scanning, so a fixture that picked
+too lopsided a pairing fails with a reason instead of exhausting 100,000
+seeds in silence.
+
+**The three new wavs, and the level-balance constraint.** `hit.wav` is the
+old `attack.wav`, renamed rather than resynthesized — it was already
+balanced against the rest of the family (peak 13106 of a 32767 ceiling,
+16-bit mono 22050Hz PCM, matching every other clip in `assets/sounds/`), and
+the ordinary case sounding like what "an action happened" always sounded
+like needed no argument for changing it. `crit.wav` is the same
+descending-chirp family pitched roughly a fifth higher (300Hz → 100Hz
+against `hit`'s 150Hz → 50Hz) with a short high tick layered on the onset,
+peak rescaled to 15500 — louder than `hit` by a deliberate, modest margin,
+nowhere near clipping. `miss.wav` inverts the shape on purpose — an
+*ascending* 220Hz → 420Hz sweep rather than a descending thud — at peak 7200,
+matching `step.wav`'s level, so a failed swing reads as smaller than a
+landed one by ear alone before the log text says why. The synthesis script
+is a scratchpad throwaway (phase-accumulated sine chirps with a linear
+fade-in/sustain/fade-out envelope), not committed to the repo — `sounds.rs`'s
+own doc comment is explicit that these are procedural blips, not assets
+someone would want to regenerate from source.
+
 ### `MessageSource` has two readers, and the battle pane's is not the filter
 
 **`MessageSource` has two readers, and the battle pane's is not the

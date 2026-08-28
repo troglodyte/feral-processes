@@ -100,13 +100,140 @@ fn battle_action_keys_come_from_the_engine_with_only_the_party_pair_case_sensiti
     for key in probes {
         let mut app = battling_app();
         app.handle_key(GameKey::Char(key));
-        let acted =
-            !app.take_sounds().is_empty() || app.status_line.is_some() || app.mode != Mode::Battle;
+        // `is_revealing` stands in for "a round resolved" now that a plain
+        // swing earns its sound from `advance_reveal` as its own line scrolls
+        // in rather than immediately: a resolved round always has fresh,
+        // unrevealed narration the instant it exists (the round header if
+        // nothing else), even for an action — Defend, say — that queues no
+        // sound of its own and neither refuses nor ends the fight.
+        let acted = !app.take_sounds().is_empty()
+            || app.status_line.is_some()
+            || app.mode != Mode::Battle
+            || app.is_revealing();
         assert!(
             acted,
             "[{key}] is advertised by the engine, but the keypress was swallowed"
         );
     }
+}
+
+/// The bug this feature exists to fix: a resolved round used to queue its
+/// sound the instant it existed, while the log pane was still scrolling the
+/// round in line by line. Nothing should play until the reveal has actually
+/// released the swing's narration.
+#[test]
+fn a_resolved_rounds_sound_does_not_play_before_anything_is_revealed() {
+    let mut app = battling_app();
+    app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+    assert!(
+        app.take_sounds().is_empty(),
+        "the round has just resolved; nothing should have played yet"
+    );
+    assert!(
+        app.is_revealing(),
+        "a resolved round always has fresh narration to scroll in"
+    );
+}
+
+/// The other half: once the reveal *has* released the round, a plain swing
+/// has earned one of the three per-band cues — never the old
+/// `SoundEvent::Attack`, which this branch deleted along with its wav.
+/// `battling_app` doesn't pin down which band the swing lands on, so this
+/// checks the shape of the result rather than which of the three.
+#[test]
+fn a_resolved_swing_earns_one_of_the_three_band_cues_once_revealed() {
+    let mut app = battling_app();
+    app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+    let _ = app.take_sounds();
+
+    app.advance_reveal(1_000.0);
+    let sounds = app.take_sounds();
+    assert!(
+        sounds
+            .iter()
+            .any(|s| matches!(s, SoundEvent::Hit | SoundEvent::Crit | SoundEvent::Miss)),
+        "a resolved swing should have played one of the three swing cues, got {sounds:?}"
+    );
+}
+
+/// **Keyed to the raw line the reveal is releasing, not to the round as a
+/// whole.** `Game::battle_log` is the same raw, per-line order
+/// `App::advance_reveal` counts through — so the swing's cue must not play
+/// on any earlier tick, only the one that actually reveals its line.
+#[test]
+fn a_swings_cue_fires_exactly_when_its_own_line_is_revealed() {
+    let mut app = battling_app();
+    app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+    let _ = app.take_sounds();
+
+    let lines = app.game.as_ref().unwrap().battle_log();
+    let swing_index = lines
+        .iter()
+        .position(|l| l.outcome.is_some())
+        .expect("a resolved attack always narrates at least one swing");
+
+    for _ in 0..swing_index {
+        app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+        assert!(
+            app.take_sounds().is_empty(),
+            "no swing cue should fire before its own line is revealed"
+        );
+    }
+    app.advance_reveal(1.0 / REVEAL_LINES_PER_SECOND);
+    let sounds = app.take_sounds();
+    assert!(
+        sounds
+            .iter()
+            .any(|s| matches!(s, SoundEvent::Hit | SoundEvent::Crit | SoundEvent::Miss)),
+        "the swing's own line should have released its cue, got {sounds:?}"
+    );
+}
+
+/// A key pressed mid-reveal dumps the rest of the narration at once — see
+/// `App::handle_key`'s guard on `is_revealing`. The remaining swing cues go
+/// silent along with it: a skip means "show me the end", not "play every
+/// blow I skipped past".
+#[test]
+fn skipping_a_reveal_silences_the_swing_cues_it_skipped_past() {
+    let mut app = battling_app();
+    app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+    let _ = app.take_sounds();
+    assert!(app.is_revealing(), "the round should still be scrolling in");
+
+    app.handle_key(GameKey::Esc);
+
+    assert!(
+        !app.is_revealing(),
+        "the keypress should have finished the reveal"
+    );
+    assert!(
+        app.take_sounds().is_empty(),
+        "a skipped reveal must not dump every swing's cue at once"
+    );
+}
+
+/// A pinned jack-out still resolves a round — the party's escape fails and
+/// the pack retaliates — so it earns its cue the same way any other round's
+/// swings do, from the reveal, rather than from the deleted
+/// `SoundEvent::Attack` this case used to double up as.
+#[test]
+fn a_refused_jack_out_still_earns_a_swing_cue_from_the_reveal() {
+    let mut app = battling_app();
+    app.handle_key(GameKey::Char('J'));
+    if app.mode != Mode::Battle {
+        // The escape succeeded outright — a different, valid outcome this
+        // seed can roll — so there is no retaliation round to check.
+        return;
+    }
+    let _ = app.take_sounds();
+    app.advance_reveal(1_000.0);
+    let sounds = app.take_sounds();
+    assert!(
+        sounds
+            .iter()
+            .any(|s| matches!(s, SoundEvent::Hit | SoundEvent::Crit | SoundEvent::Miss)),
+        "a refused jack-out's retaliation should still narrate a swing with a cue, got {sounds:?}"
+    );
 }
 
 /// The complaint that started this work: with one group left there is no

@@ -86,7 +86,7 @@ use resources::{
 };
 pub use resources::{
     DifficultyMode, EffectKind, LabourDemand, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind,
-    MessageSource, SlotShift, VisualEffect, condense,
+    MessageSource, SlotShift, SwingOutcome, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

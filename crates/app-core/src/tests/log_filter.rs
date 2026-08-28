@@ -10,6 +10,7 @@ fn field(text: &str) -> LogLine {
         kind: MessageKind::Info,
         source: MessageSource::Field,
         text: text.to_string(),
+        outcome: None,
     }
 }
 
@@ -18,6 +19,7 @@ fn base(text: &str) -> LogLine {
         kind: MessageKind::Raid,
         source: MessageSource::Base,
         text: text.to_string(),
+        outcome: None,
     }
 }
 
@@ -26,6 +28,7 @@ fn outcome(text: &str) -> LogLine {
         kind: MessageKind::Outcome,
         source: MessageSource::Field,
         text: text.to_string(),
+        outcome: None,
     }
 }
 

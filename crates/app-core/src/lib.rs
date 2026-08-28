@@ -39,7 +39,8 @@ use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, ContractRefusal, ContractRow,
     DifficultyMode, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
-    ProgramSaleOption, SlotShift, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    ProgramSaleOption, SlotShift, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport,
+    WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -619,9 +620,17 @@ pub enum SoundEvent {
     Step,
     /// A movement key walked the player into a wild creature.
     BattleStart,
-    /// The player or a companion took a battle action (attack, decompile
-    /// attempt, or a companion command).
-    Attack,
+    /// One swing in a resolved round landed cleanly, party or wild side
+    /// alike. Fired by `App::advance_reveal` as that swing's own narration
+    /// line is released, not when the round resolves — so the cue tracks
+    /// what the player is reading rather than announcing the whole round
+    /// the instant it exists. See `resources::SwingOutcome`.
+    Hit,
+    /// The `SwingOutcome::Crit` sibling of `Hit`, same timing.
+    Crit,
+    /// The `SwingOutcome::Miss` sibling of `Hit`, same timing.
+    /// `SwingOutcome::Fumble` plays this too — see `app::input::swing_sound`.
+    Miss,
     /// The player jacked out of a battle.
     Flee,
     /// A battle ended with the wild creature gone and the player still

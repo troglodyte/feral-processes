@@ -2315,6 +2315,51 @@ pub(crate) fn force_the_next_attack_to_land(game: &mut Game) {
     );
 }
 
+/// The other matchup-independent corner: the next attack crits.
+///
+/// `0.0..CRIT_CHANCE` is the band `resolve_attack` checks first, ahead of
+/// `hit_chance`'s clamp even being consulted, so — like
+/// `force_the_next_attack_to_land`'s band — no test using this has to know
+/// what it is fighting.
+pub(crate) fn force_the_next_attack_to_crit(game: &mut Game) {
+    seed_the_next_roll_into(game, 0.0..crate::tuning::CRIT_CHANCE);
+}
+
+/// Reseeds `resources::GameRng` so `attacker`'s next `swing` at `defender`
+/// resolves as a plain miss — not a fumble.
+///
+/// **Not matchup-independent**, unlike its three siblings above: the
+/// plain-miss band is `[h, 1 - FUMBLE_CHANCE)`, and `h` can clamp all the way
+/// up to `HIT_CHANCE_MAX`, closing that band to nothing for a lopsided
+/// pairing. So this reads the pairing's actual `h` off `combatant_profile`
+/// — the same call `resolve_and_apply_attack` makes — rather than assuming a
+/// fixed band, and asserts the band is non-empty before scanning for a seed
+/// in it, so a fixture that picked too lopsided a pairing fails with a
+/// reason instead of spinning through 100,000 seeds for nothing.
+pub(crate) fn force_the_next_attack_to_miss_plainly(
+    game: &mut Game,
+    attacker: Entity,
+    defender: Entity,
+    swing: battle::Swing,
+) {
+    let accuracy = game.combatant_profile(attacker, swing).accuracy;
+    let evasion = game
+        .combatant_profile(
+            defender,
+            battle::Swing::plain(battle::DamageRange::centred(0, 0)),
+        )
+        .evasion;
+    let band = battle::hit_chance(accuracy, evasion)..(1.0 - crate::tuning::FUMBLE_CHANCE);
+    assert!(
+        !band.is_empty(),
+        "plain-miss band is empty for this pairing (h={}, fumble starts at {}); \
+         pick a less lopsided matchup",
+        band.start,
+        band.end
+    );
+    seed_the_next_roll_into(game, band);
+}
+
 /// The mirror of `force_the_next_attack_to_land`: the next attack fumbles,
 /// and so deals nothing to its target.
 ///
@@ -2327,6 +2372,27 @@ pub(crate) fn force_the_next_attack_to_land(game: &mut Game) {
 #[allow(dead_code)]
 pub(crate) fn force_the_next_attack_to_miss(game: &mut Game) {
     seed_the_next_roll_into(game, (1.0 - crate::tuning::FUMBLE_CHANCE)..1.0);
+}
+
+/// Sets up `BattleState::round_targets` the way `Game::battle_resolve_round`
+/// does at the top of a round, then resolves the player's own swing at
+/// `group` directly, skipping `Game::roll_initiative` and every other
+/// actor's turn.
+///
+/// **The reason this exists rather than going through
+/// `resolve_round_with`**: `roll_initiative` draws once per living actor,
+/// through `Rng::random_range`, before anyone's `resolve_attack` roll — so a
+/// `force_the_next_attack_to_*` fixture's forced draw lands on an initiative
+/// die instead of on the attack it was aimed at, and the actual swing rolls
+/// whatever the stream happens to hold next. A one-sided fixture (one party
+/// member, one enemy) still burns two draws this way before the swing that
+/// matters.
+pub(crate) fn player_swings_at_group(game: &mut Game, group: usize) {
+    let player = game.player_entity();
+    if let Some(mut battle) = game.world.get_resource_mut::<BattleState>() {
+        battle.round_targets = battle.groups.iter().map(|g| g.members.clone()).collect();
+    }
+    game.party_member_attacks(0, player, group, player);
 }
 
 /// Scans for a `GameRng` seed whose first `f64` draw falls in `band` and

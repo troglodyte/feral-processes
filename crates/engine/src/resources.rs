@@ -3,7 +3,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::battle::{BattleAction, EnemyGroup};
+use crate::battle::{AttackOutcome, BattleAction, EnemyGroup};
 use crate::items::GearCopy;
 use crate::stack::{Dir, Frame};
 use crate::structures::StructureId;
@@ -162,6 +162,39 @@ pub enum MessageSource {
     Base,
 }
 
+/// Which of `battle::resolve_attack`'s four bands landed, for the one line
+/// that narrates a swing. Stripped down to the band alone — no damage
+/// figure, no `battle::FumbleRung` — because the only reader is a per-swing
+/// sound cue picking one of a handful of clips; the damage and the rung are
+/// already in the line's own `text` for anyone reading that.
+///
+/// A third axis on `LogLine`, beside `kind` and `source`, rather than a
+/// parallel record keyed by line index (a second `BattleTimeline`, say):
+/// `Game::battle_log` already returns lines in the raw order
+/// `App::advance_reveal` counts through to pace the reveal, so keying the
+/// cue to the line it describes costs nothing extra to keep in sync — a
+/// parallel structure would have to agree with `MessageLog`'s own drops and
+/// drains on every index by hand. `None` for every line that isn't swing
+/// narration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwingOutcome {
+    Crit,
+    Hit,
+    Miss,
+    Fumble,
+}
+
+impl From<AttackOutcome> for SwingOutcome {
+    fn from(outcome: AttackOutcome) -> Self {
+        match outcome {
+            AttackOutcome::Crit { .. } => SwingOutcome::Crit,
+            AttackOutcome::Hit { .. } => SwingOutcome::Hit,
+            AttackOutcome::Miss => SwingOutcome::Miss,
+            AttackOutcome::Fumble(_) => SwingOutcome::Fumble,
+        }
+    }
+}
+
 /// One line as stored. A struct rather than the `(kind, text)` tuple it grew
 /// from: with a third field the positional form stops reading, and every
 /// consumer already wanted to name what it was reaching for.
@@ -170,6 +203,7 @@ pub struct LogLine {
     pub kind: MessageKind,
     pub source: MessageSource,
     pub text: String,
+    pub outcome: Option<SwingOutcome>,
 }
 
 /// Where a battle's narration begins, as a count of lines ever pushed.
@@ -231,23 +265,42 @@ impl MessageLog {
     }
 
     pub fn push_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
-        self.push_line(kind, MessageSource::Field, line);
+        self.push_line(kind, MessageSource::Field, None, line);
     }
 
     /// News from the base rather than from wherever the party is standing.
     pub fn push_base(&mut self, line: impl Into<String>) {
-        self.push_line(MessageKind::Info, MessageSource::Base, line);
+        self.push_line(MessageKind::Info, MessageSource::Base, None, line);
     }
 
     pub fn push_base_kind(&mut self, kind: MessageKind, line: impl Into<String>) {
-        self.push_line(kind, MessageSource::Base, line);
+        self.push_line(kind, MessageSource::Base, None, line);
     }
 
-    fn push_line(&mut self, kind: MessageKind, source: MessageSource, text: impl Into<String>) {
+    /// Narrates one resolved swing, tagging the line with the band it
+    /// landed on — see `SwingOutcome`. Always `MessageSource::Field`: base
+    /// production never swings at anything.
+    pub fn push_swing(
+        &mut self,
+        kind: MessageKind,
+        outcome: SwingOutcome,
+        line: impl Into<String>,
+    ) {
+        self.push_line(kind, MessageSource::Field, Some(outcome), line);
+    }
+
+    fn push_line(
+        &mut self,
+        kind: MessageKind,
+        source: MessageSource,
+        outcome: Option<SwingOutcome>,
+        text: impl Into<String>,
+    ) {
         self.lines.push(LogLine {
             kind,
             source,
             text: text.into(),
+            outcome,
         });
         self.pushed += 1;
         if self.lines.len() > MESSAGE_LOG_CAP {

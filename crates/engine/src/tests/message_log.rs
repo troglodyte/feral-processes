@@ -2,7 +2,8 @@
 
 use super::support::test_assets_dir;
 use crate::resources::{
-    CONDENSE_LOOKBACK, DifficultyMode, LogEntry, LogLine, MessageKind, MessageSource, condense,
+    CONDENSE_LOOKBACK, DifficultyMode, LogEntry, LogLine, MessageKind, MessageSource, SwingOutcome,
+    condense,
 };
 
 fn line(kind: MessageKind, source: MessageSource, text: &str) -> LogLine {
@@ -10,6 +11,7 @@ fn line(kind: MessageKind, source: MessageSource, text: &str) -> LogLine {
         kind,
         source,
         text: text.to_string(),
+        outcome: None,
     }
 }
 
@@ -214,4 +216,52 @@ fn a_refusal_stays_out_of_the_log_during_a_battle() {
         before,
         "a refusal must not enter the log while a battle is open"
     );
+}
+
+/// `SwingOutcome` collapses `battle::AttackOutcome` to just the band — no
+/// damage figure, no `FumbleRung` detail — since the only reader is a
+/// per-swing sound cue picking one of a handful of clips, and every one of
+/// those clips is what a fumble sounds like regardless of which rung it
+/// landed on.
+#[test]
+fn swing_outcome_reduces_every_attack_outcome_band() {
+    use crate::battle::{AttackOutcome, FumbleRung};
+    assert_eq!(
+        SwingOutcome::from(AttackOutcome::Crit { dmg: 9 }),
+        SwingOutcome::Crit
+    );
+    assert_eq!(
+        SwingOutcome::from(AttackOutcome::Hit { dmg: 4 }),
+        SwingOutcome::Hit
+    );
+    assert_eq!(SwingOutcome::from(AttackOutcome::Miss), SwingOutcome::Miss);
+    for rung in [
+        FumbleRung::Exposed,
+        FumbleRung::Recoil { dmg: 1 },
+        FumbleRung::Opening { dmg: 0 },
+        FumbleRung::Crash,
+    ] {
+        assert_eq!(
+            SwingOutcome::from(AttackOutcome::Fumble(rung)),
+            SwingOutcome::Fumble,
+            "every fumble rung reduces to the same cue: {rung:?}"
+        );
+    }
+}
+
+/// `Game::log_swing` is the only `log_*` variant that stamps a line with a
+/// `SwingOutcome` — plain narration stays `None`, which
+/// `an_ordinary_log_line_is_field_sourced` above already covers for `log`.
+#[test]
+fn log_swing_stamps_the_line_with_its_outcome() {
+    let mut game = crate::Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.log_swing(
+        MessageKind::PartyDamage,
+        crate::battle::AttackOutcome::Crit { dmg: 12 },
+        "you tear it clean through",
+    );
+    let last = game.message_log(1);
+    assert_eq!(last[0].outcome, Some(SwingOutcome::Crit));
+    assert_eq!(last[0].kind, MessageKind::PartyDamage);
+    assert_eq!(last[0].source, MessageSource::Field);
 }

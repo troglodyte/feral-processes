@@ -38,6 +38,24 @@ impl Game {
         self.snapshot_roster();
     }
 
+    /// Narrates a resolved swing, the way `log_kind` narrates everything
+    /// else — but tagged with the band `outcome` landed on, which is what
+    /// lets a frontend's reveal fire a per-swing sound cue instead of one
+    /// blip for the whole round. The only `log_*` variant that takes an
+    /// `AttackOutcome`; every call site already has one in hand from
+    /// `resolve_and_apply_attack`.
+    pub(crate) fn log_swing(
+        &mut self,
+        kind: MessageKind,
+        outcome: battle::AttackOutcome,
+        s: impl Into<String>,
+    ) {
+        self.world
+            .resource_mut::<MessageLog>()
+            .push_swing(kind, outcome.into(), s);
+        self.snapshot_roster();
+    }
+
     /// News from the base — production, construction, and the base coming
     /// under attack. `log` stays the default because most of the game is not
     /// the base; see `MessageSource`.

@@ -21,7 +21,9 @@ use feral_processes_app_core::SoundEvent;
 pub struct SoundBank {
     step: Handle<AudioSource>,
     battle_start: Handle<AudioSource>,
-    attack: Handle<AudioSource>,
+    hit: Handle<AudioSource>,
+    crit: Handle<AudioSource>,
+    miss: Handle<AudioSource>,
     flee: Handle<AudioSource>,
     victory: Handle<AudioSource>,
     defeat: Handle<AudioSource>,
@@ -37,7 +39,9 @@ impl SoundBank {
         Self {
             step: add(include_bytes!("../../../assets/sounds/step.wav")),
             battle_start: add(include_bytes!("../../../assets/sounds/battle_start.wav")),
-            attack: add(include_bytes!("../../../assets/sounds/attack.wav")),
+            hit: add(include_bytes!("../../../assets/sounds/hit.wav")),
+            crit: add(include_bytes!("../../../assets/sounds/crit.wav")),
+            miss: add(include_bytes!("../../../assets/sounds/miss.wav")),
             flee: add(include_bytes!("../../../assets/sounds/flee.wav")),
             victory: add(include_bytes!("../../../assets/sounds/victory.wav")),
             defeat: add(include_bytes!("../../../assets/sounds/defeat.wav")),
@@ -56,7 +60,9 @@ impl SoundBank {
         let source = match event {
             SoundEvent::Step => &self.step,
             SoundEvent::BattleStart => &self.battle_start,
-            SoundEvent::Attack => &self.attack,
+            SoundEvent::Hit => &self.hit,
+            SoundEvent::Crit => &self.crit,
+            SoundEvent::Miss => &self.miss,
             SoundEvent::Flee => &self.flee,
             SoundEvent::Victory => &self.victory,
             SoundEvent::Defeat => &self.defeat,

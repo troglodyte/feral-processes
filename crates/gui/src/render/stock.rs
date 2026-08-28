@@ -32,7 +32,7 @@ pub(super) fn strip_height(m: &Metrics) -> f32 {
 /// Two pieces rather than one string because they are drawn in different
 /// colours — the tag is chrome the eye skips once it has learnt the row,
 /// and the number is the thing being read.
-fn pieces(rows: &[StockRow]) -> Vec<(String, String)> {
+pub(super) fn pieces(rows: &[StockRow]) -> Vec<(String, String)> {
     rows.iter()
         .map(|r| (format!("[{}]", r.tag), format!(" {}", r.qty)))
         .collect()
@@ -40,7 +40,7 @@ fn pieces(rows: &[StockRow]) -> Vec<(String, String)> {
 
 /// The plain text of the first `shown` piles, with a `+N` tail when the
 /// rest did not fit. What gets measured, and what the runs below spell.
-fn line(pieces: &[(String, String)], shown: usize) -> String {
+pub(super) fn line(pieces: &[(String, String)], shown: usize) -> String {
     let mut out = String::new();
     for (tag, qty) in pieces.iter().take(shown) {
         if !out.is_empty() {
@@ -66,7 +66,12 @@ fn line(pieces: &[(String, String)], shown: usize) -> String {
 /// proportional, so a row of narrow tags fits piles a row of wide ones does
 /// not. The status column seam is the warning here — a row too wide is not
 /// clipped, it is simply drawn off the end of the panel in silence.
-fn fits(pieces: &[(String, String)], avail: f32, painter: &Painter, m: &Metrics) -> usize {
+pub(super) fn fits(
+    pieces: &[(String, String)],
+    avail: f32,
+    painter: &Painter,
+    m: &Metrics,
+) -> usize {
     let mut shown = 0;
     for take in 1..=pieces.len() {
         if painter.measure_ui_advance(line(pieces, take), m.font_size) > avail {

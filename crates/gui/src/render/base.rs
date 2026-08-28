@@ -562,6 +562,10 @@ pub(super) fn draw_playing_base(
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
+    let vitals = hud::map_frame::Vitals {
+        status: &status,
+        mining: game.mining(),
+    };
     if let Some(view) = game.stack_view() {
         draw_stack(&view, painter, regions.map_pane, m);
         // Over the corridor, not part of it: the same map the `g` screen
@@ -569,8 +573,21 @@ pub(super) fn draw_playing_base(
         if let Some(map) = game.frame_map() {
             draw_map_inset(&map, stack_zoom, painter, regions.map_pane, m);
         }
+        // No surface entities are fetched down here, so there is nothing to
+        // count hostiles among — the threat readout names what the surface
+        // map shows, not what a stack frame's own view holds.
+        hud::map_frame::draw_map_frame(
+            regions.map_pane,
+            &vitals,
+            hud::map_frame::Threat {
+                hostiles: 0,
+                shielded: game.raid_defense_active(),
+            },
+            painter,
+            m,
+        );
     } else {
-        draw_surface_map(
+        let entities = draw_surface_map(
             game,
             fx,
             painter,
@@ -579,6 +596,17 @@ pub(super) fn draw_playing_base(
             glyph_px,
             &status,
             plan,
+        );
+        let hostiles = entities.iter().filter(|e| e.is_hostile).count();
+        hud::map_frame::draw_map_frame(
+            regions.map_pane,
+            &vitals,
+            hud::map_frame::Threat {
+                hostiles,
+                shielded: game.raid_defense_active(),
+            },
+            painter,
+            m,
         );
     }
 
@@ -746,6 +774,11 @@ fn history_rows(entries: &[LogEntry], selected: usize) -> Vec<Row> {
 /// The zone map: terrain, entities and effects, drawn top-down into the pane
 /// at the origin. The other half of the pane's contents is `draw_stack`,
 /// which replaces this entirely while the party is underground.
+///
+/// Returns the entities it drew — `draw_map_frame`'s threat readout counts
+/// hostiles among them, and hoisting them out here is what keeps that a
+/// second look at a Vec already built rather than a second call to
+/// `Game::view_entities`.
 #[allow(clippy::too_many_arguments)]
 fn draw_surface_map(
     game: &mut Game,
@@ -756,7 +789,7 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
-) {
+) -> Vec<EntityView> {
     // Two rings wider than the pane can show. The first is the tile the
     // camera's sub-tile offset slides in from, without which the trailing
     // edge goes blank; the second exists so *that* tile has neighbours of its
@@ -1280,6 +1313,7 @@ fn draw_surface_map(
         });
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
+    entities
 }
 
 /// What the Excavation plan is drawing over the base map: where the cursor
@@ -1634,6 +1668,86 @@ mod tests {
 
     fn test_assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// A fresh `App` with a game already in progress, for a test that draws
+    /// `draw_playing_base` directly rather than one of its pieces. `game` is
+    /// assigned by hand instead of walking `App::handle_key` through the new
+    /// game flow — this only needs *a* game standing on the surface, not the
+    /// menu path that produces one.
+    fn playing_app() -> feral_processes_app_core::App {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let tmp =
+            std::env::temp_dir().join(format!("fp_gui_map_frame_census_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut app = feral_processes_app_core::App::new(
+            root.join("assets"),
+            tmp.join("saves"),
+            tmp.join("history.log"),
+            tmp.join("profile.ron"),
+            root.join("dev-arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        app.game = Some(
+            Game::new(7, DifficultyMode::Forgiving, &test_assets())
+                .expect("the shipped assets must load"),
+        );
+        app
+    }
+
+    /// **The trap Task 4 exists to close.** `border_strip` paints its own
+    /// background quad, so calling `draw_map_frame` before the pane's
+    /// contents lets the map's own fill paint straight over the frame's
+    /// strips — the design handoff's own recorded failure.
+    /// `a_strip_paints_its_background_before_its_glyphs` in `hud::strip`
+    /// only proves the order *inside* `border_strip`; this is the half only
+    /// visible a level up, where the map pane's own background rect and the
+    /// frame's title text are two separate calls inside `draw_playing_base`.
+    #[test]
+    fn the_map_frame_draws_after_the_map() {
+        let mut app = playing_app();
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (regions, shapes) = with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let regions = hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            regions
+        });
+
+        let pane = regions.map_pane;
+        let map_bg = shapes
+            .iter()
+            .position(|cs| match &cs.shape {
+                // `fill.a() > 0` is load-bearing: `draw_map_frame` also
+                // paints a rect the exact size of the pane — its border, via
+                // `rect_lines`, which is a stroke with a *transparent* fill.
+                // Matching on geometry alone would find that border instead
+                // of the map's own `painter.rect(...)` fill and pass by
+                // accident whichever one drew first.
+                bevy_egui::egui::Shape::Rect(r) => {
+                    r.fill.a() > 0
+                        && (r.rect.min.x - pane.x).abs() < 0.5
+                        && (r.rect.min.y - pane.y).abs() < 0.5
+                        && (r.rect.width() - pane.w).abs() < 0.5
+                        && (r.rect.height() - pane.h).abs() < 0.5
+                }
+                _ => false,
+            })
+            .expect("the map pane paints a background rect the size of the pane");
+        let title = shapes
+            .iter()
+            .position(|cs| {
+                matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text() == "SECTOR MAP")
+            })
+            .expect("the map frame paints its title");
+
+        assert!(
+            title > map_bg,
+            "the map's background painted at {map_bg}, SECTOR MAP at {title} — \
+             the frame drew before the map, so its own fill painted over the label"
+        );
     }
 
     /// `draw_playing_base` no longer computes its own rects — it reads them

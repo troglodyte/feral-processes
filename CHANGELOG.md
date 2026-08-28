@@ -27,6 +27,31 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.45
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release changes what the game says when it refuses you and stores
+nothing.
+
+A rest that does not happen says why. `r` was reported dead in the Stack
+again after it was bound there; it is not dead, but a rest that could not
+happen accounted for itself nowhere the player was looking, which from
+outside is the same event as a key that does nothing.
+
+### Fixed
+
+- **Every rest that is refused now says so**, on the status banner and in
+  the log, on the surface and underground alike. Three of the four ways a
+  rest could fail said nothing at all, and the fourth spoke through a log
+  line the channel filter could hide.
+- **An empty stack in the pack is no longer mistaken for a rest charge.** A
+  slot that had been emptied still counted as something to power down with,
+  so the refusal that should have named it was skipped and the rest failed
+  silently one step later.
+- **Every other refusal on the map and Stack screens reaches the log too.**
+  Both screens were writing the banner directly, so a refused verb aged out
+  of view after a few seconds and left nothing to scroll back to.
+
 ## 0.13.44
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

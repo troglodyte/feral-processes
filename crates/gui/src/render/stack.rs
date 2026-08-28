@@ -780,9 +780,17 @@ mod tests {
     fn the_longest_underfoot_line_fits_the_stack_pane() {
         const NARROWEST_WINDOW: (f32, f32) = (1280.0, 720.0);
         let m = crate::text::ui_metrics(NARROWEST_WINDOW.1);
-        let pane_w = NARROWEST_WINDOW.0 * super::super::base::PANE_W;
         let longest = "M".repeat(feral_processes_engine::MAX_UNDERFOOT_LINE);
         crate::paint::with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane_w = super::super::hud::layout::regions(
+                NARROWEST_WINDOW.0,
+                NARROWEST_WINDOW.1,
+                char_w,
+                &m,
+            )
+            .map_pane
+            .w;
             let dims = p.measure_ui(&longest, m.font_size);
             assert!(
                 dims.width <= pane_w,

@@ -598,10 +598,14 @@ mod tests {
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
-            // The status panel is the window's width less the map pane's
-            // `PANE_W`, and `draw_status_buffs` is called one inset in — the
-            // same 1440x900 geometry `ui_metrics` is calibrated for.
-            let room = 1440.0 * (1.0 - super::super::base::PANE_W) - m.inset * 2.0;
+            // The status column is `hud::layout::regions`' `info_column`, and
+            // `draw_status_buffs` is called one inset in — the same 1440x900
+            // geometry `ui_metrics` is calibrated for.
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m)
+                .info_column
+                .w
+                - m.inset * 2.0;
             for row in buff_rows(&rows, TagStyle::OwnLine) {
                 let Row::Item { text, suffix, .. } = &row else {
                     continue;
@@ -664,7 +668,11 @@ mod tests {
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
-            let room = 1440.0 * (1.0 - super::super::base::PANE_W) - m.inset * 2.0;
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m)
+                .info_column
+                .w
+                - m.inset * 2.0;
             for row in buff_rows(&rows, TagStyle::OwnLine) {
                 // Both kinds, and measured the way `buff_panel_width`
                 // measures each: a holder line that overran would be just

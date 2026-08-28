@@ -465,15 +465,15 @@ mod tests {
         }
     }
 
-    /// The pane the inset lives in, at a given window size — built from the
-    /// same constants `draw_playing_base` divides the screen with, so a
-    /// change to the layout moves these tests rather than leaving them
-    /// asserting against a pane that no longer exists.
-    fn pane(window_w: f32, window_h: f32) -> (f32, f32) {
-        (
-            window_w * super::super::base::PANE_W,
-            window_h * super::super::base::PANE_H,
-        )
+    /// The pane the inset lives in, at a given window size — read from the
+    /// same `hud::layout::regions` `draw_playing_base` reads, so a change to
+    /// the layout moves these tests rather than leaving them asserting
+    /// against a pane that no longer exists.
+    fn pane(p: &Painter, window_w: f32, window_h: f32) -> (f32, f32) {
+        let m = crate::text::ui_metrics(window_h);
+        let char_w = p.measure_ui_advance("M", m.font_size);
+        let r = super::super::hud::layout::regions(window_w, window_h, char_w, &m);
+        (r.map_pane.w, r.map_pane.h)
     }
 
     /// The two window sizes the design sized the inset against.
@@ -488,47 +488,51 @@ mod tests {
     /// to its right and the message log below — it may overlap none of them.
     #[test]
     fn the_inset_clears_the_heading_and_stays_inside_the_pane() {
-        for (ww, wh) in WINDOWS {
-            let m = crate::text::ui_metrics(wh);
-            let (w, h) = pane(ww, wh);
-            let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
-            assert!(
-                r.y >= m.inset + m.font_size as f32,
-                "{ww}x{wh}: the inset covers the Facing/Depth/Trace heading"
-            );
-            assert!(r.x >= 0.0 && r.y >= 0.0);
-            assert!(
-                r.x + r.w <= w,
-                "{ww}x{wh}: the inset runs into the status panel"
-            );
-            assert!(
-                r.y + r.h <= h,
-                "{ww}x{wh}: the inset runs into the message log"
-            );
-        }
+        crate::paint::with_painter(|p| {
+            for (ww, wh) in WINDOWS {
+                let m = crate::text::ui_metrics(wh);
+                let (w, h) = pane(p, ww, wh);
+                let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
+                assert!(
+                    r.y >= m.inset + m.font_size as f32,
+                    "{ww}x{wh}: the inset covers the Facing/Depth/Trace heading"
+                );
+                assert!(r.x >= 0.0 && r.y >= 0.0);
+                assert!(
+                    r.x + r.w <= w,
+                    "{ww}x{wh}: the inset runs into the status panel"
+                );
+                assert!(
+                    r.y + r.h <= h,
+                    "{ww}x{wh}: the inset runs into the message log"
+                );
+            }
+        });
     }
 
     /// The inset shows the whole frame, so every cell of it has to fit —
     /// a grid clipped by its own border would silently hide a wing.
     #[test]
     fn the_whole_frame_fits_inside_the_inset() {
-        for (ww, wh) in WINDOWS {
-            let m = crate::text::ui_metrics(wh);
-            let (w, h) = pane(ww, wh);
-            let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
-            let v = view(21, 21);
-            let (ox, oy, cell) = layout(&v, r.w, r.h, INSET_FILL);
-            assert!(cell > 0.0);
-            assert!(ox >= -0.001 && oy >= -0.001);
-            assert!(
-                ox + cell * 21.0 <= r.w + 0.001,
-                "{ww}x{wh}: the grid overflows the inset"
-            );
-            assert!(
-                oy + cell * 21.0 <= r.h + 0.001,
-                "{ww}x{wh}: the grid overflows the inset"
-            );
-        }
+        crate::paint::with_painter(|p| {
+            for (ww, wh) in WINDOWS {
+                let m = crate::text::ui_metrics(wh);
+                let (w, h) = pane(p, ww, wh);
+                let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
+                let v = view(21, 21);
+                let (ox, oy, cell) = layout(&v, r.w, r.h, INSET_FILL);
+                assert!(cell > 0.0);
+                assert!(ox >= -0.001 && oy >= -0.001);
+                assert!(
+                    ox + cell * 21.0 <= r.w + 0.001,
+                    "{ww}x{wh}: the grid overflows the inset"
+                );
+                assert!(
+                    oy + cell * 21.0 <= r.h + 0.001,
+                    "{ww}x{wh}: the grid overflows the inset"
+                );
+            }
+        });
     }
 
     /// The inset's whole risk is being too small to read. A `!` cache marker
@@ -539,24 +543,26 @@ mod tests {
     fn inset_glyphs_stay_legible_at_the_smallest_window() {
         let (ww, wh) = WINDOWS[1];
         let m = crate::text::ui_metrics(wh);
-        let (w, h) = pane(ww, wh);
-        let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
-        let (_, _, cell) = layout(&view(21, 21), r.w, r.h, INSET_FILL);
-        assert!(
-            glyph_px(cell) >= MIN_INSET_GLYPH_PX,
-            "{ww}x{wh}: inset glyphs are {}px, below the {MIN_INSET_GLYPH_PX}px floor",
-            glyph_px(cell)
-        );
+        crate::paint::with_painter(|p| {
+            let (w, h) = pane(p, ww, wh);
+            let r = inset_rect(Rect::new(0.0, 0.0, w, h), &m);
+            let (_, _, cell) = layout(&view(21, 21), r.w, r.h, INSET_FILL);
+            assert!(
+                glyph_px(cell) >= MIN_INSET_GLYPH_PX,
+                "{ww}x{wh}: inset glyphs are {}px, below the {MIN_INSET_GLYPH_PX}px floor",
+                glyph_px(cell)
+            );
+        });
     }
 
     #[test]
     fn drawing_the_inset_does_not_panic() {
         let m = crate::text::ui_metrics(720.0);
-        let (w, h) = pane(1280.0, 720.0);
         let mut empty = view(0, 0);
         empty.cells = Vec::new();
         empty.marks = vec![((99, 99), FrameMapMark::Party)];
         crate::paint::with_painter(|p| {
+            let (w, h) = pane(p, 1280.0, 720.0);
             draw_map_inset(
                 &view(21, 21),
                 STACK_MAP_MIN_ZOOM,

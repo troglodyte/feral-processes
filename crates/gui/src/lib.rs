@@ -670,7 +670,7 @@ mod tests {
         assert!(
             paint::painted_text(&shapes)
                 .iter()
-                .any(|t| t.starts_with("Base stock")),
+                .any(|t| t.starts_with("base stock")),
             "the playing screen draws no stock strip at all"
         );
     }
@@ -688,7 +688,7 @@ mod tests {
         let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
         let painted = paint::painted_text(&shapes);
         assert!(
-            painted.iter().any(|t| t.starts_with("Base stock")),
+            painted.iter().any(|t| t.starts_with("base stock")),
             "a menu buried the strip: {painted:?}"
         );
     }

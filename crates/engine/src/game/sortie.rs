@@ -304,6 +304,293 @@ impl Game {
         Ok(())
     }
 
+    /// One tick of every trip currently in flight.
+    ///
+    /// A **`Game` method, not a bevy system** — `run_dig_crew` and
+    /// `run_repair_bays`' reason: it names programs through
+    /// `creature_label`, it logs, and it damages through `apply_damage`, and
+    /// a bevy system would have to be a second copy of all three.
+    pub(crate) fn run_sorties(&mut self) {
+        // `run_dig_crew`'s guard, and `nest_aggro_tick`'s obligation:
+        // anything that can change the world from inside a tick inherits the
+        // battle check. A squad's fight resolving mid-battle would spend the
+        // player's own `GameRng` draws underneath the round they are looking
+        // at.
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        if self
+            .world
+            .resource::<crate::resources::Sorties>()
+            .0
+            .is_empty()
+        {
+            return;
+        }
+        let mut index = 0;
+        while index < self.world.resource::<crate::resources::Sorties>().0.len() {
+            self.step_sortie(index);
+            // A trip that came home dropped its own record, so the index
+            // already names the next one.
+            if self.returned_sortie(index) {
+                continue;
+            }
+            index += 1;
+        }
+    }
+
+    /// Advances one trip by a tick, fighting a battle if one is due.
+    fn step_sortie(&mut self, index: usize) {
+        let (elapsed, total, due) = {
+            let sortie = &mut self.world.resource_mut::<crate::resources::Sorties>().0[index];
+            sortie.ticks_elapsed += 1;
+            (
+                sortie.ticks_elapsed,
+                sortie.ticks_total,
+                battles_due(
+                    sortie.ticks_elapsed,
+                    sortie.ticks_total,
+                    sortie.battles_total,
+                ),
+            )
+        };
+        let aborted = self.world.resource::<crate::resources::Sorties>().0[index].aborted;
+        while !aborted
+            && self.world.resource::<crate::resources::Sorties>().0[index].battles_done < due
+        {
+            self.resolve_sortie_battle(index);
+            if self.world.resource::<crate::resources::Sorties>().0[index].aborted {
+                break;
+            }
+        }
+        if elapsed >= total {
+            self.return_sortie(index);
+        }
+    }
+
+    /// Whether the record at `index` is gone — i.e. the trip came home.
+    fn returned_sortie(&self, index: usize) -> bool {
+        index >= self.world.resource::<crate::resources::Sorties>().0.len()
+            || self.world.resource::<crate::resources::Sorties>().0.len() < index + 1
+    }
+
+    /// One battle, **entirely inside this call**: spawn, fight, despawn.
+    ///
+    /// This is the load-bearing decision of the whole feature. No bevy
+    /// system runs mid-method, so the opposition is never observed by the
+    /// map, the examine ray, `cull_to_cap`, `ensure_local_population` or
+    /// anything else — which means the feature does not have to teach four
+    /// systems about a new space, and cannot reintroduce the "which space is
+    /// this?" bug class. **A hostile that outlives its battle is a defect**,
+    /// not a tuning question.
+    fn resolve_sortie_battle(&mut self, index: usize) {
+        let (risk, members) = {
+            let sortie = &self.world.resource::<crate::resources::Sorties>().0[index];
+            (sortie.risk, sortie.members.clone())
+        };
+        // The pool is drawn against the party's own anchor tile, which is a
+        // real walkable surface tile of this sector — base-space coordinates
+        // are a different space and `habitat_pools` would answer about
+        // whatever surface ground happened to share the numbers.
+        let (ax, ay) = self.anchor_position().unwrap_or((0, 0));
+        let species = {
+            let Some((candidates, _)) = self.habitat_pools(ax, ay, None, risk) else {
+                return;
+            };
+            if candidates.is_empty() {
+                return;
+            }
+            let mut rng = self.world.resource_mut::<crate::resources::GameRng>();
+            let pick = rand::RngExt::random_range(&mut rng.0, 0..candidates.len());
+            candidates[pick].clone()
+        };
+        let hostiles = self.spawn_pack(
+            &species,
+            false,
+            SORTIE_SENTINEL.0,
+            SORTIE_SENTINEL.1,
+            crate::game::spawning::SpawnEscalation::surface(),
+        );
+
+        let mut casualty = None;
+        let mut kills = 0;
+        for _ in 0..crate::tuning::SORTIE_MAX_BATTLE_ROUNDS {
+            // Sorted by entity for `assembler_system`'s reason: bevy's
+            // iteration order is not stable and two squads would resolve
+            // differently between runs.
+            let mut actors: Vec<Entity> = members
+                .iter()
+                .chain(hostiles.iter())
+                .copied()
+                .filter(|&e| self.creature_alive(e))
+                .collect();
+            actors.sort();
+            for actor in actors {
+                if !self.creature_alive(actor) {
+                    continue;
+                }
+                let ours = members.contains(&actor);
+                let targets: Vec<Entity> = if ours { &hostiles } else { &members }
+                    .iter()
+                    .copied()
+                    .filter(|&e| self.creature_alive(e))
+                    .collect();
+                let Some(&front) = targets.first() else {
+                    break;
+                };
+                self.swing_for_the_squad(actor, front, &targets);
+                self.tick_ability_cooldowns(actor);
+            }
+            kills = hostiles
+                .iter()
+                .filter(|&&e| !self.creature_alive(e))
+                .count();
+            casualty = members.iter().copied().find(|&e| !self.creature_alive(e));
+            if casualty.is_some() || kills == hostiles.len() {
+                break;
+            }
+        }
+
+        // Priced while the fallen are still standing there: `kill_xp` reads
+        // the victim's own `Stats`, so this cannot move below the despawn.
+        let mut earned = 0;
+        for &hostile in &hostiles {
+            if self.creature_alive(hostile) {
+                continue;
+            }
+            let paid = (self.kill_xp(hostile) as f32 * crate::tuning::SORTIE_XP_MULTIPLIER) as u32;
+            earned += paid;
+            for &member in &members {
+                if self.creature_alive(member) {
+                    self.award_companion_xp(member, paid);
+                }
+            }
+        }
+
+        // **Unconditional, and every hostile, living or not.** Whatever the
+        // outcome, nothing of the opposition may outlive this call — that is
+        // the whole of what keeps this feature out of the "which space is
+        // this?" bug class.
+        for &hostile in &hostiles {
+            self.world.entity_mut(hostile).despawn();
+        }
+
+        let downed = casualty.map(|e| (e, self.bench_or_dissolve(e)));
+        for &member in &members {
+            if !self.creature_alive(member) {
+                continue;
+            }
+            let heal = {
+                let stats = self.world.get::<Stats>(member).expect("a living member");
+                (stats.max_hp as f32 * crate::tuning::SORTIE_PROVISION_HEAL_FRACTION) as i32
+            };
+            self.restore_hp(member, heal);
+        }
+
+        let sortie = &mut self.world.resource_mut::<crate::resources::Sorties>().0[index];
+        sortie.battles_done += 1;
+        sortie.kills += kills as u32;
+        sortie.xp += earned;
+        if let Some((entity, name)) = downed {
+            sortie.aborted = true;
+            sortie.casualties.push(name);
+            // Dropped from the squad rather than left in it. Under
+            // Permadeath `bench_or_dissolve` has despawned the entity, and a
+            // record naming a dead id would panic the return line that goes
+            // to label it; under Forgiving the program is `Downed` and walks
+            // itself to a Repair Bay once the record is gone, which it
+            // cannot do while it is still away.
+            sortie.members.retain(|&e| e != entity);
+        }
+    }
+
+    /// A trip reaching its last tick: the record is dropped, the loot is put
+    /// away and one line says what came back.
+    ///
+    /// Members become `Staff` again **by omission** — nothing writes a role
+    /// anywhere, which is the whole of why the fourth variant was worth
+    /// having. A Forgiving casualty comes home still carrying `Downed` and
+    /// walks itself to a Repair Bay through the existing `Downed` arm of
+    /// `drift_idle_staff`; there is no new recovery path.
+    fn return_sortie(&mut self, index: usize) {
+        let sortie = self
+            .world
+            .resource_mut::<crate::resources::Sorties>()
+            .0
+            .remove(index);
+        // Loot lands through the existing put-back, so what does not fit is
+        // **logged rather than dropped in silence** — that function's rule.
+        for (item, qty) in &sortie.loot {
+            let landed = crate::game::base::stock::return_to_depots(self, item, *qty);
+            if landed < *qty {
+                let name = self.item_name(item);
+                self.log_base(format!(
+                    "{} {name} came back with no shelf to stand on.",
+                    qty - landed
+                ));
+            }
+        }
+        let names: Vec<String> = sortie
+            .members
+            .iter()
+            .map(|&e| self.creature_label(e))
+            .collect();
+        let who = if names.is_empty() {
+            "Nobody".to_string()
+        } else {
+            names.join(", ")
+        };
+        self.log_base(format!(
+            "{who} came back from {} — {} down, {} XP.",
+            sortie.site.name, sortie.kills, sortie.xp
+        ));
+        for lost in &sortie.casualties {
+            self.log_base(format!("{lost} did not come back."));
+        }
+    }
+
+    /// One combatant's swing: the highest-priority Special it can afford
+    /// that is off cooldown, else a basic attack.
+    ///
+    /// Both sides run the same stated rule, and both resolve through the
+    /// real doors — `use_ability` and `resolve_and_apply_attack` are
+    /// `BattleState`-free, so hit chance, the crit/hit/fumble/miss ladder,
+    /// damage bands, mitigation, affinity scaling and Power costs are all
+    /// the ones a fight in front of the player uses.
+    ///
+    /// The trained enemy policy is deliberately **not** used: its selection
+    /// path reads `BattleState`, and it exists to make fights against *the
+    /// player* interesting — off-screen it would be modelling an audience
+    /// that is not present.
+    fn swing_for_the_squad(&mut self, actor: Entity, front: Entity, targets: &[Entity]) {
+        let choice = self
+            .actor_abilities(actor)
+            .into_iter()
+            .filter(|d| !d.effect.field_only() && !d.is_passive())
+            .filter(|d| !matches!(d.effect, crate::abilities::AbilityEffect::Decompile))
+            .find(|d| self.ability_unavailable(actor, d).is_none());
+        match choice {
+            Some(ability) => {
+                let recipients = match ability.target {
+                    crate::abilities::AbilityTarget::AllEnemies
+                    | crate::abilities::AbilityTarget::WholeEnemyGroup => targets.to_vec(),
+                    _ => vec![front],
+                };
+                // The charge sits here and not in `use_ability`, which the
+                // wielded proc and hostile invocations share and which stays
+                // free — the `BattleAction::Special` site's rule.
+                self.spend_power(actor, crate::abilities::routine_power_cost(&ability));
+                self.arm_cooldown(actor, &ability);
+                let name = self.creature_label(actor);
+                self.use_ability(&ability, actor, &name, &recipients);
+            }
+            None => {
+                let swing = crate::battle::Swing::plain(self.natural_range_of(actor));
+                self.resolve_and_apply_attack(actor, front, swing);
+            }
+        }
+    }
+
     /// How long a trip to a site of this risk offset, running this many
     /// battles, takes.
     ///
@@ -335,4 +622,31 @@ impl Game {
 fn salt(seed: u64, tag: &[u8], n: u64) -> u64 {
     let h = crate::game::contracts::fold(seed, tag);
     crate::game::contracts::fold(h, &n.to_le_bytes())
+}
+
+/// Where a sortie's opposition is placed for the instant it exists.
+///
+/// A fixed coordinate far outside any base or zone traffic. It needs no
+/// walkability check and no uniqueness: nothing observes these entities —
+/// they are spawned, fought and despawned inside one call — and
+/// `spawn_pack`'s scatter is harmless here.
+const SORTIE_SENTINEL: (i32, i32) = (1 << 22, 1 << 22);
+
+/// How many of a trip's battles should have been fought by `elapsed`.
+///
+/// Fights fall at even intervals across the **middle** of the trip, with the
+/// travel split half out and half back — so a squad is not fighting the
+/// instant it leaves and is not fighting on the doorstep coming home.
+fn battles_due(elapsed: u64, total: u64, battles: u32) -> u32 {
+    if battles == 0 || total == 0 {
+        return 0;
+    }
+    let fighting = crate::tuning::SORTIE_TICKS_PER_BATTLE * battles as u64;
+    let travel = total.saturating_sub(fighting);
+    let start = travel / 2;
+    if elapsed <= start {
+        return 0;
+    }
+    let into = elapsed - start;
+    ((into / crate::tuning::SORTIE_TICKS_PER_BATTLE) as u32).min(battles)
 }

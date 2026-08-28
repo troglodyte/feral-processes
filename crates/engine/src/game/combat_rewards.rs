@@ -812,66 +812,81 @@ impl Game {
         if amount == 0 {
             return;
         }
-        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
-            let species_growth = self
-                .world
-                .get::<Creature>(companion)
-                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
-                .map(|s| s.growth_multiplier)
-                .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
-            let individual_roll = self
-                .world
-                .get::<Potential>(companion)
-                .map(|p| p.growth_roll)
-                .unwrap_or(Potential::NEUTRAL.growth_roll);
-            let growth_multiplier = species_growth * individual_roll;
-            let before_level = self
-                .world
-                .get::<Experience>(companion)
-                .map(|e| e.level)
-                .unwrap_or(1);
-            let level_cap = self.level_cap();
-            let gain = {
-                let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
-                let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
-                    continue;
-                };
-                progression::add_xp(
-                    &mut exp,
-                    &mut stats,
-                    amount,
-                    growth_multiplier,
-                    Some(level_cap),
-                    xp_boost_pct,
-                )
+            self.award_companion_xp(companion, amount);
+        }
+    }
+
+    /// One owned program's share of a kill, grown, levelled and announced.
+    ///
+    /// Split out of `award_party_xp` rather than copied beside it: a sortie
+    /// pays its squad the same way a fight beside the player pays the party,
+    /// and a second copy of the growth roll, the cap and the tally is
+    /// exactly the drifted-formula trap this repo keeps falling into. What
+    /// differs between the two callers is *who* is paid and how much, which
+    /// is what the parameters are.
+    pub(crate) fn award_companion_xp(&mut self, companion: Entity, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        let xp_boost_pct = self.field_buff_power(self.player_entity(), FieldBuffKind::XpBoost);
+        let species_growth = self
+            .world
+            .get::<Creature>(companion)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.growth_multiplier)
+            .unwrap_or(crate::tuning::BASELINE_GROWTH_MULTIPLIER);
+        let individual_roll = self
+            .world
+            .get::<Potential>(companion)
+            .map(|p| p.growth_roll)
+            .unwrap_or(Potential::NEUTRAL.growth_roll);
+        let growth_multiplier = species_growth * individual_roll;
+        let before_level = self
+            .world
+            .get::<Experience>(companion)
+            .map(|e| e.level)
+            .unwrap_or(1);
+        let level_cap = self.level_cap();
+        let gain = {
+            let mut query = self.world.query::<(&mut Experience, &mut Stats)>();
+            let Ok((mut exp, mut stats)) = query.get_mut(&mut self.world, companion) else {
+                return;
             };
-            let level = self
-                .world
-                .get::<Experience>(companion)
-                .map(|e| e.level)
-                .unwrap_or(before_level);
-            let tally = XpTally {
-                xp: amount,
-                gain,
-                ..XpTally::default()
-            };
-            let stored = self.record_companion_xp(companion, &tally);
-            if !stored {
-                for (kind, line) in self.companion_xp_lines(companion, &tally) {
-                    self.log_kind(kind, line);
-                }
-            } else if gain.levels > 0 {
-                let name = self.creature_label(companion);
-                self.log_kind(
-                    MessageKind::LevelUp,
-                    format!("{name} reaches level {level}!"),
-                );
+            progression::add_xp(
+                &mut exp,
+                &mut stats,
+                amount,
+                growth_multiplier,
+                Some(level_cap),
+                xp_boost_pct,
+            )
+        };
+        let level = self
+            .world
+            .get::<Experience>(companion)
+            .map(|e| e.level)
+            .unwrap_or(before_level);
+        let tally = XpTally {
+            xp: amount,
+            gain,
+            ..XpTally::default()
+        };
+        let stored = self.record_companion_xp(companion, &tally);
+        if !stored {
+            for (kind, line) in self.companion_xp_lines(companion, &tally) {
+                self.log_kind(kind, line);
             }
-            if gain.levels > 0 {
-                self.install_unlocked_routines(companion, before_level, level);
-            }
+        } else if gain.levels > 0 {
+            let name = self.creature_label(companion);
+            self.log_kind(
+                MessageKind::LevelUp,
+                format!("{name} reaches level {level}!"),
+            );
+        }
+        if gain.levels > 0 {
+            self.install_unlocked_routines(companion, before_level, level);
         }
     }
 

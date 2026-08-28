@@ -182,6 +182,13 @@ impl Game {
         // are `&mut Game` doors no bevy system can reach. See
         // `Game::run_repair_bays`.
         self.run_repair_bays();
+        // Beside the two crews and the Bays, and for `run_dig_crew`'s second
+        // reason: an off-screen battle names programs through
+        // `creature_label`, damages through `apply_damage` and logs, none of
+        // which a bevy system can reach. It sits *after* them so a squad
+        // dispatched this tick does not fight before the base has finished
+        // its own beat.
+        self.run_sorties();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an

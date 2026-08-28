@@ -1,7 +1,7 @@
 //! Sorties: the role, the catalogue, the board, dispatch, the trip and the
 //! return.
 
-use bevy_ecs::prelude::Entity;
+use bevy_ecs::prelude::{Entity, With};
 
 use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
@@ -689,4 +689,307 @@ fn the_record_outlives_the_board_that_offered_it() {
     assert_eq!(now.site, signed.site);
     assert_eq!(now.battles_total, signed.battles_total);
     assert_eq!(now.ticks_total, signed.ticks_total);
+}
+
+// ------------------------------------------------------------- the trip
+
+/// A base with a squad already away, plus the members it sent.
+fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
+    let mut game = Game::new(seed, mode, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let depot = deploy(&mut game, "depot", 0, 1);
+    let currency = game.currency();
+    game.world
+        .entity_mut(depot)
+        .insert(crate::components::Stock {
+            output: [(currency, 5_000)].into_iter().collect(),
+            capacity: 9_999,
+            ..Default::default()
+        });
+    let staff: Vec<Entity> = (0..5)
+        .map(|i| {
+            game.adopt_program("scrapper", 4 + i, 4, 1.0)
+                .expect("test roster program")
+        })
+        .collect();
+    let site = game.sortie_board().expect("a Relay stands")[0].id.clone();
+    let squad = staff[..3].to_vec();
+    game.dispatch_sortie(&site, &squad)
+        .expect("a legal dispatch");
+    (game, squad)
+}
+
+/// **The load-bearing test of the feature.** A battle spawns its
+/// opposition, fights it and despawns it inside one call, so no bevy system
+/// ever observes it. A hostile that outlives its battle is a defect, not a
+/// tuning question.
+#[test]
+fn a_battle_leaves_no_hostile_behind() {
+    let (mut game, _) = a_dispatched_sortie(4700, DifficultyMode::Forgiving);
+    assert_eq!(game.world.resource::<Sorties>().0[0].battles_done, 0);
+
+    // Far enough for several battles to have fired, and short of the return.
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    for _ in 0..(total - 1) {
+        game.wait();
+    }
+
+    let record = &game.world.resource::<Sorties>().0[0];
+    assert!(
+        record.battles_done > 0 || record.aborted,
+        "the trip must actually have fought something, or this proves nothing"
+    );
+
+    // Ambient world spawns run on every tick, so the count is compared over
+    // *hostiles at the sentinel* rather than over the whole world.
+    let mut query = game
+        .world
+        .query_filtered::<&Position, With<crate::components::Hostile>>();
+    let at_sentinel = query
+        .iter(&game.world)
+        .filter(|p| p.x.abs() > 1_000_000 || p.y.abs() > 1_000_000)
+        .count();
+    assert_eq!(
+        at_sentinel, 0,
+        "a sortie battle must spawn and despawn inside one tick"
+    );
+}
+
+/// The same rule from the other side: with the ambient spawner unable to
+/// interfere, the world holds exactly as many entities after a run of
+/// off-screen battles as before them.
+#[test]
+fn the_entity_count_is_unchanged_across_a_battle() {
+    let (mut game, squad) = a_dispatched_sortie(4701, DifficultyMode::Forgiving);
+    // The squad drops on the first blow, so the battle ends with hostiles
+    // still standing. Without that the opposition dies to a man and a
+    // despawn that only cleared *corpses* would pass this — which is
+    // exactly what a mutation run found.
+    for &member in &squad {
+        game.world
+            .get_mut::<crate::components::Stats>(member)
+            .unwrap()
+            .hp = 1;
+    }
+    let before = game.world.iter_entities().count();
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed =
+        game.world.resource::<Sorties>().0[0].ticks_total / 2;
+
+    // One battle's worth of ticks, resolved directly rather than through
+    // `wait`, so ambient spawning and the caravan never enter the count.
+    game.run_sorties();
+    let record = game.world.resource::<Sorties>().0[0].clone();
+    assert!(record.battles_done > 0, "a battle must have fired");
+    assert!(
+        record.aborted,
+        "the squad must have dropped, leaving survivors on the other side"
+    );
+
+    assert_eq!(
+        game.world.iter_entities().count(),
+        before,
+        "spawn, fight and despawn all happened inside one call"
+    );
+}
+
+/// The trip aborts on the first casualty — remaining battles are skipped,
+/// the loot so far is kept, and the return travel still runs. It does not
+/// come home early.
+#[test]
+fn the_first_casualty_aborts_but_does_not_shorten_the_trip() {
+    let (mut game, squad) = a_dispatched_sortie(4702, DifficultyMode::Forgiving);
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+
+    // Put the squad one blow from dropping, so the first battle takes one.
+    for &member in &squad {
+        game.world
+            .get_mut::<crate::components::Stats>(member)
+            .unwrap()
+            .hp = 1;
+    }
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
+    game.run_sorties();
+
+    let record = game.world.resource::<Sorties>().0[0].clone();
+    assert!(record.aborted, "a casualty aborts the trip");
+    assert!(
+        record.battles_done < record.battles_total,
+        "the remaining battles are skipped"
+    );
+
+    // It is still away, and stays away until the countdown runs out.
+    let elapsed = record.ticks_elapsed;
+    for _ in 0..(total - elapsed - 1) {
+        game.run_sorties();
+        assert_eq!(
+            game.world.resource::<Sorties>().0.len(),
+            1,
+            "an aborted trip does not teleport home"
+        );
+    }
+    game.run_sorties();
+    assert!(
+        game.world.resource::<Sorties>().0.is_empty(),
+        "it comes home on the tick it was always going to"
+    );
+    assert_eq!(
+        game.world.resource::<Sorties>().0.len(),
+        0,
+        "and the record is gone"
+    );
+}
+
+/// One rule, two meanings: Forgiving benches and keeps the roster slot,
+/// Permadeath dissolves.
+#[test]
+fn a_casualty_is_benched_under_forgiving_and_dissolved_under_permadeath() {
+    for (mode, benched) in [
+        (DifficultyMode::Forgiving, true),
+        (DifficultyMode::Permadeath, false),
+    ] {
+        let (mut game, squad) = a_dispatched_sortie(4703, mode);
+        let roster_before = game.pet_count();
+        for &member in &squad {
+            game.world
+                .get_mut::<crate::components::Stats>(member)
+                .unwrap()
+                .hp = 1;
+        }
+        let total = game.world.resource::<Sorties>().0[0].ticks_total;
+        game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
+        game.run_sorties();
+
+        let record = game.world.resource::<Sorties>().0[0].clone();
+        assert!(record.aborted, "{mode:?}: somebody should have dropped");
+        assert_eq!(record.casualties.len(), 1);
+
+        let alive: usize = squad
+            .iter()
+            .filter(|&&e| game.world.get::<crate::components::Stats>(e).is_some())
+            .count();
+        if benched {
+            assert_eq!(alive, squad.len(), "Forgiving benches rather than deletes");
+            assert_eq!(
+                game.pet_count(),
+                roster_before,
+                "a benched program keeps its roster slot"
+            );
+            let downed = squad
+                .iter()
+                .filter(|&&e| game.world.get::<crate::components::Downed>(e).is_some())
+                .count();
+            assert_eq!(downed, 1, "the casualty comes home Downed");
+        } else {
+            assert_eq!(alive, squad.len() - 1, "Permadeath dissolves");
+            assert_eq!(game.pet_count(), roster_before - 1, "the slot is freed");
+        }
+    }
+}
+
+/// Provisions restore Integrity between battles, which is the single dial
+/// that decides whether a twenty-fight trip is survivable.
+#[test]
+fn provisions_restore_integrity_between_battles() {
+    let (mut game, squad) = a_dispatched_sortie(4704, DifficultyMode::Forgiving);
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    // Hurt but well clear of dropping, so the trip does not abort and the
+    // heal has room to land.
+    for &member in &squad {
+        let max_hp = game
+            .world
+            .get::<crate::components::Stats>(member)
+            .unwrap()
+            .max_hp;
+        game.world
+            .get_mut::<crate::components::Stats>(member)
+            .unwrap()
+            .hp = max_hp / 2;
+    }
+    let hurt: Vec<i32> = squad
+        .iter()
+        .map(|&e| game.world.get::<crate::components::Stats>(e).unwrap().hp)
+        .collect();
+
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
+    game.run_sorties();
+    assert!(!game.world.resource::<Sorties>().0[0].aborted);
+
+    // Somebody is better off than the damage they took would leave them —
+    // the heal is the only thing in the loop that raises Integrity.
+    let after: Vec<i32> = squad
+        .iter()
+        .map(|&e| game.world.get::<crate::components::Stats>(e).unwrap().hp)
+        .collect();
+    let heal = {
+        let max_hp = game
+            .world
+            .get::<crate::components::Stats>(squad[0])
+            .unwrap()
+            .max_hp;
+        (max_hp as f32 * crate::tuning::SORTIE_PROVISION_HEAL_FRACTION) as i32
+    };
+    assert!(heal > 0, "the provisioning heal must be worth something");
+    assert!(
+        after.iter().zip(&hurt).any(|(a, b)| a > b),
+        "provisions must put Integrity back: {hurt:?} -> {after:?}"
+    );
+}
+
+/// Power does not recover in the field, so Specials taper across a trip.
+/// This is what earns the lower yield rather than tuning it.
+#[test]
+fn power_does_not_recover_in_the_field() {
+    let (mut game, squad) = a_dispatched_sortie(4705, DifficultyMode::Forgiving);
+    // Spend a member's reserve down, then run the trip out. Nothing in the
+    // loop may put it back.
+    let member = squad[0];
+    game.spend_power(member, 999.0);
+    let drained = game
+        .world
+        .get::<crate::components::PowerReserve>(member)
+        .unwrap()
+        .get();
+
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total / 2;
+    for _ in 0..(total / 2) {
+        if game.world.resource::<Sorties>().0.is_empty() {
+            break;
+        }
+        game.run_sorties();
+    }
+
+    let after = game
+        .world
+        .get::<crate::components::PowerReserve>(member)
+        .unwrap()
+        .get();
+    assert!(
+        after <= drained,
+        "a reserve must not refill in the field: {drained} -> {after}"
+    );
+}
+
+/// A returned program is staff again by omission — nothing writes a role
+/// anywhere, which is the whole of why the fourth variant was worth having.
+#[test]
+fn a_returned_program_is_staff_again() {
+    let (mut game, squad) = a_dispatched_sortie(4706, DifficultyMode::Forgiving);
+    assert_eq!(game.program_role(squad[0]), Some(ProgramRole::Sortie));
+
+    let total = game.world.resource::<Sorties>().0[0].ticks_total;
+    game.world.resource_mut::<Sorties>().0[0].ticks_elapsed = total - 1;
+    game.run_sorties();
+
+    assert!(game.world.resource::<Sorties>().0.is_empty());
+    for &member in &squad {
+        if game.world.get::<crate::components::Stats>(member).is_none() {
+            continue;
+        }
+        assert_ne!(
+            game.program_role(member),
+            Some(ProgramRole::Sortie),
+            "the record is gone, so nothing can still call it away"
+        );
+    }
 }

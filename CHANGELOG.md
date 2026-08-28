@@ -27,6 +27,44 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.40
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release draws the same screen differently and stores nothing new.
+
+The log pane wears its filters and its keys on its borders. Phase 3 of the
+Paned Command HUD: two rows come off the pane's body and onto its frame, and
+a channel gutter goes down its left edge.
+
+### Added
+
+- **A channel gutter down the log.** Every line is tagged with where its news
+  came from — `FIELD` or `BASE`, the two the `f` key already cycles — with a
+  pickup marked `GAIN` and an inbound sweep marked `ALERT`, because those two
+  are their own news whatever channel they arrived on.
+
+### Changed
+
+- **The log's filter row moved onto the pane's top border**, where it costs
+  no body row. That is one more line of log at every window size, and the row
+  now names `L history` alongside `f cycle`.
+- **The four-line block of eighteen keys under the status column is one row
+  on the log pane's bottom border.** It is ordered by priority and measured:
+  what does not fit is dropped from the end rather than drawn off the panel
+  in silence. Movement, `b`, `i`, `? help` and `q menu` are never dropped,
+  `? help` in particular being where every key the bar had to cut still
+  lives — all of them are in the manual's Controls page. `t trade` and
+  `s save` do not fit at any supported window size and stay cut, as the
+  design handoff had them.
+
+### Fixed
+
+- **A log line can no longer draw through the keybar.** With the filter row
+  off the body the log runs a row deeper, toward the border the keys are
+  mounted on, and the keybar paints last — so a collision would have shown as
+  keys sitting on top of a half-covered line rather than as anything a reader
+  would look for.
+
 ## 0.13.39
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

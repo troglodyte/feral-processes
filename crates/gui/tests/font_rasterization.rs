@@ -88,3 +88,39 @@ fn the_ui_font_advances_every_glyph_equally() {
         );
     }
 }
+
+/// The HUD's border strips draw block glyphs, box-drawing rules and a
+/// handful of symbols that are not ASCII — meters are `█` runs, the vitals
+/// strip's perk row leads with `▸`, and the build queue marks a finished
+/// site with `✓`.
+///
+/// The design handoff says to verify these exist before starting and lists
+/// ASCII fallbacks in case any are missing. They are all present in DejaVu
+/// Sans Mono, so what this test is actually for is the *next* font: a swap
+/// that drops one of them turns a meter into a row of tofu boxes, which
+/// reads as the HUD being broken rather than as a font being wrong.
+#[test]
+fn the_ui_font_has_every_glyph_the_hud_draws() {
+    for (ch, name) in [
+        ('\u{2588}', "FULL BLOCK — meter fill and trough"),
+        ('\u{2589}', "LEFT SEVEN EIGHTHS BLOCK — crew strip"),
+        ('\u{2591}', "LIGHT SHADE — strict-16 trough fallback"),
+        ('\u{25B8}', "BLACK RIGHT-POINTING SMALL TRIANGLE — pointer"),
+        ('\u{2713}', "CHECK MARK — a finished build site"),
+        ('\u{2192}', "RIGHTWARDS ARROW — program to target"),
+        ('\u{00B7}', "MIDDLE DOT — field separator"),
+        ('\u{2500}', "BOX DRAWINGS LIGHT HORIZONTAL"),
+        ('\u{2502}', "BOX DRAWINGS LIGHT VERTICAL"),
+    ] {
+        let (metrics, coverage) = UI.rasterize(ch, 16.0);
+        assert!(
+            metrics.width > 0 && metrics.height > 0,
+            "{ch:?} ({name}) has no raster box in the UI font"
+        );
+        assert!(
+            coverage.iter().any(|&c| c > 0),
+            "{ch:?} ({name}) rasterizes to an empty bitmap — the font has no \
+             glyph for it and it will draw as tofu"
+        );
+    }
+}

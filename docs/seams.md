@@ -1860,9 +1860,16 @@ shelf and the next out of a Lathe.
 `set_machine_status`' rule — entering a state is news, staying in it is
 not. Two fields rather than one, because the two leave the player different
 errands: no route is a wall to cut, no substrate is a shelf to fill.
-Neither is saved, so a reload says both again. There is no clearing branch
-for the dry latch, unlike the stuck one: the state ends with the site,
-since the tile that resolves it despawns the entity holding the latch.
+Neither is saved, so a reload says both again. **The dry latch clears too**,
+in `Game::dig_wants` rather than at the site that resolves — a resolved
+site does despawn the entity holding the latch, but a *dry* attempt leaves
+the site standing, and a base digs many cells over a run, so a second
+drought after the first has to be news as well, not permanent silence from
+that point on. `dig_wants` is asked every tick regardless of whose turn it
+is to swing, which is what `Game::crew_lays_tile` — once per site per
+`BASE_DIG_TICKS_PER_SWING` ticks — cannot see: a unit that appears and is
+claimed by a different site before this one's own cycle comes around would
+never register from inside it.
 
 `Game::lay_tile` is deliberately untouched and still pays from the pack
 alone. It is a player verb, paid the way every other player verb is — the
@@ -6691,10 +6698,12 @@ vanish — the old refusal logged the shortfall because it was the one build
 refusal that left the player an errand, and the errand is still there, so a
 builder standing at a site with nothing anywhere to fetch says so once,
 latched on `BuildSite::announced_dry` under `set_machine_status`'
-only-on-transition rule. The latch **clears when a source appears**, unlike a
-dig site's, because a build waits on a bill of several items over many trips:
-said once and never again, a base that ran dry in zone 2 would stay silent
-about running dry in zone 6.
+only-on-transition rule. The latch **clears when a source appears**, in
+`build_wants` — said once and never again, a base that ran dry in zone 2
+would stay silent about running dry in zone 6. `DigSite::announced_dry`
+clears the same way, in `Game::dig_wants`: a build waits on a bill of
+several items over many trips and a dig plan is many cells, but both are
+the same failure mode of "restocked once is not restocked for good".
 
 **The materials are not spent until the structure is raised**, and that is
 what makes a cancel a refund rather than a rebate. Units leave their shelf

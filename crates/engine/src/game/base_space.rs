@@ -624,9 +624,17 @@ impl Game {
     /// `DigSite::announced_dry` under `systems::set_machine_status`' rule.
     /// Silence was the whole of this bug: the mark stays, the body stays
     /// posted, the tile goes down the moment a substrate exists — and none
-    /// of that is visible from a cell that simply never becomes floor. There
-    /// is no clearing branch, because the state ends with the site: the tile
-    /// that resolves it despawns the thing holding the latch.
+    /// of that is visible from a cell that simply never becomes floor.
+    ///
+    /// **The clearing branch is not here.** A tile that resolves does
+    /// despawn the `DigSite` holding the latch, but a resolved site is not
+    /// the only way this function returns without one — a dry attempt
+    /// leaves the site standing, and a base digs many cells over a run, so
+    /// a second drought after the first is the common case, not an edge
+    /// one. `Game::dig_wants` clears it instead: the scheduler is asked
+    /// every tick regardless of whose turn it is to swing, where this
+    /// function only runs once per `BASE_DIG_TICKS_PER_SWING` ticks for the
+    /// one site currently due.
     fn crew_lays_tile(&mut self, site: Entity, x: i32, y: i32) {
         let substrate = ItemId::from(crate::items::ids::BLANK_SUBSTRATE);
         if !self.spend_one_substrate(&substrate) {

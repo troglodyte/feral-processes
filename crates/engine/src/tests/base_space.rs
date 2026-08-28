@@ -2698,6 +2698,58 @@ fn a_crew_with_no_substrate_says_so_once() {
     );
 }
 
+/// The dry latch is not a one-way door: a *later* shortage at the same
+/// site has to be news too, or the crew reads as broken the moment a run
+/// digs more than one cell dry.
+///
+/// A substrate appearing and vanishing again before this site's own cycle
+/// reaches it is not contrived — it is what happens every time a restocked
+/// unit gets claimed by a different site (or a build request) first, and
+/// the base is dry from this site's point of view exactly as before. The
+/// give-then-take here stands in for that race without needing a second
+/// consumer in the fixture.
+///
+/// Mutation-proof the same way the build side's twin is: delete the
+/// clearing arm and the second assertion fails; drop the latch altogether
+/// and the first one does.
+#[test]
+fn a_crew_reports_a_later_drought_at_the_same_site() {
+    let (mut game, staff) = base_with_a_crew(3283, 1);
+    mark(&mut game, WALL);
+    let substrate = ItemId::from(ids::BLANK_SUBSTRATE);
+
+    let wait = ticks_to_cut(&game, staff[0]) + crate::tuning::BASE_DIG_TICKS_PER_SWING as usize;
+    pass(&mut game, wait);
+
+    assert_eq!(
+        lines_saying(&game, NO_SUBSTRATE),
+        1,
+        "the first drought is news"
+    );
+
+    // A source exists for one tick — long enough for the scheduler to see
+    // it and clear the latch — and is gone again before this site's own
+    // cycle comes back around to spend it.
+    give(&mut game, &substrate, 1);
+    game.tick();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .take(substrate.clone(), 1);
+
+    pass(
+        &mut game,
+        crate::tuning::BASE_DIG_TICKS_PER_SWING as usize - 1,
+    );
+
+    assert_eq!(
+        lines_saying(&game, NO_SUBSTRATE),
+        2,
+        "a later drought at the same site must be news too, not permanent silence"
+    );
+}
+
 /// Settled decision 7, and the reason digging cannot starve production: dig
 /// wants are appended last, so `truncate(staff.len())` cuts them first.
 #[test]

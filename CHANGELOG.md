@@ -27,6 +27,49 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.48
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32,
+and this release adds no save field at all — the walk below is drawn from a
+queue the engine drains every frame and never writes to disk.
+
+A squad you dispatch from the Relay used to vanish from the map on the frame
+it left. That is exactly correct as simulation and reads as a bug, so the
+bodies now walk: out from wherever each was standing, across the base pocket,
+to the anchor, and out of phase. The return is the same thing backwards — in
+through the anchor and back to the tile each body left from. A squad's
+members set off one after another rather than together, so four programs read
+as a file leaving.
+
+- The walk is **purely cosmetic**, and that is the load-bearing decision.
+  Nothing in the simulation stands on any of those cells: `dispatch_sortie`
+  and `return_sortie` each queue one `resources::TransitCue` per body — a
+  glyph and the cells it walks through — and forget it in the same call.
+  `Game::take_transits` drains the queue, `take_effects`' counterpart, and a
+  frontend that ignores it draws the game exactly as it did before.
+  `ProgramRole::Sortie`'s five omissions are untouched, which is the whole
+  point: giving an away program a live `Position` for a few ticks is the
+  "which space is this?" bug class that role was built to stay out of.
+- Departure and arrival are the **same cue with its ends swapped**, so there
+  is no direction field to get wrong.
+- The walk follows the dug ground rather than the straight line home.
+  `base_space::transit_path` pathfinds on `BaseGrid::walkable` alone and
+  admits no blocked set — the door is the cell the Home stands on, so a walk
+  that refused occupied tiles could never reach its own destination. A body
+  ghosting past a machine for a fraction of a second is invisible; one
+  ghosting through rock reads as a rendering fault.
+- The draw sits behind the gate a raid's flash already sits behind. A cue
+  names base-space cells, so one drawn while the pane is showing the zone
+  surface would file a squad of glyphs across whatever unrelated ground
+  shares those numbers, the party's own tile among them.
+- A body standing somewhere that is not walkable base space gets no walk at
+  all rather than a straight line — the ordinary state of a program adopted
+  on the surface that has not drifted into the base yet.
+
+A cue is drained on the frame it is queued, so a return walk you are not home
+to watch is dropped rather than saved for later. That matches how a raid's
+flash already behaves, and it is what keeps the whole feature free.
+
 ## 0.13.47
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

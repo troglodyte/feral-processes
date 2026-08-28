@@ -7331,3 +7331,87 @@ one state the collapsed bars exist to prevent.
 
 PACK summarises to **units carried and not a fraction**, the pack trap one
 entry up: there is no capacity to be a denominator.
+
+### A content hue is authored, and `palette::glyph` is the one table it is drawn from
+
+`components::GlyphColor` is content's colour vocabulary: eleven names, and
+every species and structure file authors one of them. The renderer's job is
+to say what each looks like, and after phase 6 it says it in one place —
+`hud::palette::glyph`, an exhaustive match reached through
+`render/mod.rs::glyph_color`, which is now a call rather than a table.
+
+**The table is a hue table and not a role table**, and that is what makes the
+palette's two reservations survive contact with moddable content. A role
+table would have to ask what a glyph *is* — hostile, owned, a machine — which
+the renderer cannot know about a hue an asset file authored, and which would
+flatten `difficulty_color`'s four-rung con ladder into one red. So the hues
+stay hues, and the reservations are held by two censuses instead:
+`no_content_hue_takes_a_reserved_role_by_accident` says br yellow is
+unreachable from the table at all — a modded structure must not be able to
+wear the colour the status bar spends on "you must act" — and that br red is
+reached from exactly one hue, the rung a creature that would beat you is
+painted in, which is hostility and is what the colour means.
+
+Nine of the eleven are entries in the handoff's sixteen. **Brown and orange
+are not**, and they stand outside the table the way the chrome greys do:
+there is no brown in a sixteen-colour palette, and the con ladder needs a
+rung between a caution and a kill. Collapsing either onto its nearest entry
+makes two authored hues indistinguishable — a Mining Node that reads as a
+Lathe — which is worse than a hue the handoff does not list.
+
+**The ladder is the part with a trap in it.** Its third rung was first
+written as the table's other red (entry 1, the damage-number red), which is
+*further* from br red by channel distance than the orange that replaced it —
+0.278 against 0.271 — and still wrong, because the two are the same hue and
+differ mostly in lightness, which the map's vignette is free to eat. Channel
+distance cannot see that. `the_con_ladder_gets_hotter_at_every_rung` is what
+does: each rung carries more red over green than the one below it **by a
+margin**, 0.10, where the shipped ladder's smallest step is 0.12 and the
+two-reds version's is 0.06. The bare inequality passes against both, which
+is why the margin is the assertion.
+
+`glyph_color` stayed **one conversion** shared with the six popup screens
+that draw a program's glyph, rather than splitting into a map-only copy. The
+spec scopes the palette to the HUD and leaves the popups their colours, and
+this is the one place that boundary is deliberately crossed: a program that
+read as one colour on the grid and another on its own sheet is the failure
+its doc comment already warned about, and the popups' chrome is untouched.
+
+### The player's `@` is a role, and it is read off `is_player`
+
+Every other glyph on the map wears the hue its file authored. The player
+wears `palette::PLAYER`, br cyan, which nothing else may take — and the map
+selects it on `EntityView::is_player` rather than on `GlyphColor::Cyan`,
+which the player happens to spawn with and which any structure is free to
+author too.
+
+`the_players_glyph_wears_the_player_role` asserts it through a real draw and
+by **distance**, not equality: the map multiplies everything it draws by a
+vignette and a per-tile shade, and the player standing at the centre of its
+own view is the one place both are 1.0 — "all but exactly" is what rules
+equality out anywhere else. Its second assertion is the load-bearing one, and
+says the `@` is nearer the role than the authored hue: written with the
+tolerance alone it would pass against the cyan this replaced, which is 0.12
+away.
+
+### A machine's stall asks for attention, and never reads as a threat
+
+`machine_color`'s three self-inflicted, entirely fixable states — `Clogged`,
+`Stranded`, `Unpowered` — drew br red until phase 6. The palette reserves br
+red for hostility and inbound harm, and br yellow for *the player must act*,
+which is exactly what those three are: waiting does not fix any of them. So
+they take `ATTENTION`, the same colour `Game::attention` puts in the status
+bar for them, and the map and the badge agree without either knowing about
+the other.
+
+The two-band split the old red/yellow pair carried is kept rather than
+flattened — `Starved` and `Unstaffed` resolve themselves and take `WARN`, the
+dimmer yellow — because the distinction is the whole information in the
+colour: one of them is a job for the player and the other is a machine
+waiting for its turn.
+
+`a_machine_asks_for_attention_and_never_reads_as_a_threat` walks
+`MachineStatus::ALL` for the negative half rather than naming the seven
+states, `GlyphColor::ALL`'s reason: the renderer's match is exhaustive and so
+cannot miss a new status, but a census that names them can, and the status
+just added is exactly the one that would inherit red by accident.

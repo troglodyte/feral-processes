@@ -35,6 +35,26 @@ pub enum GlyphColor {
     Orange,
 }
 
+impl GlyphColor {
+    /// Every authored hue, for a census that must cover all of them —
+    /// `Rarity::ALL`'s reason. A renderer's colour table is an exhaustive
+    /// match and so cannot miss a new hue; a test naming the hues by hand
+    /// can, and silently stops covering the one just added.
+    pub const ALL: [GlyphColor; 11] = [
+        GlyphColor::White,
+        GlyphColor::Gray,
+        GlyphColor::Green,
+        GlyphColor::DarkGreen,
+        GlyphColor::Red,
+        GlyphColor::Yellow,
+        GlyphColor::Blue,
+        GlyphColor::Magenta,
+        GlyphColor::Cyan,
+        GlyphColor::Brown,
+        GlyphColor::Orange,
+    ];
+}
+
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Glyph {
     pub ch: char,
@@ -710,6 +730,21 @@ pub enum MachineStatus {
     /// only guard on the same fact via `resources::PowerGrid`, and write no
     /// status of their own.
     Unpowered,
+}
+
+impl MachineStatus {
+    /// Every status, for `GlyphColor::ALL`'s reason: the renderer's colour
+    /// table is exhaustive, but the census holding the palette's reserved
+    /// colours off machine states is not, unless it walks this.
+    pub const ALL: [MachineStatus; 7] = [
+        MachineStatus::Running,
+        MachineStatus::Starved,
+        MachineStatus::Clogged,
+        MachineStatus::Unstaffed,
+        MachineStatus::Stranded,
+        MachineStatus::Idle,
+        MachineStatus::Unpowered,
+    ];
 }
 
 /// Serde is here for `MemorySubject::Activity`, which saves this enum

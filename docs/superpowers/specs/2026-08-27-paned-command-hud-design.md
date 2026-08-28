@@ -1,8 +1,8 @@
 # The Paned Command HUD
 
-**Status:** phases 1-5 shipped (v0.13.37, .38, .40, .41 and this one); phase
-6 (the palette sweep across map glyph colours) is outstanding. Corrections
-found while building are folded into the text below rather than appended.
+**Status:** all six phases shipped (v0.13.37, .38, .40, .41, .42 and this
+one). Corrections found while building are folded into the text below rather
+than appended.
 **Date:** 2026-08-27
 
 The main HUD's right-hand column is one undifferentiated text dump —
@@ -313,6 +313,22 @@ Scope is the HUD and the map's entity glyph colours. The thirty-odd
 popup screens keep today's colours. The popups draw *over* the HUD, so
 the seam between the two palettes is not visible in play; unifying
 them is a separate change and would move several colour censuses.
+
+**Phase 6 crossed that boundary in exactly one place**, deliberately:
+`glyph_color` is the one conversion from an authored `GlyphColor` to a
+drawable colour and is shared by the map and by the six popups that
+draw a program's glyph, so repainting the map repaints those glyphs
+too. Splitting it was the alternative and was refused — a program that
+reads as one colour on the grid and another on its own sheet is the
+drift that comment already warned about. The popups' own chrome is
+untouched.
+
+The table shipped is the handoff's **minus four entries the game does
+not draw** — an idle log channel, an alert row's background tint, a
+keycap chip's, and a second body grey. They were transcribed with the
+rest and carried by a `dead_code` allow while the phases consumed the
+table; with the last phase landed they were deleted rather than left
+standing as colour nothing paints.
 
 ## Part 8 — Phasing
 

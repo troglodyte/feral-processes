@@ -975,8 +975,8 @@ fn draw_surface_map(
                 // the wash is the building's condition, not the walker's.
                 bg_source = dimmed;
                 // A machine's glyph is its state: the `$` of a Mining
-                // Node reads green running, yellow starved, red clogged,
-                // grey idle. Which structure it is stays legible from the
+                // Node reads green running, dim yellow starved, the
+                // attention yellow when it is asking for you, grey idle. Which structure it is stays legible from the
                 // glyph itself, so the authored colour is only carrying
                 // identity a machine can spare. Anything that runs no job
                 // keeps its authored colour.
@@ -998,7 +998,16 @@ fn draw_surface_map(
             // things at once.
             if let Some(ev) = actor {
                 ch = Some(ev.glyph);
-                color = glyph_color(ev.color);
+                // The `@` is the one glyph whose colour is a role. Every
+                // other entity wears the hue its file authored; the player
+                // wears `palette::PLAYER`, which nothing else on the map may
+                // take — read off `is_player` rather than off the authored
+                // `GlyphColor::Cyan`, which a structure is free to author too.
+                color = if ev.is_player {
+                    hud::palette::PLAYER
+                } else {
+                    glyph_color(ev.color)
+                };
             }
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
@@ -1240,10 +1249,13 @@ fn draw_surface_map(
                 // Orange as well as still: colour and motion say the same
                 // thing at once, so a stranded machine is legible from a
                 // paused screenshot and not only from watching it. It is
-                // deliberately not the `RED` a clogged outline already
-                // wears — being full is the machine's own problem and
-                // recoverable by collecting, while this is the base having
-                // nowhere left to put anything.
+                // deliberately not the yellow a clogged or stranded glyph
+                // already wears — being full is the machine's own problem
+                // and recoverable by collecting, while this is the base
+                // having nowhere left to put anything. The mark stays a raw
+                // hue: phase 6's sweep went as far as the map's *glyphs*,
+                // and these overlays are quads that answer to the glyph
+                // under them rather than to a palette role.
                 let (lift, alpha, base) = if stranded {
                     (0.0, fx.stranded_blink(), ORANGE)
                 } else {
@@ -1421,14 +1433,21 @@ fn outline_open(painter: &Painter, px: f32, py: f32, size: f32, color: Color, op
 /// for a clog, or a path cleared for a program that cannot get there at all.
 fn machine_color(status: MachineStatus) -> Color {
     match status {
-        MachineStatus::Running => GREEN,
-        MachineStatus::Starved | MachineStatus::Unstaffed => YELLOW,
-        // Red rather than yellow: unlike `Unstaffed`, waiting does not fix
-        // this one, so it belongs with the states that are asking for you.
-        // `Unpowered` joins them for the same reason — a dark machine never
-        // resolves itself either, only a Recharger Node fixes it.
-        MachineStatus::Clogged | MachineStatus::Stranded | MachineStatus::Unpowered => RED,
-        MachineStatus::Idle => TEXT_DIM,
+        MachineStatus::Running => hud::palette::HEALTHY,
+        MachineStatus::Starved | MachineStatus::Unstaffed => hud::palette::WARN,
+        // The louder yellow rather than the dimmer one: unlike `Unstaffed`,
+        // waiting does not fix this one, so it belongs with the states that
+        // are asking for you — which is what `palette::ATTENTION` means, and
+        // is the same colour `Game::attention` puts in the status bar for
+        // them. `Unpowered` joins them because a dark machine never resolves
+        // itself either, only a Recharger Node fixes it.
+        //
+        // Not red. Red is `palette::THREAT`, reserved for hostility and
+        // inbound harm, and a clogged Mining Node is neither.
+        MachineStatus::Clogged | MachineStatus::Stranded | MachineStatus::Unpowered => {
+            hud::palette::ATTENTION
+        }
+        MachineStatus::Idle => hud::palette::FAINT,
     }
 }
 
@@ -1439,6 +1458,7 @@ mod tests {
     use crate::paint::{painted_images, painted_text, with_painter, with_sprites};
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
+    use feral_processes_engine::components::{GlyphColor, MachineStatus};
     use feral_processes_engine::{DifficultyMode, Game};
 
     fn test_assets() -> std::path::PathBuf {
@@ -1479,6 +1499,84 @@ mod tests {
     /// only proves the order *inside* `border_strip`; this is the half only
     /// visible a level up, where the map pane's own background rect and the
     /// frame's title text are two separate calls inside `draw_playing_base`.
+    /// The `@` is the one glyph on the map whose colour is a **role** and not
+    /// the hue its entity authored. `GlyphColor::Cyan` is what the player
+    /// spawns with and what a Mainframe-blue structure may author too; br
+    /// cyan is the player's alone, and reading it off `is_player` is what
+    /// keeps it that way.
+    ///
+    /// Distance rather than equality, because the map multiplies everything
+    /// it draws by a vignette and a per-tile shade — the player stands at the
+    /// centre of its own view, where both are all but 1.0, but "all but" is
+    /// what rules equality out. The second assertion is the load-bearing one:
+    /// the authored cyan is what this used to paint.
+    #[test]
+    fn the_players_glyph_wears_the_player_role() {
+        let mut app = playing_app();
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+        });
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let at = crate::paint::painted_map_glyphs(&shapes);
+        let (_, drawn) = at
+            .iter()
+            .find(|(g, _)| g == "@")
+            .expect("the map draws the player");
+        assert!(
+            dist(*drawn, hud::palette::PLAYER) < 0.06,
+            "the player's @ painted {drawn:?}, which is {:.3} from PLAYER",
+            dist(*drawn, hud::palette::PLAYER)
+        );
+        assert!(
+            dist(*drawn, hud::palette::PLAYER) < dist(*drawn, glyph_color(GlyphColor::Cyan)),
+            "the @ is nearer its authored hue than the player role — it is \
+             still being drawn through `glyph_color`"
+        );
+    }
+
+    /// The palette's two reservations, asserted where they are easiest to
+    /// break: br red means hostility and inbound harm, so a clogged machine —
+    /// an ordinary, self-inflicted, entirely fixable state — may not wear it,
+    /// and br yellow means the player must act, which is exactly what the
+    /// three states that will not resolve themselves are.
+    ///
+    /// The split the old red/yellow pair carried is kept, not flattened:
+    /// waiting fixes a starved machine and does not fix a clogged one, so
+    /// they stay two colours.
+    #[test]
+    fn a_machine_asks_for_attention_and_never_reads_as_a_threat() {
+        for status in [
+            MachineStatus::Clogged,
+            MachineStatus::Stranded,
+            MachineStatus::Unpowered,
+        ] {
+            assert_eq!(
+                machine_color(status),
+                hud::palette::ATTENTION,
+                "{status:?} will not fix itself and is what ATTENTION means"
+            );
+        }
+        for status in [MachineStatus::Starved, MachineStatus::Unstaffed] {
+            assert_eq!(
+                machine_color(status),
+                hud::palette::WARN,
+                "{status:?} resolves itself, so it is the dimmer yellow"
+            );
+        }
+        assert_eq!(machine_color(MachineStatus::Running), hud::palette::HEALTHY);
+        // Walked rather than listed: a status added without a colour of its
+        // own is exactly the one that would inherit red by accident.
+        for status in MachineStatus::ALL {
+            assert_ne!(
+                machine_color(status),
+                hud::palette::THREAT,
+                "{status:?} is not hostility, and THREAT is reserved for it"
+            );
+        }
+    }
+
     #[test]
     fn the_map_frame_draws_after_the_map() {
         let mut app = playing_app();

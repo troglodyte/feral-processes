@@ -925,6 +925,42 @@ pub(super) fn continuation_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// What an authored description is indented by under the entry it belongs
+/// to. Four columns rather than `ROW_CONTINUATION_INDENT`'s seven: that
+/// indent is a fact about `with_icon`'s glyph slot, and none of the pickers
+/// that print a description carry an icon — four is `menu_shortcut`'s
+/// `[x] ` alone, which is what puts the prose under the entry's name.
+pub(super) const DESCRIPTION_INDENT: &str = "    ";
+
+/// One entry's authored description, wrapped to the popup and indented under
+/// the row it belongs to — the perk and research pickers' shape, and the
+/// deploy menu's.
+///
+/// One definition rather than one per picker because the shipped assets
+/// carry up to about 300 characters of prose against a `PopupSize::Large`
+/// body of roughly 114: printed raw it runs off the right edge in silence,
+/// since `draw_row` clamps a row vertically and nothing clamps it
+/// horizontally. The deploy menu shipped doing exactly that while the perk
+/// picker beside it was already wrapping.
+///
+/// `DESCRIBE_WRAP_COLUMNS` rather than `ROW_WRAP_COLUMNS` because this is
+/// prose, which reads better narrow than wide — the same width the Recipes
+/// screen wraps a product's description to, so no two screens can disagree
+/// about how wide the game's prose runs.
+///
+/// The lines stay `Row::Item`, which `perks_menu_rows` and `build_menu_rows`
+/// both document as load-bearing: `popup_layout` cuts the scrollable body at
+/// the last `Row::Item`, so a description made of `Row::Text` is torn off the
+/// entry it describes and pinned to the foot of the box.
+pub(super) fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
+    wrap_text(
+        description,
+        DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+    )
+    .into_iter()
+    .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
+}
+
 /// A menu row wrapped onto indented continuation lines at its own segment
 /// boundaries: a `head` that always leads, then trailing `tags` packed on
 /// after it while they fit and shed onto a fresh indented line when they

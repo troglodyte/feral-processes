@@ -5,36 +5,6 @@ use super::*;
 use feral_processes_engine::ResearchStatus;
 use feral_processes_engine::perks::{Perk, PerkDef};
 
-/// What a description is indented by under the entry it belongs to. Four
-/// columns rather than `continuation_lines`' seven: that indent is a fact
-/// about `with_icon`'s glyph slot, and neither picker's rows carry an icon.
-const DESCRIPTION_INDENT: &str = "    ";
-
-/// One entry's description, wrapped to the popup and indented under the row
-/// it belongs to. Both pickers print prose the same way, and the shipped
-/// assets carry up to about 240 characters of it against a
-/// `PopupSize::Large` body of roughly 114 — printed raw it ran off the
-/// right edge in silence, since `draw_row` clamps a row vertically and
-/// nothing clamps it horizontally.
-///
-/// `DESCRIBE_WRAP_COLUMNS` rather than `ROW_WRAP_COLUMNS` because this is
-/// prose, which reads better narrow than wide — the same width the Recipes
-/// screen wraps a product's description to, so the two screens cannot
-/// disagree about how wide the game's prose runs.
-///
-/// The lines stay `Row::Item`, which is what `perks_menu_rows` documents as
-/// load-bearing: `popup_layout` cuts the scrollable body at the last
-/// `Row::Item`, so a description made of `Row::Text` would be torn off the
-/// entry it describes and pinned to the foot of the box.
-fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
-    wrap_text(
-        description,
-        DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
-    )
-    .into_iter()
-    .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
-}
-
 /// The perk picker's rows. A perk's description is a *dim item row* rather
 /// than a `Row::Text`, and the help line sits in the header rather than under
 /// the list, for the reason `build_menu_rows` does the same: `popup_layout`

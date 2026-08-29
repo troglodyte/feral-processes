@@ -57,11 +57,11 @@ pub(super) fn build_menu_rows(entries: &[BuildEntry], selected: usize) -> Vec<Ro
             format!("[{}] {}", menu_shortcut(i), entry.label),
             i == selected,
         ));
-        rows.push(colored_item_row(
-            format!("    {}", entry.description),
-            false,
-            TEXT_DIM,
-        ));
+        // Through `description_rows` rather than one indented `format!`: the
+        // shipped descriptions run to 300 characters against a body of about
+        // 114, and the wrapped lines have to stay `Row::Item` for the reason
+        // above.
+        rows.extend(description_rows(&entry.description));
     }
     rows
 }
@@ -97,11 +97,19 @@ pub(super) fn draw_build_menu(
 ///
 /// All `Row::Text` — nothing here is pickable, the direction keys are — so
 /// `popup_layout` pins the lot and none of it scrolls, which is what a prompt
-/// this short wants.
+/// this short wants. That is also why the description is wrapped here rather
+/// than through `description_rows`: unindented, and a plain `Row::Text`,
+/// because there is no menu row for it to sit under and no body for it to
+/// fall out of. The width is the same `DESCRIBE_WRAP_COLUMNS` so the two
+/// deploy screens quote the same prose at the same measure.
 pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String]) -> Vec<Row> {
-    vec![
-        Row::TextColored(name.to_string(), YELLOW),
-        Row::TextColored(description.to_string(), TEXT_DIM),
+    let mut rows = vec![Row::TextColored(name.to_string(), YELLOW)];
+    rows.extend(
+        wrap_text(description, DESCRIBE_WRAP_COLUMNS)
+            .into_iter()
+            .map(|line| Row::TextColored(line, TEXT_DIM)),
+    );
+    rows.extend([
         text_row(""),
         // A waived bill is empty rather than zeroed (see
         // `StructureDef::first_free`), so the sentence is phrased here and
@@ -114,7 +122,8 @@ pub(super) fn build_direction_rows(name: &str, description: &str, cost: &[String
         }),
         text_row(""),
         text_row(DIRECTION_PROMPT),
-    ]
+    ]);
+    rows
 }
 
 const DIRECTION_PROMPT: &str = "Choose a direction to deploy (arrows/hjkl), Esc to cancel";
@@ -1032,6 +1041,7 @@ fn assignee_vitals(a: &Assignee) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feral_processes_engine::structures::StructureDb;
 
     pub(super) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
         EntityView {
@@ -1075,6 +1085,183 @@ mod tests {
             Row::Text(t) | Row::TextColored(t, _) => t,
             Row::Item { text, .. } => text,
         }
+    }
+
+    /// Every structure the game ships, as the deploy menu lists it. Read off
+    /// `assets/structures/` rather than hand-written because how long a
+    /// description runs is a property of the content: one authored longer
+    /// tomorrow has to clear the same width, and a fixture quoting today's
+    /// worst case would stop testing the wrap the moment the assets moved.
+    fn shipped_entries() -> Vec<BuildEntry> {
+        let dir = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/structures"
+        ));
+        let (db, _) = StructureDb::load_dir(dir).expect("the shipped structures load");
+        db.all()
+            .map(|def| BuildEntry {
+                label: format!("{} - {}", def.name, build_cost_label(&[])),
+                description: def.description.clone(),
+                category: def.category(),
+            })
+            .collect()
+    }
+
+    /// The shipped description that runs longest, which is the one both
+    /// deploy screens have to survive.
+    fn widest_shipped_description() -> String {
+        shipped_entries()
+            .into_iter()
+            .map(|e| e.description)
+            .max_by_key(|d| d.chars().count())
+            .expect("the shipped assets define structures")
+    }
+
+    /// A description longer than anything authored, so the wrap is what is
+    /// tested rather than the assets happening to be short enough.
+    fn synthetic_description() -> String {
+        "Recompiles damaged structures across the whole base, itself included, ".repeat(6)
+    }
+
+    /// `draw_row` clamps a row vertically and **never horizontally**, so a
+    /// structure's authored description — up to about 300 characters against
+    /// a `PopupSize::Large` body of roughly 114 — was drawn straight off the
+    /// right edge of the deploy menu in silence.
+    #[test]
+    fn no_deploy_menu_row_runs_past_the_popup_body() {
+        let mut entries = shipped_entries();
+        entries.push(BuildEntry {
+            label: "Overlong Node - free".to_string(),
+            description: synthetic_description(),
+            category: StructureCategory::Utility,
+        });
+        for row in build_menu_rows(&entries, 0) {
+            let text = row_text(&row);
+            assert!(
+                text.chars().count() <= ROW_WRAP_COLUMNS,
+                "a {} char deploy row runs past the {ROW_WRAP_COLUMNS} column body: {text:?}",
+                text.chars().count()
+            );
+        }
+    }
+
+    /// Wrapping a description costs rows, and `popup_layout` ends the
+    /// scrollable body at the *last* `Row::Item` — so a continuation line
+    /// emitted as `Row::Text` would strand the final structure's description
+    /// under the scroll indicator, detached from the row it describes. The
+    /// rule `build_menu_rows` documents, asserted over the real assets.
+    #[test]
+    fn every_deploy_description_stays_inside_the_scrollable_body() {
+        let entries = shipped_entries();
+        for selected in [0, entries.len() - 1] {
+            let rows = build_menu_rows(&entries, selected);
+            let last_item = rows
+                .iter()
+                .rposition(|r| matches!(r, Row::Item { .. }))
+                .expect("a structure is an item row");
+            assert_eq!(
+                last_item,
+                rows.len() - 1,
+                "the deploy menu pinned {} rows below its list — a description \
+                 is detached from the structure it belongs to",
+                rows.len() - last_item - 1
+            );
+        }
+    }
+
+    /// The deploy prompt draws the same description in a box with no scroll
+    /// at all — every row is `Row::Text`, so `popup_layout` pins the lot —
+    /// which is the other half of the same fault.
+    #[test]
+    fn no_deploy_prompt_row_runs_past_the_popup_body() {
+        for description in [widest_shipped_description(), synthetic_description()] {
+            let rows = build_direction_rows(
+                "Fabricator",
+                &description,
+                &["Bytecode Block (12/20)".to_string()],
+            );
+            for row in &rows {
+                let text = row_text(row);
+                assert!(
+                    text.chars().count() <= ROW_WRAP_COLUMNS,
+                    "a {} char deploy prompt row runs past the {ROW_WRAP_COLUMNS} column body: {text:?}",
+                    text.chars().count()
+                );
+            }
+            // Wrapped, not truncated: the prompt is the last thing the player
+            // reads before placing the structure, so a description that lost
+            // its tail would be worse than one that ran off the edge.
+            let drawn: Vec<&str> = rows
+                .iter()
+                .flat_map(|r| row_text(r).split_whitespace())
+                .collect();
+            for word in description.split_whitespace() {
+                assert!(drawn.contains(&word), "the wrap dropped {word:?}");
+            }
+        }
+    }
+
+    /// The prompt has no scroll, so a description tall enough to outgrow the
+    /// box loses its tail in silence — `the_tallest_memory_page_fits_its_popup`'s
+    /// trap, in the screen wrapping just moved rows into.
+    ///
+    /// Swept across window heights rather than measured at one: `ui_metrics`
+    /// clamps the font at both ends, so below the clamp the box keeps
+    /// shrinking while the line height stops.
+    #[test]
+    fn the_tallest_deploy_prompt_fits_its_popup() {
+        let rows = build_direction_rows(
+            "Fabricator",
+            &widest_shipped_description(),
+            &["Bytecode Block (12/20)".to_string()],
+        )
+        .len();
+        for h in (600..=2160).step_by(60) {
+            let m = crate::text::ui_metrics(h as f32);
+            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            assert!(
+                rows + REFUSAL_MAX_LINES <= cap,
+                "the deploy prompt builds a {rows}-row page into a {cap}-row popup at {h}px"
+            );
+        }
+    }
+
+    /// The other axis, in pixels rather than columns: `ROW_WRAP_COLUMNS` is
+    /// a proxy for the real box, and this is the measurement it stands in
+    /// for. Both deploy screens are `PopupSize::Large`.
+    #[test]
+    fn no_deploy_row_overflows_its_popup_in_pixels() {
+        let mut entries = shipped_entries();
+        entries.push(BuildEntry {
+            label: "Overlong Node - free".to_string(),
+            description: synthetic_description(),
+            category: StructureCategory::Utility,
+        });
+        let menu = build_menu_rows(&entries, 0);
+        let prompt = build_direction_rows(
+            "Fabricator",
+            &widest_shipped_description(),
+            &["Bytecode Block (12/20)".to_string()],
+        );
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in menu.iter().chain(prompt.iter()) {
+                let text = match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                    // `draw_row`'s own prefix on an item row.
+                    Row::Item { text, .. } => format!("     {text}"),
+                };
+                let drawn = p.measure_ui_advance(&text, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a deploy row overflows its popup by {:.0}px ({drawn:.0} into {room:.0}):\n{text}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// The deploy prompt used to be a bare compass, which meant the one screen

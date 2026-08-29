@@ -663,6 +663,10 @@ pub(super) fn draw_playing_base(
         (Vec::new(), Vec::new(), Default::default())
     };
     let pets = game.owned_pets();
+    // Unlike the BASE blocks this is not gated on `in_base`: a contract reads
+    // from anywhere, and it is `&self` over at most `MAX_ACTIVE_CONTRACTS`
+    // rows. `Game::contract_board` is the expensive one and is not called.
+    let contracts = game.active_contracts();
     // `Game::copy_name` is the one place a copy's name is built, and it needs
     // the borrow this data outlives — so the names are resolved here rather
     // than the pane being handed a `Game`.
@@ -685,6 +689,7 @@ pub(super) fn draw_playing_base(
         stock: &stock_rows,
         builds: &builds,
         labour,
+        contracts: &contracts,
         shielded: game.raid_defense_active(),
         in_base,
     };

@@ -213,6 +213,10 @@ impl App {
                 self.info_tab = InfoTab::Pack;
                 return;
             }
+            GameKey::Char('4') => {
+                self.info_tab = InfoTab::Contracts;
+                return;
+            }
             GameKey::Char('s') => {
                 self.save_game();
                 return;

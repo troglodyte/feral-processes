@@ -27,6 +27,10 @@ use crate::text::Metrics;
 
 /// Between one tab cell and the next.
 const TAB_GAP: &str = "   ";
+/// How many collapsed bars the column holds: every tab but the open one.
+/// Derived from `InfoTab::ALL` rather than written down, or a fifth tab
+/// would lose its bar to `draw`'s `zip` with nothing failing to compile.
+const ALL_BUT_ONE: usize = InfoTab::ALL.len() - 1;
 /// A tab wearing this needs the player.
 const MARK_ACT: &str = "!";
 /// A tab with nothing to say. The handoff reserves a cyan `·` for "merely
@@ -40,7 +44,7 @@ pub(in crate::render) struct ColumnState<'a> {
     /// `Game::attention`, called once by the caller and shared with the
     /// status bar.
     pub attention: &'a [AttentionRow],
-    /// What the two closed tabs summarise. The same struct the open pane's
+    /// What the closed tabs summarise. The same struct the open pane's
     /// rows are built from, so a collapsed bar and the pane it stands for
     /// can never disagree about what the base is holding.
     pub pane: &'a PaneData<'a>,
@@ -55,9 +59,11 @@ pub(in crate::render) struct ColumnRegions {
     /// What the open pane draws into. The one figure phase 5 lays five
     /// blocks against.
     pub body: Rect,
-    /// The two closed tabs' summary rows, in `InfoTab::ALL` order with the
-    /// open one skipped.
-    pub bars: [Rect; 2],
+    /// The closed tabs' summary rows, in `InfoTab::ALL` order with the open
+    /// one skipped. One per tab that is not open, so the length is
+    /// `InfoTab::ALL.len() - 1` — `draw` zips the closed tabs against these,
+    /// and a short array would drop the last tab's bar in silence.
+    pub bars: [Rect; ALL_BUT_ONE],
 }
 
 pub(in crate::render) fn regions(at: Rect, m: &Metrics) -> ColumnRegions {
@@ -65,7 +71,7 @@ pub(in crate::render) fn regions(at: Rect, m: &Metrics) -> ColumnRegions {
     let tabs = Rect::new(at.x, at.y + m.inset, at.w, row);
     // Pinned to the bottom edge, which is what makes the body's height fall
     // out of subtraction rather than out of however much the open pane drew.
-    let bars_top = at.y + at.h - m.inset - row * 2.0;
+    let bars_top = at.y + at.h - m.inset - row * ALL_BUT_ONE as f32;
     let body = Rect::new(
         at.x,
         tabs.y + row,
@@ -75,10 +81,7 @@ pub(in crate::render) fn regions(at: Rect, m: &Metrics) -> ColumnRegions {
     ColumnRegions {
         tabs,
         body,
-        bars: [
-            Rect::new(at.x, bars_top, at.w, row),
-            Rect::new(at.x, bars_top + row, at.w, row),
-        ],
+        bars: std::array::from_fn(|i| Rect::new(at.x, bars_top + row * i as f32, at.w, row)),
     }
 }
 
@@ -148,8 +151,14 @@ pub(in crate::render) fn draw_info_column(
     r.body
 }
 
-fn draw_tab_row(at: Rect, state: &ColumnState, painter: &Painter, m: &Metrics) {
-    let size = m.small();
+/// The tab row's pieces, in draw order.
+///
+/// Split from [`draw_tab_row`] so a census can measure exactly the string
+/// that is drawn, `contracts.rs`' `contract_footer` for the same reason: the
+/// row grows with every tab and with the *length of its label*, and
+/// `Painter` clips nothing horizontally — so it would run off the column in
+/// silence rather than failing anything.
+fn tab_row_pieces(state: &ColumnState) -> Vec<(String, Color, bool)> {
     let mut owned: Vec<(String, Color, bool)> = Vec::new();
     for (i, tab) in InfoTab::ALL.iter().enumerate() {
         if i > 0 {
@@ -171,6 +180,12 @@ fn draw_tab_row(at: Rect, state: &ColumnState, painter: &Painter, m: &Metrics) {
             None => owned.push((format!(" {MARK_CALM}"), palette::LABEL, false)),
         }
     }
+    owned
+}
+
+fn draw_tab_row(at: Rect, state: &ColumnState, painter: &Painter, m: &Metrics) {
+    let size = m.small();
+    let owned = tab_row_pieces(state);
     let runs: Vec<TextRun> = owned
         .iter()
         .map(|(text, color, bold)| TextRun {
@@ -443,6 +458,45 @@ mod tests {
     /// Every kind has a home. As a `_ =>` arm a fifth condition would ship
     /// with no marker anywhere — the exact failure the tabbed column exists
     /// to prevent — so this walks the whole enum by hand.
+    /// **The tab row grows with every tab and with the length of its
+    /// label**, and `ui_runs` clips nothing horizontally — so a label one
+    /// word too long draws off the column in silence, which is exactly how
+    /// the Contracts screen's footer shipped seven characters over its
+    /// popup. Measured with every tab wearing its `!` mark, the widest the
+    /// row ever draws.
+    #[test]
+    fn the_tab_row_fits_the_column() {
+        let at = column();
+        let m = ui_metrics(720.0);
+        let r = regions(at, &m);
+        // `draw_tab_row` starts at `at.x + m.inset`, so that is the margin
+        // it has to live inside on both sides.
+        let room = r.tabs.w - m.inset * 2.0;
+        let attention: Vec<AttentionRow> = InfoTab::ALL
+            .iter()
+            .map(|_| row(AttentionKind::IdleStructures, "idle", false))
+            .collect();
+        let pane = PaneData::default();
+        let state = ColumnState {
+            tab: InfoTab::Base,
+            attention: &attention,
+            pane: &pane,
+        };
+        let drawn: String = tab_row_pieces(&state)
+            .iter()
+            .map(|(t, _, _)| t.as_str())
+            .collect();
+        with_painter(|p| {
+            let width = p.measure_ui_advance(&drawn, m.small());
+            assert!(
+                width <= room,
+                "the tab row overflows the column by {:.0}px \
+                 ({width:.0} drawn into {room:.0}):\n{drawn}",
+                width - room
+            );
+        });
+    }
+
     #[test]
     fn every_kind_routes_to_a_tab() {
         for kind in [

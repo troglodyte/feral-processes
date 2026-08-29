@@ -89,7 +89,11 @@ impl Watch {
             // fraction of max HP inside the losing round, so anything read
             // afterwards measures the reboot rather than the fight.
             player_hp_fraction: if won { self.hp_fraction } else { 0.0 },
-            companions_downed: self.party.iter().filter(|&&e| !alive(game, e)).count() as u32,
+            companions_downed: self
+                .party
+                .iter()
+                .filter(|&&e| !alive(game, e) || benched(game, e))
+                .count() as u32,
             composition: self.composition.clone(),
             transcript: self.transcript.clone(),
         }
@@ -102,6 +106,19 @@ impl Watch {
 
 fn alive(game: &Game, entity: Entity) -> bool {
     game.world.get::<Stats>(entity).is_some_and(|s| s.hp > 0)
+}
+
+/// A companion that died under `DifficultyMode::Forgiving`, which is the
+/// mode every staged fight runs in.
+///
+/// `alive` alone is not the question for the party half: `bench_or_dissolve`
+/// keeps a dead program on the roster at **HP 1** carrying `Downed`, so from
+/// the moment that landed (2026-08-27) a companion that died read as alive
+/// and `companions_downed` was structurally zero in every report. The
+/// opponents' half is unaffected — a hostile is never benched — which is why
+/// `won` still reads off `alive`.
+fn benched(game: &Game, entity: Entity) -> bool {
+    game.world.get::<components::Downed>(entity).is_some()
 }
 
 fn hp_fraction_of(game: &Game, entity: Entity) -> f32 {
@@ -122,6 +139,7 @@ fn level_of(game: &Game, entity: Entity) -> u32 {
 mod tests {
     use crate::arena::scenario::{CompanionSpec, OpponentSpec, PlayerSource, Scenario};
     use crate::arena::test_fight;
+    use crate::components::Stats;
 
     fn scenario(level: u32, zone: u32, party: &[(&str, u32)], against: &[(&str, u32)]) -> Scenario {
         Scenario {
@@ -143,6 +161,33 @@ mod tests {
                 .collect(),
             ..Scenario::default()
         }
+    }
+
+    /// A dead companion has to be counted as one, and under Forgiving it is
+    /// not dead — it is benched at HP 1. Read off `hp > 0` alone the column
+    /// was zero in every report written after 2026-08-27.
+    #[test]
+    fn a_benched_companion_counts_as_downed() {
+        let s = scenario(20, 1, &[("glitch", 8)], &[("sprite", 1)]);
+        let mut staged =
+            crate::arena::stage(&s, &crate::tests::support::test_assets_dir(), 3, false).unwrap();
+
+        let companion = staged.game.world.resource::<crate::resources::Party>().0[0];
+        // What `bench_or_dissolve` leaves behind: on the roster, alive by
+        // HP, and out of the fight.
+        staged.game.world.get_mut::<Stats>(companion).unwrap().hp = 1;
+        staged
+            .game
+            .world
+            .entity_mut(companion)
+            .insert(crate::components::Downed);
+
+        let record = staged.watch.finish(&staged.game);
+
+        assert_eq!(
+            record.companions_downed, 1,
+            "a benched companion is a companion that went down"
+        );
     }
 
     /// The regression the transcript half exists for. `end_battle` prunes

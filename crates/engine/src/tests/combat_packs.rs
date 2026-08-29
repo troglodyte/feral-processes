@@ -2,7 +2,7 @@
 //! groups, initiative order, and what happens as groups fall.
 
 use super::support::*;
-use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE};
+use crate::tuning::{MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, MAX_PACK_BODIES};
 use crate::*;
 
 #[test]
@@ -443,10 +443,15 @@ fn a_group_is_capped_at_the_local_group_size_and_the_rest_stay_on_the_map() {
     );
 }
 
-/// The headline shape: four groups of a hundred, and nothing bigger, out of
-/// a cluster that could supply five hundred.
+/// The headline shape: four groups out of a cluster that could supply five
+/// hundred, sharing `MAX_PACK_BODIES` between them.
+///
+/// It asserted four groups of a *hundred* until 2026-08-28 — the product of
+/// the two per-group ceilings, which is what nothing bounded. The species
+/// ceiling is still the one being exercised here; it is simply no longer
+/// the binding one at this depth.
 #[test]
-fn a_mixed_swarm_fights_as_four_groups_of_a_hundred() {
+fn a_mixed_swarm_fights_as_four_groups_sharing_the_body_ceiling() {
     let mut game = Game::new(313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Zone 12 is where `zone_group_cap` saturates at `MAX_GROUP_SIZE` under
     // the linear curve (1 + 9 * 11 = 100). Anything shallower is bounded by
@@ -470,12 +475,86 @@ fn a_mixed_swarm_fights_as_four_groups_of_a_hundred() {
         "five species can't all engage — the largest four do"
     );
     for group in &groups {
-        assert_eq!(
-            group.members.len(),
-            MAX_GROUP_SIZE as usize,
+        assert!(
+            group.members.len() <= MAX_GROUP_SIZE as usize,
             "no group may pass MAX_GROUP_SIZE, however deep the cluster is"
         );
     }
+    assert_eq!(
+        groups.iter().map(|g| g.members.len()).sum::<usize>(),
+        MAX_PACK_BODIES as usize,
+        "the four engaging groups share the total ceiling between them"
+    );
+    for group in &groups {
+        assert_eq!(
+            group.members.len(),
+            MAX_PACK_BODIES as usize / MAX_ENEMY_GROUPS,
+            "trimming the largest each pass leaves four equal groups"
+        );
+    }
+}
+
+/// The bound the per-group and per-group-count ceilings never expressed:
+/// their *product*. Measured on 2026-08-28, a zone-3 depth-5 Stack ambush
+/// fielded 33 bodies against a party of four and won every rep — see
+/// `docs/measurements/2026-08-28-stack-depth-curve-after-danger-steps.md`.
+#[test]
+fn a_pack_is_bounded_by_the_total_body_ceiling() {
+    let mut game = Game::new(313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Zone 12 saturates `zone_group_cap` at `MAX_GROUP_SIZE`, so neither
+    // per-group ceiling binds here and the total is the only thing that can.
+    game.world.resource_mut::<ZoneLevel>().0 = 12;
+    let spawn = *game.world.resource::<ZoneSpawnPoint>();
+    let (x, y) = (spawn.x + 500, spawn.y);
+
+    let mut cluster = Vec::new();
+    for species in ["glitch", "scrapper", "drone", "sprite", "zero_day"] {
+        for i in 0..105 {
+            cluster.push(game.spawn_wild_creature(species, x, y + i % 5).unwrap());
+        }
+    }
+    let offered = cluster.len();
+
+    let groups = game.group_pack(cluster.clone());
+
+    let fielded: usize = groups.iter().map(|g| g.members.len()).sum();
+    assert_eq!(
+        fielded, MAX_PACK_BODIES as usize,
+        "a cluster of {offered} may field only MAX_PACK_BODIES of them"
+    );
+    let still_alive = cluster
+        .iter()
+        .filter(|&&e| game.world.get_entity(e).is_ok())
+        .count();
+    assert_eq!(
+        still_alive, offered,
+        "bodies over the total ceiling stay standing on the map, as the \
+         per-group ceiling's surplus already does — they are met on the next bump"
+    );
+}
+
+/// Trimming to the total has to be stable, or a seeded fight fields a
+/// different composition between runs of the same build.
+#[test]
+fn trimming_to_the_total_ceiling_is_deterministic() {
+    let compose = || {
+        let mut game = Game::new(313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 12;
+        let spawn = *game.world.resource::<ZoneSpawnPoint>();
+        let (x, y) = (spawn.x + 500, spawn.y);
+        let mut cluster = Vec::new();
+        for species in ["glitch", "scrapper", "drone", "sprite", "zero_day"] {
+            for i in 0..105 {
+                cluster.push(game.spawn_wild_creature(species, x, y + i % 5).unwrap());
+            }
+        }
+        game.group_pack(cluster)
+            .into_iter()
+            .map(|g| (g.species, g.members.len()))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(compose(), compose(), "the same cluster trims the same way");
 }
 
 /// The gather radius has to widen with the swarm, or a group scattered

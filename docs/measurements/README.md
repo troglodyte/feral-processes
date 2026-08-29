@@ -54,6 +54,18 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-08-28 — The Stack's depth curve after the danger-steps sum](2026-08-28-stack-depth-curve-after-danger-steps.md)
+  — the ordinary Stack ambush is unwinnable from **depth 3** down, not depth
+  5: the 2026-08-24 `danger_steps` sum moved the group-size curve as well as
+  the species window it was aimed at, and only the lair half was measured at
+  the time. A total-pack ceiling of 8 — a bound `group_pack` does not have,
+  since it caps per group and per group count but never the product —
+  restores a monotone 100 / 93.5 / 67 / 39.5 curve. Also records that
+  `arena_level_ceiling()` has clamped every scenario's companions to 12 since
+  the zone level cap shipped (the game permits 23 at zone 3), and that the
+  report's `companions down` column has been structurally zero since
+  Forgiving benching landed on 2026-08-27.
+
 - [2026-08-27 — Fitting the zone level cap](2026-08-27-zone-level-cap.md)
   — the spec's proposed constants would have made every zone past 6
   unclearable; `STEP = 11` is the smallest slope that does not, derived by

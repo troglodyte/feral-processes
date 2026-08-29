@@ -137,16 +137,29 @@ pub const MAX_TALENT_STAT_PERCENT: f32 = 15.0;
 /// decision in its tree with it.
 pub const MAX_TALENT_ACCURACY_POINTS: i32 = 6;
 
-/// The level `arena::set_level` will stage a companion up to.
+/// The **floor** under the level `arena::set_level` will stage a companion
+/// up to; the scenario's own zone cap is the other half, and the higher of
+/// the two wins.
 ///
 /// **It was `absolute_companion_level_cap` and it was the live ceiling.**
-/// `Game::level_cap` is that now; this survives as the *arena's* ceiling
-/// alone, which is why it was renamed rather than repointed. Five shipped
-/// `dev-arenas/` scenarios author `level: 12`, and staging them against the
-/// zone cap instead would silently clamp every one — a failure this repo has
-/// already had once, where the old reports stopped being comparable and
-/// nothing said so. A scenario authors its own composition and has no
-/// `KernelRing` to read, so it takes the absolute figure.
+/// `Game::level_cap` is that now. It survived the rename as the arena's
+/// whole ceiling, for a reason that still holds in one direction: five
+/// shipped `dev-arenas/` scenarios author `level: 12` and most sit in zone
+/// 1, whose cap is `ZONE_LEVEL_CAP_FLOOR` — staging those against the zone
+/// cap alone silently clamps every one, which is a failure this repo has
+/// already had, where old reports stopped being comparable and nothing said
+/// so.
+///
+/// What inverted on 2026-08-28 is the other direction. Since the zone level
+/// cap shipped, this figure sits *below* the cap from zone 2 on, so as the
+/// sole ceiling it silently clamped **upward** authoring instead: a zone-3
+/// scenario asking for the level-23 party that zone actually permits was
+/// staged at 12, and the Stack's depth curve was measured against half a
+/// party without anything saying so. See
+/// `docs/measurements/2026-08-28-stack-depth-curve-after-danger-steps.md`.
+/// Taking the higher of the two keeps the zone-1 property and ends the
+/// clamp — a scenario still authors its own composition and has no
+/// `KernelRing` to read.
 pub const fn arena_level_ceiling() -> u32 {
     TALENT_START_LEVEL + KERNEL_RING_MAX * LEVELS_PER_RING
 }
@@ -454,15 +467,50 @@ pub const ZONE_GROUP_STEP: u32 = 9;
 /// consequence of the old value and never an intent.
 pub const ZONE_ONE_GROUP_CAP: u32 = 2;
 
-/// Hard ceiling on a single species group. With `MAX_ENEMY_GROUPS` groups on
-/// the field, one intrusion tops out at four hundred programs.
+/// Hard ceiling on a single species group.
+///
+/// It used to be quoted with `MAX_ENEMY_GROUPS` as "one intrusion tops out
+/// at four hundred programs", and that product is exactly what nothing
+/// bounded — see `MAX_PACK_BODIES`, which does, and well below either of
+/// these. This is now the ceiling on how deep *one* species may stand in a
+/// fight, and it binds only where the total does not.
 pub const MAX_GROUP_SIZE: u32 = 100;
 
 /// How many distinct species groups can engage in one intrusion. A cluster
 /// with more species than this engages its largest groups and leaves the
 /// remainder standing on the map as ordinary hostiles — they're met on the
 /// next bump rather than silently despawned.
+///
+/// This is now a bound on a fight's *variety* rather than on its size:
+/// `MAX_PACK_BODIES` decides how many bodies the engaging groups share
+/// between them, and it is the smaller number.
 pub const MAX_ENEMY_GROUPS: usize = 4;
+
+/// Hard ceiling on the **whole** pack one fight may field, across every
+/// group in it.
+///
+/// The two ceilings above bound a fight per group and per group count, and
+/// nothing bounded their product — 4 x `MAX_GROUP_SIZE` in principle, and
+/// 33 bodies against a party of four in practice at zone 3 depth 5, which
+/// wins every rep. The surface never reached it (a surface fight is
+/// whoever `gather_pack` found standing together, measuring 2.6 bodies at
+/// zone 3), but `Game::stack_encounter_pack` fills it by construction: it
+/// takes one species pick and one full group roll **per group slot the
+/// curve allows**. So the same curve produced a shallow-Stack fight four
+/// times the size of the surface fight beside it, and the Stack was
+/// unwinnable from depth 3 down.
+///
+/// Fitted rather than chosen: 8 is what puts an ordinary Stack ambush at
+/// 100 / 93.5 / 67 / 39.5 across depths 2-5 for a party at the zone level
+/// cap, which is a curve that descends. 12 leaves depth 5 at 0%.
+/// `docs/measurements/2026-08-28-stack-depth-curve-after-danger-steps.md`
+/// carries the sweep, the isolation of the three terms that feed this
+/// fight, and what the number is blind to.
+///
+/// A *ceiling on the fight*, not a cull: the bodies it turns away stay
+/// standing on the map exactly as `MAX_ENEMY_GROUPS`' surplus does, and are
+/// met on the next bump.
+pub const MAX_PACK_BODIES: u32 = 8;
 
 /// How many enemy groups are in melee range of the party. Groups past this
 /// index can only act with a move flagged `ranged`, which is what keeps a

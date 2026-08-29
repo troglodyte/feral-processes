@@ -381,6 +381,63 @@ mod tests {
         );
     }
 
+    /// The instrument has to be able to field the party the game permits.
+    /// `arena_level_ceiling()` is 12 and was the whole ceiling until
+    /// 2026-08-28, so every deep-zone scenario measured a party at half the
+    /// level its zone allows — which is how the Stack's depth curve came to
+    /// be read as harder than it is.
+    #[test]
+    fn a_deep_zone_scenario_stages_a_companion_at_that_zone_s_level_cap() {
+        let target = crate::tuning::zone_level_cap(3);
+        assert!(
+            target > crate::tuning::arena_level_ceiling(),
+            "the test is vacuous unless zone 3's cap is above the absolute figure"
+        );
+        let mut s = fresh(10, 3);
+        s.party = vec![CompanionSpec {
+            species: "glitch".into(),
+            level: target,
+            equip: Vec::new(),
+        }];
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let party = &game.world.resource::<Party>().0;
+        assert_eq!(
+            game.world.get::<Experience>(party[0]).unwrap().level,
+            target,
+            "a companion authored at its zone's cap is staged there"
+        );
+    }
+
+    /// The property the absolute figure was introduced to protect, and it
+    /// still holds: zone 1's cap is below it, and five shipped scenarios
+    /// author `level: 12` — clamping those to 6 is what made an older set of
+    /// arena reports incomparable without anything saying so.
+    #[test]
+    fn a_zone_one_scenario_still_stages_a_fully_developed_companion() {
+        let developed = crate::tuning::arena_level_ceiling();
+        assert!(
+            developed > crate::tuning::zone_level_cap(1),
+            "the test is vacuous unless zone 1's cap is below the absolute figure"
+        );
+        let mut s = fresh(10, 1);
+        s.party = vec![CompanionSpec {
+            species: "glitch".into(),
+            level: developed,
+            equip: Vec::new(),
+        }];
+
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+
+        let party = &game.world.resource::<Party>().0;
+        assert_eq!(
+            game.world.get::<Experience>(party[0]).unwrap().level,
+            developed,
+            "zone 1 stages a developed companion, as it always has"
+        );
+    }
+
     #[test]
     fn an_unknown_item_id_is_an_err_naming_it() {
         let mut s = fresh(1, 1);

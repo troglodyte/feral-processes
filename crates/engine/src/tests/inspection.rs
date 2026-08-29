@@ -934,6 +934,28 @@ fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
     assert!(!rolls.label.is_empty());
 }
 
+/// The examine screen (`x` on a program, or the manifest reached from the
+/// roster) has to say a benched program is down — see
+/// `Game::bench_or_dissolve` and `components::Downed`. It shares the
+/// `activity` field `program_activity` derives, so this and the roster's
+/// own test of that function must never disagree about the wording.
+#[test]
+fn manifest_reports_a_downed_program_as_recovering() {
+    let mut game = Game::new(17, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 20, 5);
+    game.world.entity_mut(pet).insert(crate::components::Downed);
+
+    let view = game.manifest(pet).expect("a tamed program has a manifest");
+    let ManifestSubject::Program(p) = view.subject else {
+        panic!("a creature is a Program subject");
+    };
+    assert_eq!(
+        p.activity.as_deref(),
+        Some("recovering"),
+        "a downed program must not read as idle"
+    );
+}
+
 /// Any program the player owns has been able to wear gear since 0.8.0, and
 /// the manifest is the page you open to find out what something *is* — so a
 /// companion's loadout belongs on it for the same reason the player's does.

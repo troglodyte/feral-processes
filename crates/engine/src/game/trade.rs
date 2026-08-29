@@ -346,7 +346,7 @@ impl Game {
 
     /// What `creature` is doing right now, as a terse status for any dialog
     /// that lists programs: `"in party"`, the bare name of the structure it
-    /// works, `"guarding <structure>"`, or `"idle"`.
+    /// works, `"guarding <structure>"`, `"recovering"`, or `"idle"`.
     ///
     /// A worker reads as the bare structure name and a guard carries the
     /// verb, because that is the only thing distinguishing them. Owned by the
@@ -355,6 +355,16 @@ impl Game {
     /// three dialogs — each of which called a guard "on a cronjob", since the
     /// field they read was `Task.target` with the kind thrown away.
     pub fn program_activity(&self, creature: Entity) -> String {
+        // Ahead of everything else. `bench_or_dissolve`'s Forgiving arm has
+        // already pulled the program out of the party and off its post
+        // (`detach_from_play`), so every check below would find nothing and
+        // report `"idle"` — indistinguishable from a companion nobody has
+        // ever posted anywhere. `"recovering"` matches the word the log
+        // uses when a Repair Bay finishes the job (`run_repair_bays`: "is
+        // back on its feet").
+        if self.world.get::<Downed>(creature).is_some() {
+            return "recovering".to_string();
+        }
         // Ahead of the party check: the two are mutually exclusive today
         // (`wield_program` stands a member down, `add_companion` disarms),
         // but stating the order keeps them from both being reported if that

@@ -190,7 +190,7 @@ mod tests {
     }
 
     fn pane_at(screen_w: f32, screen_h: f32, m: &Metrics) -> Rect {
-        super::super::layout::regions(screen_w, screen_h, 9.0, m).map_pane
+        super::super::layout::regions(screen_w, screen_h, 9.0, m, false).map_pane
     }
 
     /// The one thing this strip must never do. It is a single row on a

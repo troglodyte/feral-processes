@@ -788,6 +788,7 @@ mod tests {
                 NARROWEST_WINDOW.1,
                 char_w,
                 &m,
+                false,
             )
             .map_pane
             .w;

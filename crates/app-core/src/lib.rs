@@ -1708,6 +1708,12 @@ pub struct App {
     /// mapping between them, and sharing one would resize the surface after
     /// a dive spent reading the maze.
     pub stack_zoom: u16,
+    /// Whether the map screen's log pane is drawn at twice its usual height
+    /// — see `SPACE` in `handle_playing_key`. Bound in the same top match
+    /// as `1`/`2`/`3`, which runs before the hand-off to `handle_stack_key`,
+    /// so the toggle reaches both locales: the log pane it resizes is drawn
+    /// on the surface and in the Stack view alike.
+    pub log_expanded: bool,
     /// Which row is highlighted on the current numbered/lettered menu, for
     /// Up/Down-plus-Enter navigation (see `App::selected_index`) — on top
     /// of, not instead of, typing a row's own number/letter directly.

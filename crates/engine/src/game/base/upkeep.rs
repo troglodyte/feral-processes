@@ -1,11 +1,11 @@
 //! Per-tick base maintenance: structure regeneration, nest respawns,
 //! visual effects, and raids.
 
-use crate::components::MemorySubject;
+use crate::components::{Downed, MemorySubject};
 use crate::species::AffinityClass;
 use crate::tuning::{
     BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, STRUCTURE_REGEN_INTERVAL,
+    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -325,7 +325,25 @@ impl Game {
         if !roll {
             return;
         }
+        // After the roll, `maybe_spawn_wild_creature`'s reason: a miss must
+        // leave the RNG stream untouched by this gate, so a base too thin to
+        // survive attrition still costs nothing but the draw already taken.
+        if self.undowned_base_staff_count() < RAID_MIN_BASE_STAFF {
+            return;
+        }
         self.run_raid();
+    }
+
+    /// How many base-staff programs (`Game::base_staff`) are not currently
+    /// `Downed` — the population `RAID_MIN_BASE_STAFF` is measured against.
+    /// A downed program cannot defend the base or absorb the next raid, so
+    /// counting it toward the floor would let a base already reduced to
+    /// wreckage keep taking hits.
+    fn undowned_base_staff_count(&self) -> usize {
+        self.base_staff()
+            .into_iter()
+            .filter(|&e| self.world.get::<Downed>(e).is_none())
+            .count()
     }
 
     /// Everything a sweep *is*, once it has been decided that one happens.

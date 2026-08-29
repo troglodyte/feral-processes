@@ -51,6 +51,23 @@ fn program_activity_names_the_structure_a_worker_is_on() {
     );
 }
 
+/// A program benched by a Forgiving death carries `components::Downed` and
+/// is out of the labour pool until a Repair Bay heals it — see
+/// `Game::bench_or_dissolve`. Before this it read as `"idle"`, the same as
+/// a companion nobody has posted anywhere, which is what let a downed
+/// program go unnoticed on both the roster and the manifest.
+#[test]
+fn program_activity_reports_a_downed_program_as_recovering() {
+    let mut game = Game::new(132, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let downed = spawn_tamed(&mut game, 30, 5);
+    game.world
+        .entity_mut(downed)
+        .insert(crate::components::Downed);
+
+    assert_eq!(game.program_activity(downed), "recovering");
+}
+
 /// `program_post` is the one read of a `Task` into a label, and
 /// `program_activity` is built on top of it — so the manifest's row and the
 /// terse status every dialog shows cannot disagree about which structure a

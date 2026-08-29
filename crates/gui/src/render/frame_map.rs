@@ -472,7 +472,7 @@ mod tests {
     fn pane(p: &Painter, window_w: f32, window_h: f32) -> (f32, f32) {
         let m = crate::text::ui_metrics(window_h);
         let char_w = p.measure_ui_advance("M", m.font_size);
-        let r = super::super::hud::layout::regions(window_w, window_h, char_w, &m);
+        let r = super::super::hud::layout::regions(window_w, window_h, char_w, &m, false);
         (r.map_pane.w, r.map_pane.h)
     }
 

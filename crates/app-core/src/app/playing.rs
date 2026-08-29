@@ -176,6 +176,18 @@ impl App {
                 self.log_filter = self.log_filter.next();
                 return;
             }
+            // Doubles the log pane's height and back. A `return` for `f`'s
+            // reason: resizing the pane you are reading is not an action.
+            // Bound up here, beside the digits below and for the same
+            // reason: this match runs before the hand-off to
+            // `handle_stack_key`, so the toggle already reaches both
+            // locales without a second arm down there to drift from this
+            // one — and the log pane it resizes is drawn on the surface and
+            // in the Stack view alike.
+            GameKey::Char(' ') => {
+                self.log_expanded = !self.log_expanded;
+                return;
+            }
             // The info column's three panes. A `return` for `f`'s reason:
             // changing which pane you are reading is not an action and must
             // not cost a turn.

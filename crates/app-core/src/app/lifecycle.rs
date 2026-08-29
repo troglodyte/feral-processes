@@ -101,6 +101,7 @@ impl App {
             trade_quantity_input: String::new(),
             zoom: 2,
             stack_zoom: STACK_MAP_MIN_ZOOM,
+            log_expanded: false,
             menu_selected: 0,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),

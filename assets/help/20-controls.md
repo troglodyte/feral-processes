@@ -43,6 +43,7 @@ Reading and housekeeping:
 
 - L — history
 - f — filter the log: all, field, or base
+- space — double the log pane's height, and back
 - s — save
 - q — main menu, which confirms first
 - +/- — zoom

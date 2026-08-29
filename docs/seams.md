@@ -1188,20 +1188,36 @@ debug build at ~700 hostiles — the game ticks once per player action and once
 a second idle, so it is nowhere near a frame, but it is three times what it
 was.
 
-### `Tile::open_to_hostiles` is the base slab's fourth reader, and `walkable` alone has never been the rule
+### `Tile::open_to_hostiles` is unreachable now, and is kept rather than deleted
 
-**`Tile::open_to_hostiles` is the base slab's fourth reader, and
-`walkable` alone has never been the rule.** The slab is the one safe
-ground: `maybe_ambush` refuses to roll while the player stands on it,
-`stamp_platform` purges what is standing there when the floor is laid,
-and `pursuit_field` keeps a provoked swarm off it. `wander_ai_system`
-quietly disagreed — it checked `walkable` — so an ordinary wild program
-could stroll onto a base a *pursuing* guardian was forbidden to enter.
-It went unnoticed because `stamp_platform` clears the slab as it is laid
-and the population was small enough that few programs ever stood beside
-one; raising the density made "adjacent to the edge, one step from the
-inside" the common case and the existing spawn-side test caught it by
-accident. A fifth mover goes through the predicate, not beside it.
+**`Tile::open_to_hostiles` was the base slab's fourth reader, and
+`walkable` alone was never the rule.** It is now **unreachable**: nothing
+writes `Biome::Platform` into a `WorldMap`, because the base is out of
+phase and its floor is `base_grid::BaseGrid` rather than a tile override.
+`Game::stamp_platform`, named throughout the original argument, no longer
+exists. The predicate is left as-is rather than deleted — slice 2/3 is
+where the slab-era readers get a base-space equivalent of this rule, and
+`link_site_free`'s own `Biome::Platform` check is dead for exactly the same
+reason and kept for exactly the same one. `Tile::open_to_hostiles`' doc
+comment in `crates/engine/src/world.rs` is the authority and says so
+directly.
+
+The argument is preserved because the *rule* is what slice 2/3 has to
+re-establish, not the mechanism. The slab was the one safe ground in the
+game, established in three places: `Game::maybe_ambush` refused to roll
+while the player stood on it, `stamp_platform` purged whatever was standing
+there when the floor was laid, and `pursuit_field` kept a provoked swarm
+off it. `wander_ai_system` was the fourth reader and the one that quietly
+disagreed — it checked `walkable` alone, so an ordinary wild program could
+stroll onto a base a *pursuing* guardian was forbidden to enter. It went
+unnoticed because `stamp_platform` cleared the slab as it was laid and the
+population was small enough that few programs ever stood beside one; raising
+the density made "adjacent to the edge, one step from the inside" the common
+case, and the existing spawn-side test caught it by accident.
+
+One predicate rather than four copies of `walkable && biome != Platform`,
+because the copy that drifts is the one nobody runs. When base space gets
+its equivalent, a fifth mover goes through *that* predicate, not beside it.
 
 ### `BaseGrid` is the one base resource that is not zone-local
 

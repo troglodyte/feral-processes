@@ -27,6 +27,43 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.54
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+One rendering fault, reported from play, and the general test that should
+have caught it two releases ago.
+
+- **The log pane's filter header was cut through the middle.** `0.13.53`
+  moved the vitals onto the log pane's top border and the
+  `LOG All · Field · Base` header into the pane's body beneath it — but a
+  border strip paints an opaque background *centred on* the line it rides,
+  so the vitals reached nine pixels down into the body and wiped the top of
+  the header a moment after it was drawn. 4.32px of a 13px row, across its
+  whole width. The body now starts below what its own strips paint, at both
+  ends of the pane, from one expression rather than a figure per edge.
+
+- **The pane was asking for fewer rows than it had room to draw.** A
+  pre-existing miscount, unrelated to the above and in the direction that
+  costs the player news: the collapsed pane requested three message lines
+  against room for four, and the expanded one seven against eight. Both are
+  now what the pane actually shows, asserted through a real draw rather than
+  by arithmetic agreeing with itself.
+
+- **The keybar end had the same latent fault and no symptom.** The body's
+  floor sat inside the reach of the keybar's own background quad; nothing
+  was clipped only because row baselines happened to miss that band at every
+  supported window size. It is now held by the same expression as the top
+  edge rather than by coincidence.
+
+This is the third release to fix one bug — an opaque background painted over
+text already drawn — and each of the first two was let through by a test
+that checked one named rectangle instead of what was actually painted. So
+the fix that matters here is the test: `draw_log_pane` is driven through a
+real painter and **no fill painted after a piece of text may overlap that
+text's ink**, for every text the pane draws, in both its states. It reads
+ink rather than layout boxes, because the leading around a line is space
+nothing draws into and measuring it would raise a false alarm on every row.
+
 ## 0.13.53
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32

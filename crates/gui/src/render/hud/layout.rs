@@ -26,12 +26,23 @@ const INFO_W_FRAC: f32 = 0.30;
 /// instead is the silent way to get a column that ignores one end.
 const INFO_W_MIN_CH: f32 = 44.0;
 const INFO_W_MAX_CH: f32 = 56.0;
-/// The log pane's four text rows, collapsed — the pane's normal state.
+/// The log pane's four **message** rows, collapsed — the pane's normal
+/// state.
 const LOG_TEXT_ROWS: f32 = 4.0;
-/// The log pane's rows expanded — see `App::log_expanded`, toggled by SPACE
-/// on the map screen. Twice the collapsed count rather than an
+/// The log pane's message rows expanded — see `App::log_expanded`, toggled
+/// by SPACE on the map screen. Twice the collapsed count rather than an
 /// independently-tuned figure, so "expanded" always means the same thing.
 const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
+/// The filter header's row, on top of whichever message count is in force.
+///
+/// It is the pane's **first body row** rather than a strip on its top
+/// border, because that border now carries the vitals — and a border strip's
+/// background quad reaches `STRIP_CLEARANCE_RATIO` past its line on *both*
+/// sides, so two strips on one border cut each other in half. A separate
+/// constant, and added to both row counts rather than folded into either, so
+/// SPACE keeps doubling exactly the message rows: the pane grows by one row
+/// once, statically, and `map_pane` pays for it once.
+pub(in crate::render) const LOG_FILTER_ROWS: f32 = 1.0;
 
 /// **Bug A's fix, and the number the bug was missing.** A border strip
 /// centres its background quad *on* the line it rides
@@ -40,13 +51,18 @@ const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
 /// strip::PAD_RATIO`. Anything opaque painted on either side of the line
 /// after the strip therefore covers the glyphs riding it.
 ///
-/// Both ends of the map pane are that case, which is why this is one
-/// constant and not a top one and a bottom one. Its title and threat
-/// readout ride the top border at `pane.y`, and `draw_status_bar` fills the
-/// bar *after* `draw_map_frame` has run; its vitals ride the bottom border
-/// at `pane.y + pane.h`, and `draw_log_pane` fills the log pane after it
-/// too — which is what cut the bottom off MIT/ATK/STR while the separation
-/// between the two panes was only `m.gap`.
+/// Two borders on this screen are that case, which is why this is one
+/// constant and not one per pane. The map pane's title and threat readout
+/// ride its top border at `map_pane.y`, and `draw_status_bar` fills the bar
+/// *after* `draw_map_frame` has run. The **log pane's top border** carries
+/// the vitals, and its quad reaches the same distance *upward* from
+/// `log_pane.y`, toward the map pane's bottom border — so `pane_gap` below
+/// has to be at least this, or the strip chews into the frame above it.
+///
+/// The magnitude has not moved; the argument has. It used to be the map
+/// pane's *bottom* border that carried the vitals, reaching downward into
+/// the log pane's own fill, which is what cut the bottom off MIT/ATK/STR
+/// while the separation between the two panes was only `m.gap`.
 ///
 /// Expressed as a ratio of `m.small()`, not a pixel figure, so it travels
 /// with the font size the same way every other figure here does. Built from
@@ -62,12 +78,13 @@ const STRIP_CLEARANCE_RATIO: f32 = 0.5 + strip::PAD_RATIO / 2.0;
 pub(in crate::render) struct HudRegions {
     /// Full width, row 0. Spans over the info column.
     pub status_bar: Rect,
-    /// Framed. Its borders carry the title, the threat readout and the
-    /// vitals strip.
+    /// Framed. Its *top* border carries the title and the threat readout;
+    /// its bottom border carries nothing.
     pub map_pane: Rect,
-    /// Framed. Map-pane width only — never the window's. Its bottom edge
-    /// is fixed; expanding it grows it *upward over* `map_pane`, which is
-    /// drawn first.
+    /// Framed. Map-pane width only — never the window's. Its top border
+    /// carries the vitals strip and its bottom one the keybar. Its bottom
+    /// edge is fixed; expanding it grows it *upward over* `map_pane`, which
+    /// is drawn first — so the vitals travel with it and stay on screen.
     pub log_pane: Rect,
     /// Drawn on `log_pane`'s bottom border line.
     pub key_bar: Rect,
@@ -108,13 +125,13 @@ pub(in crate::render) fn regions(
     // SPACE changes what the log shows, not what the screen is, so the pane
     // it grows over keeps its geometry and the grid does not re-lay-out
     // under the player.
-    let log_h = |rows: f32| m.line_height * rows + m.inset * 2.0;
+    let log_h = |rows: f32| m.line_height * (rows + LOG_FILTER_ROWS) + m.inset * 2.0;
     let collapsed_log_h = log_h(LOG_TEXT_ROWS);
     let key_h = m.line_height;
-    // The map pane's vitals ride its bottom border and paint below it, and
-    // the log pane's opaque fill lands after them. `m.gap` is narrower than
-    // that reach at every window size, so the breathing space between the
-    // two panes is whichever is larger.
+    // The log pane's vitals ride its *top* border and paint above it, into
+    // the space between the two panes. `m.gap` is narrower than that reach
+    // at every window size, so the breathing space between them is
+    // whichever is larger.
     let pane_gap = m.gap.max(strip_clearance);
     let map_h = screen_h - content_top - collapsed_log_h - key_h - pane_gap;
 
@@ -269,31 +286,60 @@ mod tests {
         }
     }
 
-    /// **Bug A's arithmetic, at the other border.** The vitals strip rides
-    /// `map_pane`'s bottom line and its quad reaches the same distance
-    /// *below* it, where the log pane's opaque fill lands afterwards.
-    /// `base.rs::the_map_frames_vitals_strip_clears_the_log_pane` is the
-    /// same assertion against the real painted quad; this one pins the
-    /// arithmetic, so a separation narrowed back to `m.gap` fails here
-    /// without a `Painter`.
+    /// **Bug A's arithmetic, at the other border — which has moved.** The
+    /// vitals strip rides `log_pane`'s *top* line now, and its quad reaches
+    /// the same distance *above* it, where the map pane's own frame sits.
+    /// `base.rs::nothing_paints_over_the_vitals_strip` is the assertion
+    /// against the real painted quads; this one pins the arithmetic, so a
+    /// separation narrowed back to `m.gap` fails here without a `Painter`.
+    ///
+    /// `map_pane`'s bottom border carries nothing at all now, which is why
+    /// this asserts about the log pane's top instead of flipping the sign
+    /// on the old one.
     ///
     /// The collapsed state only, and deliberately: an *expanded* log is an
-    /// overlay over the bottom of the map, so it covers the vitals for as
-    /// long as it is open. That is the state SPACE asks for, not a clipped
-    /// strip in the state the player spends the game in.
+    /// overlay over the bottom of the map, so its top border is somewhere
+    /// up inside the map pane by design. The strip is drawn after the map
+    /// and is not covered by it — that is what
+    /// `the_vitals_strip_survives_an_expanded_log` asserts — so there is no
+    /// clearance to hold in that state.
     #[test]
-    fn the_map_panes_bottom_clears_a_border_strips_quad() {
+    fn the_log_panes_top_clears_the_map_pane() {
         for (w, h) in SIZES {
             let m = ui_metrics(h);
             let r = at(w, h);
             let clearance = m.small() as f32 * STRIP_CLEARANCE_RATIO;
-            let quad_bottom = r.map_pane.y + r.map_pane.h + clearance;
+            let quad_top = r.log_pane.y - clearance;
             assert!(
-                quad_bottom <= r.log_pane.y + 0.001,
-                "the vitals strip would paint into the log pane at {w}x{h}: \
-                 quad bottom {quad_bottom}, log top {}",
-                r.log_pane.y
+                quad_top >= r.map_pane.y + r.map_pane.h - 0.001,
+                "the vitals strip would paint into the map pane at {w}x{h}: \
+                 quad top {quad_top}, map bottom {}",
+                r.map_pane.y + r.map_pane.h
             );
+        }
+    }
+
+    /// The filter row is a body row and the message rows are what SPACE
+    /// doubles, so the pane is exactly one row taller than its message
+    /// count in **both** states. Folding the filter into `LOG_TEXT_ROWS`
+    /// compiles and reads the same at a glance, and makes SPACE grow the
+    /// pane by five rows instead of four.
+    #[test]
+    fn the_log_pane_carries_one_filter_row_in_both_states() {
+        for (w, h) in SIZES {
+            let m = ui_metrics(h);
+            for (r, rows) in [
+                (at(w, h), LOG_TEXT_ROWS),
+                (at_expanded(w, h), LOG_TEXT_ROWS_EXPANDED),
+            ] {
+                let want = m.line_height * (rows + LOG_FILTER_ROWS) + m.inset * 2.0;
+                assert!(
+                    (r.log_pane.h - want).abs() < 0.001,
+                    "log pane is {} tall at {w}x{h} for {rows} message rows, \
+                     wanted {want}",
+                    r.log_pane.h
+                );
+            }
         }
     }
 

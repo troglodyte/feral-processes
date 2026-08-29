@@ -63,6 +63,10 @@ fn deploy_home(app: &mut App) {
     app.handle_key(GameKey::Enter);
     app.handle_key(GameKey::Up);
     assert_eq!(structure_count(app), 1, "Home should now be deployed");
+    // Founding fires the base tutorial through the real key path, and any
+    // key dismisses it — so without this the fixture's caller loses its
+    // first keypress to a screen it never asked for.
+    dismiss_notifications(app);
     stand_in_base(app);
 }
 
@@ -124,6 +128,9 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
             );
 
             app.handle_key(dir);
+            // Deploying the Home is one of the placements this walks, and
+            // that fires the base tutorial.
+            dismiss_notifications(&mut app);
             assert!(
                 app.mode == Mode::Playing,
                 "the direction picker should return to Playing either way"

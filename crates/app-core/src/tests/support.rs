@@ -514,6 +514,27 @@ pub(crate) fn found_the_base(app: &mut App) {
         .expect("a fixture with a game")
         .place_structure("home", 0, 0)
         .expect("a fresh run can afford its first Home, and founds from the open grid");
+    // Founding fires the base tutorial, which would take the screen on this
+    // fixture's next keypress and leave every downstream assertion reading
+    // `Mode::Notification` for no reason it could name. A test that is about
+    // the notification uses `dismiss_notifications` instead.
+    drain_notifications(app);
+}
+
+/// Empties the engine's notification queue without ever showing it.
+pub(crate) fn drain_notifications(app: &mut App) {
+    let Some(game) = app.game.as_mut() else {
+        return;
+    };
+    while game.take_notification().is_some() {}
+}
+
+/// Dismisses the notification on screen and everything queued behind it,
+/// through the real key path. For a fixture that reached one by playing.
+pub(crate) fn dismiss_notifications(app: &mut App) {
+    while app.mode == Mode::Notification {
+        app.handle_key(GameKey::Esc);
+    }
 }
 
 /// Puts `app`'s party out of phase, inside base space, by the same

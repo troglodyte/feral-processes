@@ -20,6 +20,7 @@ mod info_tab;
 mod inventory;
 mod log_filter;
 mod menus;
+mod notifications;
 mod party;
 mod playing;
 mod quitting;

@@ -1203,6 +1203,21 @@ pub enum Mode {
     /// one with the links at the top would put long prose out of reach.
     /// Links are followed by typing their label's shortcut instead.
     HelpPage,
+    /// A notification, taking the whole window until any key dismisses it.
+    ///
+    /// `App::pending_notification` is the subject, and `after_tick` is the
+    /// only thing that sets this mode — **only from `Mode::Playing`**, which
+    /// is the whole of what makes a queued notification safe. A fight, any
+    /// picker, text entry and the excavation plan are all untouched;
+    /// anything the engine queued while one of them was open waits until the
+    /// player is back on the map. So a notification can never eat a keypress
+    /// in the middle of an unrelated flow.
+    ///
+    /// A page with nothing to page through, `Mode::CellDescribe`'s idiom:
+    /// every key does the same thing. Dismissing takes the next one straight
+    /// away if the queue is not empty, so a burst arrives one at a time
+    /// rather than being collapsed or dropped.
+    Notification,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to
     /// save first: autosave only fires every `AUTOSAVE_INTERVAL_TICKS`, so
@@ -1340,7 +1355,10 @@ impl Mode {
             | Mode::ArenaLoad
             | Mode::ArenaSave
             | Mode::ArenaPick
-            | Mode::ArenaResult => false,
+            | Mode::ArenaResult
+            // Only ever entered from `Mode::Playing`, so it never layers
+            // over a fight.
+            | Mode::Notification => false,
         }
     }
 }
@@ -1503,6 +1521,10 @@ pub struct App {
     /// the moment `x` was pressed, and the popup must not change under the
     /// player if something later moves them.
     pub pending_description: Option<String>,
+    /// The notification on screen in `Mode::Notification`. The **one**
+    /// writer is `App::show_next_notification`; a second one is three
+    /// distinct failures inherited, `GearInspect`'s rule.
+    pub pending_notification: Option<feral_processes_engine::notifications::Notification>,
     /// Which screen `Mode::Manifest` was opened from, and so where Esc goes
     /// back to. See `ManifestOrigin`.
     pub manifest_origin: ManifestOrigin,

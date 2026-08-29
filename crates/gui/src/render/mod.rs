@@ -41,6 +41,7 @@ mod inventory;
 mod manifest;
 mod manifest_layout;
 mod meta;
+mod notify;
 mod party;
 mod popup;
 mod progression;
@@ -435,7 +436,11 @@ fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Me
 fn needs_status_banner(mode: Mode) -> bool {
     matches!(
         mode,
-        Mode::Battle | Mode::BattleResult | Mode::FrameMap | Mode::FieldRoutineCell
+        Mode::Battle
+            | Mode::BattleResult
+            | Mode::FrameMap
+            | Mode::FieldRoutineCell
+            | Mode::Notification
     )
 }
 
@@ -478,6 +483,21 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
         Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, refusal, painter, &m),
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),
+        // Drawn over the map rather than over black: the run is still there
+        // behind the notice, and the scrim lets it show through faintly.
+        // A `None` refusal because this screen draws no popup to put one in
+        // — `needs_status_banner` names it, so a refusal raised underneath
+        // still reaches the strip along the bottom.
+        Mode::Notification => {
+            draw_playing_base(app, fx, None, painter, &m);
+            match &app.pending_notification {
+                Some(note) => notify::draw_notification(note, painter, &m),
+                // The mode is only ever entered with a subject, so this is
+                // unreachable — but a blank window would be a soft lock the
+                // player cannot read their way out of, and the map is not.
+                None => draw_mode_overlay(app, None, painter, &m),
+            }
+        }
         Mode::Battle => draw_battle(app, fx, painter, &m),
         Mode::BattleTarget => {
             draw_battle(app, fx, painter, &m);
@@ -1114,7 +1134,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 86] = [
+    const ALL_MODES: [Mode; 87] = [
         Mode::MainMenu,
         Mode::DifficultyPick,
         Mode::LoadGame,
@@ -1193,6 +1213,7 @@ mod tests {
         Mode::Achievements,
         Mode::Help,
         Mode::HelpPage,
+        Mode::Notification,
         Mode::GameOver,
         Mode::QuitRunConfirm,
         Mode::QuitAppConfirm,

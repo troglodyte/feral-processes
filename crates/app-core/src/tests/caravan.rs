@@ -199,6 +199,9 @@ fn a_trader_that_rolls_away_closes_the_screen() {
         app.game.as_mut().unwrap().wait();
     }
     app.handle_key(GameKey::Char('1'));
+    // Long enough for the base to be swept at least once, which fires the
+    // raid tutorial over whatever the screen had settled on.
+    dismiss_notifications(&mut app);
 
     assert_eq!(
         app.mode,

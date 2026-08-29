@@ -57,6 +57,7 @@ impl App {
             pending_manifest: None,
             pending_structure_manifest: None,
             pending_description: None,
+            pending_notification: None,
             manifest_origin: ManifestOrigin::default(),
             pending_fuse_first: None,
             pending_fuse_second: None,
@@ -376,6 +377,44 @@ impl App {
         }
         self.flush_profile_writes();
         self.maybe_autosave();
+        self.show_next_notification();
+    }
+
+    /// Takes the screen for the next queued notification, if the player is
+    /// somewhere it is safe to.
+    ///
+    /// **`Mode::Playing` and nothing else**, which is the whole of the
+    /// timing rule: a fight, any picker and text entry all keep the queue
+    /// waiting rather than being interrupted. Nothing is dropped — the
+    /// engine holds the queue and this is its only reader, so a notification
+    /// raised four frames down is still there when the party surfaces.
+    ///
+    /// The **one writer** of `pending_notification`.
+    pub(crate) fn show_next_notification(&mut self) {
+        if self.mode != Mode::Playing {
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        let Some(next) = game.take_notification() else {
+            return;
+        };
+        self.pending_notification = Some(next);
+        self.mode = Mode::Notification;
+    }
+
+    /// Any key dismisses. The next one takes the screen straight away if
+    /// there is one, so a burst arrives one at a time rather than being
+    /// collapsed into the last of them — which is why this pops here rather
+    /// than falling back to `Mode::Playing` and waiting a tick for
+    /// `after_tick`, a tick that does not come until the player acts.
+    pub(crate) fn handle_notification_key(&mut self, _key: GameKey) {
+        self.pending_notification = None;
+        self.mode = Mode::Playing;
+        let next = self.game.as_mut().and_then(|game| game.take_notification());
+        if let Some(next) = next {
+            self.pending_notification = Some(next);
+            self.mode = Mode::Notification;
+        }
     }
 
     /// The one door a `Game` becomes the live run through — a new game, a

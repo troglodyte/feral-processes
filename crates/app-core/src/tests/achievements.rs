@@ -4,7 +4,7 @@
 use feral_processes_engine::achievements::{Earned, MainStat, Profile};
 use feral_processes_engine::tuning::PLAYER_BASE_STATS;
 
-use crate::tests::support::test_assets_dir;
+use crate::tests::support::{dismiss_notifications, test_assets_dir};
 use crate::*;
 
 /// A scratch profile path no other case can be using — the suite runs its
@@ -149,6 +149,8 @@ fn an_unwritable_profile_path_does_not_crash_the_tick() {
     breach_and_tick(&mut app);
     let _ = std::fs::remove_dir_all(&path);
 
+    // Breaching fires the breach milestone, which is not what this is about.
+    dismiss_notifications(&mut app);
     assert_eq!(app.mode, Mode::Playing, "the run should still be going");
     assert!(
         app.status_line

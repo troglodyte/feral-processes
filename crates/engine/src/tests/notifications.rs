@@ -325,3 +325,12 @@ fn draining_the_profile_channel_clears_both_halves() {
     assert!(game.take_pending_profile_writes());
     assert!(!game.take_pending_profile_writes());
 }
+/// A new run opens on the map, not on a notice. Worth pinning because
+/// `enter_next_zone` fires the breach milestone from its first line, and
+/// anything that later routes world setup through it would greet every
+/// player with "Breach" before they had moved.
+#[test]
+fn a_fresh_run_opens_on_the_map_and_not_on_a_notice() {
+    let game = fresh();
+    assert_eq!(game.notifications_pending(), 0);
+}

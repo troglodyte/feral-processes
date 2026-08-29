@@ -20,6 +20,7 @@ pub mod items_db;
 pub mod memories;
 pub mod needs;
 pub mod nemesis;
+pub mod notifications;
 pub mod perks;
 pub mod policy;
 pub mod progression;

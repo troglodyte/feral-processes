@@ -236,6 +236,14 @@ pub struct Earned {
 pub struct Profile {
     #[serde(default)]
     pub earned: Vec<Earned>,
+    /// Every `Repeat::OnceEver` notification this machine has already shown.
+    ///
+    /// Here rather than in the save for the reason the whole struct is here:
+    /// a tutorial seen in one run must stay seen in the next, and the profile
+    /// is the one thing that outlives a run. Additive and
+    /// `#[serde(default)]`, so an existing `profile.ron` keeps parsing.
+    #[serde(default)]
+    pub seen_notifications: Vec<crate::notifications::NotificationId>,
 }
 
 impl Profile {
@@ -253,6 +261,20 @@ impl Profile {
             return false;
         }
         self.earned.push(entry);
+        true
+    }
+
+    /// Records a notification as shown, returning `true` on the first
+    /// sighting and `false` — changing nothing — on a repeat.
+    ///
+    /// Deliberately the same shape as `record`: "has this happened before"
+    /// is one question with one answer, and a caller that has to ask
+    /// `contains` first and write second can forget the second half.
+    pub fn see(&mut self, id: &crate::notifications::NotificationId) -> bool {
+        if self.seen_notifications.contains(id) {
+            return false;
+        }
+        self.seen_notifications.push(id.clone());
         true
     }
 

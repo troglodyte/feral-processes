@@ -154,6 +154,12 @@ impl Game {
             // was just put on.
             self.lay_starting_pocket();
             self.log_base(format!("You deploy a {}.", def.name));
+            // Fired unconditionally: `Repeat::OnceEver` is what makes it
+            // once-only, and a second `if first_time` here would put the
+            // policy in two places.
+            let _ = self.notify(&crate::notifications::NotificationId::from(
+                "tutorial_base_founding",
+            ));
             self.tick();
             return Ok(());
         }

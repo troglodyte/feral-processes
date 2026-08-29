@@ -423,7 +423,7 @@ impl App {
     /// nothing else — it must never take the run down with it.
     fn flush_profile_writes(&mut self) {
         let Some(game) = &mut self.game else { return };
-        if game.take_pending_profile_writes().is_empty() {
+        if !game.take_pending_profile_writes() {
             return;
         }
         self.profile = game.profile().clone();

@@ -122,6 +122,9 @@ impl Game {
             MessageKind::Outcome,
             format!("CONTRACT COMPLETE: {}", contract.def.name),
         );
+        let _ = self.notify(&crate::notifications::NotificationId::from(
+            "milestone_contract",
+        ));
 
         for reward in &contract.def.reward {
             match *reward {

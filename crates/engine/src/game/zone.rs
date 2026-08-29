@@ -328,6 +328,9 @@ impl Game {
     /// end of this function. Gear, supplies, fusion tiers and banked Research
     /// Data all do.
     pub(crate) fn enter_next_zone(&mut self) {
+        let _ = self.notify(&crate::notifications::NotificationId::from(
+            "milestone_breach",
+        ));
         // The base is out of phase, not on the zone surface, so a breach
         // does not touch it — no despawn, no reposition, nothing. What
         // still has to be swept is what actually is zone-local: a

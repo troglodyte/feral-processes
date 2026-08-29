@@ -1,0 +1,8 @@
+(
+    id: "tutorial_first_work_order",
+    title: "The Order Is Filed",
+    body: "You have told the base what to hold, not who should hold it. Every tick, the base recomputes which machines that order needs, who is free to stand at them, and how far along each one is. Nothing is stored but the order itself.\n\nA standing order is a level the base keeps topped up rather than a batch it fills once. Cancelling unwinds nothing — the goods already made are already yours.\n\nIf the line stalls, the order screen names the machine it is waiting on.",
+    glyph: '&',
+    color: Yellow,
+    repeat: OnceEver,
+)

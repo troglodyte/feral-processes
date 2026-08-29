@@ -704,8 +704,62 @@ impl LabourDemand {
 /// drains after each tick and writes. It accumulates rather than being
 /// per-tick like `RunFeats`, because a failed or skipped drain must not lose
 /// the earn.
+///
+/// **Two reasons the profile can be dirty, one resource.** A notification
+/// with `Repeat::OnceEver` latches in the profile too, so `seen` accumulates
+/// beside `earned` rather than getting a second resource of its own — two
+/// resources meaning "the profile changed" is two things app-core has to
+/// remember to drain, and the one that drifts is the one nobody runs.
 #[derive(Resource, Default)]
-pub struct PendingProfileWrites(pub Vec<crate::achievements::AchievementId>);
+pub struct PendingProfileWrites {
+    pub earned: Vec<crate::achievements::AchievementId>,
+    pub seen: Vec<crate::notifications::NotificationId>,
+}
+
+impl PendingProfileWrites {
+    pub fn is_empty(&self) -> bool {
+        self.earned.is_empty() && self.seen.is_empty()
+    }
+}
+
+/// Notifications waiting to take the screen, oldest first.
+///
+/// A **session-only queue**, `RunFeats`' precedent and for a stronger
+/// reason: a notification is news about a moment, and a player reloading has
+/// already left the moment. Nothing here is saved, so `SAVE_FORMAT_VERSION`
+/// is untouched.
+///
+/// It holds **resolved** `Notification` values rather than ids —
+/// `ActiveContract`'s rule and `Sortie`'s — so a `.ron` file edited or
+/// deleted between the push and the draw cannot strand or silently rewrite
+/// something already queued.
+///
+/// `Game::notify` is the only thing that pushes and `Game::take_notification`
+/// the only thing that pops. A frontend that draws none must still call the
+/// drain or the queue grows for the life of the run, which is
+/// `take_effects`' contract.
+#[derive(Resource, Default)]
+pub struct Notifications {
+    pending: std::collections::VecDeque<crate::notifications::Notification>,
+}
+
+impl Notifications {
+    pub fn push(&mut self, notification: crate::notifications::Notification) {
+        self.pending.push_back(notification);
+    }
+
+    pub fn pop(&mut self) -> Option<crate::notifications::Notification> {
+        self.pending.pop_front()
+    }
+
+    pub fn len(&self) -> usize {
+        self.pending.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+}
 
 /// Battle records waiting for app-core to write them out, and the one bool
 /// that decides whether any are built at all.

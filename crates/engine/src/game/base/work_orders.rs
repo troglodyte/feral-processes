@@ -2058,6 +2058,9 @@ impl Game {
         } else {
             format!("Work order filed: {qty} x {name}.")
         });
+        let _ = self.notify(&crate::notifications::NotificationId::from(
+            "tutorial_first_work_order",
+        ));
         Ok(())
     }
 

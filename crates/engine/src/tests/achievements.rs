@@ -18,7 +18,7 @@ fn earned_ids(game: &Game) -> Vec<String> {
 fn pending_ids(game: &Game) -> Vec<String> {
     game.world
         .resource::<PendingProfileWrites>()
-        .0
+        .earned
         .iter()
         .map(|id| id.to_string())
         .collect()

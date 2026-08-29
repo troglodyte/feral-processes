@@ -1,0 +1,8 @@
+(
+    id: "tutorial_first_descent",
+    title: "The Stack",
+    body: "Below the on-ramp the ground stops being a map and starts being a corridor. You see only what the frame lets you see, and each frame down is worse-tempered than the last.\n\nTwo things follow you down. Trace climbs the deeper and longer you stay, and what it draws is not friendly. And the Stack is the only place Portal Fragments come from — the boss at the bottom of a stack is holding the way through to the next sector.\n\nPress [g] for the map of the frame you are standing in.",
+    glyph: '>',
+    color: Cyan,
+    repeat: OnceEver,
+)

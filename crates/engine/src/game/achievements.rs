@@ -12,6 +12,7 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::system::SystemParam;
 
 use crate::achievements::{AchievementDb, Earned, Profile, Reward, Trigger, roll_main_stat};
+use crate::notifications::Notification;
 use crate::resources::{
     DifficultyMode, GameClock, Locale, MessageKind, MessageLog, PendingProfileWrites, RunFeats,
     ZoneLevel,
@@ -38,12 +39,20 @@ pub struct RunStanding<'w> {
 /// what is newly earned into the `Profile`, and queues it for app-core to
 /// write to disk.
 ///
+/// What stands over an achievement's notification. A constant rather than a
+/// field on `AchievementDef`, because every rung is the same *kind* of news
+/// — a hue per achievement would be a second meaning on an axis
+/// `hud::palette::glyph` already spends on content.
+const ACHIEVEMENT_GLYPH: char = '*';
+const ACHIEVEMENT_COLOR: crate::components::GlyphColor = crate::components::GlyphColor::Yellow;
+
 pub fn achievement_system(
     db: Res<AchievementDb>,
     mut profile: ResMut<Profile>,
     mut feats: ResMut<RunFeats>,
     standing: RunStanding,
     mut pending: ResMut<PendingProfileWrites>,
+    mut notifications: ResMut<crate::resources::Notifications>,
     mut log: ResMut<MessageLog>,
 ) {
     let RunStanding {
@@ -80,7 +89,24 @@ pub fn achievement_system(
             permadeath,
             rolled_stat,
         });
-        pending.0.push(def.id.clone());
+        pending.earned.push(def.id.clone());
+        // **A second source, not a second door.** The notification is built
+        // from the achievement's own `name` and `description` rather than
+        // from a `.ron` file in `assets/notifications/` repeating them —
+        // authoring the same prose twice is exactly the pattern that drifts,
+        // and the copy that drifts is the one nobody runs. So a new
+        // achievement gets a notification with no notification work, and
+        // there is nothing here for the catalogue's pairing census to cover.
+        //
+        // No latch is needed: the `profile.contains` guard at the top of the
+        // loop already makes this branch a first earn.
+        notifications.push(Notification {
+            title: format!("Achievement: {}", def.name),
+            body: def.description.clone(),
+            sprite: None,
+            glyph: ACHIEVEMENT_GLYPH,
+            color: ACHIEVEMENT_COLOR,
+        });
         // `Outcome` rather than `Info` deliberately: a rung can be crossed
         // mid-fight, and `MessageLog::retain_outcomes_since_battle` prunes
         // everything but four kinds when the battle ends. An `Info` line

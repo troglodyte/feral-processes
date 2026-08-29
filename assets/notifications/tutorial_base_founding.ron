@@ -1,0 +1,8 @@
+(
+    id: "tutorial_base_founding",
+    title: "Base Space",
+    body: "Your Home stands. The ground it sits on is not the ground you were just walking — base space runs out of phase with the zone map, and the two share coordinates without sharing anything else. Nothing wild can reach you here.\n\nPress [b] for the base menu: what to build, what to make, and who is doing it. Programs you own and are not fighting beside are base staff by default. You do not assign them. You say what the base should hold, and the base works out who stands where.",
+    glyph: '#',
+    color: Cyan,
+    repeat: OnceEver,
+)

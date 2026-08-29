@@ -43,6 +43,7 @@ mod memories;
 mod message_log;
 mod needs;
 mod nemesis;
+mod notifications;
 mod party;
 mod perks;
 mod policy;

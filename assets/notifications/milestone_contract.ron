@@ -1,0 +1,8 @@
+(
+    id: "milestone_contract",
+    title: "Contract Closed",
+    body: "The Broker marks it settled and pays out. Whatever it promised is yours.\n\nThe board rotates on its own — it is not a list you can exhaust, and re-reading it after a while is how a better job turns up.",
+    glyph: '$',
+    color: Green,
+    repeat: Always,
+)

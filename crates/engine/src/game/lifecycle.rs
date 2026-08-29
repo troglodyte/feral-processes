@@ -111,6 +111,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            notifications: notification_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -148,6 +149,8 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(notification_db);
+        world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
@@ -373,6 +376,7 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
+            notifications: notification_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -424,6 +428,8 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
+        world.insert_resource(notification_db);
+        world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
         world.insert_resource(rock_db);
@@ -1780,17 +1786,23 @@ impl Game {
         self.world.resource::<crate::achievements::Profile>()
     }
 
-    /// Takes the ids earned since the last call, emptying the queue.
+    /// Takes everything that has dirtied the profile since the last call,
+    /// emptying the queue. `true` means "the profile changed, write it".
     ///
-    /// The engine decides what has been earned; app-core owns the path and
-    /// does the writing. Non-empty means "the profile changed, write it".
-    pub fn take_pending_profile_writes(&mut self) -> Vec<crate::achievements::AchievementId> {
-        std::mem::take(
-            &mut self
-                .world
-                .resource_mut::<crate::resources::PendingProfileWrites>()
-                .0,
-        )
+    /// The engine decides what happened; app-core owns the path and does the
+    /// writing. A bool rather than the ids because no caller has ever read
+    /// them — and there are two kinds now (a rung earned, a notification
+    /// seen), so a single typed list could only carry one of them honestly.
+    pub fn take_pending_profile_writes(&mut self) -> bool {
+        let mut pending = self
+            .world
+            .resource_mut::<crate::resources::PendingProfileWrites>();
+        if pending.is_empty() {
+            return false;
+        }
+        pending.earned.clear();
+        pending.seen.clear();
+        true
     }
 
     /// Replaces the empty `Profile` both constructors leave in the world with
@@ -1940,6 +1952,7 @@ struct AssetDbs {
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
+    notifications: crate::notifications::NotificationDb,
     sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
@@ -2045,6 +2058,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
+    // Same absent-is-silent rule again — see `NotificationDb`'s own doc. An
+    // empty catalogue makes `Game::notify` a no-op and no screen ever opens,
+    // which is the pre-notification game.
+    let (notifications, notification_warnings) =
+        crate::notifications::NotificationDb::load_dir(&assets_dir.join("notifications"))?;
+    warnings.extend(notification_warnings);
     // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
     // catalogue leaves `Game::sortie_board` with nothing to offer, which is
     // the pre-sortie game.
@@ -2095,6 +2114,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         environment,
         memories,
         needs,
+        notifications,
         sorties,
         caravans,
         nemesis,

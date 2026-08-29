@@ -27,6 +27,70 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.51
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32
+and no save field is added — but **this release changes how hard fights
+are**, in one direction and mostly underground, so a run in progress will
+notice.
+
+Fights had two ceilings and neither bounded the other. `Game::group_pack`
+caps a fight per group (`MAX_GROUP_SIZE`) and per group count
+(`MAX_ENEMY_GROUPS`), so what one intrusion could actually field was those
+two multiplied — four hundred programs in principle, and thirty-three
+against a party of four at zone 3, five frames down.
+
+Two things kept that hidden. A **surface** fight is whoever `gather_pack`
+found standing together, which measures 2.6 bodies at zone 3 against a
+ceiling of twelve, so the missing bound was also the bound nothing ever
+reached. A **Stack** ambush is not: `stack_encounter_pack` takes one species
+pick and one full group roll per group slot the curve allows, so it fills
+the ceiling by construction. The same curve was producing a shallow-Stack
+fight four times the size of the surface fight beside it.
+
+`0.13.21`'s change to `Game::danger_steps` — the zone step added to the
+depth step underground — is what turned that from large into fatal. It was
+aimed at which species a frame may field, and `danger_steps` also feeds both
+group-size curves. Its effect on lair fights was measured at the time; its
+effect on the ordinary wandering pack was not, and the Stack has been
+unwinnable from **depth 3 down** ever since: 2.0% at depth 3 and 0.0% at
+depth 5 for a party at the zone level cap, over 200 staged fights each.
+
+- **`tuning::MAX_PACK_BODIES` is the bound the other two never expressed.**
+  Eight bodies across every group in the fight, trimmed off the largest group
+  each pass — so a mixed pack keeps its variety and loses its depth, four
+  species two deep rather than one species eight deep. The bodies it turns
+  away **stay standing on the map** and are met on the next bump, exactly as
+  the surplus past `MAX_ENEMY_GROUPS` already did. Nothing is despawned and
+  no encounter is skipped.
+- **What that does to the Stack:** depths 2 through 5 now run 100%, 93.5%,
+  67% and 39.5% for a party at its zone's level cap — a curve that descends,
+  where before it fell off a cliff between the second frame and the third.
+- **Two fights outside the Stack move with it**, because the bound is on
+  every fight rather than on the Stack's alone. A zone-3 depth-3 lair goes
+  from 71% to 91%, and a **surface** pack at zone 6 — which could roll 17.5
+  bodies — from 64% to 100%. The late-game surface has never had a real
+  ceiling on how many programs may engage at once, and now does.
+- **The arena could not field the party the game permits.** `set_level`
+  clamped every scenario's companions to `arena_level_ceiling()`, which was
+  the live ceiling until Kernel Rings stopped buying levels in `0.13.36`;
+  since then it has sat *below* the zone cap from zone 2 on, silently
+  clamping **upward** authoring. A zone-3 scenario asking for the level-23
+  party that zone allows was staged at 12. The ceiling is now the higher of
+  the two, which keeps the zone-1 property that figure was introduced for —
+  five shipped scenarios author `level: 12` and zone 1's cap is below it.
+- **A benched companion counts as one that went down.** `companions_downed`
+  read `hp > 0`, and `0.13.36`'s Forgiving benching leaves a dead program on
+  the roster at HP 1 — so the arena's "companions down" column has been
+  structurally zero since it landed.
+
+`docs/measurements/2026-08-28-stack-depth-curve-after-danger-steps.md` has
+the sweep behind the constant, including the isolation of the three terms
+that feed a deep-Stack fight — volume, the species window and the per-body
+stat step — and the finding that the species window is a **threshold rather
+than a gradient**: pulling it back one step or two does nothing at all, and
+three steps is a cliff.
+
 ## 0.13.50
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32,

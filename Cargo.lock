@@ -2414,7 +2414,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "feral-processes"
-version = "0.13.51"
+version = "0.13.52"
 dependencies = [
  "dirs",
  "feral-processes-app-core",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-app-core"
-version = "0.13.51"
+version = "0.13.52"
 dependencies = [
  "feral-processes-engine",
  "serde_json",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-engine"
-version = "0.13.51"
+version = "0.13.52"
 dependencies = [
  "bevy_ecs",
  "bincode",
@@ -2448,7 +2448,7 @@ dependencies = [
 
 [[package]]
 name = "feral-processes-gui"
-version = "0.13.51"
+version = "0.13.52"
 dependencies = [
  "bevy",
  "bevy_egui",

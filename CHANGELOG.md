@@ -27,6 +27,53 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.52
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32
+and no save field is added. Four bugs, three of them things the game was
+already doing wrong in front of the player and one of them a run-ender for a
+base that had only just been founded.
+
+- **An opening base is too thin to raid.** A GC Entropy Sweep is meant to be
+  attrition the base absorbs, and a base with two bodies has nothing to
+  absorb it with — early raids were taking the whole staff down and leaving
+  every program `Downed`, with nobody standing to defend against the next
+  one. `tuning::RAID_MIN_BASE_STAFF` (3) is the floor `Game::raid_check` now
+  measures against, counted through the existing `Game::base_staff` and so
+  through `party::role_of`, with `Downed` bodies excluded — a base already
+  reduced to wreckage is exactly the state this closes. The gate sits
+  **after** the RNG roll, `maybe_spawn_wild_creature`'s rule, so it shifts
+  no seeded stream. Eight existing raid tests ran with **zero** staff and
+  were silently gated out by it; they stand bodies up now rather than the
+  gate being weakened to suit them.
+- **A downed program says so.** One benched by a Forgiving death read as
+  `idle` on the manifest and on the examine line, which is the same word a
+  companion nobody has ever posted anywhere gets. `bench_or_dissolve` calls
+  `detach_from_play` *before* inserting `Downed`, so the program has no
+  party slot, no wield slot and no `Task` — every branch in
+  `Game::program_activity` found nothing and fell through. One early return
+  in that derivation, which both surfaces already share, so the fix lands on
+  both at once and costs the renderer nothing. The word is `recovering`,
+  which is what `run_repair_bays` already says when a Bay finishes the job.
+- **The status bar was eating the map pane's title.** A border strip centres
+  its background quad *on* the line it rides, reaching half its own height
+  above it, and `map_pane.y` sat exactly on the status bar's bottom edge —
+  so the bar's opaque fill, drawn after `draw_map_frame`, took the top of
+  SECTOR MAP and the threat readout with it. The panes below the bar now
+  start `TOP_STRIP_CLEARANCE_RATIO * m.small()` further down, built off
+  `strip::PAD_RATIO` rather than a copied literal so the two cannot drift.
+  The bar's own rect is unchanged. The test locates the **painted quad**
+  through paint order rather than asserting a layout number, because a
+  layout figure passes against the bug.
+- **SPACE doubles the map's log pane** to eight rows and back, off
+  `App::log_expanded` on `stack_zoom`'s precedent. Bound in
+  `handle_playing_key`'s top match, which runs before the hand-off to
+  `handle_stack_key`, so it works underground too rather than falling
+  through that dispatch's `_ => {}` the way `r` once did. The pane's row
+  count is already derived from its height, so the taller pane fills itself.
+  Not advertised on the keybar — that strip has no slack at 1280x720 — so it
+  is documented on the controls page instead.
+
 ## 0.13.51
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32

@@ -133,3 +133,26 @@
   *message* count, or SPACE grows the pane by five rows instead of four.
   `base.rs`'s `log_capacity` subtracts that same constant, never a second
   literal.
+
+- **A pane whose border carries a strip starts its body at
+  `layout::strip_inset`, not at `m.inset`.** The quad `border_strip` centres
+  on its line reaches `strip_clearance` *inward* as well as outward, and the
+  strips are painted after the body — so at 1280x720 the vitals hung over
+  `[pane.y, pane.y+9]` and took 4.32px off the top of the 13px filter row
+  beneath them. `m.inset` is measured from the first pixel the body owns, and
+  on such a border that pixel is the bottom of the quad, so the two **add**;
+  the larger simply winning is the obvious form and still leaves ~2px of the
+  ascenders covered, because a row's baseline sits only `m.font_size/2` below
+  the body's top while its ink rises a full ascent above that baseline. **The
+  pane must buy the height** — `log_h` spends `strip_inset * 2.0` — or
+  `LOG_TEXT_ROWS` silently stops meaning four, which is the mutation
+  `the_pane_draws_four_message_rows_collapsed_and_eight_expanded` exists for.
+  `base.rs`'s `log_capacity` came into step for free and is asserted by that
+  same test; against the old height it under-asked by one in both states. The
+  keybar's end was the same fault latent — the floor sat 6.67px inside its
+  quad and nothing was clipped only because the row lattice never landed
+  within an ascent of it. **The general form is the deliverable**:
+  `nothing_the_log_pane_paints_covers_text_it_already_drew` walks every text
+  the pane draws, in both states, and asserts nothing painted afterwards
+  overlaps its **ink** by an area — three releases have now shipped this bug
+  because the test named one rectangle instead.

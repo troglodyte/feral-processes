@@ -1,6 +1,6 @@
 # Full-screen notifications
 
-**Status:** approved, not implemented
+**Status:** implemented
 **Date:** 2026-08-29
 
 Every big moment in a run currently lands as a line in the log pane. A zone

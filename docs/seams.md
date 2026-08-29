@@ -8023,3 +8023,90 @@ The consequence worth knowing: a cue is drained on the frame it is queued, so
 a return walk the player is not home to see is dropped rather than saved for
 later. That matches raid flashes and is the price of the whole feature being
 free.
+
+### A notification is a catalogue plus a queue plus one equality
+
+The moments that deserve the whole screen are few, and every word of them
+is content. So the split is: `assets/notifications/` is data,
+`Game::notify(id)` is Rust, and the three parts are separable.
+
+`NotificationDb` is `NeedDb::load_dir` line for line, which is `MemoryDb`'s
+before it. That is deliberate repetition rather than a missing abstraction:
+what is shared is the *property set* — absent directory silent, malformed
+file costs one entry, iteration sorted — and a generic loader would make
+each catalogue's required-versus-defaulted field list a type parameter for
+no gain. The property that matters is that **deleting the directory
+restores the pre-notification game**, and the way that lapses is a system
+or a screen gated on the db being non-empty, not a duplicated `read_dir`.
+
+**The queue holds resolved values.** This is `ActiveContract`'s rule and
+`Sortie`'s, reaching a third feature: an id in the queue means a `.ron`
+edited between the push and the draw silently rewrites what the player is
+about to read, and one deleted strands it. The cost is that a `Notification`
+is a fourth copy of five fields; the alternative is a class of bug that only
+appears to people editing assets with the game running, which is every
+modder.
+
+**Two repeat policies, and the third was rejected on its name.** Once per
+*run* would have to latch on the session-only queue resource, so it would
+really mean once per *session* and fire again after a reload. That is worse
+than not having it: a policy whose name is a lie gets used, and the bug
+report is "the tutorial keeps coming back", which reads as the latch being
+broken rather than as the policy meaning something else. `Always` and
+`OnceEver` cover the shipped content, and the third is one additive variant.
+
+`OnceEver` latches on `achievements::Profile`, which buys three things at
+once. It is not the save file, so no `SAVE_FORMAT_VERSION`. It is cross-run,
+which is what "tutorial" means. And it rides the **existing**
+`PendingProfileWrites` channel, which app-core flushes *below* `after_tick`'s
+`in_arena()` early return — so "an arena session touches no disk" holds here
+by omission. A new arena check would have been the wrong fix to the right
+worry.
+
+That channel gained a second field rather than a second resource. Two
+resources both meaning "the profile changed" is two things app-core has to
+remember to drain, and the one that drifts is the one nobody runs.
+`take_pending_profile_writes` became a bool in the same edit: no caller had
+ever read the ids, and with two kinds of dirt a single typed list could only
+carry one of them honestly.
+
+**Achievements are a second source and not a second door.** The notification
+is built from the achievement def's own `name` and `description`. Authoring
+a `.ron` file per achievement repeating that prose was the obvious shape and
+is the one this repo has been bitten by four times: a comment cannot hold two
+copies in sync, and the copy that drifts is the one nobody runs. The cost is
+that an achievement's notification cannot be worded differently from its
+listing on the profile screen. That was judged a feature.
+
+**The timing rule is one equality.** `App::show_next_notification` returns
+unless `mode == Mode::Playing`. Everything else falls out of it: a fight is
+not interrupted, no picker is, text entry is not, the excavation plan is not,
+and a mode added next year is covered without being named. The alternative —
+a list of modes it is safe to interrupt — is `Mode::is_battle`'s history,
+which fell behind three times. Nothing is dropped either: the engine holds
+the queue and this is its only reader, so a notification raised four frames
+down is still there when the party surfaces.
+
+The one thing that does *not* fall out of it is a burst.
+`handle_notification_key` pops the next one itself rather than returning to
+`Mode::Playing` and letting `after_tick` do it, because `after_tick` runs on
+a tick and a dismissed notification is not one — the second notice would
+wait for the player's next action, which reads as the screen having eaten a
+keypress.
+
+**The screen has no scroll**, which makes its height a layout constraint
+rather than a style question, the memories page's rule.
+`the_tallest_shipped_notification_fits_its_screen` is what says the
+catalogue fits at 1280x720; raising a body past it means giving the screen a
+scroll, not trimming the test. It was verified by mutation — inflating
+`ART_CELLS` fails it — because a fits-in-a-window assertion is exactly the
+shape that passes vacuously.
+
+**The art is the sprite seam unchanged.** A sprite *substitutes* for the
+glyph and never draws beside it, and a name the table has nothing under
+returns `false` so the glyph is drawn instead. Both halves are asserted for
+`base.rs`'s reason: the sprite half alone passes against a renderer that
+paints the texture over a glyph still sitting there, which looks exactly
+right on opaque art and is wrong the moment the art has any transparency.
+Every shipped notification draws its glyph today, since `assets/sprites/`
+holds one file — that is the design working, not a gap.

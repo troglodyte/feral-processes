@@ -14,7 +14,7 @@ pub(crate) mod dev_console;
 mod excavate;
 mod field;
 pub(crate) mod group_menu;
-mod input;
+pub(crate) mod input;
 mod inspection;
 mod inventory;
 mod lifecycle;

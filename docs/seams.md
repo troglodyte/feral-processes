@@ -4246,16 +4246,45 @@ pins it. A *successful* escape keeps its own `SoundEvent::Flee`, pushed
 immediately as before — fleeing has no swing to wait for and reads as its
 own discrete outcome, the same footing as `Victory`/`Defeat`.
 
-**A skip silences the cues it skipped past, and that falls out of the
-mechanism rather than needing a special case.** `App::finish_reveal` (the
-"any key during a reveal dumps the rest" path in `handle_key`) sets
-`revealed` straight to the total without walking `advance_reveal`'s `while`
-loop, so it never touches `pending_sounds` at all. A skip means "show me the
-end," not "play every blow I skipped past in one burst" —
-`skipping_a_reveal_silences_the_swing_cues_it_skipped_past` pins the
-behaviour, not because anyone had to gate it, but so a future change to
-`finish_reveal` that *did* start walking the loop would have a test to
-answer to.
+**A skip is heard as one cue, and the gesture — not the release — is what
+plays it.** 2026-08-29, correcting the shipped behaviour below. `App::
+finish_reveal` (the "any key during a reveal dumps the rest" path in
+`handle_key`) sets `revealed` straight to the total without walking
+`advance_reveal`'s `while` loop, so it never touches `pending_sounds` at
+all. That silence was taken at first as falling out of the mechanism rather
+than needing a special case — a skip means "show me the end," not "play
+every blow I skipped past in one burst" — and it made the whole feature
+inaudible in play. The report was that pressing `A` no longer made any
+noise at all; a probe on the real gesture is what settled it. A one-hostile
+round narrates three lines (`── round 1 ──`, then a swing each way), the
+header eats the first reveal slot at `REVEAL_LINES_PER_SECOND = 4.0`, and
+the player's own blow lands its cue **0.483s** after the key. Pressing the
+action key again inside that window — which is the whole point of `A`, and
+what anyone fighting at speed does — silenced both cues, so a fight fought
+at any speed made no sound at all.
+
+The fix is `App::skip_reveal`: `loudest_cue` over the lines about to be
+dumped, then `finish_reveal`, then the one cue. **One, not one per line**,
+or a wipe is six clips inside a single frame; **loudest, not first**, so a
+round that landed a crit sounds like a crit however many plain hits came
+with it. The ranking is a private `cue_rank` beside `swing_sound` and
+deliberately **not** an `Ord` derived on `SwingOutcome`, whose own variant
+order is the four bands `battle::resolve_attack` draws — a reordering there
+would otherwise silently change what a skipped round sounds like.
+
+**The cue rides the gesture, and that is why it is not in
+`finish_reveal`.** The obvious place is the release itself, but
+`finish_arena_fight` calls `finish_reveal` too, to hand the arena result
+screen its transcript whole rather than spending the player's first key on
+skipping it — a transition, not a player pressing past blows, and a swing
+landing as that screen appears is a sound with nothing on screen to explain
+it. The same holds for the test fixtures that drain the opening narration.
+So `finish_reveal` stays silent and `handle_key`'s guard calls
+`skip_reveal`; `releasing_a_reveal_without_the_skip_gesture_stays_silent`
+pins the split, `skipping_a_reveal_plays_one_cue_for_the_blows_it_skipped_past`
+the count, and `a_skipped_round_is_heard_as_its_loudest_band` the ranking —
+that last one on the fold directly, since no seed can be asked for a round
+holding one of each band.
 
 **The testing trap this surfaced, worth knowing before writing another
 seeded battle-band test.** `crate::tests::support::force_the_next_attack_to_land`

@@ -7792,16 +7792,94 @@ panes' background fills by geometry in paint order and asserts the log's is
 the later one. Checked by actually hoisting the call, which is how the
 message above was read.
 
-**The price is the vitals strip, and it is the state the player asked for.**
-The vitals ride `map_pane`'s bottom border, which is under the expanded
-pane, so they are hidden for as long as the log is open. Drawing the map
-frame *after* the log to keep them would be worse — it would lay the strip's
-glyphs on top of the log's own rows — and capping the growth so the strip
-stays clear is the same thing as not growing at all. So
-`the_map_panes_bottom_clears_a_border_strips_quad` asserts the clearance for
-the **collapsed** state only, and says why in the test: a strip clipped in
-the state the game is played in is a bug, a strip covered by a pane the
-player opened over it is a pane.
+**The overlay used to have a price, and the price was the vitals strip.**
+The vitals rode `map_pane`'s bottom border, which is under the expanded
+pane, so they were hidden for as long as the log was open — the whole
+readout gone, on a key whose only job is to show more log. Drawing the map
+frame *after* the log to keep them would have been worse, laying the strip's
+glyphs on top of the log's own rows, and capping the growth so the strip
+stayed clear is the same thing as not growing at all. What was left was to
+move the strip onto the pane that travels: it rides `log_pane`'s **top**
+border now, and the expanded state costs nothing at all.
+`the_vitals_strip_survives_an_expanded_log` is the guard, and it asserts
+both halves — that the strip is painted, and that nothing opaque lands on it
+afterwards — because the glyphs were drawn either way and a test that only
+looked for them passes against the bug.
+
+Do not restore the old paragraph on the strength of the seam's title. The
+overlay is unchanged; what changed is that there is no longer anything
+underneath it to lose.
+
+### One strip to a border, and the vitals get the contested one
+
+`strip::border_strip` centres its background quad **on** the line it mounts
+to. That is the whole point of the module — the border reads as *broken by* a
+label rather than overwritten by one — and the consequence is that the quad
+reaches `size/2 + pad/2` past that line on **both** sides. `hud::layout`'s
+`STRIP_CLEARANCE_RATIO` is that same expression, and it exists so the panes
+are far enough apart for the reach.
+
+What it never covered is two strips reaching for each other across the gap.
+The map pane's bottom border carried the vitals, mounted `BottomLeft`; the
+log pane's top border carried the filter header, mounted `TopLeft`; the two
+panes were `pane_gap` apart and each strip's quad reached exactly
+`strip_clearance` into that gap, so the two quads met and the later one won.
+Measured at 1280x720 (`font_size` 16, `m.small()` 12, `pane_gap` 9.0): the
+vitals baseline sat 4.2px below the map's bottom border and the filter
+strip's opaque quad covered `[B, B+9]` — the lower half of the vitals
+glyphs, baseline included — because `draw_log_pane` runs after
+`draw_map_frame`. INTEG, PWR, MIT, ATK and STR were all cut through, every
+frame, in the state the game is played in.
+
+**Both tests that should have caught it were arithmetic about one named
+rect.** `layout::the_map_panes_bottom_clears_a_border_strips_quad` and
+`base.rs::the_map_frames_vitals_strip_clears_the_log_pane` each compared the
+vitals quad against `log_pane.y` — the log pane's **body fill** — and neither
+knew the filter strip's own quad reached *above* that line. The clearance
+they asserted held while the strip was cut in half. The lesson is in
+`nothing_paints_over_the_vitals_strip`'s doc comment: the question is not
+whether one named rect clears the strip, it is whether **anything painted
+after it** lands on it, so the test walks every later filled rect. Overlap is
+an area and not a touch — a pane whose edge falls exactly on the quad's is
+the clearance holding, not a fault.
+
+**The vitals took the border and the filter header went back to the body.**
+Which one moves is not arbitrary. The vitals are the readout that must never
+be covered, and they had a second reason to move: the expanded log pane
+(SPACE) is an overlay over the bottom of the map, so a strip on the *map's*
+bottom border disappeared outright for as long as the log was open — the
+second complaint that opened this, and one that no clearance constant could
+have fixed. Mounted on `log_pane`'s **top** border the strip travels with the
+pane and is visible in both states. `map_pane`'s bottom border now carries
+nothing at all, which is why the arithmetic test was flipped to
+`the_log_panes_top_clears_the_map_pane` rather than having its sign changed:
+the clearance is the same magnitude and the same constant, but it is now the
+log pane's strip reaching *upward* toward the frame above it.
+
+The filter header cost the pane a body row before phase 2 moved it to the
+border, and it costs one again. `LOG_TEXT_ROWS` (4) and
+`LOG_TEXT_ROWS_EXPANDED` (8) stay the **message** counts — SPACE must keep
+doubling exactly those — and `LOG_FILTER_ROWS` is a separate constant added
+to both, so the pane is one row taller than its message count in either
+state and `map_pane` pays for it once, statically. Folding the filter into
+`LOG_TEXT_ROWS` compiles, reads the same at a glance, and makes SPACE grow
+the pane by five rows instead of four;
+`the_log_pane_carries_one_filter_row_in_both_states` is what stops it.
+
+Two smaller decisions, both deliberate. The header draws at `m.small()`
+rather than the body size: it is chrome naming the rows rather than one of
+them, it is the size its width census was measured at, and at the body size
+it competes with the news underneath it. And it is pinned **above** the
+refusal — the refusal keeps its place at the head of the *message* rows,
+because a header that moves the moment the player mistypes a key is not a
+header.
+
+`base.rs`'s `log_capacity` had to learn about the row too. It is counted in
+*entries* against a pane measured in rows and lives in a different file from
+the pane that draws them, which is a divergence by construction — but
+`draw_log_pane` cuts from the **oldest** end, so over-asking costs nothing
+and under-asking loses the newest news. It now subtracts the filter row
+through `layout::LOG_FILTER_ROWS` itself rather than a second literal.
 
 ### The map log pane wraps, and the cut comes off the oldest end
 

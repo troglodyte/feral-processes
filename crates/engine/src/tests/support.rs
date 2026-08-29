@@ -1878,6 +1878,17 @@ pub(super) fn find_home(game: &mut Game) -> Option<Entity> {
 /// a second hit.
 pub(super) const RAID_ATTEMPTS_PER_SEED: u32 = 7;
 
+/// Spawns just enough undowned base staff (`spawn_tamed`, left unposted so
+/// they fall out as `ProgramRole::Staff` by construction) to clear
+/// `RAID_MIN_BASE_STAFF` — the floor a fixture testing raid *mechanics*
+/// must clear so `Game::raid_check`'s new staff gate never masks the roll
+/// it exists to protect.
+pub(super) fn spawn_min_raid_staff(game: &mut Game) {
+    for _ in 0..crate::tuning::RAID_MIN_BASE_STAFF {
+        spawn_tamed(game, 10, 3);
+    }
+}
+
 /// Deploys a Home plus a Mining Node beside it, returning both entities
 /// so a caller can assert on what survives a breach.
 pub(super) fn build_a_base(game: &mut Game) -> (Entity, Entity) {

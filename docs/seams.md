@@ -7803,6 +7803,56 @@ the **collapsed** state only, and says why in the test: a strip clipped in
 the state the game is played in is a bug, a strip covered by a pane the
 player opened over it is a pane.
 
+### The map log pane wraps, and the cut comes off the oldest end
+
+`draw_log_pane` drew one entry per row at a fixed `text_x` and trusted the
+caller's row count to keep it inside the pane. `Painter` clips nothing
+horizontally — that is `draw_row`'s rule from the other side of the screen —
+so a long line simply kept going: measured at 1280x720, one drew to
+**x=2193.3** against a pane edge at **846.9**, straight across the info
+column beside it. The column is drawn *before* the log pane, so the text
+landed on top of the roster.
+
+The wrap itself is not the interesting half. It is
+`feral_processes_engine::text::wrap` — the engine's one wrap, called and not
+copied, the same way `popup.rs::wrap_text` reaches it — and the column count
+is `message_columns`, which divides the pane's remaining advance by a
+*measured* `measure_ui_advance("M", …)`. A character count would be wrong
+here for `hud::layout`'s reason: the UI face is DejaVu Sans Mono, not the
+map's unscii, and nothing on `Metrics` carries an advance.
+
+**The interesting half is what happens when the wrapped rows overrun the
+pane, and the old code had the answer backwards.** `App::visible_log` →
+`pane_rows` hands its rows over **oldest first**, having already kept only
+the newest `capacity` of them. The body loop's `break` at the floor was
+therefore correct only while one entry was one row: the moment an entry
+wraps, the request (counted in *entries*, in `draw_playing_base`) and the
+drawable count diverge, and stopping at the floor drops the **newest** news —
+the half of the pane the player is reading — every time a long line pushes
+the rest past the bottom. So the rows are built first, counted against the
+floor by `rows_fitting`, and `drain`ed from the **front**. A single entry
+taller than the whole pane keeps its own tail for the same reason, which is
+what a terminal does with a line too long for its window.
+`a_wrapped_screenful_drops_the_oldest_rows_and_not_the_newest` is the guard,
+and it fails on the `break` it replaced.
+
+Two smaller rules fall out of the same change. **The channel tag rides the
+first row of its entry alone** — it says which channel a *line* arrived on,
+and repeating `FIELD` down five wrapped rows reads as five lines of traffic;
+continuations indent to `text_x` instead, under the message rather than under
+the gutter. And `draw_message_line` had to split rather than gain a
+parameter: `message_text` builds the line and its folded `×N` suffix,
+`draw_message_text` owns the three styling paths (number emphasis, bold
+level-up, plain). `render/battle.rs`'s call site still calls the original,
+which is now a call to both — the alternative was a second copy of the colour
+and emphasis logic in the file that wraps.
+
+**`render/battle.rs` draws its own rows through the unwrapped path and was
+left alone.** The battle box measures itself and widens (`buff_panel_width`),
+which is the opposite constraint to a pane pinned to the map's width, so the
+fix there is not this fix.
+
+
 ### `ProgramRole` has a fourth variant, and almost everything a sortie needs falls out of it as an omission
 
 A squad away from the base has to be out of the scheduler, out of the drift

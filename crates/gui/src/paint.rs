@@ -774,6 +774,69 @@ pub(crate) fn painted_rects(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::
         .collect()
 }
 
+/// Every run of text `with_painter` recorded, as `(paint index, text, inked
+/// box in window coordinates)`.
+///
+/// The box is the **ink** — `TextDims`' rule — and not the galley's layout
+/// box, because the question this exists to answer is whether something was
+/// painted over glyphs the player can see, and a galley carries leading
+/// above and below them that nothing is ever drawn into. Text that
+/// rasterizes to nothing (an empty run, a run of spaces) has no box and is
+/// skipped rather than reported as an infinite one.
+///
+/// The index is the position in paint order, so a caller can ask what came
+/// *after* a given piece of text — which is the only order in which one
+/// shape can cover another.
+#[cfg(test)]
+pub(crate) fn painted_text_boxes(
+    shapes: &[egui::epaint::ClippedShape],
+) -> Vec<(usize, String, Rect)> {
+    shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, cs)| match &cs.shape {
+            egui::Shape::Text(t) => {
+                let ink = t.galley.mesh_bounds;
+                ink.is_finite().then(|| {
+                    (
+                        i,
+                        t.galley.text().to_string(),
+                        Rect::new(
+                            t.pos.x + ink.min.x,
+                            t.pos.y + ink.min.y,
+                            ink.width(),
+                            ink.height(),
+                        ),
+                    )
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every rect that paints something, as `(paint index, box)`.
+///
+/// `painted_rects` above reports every `Shape::Rect` and is the right answer
+/// for "where is this panel"; this one drops the transparent ones, because
+/// `rect_lines` records a rect of the panel's exact geometry with no fill
+/// and a caller asking *what covers this* would otherwise be answered by
+/// every border on the screen.
+#[cfg(test)]
+pub(crate) fn painted_fills(shapes: &[egui::epaint::ClippedShape]) -> Vec<(usize, Rect)> {
+    shapes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, cs)| match &cs.shape {
+            egui::Shape::Rect(r) if r.fill.a() > 0 => Some((
+                i,
+                Rect::new(r.rect.min.x, r.rect.min.y, r.rect.width(), r.rect.height()),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

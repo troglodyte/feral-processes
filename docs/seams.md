@@ -7881,6 +7881,95 @@ the pane that draws them, which is a divergence by construction — but
 and under-asking loses the newest news. It now subtracts the filter row
 through `layout::LOG_FILTER_ROWS` itself rather than a second literal.
 
+### A top-mounted strip eats its own pane's body
+
+The third instance of one bug, and the reason the rule is now an expression
+rather than a habit.
+
+`strip::border_strip` centres its opaque background quad **on** the line it
+mounts to. The seam above is about the half that reaches *outward*, into the
+gap between two panes — that is what `STRIP_CLEARANCE_RATIO` and `pane_gap`
+were built for. The other half reaches exactly as far **inward**, into the
+body of the pane the strip belongs to, and nothing priced it.
+
+v0.13.53 moved the vitals onto `log_pane`'s top border and put the filter
+header back as the pane's first body row. The row started at `pane.y +
+m.inset`, the way every pane's body does. Measured at 1280x720 (`font_size`
+16, `m.small()` 12, `m.inset` 6.67): the vitals quad spans `[pane.y - 9,
+pane.y + 9]`, the filter row's baseline sits at `pane.y + 14.67` and its ink
+starts at `pane.y + 4.67` — so **4.32px of a 13px letter height** was painted
+over, on the row that names what the whole pane is showing. The player's
+report was "i can only see half the letters". `draw_log_pane` draws its body
+first and mounts its strips last, so the row was drawn correctly and then
+erased.
+
+The three instances are one shape. Round 1: the log pane's body *fill*
+covered the vitals riding the map pane's bottom border. Round 2: the filter
+strip's quad covered those same vitals from the other side. Round 3: the
+vitals strip's quad covered the filter row beneath it. Every one is an opaque
+quad painted **after** text that overlaps it, and every one shipped because
+the test that should have caught it named a single rectangle and did
+arithmetic against it — the arithmetic held while the glyphs were cut.
+
+**The fix is `hud::layout::strip_inset`, and what it says is that `m.inset`
+is measured from the first pixel the body owns.** On a border carrying a
+strip that pixel is the bottom of the quad, not the border line, so the two
+**add**: `strip_clearance(m) + m.inset`. The larger simply winning is not
+enough and is worth stating, because it is the obvious form and it does not
+work — a body row's baseline sits `m.font_size / 2` below the body's top by
+the convention every pane here uses, and its ink rises a full ascent above
+that baseline, so `m.small() * STRIP_CLEARANCE_RATIO` alone still leaves
+about 2px of the ascenders inside the quad at 1280x720.
+
+The log pane carries a strip on **both** of its borders, so it pays this at
+both ends and `layout::regions` buys it the height:
+`m.line_height * (rows + LOG_FILTER_ROWS) + strip_inset(m) * 2.0`. That is
+what keeps `LOG_TEXT_ROWS` meaning what it says — the pane still draws four
+message rows collapsed and eight expanded at all three stated window sizes,
+asserted through a real draw by
+`the_pane_draws_four_message_rows_collapsed_and_eight_expanded`. Growing the
+body's inset without growing the pane compiles, looks like the whole fix, and
+silently costs the log a row at each end; that is the mutation the row-count
+test exists for.
+
+`base.rs`'s `log_capacity` came into step for free and is asserted by the
+same test. Against the old height it asked app-core for **3** entries
+collapsed and **7** expanded while the pane had room for 4 and 8 — a
+pre-existing under-ask, and the one direction that actually costs the player
+news, since `draw_log_pane` cuts from the oldest end. Against the new height
+the same expression yields exactly 4 and 8.
+
+**The bottom edge was the same fault, latent.** The keybar rides the pane's
+bottom border and its quad reaches `strip_clearance` *upward* into the body,
+while the body's floor was `pane.y + pane.h - m.inset` — 6.67px **inside**
+that reach at 1280x720 and 7.17px at 1920x1080. Nothing was clipped in play:
+row baselines fall on a fixed lattice from the body's first row, and at none
+of the three sizes did one land within an ascent of the floor. That is a
+coincidence of the arithmetic and not a rule, so the floor takes the same
+`strip_inset` and the margin goes from 6.67px to 15.67px.
+`no_log_line_reaches_the_keybar` was written against the old geometry and
+compared the *galley top* against the border line; it now compares the row's
+**ink bottom** against the quad's top, read from `layout::strip_clearance`
+rather than a literal, because a descender hangs into the quad while the
+older assertion still holds.
+
+**The deliverable is the general test, not the fix.**
+`nothing_the_log_pane_paints_covers_text_it_already_drew` drives a real draw
+of the pane through `paint::with_painter` in **both** states, with a refusal
+and more rows than fit, and asserts that no filled rect painted after a piece
+of text overlaps that text's ink. It covers what the three point tests each
+covered one of — the filter row, the refusal, every `draw_message_text`
+styling path, the vitals strip and the keybar — and it is the form the class
+of bug has to be asked in. `paint::painted_text_boxes` and
+`paint::painted_fills` are its two primitives, in the one file allowed to
+name a graphics library: the first reports **ink** and not the galley's
+layout box, because leading is space nothing draws into and a layout box
+would report faults that are not there; the second drops transparent rects,
+because `rect_lines` records one of the pane's exact geometry and every
+border would otherwise answer "yes, I cover that". Overlap is an **area** and
+not a touch, `nothing_paints_over_the_vitals_strip`'s rule — a pane edge
+landing exactly on a quad's is the clearance holding.
+
 ### The map log pane wraps, and the cut comes off the oldest end
 
 `draw_log_pane` drew one entry per row at a fixed `text_x` and trusted the

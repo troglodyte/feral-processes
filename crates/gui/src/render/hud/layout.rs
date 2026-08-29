@@ -70,6 +70,34 @@ pub(in crate::render) const LOG_FILTER_ROWS: f32 = 1.0;
 /// drift apart.
 const STRIP_CLEARANCE_RATIO: f32 = 0.5 + strip::PAD_RATIO / 2.0;
 
+/// How far a border strip's background quad reaches past the line it rides,
+/// on **each** side of it. See [`STRIP_CLEARANCE_RATIO`].
+///
+/// `pub(in crate::render)` for the same reason `strip::PAD_RATIO` is: it is
+/// the figure `log_frame`'s bottom-edge assertion is stated against, and a
+/// literal there is the copy that drifts.
+pub(in crate::render) fn strip_clearance(m: &Metrics) -> f32 {
+    m.small() as f32 * STRIP_CLEARANCE_RATIO
+}
+
+/// The space between a pane's edge and its body, on a border that **carries
+/// a strip**.
+///
+/// A pane's `m.inset` is breathing space measured from the first pixel the
+/// body owns, and on a border carrying a strip that pixel is the bottom of
+/// the strip's opaque background quad rather than the border line itself —
+/// so the two **add**, and the larger does not simply win. The log pane
+/// carries a strip on both of its borders, so it pays this at both ends:
+/// `log_h` below buys it the height and `log_frame::draw_log_pane` spends
+/// it, top and bottom, off this one call.
+///
+/// The rule this closes has now cost three releases, each time as an opaque
+/// quad painted over text that was already there — see `docs/seams.md`'s
+/// "A top-mounted strip eats its own pane's body".
+pub(in crate::render) fn strip_inset(m: &Metrics) -> f32 {
+    strip_clearance(m) + m.inset
+}
+
 /// The five regions, in window pixels.
 ///
 /// `key_bar` overlaps the bottom edge of `log_pane` deliberately: the
@@ -118,21 +146,27 @@ pub(in crate::render) fn regions(
     // own rect only; see `STRIP_CLEARANCE_RATIO` for why the panes below it
     // start further down than this.
     let head_h = m.line_height + m.inset;
-    let strip_clearance = m.small() as f32 * STRIP_CLEARANCE_RATIO;
-    let content_top = head_h + strip_clearance;
+    let clearance = strip_clearance(m);
+    let content_top = head_h + clearance;
 
     // The map is laid out against the *collapsed* log at every window size:
     // SPACE changes what the log shows, not what the screen is, so the pane
     // it grows over keeps its geometry and the grid does not re-lay-out
     // under the player.
-    let log_h = |rows: f32| m.line_height * (rows + LOG_FILTER_ROWS) + m.inset * 2.0;
+    // `strip_inset` and not `m.inset`, at **both** ends: this pane carries a
+    // strip on each of its borders — the vitals on the top and the keybar on
+    // the bottom — and each quad reaches `clearance` *into* the body. The
+    // extra height is what keeps the row counts above intact once
+    // `draw_log_pane` starts its body below the one and stops it above the
+    // other.
+    let log_h = |rows: f32| m.line_height * (rows + LOG_FILTER_ROWS) + strip_inset(m) * 2.0;
     let collapsed_log_h = log_h(LOG_TEXT_ROWS);
     let key_h = m.line_height;
     // The log pane's vitals ride its *top* border and paint above it, into
     // the space between the two panes. `m.gap` is narrower than that reach
     // at every window size, so the breathing space between them is
     // whichever is larger.
-    let pane_gap = m.gap.max(strip_clearance);
+    let pane_gap = m.gap.max(clearance);
     let map_h = screen_h - content_top - collapsed_log_h - key_h - pane_gap;
 
     // Pinned at the bottom, so the expanded pane grows upward *over* the
@@ -324,6 +358,12 @@ mod tests {
     /// count in **both** states. Folding the filter into `LOG_TEXT_ROWS`
     /// compiles and reads the same at a glance, and makes SPACE grow the
     /// pane by five rows instead of four.
+    ///
+    /// The pane's own edges cost `strip_inset` and not `m.inset`, because
+    /// both of its borders carry a strip whose quad hangs into the body —
+    /// see that function. Spending `m.inset` here instead still leaves the
+    /// arithmetic self-consistent and silently costs the body a row at each
+    /// end, which is the fault this whole expression exists to price.
     #[test]
     fn the_log_pane_carries_one_filter_row_in_both_states() {
         for (w, h) in SIZES {
@@ -332,7 +372,7 @@ mod tests {
                 (at(w, h), LOG_TEXT_ROWS),
                 (at_expanded(w, h), LOG_TEXT_ROWS_EXPANDED),
             ] {
-                let want = m.line_height * (rows + LOG_FILTER_ROWS) + m.inset * 2.0;
+                let want = m.line_height * (rows + LOG_FILTER_ROWS) + strip_inset(&m) * 2.0;
                 assert!(
                     (r.log_pane.h - want).abs() < 0.001,
                     "log pane is {} tall at {w}x{h} for {rows} message rows, \

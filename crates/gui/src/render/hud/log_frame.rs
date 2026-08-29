@@ -9,9 +9,17 @@
 //! half of the vitals riding the map pane's bottom border, baseline
 //! included. The vitals took the border because they are the readout that
 //! must never be covered; the filter header went back to being a body row,
-//! where it is top-aligned with the messages it heads and nothing above
-//! `pane.y` can reach it. The keybar keeps the bottom border, which is
-//! uncontested.
+//! where it is top-aligned with the messages it heads. The keybar keeps the
+//! bottom border, which is uncontested.
+//!
+//! **A body row is not out of reach of its own pane's strips, and that was
+//! the third instance of this bug.** The same quad that reaches outward
+//! across the gap reaches exactly as far *inward*, so the vitals hang
+//! `layout::strip_clearance` below the top border and the keybar the same
+//! distance above the bottom one — over a body that starts and ends at
+//! `m.inset`, and painted after it. `layout::strip_inset` is the one
+//! expression for where the body may begin; see `docs/seams.md`'s "A
+//! top-mounted strip eats its own pane's body".
 //!
 //! The vitals ride *this* pane rather than the map's for a second reason:
 //! the expanded pane (SPACE, `App::log_expanded`) is an overlay over the
@@ -37,6 +45,7 @@ use feral_processes_engine::text::wrap;
 use feral_processes_engine::{LogEntry, MessageKind, MessageSource, PlayerStatus};
 
 use super::bar::bar;
+use super::layout;
 use super::palette;
 use super::strip::{Mount, Piece, draw_pieces, fitting, label, value};
 use crate::paint::{Color, Painter, Rect, TextRun};
@@ -320,12 +329,16 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
 
     let gutter = painter.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
     let text_x = pane.x + m.inset + gutter;
-    let mut y = pane.y + m.inset + m.font_size as f32 / 2.0;
+    // **Both of this pane's borders carry a strip, and a strip's background
+    // quad reaches into the pane.** `layout::strip_inset` is the one
+    // expression for how far — the vitals' quad hangs that far below the top
+    // border and the keybar's that far above the bottom one, and both are
+    // painted *after* the body, so a row starting at the pane's own `m.inset`
+    // is drawn and then painted over. `layout::regions` buys the pane the
+    // height this costs, so the row counts are unchanged.
+    let inner = layout::strip_inset(m);
+    let mut y = pane.y + inner + m.font_size as f32 / 2.0;
     let columns = message_columns(pane, text_x, painter, m);
-    // The keybar is mounted *on* the bottom border and its glyphs stand half
-    // a line above it, so the body's floor is that border rather than the
-    // pane's inner edge.
-    //
     // At every supported window size the caller's capacity figure already
     // stops short of this, so nothing is dropped for it in play. It is here
     // because that figure is computed in `draw_playing_base` off the same
@@ -334,14 +347,15 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     // rather than anywhere a reader would look. Wrapping is the second way
     // the two can disagree, and this time by design: the caller counts
     // entries and a wrapped entry is several rows.
-    let floor = pane.y + pane.h - m.inset;
+    let floor = pane.y + pane.h - inner;
 
     // The filter row is pinned first, above even a refusal: it names what
     // the rows below it are, and a header that moves the moment the player
     // mistypes a key is not a header. It starts at the pane's own inset —
     // in the gutter column, not past it — because it heads the whole body
     // and not one channel of it. `LOG_FILTER_ROWS` in `hud::layout` is the
-    // row this consumes.
+    // row this consumes, and `inner` above is what keeps the vitals' quad
+    // off the top of its letters.
     let filter = filter_pieces(log.filter, log.filtered_out);
     let runs: Vec<TextRun> = filter
         .iter()
@@ -705,9 +719,19 @@ mod tests {
     /// `draw_playing_base` computes, the rows clear the border on the
     /// arithmetic alone and this test passes with the floor deleted — which
     /// is a test that reads as coverage and holds nothing. Handed more than
-    /// fits, it is the floor that stops them, and removing the floor fails it
-    /// at y=706 against a 694 ceiling. Over-asking is also the drift the
-    /// floor exists for: that capacity figure lives in another file.
+    /// fits, it is the floor that stops them. Over-asking is also the drift
+    /// the floor exists for: that capacity figure lives in another file.
+    ///
+    /// **The ceiling is the keybar's quad and not its border line.** The
+    /// keybar is a strip, so its opaque background reaches
+    /// `layout::strip_clearance` *up* into the body — and the floor that used
+    /// to be `pane.y + pane.h - m.inset` sat inside that reach at every
+    /// supported size (6.67px inside it at 1280x720). Nothing was clipped in
+    /// play, because the row lattice never landed within an ascent of the
+    /// floor, but the geometry permitted it; `strip_inset` is what makes the
+    /// clearance a rule rather than a coincidence. Measured on the **ink**
+    /// and not the galley top, or a descender hangs into the quad while the
+    /// assertion holds.
     #[test]
     fn no_log_line_reaches_the_keybar() {
         let m = ui_metrics(SMALLEST.1);
@@ -736,20 +760,15 @@ mod tests {
                 );
             });
 
-            // The keybar's glyphs are centred on the border and rise about
-            // half their size above it; a body row must stay clear of that.
-            let ceiling = pane.y + pane.h - m.small() as f32 / 2.0;
-            for cs in &shapes {
-                if let bevy_egui::egui::Shape::Text(t) = &cs.shape {
-                    let text = t.galley.text();
-                    if text.contains("a line") || text.contains("Nothing to collect.") {
-                        assert!(
-                            t.pos.y < ceiling,
-                            "a body row drew at y={} against a {ceiling} floor — it \
-                             runs through the keybar",
-                            t.pos.y
-                        );
-                    }
+            let ceiling = pane.y + pane.h - layout::strip_clearance(&m);
+            for (_, text, ink) in crate::paint::painted_text_boxes(&shapes) {
+                if text.contains("a line") || text.contains("Nothing to collect.") {
+                    let bottom = ink.y + ink.h;
+                    assert!(
+                        bottom <= ceiling,
+                        "a body row's ink reached y={bottom} against a {ceiling} \
+                         ceiling — it runs into the keybar's background: {text:?}"
+                    );
                 }
             }
         });
@@ -1086,6 +1105,166 @@ mod tests {
                  {filter_y} that names its channel"
             );
         });
+    }
+
+    /// Two edges this close are the same edge. A pane's own edge landing
+    /// exactly on a strip's quad is the clearance holding, not overdraw, so
+    /// an overlap has to be an **area** — `base.rs` carries the same slack
+    /// for the same reason.
+    const EDGE_SLACK: f32 = 0.01;
+
+    /// How far two boxes overlap on each axis, zero where they only touch.
+    fn overlap(a: crate::paint::Rect, b: crate::paint::Rect) -> (f32, f32) {
+        let span =
+            |a0: f32, a1: f32, b0: f32, b1: f32| (a1.min(b1) - a0.max(b0) - EDGE_SLACK).max(0.0);
+        (
+            span(a.x, a.x + a.w, b.x, b.x + b.w),
+            span(a.y, a.y + a.h, b.y, b.y + b.h),
+        )
+    }
+
+    /// One entry per styling path `draw_message_text` has, since each reaches
+    /// the screen through a different `Painter` call: the plain body face,
+    /// the bold a level takes, and the run-per-number a blow takes.
+    fn every_styling_path(rows: usize) -> Vec<LogEntry> {
+        [
+            MessageKind::Info,
+            MessageKind::LevelUp,
+            MessageKind::PartyDamage,
+            MessageKind::Loot,
+            MessageKind::Raid,
+        ]
+        .into_iter()
+        .cycle()
+        .take(rows)
+        .map(|kind| LogEntry {
+            kind,
+            source: MessageSource::Field,
+            text: "a line took 7 damage".to_string(),
+            repeats: 1,
+        })
+        .collect()
+    }
+
+    /// **The class of bug, asserted once instead of one rect at a time.**
+    ///
+    /// Every fault this pane has shipped has been the same shape — an opaque
+    /// quad painted *after* text that lands on it — and every one shipped
+    /// because the test that should have caught it named a single rectangle
+    /// and did arithmetic against it. The pane's body fill covered the
+    /// vitals; the filter strip's quad covered them from the other side;
+    /// the vitals strip's quad covered the filter row beneath it. So the
+    /// question is not whether one named rect clears one named strip, but
+    /// whether **anything** the pane paints lands on text it has already
+    /// drawn.
+    ///
+    /// Both states, because the two have different geometry and only the
+    /// collapsed one has a clearance to hold against the map above it, and
+    /// with a refusal and a full pane of rows, so the filter header, the
+    /// refusal, every message styling path, the vitals and the keybar are
+    /// all in the fixture.
+    #[test]
+    fn nothing_the_log_pane_paints_covers_text_it_already_drew() {
+        let m = ui_metrics(SMALLEST.1);
+        for expanded in [false, true] {
+            with_painter(|p| {
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, expanded).log_pane;
+                // Over-asked on purpose, `no_log_line_reaches_the_keybar`'s
+                // rule: handed exactly what fits, the rows clear the bottom
+                // border on the arithmetic alone and the floor is untested.
+                let rows = (pane.h / m.line_height) as usize + 4;
+                let status = wide_status();
+                let vitals = Vitals {
+                    status: &status,
+                    mining: true,
+                };
+                let entries = every_styling_path(rows);
+                let (_, shapes) = with_painter(|q| {
+                    draw_log_pane(
+                        pane,
+                        &log_pane(&entries, &vitals, Some("Nothing to collect.")),
+                        q,
+                        &m,
+                    );
+                });
+
+                let fills = crate::paint::painted_fills(&shapes);
+                for (at, text, ink) in crate::paint::painted_text_boxes(&shapes) {
+                    for (painted, fill) in fills.iter().copied() {
+                        if painted <= at {
+                            continue;
+                        }
+                        let (x, y) = overlap(ink, fill);
+                        assert!(
+                            x <= 0.0 || y <= 0.0,
+                            "with the log {}, a fill painted at {fill:?} covers \
+                             {x:.2}x{y:.2}px of {text:?}, whose ink is {ink:?} — \
+                             the text was painted at {at} and the fill at {painted}",
+                            if expanded { "expanded" } else { "collapsed" }
+                        );
+                    }
+                }
+            });
+        }
+    }
+
+    /// The three window sizes the design is stated against, for the two
+    /// counts the pane's height is built out of.
+    const ALL_SIZES: [(f32, f32); 3] = [(1280.0, 720.0), (1440.0, 810.0), (1920.0, 1080.0)];
+
+    /// **What the pane's height is for.** `LOG_TEXT_ROWS` is four and SPACE
+    /// doubles it, and the pane has to keep drawing exactly that many
+    /// message rows once its body has paid `strip_inset` at both ends —
+    /// otherwise the fix for the strips is a row silently taken off the log.
+    ///
+    /// The capacity figure `draw_playing_base` asks app-core for is asserted
+    /// against the same number, because the two live in different files and
+    /// nothing but this makes them move together. It is a *request*, and
+    /// over-asking costs nothing (`draw_log_pane` cuts from the oldest end),
+    /// so what this catches is the under-ask: a pane with room for four
+    /// lines handed three shows three.
+    #[test]
+    fn the_pane_draws_four_message_rows_collapsed_and_eight_expanded() {
+        for (expanded, want) in [(false, 4), (true, 8)] {
+            for (w, h) in ALL_SIZES {
+                let m = ui_metrics(h);
+                with_painter(|p| {
+                    let char_w = p.measure_ui_advance("M", m.font_size);
+                    let pane = layout::regions(w, h, char_w, &m, expanded).log_pane;
+                    // `draw_playing_base`'s own figure. Kept in step by hand,
+                    // which is what this asserts.
+                    let capacity = ((pane.h - m.line_height * (1.0 + layout::LOG_FILTER_ROWS))
+                        / m.line_height)
+                        .max(1.0) as usize;
+                    let status = wide_status();
+                    let vitals = Vitals {
+                        status: &status,
+                        mining: true,
+                    };
+                    // More than can fit, so what is drawn is what the pane
+                    // has room for and not what the fixture happened to hold.
+                    let entries = every_styling_path(want + 6);
+                    let (_, shapes) = with_painter(|q| {
+                        draw_log_pane(pane, &log_pane(&entries, &vitals, None), q, &m);
+                    });
+                    let drawn = painted_text(&shapes)
+                        .iter()
+                        .filter(|t| t.contains("a line"))
+                        .count();
+                    assert_eq!(
+                        drawn, want,
+                        "the log drew {drawn} message rows at {w}x{h} \
+                         (expanded: {expanded}), wanted {want}"
+                    );
+                    assert_eq!(
+                        capacity, want,
+                        "`draw_playing_base` would ask for {capacity} entries at \
+                         {w}x{h} (expanded: {expanded}) for a pane that draws {want}"
+                    );
+                });
+            }
+        }
     }
 
     /// Both of the pane's borders carry a strip, and the gutter tags the one

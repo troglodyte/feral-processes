@@ -15,12 +15,13 @@
 //! a pickup and a sweep — picked out of it. See `channel_tag`.
 
 use feral_processes_app_core::LogFilter;
+use feral_processes_engine::text::wrap;
 use feral_processes_engine::{LogEntry, MessageKind, MessageSource};
 
 use super::palette;
 use super::strip::{Mount, Piece, draw_pieces, fitting};
 use crate::paint::{Color, Painter, Rect};
-use crate::render::draw_message_line;
+use crate::render::{draw_message_text, message_text};
 use crate::text::Metrics;
 
 /// The widest tag plus the space that separates it from the message. The
@@ -168,6 +169,40 @@ fn keybar_segments() -> Vec<Vec<Piece>> {
     ]
 }
 
+/// How many characters of message fit between the gutter and the pane's
+/// right edge.
+///
+/// Measured rather than assumed. The UI face is DejaVu Sans Mono, whose
+/// advance is nothing like the map font's cell, and `layout`'s `char_w` is
+/// derived at the map size — a hardcoded column count would be right at one
+/// window size and wrong at every other, since `ui_metrics` ramps the face
+/// with the window.
+fn message_columns(pane: Rect, text_x: f32, painter: &Painter, m: &Metrics) -> usize {
+    let avail = pane.x + pane.w - m.inset - text_x;
+    (avail / painter.measure_ui_advance("M", m.font_size)).max(1.0) as usize
+}
+
+/// One drawn row of the body: the text, the kind that styles it, and the
+/// channel tag when this is the row its entry leads with.
+struct BodyRow {
+    tag: Option<(&'static str, Color)>,
+    text: String,
+    kind: MessageKind,
+}
+
+/// How many rows fit between a first baseline at `y` and the body's `floor`.
+///
+/// The floor counted forwards rather than checked per row: once an entry can
+/// take more than one row, what does not fit has to be decided *before* the
+/// drawing, so the rows that are dropped are the oldest ones and not the
+/// newest.
+fn rows_fitting(y: f32, floor: f32, line_height: f32) -> usize {
+    if y > floor {
+        return 0;
+    }
+    ((floor - y) / line_height) as usize + 1
+}
+
 /// Fill, refusal, gutter and lines, then the border and its two strips.
 ///
 /// **One function because the order is the whole of it.** `border_strip`
@@ -182,32 +217,64 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     let gutter = painter.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
     let text_x = pane.x + m.inset + gutter;
     let mut y = pane.y + m.inset + m.font_size as f32 / 2.0;
-
-    // The gutter stays blank for a refusal: it is the answer to a keypress,
-    // not traffic on a channel, and inventing a tag for it would put it in a
-    // column the filter key claims to control.
-    if let Some(s) = log.refusal {
-        painter.ui(s, text_x, y, m.font_size, palette::THREAT);
-        y += m.line_height;
-    }
+    let columns = message_columns(pane, text_x, painter, m);
     // The keybar is mounted *on* the bottom border and its glyphs stand half
     // a line above it, so the body's floor is that border rather than the
     // pane's inner edge.
     //
     // At every supported window size the caller's capacity figure already
-    // stops short of this, so the guard does not fire in play. It is here
+    // stops short of this, so nothing is dropped for it in play. It is here
     // because that figure is computed in `draw_playing_base` off the same
     // geometry this function is handed, in a different file — nothing makes
     // the two move together, and a drift between them lands on the keys
-    // rather than anywhere a reader would look.
+    // rather than anywhere a reader would look. Wrapping is the second way
+    // the two can disagree, and this time by design: the caller counts
+    // entries and a wrapped entry is several rows.
     let floor = pane.y + pane.h - m.inset;
-    for entry in log.entries {
-        if y > floor {
-            break;
+
+    // The gutter stays blank for a refusal: it is the answer to a keypress,
+    // not traffic on a channel, and inventing a tag for it would put it in a
+    // column the filter key claims to control.
+    if let Some(s) = log.refusal {
+        for line in wrap(s, columns) {
+            if y > floor {
+                break;
+            }
+            painter.ui(&line, text_x, y, m.font_size, palette::THREAT);
+            y += m.line_height;
         }
+    }
+
+    // Rows, not entries. The tag rides the first row of its entry alone: it
+    // says which channel a *line* came in on, and repeating it down a wrapped
+    // one would read as that many lines of traffic.
+    let mut rows: Vec<BodyRow> = Vec::new();
+    for entry in log.entries {
         let (tag, color) = channel_tag(entry);
-        painter.ui(tag, pane.x + m.inset, y, m.font_size, color);
-        draw_message_line(entry, text_x, y, painter, m);
+        for (i, line) in wrap(&message_text(entry), columns).into_iter().enumerate() {
+            rows.push(BodyRow {
+                tag: (i == 0).then_some((tag, color)),
+                text: line,
+                kind: entry.kind,
+            });
+        }
+    }
+    // The cut comes off the *oldest* end, which is the whole reason this is
+    // a cut rather than a `break` at the floor. `pane_rows` hands the rows
+    // over oldest first, so stopping at the floor would drop the newest news
+    // — the half of the pane the player is actually reading — every time a
+    // long line pushed the rest past the bottom. A single entry taller than
+    // the pane keeps its own tail for the same reason, which is what a
+    // terminal does with a line too long for its window.
+    let room = rows_fitting(y, floor, m.line_height);
+    if rows.len() > room {
+        rows.drain(..rows.len() - room);
+    }
+    for row in rows {
+        if let Some((tag, color)) = row.tag {
+            painter.ui(tag, pane.x + m.inset, y, m.font_size, color);
+        }
+        draw_message_text(row.kind, &row.text, text_x, y, painter, m);
         y += m.line_height;
     }
 
@@ -535,6 +602,187 @@ mod tests {
                     }
                 }
             }
+        });
+    }
+
+    /// A line long enough to reach the info column beside it. `Painter`
+    /// clips nothing horizontally, so an unwrapped row does not stop at the
+    /// pane's edge — it draws straight across the column to its right, and
+    /// reads as a fault in *that* column rather than in this one.
+    ///
+    /// Every styling path is in the fixture, because each reaches the screen
+    /// through a different `Painter` call: plain text, the bold a level
+    /// takes, the run-per-number a blow takes, and the folded row's count,
+    /// which is appended to the text after this function has handed it over.
+    /// The refusal is here too — it is the pane's first line and is the one
+    /// thing `draw_log_pane` draws itself.
+    #[test]
+    fn no_log_line_runs_past_the_pane_into_the_info_column() {
+        let m = ui_metrics(SMALLEST.1);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
+            let long: String = (0..40).map(|i| format!("overrun-{i:02} ")).collect();
+            let refusal: String = (0..20).map(|i| format!("refused-{i:02} ")).collect();
+            let entries: Vec<LogEntry> = [
+                (MessageKind::Info, 1),
+                (MessageKind::LevelUp, 1),
+                (MessageKind::PartyDamage, 1),
+                (MessageKind::Loot, 4),
+            ]
+            .into_iter()
+            .map(|(kind, repeats)| LogEntry {
+                kind,
+                source: MessageSource::Field,
+                text: long.clone(),
+                repeats,
+            })
+            .collect();
+            let (_, shapes) = with_painter(|q| {
+                draw_log_pane(
+                    pane,
+                    &LogPane {
+                        entries: &entries,
+                        filter: LogFilter::All,
+                        filtered_out: 0,
+                        refusal: Some(&refusal),
+                        border: palette::PANE_BORDER,
+                    },
+                    q,
+                    &m,
+                );
+            });
+
+            let edge = pane.x + pane.w;
+            for cs in &shapes {
+                if let bevy_egui::egui::Shape::Text(t) = &cs.shape {
+                    let text = t.galley.text().to_string();
+                    if !text.contains("overrun") && !text.contains("refused") {
+                        continue;
+                    }
+                    let right = t.pos.x + t.galley.rect.width();
+                    assert!(
+                        right <= edge,
+                        "a log row ran to x={right} against a {edge} pane edge — it \
+                         draws over the info column: {text:?}"
+                    );
+                }
+            }
+        });
+    }
+
+    /// An entry led by `lead` and just long enough to take a second row.
+    ///
+    /// Sized off the measured column count rather than a fixed length. The
+    /// pane is about five rows tall at the smallest supported window, so a
+    /// fixture that wraps into more rows than the pane holds says nothing
+    /// about which end the overflow comes off — the answer would be "both".
+    fn two_row_entry(lead: &str, columns: usize) -> LogEntry {
+        let mut text = lead.to_string();
+        while text.chars().count() <= columns {
+            text.push_str(" filler");
+        }
+        LogEntry {
+            kind: MessageKind::Info,
+            source: MessageSource::Field,
+            text,
+            repeats: 1,
+        }
+    }
+
+    /// A tag belongs to the entry, not to each row it happens to take. Two
+    /// tags down one wrapped sentence read as two lines of traffic on that
+    /// channel, and the continuation rows have to line up under the first or
+    /// the gutter stops being a column.
+    #[test]
+    fn a_wrapped_entry_wears_one_tag_and_indents_its_continuations() {
+        let m = ui_metrics(SMALLEST.1);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
+            let text_x = pane.x + m.inset + p.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
+            let entries = [two_row_entry(
+                "overrun",
+                message_columns(pane, text_x, p, &m),
+            )];
+            let (_, shapes) = with_painter(|q| {
+                draw_log_pane(
+                    pane,
+                    &LogPane {
+                        entries: &entries,
+                        filter: LogFilter::All,
+                        filtered_out: 0,
+                        refusal: None,
+                        border: palette::PANE_BORDER,
+                    },
+                    q,
+                    &m,
+                );
+            });
+
+            let mut tags = 0;
+            let mut rows = 0;
+            for cs in &shapes {
+                if let bevy_egui::egui::Shape::Text(t) = &cs.shape {
+                    let text = t.galley.text();
+                    if text == "FIELD" {
+                        tags += 1;
+                    }
+                    if text.contains("filler") {
+                        rows += 1;
+                        assert!(
+                            (t.pos.x - text_x).abs() < 0.5,
+                            "a wrapped row started at x={} against a {text_x} text column",
+                            t.pos.x
+                        );
+                    }
+                }
+            }
+            assert!(rows > 1, "the fixture did not wrap: {rows} row(s)");
+            assert_eq!(tags, 1, "{rows} rows wore {tags} tags");
+        });
+    }
+
+    /// The cut has to come off the oldest end. `pane_rows` hands the pane its
+    /// rows oldest first and `draw_playing_base` sizes the request in
+    /// *entries*, so as soon as one entry wraps there are more rows than the
+    /// pane has — and stopping at the floor instead would drop the newest
+    /// news, which is worse than the overhang this wrap exists to fix.
+    #[test]
+    fn a_wrapped_screenful_drops_the_oldest_rows_and_not_the_newest() {
+        let m = ui_metrics(SMALLEST.1);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
+            let text_x = pane.x + m.inset + p.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
+            let columns = message_columns(pane, text_x, p, &m);
+            let entries: Vec<LogEntry> = (0..10)
+                .map(|i| two_row_entry(&format!("mark{i:02}"), columns))
+                .collect();
+            let (_, shapes) = with_painter(|q| {
+                draw_log_pane(
+                    pane,
+                    &LogPane {
+                        entries: &entries,
+                        filter: LogFilter::All,
+                        filtered_out: 0,
+                        refusal: None,
+                        border: palette::PANE_BORDER,
+                    },
+                    q,
+                    &m,
+                );
+            });
+
+            let drawn = painted_text(&shapes).join("\n");
+            assert!(
+                drawn.contains("mark09"),
+                "the newest line went undrawn: {drawn}"
+            );
+            assert!(
+                !drawn.contains("mark00"),
+                "the fixture fits the pane, so it proves nothing: {drawn}"
+            );
         });
     }
 

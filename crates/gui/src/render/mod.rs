@@ -3,6 +3,8 @@
 //! drawn text for menus). Reads engine data through `App` and never touches
 //! the ECS `World`.
 
+use std::borrow::Cow;
+
 use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
@@ -398,19 +400,39 @@ fn emphasizes_numbers(kind: MessageKind) -> bool {
     matches!(kind, MessageKind::PartyDamage | MessageKind::Heal)
 }
 
-/// Draws one log-pane row in its kind's style, with the `×N` a folded
-/// row carries — see `resources::condense`. The same suffix the history
+/// What a log row reads as: the line itself plus the `×N` a folded row
+/// carries — see `resources::condense`. The same suffix the history
 /// screen's `counted_item_row` writes, so one repeated line reads the same
 /// wherever it is drawn; a row standing for a single line carries nothing.
-fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Metrics) {
-    let kind = entry.kind;
-    let counted;
-    let text: &str = if entry.repeats > 1 {
-        counted = format!("{} \u{d7}{}", entry.text, entry.repeats);
-        &counted
+///
+/// Separate from the drawing because the count is part of the sentence, and
+/// anything that measures or wraps a row has to see it — the map's log pane
+/// wraps this string, not `entry.text`.
+fn message_text(entry: &LogEntry) -> Cow<'_, str> {
+    if entry.repeats > 1 {
+        Cow::Owned(format!("{} \u{d7}{}", entry.text, entry.repeats))
     } else {
-        &entry.text
-    };
+        Cow::Borrowed(&entry.text)
+    }
+}
+
+/// Draws one log-pane row in its kind's style.
+fn draw_message_line(entry: &LogEntry, x: f32, y: f32, painter: &Painter, m: &Metrics) {
+    draw_message_text(entry.kind, &message_text(entry), x, y, painter, m);
+}
+
+/// The same, for a caller that has already broken an entry into rows: the
+/// map's log pane wraps a long line and draws each row through here, so the
+/// three styling paths stay in one place rather than being restated beside
+/// the wrap.
+fn draw_message_text(
+    kind: MessageKind,
+    text: &str,
+    x: f32,
+    y: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
     let color = message_color(kind);
     match kind {
         k if emphasizes_numbers(k) => {

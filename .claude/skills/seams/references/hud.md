@@ -34,8 +34,9 @@
 - **`PaneData` takes `roster`/`carrying` and not a `&PlayerStatus`**: those
   are every field of it the panes read, and `PlayerStatus` derives nothing,
   so a wider dependency is a census nobody writes. The vitals strip carries
-  the bars and the four stats, the status bar the zone/position/stock; only
-  the roster, the routines and the pack needed homes in the column.
+  the bars and the four stats (on the *log* pane's top border — see the last
+  bullet), the status bar the zone/position/stock; only the roster, the
+  routines and the pack needed homes in the column.
 - **The buff-tag ceiling moved with the buffs.** CREW calls `buff_entries`
   rather than restating a buff row, `TagStyle::OwnLine` because the column
   cannot widen. `no_column_row_overflows_the_column` measures a row's left
@@ -103,6 +104,32 @@
   tidy — puts the map's fill over the expanded rows, with nothing failing to
   compile and the collapsed pane still drawing correctly.
   `the_expanded_log_pane_draws_over_the_map` locates both fills in paint
-  order. The vitals strip rides the map's bottom border and *is* covered
-  while the log is open, which is why the bottom-clearance census asserts the
-  collapsed state alone.
+  order. The overlay used to cost the vitals, which rode the map's bottom
+  border and were covered outright while the log was open; they ride the
+  **log** pane's top border now and travel with it, so the expanded state
+  costs nothing. Don't restore the old "price" paragraph on the strength of
+  this seam's title — the overlay is unchanged, there is just nothing
+  underneath it left to lose.
+
+- **One strip to a border, and the vitals get the contested one.**
+  `border_strip` centres its quad *on* its line, so it reaches
+  `size/2 + pad/2` past it on **both** sides — `STRIP_CLEARANCE_RATIO` is
+  that same expression, and what it never covered is two strips reaching for
+  each other across the gap between two panes. The map pane's bottom vitals
+  and the log pane's top filter header did exactly that: at 1280x720 the
+  filter's opaque quad covered `[B, B+9]` of a 21px strip — the lower half of
+  the vitals glyphs, baseline included — because `draw_log_pane` runs after
+  `draw_map_frame`. **The trap is that a clearance test naming one rect is
+  vacuous here**: both of the tests that should have caught it compared the
+  vitals quad against `log_pane.y`, the log pane's *body fill*, and the
+  arithmetic held while the strip was cut. Ask instead whether **anything
+  painted after** the strip lands on it, and count an overlap as an area
+  rather than a touch — a pane edge exactly on the quad's is the clearance
+  holding. The vitals took the border because they are the readout that must
+  never be covered and because the expanded pane would otherwise erase them;
+  `map_pane`'s bottom border now carries nothing. The filter header is the
+  body's first row again, at `m.small()` and **above** the refusal, and it
+  costs a row through its own `LOG_FILTER_ROWS` — `LOG_TEXT_ROWS` stays the
+  *message* count, or SPACE grows the pane by five rows instead of four.
+  `base.rs`'s `log_capacity` subtracts that same constant, never a second
+  literal.

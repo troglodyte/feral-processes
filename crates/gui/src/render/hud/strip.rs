@@ -1,8 +1,15 @@
 //! Text mounted **on** a pane's border, breaking the border run behind it.
 //!
-//! This is the handoff's signature move: the map pane's title, its threat
-//! readout and its vitals all ride the frame rather than costing the pane a
-//! body row, and the log pane's filters and keybar do the same.
+//! This is the handoff's signature move: the map pane's title and threat
+//! readout ride its frame rather than costing the pane a body row, and the
+//! log pane's vitals and keybar do the same.
+//!
+//! **One strip to a border, and only one.** The quad below is centred *on*
+//! the line, so it reaches `size/2 + pad/2` past it on both sides — two
+//! strips reaching for each other across the gap between two panes cut each
+//! other in half, which is why the log pane's filter header is a body row
+//! and not a third mount. `docs/seams.md`'s "One strip to a border" entry
+//! carries the measurement.
 //!
 //! **Draw order is the whole of what this module is for.** The caller has
 //! already drawn the pane's border *and its interior fill*; this then paints
@@ -118,8 +125,9 @@ const BASELINE_RATIO: f32 = 0.35;
 /// strip consumed.
 ///
 /// The return value is what lets a caller mount two strips on one border and
-/// know whether the second clears the first — the log pane's top border does
-/// exactly that.
+/// know whether the second clears the first — the map pane's top border does
+/// exactly that, with the title at one end and the threat readout at the
+/// other.
 pub(in crate::render) fn border_strip(
     pane: Rect,
     mount: Mount,

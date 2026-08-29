@@ -563,9 +563,15 @@ pub(super) fn draw_playing_base(
     );
     // The pane's rows, chosen by app-core (see `pane_rows`), and the header
     // that says which channel they are. Both read before the `game` borrow.
-    // No `- 1` for the header any more: it rides the pane's top border, so
-    // every row of the body is a log line.
-    let log_capacity = ((regions.log_pane.h - m.line_height) / m.line_height).max(1.0) as usize;
+    //
+    // Counted in *entries* against a pane measured in rows, so the two
+    // diverge the moment one entry wraps — `draw_log_pane` cuts from the
+    // oldest end, so over-asking costs nothing and under-asking loses the
+    // newest news. Two rows come off the top: the keybar's, and the filter
+    // header's, which is the pane's first body row (`LOG_FILTER_ROWS`).
+    let log_capacity = ((regions.log_pane.h - m.line_height * (1.0 + hud::layout::LOG_FILTER_ROWS))
+        / m.line_height)
+        .max(1.0) as usize;
     let log_lines = app.visible_log(log_capacity);
     let log_filter = app.log_filter;
     // Before the `game` borrow, like `log_filter` above.
@@ -594,7 +600,10 @@ pub(super) fn draw_playing_base(
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
-    let vitals = hud::map_frame::Vitals {
+    // Mounted on the log pane's top border by `draw_log_pane` at the end of
+    // this function, so it is built here — before the `game` borrow it needs
+    // — and held until then.
+    let vitals = hud::log_frame::Vitals {
         status: &status,
         mining: game.mining(),
     };
@@ -610,7 +619,6 @@ pub(super) fn draw_playing_base(
         // map shows, not what a stack frame's own view holds.
         hud::map_frame::draw_map_frame(
             regions.map_pane,
-            &vitals,
             hud::map_frame::Threat {
                 hostiles: 0,
                 shielded: game.raid_defense_active(),
@@ -632,7 +640,6 @@ pub(super) fn draw_playing_base(
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
             regions.map_pane,
-            &vitals,
             hud::map_frame::Threat {
                 hostiles,
                 shielded: game.raid_defense_active(),
@@ -719,6 +726,7 @@ pub(super) fn draw_playing_base(
             entries: &log_lines,
             filter: log_filter,
             filtered_out,
+            vitals: &vitals,
             refusal: status_line.as_deref(),
             border: fx.log_border(hud::palette::PANE_BORDER),
         },
@@ -1821,40 +1829,52 @@ mod tests {
         );
     }
 
-    /// **Bug A's mirror, at the other end of the map pane.** The vitals
-    /// strip rides `map_pane`'s *bottom* border, and `border_strip` centres
-    /// its quad on that line — so it reaches `size/2 + pad/2` *below*
-    /// `map_pane.y + map_pane.h`. `draw_log_pane` paints an opaque fill over
-    /// the whole log pane and runs *after* `draw_map_frame`, so a separation
-    /// narrower than that reach cuts the bottom off MIT/ATK/STR in silence.
+    /// The first filled rect painted after `index` that lands on `quad`.
     ///
-    /// Asserted against the real painted quad for the same reason the test
-    /// above is: a region number says nothing about how far past its own
-    /// edge a strip paints.
-    #[test]
-    fn the_map_frames_vitals_strip_clears_the_log_pane() {
-        let mut app = playing_app();
-        let mut fx = Fx::new();
-        let m = ui_metrics(900.0);
-        let (regions, shapes) = with_painter(|p| {
-            let char_w = p.measure_ui_advance("M", m.font_size);
-            let regions =
-                hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
-            regions
-        });
+    /// A strip's own background quad is painted immediately before its
+    /// glyphs (`strip::border_strip`'s ordering rule), so it is *not* a
+    /// candidate when `index` is that strip's text — which is what makes
+    /// "nothing opaque lands on top of it afterwards" the question this
+    /// answers.
+    fn covering_rect_after(
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+        index: usize,
+        quad: bevy_egui::egui::Rect,
+    ) -> Option<bevy_egui::egui::Rect> {
+        // A pane whose edge lands exactly on the quad's is the clearance
+        // holding, not a rect painted over it, so the overlap has to be an
+        // area rather than a touch — the same 0.01 slack every other
+        // geometry assertion on this screen carries.
+        let covers = |r: &bevy_egui::egui::Rect| {
+            r.min.x < quad.max.x - EDGE_SLACK
+                && r.max.x > quad.min.x + EDGE_SLACK
+                && r.min.y < quad.max.y - EDGE_SLACK
+                && r.max.y > quad.min.y + EDGE_SLACK
+        };
+        shapes[index + 1..].iter().find_map(|cs| match &cs.shape {
+            bevy_egui::egui::Shape::Rect(r) if r.fill.a() > 0 && covers(&r.rect) => Some(r.rect),
+            _ => None,
+        })
+    }
 
-        let log_top = regions.log_pane.y;
-        // The whole strip is one galley (`strip::draw_pieces` lays its
-        // pieces out together), so any segment identifies it; MIT is the one
-        // the report named.
-        let text_idx = shapes
+    /// Two edges this close are the same edge.
+    const EDGE_SLACK: f32 = 0.01;
+
+    /// The vitals strip's glyphs and the background quad they sit on.
+    ///
+    /// The whole strip is one galley (`strip::draw_pieces` lays its pieces
+    /// out together), so any segment identifies it; MIT is the one the
+    /// report named.
+    fn vitals_strip(
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+    ) -> (usize, bevy_egui::egui::Rect) {
+        let index = shapes
             .iter()
             .position(|cs| {
                 matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text().contains("MIT "))
             })
-            .expect("the map frame never painted the vitals strip");
-        let quad = shapes[..text_idx]
+            .expect("the vitals strip was never painted");
+        let quad = shapes[..index]
             .iter()
             .rev()
             .find_map(|cs| match &cs.shape {
@@ -1862,11 +1882,74 @@ mod tests {
                 _ => None,
             })
             .expect("the vitals strip has no background quad ahead of it");
+        (index, quad)
+    }
+
+    /// Draws the map screen and returns the shapes, with the log collapsed
+    /// or expanded.
+    fn playing_shapes(expanded: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let mut app = playing_app();
+        app.log_expanded = expanded;
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+        });
+        shapes
+    }
+
+    /// **The vitals strip is the last thing painted over its own line, and
+    /// this asserts that against *every* quad that follows it.**
+    ///
+    /// The strip rides a pane border, and `border_strip` centres its
+    /// background quad *on* that line — so it reaches `size/2 + pad/2` past
+    /// the border on both sides, into whatever the next pane fills.
+    ///
+    /// **The predecessor of this test named one such quad and was
+    /// effectively vacuous.** It compared the strip's own quad against
+    /// `log_pane.y`, the log pane's *body fill*, and knew nothing about the
+    /// filter strip that used to ride the log pane's top border — whose
+    /// quad reached `size/2 + pad/2` *above* that line and covered the
+    /// lower half of the vitals glyphs, baseline included, while the
+    /// arithmetic it asserted still held. So the question is not "does one
+    /// named rect clear it" but "does anything painted after it land on
+    /// it", which is what this walks.
+    #[test]
+    fn nothing_paints_over_the_vitals_strip() {
+        let shapes = playing_shapes(false);
+        let (index, quad) = vitals_strip(&shapes);
+        let covered = covering_rect_after(&shapes, index, quad);
         assert!(
-            quad.max.y <= log_top + 0.01,
-            "the vitals strip's quad reaches y={} against the log pane's \
-             {log_top}px top edge — the log's fill paints over it",
-            quad.max.y
+            covered.is_none(),
+            "an opaque rect at {covered:?} painted over the vitals strip's \
+             {quad:?} — the strip is cut by whatever fills that box"
+        );
+    }
+
+    /// **The second complaint, and the reason the strip moved.** With the
+    /// log expanded (SPACE, `App::log_expanded`) the pane grows upward over
+    /// the bottom of the map as an overlay — so a strip riding the *map*
+    /// pane's bottom border vanished entirely for as long as the log was
+    /// open. Riding the *log* pane's top border instead, it travels with
+    /// the pane and stays on screen in both states.
+    ///
+    /// Asserted as "painted, and nothing painted over it": the text alone
+    /// is drawn either way, so a test that only looked for it passes
+    /// against the bug it exists to catch.
+    #[test]
+    fn the_vitals_strip_survives_an_expanded_log() {
+        let shapes = playing_shapes(true);
+        let text = painted_text(&shapes).join(" ");
+        assert!(
+            text.contains("MIT "),
+            "the vitals strip is not on screen with the log expanded: {text:?}"
+        );
+        let (index, quad) = vitals_strip(&shapes);
+        let covered = covering_rect_after(&shapes, index, quad);
+        assert!(
+            covered.is_none(),
+            "with the log expanded, an opaque rect at {covered:?} painted over \
+             the vitals strip's {quad:?}"
         );
     }
 

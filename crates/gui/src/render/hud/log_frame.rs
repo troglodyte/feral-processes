@@ -1,11 +1,29 @@
-//! The log pane: its frame, the channel gutter down its left edge, the filter
-//! strip on its top border and the keybar on its bottom one.
+//! The log pane: its frame, the channel gutter down its left edge, the
+//! player's vitals on its top border, the filter header as its first body
+//! row, and the keybar on its bottom border.
 //!
-//! Two rows come off the pane's body and onto its frame here. The filter
-//! header used to cost a body row and now rides the top border, which is one
-//! more line of log at every window size; the four-line key block used to sit
-//! at the foot of the status column and now rides the bottom border as one
-//! row. Both are [`border_strip`] doing what it was written for.
+//! **Only one strip may ride a border**, and that is what decides the two
+//! halves above. [`border_strip`] centres its background quad *on* the line
+//! it mounts to, reaching `size/2 + pad/2` past it on **both** sides — so
+//! the filter strip, riding this pane's top border, painted over the lower
+//! half of the vitals riding the map pane's bottom border, baseline
+//! included. The vitals took the border because they are the readout that
+//! must never be covered; the filter header went back to being a body row,
+//! where it is top-aligned with the messages it heads and nothing above
+//! `pane.y` can reach it. The keybar keeps the bottom border, which is
+//! uncontested.
+//!
+//! The vitals ride *this* pane rather than the map's for a second reason:
+//! the expanded pane (SPACE, `App::log_expanded`) is an overlay over the
+//! bottom of the map, so a strip on the map's bottom border disappeared
+//! entirely for as long as the log was open. Mounted here it travels with
+//! the pane.
+//!
+//! **The vitals strip does not fit at every window size and does not pretend
+//! to.** It is one row on a border with no wrap and no clip, so its segments
+//! carry a fixed priority and the ones that do not fit are dropped from the
+//! end, measured. That is `stock::fits`' rule applied to segments instead of
+//! piles.
 //!
 //! **The gutter is the honest half of the handoff's five channels.** That
 //! reference names `FIELD` `GAIN` `BASE` `DEFEND` `IDLE`, which this game has
@@ -16,11 +34,12 @@
 
 use feral_processes_app_core::LogFilter;
 use feral_processes_engine::text::wrap;
-use feral_processes_engine::{LogEntry, MessageKind, MessageSource};
+use feral_processes_engine::{LogEntry, MessageKind, MessageSource, PlayerStatus};
 
+use super::bar::bar;
 use super::palette;
-use super::strip::{Mount, Piece, draw_pieces, fitting};
-use crate::paint::{Color, Painter, Rect};
+use super::strip::{Mount, Piece, draw_pieces, fitting, label, value};
+use crate::paint::{Color, Painter, Rect, TextRun};
 use crate::render::{draw_message_text, message_text};
 use crate::text::Metrics;
 
@@ -31,11 +50,27 @@ use crate::text::Metrics;
 /// the two from drifting apart.
 const GUTTER_SAMPLE: &str = "ALERT  ";
 
+const INTEG_CELLS: usize = 16;
+const POWER_CELLS: usize = 10;
+const XP_CELLS: usize = 14;
+/// `POWER_MAX` — the reserve's ceiling is fixed forever and does not scale
+/// with the player, unlike `max_hp`.
+const POWER_MAX: f32 = 100.0;
+
+/// What the vitals strip reads.
+pub(in crate::render) struct Vitals<'a> {
+    pub status: &'a PlayerStatus,
+    pub mining: bool,
+}
+
 /// What the pane draws.
 pub(in crate::render) struct LogPane<'a> {
     pub entries: &'a [LogEntry],
     pub filter: LogFilter,
     pub filtered_out: usize,
+    /// Mounted on the pane's top border, not drawn among the rows — see the
+    /// module comment for why it is this pane's border and not the map's.
+    pub vitals: &'a Vitals<'a>,
     /// The refusal the player's last keypress earned, if any. Stays the first
     /// line of this pane — `needs_status_banner` names the four screens that
     /// draw no popup and `Playing` is not one of them.
@@ -77,13 +112,82 @@ fn channel_tag(entry: &LogEntry) -> (&'static str, Color) {
     }
 }
 
+/// A meter as three pieces: label, filled cells, trough cells.
+fn meter(name: &str, v: f32, max: f32, cells: usize, fill: Color) -> Vec<Piece> {
+    let b = bar(v, max, cells);
+    vec![
+        label(name),
+        (b.filled, fill, false),
+        (b.empty, palette::BAR_TROUGH, false),
+    ]
+}
+
+/// The vitals segments in priority order. The caller takes the longest
+/// prefix that fits.
+fn vitals_segments(v: &Vitals) -> Vec<Vec<Piece>> {
+    let s = v.status;
+    let mut out: Vec<Vec<Piece>> = Vec::new();
+
+    let mut integ = meter(
+        "INTEG ",
+        s.hp as f32,
+        s.max_hp.max(1) as f32,
+        INTEG_CELLS,
+        palette::HEALTHY,
+    );
+    integ.push(value(format!(" {}/{}", s.hp, s.max_hp.max(1))));
+    out.push(integ);
+
+    let mut pwr = meter("PWR ", s.power, POWER_MAX, POWER_CELLS, palette::ATTENTION);
+    pwr.push(value(format!(" {:.0}", s.power)));
+    out.push(pwr);
+
+    let mut xp = meter(
+        &format!("L{} ", s.level),
+        s.xp as f32,
+        s.xp_to_next.max(1) as f32,
+        XP_CELLS,
+        palette::CH_GAIN,
+    );
+    xp.push(value(format!(" {}/{}", s.xp, s.xp_to_next)));
+    out.push(xp);
+
+    // Omitted entirely at zero rather than reading "0 perk pts". It wears
+    // ATTENTION, which is reserved for "the player must act", so drawing it
+    // with nothing to spend would be that reservation lapsing on its first
+    // use in the game.
+    if s.perk_points > 0 {
+        out.push(vec![(
+            format!("\u{25B8} {} perk pts [k]", s.perk_points),
+            palette::ATTENTION,
+            true,
+        )]);
+    }
+
+    out.push(vec![label("MIT "), value(format!("{}%", s.mitigation))]);
+    out.push(vec![label("ATK "), value(s.atk.to_string())]);
+    out.push(vec![label("STR "), value(s.strength.to_string())]);
+    out.push(vec![label("DEC "), value(s.decompiler.to_string())]);
+    out.push(vec![if v.mining {
+        ("mining on".to_string(), palette::HEALTHY, false)
+    } else {
+        ("mining off".to_string(), palette::LABEL, false)
+    }]);
+    out
+}
+
 fn dim(text: impl Into<String>) -> Piece {
     (text.into(), palette::FIELD_LABEL, false)
 }
 
-/// The filter strip: every channel with the active one picked out, the key
+/// The filter row: every channel with the active one picked out, the key
 /// that cycles them, the key that opens the history, and — when a channel is
 /// being suppressed — how much of it is going unread.
+///
+/// Drawn at `m.small()`, not the body size. It is chrome heading the rows
+/// rather than one of them, it is the size it was measured and tuned at
+/// while it rode the border, and at the body size it would compete with the
+/// news underneath it for the eye.
 ///
 /// All three filters are listed rather than only the active one. Named alone,
 /// "Field" says nothing about what the other settings are or which way the
@@ -232,6 +336,24 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     // entries and a wrapped entry is several rows.
     let floor = pane.y + pane.h - m.inset;
 
+    // The filter row is pinned first, above even a refusal: it names what
+    // the rows below it are, and a header that moves the moment the player
+    // mistypes a key is not a header. It starts at the pane's own inset —
+    // in the gutter column, not past it — because it heads the whole body
+    // and not one channel of it. `LOG_FILTER_ROWS` in `hud::layout` is the
+    // row this consumes.
+    let filter = filter_pieces(log.filter, log.filtered_out);
+    let runs: Vec<TextRun> = filter
+        .iter()
+        .map(|(text, color, bold)| TextRun {
+            text,
+            bold: *bold,
+            color: *color,
+        })
+        .collect();
+    painter.ui_runs(&runs, pane.x + m.inset, y, m.small());
+    y += m.line_height;
+
     // The gutter stays blank for a refusal: it is the answer to a keypress,
     // not traffic on a channel, and inventing a tag for it would put it in a
     // column the filter key claims to control.
@@ -279,14 +401,9 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     }
 
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, log.border);
-    draw_pieces(
-        pane,
-        Mount::TopLeft,
-        &filter_pieces(log.filter, log.filtered_out),
-        painter,
-        m,
-    );
     let avail = pane.w - m.inset * 2.0;
+    let vitals = fitting(&vitals_segments(log.vitals), avail, painter, m);
+    draw_pieces(pane, Mount::TopLeft, &vitals, painter, m);
     let taken = fitting(&keybar_segments(), avail, painter, m);
     draw_pieces(pane, Mount::BottomLeft, &taken, painter, m);
 }
@@ -297,6 +414,7 @@ mod tests {
     use crate::paint::{painted_text, with_painter};
     use crate::render::hud::layout;
     use crate::text::ui_metrics;
+    use feral_processes_engine::{DifficultyMode, Game};
 
     /// The smallest window the design is stated against.
     const SMALLEST: (f32, f32) = (1280.0, 720.0);
@@ -314,6 +432,43 @@ mod tests {
             source,
             text: "a line".to_string(),
             repeats: 1,
+        }
+    }
+
+    /// Every figure at its widest plausible value, so the width census is
+    /// not passing on a short fixture.
+    fn wide_status() -> PlayerStatus {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let mut s = game.player_status();
+        s.hp = 99_999;
+        s.max_hp = 99_999;
+        s.power = 100.0;
+        s.level = 99;
+        s.xp = 999_999;
+        s.xp_to_next = 999_999;
+        s.perk_points = 99;
+        s.mitigation = 88;
+        s.atk = 777;
+        s.strength = 9_999;
+        s.decompiler = 666;
+        s
+    }
+
+    /// The pane's three constant fields, so a test that does not care about
+    /// them says so by omission.
+    fn log_pane<'a>(
+        entries: &'a [LogEntry],
+        vitals: &'a Vitals<'a>,
+        refusal: Option<&'a str>,
+    ) -> LogPane<'a> {
+        LogPane {
+            entries,
+            filter: LogFilter::All,
+            filtered_out: 0,
+            vitals,
+            refusal,
+            border: palette::PANE_BORDER,
         }
     }
 
@@ -501,20 +656,14 @@ mod tests {
     fn the_pane_fills_before_its_strips() {
         let m = ui_metrics(900.0);
         let pane = crate::paint::Rect::new(0.0, 600.0, 900.0, 120.0);
+        let status = wide_status();
+        let vitals = Vitals {
+            status: &status,
+            mining: true,
+        };
         let entries = [entry(MessageKind::Info, MessageSource::Field)];
         let (_, shapes) = with_painter(|p| {
-            draw_log_pane(
-                pane,
-                &LogPane {
-                    entries: &entries,
-                    filter: LogFilter::All,
-                    filtered_out: 0,
-                    refusal: None,
-                    border: palette::PANE_BORDER,
-                },
-                p,
-                &m,
-            );
+            draw_log_pane(pane, &log_pane(&entries, &vitals, None), p, &m);
         });
 
         let fill = shapes
@@ -567,20 +716,21 @@ mod tests {
             let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
             // `draw_playing_base`'s own figure. Kept in step by hand, so if
             // that expression moves this test is measuring the wrong pane.
-            let capacity = ((pane.h - m.line_height) / m.line_height).max(1.0) as usize;
+            let capacity = ((pane.h - m.line_height * (1.0 + layout::LOG_FILTER_ROWS))
+                / m.line_height)
+                .max(1.0) as usize;
+            let status = wide_status();
+            let vitals = Vitals {
+                status: &status,
+                mining: true,
+            };
             let entries: Vec<LogEntry> = (0..capacity + 3)
                 .map(|_| entry(MessageKind::Info, MessageSource::Field))
                 .collect();
             let (_, shapes) = with_painter(|q| {
                 draw_log_pane(
                     pane,
-                    &LogPane {
-                        entries: &entries,
-                        filter: LogFilter::All,
-                        filtered_out: 0,
-                        refusal: Some("Nothing to collect."),
-                        border: palette::PANE_BORDER,
-                    },
+                    &log_pane(&entries, &vitals, Some("Nothing to collect.")),
                     q,
                     &m,
                 );
@@ -624,6 +774,11 @@ mod tests {
             let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
             let long: String = (0..40).map(|i| format!("overrun-{i:02} ")).collect();
             let refusal: String = (0..20).map(|i| format!("refused-{i:02} ")).collect();
+            let status = wide_status();
+            let vitals = Vitals {
+                status: &status,
+                mining: true,
+            };
             let entries: Vec<LogEntry> = [
                 (MessageKind::Info, 1),
                 (MessageKind::LevelUp, 1),
@@ -639,18 +794,7 @@ mod tests {
             })
             .collect();
             let (_, shapes) = with_painter(|q| {
-                draw_log_pane(
-                    pane,
-                    &LogPane {
-                        entries: &entries,
-                        filter: LogFilter::All,
-                        filtered_out: 0,
-                        refusal: Some(&refusal),
-                        border: palette::PANE_BORDER,
-                    },
-                    q,
-                    &m,
-                );
+                draw_log_pane(pane, &log_pane(&entries, &vitals, Some(&refusal)), q, &m);
             });
 
             let edge = pane.x + pane.w;
@@ -701,23 +845,17 @@ mod tests {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
             let text_x = pane.x + m.inset + p.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
+            let status = wide_status();
+            let vitals = Vitals {
+                status: &status,
+                mining: true,
+            };
             let entries = [two_row_entry(
                 "overrun",
                 message_columns(pane, text_x, p, &m),
             )];
             let (_, shapes) = with_painter(|q| {
-                draw_log_pane(
-                    pane,
-                    &LogPane {
-                        entries: &entries,
-                        filter: LogFilter::All,
-                        filtered_out: 0,
-                        refusal: None,
-                        border: palette::PANE_BORDER,
-                    },
-                    q,
-                    &m,
-                );
+                draw_log_pane(pane, &log_pane(&entries, &vitals, None), q, &m);
             });
 
             let mut tags = 0;
@@ -756,22 +894,16 @@ mod tests {
             let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
             let text_x = pane.x + m.inset + p.measure_ui_advance(GUTTER_SAMPLE, m.font_size);
             let columns = message_columns(pane, text_x, p, &m);
+            let status = wide_status();
+            let vitals = Vitals {
+                status: &status,
+                mining: true,
+            };
             let entries: Vec<LogEntry> = (0..10)
                 .map(|i| two_row_entry(&format!("mark{i:02}"), columns))
                 .collect();
             let (_, shapes) = with_painter(|q| {
-                draw_log_pane(
-                    pane,
-                    &LogPane {
-                        entries: &entries,
-                        filter: LogFilter::All,
-                        filtered_out: 0,
-                        refusal: None,
-                        border: palette::PANE_BORDER,
-                    },
-                    q,
-                    &m,
-                );
+                draw_log_pane(pane, &log_pane(&entries, &vitals, None), q, &m);
             });
 
             let drawn = painted_text(&shapes).join("\n");
@@ -786,22 +918,191 @@ mod tests {
         });
     }
 
+    fn segments_text(taken: &[Piece]) -> String {
+        taken.iter().map(|(t, _, _)| t.as_str()).collect()
+    }
+
+    fn pane_at(screen_w: f32, screen_h: f32, m: &Metrics) -> Rect {
+        layout::regions(screen_w, screen_h, 9.0, m, false).log_pane
+    }
+
+    /// The one thing this strip must never do. It is a single row on a
+    /// border with no wrap and no clip, so a line wider than the pane is not
+    /// cut off — it is drawn past the edge in silence.
+    #[test]
+    fn the_vitals_strip_never_draws_wider_than_its_pane() {
+        let m = ui_metrics(SMALLEST.1);
+        let status = wide_status();
+        let v = Vitals {
+            status: &status,
+            mining: true,
+        };
+        with_painter(|p| {
+            let pane = pane_at(SMALLEST.0, SMALLEST.1, &m);
+            let segments = vitals_segments(&v);
+            let taken = fitting(&segments, pane.w - m.inset * 2.0, p, &m);
+            let drawn = p.measure_ui_advance(segments_text(&taken), m.small());
+            assert!(
+                drawn <= pane.w - m.inset * 2.0,
+                "vitals draw {drawn} into {}",
+                pane.w - m.inset * 2.0
+            );
+            // If the fixture fits whole, this test is not exercising the drop
+            // rule and would pass against no drop rule at all.
+            let whole: String = segments
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect();
+            assert!(
+                p.measure_ui_advance(&whole, m.small()) > pane.w - m.inset * 2.0,
+                "fixture fits at 1280x720 — it cannot exercise the drop rule"
+            );
+        });
+    }
+
+    /// Guards a drop rule that is too eager, which the census above alone
+    /// would not catch: a strip that always drew one segment would pass it.
+    #[test]
+    fn a_wide_window_keeps_more_than_a_narrow_one() {
+        let status = wide_status();
+        let v = Vitals {
+            status: &status,
+            mining: true,
+        };
+        with_painter(|p| {
+            let narrow_m = ui_metrics(SMALLEST.1);
+            let wide_m = ui_metrics(1080.0);
+            let count = |screen: (f32, f32), m: &Metrics| {
+                let pane = pane_at(screen.0, screen.1, m);
+                fitting(&vitals_segments(&v), pane.w - m.inset * 2.0, p, m).len()
+            };
+            let narrow = count(SMALLEST, &narrow_m);
+            let wide = count((1920.0, 1080.0), &wide_m);
+            assert!(narrow > 0, "nothing fits at 1280x720");
+            assert!(
+                wide > narrow,
+                "a 1920-wide pane took {wide} pieces against {narrow} at 1280"
+            );
+        });
+    }
+
+    /// A perk-points segment reading zero is chrome, and it wears the colour
+    /// reserved for "the player must act".
+    #[test]
+    fn no_perk_segment_when_none_are_unspent() {
+        let mut status = wide_status();
+        status.perk_points = 0;
+        let text: String = vitals_segments(&Vitals {
+            status: &status,
+            mining: false,
+        })
+        .iter()
+        .flatten()
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+        assert!(
+            !text.contains("perk"),
+            "zero perk points still drew: {text}"
+        );
+
+        status.perk_points = 1;
+        let text: String = vitals_segments(&Vitals {
+            status: &status,
+            mining: false,
+        })
+        .iter()
+        .flatten()
+        .map(|(t, _, _)| t.as_str())
+        .collect();
+        assert!(text.contains("perk pts [k]"), "one perk point drew nothing");
+    }
+
+    /// **The two halves of the swap, asserted together because either alone
+    /// is satisfied by the arrangement this replaced.** The vitals ride the
+    /// top border, where a strip's quad has the line to itself; the filter
+    /// header is the *first row of the body*, which is what "the top of the
+    /// toggle menu and the top of the log area are the same" means.
+    ///
+    /// Positions are galley **tops** (`Painter::ui_runs` converts the
+    /// baseline it takes), and the header is drawn at `m.small()` against
+    /// the messages' `m.font_size`, so the assertions are orderings and
+    /// containments rather than a line-height arithmetic that would be
+    /// comparing two different ascents. What a body row *costs* the pane is
+    /// `layout::the_log_pane_carries_one_filter_row_in_both_states`.
+    #[test]
+    fn the_filter_heads_the_body_and_the_vitals_ride_the_border() {
+        let m = ui_metrics(SMALLEST.1);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
+            let status = wide_status();
+            let vitals = Vitals {
+                status: &status,
+                mining: true,
+            };
+            let entries = [entry(MessageKind::Info, MessageSource::Field)];
+            let (_, shapes) = with_painter(|q| {
+                draw_log_pane(pane, &log_pane(&entries, &vitals, None), q, &m);
+            });
+
+            let y_of = |want: &str| {
+                shapes
+                    .iter()
+                    .find_map(|cs| match &cs.shape {
+                        bevy_egui::egui::Shape::Text(t) if t.galley.text().contains(want) => {
+                            Some(t.pos.y)
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("{want:?} was never painted"))
+            };
+            // `INTEG`, not `MIT`: the strip drops segments from the end at
+            // this window size, and MIT is past the cut here.
+            let vitals_y = y_of("INTEG");
+            let filter_y = y_of("LOG");
+            let message_y = y_of("a line");
+
+            assert!(
+                vitals_y < pane.y,
+                "the vitals drew at y={vitals_y}, below the pane's top edge at \
+                 {} — they are not on the border",
+                pane.y
+            );
+            assert!(
+                filter_y >= pane.y,
+                "the filter header drew at y={filter_y}, above the pane's top \
+                 edge at {} — it is a border strip again",
+                pane.y
+            );
+            assert!(
+                filter_y > vitals_y,
+                "the filter header at y={filter_y} and the vitals at y={vitals_y} \
+                 share a line — two strips on one border cut each other in half"
+            );
+            assert!(
+                message_y > filter_y,
+                "the first message drew at y={message_y}, above the header at \
+                 {filter_y} that names its channel"
+            );
+        });
+    }
+
     /// Both of the pane's borders carry a strip, and the gutter tags the one
     /// line the fixture holds. All three come off one call.
     #[test]
     fn the_pane_draws_its_gutter_and_both_strips() {
         let m = ui_metrics(900.0);
+        let status = wide_status();
+        let vitals = Vitals {
+            status: &status,
+            mining: true,
+        };
         let entries = [entry(MessageKind::Loot, MessageSource::Base)];
         let (_, shapes) = with_painter(|p| {
             draw_log_pane(
                 crate::paint::Rect::new(0.0, 600.0, 900.0, 120.0),
-                &LogPane {
-                    entries: &entries,
-                    filter: LogFilter::All,
-                    filtered_out: 0,
-                    refusal: Some("Nothing to collect."),
-                    border: palette::PANE_BORDER,
-                },
+                &log_pane(&entries, &vitals, Some("Nothing to collect.")),
                 p,
                 &m,
             );

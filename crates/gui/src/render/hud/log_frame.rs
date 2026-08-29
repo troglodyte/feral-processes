@@ -140,6 +140,12 @@ fn divider() -> Vec<Piece> {
 /// that hold the rest come first, and the answer to the spec's open question
 /// is **no**: there is no slack for `t trade` or `s save` at any supported
 /// size, and they stay cut exactly as the handoff had them.
+///
+/// `SPACE` (expand/collapse this pane, see `App::log_expanded`) is not a
+/// segment here for the same reason: at 60.5px of slack left over at
+/// 1280x720 it is already narrower than what the next-lowest-priority key
+/// (`e drain`) needs, and this bar has no room to spend on advertising a key
+/// nothing else on the census requires. `?` is still where it is discovered.
 fn keybar_segments() -> Vec<Vec<Piece>> {
     vec![
         keycap("hjkl", "move"),
@@ -397,7 +403,7 @@ mod tests {
             let m = ui_metrics(h);
             with_painter(|p| {
                 let char_w = p.measure_ui_advance("M", m.font_size);
-                let pane = layout::regions(w, h, char_w, &m).log_pane;
+                let pane = layout::regions(w, h, char_w, &m, false).log_pane;
                 let avail = pane.w - m.inset * 2.0;
                 let taken = fitting(&keybar_segments(), avail, p, &m);
                 let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
@@ -491,7 +497,7 @@ mod tests {
         let m = ui_metrics(SMALLEST.1);
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m).log_pane;
+            let pane = layout::regions(SMALLEST.0, SMALLEST.1, char_w, &m, false).log_pane;
             // `draw_playing_base`'s own figure. Kept in step by hand, so if
             // that expression moves this test is measuring the wrong pane.
             let capacity = ((pane.h - m.line_height) / m.line_height).max(1.0) as usize;

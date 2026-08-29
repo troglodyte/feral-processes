@@ -27,7 +27,14 @@ pub(in crate::render) enum Mount {
 
 /// Pad either side of the label, inside the background quad. What makes the
 /// border read as *broken by* a label rather than overwritten by one.
-const PAD_RATIO: f32 = 0.5;
+///
+/// `pub(in crate::render)` because `hud::layout` needs it too: a top-mounted
+/// strip's quad reaches `size/2 + pad/2` above its border line (see
+/// `border_strip` below), and `layout::TOP_STRIP_CLEARANCE_RATIO` is that
+/// same expression rather than a second copy of it — a call, not a copy,
+/// per `CLAUDE.md`'s rule on doc comments that claim to mirror another
+/// module.
+pub(in crate::render) const PAD_RATIO: f32 = 0.5;
 
 /// The separator between two segments of a strip.
 const SEP: &str = " · ";

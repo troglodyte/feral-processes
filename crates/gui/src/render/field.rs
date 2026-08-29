@@ -568,7 +568,7 @@ mod tests {
             // `draw_status_buffs` is called one inset in — the same 1440x900
             // geometry `ui_metrics` is calibrated for.
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m)
+            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m, false)
                 .info_column
                 .w
                 - m.inset * 2.0;
@@ -635,7 +635,7 @@ mod tests {
         with_painter(|p| {
             let m = ui_metrics(900.0);
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m)
+            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m, false)
                 .info_column
                 .w
                 - m.inset * 2.0;

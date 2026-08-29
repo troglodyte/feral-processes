@@ -15,6 +15,7 @@
 //! character count is not a width. The caller measures once and passes it
 //! in; the tests pass a literal, which is the whole point of the parameter.
 
+use super::strip;
 use crate::paint::Rect;
 use crate::text::Metrics;
 
@@ -25,8 +26,31 @@ const INFO_W_FRAC: f32 = 0.30;
 /// instead is the silent way to get a column that ignores one end.
 const INFO_W_MIN_CH: f32 = 44.0;
 const INFO_W_MAX_CH: f32 = 56.0;
-/// The log pane's four text rows.
+/// The log pane's four text rows, collapsed — the pane's normal state.
 const LOG_TEXT_ROWS: f32 = 4.0;
+/// The log pane's rows expanded — see `App::log_expanded`, toggled by SPACE
+/// on the map screen. Twice the collapsed count rather than an
+/// independently-tuned figure, so "expanded" always means the same thing.
+const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
+
+/// **Bug A's fix, and the number the bug was missing.** A border strip
+/// mounted `Mount::TopLeft`/`TopRight` centres its background quad *on* the
+/// line it rides (`strip::border_strip`), reaching `size/2 + pad/2` above
+/// it, where `size = m.small()` and `pad = size * strip::PAD_RATIO`. The map
+/// pane's title and threat readout ride its top border at `pane.y`, so a
+/// pane whose top edge sits exactly on the status bar's bottom edge lets
+/// that quad — and the top of the strip's own glyph caps — paint into the
+/// bar's opaque fill, which `draw_status_bar` draws *after* `draw_map_frame`
+/// has already run.
+///
+/// So the panes below the bar start `m.small() * TOP_STRIP_CLEARANCE_RATIO`
+/// further down than the bar itself is tall — the bar's own rect
+/// (`status_bar`) is untouched, only where the *next* thing may start.
+/// Expressed as a ratio of `m.small()`, not a pixel figure, so it travels
+/// with the font size the same way every other figure here does. Built from
+/// `strip::PAD_RATIO` directly rather than a copied `0.5` so the two cannot
+/// drift apart.
+const TOP_STRIP_CLEARANCE_RATIO: f32 = 0.5 + strip::PAD_RATIO / 2.0;
 
 /// The five regions, in window pixels.
 ///
@@ -51,11 +75,14 @@ pub(in crate::render) struct HudRegions {
 ///
 /// `char_w` is the UI face's advance for one character, measured by the
 /// caller — see the module comment for why it is not read off `m`.
+/// `log_expanded` is `App::log_expanded` — SPACE on the map screen doubles
+/// `log_pane`'s row count and back.
 pub(in crate::render) fn regions(
     screen_w: f32,
     screen_h: f32,
     char_w: f32,
     m: &Metrics,
+    log_expanded: bool,
 ) -> HudRegions {
     let info_w = (screen_w * INFO_W_FRAC).clamp(INFO_W_MIN_CH * char_w, INFO_W_MAX_CH * char_w);
     // One cell between the column and everything to its left.
@@ -63,20 +90,33 @@ pub(in crate::render) fn regions(
     let left_w = screen_w - info_w - gutter;
 
     // One row plus the inset above and below it — the height the stock
-    // strip claimed before the status bar absorbed it, kept so the panes
-    // below start clear of it exactly as they did.
+    // strip claimed before the status bar absorbed it. This sizes the bar's
+    // own rect only; see `TOP_STRIP_CLEARANCE_RATIO` for why the panes below
+    // it start further down than this.
     let head_h = m.line_height + m.inset;
-    let log_h = m.line_height * LOG_TEXT_ROWS + m.inset * 2.0;
-    let key_h = m.line_height;
-    let map_h = screen_h - head_h - log_h - key_h - m.gap;
+    let content_top = head_h + m.small() as f32 * TOP_STRIP_CLEARANCE_RATIO;
 
-    let log_y = head_h + map_h + m.gap;
+    let log_rows = if log_expanded {
+        LOG_TEXT_ROWS_EXPANDED
+    } else {
+        LOG_TEXT_ROWS
+    };
+    let log_h = m.line_height * log_rows + m.inset * 2.0;
+    let key_h = m.line_height;
+    let map_h = screen_h - content_top - log_h - key_h - m.gap;
+
+    let log_y = content_top + map_h + m.gap;
     HudRegions {
         status_bar: Rect::new(0.0, 0.0, screen_w, head_h),
-        map_pane: Rect::new(0.0, head_h, left_w, map_h),
+        map_pane: Rect::new(0.0, content_top, left_w, map_h),
         log_pane: Rect::new(0.0, log_y, left_w, log_h),
         key_bar: Rect::new(0.0, log_y + log_h - key_h, left_w, key_h),
-        info_column: Rect::new(screen_w - info_w, head_h, info_w, screen_h - head_h),
+        info_column: Rect::new(
+            screen_w - info_w,
+            content_top,
+            info_w,
+            screen_h - content_top,
+        ),
     }
 }
 
@@ -95,7 +135,11 @@ mod tests {
     const CHAR_W: f32 = 9.0;
 
     fn at(w: f32, h: f32) -> HudRegions {
-        regions(w, h, CHAR_W, &ui_metrics(h))
+        regions(w, h, CHAR_W, &ui_metrics(h), false)
+    }
+
+    fn at_expanded(w: f32, h: f32) -> HudRegions {
+        regions(w, h, CHAR_W, &ui_metrics(h), true)
     }
 
     /// Rule 1. The column owns the screen's bottom-right corner, so it has
@@ -171,6 +215,80 @@ mod tests {
                 h += 120.0;
             }
             w += 240.0;
+        }
+    }
+
+    /// **Bug A's arithmetic half.** `base.rs::the_map_frames_top_strips_
+    /// clear_the_status_bar` is the test that catches a regression here
+    /// against the *real* painted strip; this pins the ratio itself, so an
+    /// edit to `strip::PAD_RATIO` or `strip::BASELINE_RATIO` that reopens
+    /// the gap fails here first, without a `Painter`.
+    #[test]
+    fn the_map_panes_top_clears_a_border_strips_quad() {
+        for (w, h) in SIZES {
+            let m = ui_metrics(h);
+            let r = at(w, h);
+            let clearance = m.small() as f32 * TOP_STRIP_CLEARANCE_RATIO;
+            let quad_top = r.map_pane.y - clearance;
+            assert!(
+                quad_top >= r.status_bar.y + r.status_bar.h - 0.001,
+                "a top strip on the map pane would paint into the status bar \
+                 at {w}x{h}: quad top {quad_top}, bar bottom {}",
+                r.status_bar.y + r.status_bar.h
+            );
+        }
+    }
+
+    /// **Bug B.** SPACE doubles the log pane's row count, so its height
+    /// grows by exactly the four extra rows — nothing else on the screen is
+    /// supposed to move because of it.
+    #[test]
+    fn expanding_the_log_doubles_its_extra_row_height() {
+        for (w, h) in SIZES {
+            let m = ui_metrics(h);
+            let collapsed = at(w, h);
+            let expanded = at_expanded(w, h);
+            let want_taller_by = m.line_height * LOG_TEXT_ROWS;
+            assert!(
+                (expanded.log_pane.h - collapsed.log_pane.h - want_taller_by).abs() < 0.001,
+                "log pane grew by {} at {w}x{h}, wanted {want_taller_by}",
+                expanded.log_pane.h - collapsed.log_pane.h
+            );
+            assert!(
+                expanded.log_pane.h > collapsed.log_pane.h,
+                "SPACE did not grow the log pane at {w}x{h}"
+            );
+        }
+    }
+
+    /// The module's two load-bearing rules, re-run with the log expanded —
+    /// a taller log pane eats into `map_pane`, not into the column, so
+    /// neither rule may lapse just because SPACE was pressed.
+    #[test]
+    fn expanding_the_log_still_satisfies_the_module_rules() {
+        for (w, h) in SIZES {
+            let r = at_expanded(w, h);
+            assert!(
+                (r.info_column.y + r.info_column.h - h).abs() < 0.001,
+                "column stops short of the bottom edge at {w}x{h} expanded"
+            );
+            assert!(
+                r.log_pane.x + r.log_pane.w <= r.info_column.x,
+                "the expanded log passes under the info column at {w}x{h}"
+            );
+            assert!(
+                r.key_bar.x + r.key_bar.w <= r.info_column.x,
+                "the keybar runs under the column at {w}x{h} expanded"
+            );
+            for (name, rect) in [
+                ("status_bar", r.status_bar),
+                ("map_pane", r.map_pane),
+                ("log_pane", r.log_pane),
+                ("key_bar", r.key_bar),
+                ("info_column", r.info_column),
+            ] {
+                assert!(rect.h > 0.0, "{name} has height {} at {w}x{h}", rect.h);
+            }
         }
     }
 }

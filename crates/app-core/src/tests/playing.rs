@@ -274,3 +274,48 @@ fn n_is_refused_outside_base_space() {
         app.status_line
     );
 }
+
+/// SPACE doubles the map screen's log pane and back — `App::log_expanded`,
+/// read by `hud::layout::regions` in the renderer. Toggling is not an
+/// action, the same as `n` above: reading a wider log must not cost a turn.
+#[test]
+fn space_toggles_the_log_pane_and_spends_no_turn() {
+    let mut app = test_app(9103);
+    let tick = app.game.as_ref().unwrap().current_tick();
+    assert!(!app.log_expanded, "the log pane starts collapsed");
+
+    app.handle_key(GameKey::Char(' '));
+    assert!(app.log_expanded, "SPACE did not expand the log pane");
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        tick,
+        "expanding the log spent a turn"
+    );
+
+    app.handle_key(GameKey::Char(' '));
+    assert!(
+        !app.log_expanded,
+        "SPACE did not collapse the log pane back"
+    );
+}
+
+/// **The load-bearing one**, `the_digits_work_underground`'s reason: this
+/// match runs before the hand-off to `handle_stack_key`, which ends in
+/// `_ => {}`, so a key that reached it instead would be a swallowed
+/// keypress with no refusal and nothing in the log — how `r` (rest) shipped
+/// broken underground. The log pane the toggle resizes is drawn on the
+/// Stack view too, so the toggle has to reach both locales.
+#[test]
+fn space_toggles_the_log_pane_underground_too() {
+    let mut app = app_underground(9104);
+    assert!(app.game.as_ref().unwrap().is_underground());
+
+    app.handle_key(GameKey::Char(' '));
+
+    assert!(app.log_expanded, "SPACE was swallowed underground");
+    assert!(
+        app.status_line.is_none(),
+        "the key was refused rather than acted on: {:?}",
+        app.status_line
+    );
+}

@@ -798,7 +798,7 @@ mod tests {
         let mut out = Rect::new(0.0, 0.0, 0.0, 0.0);
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let r = crate::render::hud::layout::regions(1280.0, 720.0, char_w, m);
+            let r = crate::render::hud::layout::regions(1280.0, 720.0, char_w, m, false);
             out = crate::render::hud::column::regions(r.info_column, m).body;
         });
         out

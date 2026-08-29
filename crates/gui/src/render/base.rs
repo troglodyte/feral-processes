@@ -554,7 +554,13 @@ pub(super) fn draw_playing_base(
     // no `Game`, so it is computed before the borrow below like every other
     // value gathered here.
     let char_w = painter.measure_ui_advance("M", m.font_size);
-    let regions = hud::layout::regions(painter.screen_w(), painter.screen_h(), char_w, m);
+    let regions = hud::layout::regions(
+        painter.screen_w(),
+        painter.screen_h(),
+        char_w,
+        m,
+        app.log_expanded,
+    );
     // The pane's rows, chosen by app-core (see `pane_rows`), and the header
     // that says which channel they are. Both read before the `game` borrow.
     // No `- 1` for the header any more: it rides the pane's top border, so
@@ -1663,7 +1669,8 @@ mod tests {
         let m = ui_metrics(900.0);
         let (regions, shapes) = with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let regions = hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m);
+            let regions =
+                hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
             draw_playing_base(&mut app, &mut fx, None, p, &m);
             regions
         });
@@ -1700,6 +1707,64 @@ mod tests {
             "the map's background painted at {map_bg}, SECTOR MAP at {title} — \
              the frame drew before the map, so its own fill painted over the label"
         );
+    }
+
+    /// **Bug A.** `border_strip` centres its background quad *on* the border
+    /// line it mounts to, so a strip riding the map pane's top border
+    /// reaches upward past `map_pane.y` by `size/2 + pad/2` — and
+    /// `map_pane.y` used to sit exactly on the status bar's own bottom edge.
+    /// `draw_status_bar` paints its opaque fill *after* `draw_map_frame` has
+    /// already run, so the top of that quad — and the top of "SECTOR MAP"'s
+    /// and the THREAT readout's glyph caps riding on it — painted straight
+    /// through the bar.
+    ///
+    /// Asserted against the real painted quad rather than a region number:
+    /// `the_playing_screen_draws_inside_its_regions` already checks
+    /// `map_pane.y >= status_bar.y + status_bar.h`, and that alone passes
+    /// against this bug, since the quad reaches *above* `map_pane.y` by a
+    /// margin that number says nothing about.
+    #[test]
+    fn the_map_frames_top_strips_clear_the_status_bar() {
+        let mut app = playing_app();
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (regions, shapes) = with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let regions =
+                hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            regions
+        });
+
+        let status_bottom = regions.status_bar.y + regions.status_bar.h;
+
+        // "SECTOR MAP" (Mount::TopLeft) and the THREAT readout
+        // (Mount::TopRight) both ride the map pane's top border. Each paints
+        // its background quad immediately before its own glyphs
+        // (`strip::border_strip`'s ordering rule), so the nearest preceding
+        // filled rect *is* that quad.
+        for label in ["SECTOR MAP", "THREAT"] {
+            let text_idx = shapes
+                .iter()
+                .position(|cs| {
+                    matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text().contains(label))
+                })
+                .unwrap_or_else(|| panic!("the map frame never painted {label:?}"));
+            let quad = shapes[..text_idx]
+                .iter()
+                .rev()
+                .find_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) if r.fill.a() > 0 => Some(r.rect),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("{label} has no background quad ahead of it"));
+            assert!(
+                quad.min.y >= status_bottom - 0.01,
+                "{label}'s background quad starts at y={} against the status \
+                 bar's {status_bottom}px bottom edge — it paints into the bar",
+                quad.min.y
+            );
+        }
     }
 
     /// **The census the design names.** The badge, the tab marker and the
@@ -1789,7 +1854,7 @@ mod tests {
         let m = ui_metrics(720.0);
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let r = hud::layout::regions(1280.0, 720.0, char_w, &m);
+            let r = hud::layout::regions(1280.0, 720.0, char_w, &m, false);
             let body = hud::column::regions(r.info_column, &m).body;
 
             // Two bars, the level/zone/position block, four stat rows, the
@@ -1814,7 +1879,7 @@ mod tests {
         with_painter(|p| {
             let m = ui_metrics(900.0);
             let char_w = p.measure_ui_advance("M", m.font_size);
-            let r = hud::layout::regions(1440.0, 900.0, char_w, &m);
+            let r = hud::layout::regions(1440.0, 900.0, char_w, &m, false);
             assert!(
                 r.map_pane.x + r.map_pane.w <= r.info_column.x,
                 "the map pane runs into the info column"

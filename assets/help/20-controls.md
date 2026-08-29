@@ -41,6 +41,9 @@ Acting on the world:
 
 Reading and housekeeping:
 
+- 1-4 — the side column: what your base is holding, your crew, your pack, and the contracts you
+  are signed to. A closed tab still summarises itself along the bottom, and wears a mark when it
+  needs you.
 - L — history
 - f — filter the log: all, field, or base
 - space — double the log pane's height, and back

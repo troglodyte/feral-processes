@@ -27,6 +27,67 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.53
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32
+and no save field is added — the one thing this release does store, a
+notification's "once ever" latch, goes on the cross-run profile rather than
+the save. A new feature and five bugs, all six of them things the map screen
+was doing in front of the player.
+
+- **Full-screen notifications.** `assets/notifications/` is a data
+  catalogue in the shape `assets/needs/` established: an absent directory
+  loads silently empty, a malformed file costs that one notification and
+  never the startup, and deleting the directory restores the game exactly as
+  it was. `Game::notify` is the one door — it resolves the def, checks the
+  repeat latch and queues a resolved value — and the queue is drained only
+  from `Mode::Playing`. That single equality is the whole timing rule, so a
+  fight, any picker and text entry all keep a notification waiting rather
+  than having it thrown over them, and a mode added later is covered without
+  being named. Achievements are a second *source* and not a second door: the
+  card is built from the achievement's own name and description, so a new
+  achievement earns one with no notification work. Two repeat policies, once
+  per session and once ever; the third — once per *run* — is rejected in the
+  doc comment, because a session-only queue would make it mean the first.
+
+- **The expanded log moved the map.** SPACE's four extra rows were paid for
+  out of the map pane's height, so every press re-laid the whole grid out
+  under the player — a key whose entire job is "show me more of what I have
+  already read" moved the thing being looked at. The map is now derived from
+  the *collapsed* log at every window size and the log's bottom edge is the
+  fixed one, so the expanded pane grows upward as an overlay.
+
+- **The info column overhung the log pane by a row.** It ran to the window's
+  bottom edge while the log stopped one row short of it — the reserve the
+  keybar's glyphs straddle — leaving the two panes' bottom edges out of line.
+  The column now ends where the log does.
+
+- **The vitals were being cut in half, and then hidden altogether.** A
+  border strip centres its background on the line it rides and reaches past
+  it on *both* sides, so the log pane's `LOG All · Field · Base` header —
+  riding the log's top border — painted over the lower half of the
+  `MIT ATK STR DEC` readout riding the map's bottom border, baseline
+  included, every frame. Two strips were sharing one line. The vitals take
+  the border, because they are the readout that must not be covered, and the
+  filter header goes back to heading the log's body, top-aligned with the
+  messages it names. Mounting the vitals on the log pane also means they
+  travel with it, so expanding the log no longer hides them.
+
+- **Long log lines drew across the info column.** Nothing clips a row
+  horizontally, so a line longer than the pane did not stop at its right
+  edge — it ran over the roster beside it, reading as a fault in that column
+  rather than in the log. Lines wrap now, measured against the UI face's own
+  advance rather than a fixed column count, and what will not fit is cut
+  from the **oldest** end: the pane is handed its rows oldest first, so
+  stopping at the bottom would have dropped the newest news.
+
+- **A structure's description ran off the deploy screens.** Both the deploy
+  menu and the direction prompt emitted an authored description as one
+  unwrapped row, and the widest shipped one ran some 1715px past the popup's
+  body before vanishing — 303 characters against a budget of about 114. Both
+  wrap now, through the helper the perk and research pickers were already
+  using rather than a second copy of it.
+
 ## 0.13.52
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32

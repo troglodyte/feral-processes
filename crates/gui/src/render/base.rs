@@ -1767,6 +1767,109 @@ mod tests {
         }
     }
 
+    /// **Bug C's other half.** The expanded log pane is an *overlay*: it
+    /// keeps the collapsed pane's bottom edge and grows upward over the
+    /// bottom of the map, which is what stops SPACE re-laying the grid out
+    /// under the player. That costs the layout nothing only because the log
+    /// is drawn **after** the map and fills opaquely — move
+    /// `draw_log_pane` above the map and the expanded rows are painted over
+    /// by the very pane they are supposed to cover, with nothing failing to
+    /// compile.
+    #[test]
+    fn the_expanded_log_pane_draws_over_the_map() {
+        let mut app = playing_app();
+        app.log_expanded = true;
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (regions, shapes) = with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let regions =
+                hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            regions
+        });
+
+        assert!(
+            regions.log_pane.y < regions.map_pane.y + regions.map_pane.h,
+            "the expanded log does not reach the map, so nothing is overlaid"
+        );
+
+        // `fill.a() > 0` for `the_map_frame_draws_after_the_map`'s reason:
+        // both panes also paint a `rect_lines` border of the same geometry
+        // with a transparent fill.
+        let fill_of = |pane: crate::paint::Rect| {
+            shapes
+                .iter()
+                .position(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) => {
+                        r.fill.a() > 0
+                            && (r.rect.min.x - pane.x).abs() < 0.5
+                            && (r.rect.min.y - pane.y).abs() < 0.5
+                            && (r.rect.width() - pane.w).abs() < 0.5
+                            && (r.rect.height() - pane.h).abs() < 0.5
+                    }
+                    _ => false,
+                })
+                .expect("both panes paint a background fill the size of the pane")
+        };
+        let map_bg = fill_of(regions.map_pane);
+        let log_bg = fill_of(regions.log_pane);
+        assert!(
+            log_bg > map_bg,
+            "the map's fill painted at {map_bg} and the log's at {log_bg} — \
+             the overlay is under the pane it overlays"
+        );
+    }
+
+    /// **Bug A's mirror, at the other end of the map pane.** The vitals
+    /// strip rides `map_pane`'s *bottom* border, and `border_strip` centres
+    /// its quad on that line — so it reaches `size/2 + pad/2` *below*
+    /// `map_pane.y + map_pane.h`. `draw_log_pane` paints an opaque fill over
+    /// the whole log pane and runs *after* `draw_map_frame`, so a separation
+    /// narrower than that reach cuts the bottom off MIT/ATK/STR in silence.
+    ///
+    /// Asserted against the real painted quad for the same reason the test
+    /// above is: a region number says nothing about how far past its own
+    /// edge a strip paints.
+    #[test]
+    fn the_map_frames_vitals_strip_clears_the_log_pane() {
+        let mut app = playing_app();
+        let mut fx = Fx::new();
+        let m = ui_metrics(900.0);
+        let (regions, shapes) = with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let regions =
+                hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
+            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            regions
+        });
+
+        let log_top = regions.log_pane.y;
+        // The whole strip is one galley (`strip::draw_pieces` lays its
+        // pieces out together), so any segment identifies it; MIT is the one
+        // the report named.
+        let text_idx = shapes
+            .iter()
+            .position(|cs| {
+                matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text().contains("MIT "))
+            })
+            .expect("the map frame never painted the vitals strip");
+        let quad = shapes[..text_idx]
+            .iter()
+            .rev()
+            .find_map(|cs| match &cs.shape {
+                bevy_egui::egui::Shape::Rect(r) if r.fill.a() > 0 => Some(r.rect),
+                _ => None,
+            })
+            .expect("the vitals strip has no background quad ahead of it");
+        assert!(
+            quad.max.y <= log_top + 0.01,
+            "the vitals strip's quad reaches y={} against the log pane's \
+             {log_top}px top edge — the log's fill paints over it",
+            quad.max.y
+        );
+    }
+
     /// **The census the design names.** The badge, the tab marker and the
     /// collapsed bar are three readouts of one call, so they cannot
     /// disagree — and both halves are asserted, because either alone passes

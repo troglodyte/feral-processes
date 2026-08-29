@@ -4,8 +4,8 @@
 //! Two of the rules here are load-bearing rather than decorative, and both
 //! are asserted below rather than left to the arithmetic:
 //!
-//! 1. **The info column reaches the bottom edge.** The log does not pass
-//!    under it.
+//! 1. **The info column ends where the log pane does.** The log does not
+//!    pass under it, and the column does not overhang it.
 //! 2. **The log pane is only as wide as the map pane.** The screen's
 //!    bottom-right corner belongs to the column.
 //!
@@ -34,23 +34,25 @@ const LOG_TEXT_ROWS: f32 = 4.0;
 const LOG_TEXT_ROWS_EXPANDED: f32 = LOG_TEXT_ROWS * 2.0;
 
 /// **Bug A's fix, and the number the bug was missing.** A border strip
-/// mounted `Mount::TopLeft`/`TopRight` centres its background quad *on* the
-/// line it rides (`strip::border_strip`), reaching `size/2 + pad/2` above
-/// it, where `size = m.small()` and `pad = size * strip::PAD_RATIO`. The map
-/// pane's title and threat readout ride its top border at `pane.y`, so a
-/// pane whose top edge sits exactly on the status bar's bottom edge lets
-/// that quad — and the top of the strip's own glyph caps — paint into the
-/// bar's opaque fill, which `draw_status_bar` draws *after* `draw_map_frame`
-/// has already run.
+/// centres its background quad *on* the line it rides
+/// (`strip::border_strip`), reaching `size/2 + pad/2` past that line on
+/// *both* sides, where `size = m.small()` and `pad = size *
+/// strip::PAD_RATIO`. Anything opaque painted on either side of the line
+/// after the strip therefore covers the glyphs riding it.
 ///
-/// So the panes below the bar start `m.small() * TOP_STRIP_CLEARANCE_RATIO`
-/// further down than the bar itself is tall — the bar's own rect
-/// (`status_bar`) is untouched, only where the *next* thing may start.
+/// Both ends of the map pane are that case, which is why this is one
+/// constant and not a top one and a bottom one. Its title and threat
+/// readout ride the top border at `pane.y`, and `draw_status_bar` fills the
+/// bar *after* `draw_map_frame` has run; its vitals ride the bottom border
+/// at `pane.y + pane.h`, and `draw_log_pane` fills the log pane after it
+/// too — which is what cut the bottom off MIT/ATK/STR while the separation
+/// between the two panes was only `m.gap`.
+///
 /// Expressed as a ratio of `m.small()`, not a pixel figure, so it travels
 /// with the font size the same way every other figure here does. Built from
 /// `strip::PAD_RATIO` directly rather than a copied `0.5` so the two cannot
 /// drift apart.
-const TOP_STRIP_CLEARANCE_RATIO: f32 = 0.5 + strip::PAD_RATIO / 2.0;
+const STRIP_CLEARANCE_RATIO: f32 = 0.5 + strip::PAD_RATIO / 2.0;
 
 /// The five regions, in window pixels.
 ///
@@ -63,11 +65,15 @@ pub(in crate::render) struct HudRegions {
     /// Framed. Its borders carry the title, the threat readout and the
     /// vitals strip.
     pub map_pane: Rect,
-    /// Framed. Map-pane width only — never the window's.
+    /// Framed. Map-pane width only — never the window's. Its bottom edge
+    /// is fixed; expanding it grows it *upward over* `map_pane`, which is
+    /// drawn first.
     pub log_pane: Rect,
     /// Drawn on `log_pane`'s bottom border line.
     pub key_bar: Rect,
-    /// Runs to the window's bottom edge.
+    /// Ends on `log_pane`'s bottom edge, `key_h` short of the window's:
+    /// the keybar's glyphs straddle that line, and a column running past it
+    /// overhangs the pane beside it.
     pub info_column: Rect,
 }
 
@@ -76,7 +82,8 @@ pub(in crate::render) struct HudRegions {
 /// `char_w` is the UI face's advance for one character, measured by the
 /// caller — see the module comment for why it is not read off `m`.
 /// `log_expanded` is `App::log_expanded` — SPACE on the map screen doubles
-/// `log_pane`'s row count and back.
+/// `log_pane`'s row count and back. The extra rows are taken upward over
+/// `map_pane`, whose geometry does not depend on the flag at all.
 pub(in crate::render) fn regions(
     screen_w: f32,
     screen_h: f32,
@@ -91,21 +98,36 @@ pub(in crate::render) fn regions(
 
     // One row plus the inset above and below it — the height the stock
     // strip claimed before the status bar absorbed it. This sizes the bar's
-    // own rect only; see `TOP_STRIP_CLEARANCE_RATIO` for why the panes below
-    // it start further down than this.
+    // own rect only; see `STRIP_CLEARANCE_RATIO` for why the panes below it
+    // start further down than this.
     let head_h = m.line_height + m.inset;
-    let content_top = head_h + m.small() as f32 * TOP_STRIP_CLEARANCE_RATIO;
+    let strip_clearance = m.small() as f32 * STRIP_CLEARANCE_RATIO;
+    let content_top = head_h + strip_clearance;
 
-    let log_rows = if log_expanded {
-        LOG_TEXT_ROWS_EXPANDED
-    } else {
-        LOG_TEXT_ROWS
-    };
-    let log_h = m.line_height * log_rows + m.inset * 2.0;
+    // The map is laid out against the *collapsed* log at every window size:
+    // SPACE changes what the log shows, not what the screen is, so the pane
+    // it grows over keeps its geometry and the grid does not re-lay-out
+    // under the player.
+    let log_h = |rows: f32| m.line_height * rows + m.inset * 2.0;
+    let collapsed_log_h = log_h(LOG_TEXT_ROWS);
     let key_h = m.line_height;
-    let map_h = screen_h - content_top - log_h - key_h - m.gap;
+    // The map pane's vitals ride its bottom border and paint below it, and
+    // the log pane's opaque fill lands after them. `m.gap` is narrower than
+    // that reach at every window size, so the breathing space between the
+    // two panes is whichever is larger.
+    let pane_gap = m.gap.max(strip_clearance);
+    let map_h = screen_h - content_top - collapsed_log_h - key_h - pane_gap;
 
-    let log_y = content_top + map_h + m.gap;
+    // Pinned at the bottom, so the expanded pane grows upward *over* the
+    // map. `draw_playing_base` draws the log last and it fills opaquely, so
+    // the overlay costs nothing but this subtraction.
+    let log_bottom = content_top + map_h + pane_gap + collapsed_log_h;
+    let log_h = if log_expanded {
+        log_h(LOG_TEXT_ROWS_EXPANDED)
+    } else {
+        collapsed_log_h
+    };
+    let log_y = log_bottom - log_h;
     HudRegions {
         status_bar: Rect::new(0.0, 0.0, screen_w, head_h),
         map_pane: Rect::new(0.0, content_top, left_w, map_h),
@@ -115,7 +137,7 @@ pub(in crate::render) fn regions(
             screen_w - info_w,
             content_top,
             info_w,
-            screen_h - content_top,
+            log_bottom - content_top,
         ),
     }
 }
@@ -142,18 +164,26 @@ mod tests {
         regions(w, h, CHAR_W, &ui_metrics(h), true)
     }
 
-    /// Rule 1. The column owns the screen's bottom-right corner, so it has
-    /// to actually reach it — a column stopping short of the bottom leaves
-    /// a strip of canvas that reads as a rendering fault.
+    /// Rule 1. The column and the log pane end on one line. The column used
+    /// to run to `screen_h` while the log stopped `key_h` short of it — the
+    /// reserve the keybar's glyphs straddle — so the column overhung the
+    /// pane beside it by a row, which reads as the column having been drawn
+    /// too long rather than as a margin.
+    ///
+    /// Asserted against the *collapsed* pane as well as the expanded one:
+    /// the log's bottom edge is pinned, so one line answers for both.
     #[test]
-    fn the_info_column_reaches_the_bottom_edge() {
+    fn the_info_column_ends_where_the_log_pane_does() {
         for (w, h) in SIZES {
-            let r = at(w, h);
-            assert!(
-                (r.info_column.y + r.info_column.h - h).abs() < 0.001,
-                "column stops at {} of {h} at {w}x{h}",
-                r.info_column.y + r.info_column.h
-            );
+            for r in [at(w, h), at_expanded(w, h)] {
+                let column_bottom = r.info_column.y + r.info_column.h;
+                let log_bottom = r.log_pane.y + r.log_pane.h;
+                assert!(
+                    (column_bottom - log_bottom).abs() < 0.001,
+                    "column ends at {column_bottom}, log pane at {log_bottom} \
+                     at {w}x{h}"
+                );
+            }
         }
     }
 
@@ -228,13 +258,74 @@ mod tests {
         for (w, h) in SIZES {
             let m = ui_metrics(h);
             let r = at(w, h);
-            let clearance = m.small() as f32 * TOP_STRIP_CLEARANCE_RATIO;
+            let clearance = m.small() as f32 * STRIP_CLEARANCE_RATIO;
             let quad_top = r.map_pane.y - clearance;
             assert!(
                 quad_top >= r.status_bar.y + r.status_bar.h - 0.001,
                 "a top strip on the map pane would paint into the status bar \
                  at {w}x{h}: quad top {quad_top}, bar bottom {}",
                 r.status_bar.y + r.status_bar.h
+            );
+        }
+    }
+
+    /// **Bug A's arithmetic, at the other border.** The vitals strip rides
+    /// `map_pane`'s bottom line and its quad reaches the same distance
+    /// *below* it, where the log pane's opaque fill lands afterwards.
+    /// `base.rs::the_map_frames_vitals_strip_clears_the_log_pane` is the
+    /// same assertion against the real painted quad; this one pins the
+    /// arithmetic, so a separation narrowed back to `m.gap` fails here
+    /// without a `Painter`.
+    ///
+    /// The collapsed state only, and deliberately: an *expanded* log is an
+    /// overlay over the bottom of the map, so it covers the vitals for as
+    /// long as it is open. That is the state SPACE asks for, not a clipped
+    /// strip in the state the player spends the game in.
+    #[test]
+    fn the_map_panes_bottom_clears_a_border_strips_quad() {
+        for (w, h) in SIZES {
+            let m = ui_metrics(h);
+            let r = at(w, h);
+            let clearance = m.small() as f32 * STRIP_CLEARANCE_RATIO;
+            let quad_bottom = r.map_pane.y + r.map_pane.h + clearance;
+            assert!(
+                quad_bottom <= r.log_pane.y + 0.001,
+                "the vitals strip would paint into the log pane at {w}x{h}: \
+                 quad bottom {quad_bottom}, log top {}",
+                r.log_pane.y
+            );
+        }
+    }
+
+    /// **Bug C.** SPACE is a change of what the log shows, not of what the
+    /// screen is. The expanded pane grows *upward over* the map — bottom
+    /// edge pinned, `map_pane` untouched — because paying for the extra
+    /// rows out of the map's height re-lays the whole grid out and the map
+    /// jumps under the player's eyes. The draw order already supports it:
+    /// `draw_playing_base` paints the map and its frame first and
+    /// `draw_log_pane` last, over an opaque fill.
+    #[test]
+    fn expanding_the_log_overlays_the_map_instead_of_shrinking_it() {
+        for (w, h) in SIZES {
+            let collapsed = at(w, h);
+            let expanded = at_expanded(w, h);
+            assert_eq!(
+                collapsed.map_pane, expanded.map_pane,
+                "the map pane moved when the log expanded at {w}x{h}"
+            );
+            let collapsed_bottom = collapsed.log_pane.y + collapsed.log_pane.h;
+            let expanded_bottom = expanded.log_pane.y + expanded.log_pane.h;
+            assert!(
+                (collapsed_bottom - expanded_bottom).abs() < 0.001,
+                "the log's bottom edge moved from {collapsed_bottom} to \
+                 {expanded_bottom} at {w}x{h} — it grew downward, not up"
+            );
+            assert!(
+                expanded.log_pane.y < collapsed.map_pane.y + collapsed.map_pane.h,
+                "the expanded log at {w}x{h} starts at {} and never reaches \
+                 the map's {} bottom edge, so it overlays nothing",
+                expanded.log_pane.y,
+                collapsed.map_pane.y + collapsed.map_pane.h
             );
         }
     }
@@ -261,17 +352,14 @@ mod tests {
         }
     }
 
-    /// The module's two load-bearing rules, re-run with the log expanded —
-    /// a taller log pane eats into `map_pane`, not into the column, so
-    /// neither rule may lapse just because SPACE was pressed.
+    /// The module's second rule and the extents, re-run with the log
+    /// expanded — the taller pane grows over `map_pane` and must still stop
+    /// at the column's edge. Rule 1 is asserted for both states by
+    /// `the_info_column_ends_where_the_log_pane_does`.
     #[test]
     fn expanding_the_log_still_satisfies_the_module_rules() {
         for (w, h) in SIZES {
             let r = at_expanded(w, h);
-            assert!(
-                (r.info_column.y + r.info_column.h - h).abs() < 0.001,
-                "column stops short of the bottom edge at {w}x{h} expanded"
-            );
             assert!(
                 r.log_pane.x + r.log_pane.w <= r.info_column.x,
                 "the expanded log passes under the info column at {w}x{h}"

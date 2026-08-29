@@ -7762,6 +7762,47 @@ the most literal thing "hostility and inbound harm" describes on this screen
 — so painted in a red of its own, the one cue the `THREAT` reservation exists
 for would have been the one cue not drawn from it.
 
+### The expanded log pane is an overlay, and the map pane does not know it exists
+
+SPACE doubles the map screen's log to eight rows (`App::log_expanded`). It
+first paid for those rows out of `map_pane`'s height: `hud::layout::regions`
+sized the log from the flag and gave the map whatever was left. The pane is
+the map, so every press re-laid the whole grid out — the tiles moved under
+the cursor, the map recentred, and a key whose entire job is "show me more
+of what I have already read" moved the thing the player was looking at.
+
+`map_pane` is now derived from the **collapsed** log at every window size,
+and the log's *bottom* edge is the fixed one: expanding it grows the pane
+upward, over the bottom of the map. `map_pane` is bit-identical across the
+flag, which is what
+`expanding_the_log_overlays_the_map_instead_of_shrinking_it` asserts —
+equality of the whole `Rect`, not of its height, so a pane that merely
+happens to be the same size in the fixture cannot pass it.
+
+**What makes an overlay free here is draw order, and nothing states it.**
+`draw_playing_base` paints the map and its frame first and calls
+`hud::log_frame::draw_log_pane` last, and the log pane fills opaquely with
+`palette::STATUS_BG` before it draws anything else. Move that call above the
+map — a plausible tidy, since it groups the two framed panes together — and
+the map's own fill paints straight over the expanded rows. Nothing fails to
+compile and the collapsed pane, which does not overlap anything, still draws
+correctly, so the whole failure is invisible until SPACE is pressed.
+`the_expanded_log_pane_draws_over_the_map` is the guard: it locates both
+panes' background fills by geometry in paint order and asserts the log's is
+the later one. Checked by actually hoisting the call, which is how the
+message above was read.
+
+**The price is the vitals strip, and it is the state the player asked for.**
+The vitals ride `map_pane`'s bottom border, which is under the expanded
+pane, so they are hidden for as long as the log is open. Drawing the map
+frame *after* the log to keep them would be worse — it would lay the strip's
+glyphs on top of the log's own rows — and capping the growth so the strip
+stays clear is the same thing as not growing at all. So
+`the_map_panes_bottom_clears_a_border_strips_quad` asserts the clearance for
+the **collapsed** state only, and says why in the test: a strip clipped in
+the state the game is played in is a bug, a strip covered by a pane the
+player opened over it is a pane.
+
 ### `ProgramRole` has a fourth variant, and almost everything a sortie needs falls out of it as an omission
 
 A squad away from the base has to be out of the scheduler, out of the drift

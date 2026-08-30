@@ -85,6 +85,15 @@ pub struct PlayerSave {
     /// Which perks have been bought, and at what level (see
     /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
+    /// Whether this run was started under the onboarding chain.
+    ///
+    /// `#[serde(default)]` to false, which is what a save written before the
+    /// chain existed reads as — and `Game::load` files the whole chain as
+    /// finished for those, so a run forty hours old is never told to build a
+    /// Home it built long ago. Additive behind a default, so **no
+    /// `SAVE_FORMAT_VERSION` bump**.
+    #[serde(default)]
+    pub tutorial_seeded: bool,
     /// **Legacy, read-only, and on its way out.** Fused copies as
     /// `(item, tier, qty)`, which is how they were stored up to v29.
     ///
@@ -1354,6 +1363,7 @@ mod tests {
                 gear_copies: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
+                tutorial_seeded: true,
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
                 sorties: Vec::new(),

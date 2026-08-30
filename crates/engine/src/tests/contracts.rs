@@ -3046,3 +3046,87 @@ fn no_broker_still_answers_none_during_the_chain() {
     let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     assert_eq!(game.contract_board(), None);
 }
+
+fn save_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "feral_processes_contracts_{tag}_{}.bin",
+        std::process::id()
+    ))
+}
+
+/// Rewrites `path` as a build without `field` would have written it. The
+/// save is field-named RON — which is the whole reason this is legal, and
+/// a positional format would make this test impossible to write.
+fn strip_field_from_save(path: &std::path::Path, field: &str) {
+    let text = std::fs::read_to_string(path).unwrap();
+    let key = format!("{field}:");
+    assert!(
+        text.contains(&key),
+        "the current build has to be writing {field}, or this test proves nothing"
+    );
+    let older: String = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with(&key))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !older.contains(&key),
+        "the key has to actually be gone for this to prove anything"
+    );
+    std::fs::write(path, older).unwrap();
+}
+
+/// A save written before this feature existed carries no flag, and a run
+/// forty hours old must not be told to build a Home it built long ago. The
+/// whole chain is filed as finished at load.
+#[test]
+fn a_save_from_before_the_chain_never_starts_it() {
+    // Written by an install with no chain at all and loaded against one that
+    // has it, which is exactly what shipping this feature does to a run in
+    // progress. Building the fixture this way rather than deleting the field
+    // out of a chain-aware save is what makes it faithful: a pre-chain save
+    // cannot have a mission in hand either.
+    let before = scratch_assets_dir("seed_old_save_before");
+    copy_shipped_assets(&before, &[]);
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &before).unwrap();
+    let path = save_path("old_save");
+    game.save(&path).unwrap();
+    strip_field_from_save(&path, "tutorial_seeded");
+
+    let dir = assets_with_fixture_chain("seed_old_save_after");
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(!loaded.in_tutorial(), "the chain is filed as finished");
+    assert_eq!(
+        loaded
+            .active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0,
+        "and nothing is in hand"
+    );
+}
+
+/// A save written *by* this build carries the flag and resumes the chain
+/// exactly where it was — the position is derived from `done`, so there is
+/// nothing else to restore.
+#[test]
+fn a_run_saved_mid_chain_resumes_on_the_same_step() {
+    let dir = assets_with_fixture_chain("seed_mid_chain");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    let path = save_path("mid_chain");
+    game.save(&path).unwrap();
+
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let held: Vec<String> = loaded
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
+    assert!(loaded.in_tutorial());
+}

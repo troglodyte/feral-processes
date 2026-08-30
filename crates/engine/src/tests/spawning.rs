@@ -1545,6 +1545,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             module_quality: crate::tuning::QUALITY_DEFAULT,
             perk_points: 0,
             unlocked_perks: Vec::new(),
+            tutorial_seeded: true,
             fused_gear: Vec::new(),
             gear_copies: Vec::new(),
             routines: Vec::new(),

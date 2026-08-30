@@ -1237,6 +1237,27 @@ impl Game {
         game.restore_locale(data.locale);
 
         game.log("Session restored. Reconnecting to the Grid.");
+        // A save from before the chain existed: file every mission as
+        // finished so an established run is left alone. New runs are seeded
+        // by `Game::new`, which sets the flag, so this fires exactly once
+        // and only for a save the previous build wrote.
+        if !data.player.tutorial_seeded {
+            let ids: Vec<crate::contracts::ContractId> = game
+                .world
+                .resource::<crate::contracts::ContractDb>()
+                .tutorial_chain()
+                .iter()
+                .map(|d| d.id.clone())
+                .collect();
+            let mut held = game
+                .world
+                .resource_mut::<crate::resources::ActiveContracts>();
+            for id in ids {
+                if !held.done.contains(&id) {
+                    held.done.push(id);
+                }
+            }
+        }
         // A save taken mid-chain resumes with no seeding path of its own —
         // the position is derived from the `done` list the save carries.
         game.ensure_tutorial_held();
@@ -1678,6 +1699,7 @@ impl Game {
                 gear_copies,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
+                tutorial_seeded: true,
                 routines,
                 field_buffs,
                 sorties,

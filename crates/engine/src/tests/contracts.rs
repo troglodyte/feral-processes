@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 6];
+    let mut seen = [false; 7];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -319,6 +319,7 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Breach { .. } => 3,
             Objective::Build { .. } => 4,
             Objective::Hold { .. } => 5,
+            Objective::Perform { .. } => 6,
         };
         seen[slot] = true;
     }
@@ -2613,5 +2614,84 @@ fn a_held_hold_completes_from_the_players_pack() {
             .done
             .contains(&ContractId::from("hold_test")),
         "a pack that already meets the objective finishes it on the next tick"
+    );
+}
+
+/// A deed recorded this tick finishes a held `Perform`, through the same
+/// system and the same completion path a kill goes through.
+#[test]
+fn a_deed_finishes_a_held_perform_contract() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(
+        &mut game,
+        def(
+            "perform_test",
+            Objective::Perform {
+                deed: crate::contracts::Deed::Examined,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.tick();
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+        "nothing has been done yet"
+    );
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+    );
+}
+
+/// A deed of the wrong kind advances nothing. Without this the six deeds
+/// would be one deed with six names.
+#[test]
+fn a_deed_of_another_kind_advances_nothing() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(
+        &mut game,
+        def(
+            "perform_test",
+            Objective::Perform {
+                deed: crate::contracts::Deed::PostedStaff,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+        "examining is not posting staff"
+    );
+}
+
+/// The queue is drained every tick by `contract_system` and by nothing else.
+/// A deed left in it would finish a contract accepted long afterwards.
+#[test]
+fn a_deed_does_not_survive_the_tick_that_drained_it() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::RunFeats>()
+            .deeds
+            .is_empty(),
+        "the queue is drained unconditionally"
     );
 }

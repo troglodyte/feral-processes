@@ -53,6 +53,45 @@ impl std::fmt::Display for ContractId {
     }
 }
 
+/// Something the player did, recorded for `Objective::Perform`.
+///
+/// A **closed engine enum, not a string**. A deed is an engine *event*, not
+/// content: a mod cannot emit one, so the openness a string would buy is
+/// openness onto nothing. What a string would buy instead is a mission
+/// naming a deed that does not exist, loading with no warning and never
+/// completing — the failure the README already documents for a `Terminate`
+/// naming a species that is gone, and one there is no reason to repeat where
+/// the vocabulary is closed.
+///
+/// A deed carries **no parameters**. `QueuedStandingOrder` does not name the
+/// item and `PostedStaff` does not name the structure: the mission's
+/// description is where the player is told what to order and where to post,
+/// and a parameterised deed would be a second place the same instruction is
+/// written. A mission that genuinely has to tell two postings apart is a new
+/// variant here, not a field on an existing one.
+///
+/// Every variant must have a caller of `Game::note_deed` — asserted
+/// exhaustively by `every_deed_has_an_emit_site`, `cell_mark`'s rule, so a
+/// variant with no writer fails the build rather than shipping a mission
+/// that can never complete.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Deed {
+    /// `x` found something. `Game::find_target_in_direction`.
+    Examined,
+    /// A decompile succeeded. `Game::attempt_decompile`.
+    Tamed,
+    /// The transfer screen moved something *out* of a container.
+    /// `Game::transfer_items`.
+    TookFromContainer,
+    /// A work order was queued with `standing` set.
+    /// `Game::queue_work_order`.
+    QueuedStandingOrder,
+    /// A Perk Point was spent. `Game::unlock_perk`.
+    UnlockedPerk,
+    /// A program was posted to a machine. `Game::post_worker`.
+    PostedStaff,
+}
+
 /// What a contract asks for.
 ///
 /// Four of the five are state-shaped and are evaluated by polling, which is
@@ -86,6 +125,12 @@ pub enum Objective {
     /// stays met, so spending the stock on the next thing the chain asks for
     /// does not un-finish it.
     Hold { item: ItemId, count: u32 },
+    /// The player did a particular thing. The one event-shaped objective
+    /// besides `Terminate`, and the whole of the onboarding chain's new
+    /// vocabulary — six verbs behind one variant, because a variant each
+    /// would grow every match on `Objective` and make the seventh verb a
+    /// schema change.
+    Perform { deed: Deed },
 }
 
 /// Everything about the run a state-shaped objective can be asked against.
@@ -129,7 +174,8 @@ impl Objective {
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
-            | Objective::Hold { .. } => 1,
+            | Objective::Hold { .. }
+            | Objective::Perform { .. } => 1,
         }
     }
 
@@ -153,7 +199,11 @@ impl Objective {
     /// added cost a signature change at both.
     pub fn already_met(&self, state: &ObjectiveState) -> bool {
         match self {
-            Objective::Terminate { .. } | Objective::Deliver { .. } => false,
+            // Event-shaped, so never *already* true: a board would otherwise
+            // refuse to offer one forever.
+            Objective::Terminate { .. } | Objective::Deliver { .. } | Objective::Perform { .. } => {
+                false
+            }
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),

@@ -19,7 +19,7 @@ use rand::prelude::*;
 use crate::Game;
 use crate::components::Inventory;
 use crate::components::Structure;
-use crate::contracts::{ContractId, Objective, Reward};
+use crate::contracts::{ContractId, Deed, Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
 
@@ -72,6 +72,7 @@ pub fn contract_system(
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
                 .count() as u32,
+            Objective::Perform { deed } => feats.deeds.iter().filter(|d| *d == deed).count() as u32,
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
             // The state-shaped ones advance by exactly the predicate
@@ -83,12 +84,21 @@ pub fn contract_system(
         contract.progress = contract.progress.saturating_add(advance).min(target);
     }
 
-    // Unconditional, and this system is the field's only drainer: leaving a
-    // kill in it would advance a contract accepted afterwards, forever.
+    // Unconditional, and this system is each field's only drainer: leaving a
+    // kill or a deed in one would advance a contract accepted afterwards,
+    // forever.
     feats.kills.clear();
+    feats.deeds.clear();
 }
 
 impl Game {
+    /// The one door a `Deed` is written through. The six triggers are
+    /// **callers of this, not writers beside it** — `Game::remember`'s rule,
+    /// and what keeps "which deeds exist" answerable by reading one file.
+    pub(crate) fn note_deed(&mut self, deed: Deed) {
+        self.world.resource_mut::<RunFeats>().deeds.push(deed);
+    }
+
     /// Finishes every held contract that has reached its target.
     ///
     /// Separate from `contract_system` because a payout writes the player's
@@ -717,6 +727,16 @@ impl Game {
             Objective::Hold { item, count } => {
                 format!("Hold {count} {}", self.item_name(item))
             }
+            // Exhaustive on purpose: a new `Deed` fails to compile here
+            // rather than shipping a row with no words on it.
+            Objective::Perform { deed } => match deed {
+                Deed::Examined => "Examine something with [x]".to_string(),
+                Deed::Tamed => "Decompile a wild program".to_string(),
+                Deed::TookFromContainer => "Take stock out of a machine with [c]".to_string(),
+                Deed::QueuedStandingOrder => "Place a standing work order".to_string(),
+                Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
+                Deed::PostedStaff => "Post a program to a machine".to_string(),
+            },
         }
     }
 }

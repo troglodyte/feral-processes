@@ -12,10 +12,9 @@
 //! on the machine. A put is **one budget shared across every row**, the
 //! Depot's remaining room, so filling one row lowers all the others.
 //!
-//! The table below is deliberately subtle: an inverted Left/Right that is
-//! *specified* to be inverted, a `div_ceil` that is what makes the Ctrl step
-//! terminate, and a saturating digit accumulation that lets a held key reach
-//! the clamp rather than overflow.
+//! The table below is deliberately subtle: a `div_ceil` that is what makes
+//! the Ctrl step terminate, and a saturating digit accumulation that lets a
+//! held key reach the clamp rather than overflow.
 
 use crate::*;
 
@@ -88,12 +87,14 @@ impl App {
     /// number that cannot exceed what is available is worth having by
     /// construction rather than by a check at the commit.
     ///
-    /// **Left puts in and Right takes out**, inverted against every other
-    /// Left/Right in the game — the manifest pager, the arena row editor and
-    /// all four movement handlers step `Right` positive. It is inverted here
-    /// by request, so the inconsistency is the specification rather than a
-    /// slip: anything "restoring" it fails
-    /// `left_puts_in_and_right_takes_out`, which says so in as many words.
+    /// **Left takes out and Right puts in**, which is the arrow moving stock
+    /// in the direction of the column it heads for. The screen is a table
+    /// reading `change | you | container`, so the container is the rightmost
+    /// column and you are the one to its left: Left pulls units off the
+    /// container toward you (a take, positive) and Right pushes them from you
+    /// into it (a put, negative). `left_takes_out_and_right_puts_in` is the
+    /// pin, and the sign convention is untouched by it — only which arrow
+    /// reaches which end.
     pub(crate) fn handle_basket_key(&mut self, key: GameKey) {
         let len = self.basket_rows.len();
         match key {
@@ -134,17 +135,17 @@ impl App {
                 });
             }
             GameKey::Backspace => self.edit_row(|n, _, _| n / 10),
-            GameKey::Left => self.edit_row(|n, _, _| n - 1),
-            GameKey::Right => self.edit_row(|n, _, _| n + 1),
+            GameKey::Left => self.edit_row(|n, _, _| n + 1),
+            GameKey::Right => self.edit_row(|n, _, _| n - 1),
             // The two modifiers are different verbs. Shift is a *target* —
             // an end of the range, idempotent under the key repeat driving
             // these arrows. Ctrl is a *step*: it closes half the gap to the
             // end it is heading for, so pressing it again halves what is
             // left rather than landing on the same number twice.
-            GameKey::ShiftLeft => self.edit_row(|_, _, put| -put),
-            GameKey::ShiftRight => self.edit_row(|_, take, _| take),
-            GameKey::CtrlLeft => self.edit_row(|n, _, put| half_way_to(n, -put)),
-            GameKey::CtrlRight => self.edit_row(|n, take, _| half_way_to(n, take)),
+            GameKey::ShiftLeft => self.edit_row(|_, take, _| take),
+            GameKey::ShiftRight => self.edit_row(|_, _, put| -put),
+            GameKey::CtrlLeft => self.edit_row(|n, take, _| half_way_to(n, take)),
+            GameKey::CtrlRight => self.edit_row(|n, _, put| half_way_to(n, -put)),
             _ => {}
         }
     }

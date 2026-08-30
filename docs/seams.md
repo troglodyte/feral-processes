@@ -6877,11 +6877,56 @@ appears. Under-offering is safe precisely because the commit takes first.
 **The key table stayed one table and grew a sign.** `half_way_to` generalises
 the Ctrl step over the sign, still `div_ceil` on the *magnitude* of the gap so
 a gap of one closes rather than stranding; digits accumulate in the row's
-current sign, and a row at zero types a take. **Left puts in and Right takes
-out** — the inversion collect shipped with, kept, and now named in as many
-words by `left_puts_in_and_right_takes_out`. `[A]` writes the take ceiling
+current sign, and a row at zero types a take. `[A]` writes the take ceiling
 over every row, clearing a pending give; that is a decision about what "take
 everything" means on one axis, not an oversight.
+
+**An arrow moves stock toward the column it points at, and that is what the
+table bought.** The screen was a list of rows reading `{amount} / -{put} ..
++{take}`, and the arrows were inverted against every other Left/Right in the
+game — Left put in, Right took out — an inversion that was *specified* and
+still read to everyone who used it as a slip. The screen is now a table whose
+columns run `item | change | you | container`, and the arrows fall out of it:
+**Left pulls off the container toward you (a take, positive) and Right pushes
+from you into the container (a put, negative)**. That is the exact reverse of
+what shipped, and it needed no other change — the **sign convention is
+untouched**, negative still puts and positive still takes, so `basket_request`,
+`edit_row`'s clamp and `transfer_items` never learned about it. Only which
+arrow reaches which end moved, in the four arms of `handle_basket_key` and the
+four modifier arms beside them, and `left_takes_out_and_right_puts_in` is the
+pin. Nothing left claims the old rule: the caravan's key table used to cite it
+by name to say it was *not* following it, which was a doc comment that would
+have gone quietly false.
+
+**The table forced the figures out of the suffix column, and the header is
+why.** A `Row::Item`'s suffix is placed by `suffix_x`, one `m.inset` — a
+*pixel* gap, 7.5px against a ~10.8px monospace cell at the base font — past
+the advance of the row's own label. A column header cannot be a `Row::Item`:
+`popup_layout` splits a body at the *first* item row, so a header built as one
+would join the scrolling body and slide away up the list. It has to be a
+`Row::Text`, which is drawn flat at `x + m.pad` with no suffix of its own, and
+there is no string that reproduces a 7.5px offset in monospace cells — the
+heading would name a column it does not sit over. So all four cells are padded
+into the row's own label, every gap a whole number of cells, and the header
+matches the boundaries exactly. The hazard the suffix column exists to close —
+a row measured without part of what it draws — does not arise, because
+`draw_row` measures the one string it lays down.
+
+**The second half of that trap is the lead.** `draw_row` opens every
+`Row::Item` label with `"  "`, or `"> "` when selected, and gives a `Row::Text`
+nothing at all. A header padded from the same widths therefore lands two cells
+left of the table it names, which reads as the *figures* being crooked rather
+than the heading. `Columns::header` carries `HEADER_LEAD` itself, and
+`the_header_sits_over_the_columns_it_names` measures the header's and the rows'
+column boundaries through `paint::with_painter` rather than comparing strings —
+the advance is what the painter places against.
+
+**The `change` column signs a movement and leaves zero bare.** `+3`, `-2`,
+`0`. The sign is what says which way the units go, so it is printed only when
+units go; a column of `+0`s reads as a basket already full of takes. `you` and
+`container` lost their `-`/`+` decoration in the same move — the heading now
+says which end each is, and a `-` in front of a *ceiling* was always a
+statement about the arrow rather than about the figure.
 
 ### `Game::copy_power` is the one door to a rating, and every term in it is a call
 
@@ -7007,12 +7052,12 @@ silently become plain steps and nothing anywhere fails.
 `shift_left_empties_a_sell_row_in_one_press` is the only thing that catches
 it.
 
-**Right increases and Left decreases — not the transfer picker's inversion.**
-That inversion is specified for a single row spanning both directions, so its
-amount is signed and an arrow picks an end. Here the sign is fixed by which
-section a row is in, so inverting would read as a slip.
-`left_puts_in_and_right_takes_out` is about `Mode::Transfer` and stays
-untouched. `[A]` fills the **sell** rows only: on the picker it writes the
+**Right increases and Left decreases**, which is the transfer picker's rule
+only by coincidence: there an arrow picks an end of a signed row and Left heads
+for the container column, while here the sign is fixed by which section a row
+is in and an arrow is a plain step. Nothing on this screen is a table with a
+container column, so there is no direction for an arrow to point at.
+`[A]` fills the **sell** rows only: on the picker it writes the
 per-row ceiling over every row, and here that ceiling is the sell side —
 filling the offer side would spend the whole purse on one keypress, on a
 screen with no buyback.

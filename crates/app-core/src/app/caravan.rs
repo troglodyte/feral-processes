@@ -136,13 +136,12 @@ impl App {
 
     /// The key table.
     ///
-    /// **Right increases and Left decreases** — *not* the transfer picker's
-    /// inversion. That one is specified for a single row spanning both
-    /// directions, so its amount is signed and an arrow picks an end. Here
-    /// the sign is fixed by which section the row is in, so inverting would
-    /// read as a slip rather than as a specification.
-    /// `left_puts_in_and_right_takes_out` is about `Mode::Transfer` and stays
-    /// untouched.
+    /// **Right increases and Left decreases**, which is the transfer
+    /// picker's rule only by coincidence: there an arrow picks an end of a
+    /// signed row and Left heads for the container column, while here the
+    /// sign is fixed by which section the row is in and an arrow is a plain
+    /// step. Nothing on this screen is a table with a container column, so
+    /// there is no direction for an arrow to point at.
     ///
     /// `[A]` fills the **sell** rows only. On the picker it writes the take
     /// ceiling over every row, and the take side is the one with a per-row

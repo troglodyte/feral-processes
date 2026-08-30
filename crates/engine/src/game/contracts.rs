@@ -92,6 +92,74 @@ pub fn contract_system(
 }
 
 impl Game {
+    /// The onboarding mission the run is on, or `None` once every step is
+    /// finished.
+    ///
+    /// **Derived, never stored**: the first mission in
+    /// `ContractDb::tutorial_chain` whose id is not in
+    /// `ActiveContracts::done`. There is no cursor and no index, so nothing
+    /// can disagree with `done` about where the player is — the rule
+    /// `views::BuildOrderRow` and `Game::morale` already follow.
+    ///
+    /// Cloned rather than borrowed because every caller goes on to touch
+    /// `&mut self`.
+    pub(crate) fn current_tutorial(&self) -> Option<crate::contracts::ContractDef> {
+        let done = &self.world.resource::<ActiveContracts>().done;
+        self.world
+            .resource::<crate::contracts::ContractDb>()
+            .tutorial_chain()
+            .into_iter()
+            .find(|def| !done.contains(&def.id))
+            .cloned()
+    }
+
+    /// Whether onboarding is still running. The board's suppression, the
+    /// forced first decompile and the renderer's green row all read this one
+    /// call rather than each deciding for themselves.
+    pub fn in_tutorial(&self) -> bool {
+        self.current_tutorial().is_some()
+    }
+
+    /// Puts the run's current onboarding mission in hand if it is not there
+    /// already. **The one writer of a tutorial contract into
+    /// `ActiveContracts`**, called from `Game::new`, `Game::load` and
+    /// `Game::settle_contracts`.
+    ///
+    /// It never goes through `accept_contract`, and three things follow as
+    /// **omissions rather than checks**, which is the point of routing it
+    /// this way: `MAX_ACTIVE_CONTRACTS` never sees it, so the cap keeps
+    /// meaning what it meant; `broker_reach` never sees it, which is what
+    /// lets the first five missions exist before a Contract Broker does; and
+    /// `offerable` never sees it, so no `min_zone` or `already_met` can hold
+    /// the chain up.
+    pub(crate) fn ensure_tutorial_held(&mut self) {
+        let Some(def) = self.current_tutorial() else {
+            return;
+        };
+        if self
+            .world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .any(|c| c.def.id == def.id)
+        {
+            return;
+        }
+        let accepted_tick = self.current_tick();
+        let name = def.name.clone();
+        self.world.resource_mut::<ActiveContracts>().active.push(
+            crate::resources::ActiveContract {
+                def,
+                progress: 0,
+                accepted_tick,
+            },
+        );
+        // `Outcome` rather than `Info`, `complete_contract`'s reason: a
+        // mission can be handed out mid-fight, and the battle prune keeps
+        // only four kinds.
+        self.log_kind(MessageKind::Outcome, format!("ONBOARDING: {name}"));
+    }
+
     /// The one door a `Deed` is written through. The six triggers are
     /// **callers of this, not writers beside it** — `Game::remember`'s rule,
     /// and what keeps "which deeds exist" answerable by reading one file.
@@ -686,6 +754,7 @@ impl Game {
             reward_line: self.reward_line(&def.reward),
             progress,
             target: def.objective.target(),
+            tutorial: def.tutorial.is_some(),
         }
     }
 
@@ -823,6 +892,13 @@ impl Game {
         let Some(idx) = held.active.iter().position(|c| c.def.id == *id) else {
             return false;
         };
+        // An onboarding mission cannot be given back. This is the invariant,
+        // so it does not depend on a caller remembering to ask; the sentence
+        // the player reads is app-core's, through `App::refuse`, because a
+        // bare `false` cannot reach the log.
+        if held.active[idx].def.tutorial.is_some() {
+            return false;
+        }
         let name = held.active.remove(idx).def.name;
         self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
         true

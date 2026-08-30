@@ -310,6 +310,9 @@ impl Game {
         game.ensure_local_population();
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
+        // Before the first tick, so the very first contracts screen a run
+        // opens already has the chain's first mission in hand.
+        game.ensure_tutorial_held();
         Ok(game)
     }
 
@@ -1234,6 +1237,9 @@ impl Game {
         game.restore_locale(data.locale);
 
         game.log("Session restored. Reconnecting to the Grid.");
+        // A save taken mid-chain resumes with no seeding path of its own —
+        // the position is derived from the `done` list the save carries.
+        game.ensure_tutorial_held();
         Ok(game)
     }
 

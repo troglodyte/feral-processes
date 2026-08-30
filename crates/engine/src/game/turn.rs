@@ -204,6 +204,9 @@ impl Game {
         // inventory write and an XP grant — so it cannot live in the system
         // that counts.
         self.settle_contracts();
+        // After settling, so finishing a mission hands out the next one in
+        // the same tick and the player never sees an empty slot.
+        self.ensure_tutorial_held();
         self.structure_regen();
         // After the schedule, where the base systems' commands have just
         // flushed, so the walk reads structure positions that are settled —

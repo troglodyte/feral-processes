@@ -2880,3 +2880,133 @@ mod deed_sites {
         assert!(deeds(&game).contains(&Deed::PostedStaff));
     }
 }
+
+// ---------------------------------------------------------------------------
+// The onboarding chain
+// ---------------------------------------------------------------------------
+
+/// A new run has the chain's first mission in hand before anything is
+/// ticked and with no Broker anywhere — which is the whole reason it is
+/// handed out rather than offered.
+#[test]
+fn a_new_run_holds_the_first_mission_with_no_broker() {
+    let dir = assets_with_fixture_chain("chain_first");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let held: Vec<String> = game
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(
+        held.contains(&"fixture_step_1".to_string()),
+        "the chain's first step is in hand at tick 0: {held:?}"
+    );
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::NoBroker,
+        "and no Broker is standing"
+    );
+}
+
+/// Exactly one, never two. The property the whole feature rests on.
+#[test]
+fn exactly_one_mission_is_held_at_a_time() {
+    let dir = assets_with_fixture_chain("chain_one");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    for _ in 0..3 {
+        let count = game
+            .active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count();
+        assert_eq!(count, 1, "one onboarding mission is live at a time");
+        game.note_deed(crate::contracts::Deed::Examined);
+        game.tick();
+    }
+}
+
+/// Finishing one hands out the next in the same tick, so the player never
+/// sees an empty slot.
+#[test]
+fn finishing_a_mission_hands_out_the_next_one() {
+    let dir = assets_with_fixture_chain("chain_next");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    let held: Vec<String> = game
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
+    assert!(!held.contains(&"fixture_step_1".to_string()), "{held:?}");
+}
+
+/// When the last one is finished the chain is over and nothing is handed
+/// out again.
+#[test]
+fn a_finished_chain_hands_out_nothing() {
+    let dir = assets_with_fixture_chain("chain_end");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    for _ in 0..3 {
+        game.note_deed(crate::contracts::Deed::Examined);
+        game.tick();
+    }
+    assert!(!game.in_tutorial(), "three steps, three deeds, chain over");
+    game.tick();
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0
+    );
+}
+
+/// The chain cannot be given back. An unbreakable chain with a give-back key
+/// is not a chain.
+#[test]
+fn an_onboarding_mission_cannot_be_abandoned() {
+    let dir = assets_with_fixture_chain("chain_abandon");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(!game.abandon_contract(&ContractId::from("fixture_step_1")));
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        1,
+        "it is still in hand"
+    );
+}
+
+/// The row says it is one, which is what the renderer colours on and what
+/// app-core refuses on.
+#[test]
+fn an_onboarding_missions_row_is_flagged() {
+    let dir = assets_with_fixture_chain("chain_flag");
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id.as_str() == "fixture_step_1")
+        .expect("held");
+    assert!(row.tutorial);
+}
+
+/// An install with no chain is the pre-tutorial game exactly: nothing is
+/// handed out and nothing is flagged.
+#[test]
+fn an_install_with_no_chain_hands_out_nothing() {
+    let dir = scratch_assets_dir("chain_absent");
+    copy_shipped_assets(&dir, &[]);
+    let game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(!game.in_tutorial());
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0
+    );
+}

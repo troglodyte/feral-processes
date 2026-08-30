@@ -72,6 +72,16 @@ impl App {
             if let Some(ContractScreenRow::Active(row)) =
                 contract_row(idx, active.len(), offers.len())
             {
+                // The engine refuses this too — that is where the invariant
+                // lives — but a bare `false` cannot reach the log, and a key
+                // that silently does nothing reads as a broken key.
+                if active[row].tutorial {
+                    self.refuse(
+                        "Onboarding missions cannot be given back — finish this one and \
+                         the next arrives.",
+                    );
+                    return;
+                }
                 let id = active[row].id.clone();
                 if let Some(game) = &mut self.game {
                     game.abandon_contract(&id);

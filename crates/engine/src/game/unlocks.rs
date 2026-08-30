@@ -190,6 +190,7 @@ impl Game {
             }
         }
         self.log(format!("You buy the {name} perk (level {level})."));
+        self.note_deed(crate::contracts::Deed::UnlockedPerk);
         Ok(())
     }
 

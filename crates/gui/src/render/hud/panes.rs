@@ -772,6 +772,7 @@ mod tests {
             reward_line: String::new(),
             progress,
             target,
+            tutorial: false,
         }
     }
     use super::*;

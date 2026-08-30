@@ -238,6 +238,76 @@ mod tests {
         });
     }
 
+    /// **The onboarding briefing is a template, and its real height is the
+    /// filled one.** The census above measures `{description}` — seventeen
+    /// characters — where the screen will draw a whole mission paragraph, so
+    /// on its own it says nothing about the screen a player sees.
+    ///
+    /// The fix for a failure here is to shorten that mission's
+    /// `description`, which shortens its contracts-screen row too. There is
+    /// no scroll to give it.
+    #[test]
+    fn every_onboarding_briefing_fits_its_screen_once_filled() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = feral_processes_engine::Game::new(
+            47,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets");
+        let template = shipped()
+            .get(&feral_processes_engine::notifications::NotificationId::from("onboarding_mission"))
+            .expect("the briefing template ships")
+            .clone();
+
+        let missions: Vec<_> = game
+            .contract_catalogue()
+            .into_iter()
+            .filter(|row| row.tutorial)
+            .collect();
+        assert!(
+            !missions.is_empty(),
+            "the census must walk the real chain, or it passes vacuously"
+        );
+
+        let m = crate::text::ui_metrics(720.0);
+        crate::paint::with_painter(|p| {
+            let h = 720.0;
+            let w = 1280.0;
+            let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
+                .floor() as usize;
+            for mission in &missions {
+                let body = template
+                    .body
+                    .replace("{name}", &mission.name)
+                    .replace("{objective}", &mission.objective_line)
+                    .replace("{description}", &mission.description);
+                let lines = wrapped_body(&body, columns.max(20));
+                let title_h = p.measure_ui(&mission.name, m.title() + 6).height;
+                let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
+                let block = m.line_height * ART_CELLS
+                    + m.gap
+                    + title_h
+                    + m.gap
+                    + lines.len() as f32 * m.line_height
+                    + m.gap * 2.0
+                    + hint_h;
+                assert!(
+                    block + 2.0 * m.pad < h,
+                    "{}'s briefing is {block}px in a {h}px window ({} lines) — this \
+                     screen has no scroll, so cut the mission's description",
+                    mission.id,
+                    lines.len()
+                );
+                assert!(
+                    p.measure_ui_advance(&mission.name, m.title() + 6) < w - 2.0 * m.pad,
+                    "{}'s name is too wide for a title, which does not wrap",
+                    mission.id
+                );
+            }
+        });
+    }
+
     /// A title is drawn large and **does not wrap**, so an over-long one runs
     /// off both edges rather than being clipped anywhere it could be seen.
     #[test]

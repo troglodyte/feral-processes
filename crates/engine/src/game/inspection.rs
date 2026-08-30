@@ -479,7 +479,7 @@ impl Game {
             ))
         }));
 
-        candidates
+        let found = candidates
             .into_iter()
             .min()
             .map(|(_, rank, entity)| match rank {
@@ -487,7 +487,15 @@ impl Game {
                 BUILD_SITE_ON_TILE => InspectTarget::BuildSite(entity),
                 CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
                 _ => InspectTarget::Creature(entity),
-            })
+            });
+        // Only on a hit. Pointing `x` at blank ground reports nothing, and
+        // the mission that asks for this is teaching that the key *tells you
+        // something* — a deed on a miss would complete it against an empty
+        // corridor.
+        if found.is_some() {
+            self.note_deed(crate::contracts::Deed::Examined);
+        }
+        found
     }
 
     /// The `B` roster's row for one structure, for the inspector's detail

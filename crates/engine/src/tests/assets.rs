@@ -2489,3 +2489,185 @@ fn the_shipped_repair_bay_is_passive_and_affordable_in_zone_one() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The onboarding chain
+// ---------------------------------------------------------------------------
+
+/// **The shipped chain cannot stall on economy.**
+///
+/// An unbreakable chain fails in a way an optional contract does not: a
+/// mission the player cannot afford to finish ends onboarding for the rest
+/// of the run, with no key to press. This walks the chain in step order
+/// carrying a Core Fragment balance — starting from what a run starts with,
+/// crediting each mission's payout and debiting each `Build`'s cost — and
+/// asserts it never goes negative.
+///
+/// It is deliberately blind to what the player spends on anything the chain
+/// does not know about, and to everything a run *earns* by playing, which is
+/// why the shipped payouts carry headroom rather than exactly clearing.
+#[test]
+fn the_tutorial_chain_can_always_afford_its_next_step() {
+    let assets = test_assets_dir();
+    let (contracts, _) = crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
+    let (structures, _) = crate::structures::StructureDb::load_dir(&assets.join("structures"))
+        .expect("the shipped structures load");
+    let fragment = ItemId::from(crate::items::ids::CORE_FRAGMENT);
+
+    let chain = contracts.tutorial_chain();
+    assert!(!chain.is_empty(), "the census must walk a real chain");
+
+    // What `Game::new` puts in the pack — see `game/lifecycle.rs`.
+    let mut balance: i64 = 5;
+    for def in chain {
+        match &def.objective {
+            crate::contracts::Objective::Build { structure } => {
+                let cost = structures
+                    .get(structure)
+                    .unwrap_or_else(|| panic!("{} names a structure that does not exist", def.id))
+                    .build_cost
+                    .iter()
+                    .find(|(item, _)| *item == fragment)
+                    .map(|(_, n)| *n as i64)
+                    .unwrap_or(0);
+                balance -= cost;
+            }
+            // A `Hold` is satisfied by *play* — fighting and mining — not by
+            // the chain's own payouts, so there is no balance claim to make
+            // here beyond the one below. What this arm is for is keeping the
+            // model honest about what it tracks.
+            crate::contracts::Objective::Hold { item, .. } => assert!(
+                *item == fragment,
+                "{} holds something the balance does not track: {item}",
+                def.id
+            ),
+            _ => {}
+        }
+        assert!(
+            balance >= 0,
+            "the chain runs dry at {}: {balance} Core Fragments",
+            def.id
+        );
+        for reward in &def.reward {
+            if let crate::contracts::Reward::Item(item, n) = reward
+                && *item == fragment
+            {
+                balance += *n as i64;
+            }
+        }
+    }
+}
+
+/// **Every `Deed` has an emit site.** Exhaustive over the enum, `cell_mark`'s
+/// rule: a variant with no writer ships a mission that can never complete,
+/// and this fails the build instead.
+///
+/// A source census rather than a runtime check, because there is no runtime
+/// at which "has anything ever written this" is answerable.
+#[test]
+fn every_deed_has_an_emit_site() {
+    use crate::contracts::Deed;
+
+    fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                out.push(path);
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut paths = Vec::new();
+    rust_files(&src, &mut paths);
+    let mut body = String::new();
+    for path in &paths {
+        // The tests are not emit sites; a deed only written by a fixture is
+        // a deed the game never records.
+        if path.components().any(|c| c.as_os_str() == "tests") {
+            continue;
+        }
+        // Comment lines stripped: `Deed`'s own doc names each emit site, and
+        // a doc comment quoting the call form would answer this census for a
+        // deed that has no writer at all.
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            if !line.trim_start().starts_with("//") {
+                body.push_str(line);
+                body.push('\n');
+            }
+        }
+    }
+    assert!(
+        body.len() > 10_000,
+        "the census must actually read the engine's source, or it passes vacuously"
+    );
+
+    for deed in [
+        Deed::Examined,
+        Deed::Tamed,
+        Deed::TookFromContainer,
+        Deed::QueuedStandingOrder,
+        Deed::UnlockedPerk,
+        Deed::PostedStaff,
+    ] {
+        let call = format!("note_deed(crate::contracts::Deed::{deed:?})");
+        let short = format!("note_deed(Deed::{deed:?})");
+        assert!(
+            body.contains(&call) || body.contains(&short),
+            "{deed:?} has no `Game::note_deed` caller outside the tests. A deed \
+             with no emit site is a mission that can never complete."
+        );
+    }
+}
+
+/// The shipped chain's own well-formedness: unique steps, ids that resolve,
+/// and nothing carrying a flag its own load refuses.
+#[test]
+fn the_shipped_tutorial_chain_is_well_formed() {
+    let assets = test_assets_dir();
+    let (contracts, warnings) =
+        crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
+    assert!(warnings.is_empty(), "the shipped set parses: {warnings:?}");
+    let chain = contracts.tutorial_chain();
+    assert!(
+        chain.len() >= 11,
+        "the shipped chain is authored, not empty: {}",
+        chain.len()
+    );
+
+    let (structures, _) =
+        crate::structures::StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (items, _) = crate::items_db::ItemDb::load_dir(&assets.join("items"), &abilities).unwrap();
+
+    let mut steps: Vec<u32> = Vec::new();
+    for def in &chain {
+        let step = def.tutorial.expect("in the chain");
+        assert!(!steps.contains(&step), "{} repeats step {step}", def.id);
+        steps.push(step);
+        assert!(!def.starter, "{} is a mission, not a starter", def.id);
+        assert!(!def.repeatable, "{} must not be repeatable", def.id);
+        assert!(
+            !def.description.is_empty(),
+            "{} needs a description — it is the only place the player is told what to do",
+            def.id
+        );
+        match &def.objective {
+            crate::contracts::Objective::Build { structure } => assert!(
+                structures.get(structure).is_some(),
+                "{} names a structure that does not exist: {structure}",
+                def.id
+            ),
+            crate::contracts::Objective::Hold { item, count } => {
+                assert!(
+                    items.get(item.as_str()).is_some(),
+                    "{} asks for an item that does not exist: {item}",
+                    def.id
+                );
+                assert!(*count > 0, "{} holds nothing", def.id);
+            }
+            _ => {}
+        }
+    }
+}

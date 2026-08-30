@@ -45,13 +45,44 @@ files are not covered by that census — check the id against the table below.
 | `color` | no | One of the `GlyphColor` hues. Defaults to `White`. |
 | `repeat` | no | `Always` (default) or `OnceEver`. |
 
+### Placeholders
+
+A `title` or `body` may carry `{hole}` placeholders, filled by the call site
+through `Game::notify_filled`. That is what lets one file be read for many
+subjects: `onboarding_mission.ron` is a single briefing filled from whichever
+contract the chain has just handed out, rather than eleven files each
+repeating a mission's own name and description.
+
+The holes a def uses are the ones its site fills — there is no catalogue of
+them, because a placeholder is a contract between one file and one call site.
+A hole nobody fills is **left standing** rather than blanked, so it shows up
+as `{objective}` on screen and in a census instead of reading as a missing
+word.
+
+Shipped holes:
+
+| Def | Holes | Filled by |
+|---|---|---|
+| `onboarding_mission` | `{name}`, `{objective}`, `{description}` | `Game::ensure_tutorial_held`, from the mission's own `ContractDef` |
+
+**A templated def's real height is the filled one.** The screen has no
+scroll, so `every_onboarding_briefing_fits_its_screen_once_filled` measures
+the template filled with every shipped mission — the plain
+`the_tallest_shipped_notification_fits_its_screen` would be measuring
+`{description}`, seventeen characters where a paragraph will go.
+
 ### `repeat`
 
 `Always` fires every time its site is reached — right for news about *this*
 moment, like a breach or a contract landing.
 
 `OnceEver` fires once and never again, on this machine, **across every run**.
-That is what a tutorial wants. The latch lives in `profile.ron` beside your
+That is what a tutorial tip wants.
+
+The onboarding chain's briefing is deliberately `Always`, and named
+`onboarding_mission` rather than `tutorial_*` to say so: the chain runs on
+every new game, so a briefing latched across runs would leave a second
+playthrough's eleven missions unexplained. The latch lives in `profile.ron` beside your
 achievements, not in a save, so starting a new run does not re-show them.
 Deleting `profile.ron` shows them again (and costs you your achievements).
 

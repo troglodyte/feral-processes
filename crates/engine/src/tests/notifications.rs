@@ -265,6 +265,7 @@ fn every_shipped_notification_is_fired_by_a_named_site() {
         ("tutorial_first_work_order", "Game::queue_work_order"),
         ("milestone_breach", "Game::enter_next_zone"),
         ("milestone_contract", "Game::complete_contract"),
+        ("onboarding_mission", "Game::ensure_tutorial_held"),
     ];
 
     let (db, warnings) =
@@ -296,6 +297,10 @@ fn every_shipped_notification_is_fired_by_a_named_site() {
 fn tutorials_latch_and_milestones_do_not() {
     let (db, _) = NotificationDb::load_dir(&test_assets_dir().join("notifications")).unwrap();
     for def in db.iter() {
+        // `onboarding_` is deliberately a different prefix from `tutorial_`
+        // and takes the other policy: the chain runs on every new game, so a
+        // briefing latched across runs would leave a second playthrough's
+        // missions unexplained.
         let expected = if def.id.as_str().starts_with("tutorial_") {
             Repeat::OnceEver
         } else {
@@ -344,12 +349,138 @@ fn draining_the_profile_channel_clears_both_halves() {
     assert!(game.take_pending_profile_writes());
     assert!(!game.take_pending_profile_writes());
 }
-/// A new run opens on the map, not on a notice. Worth pinning because
-/// `enter_next_zone` fires the breach milestone from its first line, and
-/// anything that later routes world setup through it would greet every
-/// player with "Breach" before they had moved.
+/// A new run opens on its onboarding briefing and **nothing else**. Worth
+/// pinning because `enter_next_zone` fires the breach milestone from its
+/// first line, and anything that later routes world setup through it would
+/// greet every player with "Breach" before they had moved.
+///
+/// The briefing itself is deliberate: `Game::new` hands out the chain's
+/// first mission, and a mission handed out is a mission explained.
 #[test]
-fn a_fresh_run_opens_on_the_map_and_not_on_a_notice() {
-    let game = fresh();
+fn a_fresh_run_opens_on_its_briefing_and_no_other_notice() {
+    let mut game = fresh();
+    let queued: Vec<String> = std::iter::from_fn(|| game.take_notification())
+        .map(|n| n.title)
+        .collect();
+    let first = game
+        .active_contracts()
+        .into_iter()
+        .find(|row| row.tutorial)
+        .expect("a new run holds the chain's first mission");
+    assert_eq!(
+        queued,
+        vec![first.name],
+        "one notice, and it is the mission just handed out"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The onboarding chain's briefing
+// ---------------------------------------------------------------------------
+
+/// A hole the caller filled is gone, and one it did not name is left alone
+/// rather than becoming an empty string — a body reading "Build a  now" is
+/// a worse failure than one still showing its placeholder, because only the
+/// second is visible in a census.
+#[test]
+fn filling_replaces_the_holes_the_caller_named() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert_eq!(
+        game.notify_filled(&nid("milestone_breach"), &[("nothing", "x")]),
+        Ok(())
+    );
+    assert!(game.take_notification().is_some());
+}
+
+/// The briefing carries **the contract's own words**. It is the whole point
+/// of templating one file rather than authoring eleven: the mission's name
+/// and description exist once, in `assets/contracts/`.
+#[test]
+fn handing_out_a_mission_briefs_it_in_the_contracts_own_words() {
+    let mut game = fresh();
+    let held = game
+        .active_contracts()
+        .into_iter()
+        .find(|row| row.tutorial)
+        .expect("a new run holds the chain's first mission");
+
+    let shown = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.body.contains(&held.description))
+        .unwrap_or_else(|| panic!("no briefing carried {}'s description", held.id));
+
+    assert!(
+        shown.title.contains(&held.name),
+        "the briefing is titled for the mission: {:?}",
+        shown.title
+    );
+    assert!(
+        shown.body.contains(&held.objective_line),
+        "and says what it asks for: {:?}",
+        shown.body
+    );
+    assert!(
+        !shown.body.contains('{'),
+        "every hole is filled: {:?}",
+        shown.body
+    );
+}
+
+/// Finishing one briefs the next, in the same tick it is handed out.
+#[test]
+fn finishing_a_mission_briefs_the_next_one() {
+    let mut game = fresh();
+    drain(&mut game);
+    game.note_deed(crate::contracts::Deed::Examined);
+    // Step 10 is `Build(home)`; step 20 is the `Examined` one. Walk to it by
+    // filing the first as done rather than by building a Home.
+    let first = game
+        .active_contracts()
+        .into_iter()
+        .find(|row| row.tutorial)
+        .expect("holding one");
+    game.world
+        .resource_mut::<crate::resources::ActiveContracts>()
+        .active
+        .retain(|c| c.def.id != first.id);
+    game.world
+        .resource_mut::<crate::resources::ActiveContracts>()
+        .done
+        .push(first.id.clone());
+    game.tick();
+
+    let next = game
+        .active_contracts()
+        .into_iter()
+        .find(|row| row.tutorial)
+        .expect("the next step is in hand");
+    assert_ne!(next.id, first.id, "the chain moved on");
+    assert!(
+        std::iter::from_fn(|| game.take_notification()).any(|n| n.title.contains(&next.name)),
+        "the step that was just handed out is the one briefed"
+    );
+}
+
+/// Deleting `assets/notifications/` is a supported install, and the chain
+/// must not notice. The briefing is the only new caller, so this is the
+/// property that keeps it that way.
+#[test]
+fn a_run_with_no_notification_catalogue_still_runs_the_chain() {
+    let dir = scratch_assets_dir("chain_no_notifications");
+    copy_shipped_assets(&dir, &[]);
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    for entry in std::fs::read_dir(test_assets_dir().join("contracts")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_file() {
+            std::fs::copy(&path, contracts.join(path.file_name().unwrap())).unwrap();
+        }
+    }
+    // No `notifications/` directory at all.
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     assert_eq!(game.notifications_pending(), 0);
+    assert!(
+        game.active_contracts().iter().any(|row| row.tutorial),
+        "the chain is handed out exactly as it is with a catalogue"
+    );
 }

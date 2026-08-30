@@ -501,6 +501,84 @@ pub(super) fn modded_assets_dir(
 /// `Game::ability_affinity`'s clamp from the talent side: the shipped nodes are
 /// deliberately small enough that no combination of them reaches
 /// `AFFINITY_MAX`, which is the content rule working rather than an omission.
+/// A scratch install whose `contracts/` directory is a three-step fixture
+/// chain and nothing else.
+///
+/// Built rather than leaning on the shipped missions, so these tests keep
+/// testing the *mechanism* when the shipped wording changes — and so they
+/// were already passing before the shipped chain existed.
+pub(super) fn assets_with_fixture_chain(tag: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    // One ordinary contract beside the chain, so a test about the board
+    // being *suppressed* can tell that from a board with nothing to offer.
+    std::fs::write(
+        contracts.join("fixture_plain.ron"),
+        r#"(id: "fixture_plain", name: "Fixture Plain", description: "d",
+            objective: Terminate(species: None, count: 1), reward: [Xp(1)])"#,
+    )
+    .unwrap();
+    // Steps of its own, on numbers no shipped mission uses.
+    for (n, step) in [(1u32, 9001u32), (2, 9002), (3, 9003)] {
+        std::fs::write(
+            contracts.join(format!("fixture_step_{n}.ron")),
+            format!(
+                r#"(id: "fixture_step_{n}", name: "Fixture {n}", description: "d",
+                    objective: Perform(deed: Examined), reward: [Xp(1)], tutorial: Some({step}))"#
+            ),
+        )
+        .unwrap();
+    }
+    dir
+}
+
+/// A scratch install whose whole chain is one mission asking for a
+/// decompile — what the forced first roll keys off.
+///
+/// Keyed on the *objective* rather than on a shipped id, so this fixture
+/// exercises exactly the rule the engine applies and does not depend on
+/// what the shipped chain calls its decompile step.
+pub(super) fn assets_with_decompile_mission(tag: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    std::fs::write(
+        contracts.join("fixture_decompile.ron"),
+        r#"(id: "fixture_decompile", name: "Fixture Decompile", description: "d",
+            objective: Perform(deed: Tamed), reward: [Xp(1)], tutorial: Some(9001))"#,
+    )
+    .unwrap();
+    dir
+}
+
+/// Files every onboarding mission as finished, so the ordinary contract
+/// board is live.
+///
+/// Every test that wants a board needs this, because a run with an
+/// unfinished chain has an empty one by design. Cheaper and more honest than
+/// each test playing the chain: what those tests are about is the board.
+pub(crate) fn skip_tutorial(game: &mut Game) {
+    let ids: Vec<crate::contracts::ContractId> = game
+        .world
+        .resource::<crate::contracts::ContractDb>()
+        .tutorial_chain()
+        .iter()
+        .map(|d| d.id.clone())
+        .collect();
+    let mut held = game
+        .world
+        .resource_mut::<crate::resources::ActiveContracts>();
+    held.active.retain(|c| c.def.tutorial.is_none());
+    for id in ids {
+        if !held.done.contains(&id) {
+            held.done.push(id);
+        }
+    }
+}
+
 pub(super) fn assets_dir_with_talents(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);

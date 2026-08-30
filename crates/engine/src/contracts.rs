@@ -53,6 +53,46 @@ impl std::fmt::Display for ContractId {
     }
 }
 
+/// Something the player did, recorded for `Objective::Perform`.
+///
+/// A **closed engine enum, not a string**. A deed is an engine *event*, not
+/// content: a mod cannot emit one, so the openness a string would buy is
+/// openness onto nothing. What a string would buy instead is a mission
+/// naming a deed that does not exist, loading with no warning and never
+/// completing — the failure the README already documents for a `Terminate`
+/// naming a species that is gone, and one there is no reason to repeat where
+/// the vocabulary is closed.
+///
+/// A deed carries **no parameters**. `QueuedStandingOrder` does not name the
+/// item and `PostedStaff` does not name the structure: the mission's
+/// description is where the player is told what to order and where to post,
+/// and a parameterised deed would be a second place the same instruction is
+/// written. A mission that genuinely has to tell two postings apart is a new
+/// variant here, not a field on an existing one.
+///
+/// Every variant must have a caller of `Game::note_deed` — asserted
+/// exhaustively by `every_deed_has_an_emit_site`, `cell_mark`'s rule, so a
+/// variant with no writer fails the build rather than shipping a mission
+/// that can never complete.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Deed {
+    /// `x` found something. `Game::find_target_in_direction`.
+    Examined,
+    /// A decompile succeeded. `Game::attempt_decompile`.
+    Tamed,
+    /// The transfer screen moved something *out* of a container.
+    /// `Game::transfer_items`.
+    TookFromContainer,
+    /// A work order was queued with `standing` set.
+    /// `Game::queue_work_order`.
+    QueuedStandingOrder,
+    /// A Perk Point was spent. `Game::unlock_perk`.
+    UnlockedPerk,
+    /// A machine was set to be kept staffed. `Game::set_standing_job` —
+    /// the player's own key, not `post_worker`, which is the scheduler's.
+    PostedStaff,
+}
+
 /// What a contract asks for.
 ///
 /// Four of the five are state-shaped and are evaluated by polling, which is
@@ -75,6 +115,53 @@ pub enum Objective {
     Breach { zone: u32 },
     /// One of these is deployed.
     Build { structure: StructureId },
+    /// This many of an item are in the player's pack **at once**.
+    ///
+    /// Not `Deliver`: nothing is handed over and nothing is spent, so it
+    /// needs no Broker and can be met four frames down. That is why it
+    /// exists — the onboarding chain has to teach that fighting pays in
+    /// stock before a Contract Broker has been built.
+    ///
+    /// State-shaped and **latched**, like `Build` and `Descend`: once met it
+    /// stays met, so spending the stock on the next thing the chain asks for
+    /// does not un-finish it.
+    Hold { item: ItemId, count: u32 },
+    /// The player did a particular thing. The one event-shaped objective
+    /// besides `Terminate`, and the whole of the onboarding chain's new
+    /// vocabulary — six verbs behind one variant, because a variant each
+    /// would grow every match on `Objective` and make the seventh verb a
+    /// schema change.
+    Perform { deed: Deed },
+}
+
+/// Everything about the run a state-shaped objective can be asked against.
+///
+/// A struct rather than positional arguments because `Objective::already_met`
+/// has two readers that must not drift — `contract_system` advances by it and
+/// `Game::offerable` refuses a board slot on it — so every objective added
+/// widened one signature at two call sites. A field costs neither, and the
+/// next objective costs a field.
+pub struct ObjectiveState {
+    /// Stack depth, read from `resources::Locale` and never from `Position`,
+    /// which is pinned to the surface entrance tile while underground.
+    pub depth: u32,
+    pub zone: u32,
+    /// Every deployed structure's kind.
+    pub standing: Vec<StructureId>,
+    /// What the player is carrying, for `Objective::Hold`.
+    pub carried: Vec<(ItemId, u32)>,
+}
+
+impl ObjectiveState {
+    /// Units of `item` in the pack, 0 if none — carrying nothing of it is the
+    /// common case, not an error.
+    pub fn count(&self, item: &ItemId) -> u32 {
+        self.carried
+            .iter()
+            .find(|(i, _)| i == item)
+            .map(|(_, q)| *q)
+            .unwrap_or(0)
+    }
 }
 
 impl Objective {
@@ -85,7 +172,11 @@ impl Objective {
     pub fn target(&self) -> u32 {
         match self {
             Objective::Terminate { count, .. } | Objective::Deliver { count, .. } => *count,
-            Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => 1,
+            Objective::Descend { .. }
+            | Objective::Breach { .. }
+            | Objective::Build { .. }
+            | Objective::Hold { .. }
+            | Objective::Perform { .. } => 1,
         }
     }
 
@@ -93,7 +184,7 @@ impl Objective {
     /// pay out on the spot.
     ///
     /// The one statement of it, and it has two readers that must not drift:
-    /// `contract_system` advances the three state-shaped objectives by exactly
+    /// `contract_system` advances the state-shaped objectives by exactly
     /// this, and `Game::offerable` refuses to put one on the board while it is
     /// already true. They were one expression in the system alone until a
     /// board was read against the `contracts` template and offered
@@ -101,14 +192,26 @@ impl Objective {
     /// Credits, 5 Power Cells and 140 XP for pressing a key — and offered
     /// *Reach sector 3* to a run already in sector 3.
     ///
-    /// The two counting objectives are never already met: a contract asking
-    /// for zero of something is refused at load.
-    pub fn already_met(&self, depth: u32, zone: u32, standing: &[StructureId]) -> bool {
+    /// The event-shaped objectives are never already met: `Terminate` and
+    /// `Deliver` because a contract asking for zero of something is refused
+    /// at load, and `Perform` because a deed is a thing that happens rather
+    /// than a state the run is in — a board would otherwise refuse to offer
+    /// one forever.
+    ///
+    /// The run's side of the question is one `ObjectiveState` rather than a
+    /// widening argument list, because with two readers every objective
+    /// added cost a signature change at both.
+    pub fn already_met(&self, state: &ObjectiveState) -> bool {
         match self {
-            Objective::Terminate { .. } | Objective::Deliver { .. } => false,
-            Objective::Descend { depth: want } => depth >= *want,
-            Objective::Breach { zone: want } => zone >= *want,
-            Objective::Build { structure } => standing.contains(structure),
+            // Event-shaped, so never *already* true: a board would otherwise
+            // refuse to offer one forever.
+            Objective::Terminate { .. } | Objective::Deliver { .. } | Objective::Perform { .. } => {
+                false
+            }
+            Objective::Descend { depth } => state.depth >= *depth,
+            Objective::Breach { zone } => state.zone >= *zone,
+            Objective::Build { structure } => state.standing.contains(structure),
+            Objective::Hold { item, count } => state.count(item) >= *count,
         }
     }
 }
@@ -166,6 +269,24 @@ pub struct ContractDef {
     /// sector happened to supply.
     #[serde(default)]
     pub starter: bool,
+    /// Which step of the onboarding chain this mission is, if any. Absent on
+    /// an ordinary contract, which is every shipped contract but eleven.
+    ///
+    /// A **step, not an index**: the shipped missions are spaced 10 apart so
+    /// inserting one later never renumbers the others. The chain itself is
+    /// `ContractDb::tutorial_chain`, and the run's position in it is derived
+    /// from `ActiveContracts::done` rather than stored — see
+    /// `Game::ensure_tutorial_held`.
+    ///
+    /// Refused at load beside `starter` or `repeatable`: a tutorial mission
+    /// is never offered, so a board-slot flag on one is a claim about
+    /// something that cannot happen, and a repeatable one would leave and
+    /// re-enter the chain forever.
+    ///
+    /// `min_zone` is not refused here but is inert — nothing gates a mission
+    /// the player is handed.
+    #[serde(default)]
+    pub tutorial: Option<u32>,
 }
 
 /// Separates a template's id from the parameters a roll filled in —
@@ -357,6 +478,7 @@ impl ContractTemplate {
             min_zone: self.min_zone,
             repeatable: self.repeatable,
             starter: false,
+            tutorial: None,
         })
     }
 }
@@ -427,8 +549,14 @@ impl ContractDb {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((db, warnings)),
             Err(e) => return Err(e),
         };
-        for entry in entries {
-            let path = entry?.path();
+        // Sorted before parsing, `MemoryDb::load_dir`'s rule: two files
+        // claiming one id — or, now, one tutorial step — have to resolve the
+        // same way on every machine, and `read_dir` gives no such promise.
+        let mut paths: Vec<std::path::PathBuf> = entries
+            .map(|e| e.map(|e| e.path()))
+            .collect::<std::io::Result<_>>()?;
+        paths.sort();
+        for path in paths {
             if path.extension().and_then(|e| e.to_str()) != Some("ron") {
                 continue;
             }
@@ -442,6 +570,15 @@ impl ContractDb {
                         "skipped invalid contract file {path:?}: id {} is already taken",
                         def.id
                     )),
+                    None if def.tutorial.is_some()
+                        && db.defs.values().any(|d| d.tutorial == def.tutorial) =>
+                    {
+                        warnings.push(format!(
+                            "skipped invalid contract file {path:?}: tutorial step {} is \
+                             already taken",
+                            def.tutorial.expect("guarded by is_some above")
+                        ))
+                    }
                     None => {
                         db.defs.insert(def.id.clone(), def);
                     }
@@ -534,6 +671,22 @@ impl ContractDb {
     pub fn iter(&self) -> impl Iterator<Item = &ContractDef> {
         self.defs.values()
     }
+
+    /// The onboarding chain: every def carrying a `tutorial` step, in step
+    /// order. The one derivation of what the chain is.
+    ///
+    /// Sorted by step and then by id. The second key is unreachable while
+    /// `load_dir` refuses a duplicate step; it is here so the order is total
+    /// on its own rather than resting on that refusal.
+    pub fn tutorial_chain(&self) -> Vec<&ContractDef> {
+        let mut chain: Vec<&ContractDef> = self
+            .defs
+            .values()
+            .filter(|d| d.tutorial.is_some())
+            .collect();
+        chain.sort_by(|a, b| (a.tutorial, &a.id).cmp(&(b.tutorial, &b.id)));
+        chain
+    }
 }
 
 /// Why `def` cannot be loaded, or `None` if it is fine. A contract that pays
@@ -561,6 +714,22 @@ fn complaint(def: &ContractDef) -> Option<String> {
         .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
     {
         return Some("a reward of 0 pays nothing; give it at least 1 or delete it".to_string());
+    }
+    if def.tutorial.is_some() && def.starter {
+        return Some(
+            "a tutorial mission is handed to the player, never offered, so it cannot \
+             also be a starter — a starter flag on one claims a board slot it can \
+             never occupy"
+                .to_string(),
+        );
+    }
+    if def.tutorial.is_some() && def.repeatable {
+        return Some(
+            "a tutorial mission cannot be repeatable: the chain's position is derived \
+             from what has been finished, so a repeatable one would leave and re-enter \
+             it forever"
+                .to_string(),
+        );
     }
     None
 }

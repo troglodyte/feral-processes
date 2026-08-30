@@ -197,8 +197,12 @@ use crate::tuning::{
 };
 use crate::{DifficultyMode, Game, Glyph, GlyphColor, Position, Structure};
 
+/// Onboarding skipped: `based` raises a Home, which finishes the chain's
+/// first mission and pays Credits into the middle of a ledger assertion.
 fn fresh() -> Game {
-    Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    skip_tutorial(&mut game);
+    game
 }
 
 /// Stands a structure of `kind` at an absolute base-space cell, bypassing the

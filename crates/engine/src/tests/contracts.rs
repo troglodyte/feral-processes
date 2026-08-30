@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 5];
+    let mut seen = [false; 7];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -318,6 +318,8 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Descend { .. } => 2,
             Objective::Breach { .. } => 3,
             Objective::Build { .. } => 4,
+            Objective::Hold { .. } => 5,
+            Objective::Perform { .. } => 6,
         };
         seen[slot] = true;
     }
@@ -336,8 +338,14 @@ use crate::contracts::ContractDef;
 use crate::resources::{ActiveContract, ActiveContracts};
 use crate::*;
 
+/// A run with onboarding already behind it, which is what every test in
+/// this file below the chain's own section is about. A new run holds the
+/// chain's first mission and has an empty board by design, so a test about
+/// the board or about the cap has to start from here.
 fn fresh() -> Game {
-    Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    skip_tutorial(&mut game);
+    game
 }
 
 /// A def built by hand rather than looked up, so a retune of the shipped set
@@ -352,6 +360,7 @@ fn def(id: &str, objective: Objective, reward: Vec<Reward>) -> ContractDef {
         min_zone: 0,
         repeatable: false,
         starter: false,
+        tutorial: None,
     }
 }
 
@@ -368,10 +377,14 @@ fn give(game: &mut Game, def: ContractDef, progress: u32) {
 }
 
 #[test]
-fn a_new_game_holds_no_contracts() {
-    let game = fresh();
+fn a_new_game_holds_nothing_it_did_not_sign_for() {
+    // Not `fresh` — this is about what `Game::new` itself produces. A new
+    // run holds exactly one thing, the chain's first onboarding mission, and
+    // has signed for nothing.
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let held = game.world.resource::<ActiveContracts>();
-    assert!(held.active.is_empty());
+    assert_eq!(held.active.len(), 1);
+    assert!(held.active[0].def.tutorial.is_some());
     assert!(held.done.is_empty());
 }
 
@@ -432,12 +445,21 @@ fn active_contracts_survive_a_save_and_load() {
         held.active, before,
         "progress, accepted_tick and the whole resolved def all travel"
     );
-    assert_eq!(held.done, vec![ContractId::from("already_finished")]);
+    // `fresh` files the onboarding chain as finished, so `done` carries it
+    // too — what this is about is the one id the test put there.
+    assert_eq!(
+        held.done.last(),
+        Some(&ContractId::from("already_finished"))
+    );
 }
 
 #[test]
 fn a_save_written_before_contracts_existed_still_loads() {
-    let mut game = fresh();
+    // An install with no chain, so both fields serialise to a single `[]`
+    // line each and the strip below is a line filter rather than a parser.
+    let dir = scratch_assets_dir("legacy_contracts_save");
+    copy_shipped_assets(&dir, &[]);
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     let path =
         std::env::temp_dir().join(format!("feral_contracts_legacy_{}.bin", std::process::id()));
     game.save(&path).unwrap();
@@ -461,7 +483,7 @@ fn a_save_written_before_contracts_existed_still_loads() {
     );
     std::fs::write(&path, stripped).unwrap();
 
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
     let _ = std::fs::remove_file(&path);
     let held = loaded.world.resource::<ActiveContracts>();
     assert!(held.active.is_empty());
@@ -847,7 +869,7 @@ fn a_finished_contract_pays_each_reward_once_and_is_filed_as_done() {
 
     let held = game.world.resource::<ActiveContracts>();
     assert!(held.active.is_empty(), "a finished contract is not held");
-    assert_eq!(held.done, vec![ContractId::from("paid")]);
+    assert_eq!(held.done.last(), Some(&ContractId::from("paid")));
 }
 
 #[test]
@@ -2419,5 +2441,875 @@ fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
         game.broker_reach(),
         BrokerReach::AtBroker,
         "the same cell, once it is floor"
+    );
+}
+
+/// The chain is every def carrying a step, in step order — not file order,
+/// not id order. Written with the files deliberately out of order so a
+/// `read_dir` that happened to return them sorted cannot pass this by luck.
+#[test]
+fn the_tutorial_chain_is_every_stepped_contract_in_step_order() {
+    let (db, warnings) = load(
+        "tutorial_chain_order",
+        &[
+            (
+                "z_third.ron",
+                r#"(id: "third", name: "Third", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(30))"#,
+            ),
+            (
+                "a_first.ron",
+                r#"(id: "first", name: "First", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+            (
+                "m_plain.ron",
+                r#"(id: "plain", name: "Plain", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)])"#,
+            ),
+            (
+                "b_second.ron",
+                r#"(id: "second", name: "Second", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(20))"#,
+            ),
+        ],
+    );
+    assert!(warnings.is_empty(), "all four are valid: {warnings:?}");
+    let chain: Vec<&str> = db.tutorial_chain().iter().map(|d| d.id.as_str()).collect();
+    assert_eq!(
+        chain,
+        vec!["first", "second", "third"],
+        "the chain is step order, and a contract with no step is not in it"
+    );
+}
+
+/// A directory with no stepped contract has no chain, which is the
+/// pre-tutorial game and a supported install.
+#[test]
+fn a_directory_with_no_stepped_contract_has_no_chain() {
+    let (db, _) = load(
+        "tutorial_chain_empty",
+        &[(
+            "plain.ron",
+            r#"(id: "plain", name: "Plain", description: "d",
+                objective: Breach(zone: 2), reward: [Xp(1)])"#,
+        )],
+    );
+    assert!(db.tutorial_chain().is_empty());
+}
+
+/// Two files claiming one step would run the chain in an order nobody
+/// authored, and which of them won would depend on `read_dir`. The second is
+/// skipped with a warning, exactly as a duplicate id is.
+#[test]
+fn a_duplicate_tutorial_step_is_refused() {
+    let (db, warnings) = load(
+        "tutorial_dup_step",
+        &[
+            (
+                "a.ron",
+                r#"(id: "a", name: "A", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+            (
+                "b.ron",
+                r#"(id: "b", name: "B", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+        ],
+    );
+    assert_eq!(db.tutorial_chain().len(), 1, "one of the two is kept");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "and the other is warned about: {warnings:?}"
+    );
+    assert!(
+        warnings[0].contains("step"),
+        "the warning names what collided: {warnings:?}"
+    );
+}
+
+/// `load_dir` sorts its entries, so two files claiming one step resolve the
+/// same way every run. Without the sort the survivor above is whichever
+/// `read_dir` happened to yield first, and the shipped chain would differ
+/// between machines.
+#[test]
+fn a_duplicate_tutorial_step_resolves_the_same_way_every_run() {
+    for i in 0..4 {
+        let (db, _) = load(
+            &format!("tutorial_dup_stable_{i}"),
+            &[
+                (
+                    "zzz.ron",
+                    r#"(id: "zzz", name: "Z", description: "d",
+                        objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+                ),
+                (
+                    "aaa.ron",
+                    r#"(id: "aaa", name: "A", description: "d",
+                        objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+                ),
+            ],
+        );
+        assert_eq!(
+            db.tutorial_chain()[0].id.as_str(),
+            "aaa",
+            "the file that sorts first is the one that loads"
+        );
+    }
+}
+
+/// A tutorial mission is never offered, so a `starter` flag on one is a
+/// claim about a board slot it can never occupy.
+#[test]
+fn a_tutorial_mission_may_not_also_be_a_starter() {
+    let (db, warnings) = load(
+        "tutorial_and_starter",
+        &[(
+            "a.ron",
+            r#"(id: "a", name: "A", description: "d", objective: Breach(zone: 2),
+                reward: [Xp(1)], tutorial: Some(10), starter: true)"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("starter"), "{warnings:?}");
+}
+
+/// The chain's position is derived from `done`, so a repeatable mission
+/// would leave and re-enter it forever.
+#[test]
+fn a_tutorial_mission_may_not_be_repeatable() {
+    let (db, warnings) = load(
+        "tutorial_and_repeatable",
+        &[(
+            "a.ron",
+            r#"(id: "a", name: "A", description: "d", objective: Breach(zone: 2),
+                reward: [Xp(1)], tutorial: Some(10), repeatable: true)"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("repeatable"), "{warnings:?}");
+}
+
+/// `Hold` is met by what is in the pack, needs no Broker, and is what lets
+/// the chain teach "fighting pays in stock" before one is standing.
+#[test]
+fn hold_is_met_by_what_the_player_is_carrying() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 12,
+    };
+    let mut state = crate::contracts::ObjectiveState {
+        depth: 0,
+        zone: 1,
+        standing: Vec::new(),
+        carried: vec![(ItemId::from(crate::items::ids::CORE_FRAGMENT), 11)],
+    };
+    assert!(!objective.already_met(&state), "eleven is not twelve");
+    state.carried[0].1 = 12;
+    assert!(objective.already_met(&state));
+    state.carried[0].1 = 40;
+    assert!(
+        objective.already_met(&state),
+        "more than asked still counts"
+    );
+}
+
+/// State-shaped, so it completes through the one `progress >= target` rule
+/// with a target of 1 — the same shape `Build` and `Descend` have.
+#[test]
+fn hold_is_a_latch_with_a_target_of_one() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 12,
+    };
+    assert_eq!(objective.target(), 1);
+}
+
+/// Carrying nothing of the item at all is the common case and must not
+/// panic or read as met.
+#[test]
+fn hold_is_not_met_by_an_empty_pack() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 1,
+    };
+    let state = crate::contracts::ObjectiveState {
+        depth: 0,
+        zone: 1,
+        standing: Vec::new(),
+        carried: Vec::new(),
+    };
+    assert!(!objective.already_met(&state));
+}
+
+/// A held `Hold` finishes off the run's own inventory, through the ordinary
+/// tick path and the ordinary completion path.
+#[test]
+fn a_held_hold_completes_from_the_players_pack() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 100);
+    give(
+        &mut game,
+        def(
+            "hold_test",
+            Objective::Hold { item, count: 12 },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("hold_test")),
+        "a pack that already meets the objective finishes it on the next tick"
+    );
+}
+
+/// A deed recorded this tick finishes a held `Perform`, through the same
+/// system and the same completion path a kill goes through.
+#[test]
+fn a_deed_finishes_a_held_perform_contract() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(
+        &mut game,
+        def(
+            "perform_test",
+            Objective::Perform {
+                deed: crate::contracts::Deed::Examined,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.tick();
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+        "nothing has been done yet"
+    );
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+    );
+}
+
+/// A deed of the wrong kind advances nothing. Without this the six deeds
+/// would be one deed with six names.
+#[test]
+fn a_deed_of_another_kind_advances_nothing() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(
+        &mut game,
+        def(
+            "perform_test",
+            Objective::Perform {
+                deed: crate::contracts::Deed::PostedStaff,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        !game
+            .world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("perform_test")),
+        "examining is not posting staff"
+    );
+}
+
+/// The queue is drained every tick by `contract_system` and by nothing else.
+/// A deed left in it would finish a contract accepted long afterwards.
+#[test]
+fn a_deed_does_not_survive_the_tick_that_drained_it() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::RunFeats>()
+            .deeds
+            .is_empty(),
+        "the queue is drained unconditionally"
+    );
+}
+
+/// Every emit site, one test each. They assert on the queue rather than on a
+/// finished contract so a failure names the site that stopped writing rather
+/// than reading as the contract system being broken.
+///
+/// `Deed::Tamed` is not here: it is tested in `tests/taming.rs` beside the
+/// forced first decompile, because the two are one behaviour from the
+/// player's side.
+mod deed_sites {
+    use super::*;
+    use crate::contracts::Deed;
+    use crate::game::base::work_orders::WorkOrder;
+
+    fn deeds(game: &Game) -> Vec<Deed> {
+        game.world
+            .resource::<crate::resources::RunFeats>()
+            .deeds
+            .clone()
+    }
+
+    fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, output: &[(&str, u32)]) -> Entity {
+        let machine = spawn_machine_at(game, kind, x, y);
+        let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+        for (id, n) in output {
+            stock.output.insert(ItemId::from(*id), *n);
+        }
+        machine
+    }
+
+    fn player_tile(game: &Game) -> Position {
+        *game.world.get::<Position>(game.player_entity()).unwrap()
+    }
+
+    #[test]
+    fn examining_something_writes_a_deed() {
+        let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let start = player_tile(&game);
+        clear_creatures_east_of_player(&mut game, start, 10);
+        let species = game.species_defs().into_iter().next().unwrap();
+        game.world.spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position {
+                x: start.x + 3,
+                y: start.y,
+            },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                mitigation: 1,
+            },
+        ));
+        assert!(
+            game.find_target_in_direction(1, 0, 5).is_some(),
+            "the fixture has to put something there"
+        );
+        assert!(deeds(&game).contains(&Deed::Examined));
+    }
+
+    #[test]
+    fn examining_nothing_writes_no_deed() {
+        let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let start = player_tile(&game);
+        clear_creatures_along_ray(&mut game, start, 0, -1, 10);
+        // An empty ray. The mission is to teach that `x` reports something,
+        // so pointing it at blank ground must not complete it.
+        assert!(game.find_target_in_direction(0, -1, 1).is_none());
+        assert!(!deeds(&game).contains(&Deed::Examined));
+    }
+
+    /// `transfer_items` ticks, and the tick is what drains the queue — so
+    /// these two read the contract rather than `RunFeats`. The deed is
+    /// written *before* that tick deliberately, so the mission advances on
+    /// the action rather than a tick behind it.
+    fn holding_a_take_mission(seed: u32) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        give(
+            &mut game,
+            def(
+                "take_test",
+                Objective::Perform {
+                    deed: Deed::TookFromContainer,
+                },
+                vec![Reward::Xp(1)],
+            ),
+            0,
+        );
+        game
+    }
+
+    fn finished_take_mission(game: &Game) -> bool {
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("take_test"))
+    }
+
+    /// Taking teaches pulling stock *out* of a machine, so only the take
+    /// side writes.
+    #[test]
+    fn taking_from_a_container_writes_a_deed() {
+        let mut game = holding_a_take_mission(22);
+        // Base-space coordinates: `stand_in_base` puts the party at the
+        // base's own origin, and `Position` is the surface tile.
+        stand_in_base(&mut game);
+        stocked(&mut game, "mining_node", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
+        let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]);
+        assert!(!taken.is_empty(), "the fixture has to move something");
+        assert!(finished_take_mission(&game));
+    }
+
+    /// The negative half, and the one that catches a `note_deed` written
+    /// unconditionally at the top of `transfer_items`: a player who only put
+    /// something in has not done what the mission asks.
+    #[test]
+    fn only_putting_into_a_container_writes_no_deed() {
+        let mut game = holding_a_take_mission(23);
+        stand_in_base(&mut game);
+        stocked(&mut game, "depot", 1, 0, &[]);
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 10)]);
+        let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+        assert!(!given.is_empty(), "the fixture has to move something");
+        assert!(!finished_take_mission(&game));
+    }
+
+    /// The mission asks for a *standing* order, which is the thing that
+    /// keeps working without being asked again.
+    #[test]
+    fn a_standing_work_order_writes_a_deed() {
+        let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 20))
+            .unwrap();
+        assert!(deeds(&game).contains(&Deed::QueuedStandingOrder));
+    }
+
+    /// And a one-off is not one. Without this the mission completes on the
+    /// first order of any kind and the lesson never lands.
+    #[test]
+    fn a_one_off_work_order_writes_no_deed() {
+        let mut game = Game::new(25, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 20))
+            .unwrap();
+        assert!(!deeds(&game).contains(&Deed::QueuedStandingOrder));
+    }
+
+    #[test]
+    fn unlocking_a_perk_writes_a_deed() {
+        let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 20;
+        let perk = game.perk_defs().first().expect("a shipped perk").id;
+        game.unlock_perk(perk).unwrap();
+        assert!(deeds(&game).contains(&Deed::UnlockedPerk));
+    }
+
+    /// A refusal spends nothing and must record nothing.
+    #[test]
+    fn a_refused_perk_writes_no_deed() {
+        let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+        let perk = game.perk_defs().first().expect("a shipped perk").id;
+        assert!(game.unlock_perk(perk).is_err());
+        assert!(!deeds(&game).contains(&Deed::UnlockedPerk));
+    }
+
+    /// The player's own key — `set_standing_job`, which is what
+    /// `StaffAction::StandingWork` calls.
+    #[test]
+    fn setting_a_machine_to_be_kept_staffed_writes_a_deed() {
+        let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, true, false).unwrap();
+        assert!(deeds(&game).contains(&Deed::PostedStaff));
+    }
+
+    /// Turning the job **off** is not doing it, and neither is setting a
+    /// guard — the mission asks for a machine kept staffed.
+    #[test]
+    fn clearing_a_standing_job_writes_no_deed() {
+        let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, false, false).unwrap();
+        assert!(!deeds(&game).contains(&Deed::PostedStaff));
+    }
+
+    /// **The scheduler is not the player.** `post_worker`'s only non-test
+    /// caller is `schedule_base_labour`, which runs every tick — a deed
+    /// written there would complete `tutorial_man_the_node` on its own, with
+    /// nobody having pressed anything, and the mission's own text names a
+    /// verb no key reaches.
+    #[test]
+    fn the_scheduler_posting_a_body_writes_no_deed() {
+        let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.post_worker(worker, machine);
+        assert!(
+            !deeds(&game).contains(&Deed::PostedStaff),
+            "the base deciding where a body goes is not the player asking for it"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The onboarding chain
+// ---------------------------------------------------------------------------
+
+/// A new run has the chain's first mission in hand before anything is
+/// ticked and with no Broker anywhere — which is the whole reason it is
+/// handed out rather than offered.
+#[test]
+fn a_new_run_holds_the_first_mission_with_no_broker() {
+    let dir = assets_with_fixture_chain("chain_first");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let held: Vec<String> = game
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(
+        held.contains(&"fixture_step_1".to_string()),
+        "the chain's first step is in hand at tick 0: {held:?}"
+    );
+    assert_eq!(
+        game.broker_reach(),
+        BrokerReach::NoBroker,
+        "and no Broker is standing"
+    );
+}
+
+/// Exactly one, never two. The property the whole feature rests on.
+#[test]
+fn exactly_one_mission_is_held_at_a_time() {
+    let dir = assets_with_fixture_chain("chain_one");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    for _ in 0..3 {
+        let count = game
+            .active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count();
+        assert_eq!(count, 1, "one onboarding mission is live at a time");
+        game.note_deed(crate::contracts::Deed::Examined);
+        game.tick();
+    }
+}
+
+/// Finishing one hands out the next in the same tick, so the player never
+/// sees an empty slot.
+#[test]
+fn finishing_a_mission_hands_out_the_next_one() {
+    let dir = assets_with_fixture_chain("chain_next");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    let held: Vec<String> = game
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
+    assert!(!held.contains(&"fixture_step_1".to_string()), "{held:?}");
+}
+
+/// When the last one is finished the chain is over and nothing is handed
+/// out again.
+#[test]
+fn a_finished_chain_hands_out_nothing() {
+    let dir = assets_with_fixture_chain("chain_end");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    for _ in 0..3 {
+        game.note_deed(crate::contracts::Deed::Examined);
+        game.tick();
+    }
+    assert!(!game.in_tutorial(), "three steps, three deeds, chain over");
+    game.tick();
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0
+    );
+}
+
+/// The chain cannot be given back. An unbreakable chain with a give-back key
+/// is not a chain.
+#[test]
+fn an_onboarding_mission_cannot_be_abandoned() {
+    let dir = assets_with_fixture_chain("chain_abandon");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(!game.abandon_contract(&ContractId::from("fixture_step_1")));
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        1,
+        "it is still in hand"
+    );
+}
+
+/// The row says it is one, which is what the renderer colours on and what
+/// app-core refuses on.
+#[test]
+fn an_onboarding_missions_row_is_flagged() {
+    let dir = assets_with_fixture_chain("chain_flag");
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id.as_str() == "fixture_step_1")
+        .expect("held");
+    assert!(row.tutorial);
+}
+
+/// An install with no chain is the pre-tutorial game exactly: nothing is
+/// handed out and nothing is flagged.
+#[test]
+fn an_install_with_no_chain_hands_out_nothing() {
+    // The shipped contracts with the eleven missions deleted — the claim is
+    // that removing the chain gives the pre-chain game back, ordinary
+    // contracts and open board included, and a directory with no contracts
+    // at all could not say that.
+    let dir = scratch_assets_dir("chain_absent");
+    copy_shipped_assets(&dir, &[]);
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    let shipped = test_assets_dir().join("contracts");
+    let mut copied = 0;
+    for entry in std::fs::read_dir(&shipped).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        if path.is_dir() || name.starts_with("tutorial_") {
+            continue;
+        }
+        std::fs::copy(&path, contracts.join(&name)).unwrap();
+        copied += 1;
+    }
+    assert!(
+        copied > 0,
+        "the install has to have ordinary contracts in it"
+    );
+
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(!game.in_tutorial());
+    assert_eq!(
+        game.active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0
+    );
+    deploy_broker(&mut game);
+    assert!(
+        !game
+            .contract_board()
+            .expect("a Broker is standing")
+            .is_empty(),
+        "and the ordinary board is open, which is the pre-chain game"
+    );
+}
+
+/// While the chain runs the board is empty — one mission at a time means
+/// one, not one plus three the player cannot evaluate yet.
+#[test]
+fn the_board_is_empty_while_the_chain_runs() {
+    let dir = assets_with_fixture_chain("board_suppressed");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    deploy_broker(&mut game);
+    assert!(game.in_tutorial());
+    assert_eq!(
+        game.contract_board(),
+        Some(Vec::new()),
+        "a Broker is standing, so the board exists and is empty — not `None`, \
+         which is the claim that no Broker is standing at all"
+    );
+}
+
+/// And fills the moment the chain is finished.
+#[test]
+fn the_board_fills_when_the_chain_is_finished() {
+    let dir = assets_with_fixture_chain("board_freed");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    deploy_broker(&mut game);
+    skip_tutorial(&mut game);
+    let board = game.contract_board().expect("a Broker is standing");
+    assert!(!board.is_empty(), "the ordinary board is live again");
+}
+
+/// With no Broker the answer is still `None` and not an empty board. Two
+/// readers depend on that difference.
+#[test]
+fn no_broker_still_answers_none_during_the_chain() {
+    let dir = assets_with_fixture_chain("board_no_broker");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    assert_eq!(game.contract_board(), None);
+}
+
+fn save_path(tag: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "feral_processes_contracts_{tag}_{}.bin",
+        std::process::id()
+    ))
+}
+
+/// Rewrites `path` as a build without `field` would have written it. The
+/// save is field-named RON — which is the whole reason this is legal, and
+/// a positional format would make this test impossible to write.
+fn strip_field_from_save(path: &std::path::Path, field: &str) {
+    let text = std::fs::read_to_string(path).unwrap();
+    let key = format!("{field}:");
+    assert!(
+        text.contains(&key),
+        "the current build has to be writing {field}, or this test proves nothing"
+    );
+    let older: String = text
+        .lines()
+        .filter(|line| !line.trim_start().starts_with(&key))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !older.contains(&key),
+        "the key has to actually be gone for this to prove anything"
+    );
+    std::fs::write(path, older).unwrap();
+}
+
+/// A save written before this feature existed carries no flag, and a run
+/// forty hours old must not be told to build a Home it built long ago. The
+/// whole chain is filed as finished at load.
+#[test]
+fn a_save_from_before_the_chain_never_starts_it() {
+    // Written by an install with no chain at all and loaded against one that
+    // has it, which is exactly what shipping this feature does to a run in
+    // progress. Building the fixture this way rather than deleting the field
+    // out of a chain-aware save is what makes it faithful: a pre-chain save
+    // cannot have a mission in hand either.
+    let before = scratch_assets_dir("seed_old_save_before");
+    copy_shipped_assets(&before, &[]);
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &before).unwrap();
+    let path = save_path("old_save");
+    game.save(&path).unwrap();
+    strip_field_from_save(&path, "tutorial_seeded");
+
+    let dir = assets_with_fixture_chain("seed_old_save_after");
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    assert!(!loaded.in_tutorial(), "the chain is filed as finished");
+    assert_eq!(
+        loaded
+            .active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        0,
+        "and nothing is in hand"
+    );
+}
+
+/// A save written *by* this build carries the flag and resumes the chain
+/// exactly where it was — the position is derived from `done`, so there is
+/// nothing else to restore.
+#[test]
+fn a_run_saved_mid_chain_resumes_on_the_same_step() {
+    let dir = assets_with_fixture_chain("seed_mid_chain");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    game.note_deed(crate::contracts::Deed::Examined);
+    game.tick();
+    let path = save_path("mid_chain");
+    game.save(&path).unwrap();
+
+    let loaded = Game::load(&path, &dir).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let held: Vec<String> = loaded
+        .active_contracts()
+        .iter()
+        .map(|r| r.id.to_string())
+        .collect();
+    assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
+    assert!(loaded.in_tutorial());
+}
+
+/// **The board is the sector's, not the party's.**
+///
+/// It is readable underground, so `Game::offerable` must answer at depth 0
+/// however deep the party is standing. Asked from the party's live state a
+/// `Descend(1)` is `already_met` five frames down and drops out of the pool —
+/// and `board_defs` draws with `swap_remove`, so a pool one entry shorter
+/// reshuffles *every* slot rather than just the one that left. A board that
+/// changes as you walk is against the seam that says it is derived from the
+/// seed and nothing else.
+///
+/// Asserted on `offerable` rather than on the three rows a seed happened to
+/// draw: the draw is a lossy view of the pool, and for most seeds it hides
+/// the change entirely.
+#[test]
+fn a_descend_contract_stays_offerable_however_deep_the_party_stands() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let descend = def(
+        "probe_descend",
+        Objective::Descend { depth: 1 },
+        vec![Reward::Xp(1)],
+    );
+    assert!(
+        game.offerable_contracts_for_test(&descend),
+        "the fixture has to start from an offerable contract"
+    );
+
+    game.world.insert_resource(Locale::Stack {
+        depth: 5,
+        frames: 6,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    });
+
+    assert!(
+        game.offerable_contracts_for_test(&descend),
+        "five frames down, the sector's board still offers the descent"
+    );
+}
+
+/// The same rule one objective over, and the one that will fire the day a
+/// non-tutorial `Hold` ships: a board read against the live pack would
+/// reshuffle whenever the player picked something up.
+#[test]
+fn a_hold_contract_stays_offerable_whatever_is_in_the_pack() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let hold = def(
+        "probe_hold",
+        Objective::Hold {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            count: 12,
+        },
+        vec![Reward::Xp(1)],
+    );
+    assert!(game.offerable_contracts_for_test(&hold));
+
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
+
+    assert!(
+        game.offerable_contracts_for_test(&hold),
+        "what is in the pack is not a board input"
     );
 }

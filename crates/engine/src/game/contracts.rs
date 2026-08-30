@@ -19,9 +19,24 @@ use rand::prelude::*;
 use crate::Game;
 use crate::components::Inventory;
 use crate::components::Structure;
-use crate::contracts::{ContractId, Objective, Reward};
+use crate::contracts::{ContractId, Deed, Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
+
+/// How deep the party stands, for a `Descend` objective.
+///
+/// A free function so `contract_system` and `Game::objective_state` cannot
+/// disagree about what base space answers — 0 is what "no Stack depth
+/// reached" means here, and base space is neither the surface nor a frame.
+///
+/// Deliberately not `stack_market`'s `stack_depth`, which floors at 1
+/// because a price needs a multiplier.
+fn contract_depth(locale: &Locale) -> u32 {
+    match locale {
+        Locale::Stack { depth, .. } => *depth,
+        Locale::Surface | Locale::Base { .. } => 0,
+    }
+}
 
 /// Raises `ActiveContract::progress` and nothing else. Completion is
 /// `Game::settle_contracts`' — a payout writes to the player's inventory and
@@ -36,17 +51,18 @@ pub fn contract_system(
     // surface coordinate.
     locale: Res<Locale>,
     structures: Query<&Structure>,
+    player: Query<&Inventory, With<crate::components::Player>>,
 ) {
-    let depth = match *locale {
-        Locale::Stack { depth, .. } => depth,
-        // Base space has no depth to reach, and it is not the surface
-        // either — but 0 is what "no Stack depth reached" already means
-        // here, so both non-Stack locales answer the same.
-        Locale::Surface | Locale::Base { .. } => 0,
+    let state = crate::contracts::ObjectiveState {
+        depth: contract_depth(&locale),
+        zone: zone.0,
+        standing: structures.iter().map(|s| s.kind.clone()).collect(),
+        carried: player
+            .iter()
+            .next()
+            .map(|inv| inv.items.clone())
+            .unwrap_or_default(),
     };
-
-    let standing: Vec<crate::structures::StructureId> =
-        structures.iter().map(|s| s.kind.clone()).collect();
 
     for contract in &mut held.active {
         let target = contract.def.objective.target();
@@ -56,23 +72,115 @@ pub fn contract_system(
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
                 .count() as u32,
+            Objective::Perform { deed } => feats.deeds.iter().filter(|d| *d == deed).count() as u32,
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
-            // The three state-shaped ones advance by exactly the predicate
+            // The state-shaped ones advance by exactly the predicate
             // `Game::offerable` refuses a board slot on, so a contract cannot
             // be offered in a state that would finish it and then fail to
             // finish once taken.
-            state => u32::from(state.already_met(depth, zone.0, &standing)),
+            polled => u32::from(polled.already_met(&state)),
         };
         contract.progress = contract.progress.saturating_add(advance).min(target);
     }
 
-    // Unconditional, and this system is the field's only drainer: leaving a
-    // kill in it would advance a contract accepted afterwards, forever.
+    // Unconditional, and this system is each field's only drainer: leaving a
+    // kill or a deed in one would advance a contract accepted afterwards,
+    // forever.
     feats.kills.clear();
+    feats.deeds.clear();
 }
 
 impl Game {
+    /// The onboarding mission the run is on, or `None` once every step is
+    /// finished.
+    ///
+    /// **Derived, never stored**: the first mission in
+    /// `ContractDb::tutorial_chain` whose id is not in
+    /// `ActiveContracts::done`. There is no cursor and no index, so nothing
+    /// can disagree with `done` about where the player is — the rule
+    /// `views::BuildOrderRow` and `Game::morale` already follow.
+    ///
+    /// Cloned rather than borrowed because every caller goes on to touch
+    /// `&mut self`.
+    pub(crate) fn current_tutorial(&self) -> Option<crate::contracts::ContractDef> {
+        let done = &self.world.resource::<ActiveContracts>().done;
+        self.world
+            .resource::<crate::contracts::ContractDb>()
+            .tutorial_chain()
+            .into_iter()
+            .find(|def| !done.contains(&def.id))
+            .cloned()
+    }
+
+    /// Whether onboarding is still running. The board's suppression, the
+    /// forced first decompile and the renderer's green row all read this one
+    /// call rather than each deciding for themselves.
+    pub fn in_tutorial(&self) -> bool {
+        self.current_tutorial().is_some()
+    }
+
+    /// Puts the run's current onboarding mission in hand if it is not there
+    /// already. **The one writer of a tutorial contract into
+    /// `ActiveContracts`**, called from `Game::new`, `Game::load` and
+    /// `Game::settle_contracts`.
+    ///
+    /// It never goes through `accept_contract`, and three things follow as
+    /// **omissions rather than checks**, which is the point of routing it
+    /// this way: `MAX_ACTIVE_CONTRACTS` never sees it, so the cap keeps
+    /// meaning what it meant; `broker_reach` never sees it, which is what
+    /// lets the first five missions exist before a Contract Broker does; and
+    /// `offerable` never sees it, so no `min_zone` or `already_met` can hold
+    /// the chain up.
+    pub(crate) fn ensure_tutorial_held(&mut self) {
+        let Some(def) = self.current_tutorial() else {
+            return;
+        };
+        if self
+            .world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .any(|c| c.def.id == def.id)
+        {
+            return;
+        }
+        let accepted_tick = self.current_tick();
+        let name = def.name.clone();
+        // The briefing carries the contract's own words, filled from the def
+        // in hand — one template file rather than a second copy of every
+        // mission's name and description. An absent catalogue returns
+        // `Unknown` and is ignored, so deleting `assets/notifications/`
+        // stays a supported install.
+        let objective = self.objective_line(&def.objective);
+        let _ = self.notify_filled(
+            &crate::notifications::NotificationId::from("onboarding_mission"),
+            &[
+                ("name", &name),
+                ("objective", &objective),
+                ("description", &def.description),
+            ],
+        );
+        self.world.resource_mut::<ActiveContracts>().active.push(
+            crate::resources::ActiveContract {
+                def,
+                progress: 0,
+                accepted_tick,
+            },
+        );
+        // `Outcome` rather than `Info`, `complete_contract`'s reason: a
+        // mission can be handed out mid-fight, and the battle prune keeps
+        // only four kinds.
+        self.log_kind(MessageKind::Outcome, format!("ONBOARDING: {name}"));
+    }
+
+    /// The one door a `Deed` is written through. The six triggers are
+    /// **callers of this, not writers beside it** — `Game::remember`'s rule,
+    /// and what keeps "which deeds exist" answerable by reading one file.
+    pub(crate) fn note_deed(&mut self, deed: Deed) {
+        self.world.resource_mut::<RunFeats>().deeds.push(deed);
+    }
+
     /// Finishes every held contract that has reached its target.
     ///
     /// Separate from `contract_system` because a payout writes the player's
@@ -271,6 +379,22 @@ impl Game {
     fn board_defs(&mut self) -> Option<Vec<crate::contracts::ContractDef>> {
         if self.broker_reach() == BrokerReach::NoBroker {
             return None;
+        }
+        // Onboarding owns the board while it runs. A new player choosing
+        // between three offers they have no way to evaluate is what the
+        // chain exists to replace, and the starter queue below was the
+        // weaker first attempt at the same thing.
+        //
+        // `Some(vec![])` rather than `None`: the Broker is standing and
+        // reachable, and `None` is the claim that it is not — a claim two
+        // other readers act on.
+        //
+        // It also keeps the chain's *later* steps off the board. They are
+        // ordinary unfinished contracts, so `offerable` would happily list
+        // step 3 beside step 1's held copy; once the chain is over they are
+        // all in `done` and refused there, so this is the only guard needed.
+        if self.in_tutorial() {
+            return Some(Vec::new());
         }
         let mut pool = self.offerable_contracts();
         pool.extend(self.rolled_contracts());
@@ -473,12 +597,24 @@ impl Game {
         if held.done.contains(&def.id) && !def.repeatable {
             return false;
         }
-        // Never offer something the run has already done. A board is only read
-        // on the surface, so the depth here is always 0 and a `Descend` can
-        // never be pre-met — `Breach` and `Build` are the live cases, and both
-        // shipped authored contracts that could hit them.
+        // Never offer something the run has already done — asked at depth 0
+        // and against an empty pack, deliberately.
+        //
+        // The board is **the sector's**, and it is readable underground and
+        // off the base. Answered from the party's live `ObjectiveState` a
+        // `Descend(1)` would drop out of the pool the moment the party stood
+        // one frame down, and `board_defs` draws with `swap_remove`, so a
+        // pool one entry shorter reshuffles *every* slot — a board that
+        // changed as you walked, against the seam that says it is derived
+        // from the seed and nothing else. `carried` is the same trap one
+        // objective over, waiting for the first non-tutorial `Hold`.
         !def.objective
-            .already_met(0, zone, &self.standing_structures())
+            .already_met(&crate::contracts::ObjectiveState {
+                depth: 0,
+                zone,
+                standing: self.standing_structures(),
+                carried: Vec::new(),
+            })
     }
 
     /// Every deployed structure's kind. Collected rather than queried lazily
@@ -654,6 +790,7 @@ impl Game {
             reward_line: self.reward_line(&def.reward),
             progress,
             target: def.objective.target(),
+            tutorial: def.tutorial.is_some(),
         }
     }
 
@@ -692,6 +829,19 @@ impl Game {
                     .unwrap_or_else(|| structure.clone());
                 format!("Build a {name}")
             }
+            Objective::Hold { item, count } => {
+                format!("Hold {count} {}", self.item_name(item))
+            }
+            // Exhaustive on purpose: a new `Deed` fails to compile here
+            // rather than shipping a row with no words on it.
+            Objective::Perform { deed } => match deed {
+                Deed::Examined => "Examine something with [x]".to_string(),
+                Deed::Tamed => "Decompile a wild program".to_string(),
+                Deed::TookFromContainer => "Take stock out of a machine with [c]".to_string(),
+                Deed::QueuedStandingOrder => "Place a standing work order".to_string(),
+                Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
+                Deed::PostedStaff => "Set a machine to be kept staffed".to_string(),
+            },
         }
     }
 }
@@ -778,6 +928,13 @@ impl Game {
         let Some(idx) = held.active.iter().position(|c| c.def.id == *id) else {
             return false;
         };
+        // An onboarding mission cannot be given back. This is the invariant,
+        // so it does not depend on a caller remembering to ask; the sentence
+        // the player reads is app-core's, through `App::refuse`, because a
+        // bare `false` cannot reach the log.
+        if held.active[idx].def.tutorial.is_some() {
+            return false;
+        }
         let name = held.active.remove(idx).def.name;
         self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
         true

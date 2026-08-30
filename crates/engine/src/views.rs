@@ -1988,6 +1988,10 @@ pub struct ContractRow {
     /// `Objective::target()` — every contract displays and completes through
     /// one `progress >= target` rule.
     pub target: u32,
+    /// Whether this is an onboarding mission — see
+    /// `Game::ensure_tutorial_held`. The renderer draws these green and
+    /// app-core refuses to give one back.
+    pub tutorial: bool,
 }
 
 /// One site standing on the Relay's board — see `Game::sortie_board`.

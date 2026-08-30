@@ -22,29 +22,67 @@ impl Game {
     /// Queues the notification `id` names, to take the screen the next time
     /// the player is standing on the map.
     ///
-    /// A thin call onto `notify_with_detail` with no detail — every firing
-    /// site but `Game::complete_contract` has nothing dynamic to say.
+    /// A thin call onto `queue_notification` with neither extra — most
+    /// firing sites have nothing dynamic to say.
     pub fn notify(&mut self, id: &NotificationId) -> Result<(), NoNotify> {
-        self.notify_with_detail(id, None)
+        self.queue_notification(id, &[], None)
     }
 
     /// `notify`, with a figure the `.ron` file could not have authored —
     /// `Game::complete_contract`'s payout is the one caller today.
-    ///
-    /// The **one door**. It resolves the def, checks the latch and pushes a
-    /// *resolved* value; it draws no RNG and writes no log line. A caller
-    /// fires it unconditionally at its site — the once-only rule is
-    /// `Repeat::OnceEver` and lives here, so a second `if first_time` check
-    /// in Rust would put the policy in two places and let the two disagree.
     pub fn notify_with_detail(
         &mut self,
         id: &NotificationId,
         detail: Option<String>,
     ) -> Result<(), NoNotify> {
+        self.queue_notification(id, &[], detail)
+    }
+
+    /// `notify`, with `{hole}` placeholders in the title and body replaced.
+    ///
+    /// It exists so a def can be written once and read for many subjects:
+    /// the onboarding chain's briefing is one file filled from whichever
+    /// mission was just handed out, rather than eleven files each repeating
+    /// a mission's own name and description. A hole no caller names is left
+    /// standing rather than blanked, so it is visible to a census instead of
+    /// reading as a missing word.
+    pub fn notify_filled(
+        &mut self,
+        id: &NotificationId,
+        fills: &[(&str, &str)],
+    ) -> Result<(), NoNotify> {
+        self.queue_notification(id, fills, None)
+    }
+
+    /// The **one door**. It resolves the def, checks the latch and pushes a
+    /// *resolved* value; it draws no RNG and writes no log line. A caller
+    /// fires it unconditionally at its site — the once-only rule is
+    /// `Repeat::OnceEver` and lives here, so a second `if first_time` check
+    /// in Rust would put the policy in two places and let the two disagree.
+    ///
+    /// The two extras are **parameters on that one door**, not doors of
+    /// their own — `pursuit_field`'s shape over `walk_field`. They are
+    /// orthogonal and the three public names above are the combinations
+    /// anything actually asks for: a figure the file could not know
+    /// (`detail`), and holes in the file the caller fills (`fills`). A
+    /// fourth wrapper is a signal to re-read the call site, not to add one.
+    fn queue_notification(
+        &mut self,
+        id: &NotificationId,
+        fills: &[(&str, &str)],
+        detail: Option<String>,
+    ) -> Result<(), NoNotify> {
         let Some(def) = self.world.resource::<NotificationDb>().get(id) else {
             return Err(NoNotify::Unknown);
         };
+        let fill = |text: &str| {
+            fills.iter().fold(text.to_string(), |text, (key, value)| {
+                text.replace(&format!("{{{key}}}"), value)
+            })
+        };
         let mut notification = Notification::from(def);
+        notification.title = fill(&notification.title);
+        notification.body = fill(&notification.body);
         notification.detail = detail;
         let repeat = def.repeat;
         if repeat == Repeat::OnceEver {

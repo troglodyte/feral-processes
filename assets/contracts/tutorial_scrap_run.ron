@@ -1,0 +1,8 @@
+(
+    id: "tutorial_scrap_run",
+    name: "Scrap Run",
+    description: "Everything out here starts as something somebody chipped loose. Put wild programs down and mine what you walk past until you are carrying twelve Core Fragments at once.",
+    objective: Hold(item: "core_fragment", count: 12),
+    reward: [Credits(20), Item("core_fragment", 6), Xp(80)],
+    tutorial: Some(30),
+)

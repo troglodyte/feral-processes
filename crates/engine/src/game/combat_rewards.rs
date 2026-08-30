@@ -953,6 +953,14 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_bool(chance as f64)
         };
+        // The chain's decompile mission cannot be failed: a run of bad rolls
+        // would end onboarding permanently. The catalyst above is already
+        // spent, so only the roll is forced — the lesson that decompiling is
+        // priced in catalysts is the half that stays.
+        //
+        // Below the odds read, deliberately, so what the battle screen has
+        // been showing stays honest about what the roll would have been.
+        let roll = roll || self.tutorial_grants_capture();
         let attempts = {
             let mut battle = self.world.resource_mut::<BattleState>();
             let counter = battle.decompile_attempts.entry(front).or_insert(0);
@@ -983,6 +991,7 @@ impl Game {
             .resource_mut::<BattleState>()
             .rewards
             .decompile_verdict = None;
+        self.note_deed(crate::contracts::Deed::Tamed);
 
         // Taken while the program is still hostile: `kill_xp` reads its
         // `Stats`, and everything below this line is the act of turning it
@@ -1034,5 +1043,27 @@ impl Game {
         }
         self.log("Another rogue program from the pack engages!");
         false
+    }
+
+    /// Whether the run's live onboarding mission is the one that teaches
+    /// decompiling.
+    ///
+    /// The one place the chain changes a shipped formula's outcome, and it is
+    /// bounded to a single mission of a single run: read off the live mission
+    /// rather than a flag, so it disarms itself the moment the chain moves
+    /// on and there is no state to leave set.
+    ///
+    /// Keyed on the **objective**, not the id, so it stays content-driven —
+    /// a mod authoring its own `Perform(deed: Tamed)` mission gets the same
+    /// guarantee, and renaming the shipped file changes nothing.
+    fn tutorial_grants_capture(&self) -> bool {
+        self.current_tutorial().is_some_and(|def| {
+            matches!(
+                def.objective,
+                crate::contracts::Objective::Perform {
+                    deed: crate::contracts::Deed::Tamed
+                }
+            )
+        })
     }
 }

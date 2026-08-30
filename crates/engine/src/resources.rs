@@ -587,6 +587,16 @@ pub struct RunFeats {
     /// registered unchained, and a shared queue would silently make that
     /// unsound the moment one ate the other's events.
     pub kills: Vec<String>,
+    /// Every `contracts::Deed` the player performed this tick, for a
+    /// contract's `Objective::Perform`.
+    ///
+    /// A **third field**, not a widening of `kills`, for the reason the
+    /// second one exists: each field having exactly one drainer is what
+    /// removes any ordering dependency between the systems that read them,
+    /// and a shared queue would make that unsound the moment one ate the
+    /// other's events. This one's single drainer is
+    /// `game::contracts::contract_system`.
+    pub deeds: Vec<crate::contracts::Deed>,
 }
 
 /// This tick's answer to "what does the base supply, what do its machines

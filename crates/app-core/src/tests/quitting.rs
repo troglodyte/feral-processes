@@ -31,6 +31,14 @@ fn app_with_a_save_slot(name: &str) -> App {
         std::env::temp_dir().join("feral_processes_quitting_telemetry.jsonl"),
     );
     app.start_new_game(DifficultyMode::Forgiving);
+    // A new run queues the onboarding chain's first briefing, which surfaces
+    // on the first tick — so it would take the screen out from under the
+    // very keypress these tests are about. Drained rather than dismissed,
+    // because it reaches the screen *after* a key this test has already
+    // spent. `test_app` does the same for the same reason.
+    if let Some(game) = &mut app.game {
+        while game.take_notification().is_some() {}
+    }
     app
 }
 

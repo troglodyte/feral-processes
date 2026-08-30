@@ -106,6 +106,7 @@ pub fn achievement_system(
             sprite: None,
             glyph: ACHIEVEMENT_GLYPH,
             color: ACHIEVEMENT_COLOR,
+            detail: None,
         });
         // `Outcome` rather than `Info` deliberately: a rung can be crossed
         // mid-fight, and `MessageLog::retain_outcomes_since_battle` prunes

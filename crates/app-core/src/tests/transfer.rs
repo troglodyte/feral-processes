@@ -119,23 +119,23 @@ fn c_with_nothing_on_either_side_opens_no_window() {
     );
 }
 
-/// **Left puts in and Right takes out**, which is the opposite of every
-/// other Left/Right in the game and is deliberate — see `handle_basket_key`.
-/// This test is the pin: a later hand reading the arena row editor or the
-/// manifest pager and "restoring consistency" here fails it.
+/// **Left takes out and Right puts in**, which is the arrow moving stock in
+/// the direction of the column it heads for: the screen is a table reading
+/// `change | you | container`, so Left pulls off the container toward you and
+/// Right pushes from you into it. This test is the pin.
 #[test]
-fn left_puts_in_and_right_takes_out() {
+fn left_takes_out_and_right_puts_in() {
     let mut app = depot_picker(973, 100, &[(ITEM, 5)]);
     let row = row_of(&app, ITEM);
     app.menu_selected = row;
 
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[row], 1, "Left takes off the shelf");
     app.handle_key(GameKey::Right);
-    assert_eq!(app.basket_amounts[row], 1, "Right takes off the shelf");
-    app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Right);
     assert_eq!(
         app.basket_amounts[row], -1,
-        "Left walks back through zero and puts into the Depot"
+        "Right walks back through zero and puts into the Depot"
     );
 }
 
@@ -145,11 +145,11 @@ fn the_arrows_saturate_at_both_ends() {
     let mut app = picker_with_shelf(974, 2);
 
     for _ in 0..4 {
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Left);
     }
     assert_eq!(amounts(&app), vec![2], "nothing more is on the shelf");
     for _ in 0..6 {
-        app.handle_key(GameKey::Left);
+        app.handle_key(GameKey::Right);
     }
     assert_eq!(amounts(&app), vec![0], "and nothing in the pack to put in");
 }
@@ -164,14 +164,14 @@ fn shift_is_a_target_and_ctrl_is_a_step_that_terminates() {
     let row = row_of(&app, "power_cell");
     app.menu_selected = row;
 
-    app.handle_key(GameKey::ShiftRight);
+    app.handle_key(GameKey::ShiftLeft);
     assert_eq!(app.basket_amounts[row], 0, "nothing of it on the shelf");
-    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::ShiftRight);
     assert_eq!(app.basket_amounts[row], -1, "the Depot has room for one");
-    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::ShiftRight);
     assert_eq!(app.basket_amounts[row], -1, "and a target is idempotent");
 
-    app.handle_key(GameKey::CtrlRight);
+    app.handle_key(GameKey::CtrlLeft);
     assert_eq!(
         app.basket_amounts[row], 0,
         "a gap of one closes rather than stranding the last unit"
@@ -181,11 +181,11 @@ fn shift_is_a_target_and_ctrl_is_a_step_that_terminates() {
     // On 8 the ceiling and the floor agree on every step but the final one,
     // so a step rounded down sticks at 7 forever.
     for expected in [4, 6, 7, 8, 8] {
-        app.handle_key(GameKey::CtrlRight);
+        app.handle_key(GameKey::CtrlLeft);
         assert_eq!(amounts(&app), vec![expected]);
     }
     for expected in [4, 2, 1, 0, 0] {
-        app.handle_key(GameKey::CtrlLeft);
+        app.handle_key(GameKey::CtrlRight);
         assert_eq!(amounts(&app), vec![expected]);
     }
 }
@@ -202,7 +202,7 @@ fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
 
     assert_eq!(app.put_available(first), 3, "the Depot's whole room");
     app.menu_selected = first;
-    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::ShiftRight);
     assert_eq!(app.basket_amounts[first], -3);
 
     assert_eq!(app.put_available(second), 0, "the room is spent");
@@ -211,7 +211,7 @@ fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
         3,
         "the row being edited does not spend its own budget"
     );
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Left);
     assert_eq!(app.basket_amounts[first], -2, "so it can be lowered again");
 }
 
@@ -229,7 +229,7 @@ fn a_full_depot_closes_every_put_and_touches_no_take() {
     assert_eq!(app.put_available(pack), 0);
 
     app.menu_selected = shelf;
-    app.handle_key(GameKey::ShiftRight);
+    app.handle_key(GameKey::ShiftLeft);
     assert_eq!(app.basket_amounts[shelf], 200, "take everything on it");
     assert_eq!(
         app.put_available(pack),
@@ -261,10 +261,10 @@ fn digits_type_into_the_rows_current_sign() {
     app.handle_key(GameKey::Char('3'));
     assert_eq!(app.basket_amounts[row], 3, "a row at zero types a take");
 
-    app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Left);
-    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
     assert_eq!(app.basket_amounts[row], -1);
     app.handle_key(GameKey::Char('2'));
     assert_eq!(app.basket_amounts[row], -12, "and keeps the sign it is in");
@@ -307,7 +307,7 @@ fn take_everything_overwrites_a_pending_give() {
     let pack = row_of(&app, "power_cell");
     let shelf = row_of(&app, ITEM);
     app.menu_selected = pack;
-    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::ShiftRight);
     assert!(app.basket_amounts[pack] < 0, "a give is pending");
 
     app.handle_key(GameKey::Char('A'));
@@ -362,7 +362,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     app.menu_selected = shelf;
     app.handle_key(GameKey::Char('4'));
     app.menu_selected = pack;
-    app.handle_key(GameKey::ShiftLeft);
+    app.handle_key(GameKey::ShiftRight);
     app.handle_key(GameKey::Enter);
 
     assert_eq!(app.mode, Mode::Playing);

@@ -22,16 +22,30 @@ impl Game {
     /// Queues the notification `id` names, to take the screen the next time
     /// the player is standing on the map.
     ///
+    /// A thin call onto `notify_with_detail` with no detail — every firing
+    /// site but `Game::complete_contract` has nothing dynamic to say.
+    pub fn notify(&mut self, id: &NotificationId) -> Result<(), NoNotify> {
+        self.notify_with_detail(id, None)
+    }
+
+    /// `notify`, with a figure the `.ron` file could not have authored —
+    /// `Game::complete_contract`'s payout is the one caller today.
+    ///
     /// The **one door**. It resolves the def, checks the latch and pushes a
     /// *resolved* value; it draws no RNG and writes no log line. A caller
     /// fires it unconditionally at its site — the once-only rule is
     /// `Repeat::OnceEver` and lives here, so a second `if first_time` check
     /// in Rust would put the policy in two places and let the two disagree.
-    pub fn notify(&mut self, id: &NotificationId) -> Result<(), NoNotify> {
+    pub fn notify_with_detail(
+        &mut self,
+        id: &NotificationId,
+        detail: Option<String>,
+    ) -> Result<(), NoNotify> {
         let Some(def) = self.world.resource::<NotificationDb>().get(id) else {
             return Err(NoNotify::Unknown);
         };
-        let notification = Notification::from(def);
+        let mut notification = Notification::from(def);
+        notification.detail = detail;
         let repeat = def.repeat;
         if repeat == Repeat::OnceEver {
             if !self.world.resource_mut::<Profile>().see(id) {

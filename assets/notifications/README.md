@@ -59,6 +59,16 @@ There is deliberately no once-per-*run* policy. Its latch would have to live
 in memory, so it would really mean once per *session* and fire again after a
 reload — a name that lies is worse than a missing policy.
 
+## A fired notification can carry one more line than the file does
+
+What a screen draws is `Notification`, not `NotificationDef` — the resolved
+value the queue holds, built from your file at the moment it fires. Most
+fields are copied straight across, but a firing site may attach a `detail`
+line the `.ron` file has no way to author: a figure only the engine knows at
+that moment, such as `Game::complete_contract` naming what a contract just
+paid. There is no `detail:` field to set here, and there never will be — it
+is a parameter to the door (`Game::notify_with_detail`), not content.
+
 ## Achievements do not belong here
 
 An achievement earned already raises a notification, built from that

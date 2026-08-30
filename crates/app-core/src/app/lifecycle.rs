@@ -37,6 +37,7 @@ impl App {
             status_line: profile_warning,
             log_filter: LogFilter::default(),
             info_tab: InfoTab::default(),
+            last_in_base: false,
             history_written: false,
             assets_dir,
             saves_dir,
@@ -365,6 +366,9 @@ impl App {
     /// new game by `grant_profile_rewards`. One guard covers both precisely
     /// because this function is the one place they happen.
     pub(crate) fn after_tick(&mut self) {
+        // Deliberately above the arena guard too: this is UI bookkeeping,
+        // not a disk write, so an arena fight is not a reason to skip it.
+        self.sync_info_tab_to_locale(false);
         // **Deliberately above the guard, and the exception is the point.**
         // The rule below exists so a tester's fight cannot corrupt a save or
         // pay a real profile reward; a dev-only file under `dev-logs/` does
@@ -430,6 +434,42 @@ impl App {
             game.enable_battle_telemetry();
         }
         self.game = Some(game);
+        // Forced: a fresh or just-loaded run has no prior side to compare
+        // against, so it must open on the true tab rather than wait for a
+        // crossing that, from this run's point of view, already happened
+        // before it existed.
+        self.sync_info_tab_to_locale(true);
+    }
+
+    /// Keeps `info_tab` in step with which side of the base boundary the
+    /// party is on: CREW outside, BASE inside — the surface and the Stack
+    /// read as the same "outside" here, matching `Game::in_base`.
+    ///
+    /// One writer for the whole tab, `Game::attention`'s reason: `after_tick`
+    /// calls this with `force: false` on every tick, so walking out, walking
+    /// back in, and a zone breach — which changes the locale without any
+    /// locale-specific verb of its own — all reach it through the one hook
+    /// that already runs after anything able to move the party, rather than
+    /// each verb setting the tab itself.
+    ///
+    /// `force` is why `install_game` shares this function instead of
+    /// duplicating the "which tab does this state want" mapping: it writes
+    /// unconditionally, where the tick path only writes on an actual change
+    /// of side. That difference is also what leaves a manual `1`/`2`/`3`/`4`
+    /// press alone — those keys `return` before `after_tick` is ever
+    /// reached, and this only overwrites `info_tab` when `last_in_base`
+    /// disagrees with where the party now stands.
+    pub(crate) fn sync_info_tab_to_locale(&mut self, force: bool) {
+        let Some(game) = &self.game else { return };
+        let in_base = game.in_base();
+        if force || in_base != self.last_in_base {
+            self.info_tab = if in_base {
+                InfoTab::Base
+            } else {
+                InfoTab::Crew
+            };
+        }
+        self.last_in_base = in_base;
     }
 
     /// Appends everything the engine recorded since the last tick, one JSON

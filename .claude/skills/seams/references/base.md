@@ -238,12 +238,32 @@
   item on a *shelf* is still a real take row), must close entirely without a
   `stores` neighbour, and reads `Inventory` — the plain-copy store — so a
   rare copy is never cargo.
-- **On the picker screen Left puts in and Right takes out** — the one
-  inverted Left/Right in the game, asked for after collect shipped the
-  conventional way. It reads as a slip, so the hint line names both arrows
-  and `left_puts_in_and_right_takes_out` says the inversion is the
-  specification. `[A]` writes the take ceiling over **every** row, clearing a
-  pending give: that is what "take everything" means on one axis.
+- **On the picker screen an arrow moves stock toward the column it points
+  at.** The screen is a table reading `item | change | you | container`, so
+  Left pulls off the container toward you (a take, **positive**) and Right
+  pushes from you into it (a put, **negative**). The **sign convention is
+  untouched** by that — only which arrow reaches which end — so nothing below
+  `handle_basket_key` knows the arrows moved, and
+  `left_takes_out_and_right_puts_in` is the pin. This replaced an inversion
+  that was specified and still read as a slip; the caravan's key table used to
+  cite the old test by name to say it was *not* following it. `[A]` writes the
+  take ceiling over **every** row, clearing a pending give: that is what "take
+  everything" means on one axis.
+- **The picker's figures are padded into the row's own label, not ridden in
+  the suffix column, and the header is why.** `suffix_x` places a suffix one
+  `m.inset` — a *pixel* gap — past the label's advance, and a column header
+  cannot be a `Row::Item` (`popup_layout` splits the body at the first item
+  row, so a header built as one scrolls away). A `Row::Text` header is drawn
+  flat at `x + m.pad` and no string reproduces a 7.5px offset in monospace
+  cells, so every gap on this screen is a whole number of cells instead.
+  **The second half is the lead**: `draw_row` opens an item label with `"  "`
+  and a text row with nothing, so a header padded from the same widths sits
+  two cells left of its own table and reads as the *figures* being crooked.
+  `Columns::header` carries `HEADER_LEAD` itself, and
+  `the_header_sits_over_the_columns_it_names` measures both sets of column
+  boundaries rather than comparing strings. `no_transfer_row_overflows_its_popup`
+  is still the census that stops an over-wide row being drawn off the panel in
+  silence, and it measures the header too.
 - **A modifier is four `GameKey` variants, and the picker is the only screen
   that sees one.** `ShiftLeft`/`ShiftRight` is a **target** (an end of the
   row, idempotent under key repeat); `CtrlLeft`/`CtrlRight` is a **step**

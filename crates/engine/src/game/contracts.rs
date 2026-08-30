@@ -122,9 +122,6 @@ impl Game {
             MessageKind::Outcome,
             format!("CONTRACT COMPLETE: {}", contract.def.name),
         );
-        let _ = self.notify(&crate::notifications::NotificationId::from(
-            "milestone_contract",
-        ));
 
         for reward in &contract.def.reward {
             match *reward {
@@ -151,6 +148,16 @@ impl Game {
         self.log_kind(
             MessageKind::Loot,
             format!("{} paid {paid}.", contract.def.name),
+        );
+        // Below the reward loop rather than above it, so the alert screen
+        // can quote the same figure the `Loot` line just logged. Moving it
+        // does not reopen double-payment: the contract already left
+        // `ActiveContracts` at the top of this function, which is the half
+        // of "drop before pay" that makes a second settle unexpressible —
+        // this notify never touches `ActiveContracts` at all.
+        let _ = self.notify_with_detail(
+            &crate::notifications::NotificationId::from("milestone_contract"),
+            Some(paid),
         );
     }
 

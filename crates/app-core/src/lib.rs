@@ -1538,8 +1538,18 @@ pub struct App {
     /// Which of the log's two channels the map's pane shows. Cycled with `F`;
     /// see `LogFilter`.
     pub log_filter: LogFilter,
-    /// Which pane of the HUD's info column is open — see [`InfoTab`].
+    /// Which pane of the HUD's info column is open — see [`InfoTab`]. Kept
+    /// in step with the base boundary by `App::sync_info_tab_to_locale`,
+    /// which a manual `1`/`2`/`3`/`4` press overrides until the next
+    /// crossing.
     pub info_tab: InfoTab,
+    /// Which side of the base boundary `info_tab` was last synced
+    /// against — `true` for base space, `false` for everywhere else
+    /// (surface and the Stack read the same here; see `Game::in_base`).
+    /// UI bookkeeping only, exactly as [`InfoTab`] is: not saved, and it
+    /// exists solely so `sync_info_tab_to_locale` can tell an actual
+    /// crossing from staying put.
+    last_in_base: bool,
     /// The first program picked in `Mode::Fuse`, awaiting a second from
     /// `Mode::FuseSecond` before `Game::fuse_companions` is actually called.
     pub pending_fuse_first: Option<Entity>,

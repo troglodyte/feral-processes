@@ -27,6 +27,95 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.57
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32;
+`PlayerSave::tutorial_seeded` is additive behind `#[serde(default)]`, which
+is exactly what field-named RON retired migrations for. A run in progress
+when this lands is never told to build a Home it built forty hours ago —
+the whole chain is filed as finished at load.
+
+Onboarding is a **chain of contracts** now: eleven missions, one live at a
+time, handed to the player rather than offered, drawn green, and suppressing
+the ordinary board until the last one is done.
+
+- **The first hour was discoverable and none of it was offered.** A new run
+  dropped you on a surface with five Core Fragments and no instruction.
+  Everything it asks of you — raise a Home, examine a thing, decompile a
+  program, stand up a Broker, work the transfer screen, queue a standing
+  order, spend a perk point — you had to find. The `starter: true` queue was
+  the first attempt and was not enough: it biased a board draw, it needed a
+  Contract Broker you had not built, and it said nothing about order.
+
+- **A tutorial mission is an ordinary contract.** `ContractDef` gains
+  `tutorial: Option<u32>` — a *step*, spaced 10 apart so inserting one later
+  renumbers nothing. Nothing downstream can tell one from a contract you
+  signed for: the ordinary `contract_system` advances it and the ordinary
+  `complete_contract` settles it. `ContractDb::tutorial_chain` is the one
+  derivation of what the chain is, and the run's position in it is **the
+  first mission not in `contracts_done`** — no cursor, no index, nothing
+  that can disagree with the save about where you are.
+
+- **`Game::ensure_tutorial_held` is the one writer**, and it bypasses
+  `accept_contract` entirely. Three things follow as *omissions rather than
+  checks*, which is the point of routing it that way: `MAX_ACTIVE_CONTRACTS`
+  never sees it, so the cap keeps meaning what it meant; `broker_reach`
+  never sees it, which is what lets the first five missions exist before a
+  Broker does; and `offerable` never sees it, so no `min_zone` holds the
+  chain up. It cannot be given back — an unbreakable chain with a give-back
+  key is not a chain — and `[A]` refuses with a sentence on both the popup
+  and the log rather than doing nothing.
+
+- **Two new objectives, and six new verbs behind one of them.**
+  `Objective::Hold` is *have this many in your pack at once*: state-shaped,
+  latched, no Broker, and met four frames down — which is what lets the
+  chain teach that fighting pays in stock before a Contract Broker is
+  standing. `Objective::Perform { deed }` carries all six new verbs over a
+  closed `Deed` enum, because a deed is an engine event a mod cannot emit,
+  so a string would buy openness onto nothing while costing a mission that
+  names a deed that does not exist and never finishes.
+
+- **`already_met` takes one `ObjectiveState` instead of three positional
+  arguments.** It has two readers that must not drift, so every objective
+  added used to cost a signature change at both; the next one costs a field.
+  The board still asks it at depth 0 with an empty pack, deliberately: the
+  board is *the sector's*, and answered from where the party is standing a
+  `Descend(1)` would drop out of the pool the moment you went one frame
+  down — and since the draw uses `swap_remove`, a pool one entry shorter
+  reshuffles every slot. A board that changed as you walked.
+
+- **The first decompile cannot fail.** A run of bad rolls would end
+  onboarding permanently, which is the one thing an unbreakable chain must
+  not do. The catalyst is still spent — the lesson that decompiling is
+  priced in catalysts is the half that stays — and the branch reads the live
+  mission's *objective* rather than a flag, so it is content-driven and
+  disarms itself the moment the chain moves on.
+
+- **Every mission opens with a full-screen briefing** carrying the
+  contract's own name, objective and description, and pointing at `[4]`.
+  One templated `assets/notifications/onboarding_mission.ron` filled at fire
+  time rather than eleven files repeating what the contract already says, so
+  a twelfth mission still costs one asset file and no Rust.
+  `Game::notify_filled` and `Game::notify_with_detail` are both thin calls
+  onto one private `queue_notification`, so the latch and the resolved push
+  still live in exactly one place.
+
+- **A contract's description ran off the popup.** The screen pushed it
+  unwrapped while every other prose surface in `render/` goes through
+  `description_rows`, and the width census measured only the row above it —
+  which is how eleven descriptions several times longer than any other
+  contract's shipped against a green suite. `contract_rows` is split out of
+  `draw_contracts` so the census now measures what the screen emits rather
+  than what the helper would have returned.
+
+- **Three censuses keep the chain finishable.** A mission you cannot finish
+  ends onboarding for the rest of the run with no key to press, so the
+  shipped set is held to: build costs never outrun payouts, every `Deed` has
+  a `note_deed` caller outside the tests, and every id a mission names
+  resolves. A fourth holds the briefing to the screen it is drawn on, filled
+  — the plain height census would be measuring `{description}`, seventeen
+  characters where a paragraph goes.
+
 ## 0.13.56
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

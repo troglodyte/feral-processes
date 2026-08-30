@@ -48,10 +48,18 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
 
     let title_h = painter.measure_ui(&note.title, title_size).height;
     let body_h = lines.len() as f32 * m.line_height;
+    // Zero for the common case of no detail, so the block this screen
+    // centres around does not grow for a notification that has nothing to
+    // report — `Game::complete_contract` is the one caller that ever sets
+    // it.
+    let detail_h = note
+        .detail
+        .as_deref()
+        .map_or(0.0, |d| m.gap + painter.measure_ui(d, body_size).height);
     let hint = "Press any key to continue";
     let hint_h = painter.measure_ui(hint, m.small()).height;
 
-    let block = art_size + m.gap + title_h + m.gap + body_h + m.gap * 2.0 + hint_h;
+    let block = art_size + m.gap + title_h + m.gap + body_h + detail_h + m.gap * 2.0 + hint_h;
     let mut y = ((h - block) / 2.0).max(m.pad);
 
     // A sprite fills its square from a **top-left**; a glyph is drawn from a
@@ -95,6 +103,16 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
         y += m.line_height;
         painter.ui(line, left, y, body_size, super::TEXT);
     }
+
+    // The notification's own colour, not the body's `TEXT`: this is the
+    // payout, meant to read as a figure rather than as more prose — the
+    // reason it is a separate line under the body rather than folded into
+    // it.
+    if let Some(detail) = &note.detail {
+        y += m.gap + painter.measure_ui(detail, body_size).height;
+        let detail_w = painter.measure_ui(detail, body_size).width;
+        painter.ui(detail, (w - detail_w) / 2.0, y, body_size, color);
+    }
     y += m.gap * 2.0 + hint_h;
 
     let hint_w = painter.measure_ui(hint, m.small()).width;
@@ -124,6 +142,23 @@ mod tests {
     use super::*;
     use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::notifications::{NotificationDb, NotificationId};
+    use feral_processes_engine::{DifficultyMode, Game};
+
+    /// The longest payout a shipped contract can state, for the height
+    /// census's worst case. Built from the real `assets/contracts/` through
+    /// `Game::contract_catalogue`, which already words every def **and**
+    /// every template at its widest pool — never a hand-picked string, since
+    /// a `detail` is drawn from live game state and this crate has no wording
+    /// of its own for one (`Game::reward_line`'s rule).
+    fn widest_contract_payout() -> String {
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let game = Game::new(41, DifficultyMode::Forgiving, &assets).expect("shipped assets");
+        game.contract_catalogue()
+            .into_iter()
+            .map(|row| row.reward_line)
+            .max_by_key(|line| line.chars().count())
+            .expect("the shipped assets define contracts")
+    }
 
     fn shipped() -> NotificationDb {
         let dir =
@@ -149,9 +184,24 @@ mod tests {
     /// **The screen has no scroll.** A row past the bottom edge is dropped in
     /// silence, so what says the shipped catalogue fits is this, at the
     /// smallest window the game is built for.
+    ///
+    /// A shipped `NotificationDef` carries no `detail` — it is a parameter a
+    /// firing site supplies, not a `.ron` field — so this census is blind to
+    /// it unless the worst case is added by hand. Every def is checked as
+    /// though it were the one that got a detail, at the longest payout the
+    /// shipped `assets/contracts/` can ever word, which is the honest bound:
+    /// today only `milestone_contract` fires with one, but nothing stops a
+    /// future site pairing a long body with a long detail, and the constraint
+    /// this test exists to hold is on the *screen*, not on which id does it
+    /// first.
     #[test]
     fn the_tallest_shipped_notification_fits_its_screen() {
         let m = crate::text::ui_metrics(720.0);
+        let detail = widest_contract_payout();
+        assert!(
+            !detail.is_empty(),
+            "the census measured no payout — the shipped contracts have to reach here"
+        );
         crate::paint::with_painter(|p| {
             // `with_painter` opens at 1440x900; the height under test is the
             // 720 the metrics were taken at, which is the tighter case.
@@ -159,6 +209,11 @@ mod tests {
             let w = 1280.0;
             let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
                 .floor() as usize;
+            let detail_h = m.gap + p.measure_ui(&detail, m.font_size).height;
+            assert!(
+                detail_h > m.gap,
+                "the detail census measured nothing — {detail:?} has no height"
+            );
             for def in shipped().iter() {
                 let lines = wrapped_body(&def.body, columns.max(20));
                 let title_h = p.measure_ui(&def.title, m.title() + 6).height;
@@ -168,12 +223,14 @@ mod tests {
                     + title_h
                     + m.gap
                     + lines.len() as f32 * m.line_height
+                    + detail_h
                     + m.gap * 2.0
                     + hint_h;
                 assert!(
                     block + 2.0 * m.pad < h,
-                    "{} is {block}px of notification in a {h}px window ({} lines) — this \
-                     screen has no scroll, so give it one or cut the body",
+                    "{} is {block}px of notification (with the widest shipped contract \
+                     payout as its detail) in a {h}px window ({} lines) — this screen has \
+                     no scroll, so give it one or cut the body",
                     def.id,
                     lines.len()
                 );
@@ -219,6 +276,7 @@ mod tests {
             sprite: Some("notify_art".into()),
             glyph: '>',
             color: GlyphColor::Cyan,
+            detail: None,
         }
     }
 
@@ -253,6 +311,44 @@ mod tests {
         assert!(
             glyphs.iter().any(|g| g == ">"),
             "the glyph is what a missing sprite falls back to: {glyphs:?}"
+        );
+    }
+
+    /// A contract's payout goes on the alert screen, not just the log — it
+    /// is drawn in the notification's own colour rather than the body's
+    /// `TEXT`, so it reads as a figure and not as more prose.
+    #[test]
+    fn a_detail_is_drawn_in_the_notifications_own_colour() {
+        let mut note = note();
+        note.detail = Some("40 Credits, 25 XP".into());
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_sprites(crate::paint::SpriteTable::default(), |p| {
+            draw_notification(&note, p, &m)
+        });
+
+        let runs = crate::paint::painted_runs_in(&shapes, glyph_color(note.color), false);
+        assert!(
+            runs.iter().any(|r| r.contains("40 Credits, 25 XP")),
+            "the payout must be drawn in the notification's own colour: {runs:?}"
+        );
+    }
+
+    /// No detail draws no extra line at all — the common case, and every
+    /// notification but a completed contract's.
+    #[test]
+    fn no_detail_draws_no_extra_line() {
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_sprites(crate::paint::SpriteTable::default(), |p| {
+            draw_notification(&note(), p, &m)
+        });
+
+        let texts = crate::paint::painted_text(&shapes);
+        // The glyph, the title, the body ("B") and the hint are the only
+        // text this fixture draws with no detail set.
+        assert_eq!(
+            texts,
+            vec![">", "T", "B", "Press any key to continue"],
+            "an absent detail must draw nothing beyond the glyph, title, body and hint"
         );
     }
 

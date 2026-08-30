@@ -48,6 +48,25 @@ fn always_queues_every_time_and_once_ever_queues_once() {
     assert_eq!(game.notifications_pending(), 1);
 }
 
+/// Only `Game::complete_contract` has a figure worth attaching to the
+/// screen. The other two firing sites (`enter_next_zone`, `descend_to`) go
+/// through the plain door and must keep queuing `detail: None`.
+#[test]
+fn firing_without_a_detail_leaves_it_none() {
+    let mut game = fresh();
+    drain(&mut game);
+
+    game.notify(&nid("milestone_breach")).unwrap();
+    let breach = game.take_notification().expect("queued");
+    assert_eq!(breach.detail, None);
+
+    descend(&mut game);
+    let descent = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "The Stack")
+        .expect("descending fires the Stack tutorial");
+    assert_eq!(descent.detail, None);
+}
+
 /// The queue is FIFO and hands back the *resolved* def, so what the screen
 /// draws cannot depend on the catalogue still being on disk.
 #[test]

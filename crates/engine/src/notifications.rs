@@ -127,6 +127,14 @@ pub struct Notification {
     pub sprite: Option<String>,
     pub glyph: char,
     pub color: GlyphColor,
+    /// A figure the firing site knows and no `.ron` file can: a contract's
+    /// payout, worded through the same `Game::reward_line` the log line
+    /// uses. **Not a field on `NotificationDef`** — the catalogue is
+    /// authored prose and this is drawn from live game state at the moment
+    /// the notification fires, so it is a parameter to the door
+    /// (`Game::notify_with_detail`) rather than something a `.ron` file
+    /// could ever supply. `None` for every site that has nothing to add.
+    pub detail: Option<String>,
 }
 
 impl From<&NotificationDef> for Notification {
@@ -137,6 +145,7 @@ impl From<&NotificationDef> for Notification {
             sprite: def.sprite.clone(),
             glyph: def.glyph,
             color: def.color,
+            detail: None,
         }
     }
 }

@@ -861,6 +861,46 @@ fn a_finished_contract_does_not_pay_twice() {
     assert_eq!(carried(&game, "credits"), before + 40);
 }
 
+/// The alert screen is what takes over the display, and it used to say only
+/// that the Broker "pays out" without ever saying what. The notification's
+/// `detail` must name the same figures the `Loot` log line does — asserted
+/// against that line's own wording, so a formula that drifts between the two
+/// call sites fails here rather than reading as two different bugs later.
+#[test]
+fn completing_a_contract_puts_the_payout_on_the_notification_and_it_matches_the_log() {
+    let mut game = fresh();
+    give_finished(
+        &mut game,
+        "paid_notice",
+        vec![Reward::Credits(40), Reward::Xp(25)],
+    );
+    game.tick();
+
+    let paid_line = game
+        .message_log(20)
+        .into_iter()
+        .find(|l| {
+            l.kind == crate::resources::MessageKind::Loot && l.text.contains("paid_notice paid")
+        })
+        .expect("complete_contract logs a Loot line naming the payout");
+    let paid = paid_line
+        .text
+        .strip_prefix("Contract paid_notice paid ")
+        .and_then(|s| s.strip_suffix('.'))
+        .unwrap_or_else(|| panic!("unexpected payout line: {}", paid_line.text))
+        .to_string();
+    assert!(!paid.is_empty());
+
+    let notice = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Contract Closed")
+        .expect("completing a contract fires milestone_contract");
+    assert_eq!(
+        notice.detail.as_deref(),
+        Some(paid.as_str()),
+        "the alert screen must quote the same wording as the log line"
+    );
+}
+
 #[test]
 fn a_gear_reward_is_always_ordinary() {
     let mut game = fresh();

@@ -1164,7 +1164,48 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);
+    // The Broker fixtures are all about the *board*, and a run still running
+    // the onboarding chain has an empty one by design.
+    skip_tutorial(&mut app);
     app
+}
+
+/// Files every onboarding mission as finished, so the ordinary contract
+/// board is live and nothing is in hand the player did not sign for.
+///
+/// A save round trip rather than a call into the engine: the engine's own
+/// `skip_tutorial` is a `#[cfg(test)]` helper of that crate and unreachable
+/// from here, and `contracts_done` is what the chain's position is derived
+/// from — so writing it is the same thing the engine's helper does, through
+/// the one public door app-core has for editing a run.
+///
+/// Which ids belong to the chain is read off `ContractRow::tutorial`, which
+/// is exactly what the screen colours on.
+pub(crate) fn skip_tutorial(app: &mut App) {
+    let path = scratch_path("skip_tutorial", 0);
+    let game = app.game.as_mut().unwrap();
+    let ids: Vec<_> = game
+        .contract_catalogue()
+        .into_iter()
+        .filter(|row| row.tutorial)
+        .map(|row| row.id)
+        .collect();
+    assert!(
+        !ids.is_empty(),
+        "the shipped chain is what this skips; an empty one means it is not \
+         reaching the catalogue"
+    );
+    game.save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.contracts.retain(|held| held.def.tutorial.is_none());
+    for id in ids {
+        if !data.contracts_done.contains(&id) {
+            data.contracts_done.push(id);
+        }
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
 }
 
 /// Takes the party out of the base entirely, without walking there.

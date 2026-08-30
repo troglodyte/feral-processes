@@ -338,8 +338,14 @@ use crate::contracts::ContractDef;
 use crate::resources::{ActiveContract, ActiveContracts};
 use crate::*;
 
+/// A run with onboarding already behind it, which is what every test in
+/// this file below the chain's own section is about. A new run holds the
+/// chain's first mission and has an empty board by design, so a test about
+/// the board or about the cap has to start from here.
 fn fresh() -> Game {
-    Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    skip_tutorial(&mut game);
+    game
 }
 
 /// A def built by hand rather than looked up, so a retune of the shipped set
@@ -371,10 +377,14 @@ fn give(game: &mut Game, def: ContractDef, progress: u32) {
 }
 
 #[test]
-fn a_new_game_holds_no_contracts() {
-    let game = fresh();
+fn a_new_game_holds_nothing_it_did_not_sign_for() {
+    // Not `fresh` — this is about what `Game::new` itself produces. A new
+    // run holds exactly one thing, the chain's first onboarding mission, and
+    // has signed for nothing.
+    let game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let held = game.world.resource::<ActiveContracts>();
-    assert!(held.active.is_empty());
+    assert_eq!(held.active.len(), 1);
+    assert!(held.active[0].def.tutorial.is_some());
     assert!(held.done.is_empty());
 }
 
@@ -435,12 +445,21 @@ fn active_contracts_survive_a_save_and_load() {
         held.active, before,
         "progress, accepted_tick and the whole resolved def all travel"
     );
-    assert_eq!(held.done, vec![ContractId::from("already_finished")]);
+    // `fresh` files the onboarding chain as finished, so `done` carries it
+    // too — what this is about is the one id the test put there.
+    assert_eq!(
+        held.done.last(),
+        Some(&ContractId::from("already_finished"))
+    );
 }
 
 #[test]
 fn a_save_written_before_contracts_existed_still_loads() {
-    let mut game = fresh();
+    // An install with no chain, so both fields serialise to a single `[]`
+    // line each and the strip below is a line filter rather than a parser.
+    let dir = scratch_assets_dir("legacy_contracts_save");
+    copy_shipped_assets(&dir, &[]);
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     let path =
         std::env::temp_dir().join(format!("feral_contracts_legacy_{}.bin", std::process::id()));
     game.save(&path).unwrap();
@@ -464,7 +483,7 @@ fn a_save_written_before_contracts_existed_still_loads() {
     );
     std::fs::write(&path, stripped).unwrap();
 
-    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let loaded = Game::load(&path, &dir).unwrap();
     let _ = std::fs::remove_file(&path);
     let held = loaded.world.resource::<ActiveContracts>();
     assert!(held.active.is_empty());
@@ -850,7 +869,7 @@ fn a_finished_contract_pays_each_reward_once_and_is_filed_as_done() {
 
     let held = game.world.resource::<ActiveContracts>();
     assert!(held.active.is_empty(), "a finished contract is not held");
-    assert_eq!(held.done, vec![ContractId::from("paid")]);
+    assert_eq!(held.done.last(), Some(&ContractId::from("paid")));
 }
 
 #[test]
@@ -2998,9 +3017,31 @@ fn an_onboarding_missions_row_is_flagged() {
 /// handed out and nothing is flagged.
 #[test]
 fn an_install_with_no_chain_hands_out_nothing() {
+    // The shipped contracts with the eleven missions deleted — the claim is
+    // that removing the chain gives the pre-chain game back, ordinary
+    // contracts and open board included, and a directory with no contracts
+    // at all could not say that.
     let dir = scratch_assets_dir("chain_absent");
     copy_shipped_assets(&dir, &[]);
-    let game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    let shipped = test_assets_dir().join("contracts");
+    let mut copied = 0;
+    for entry in std::fs::read_dir(&shipped).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        if path.is_dir() || name.starts_with("tutorial_") {
+            continue;
+        }
+        std::fs::copy(&path, contracts.join(&name)).unwrap();
+        copied += 1;
+    }
+    assert!(
+        copied > 0,
+        "the install has to have ordinary contracts in it"
+    );
+
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &dir).unwrap();
     assert!(!game.in_tutorial());
     assert_eq!(
         game.active_contracts()
@@ -3008,6 +3049,14 @@ fn an_install_with_no_chain_hands_out_nothing() {
             .filter(|r| r.tutorial)
             .count(),
         0
+    );
+    deploy_broker(&mut game);
+    assert!(
+        !game
+            .contract_board()
+            .expect("a Broker is standing")
+            .is_empty(),
+        "and the ordinary board is open, which is the pre-chain game"
     );
 }
 

@@ -12,10 +12,32 @@ fn base_labels(app: &mut App) -> Vec<&'static str> {
 #[test]
 fn the_row_is_hidden_with_no_broker_and_nothing_in_hand() {
     let mut app = test_app(3101);
+    // Past onboarding: a run still running the chain always has a mission in
+    // hand, which is the case the test below covers.
+    skip_tutorial(&mut app);
     assert!(
         !base_labels(&mut app).contains(&"Contracts"),
         "a row that opens an empty screen is what `group_rows` exists to stop"
     );
+}
+
+/// The other half, and new with the onboarding chain: a fresh run holds its
+/// first mission before it has built anything, so the row is there from the
+/// first keypress. Without it the chain is handed out somewhere the player
+/// has no way to reach.
+#[test]
+fn the_row_is_shown_from_the_first_tick_by_the_onboarding_mission() {
+    let mut app = test_app(3122);
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .active_contracts()
+            .iter()
+            .any(|row| row.tutorial),
+        "a new run holds the chain's first mission"
+    );
+    assert!(base_labels(&mut app).contains(&"Contracts"));
 }
 
 #[test]

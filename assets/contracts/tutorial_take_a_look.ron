@@ -1,0 +1,8 @@
+(
+    id: "tutorial_take_a_look",
+    name: "Take a Look",
+    description: "Guessing at what is standing in front of you is how a run ends early. Press [x] and pick a direction to read whatever is out there.",
+    objective: Perform(deed: Examined),
+    reward: [Credits(10), Xp(30)],
+    tutorial: Some(20),
+)

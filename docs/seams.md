@@ -1787,10 +1787,53 @@ involved is the one deliberately kept quiet.
 of what a face is. It is the half of `NoPost::BoxedIn` that does not depend
 on who is asking — `from` ranks a target's faces and never adds or removes
 one — which is why it can be answered before the bodies are counted, and it
-costs four grid lookups rather than a walk. `NoPost::NoRoute` stays below the
-cut where it was: a site with a face and no route is the player's errand and
-says so once, so it is visible when it starves something, which a silent
-refusal never is.
+costs four grid lookups rather than a walk.
+
+**`NoPost::NoRoute` was left below the cut and had to follow it up**, which
+is the correction this entry carries. The argument for leaving it was that a
+cut-off site announces itself, so it would be *visible* when it starved
+something. It is not: the sentence names one cell, the starvation is a crew
+standing idle with a plan on the wall, and nothing joins the two. And the
+starvation is the same shape as the boxed-in one, because a run of cells
+sharing one sealed pocket — entropy takes a corridor back, or the plan is
+drawn past `haul_walk_radius` — sorts first in tile order exactly as an
+interior does, `continue`s without costing a body when its turn comes, and
+leaves the reachable rim below the cut. A save was reproduced in that state
+on 2026-08-29 with four sealed marks and one reachable wall: four idle
+programs and not a swing taken.
+
+So both refusals are now answered above the truncation, in the block that
+was already dropping unreachable *build* requests, and the two kinds share
+it. `can_walk_to_dig` is gone with them — with the announcement moved out of
+it, it was `can_walk_to_post` under another name, and the assignment loop
+now asks one question of both kinds and skips silently either way.
+`post_reach` stays the authority *at the posting*, so a want the filter
+keeps and this body cannot reach still simply goes to nobody this tick.
+
+**The cost is why this is one field per body rather than one walk per
+want.** `post_route` builds a Dijkstra field per face, and a plan is
+routinely a hundred cells: asked per site, that is a hundred walks a tick
+for as long as the plan stands — which, after this fix, is until the player
+digs through to it, so the hitch would be permanent and would land on
+exactly the base that has just been fixed. `hauling::crew_reach` turns the
+question around and builds the field from the *body*, once, leaving every
+want a set lookup through `hauling::reaches`. In a connected base the first
+body answers everything and the whole scheduler costs one walk — fewer than
+the build filter alone cost before.
+
+Turning it around has one seam of its own: `walk_field` bounds successors to
+a box centred on its origin, so a body-centred field is bounded around the
+body where `post_field`'s is bounded around the face. Both boxes are
+`haul_walk_radius(pocket_radius)` half-width and every base cell is within
+`pocket_radius` of the origin, so up to a base radius of
+`HAUL_WALK_MAX_TILES / 2` — 30, itself three times the size the Heap
+Pillar's cost makes routine — each box contains the whole base and the two
+agree by construction. Past that they can bind differently, and only one
+direction of disagreement costs anything: a want the filter *keeps* is
+refused again at the posting, while a want it *drops* on a base wider than
+the walk cap was ever sized for is a job the crew declines. That is the
+trade, and it is why the filter is a filter and `post_reach` is still the
+authority.
 
 ### Mining does not go through `battle::resolve_attack`
 
@@ -7212,7 +7255,8 @@ announcement had to *move*: a dry site is now never posted, so no builder
 ever stands there to report it, and the report belongs where the drop
 happens — which is the codebase's existing rule that the scheduler is the
 only thing that can see a post nobody holds. `run_build_crew` is silent
-about it, exactly as `can_walk_to_dig` owns the stuck announcement.
+about it, exactly as `announce_dig_cut_off` sits beside the drop that
+silences a cut-off dig site.
 And `build_is_workable` must count **a load already in a builder's hands**,
 or the base announces "nothing to fetch" the instant a builder empties the
 last shelf into its arms — naming the whole bill outstanding, because

@@ -920,59 +920,108 @@ impl Game {
             .collect();
         wanted.retain(|post| !outsiders.contains(post));
 
-        // **An unreachable build want is dropped here, above the cut**, and
+        // **An unreachable request is dropped here, above the cut**, and
         // that placement is the whole fix rather than a tidy-up.
         //
-        // Every other kind tests reachability *below* the truncation, and
-        // for a dig want that is affordable: dig wants are appended last, so
-        // one that turns out to be unroutable costs only itself. A build
-        // want is prepended, so it is inside the cut by construction — and a
-        // site nobody can walk to would take the slot, be skipped when its
-        // turn came, and leave the base with an idle body and an unworked
-        // order. Every tick, for the rest of the run, in silence.
+        // A build want is *prepended*, so it is inside the cut by
+        // construction — a site nobody can walk to would take the slot, be
+        // skipped when its turn came, and leave the base with an idle body
+        // and an unworked order. Every tick, for the rest of the run, in
+        // silence.
+        //
+        // **A dig want is here for the mirror-image reason.** Dig wants are
+        // appended last, so one unroutable site costs only itself — but a
+        // plan is not one site. `dig_wants` already drops the boxed-in
+        // interior of a marked block through `hauling::has_station`; what it
+        // cannot answer is the cell with a perfectly good face that nothing
+        // can walk to, because that question needs the bodies. A pocket
+        // entropy sealed off, or a plan drawn past `haul_walk_radius`, leaves
+        // a run of those — they sort first in tile order, `continue` costs no
+        // body when their turn comes, and the one cell the crew could have
+        // been sent to is cut off the end of the list. The crew stands idle
+        // with a plan on the wall, which is the exact failure
+        // `has_station` was added to close, one refusal further along.
         //
         // Asked of the staff rather than of a fixed reference point, and
         // short-circuited on the first body that routes: the answer is
-        // "somebody could build this", which is the question the want list
-        // is asking. In a connected base — every base, nearly always — that
-        // is one walk against the first body and no more.
-        {
+        // "somebody could work this", which is the question the want list is
+        // asking.
+        //
+        // **One field per body, not one per want.** `post_route` costs a
+        // walk per face and a plan can be a hundred cells, so asking it per
+        // site is a hundred walks a tick for as long as the plan stands.
+        // `hauling::crew_reach` turns the question around — the field is
+        // built from the *body*, once, and every want is a lookup in it. In
+        // a connected base that is one walk for the whole scheduler.
+        //
+        // **Skipped outright when nobody is on shift**, or the answer to
+        // "can anybody reach this" is no for want of an *anybody* and every
+        // site the base holds is announced cut off. Nothing is posted on
+        // such a tick regardless — `truncate(0)` empties the list — so the
+        // only thing the guard changes is the sentence.
+        if !on_shift.is_empty() {
             let blocked = self.structure_tiles();
             let pocket_radius = self.world.resource::<BaseGrid>().radius();
-            let mut unreachable: Vec<Entity> = Vec::new();
+            let mut reach: Vec<hauling::CrewReach> = Vec::new();
+            let mut unreachable: Vec<(Entity, TaskKind)> = Vec::new();
             for &(post, kind) in wanted.iter() {
-                if kind != TaskKind::Construct {
+                if !matches!(kind, TaskKind::Construct | TaskKind::Excavate) {
                     continue;
                 }
-                let anyone = on_shift.iter().any(|&worker| {
+                let Some(at) = self.world.get::<Position>(post).copied() else {
+                    continue;
+                };
+                let mut anyone = false;
+                for (index, &worker) in on_shift.iter().enumerate() {
                     let from = self
                         .world
                         .get::<Position>(worker)
                         .copied()
                         .unwrap_or(Position { x: 0, y: 0 });
-                    self.post_route(from, post, &blocked, pocket_radius).is_ok()
-                });
+                    if reach.len() == index {
+                        let grid = self.world.resource::<BaseGrid>();
+                        let field = hauling::crew_reach(grid, from, &blocked, pocket_radius);
+                        reach.push((from, field));
+                    }
+                    let (from, field) = &reach[index];
+                    let grid = self.world.resource::<BaseGrid>();
+                    if hauling::reaches(grid, field, *from, at, &blocked) {
+                        anyone = true;
+                        break;
+                    }
+                }
                 if !anyone {
-                    unreachable.push(post);
+                    unreachable.push((post, kind));
                 }
             }
-            for post in &unreachable {
-                self.announce_cut_off(*post);
+            for &(post, kind) in &unreachable {
+                match kind {
+                    TaskKind::Construct => self.announce_cut_off(post),
+                    _ => self.announce_dig_cut_off(post),
+                }
             }
-            wanted
-                .retain(|(post, kind)| *kind != TaskKind::Construct || !unreachable.contains(post));
+            wanted.retain(|post| !unreachable.contains(post));
             // A route that has opened up again clears the latch, so a player
             // who digs through to a stranded request is told about it once
             // more if they wall it off a second time. `set_machine_status`'
             // rule: entering a state is news, staying in it is not.
-            let reopened: Vec<Entity> = wanted
+            let reopened: Vec<(Entity, TaskKind)> = wanted
                 .iter()
-                .filter(|(_, kind)| *kind == TaskKind::Construct)
-                .map(|(post, _)| *post)
+                .filter(|(_, kind)| matches!(kind, TaskKind::Construct | TaskKind::Excavate))
+                .copied()
                 .collect();
-            for post in reopened {
-                if let Some(mut build) = self.world.get_mut::<BuildSite>(post) {
-                    build.announced_stuck = false;
+            for (post, kind) in reopened {
+                match kind {
+                    TaskKind::Construct => {
+                        if let Some(mut build) = self.world.get_mut::<BuildSite>(post) {
+                            build.announced_stuck = false;
+                        }
+                    }
+                    _ => {
+                        if let Some(mut dig) = self.world.get_mut::<DigSite>(post) {
+                            dig.announced_stuck = false;
+                        }
+                    }
                 }
             }
         }
@@ -1200,17 +1249,16 @@ impl Game {
                 .get::<Position>(worker)
                 .copied()
                 .unwrap_or(Position { x: 0, y: 0 });
-            if kind == TaskKind::Excavate
-                && !self.can_walk_to_dig(from, post, &blocked, pocket_radius)
-            {
-                // Both refusals are silent *here*: `can_walk_to_dig` owns
-                // the announcement, because only it can tell the interior of
-                // a marked block from a cell the player has walled off.
-                continue;
-            }
-            if kind == TaskKind::GatherResource
+            if matches!(kind, TaskKind::GatherResource | TaskKind::Excavate)
                 && !self.can_walk_to_post(from, post, &blocked, pocket_radius)
             {
+                // **Silent, dig sites included.** A dig want that no body can
+                // reach was dropped above the cut and said so there; what is
+                // left here is the narrower question of whether *this* body
+                // routes, and `post_reach` is the authority on it — a want
+                // the reach field kept and this refuses simply goes to
+                // nobody this tick, which is what the skip already means for
+                // a machine.
                 // A machine the base has been built around, or one with no
                 // route from where the player is standing. **Skipped rather
                 // than filled**: `hauling::post_reach` is the one predicate
@@ -1276,57 +1324,41 @@ impl Game {
         hauling::post_reach(grid, from, to, blocked, pocket_radius)
     }
 
-    /// Whether a body at `from` can be sent to `site`, and **the one place a
-    /// stalled excavation is announced**.
+    /// Says once that nothing on the staff can walk to `site` —
+    /// `announce_cut_off`'s twin, on `DigSite::announced_stuck` rather than
+    /// `BuildSite::announced_stuck`.
     ///
-    /// The two ways a dig site can refuse a body are not symmetrical, and
-    /// that asymmetry is the whole of this function:
+    /// A second function rather than a shared one for `announce_dig_dry`'s
+    /// reason: a dig site names a cell, not a bill of materials, so there is
+    /// no structure to name in the sentence.
     ///
-    /// - `BoxedIn` — nothing can stand beside the cell at all. That is the
-    ///   ordinary *interior* of any block the player marked, and it resolves
-    ///   itself as the shell comes down. **Silent**, or a nine-cell plan
-    ///   would complain about its own middle every tick until it was dug.
-    /// - `NoRoute` — a face exists and no body can reach it. Only the player
-    ///   can fix that, so it **says so once** and then stops, which is
-    ///   `systems::set_machine_status`' rule one subsystem over: entering a
-    ///   state is news, staying in it is not. `DigSite::announced_stuck` is
-    ///   the latch, and it clears the moment a route exists again — without
-    ///   that the second stall would be silent forever.
-    fn can_walk_to_dig(
-        &mut self,
-        from: Position,
-        site: Entity,
-        blocked: &std::collections::HashSet<(i32, i32)>,
-        pocket_radius: i32,
-    ) -> bool {
-        let route = self.post_route(from, site, blocked, pocket_radius);
-        let announced = self
+    /// **Only ever reached with a face to stand at.** The other way a site
+    /// refuses a body is `NoPost::BoxedIn` — nothing can stand beside it at
+    /// all — and that one is the ordinary interior of any marked block,
+    /// resolves itself as the shell comes down, and is dropped silently and
+    /// by design in `dig_wants` before the bodies are ever counted. So what
+    /// arrives here is a cell the player has walled off, which only the
+    /// player can fix, and it says so once: `set_machine_status`' rule one
+    /// subsystem over, entering a state is news and staying in it is not.
+    /// The latch clears the moment a route exists again, or the second stall
+    /// would be silent forever.
+    fn announce_dig_cut_off(&mut self, site: Entity) {
+        if self
             .world
             .get::<DigSite>(site)
-            .is_some_and(|d| d.announced_stuck);
-        match route {
-            Ok(()) => {
-                if announced && let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
-                    dig.announced_stuck = false;
-                }
-                true
-            }
-            Err(hauling::NoPost::BoxedIn) => false,
-            Err(hauling::NoPost::NoRoute) => {
-                if !announced {
-                    if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
-                        dig.announced_stuck = true;
-                    }
-                    let at = self.world.get::<Position>(site).copied();
-                    if let Some(at) = at {
-                        self.log_base(format!(
-                            "The marked cell at {}, {} is cut off — no program can find a way to it.",
-                            at.x, at.y
-                        ));
-                    }
-                }
-                false
-            }
+            .is_none_or(|d| d.announced_stuck)
+        {
+            return;
+        }
+        if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+            dig.announced_stuck = true;
+        }
+        let at = self.world.get::<Position>(site).copied();
+        if let Some(at) = at {
+            self.log_base(format!(
+                "The marked cell at {}, {} is cut off — no program can find a way to it.",
+                at.x, at.y
+            ));
         }
     }
 
@@ -1345,12 +1377,12 @@ impl Game {
     ///
     /// **A cell with no exposed face is not a want**, and that is the one
     /// thing here that is not simply "the player marked it". Any block
-    /// marked out in open rock is boxed in everywhere but its rim, and
-    /// `can_walk_to_dig` refuses those *silently* and by design — but the
-    /// refusal happens below `truncate(staff.len())`, so listed they spend
-    /// the whole dig budget and the rim gets cut off the end of the list.
-    /// A thirty-six cell room then never has a single swing taken at it.
-    /// Dropped here instead, the budget goes to cells a body can be sent
+    /// marked out in open rock is boxed in everywhere but its rim, and a
+    /// boxed-in site is refused *silently* and by design — but listed as a
+    /// want it sorts first in tile order and spends the dig budget, and the
+    /// rim gets cut off the end of the list. A thirty-six cell room then
+    /// never has a single swing taken at it. Dropped here instead, the
+    /// budget goes to cells a body can be sent
     /// to, and the interior arrives as a want the moment the shell in front
     /// of it comes down. `hauling::has_station` is the shared predicate, not
     /// a second reading of what a face is, and it is the half of
@@ -1405,9 +1437,9 @@ impl Game {
         // scheduler is the only thing that can see a site nobody is posted
         // to — which a dry site now always is, since it is dropped here — so
         // this is where the shortfall has to be said. `run_build_crew` is
-        // silent about it for the same reason `can_walk_to_dig` owns the
-        // stuck announcement: only the thing that decides not to staff a job
-        // knows the job went unstaffed.
+        // silent about it for the same reason `announce_dig_cut_off` sits
+        // beside the drop above the cut: only the thing that decides not to
+        // staff a job knows the job went unstaffed.
         let mut workable = Vec::with_capacity(sites.len());
         for (x, y, site) in sites {
             if self.build_is_workable(site) {

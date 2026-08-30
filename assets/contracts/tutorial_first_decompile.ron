@@ -1,7 +1,7 @@
 (
     id: "tutorial_first_decompile",
     name: "First Decompile",
-    description: "A wild program is worth more running beside you than lying in pieces. Take one into a fight, wear it down, and run Decompile — it spends a taming catalyst each time you try.",
+    description: "A wild program can be programmed to follow you. \n\nEngage one by walking into it on the map, wear it down, and run Decompile ('s' for special attack) \n\n it spends a taming catalyst each time you try.",
     objective: Perform(deed: Tamed),
     reward: [Credits(25), Item("core_fragment", 6), Xp(90)],
     tutorial: Some(40),

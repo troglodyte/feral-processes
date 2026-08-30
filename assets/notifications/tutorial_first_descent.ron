@@ -1,8 +1,0 @@
-(
-    id: "tutorial_first_descent",
-    title: "The Stack",
-    body: "Below the zone field, the ground stops becomes a stack (a dungeon). Each frame (level) down is more dangerous than the last.\n\n Something is scanning your progress, the 'Trace' climbs the deeper and longer you stay, and what it draws is not friendly, encounters will become more frequent. You sense something big, humming with energy below.\n\nPress [g] for the map of the frame you are standing in.",
-    glyph: '>',
-    color: Cyan,
-    repeat: OnceEver,
-)

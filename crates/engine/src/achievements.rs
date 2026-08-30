@@ -236,14 +236,21 @@ pub struct Earned {
 pub struct Profile {
     #[serde(default)]
     pub earned: Vec<Earned>,
-    /// Every `Repeat::OnceEver` notification this machine has already shown.
+    /// Every `Repeat::OnceEver` notification this machine has already shown,
+    /// by `NotificationKind::latch_key`.
     ///
     /// Here rather than in the save for the reason the whole struct is here:
     /// a tutorial seen in one run must stay seen in the next, and the profile
     /// is the one thing that outlives a run. Additive and
     /// `#[serde(default)]`, so an existing `profile.ron` keeps parsing.
+    ///
+    /// **Plain strings, deliberately, where every other id in this file is a
+    /// type.** `load` discards the *whole* profile — achievements included —
+    /// when it cannot parse, so a key this build has retired must stay inert
+    /// rather than becoming a parse error that costs a player everything
+    /// they have earned. Nothing reads these back except `see`.
     #[serde(default)]
-    pub seen_notifications: Vec<crate::notifications::NotificationId>,
+    pub seen_notifications: Vec<String>,
 }
 
 impl Profile {
@@ -270,11 +277,12 @@ impl Profile {
     /// Deliberately the same shape as `record`: "has this happened before"
     /// is one question with one answer, and a caller that has to ask
     /// `contains` first and write second can forget the second half.
-    pub fn see(&mut self, id: &crate::notifications::NotificationId) -> bool {
-        if self.seen_notifications.contains(id) {
+    pub fn see(&mut self, kind: crate::notifications::NotificationKind) -> bool {
+        let key = kind.latch_key();
+        if self.seen_notifications.iter().any(|seen| seen == key) {
             return false;
         }
-        self.seen_notifications.push(id.clone());
+        self.seen_notifications.push(key.to_string());
         true
     }
 

@@ -1,8 +1,0 @@
-(
-    id: "tutorial_first_work_order",
-    title: "The Order Is Filed",
-    body: "You have declared to your semi sentient programs what to craft, and what to keep in stock. Every tick, the base recomputes which machines that order needs, who is free to stand at them, and how far along each one is. \n\nA standing order is a level the base keeps topped up rather than a batch it fills once. \n\nIf the line stalls, the order screen names the machine it is waiting on.",
-    glyph: '&',
-    color: Yellow,
-    repeat: OnceEver,
-)

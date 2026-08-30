@@ -1,7 +1,7 @@
 (
     id: "tutorial_first_reading",
     name: "First Reading",
-    description: "Nothing gets built twice out here unless somebody wrote down how. Stand up a Research Node and start banking readings.",
+    description: "Stand up a Research Node and start collecting research points.",
     objective: Build(structure: "research_node"),
     reward: [Credits(30), Xp(100)],
     tutorial: Some(90),

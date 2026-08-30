@@ -148,13 +148,11 @@ impl Game {
         let accepted_tick = self.current_tick();
         let name = def.name.clone();
         // The briefing carries the contract's own words, filled from the def
-        // in hand — one template file rather than a second copy of every
-        // mission's name and description. An absent catalogue returns
-        // `Unknown` and is ignored, so deleting `assets/notifications/`
-        // stays a supported install.
+        // in hand — one templated def rather than a second copy of every
+        // mission's name and description.
         let objective = self.objective_line(&def.objective);
-        let _ = self.notify_filled(
-            &crate::notifications::NotificationId::from("onboarding_mission"),
+        self.notify_filled(
+            crate::notifications::NotificationKind::OnboardingMission,
             &[
                 ("name", &name),
                 ("objective", &objective),
@@ -263,8 +261,8 @@ impl Game {
         // `ActiveContracts` at the top of this function, which is the half
         // of "drop before pay" that makes a second settle unexpressible —
         // this notify never touches `ActiveContracts` at all.
-        let _ = self.notify_with_detail(
-            &crate::notifications::NotificationId::from("milestone_contract"),
+        self.notify_with_detail(
+            crate::notifications::NotificationKind::ContractClosed,
             Some(paid),
         );
     }

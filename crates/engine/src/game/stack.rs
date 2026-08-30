@@ -500,9 +500,7 @@ impl Game {
     /// Both still go through `enter_frame`.
     pub(crate) fn descend_to(&mut self, depth: u32, frames: u32, entrance: (i32, i32)) {
         self.enter_frame(depth, frames, entrance, |level| level.entry);
-        let _ = self.notify(&crate::notifications::NotificationId::from(
-            "tutorial_first_descent",
-        ));
+        self.notify(crate::notifications::NotificationKind::FirstDescent);
     }
 
     /// Puts the party back on the zone map. The player's `Position` was

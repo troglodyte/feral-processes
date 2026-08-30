@@ -723,7 +723,7 @@ impl LabourDemand {
 #[derive(Resource, Default)]
 pub struct PendingProfileWrites {
     pub earned: Vec<crate::achievements::AchievementId>,
-    pub seen: Vec<crate::notifications::NotificationId>,
+    pub seen: Vec<crate::notifications::NotificationKind>,
 }
 
 impl PendingProfileWrites {

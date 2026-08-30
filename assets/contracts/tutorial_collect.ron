@@ -1,7 +1,7 @@
 (
     id: "tutorial_collect",
     name: "Collect",
-    description: "What a machine cuts sits in its own buffer until somebody moves it. Walk up to one and press [c] to open the transfer screen, then take what it is holding.",
+    description: "Collect your results, walk up to one and press [c] to open the transfer screen. Collect 8 core fragments",
     objective: Perform(deed: TookFromContainer),
     reward: [Credits(20), Item("core_fragment", 8), Xp(70)],
     tutorial: Some(70),

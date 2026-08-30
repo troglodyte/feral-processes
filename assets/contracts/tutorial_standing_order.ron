@@ -1,7 +1,7 @@
 (
     id: "tutorial_standing_order",
     name: "Standing Order",
-    description: "Telling the base what to hold beats telling it what to do. Open your work orders and place a standing order for twenty Core Fragments — it will keep topping them up without being asked again.",
+    description: "Open your work orders and place a standing order for twenty Core Fragments, the base will keep topping them up without being asked again.",
     objective: Perform(deed: QueuedStandingOrder),
     reward: [Credits(25), Item("core_fragment", 6), Xp(80)],
     tutorial: Some(80),

@@ -1,7 +1,7 @@
 (
     id: "tutorial_spend_it",
     name: "Spend It",
-    description: "Levelling pays you in Perk Points and they do nothing sitting unspent. Open your perks and buy one — that is the last thing anyone is going to walk you through.",
+    description: "As you level, you earn Perk Points. Open your perks ([p] party meny) and buy one.",
     objective: Perform(deed: UnlockedPerk),
     reward: [Credits(40), Xp(120)],
     tutorial: Some(110),

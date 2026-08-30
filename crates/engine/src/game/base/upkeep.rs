@@ -371,9 +371,7 @@ impl Game {
         // Here rather than in `raid_check`, which can decide a sweep happens
         // and then find nothing standing to sweep. This is the first line
         // after a sweep is real.
-        let _ = self.notify(&crate::notifications::NotificationId::from(
-            "tutorial_first_raid",
-        ));
+        self.notify(crate::notifications::NotificationKind::FirstRaid);
         let target = {
             let mut rng = self.world.resource_mut::<GameRng>();
             let idx = rng.0.random_range(0..targets.len());

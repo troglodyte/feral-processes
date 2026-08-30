@@ -4,12 +4,14 @@
 use crate::tests::support::*;
 use crate::*;
 
-fn queue(app: &mut App, id: &str) {
-    app.game
-        .as_mut()
-        .expect("a fixture with a game")
-        .notify(&feral_processes_engine::notifications::NotificationId::from(id))
-        .expect("the shipped catalogue defines it");
+fn queue(app: &mut App, kind: feral_processes_engine::notifications::NotificationKind) {
+    assert!(
+        app.game
+            .as_mut()
+            .expect("a fixture with a game")
+            .notify(kind),
+        "an Always notification queues every time"
+    );
 }
 
 /// The whole timing rule in one test. Queued while a picker is open, the
@@ -21,7 +23,10 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseMenu);
 
-    queue(&mut app, "milestone_breach");
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::Breach,
+    );
     app.handle_key(GameKey::Down);
     assert_eq!(
         app.mode,
@@ -43,8 +48,14 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
 #[test]
 fn each_key_dismisses_one_and_the_last_returns_to_the_map() {
     let mut app = test_app(9102);
-    queue(&mut app, "milestone_breach");
-    queue(&mut app, "milestone_contract");
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::Breach,
+    );
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::ContractClosed,
+    );
     app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::Notification);
     let first = app.pending_notification.clone().expect("one on screen");
@@ -68,7 +79,10 @@ fn each_key_dismisses_one_and_the_last_returns_to_the_map() {
 fn only_the_map_gives_up_the_screen() {
     for guarded in [Mode::Battle, Mode::Build, Mode::FuseName, Mode::Excavate] {
         let mut app = test_app(9103);
-        queue(&mut app, "milestone_breach");
+        queue(
+            &mut app,
+            feral_processes_engine::notifications::NotificationKind::Breach,
+        );
         app.mode = guarded;
         app.show_next_notification();
         assert_eq!(app.mode, guarded, "{guarded:?} was interrupted");
@@ -76,7 +90,10 @@ fn only_the_map_gives_up_the_screen() {
     }
 
     let mut app = test_app(9103);
-    queue(&mut app, "milestone_breach");
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::Breach,
+    );
     app.mode = Mode::Playing;
     app.show_next_notification();
     assert_eq!(app.mode, Mode::Notification);

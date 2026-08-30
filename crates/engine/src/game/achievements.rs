@@ -92,11 +92,15 @@ pub fn achievement_system(
         pending.earned.push(def.id.clone());
         // **A second source, not a second door.** The notification is built
         // from the achievement's own `name` and `description` rather than
-        // from a `.ron` file in `assets/notifications/` repeating them —
-        // authoring the same prose twice is exactly the pattern that drifts,
-        // and the copy that drifts is the one nobody runs. So a new
-        // achievement gets a notification with no notification work, and
-        // there is nothing here for the catalogue's pairing census to cover.
+        // from a `NotificationKind` arm repeating them — authoring the same
+        // prose twice is exactly the pattern that drifts, and the copy that
+        // drifts is the one nobody runs. So a new achievement gets a
+        // notification with no notification work, and there is no kind here
+        // for `every_notification_kind_is_fired_by_a_named_site` to cover.
+        //
+        // This is also why `Notifications` holds resolved `Notification`
+        // values rather than kinds: there is no kind to hold for one of
+        // these.
         //
         // No latch is needed: the `profile.contains` guard at the top of the
         // loop already makes this branch a first earn.

@@ -1,8 +1,0 @@
-(
-    id: "tutorial_base_founding",
-    title: "Base Space",
-    body: "Your Home stands, the base runs out of phase with the zone map. Climb up (# icon) to visit.\n\n [b] for the base menu: build, craft, and assign entities to structures.\n\n Programs you own and are not in the party will live and work in the base.",
-    glyph: '#',
-    color: Cyan,
-    repeat: OnceEver,
-)

@@ -1,15 +1,21 @@
-//! Full-screen notifications: what queues one, what stops one queueing
-//! twice, and the properties an empty catalogue has to keep.
+//! Full-screen notifications: what queues one, and what stops one queueing
+//! twice.
 
 use super::support::*;
 use crate::achievements::Profile;
-use crate::game::notify::NoNotify;
-use crate::notifications::{NotificationDb, NotificationId, Repeat};
+use crate::notifications::{NotificationKind, Repeat};
 use crate::resources::{Notifications, PendingProfileWrites};
 use crate::*;
 
-fn nid(s: &str) -> NotificationId {
-    NotificationId::from(s)
+/// Whether the profile has latched `kind`. The store is plain strings on
+/// purpose (`Profile::seen_notifications`), so every assertion about it goes
+/// through `latch_key` rather than restating one.
+fn latched(game: &Game, kind: NotificationKind) -> bool {
+    game.world
+        .resource::<Profile>()
+        .seen_notifications
+        .iter()
+        .any(|seen| seen == kind.latch_key())
 }
 
 fn fresh() -> Game {
@@ -23,27 +29,19 @@ fn drain(game: &mut Game) {
 }
 
 #[test]
-fn an_unknown_id_is_a_returned_refusal_and_queues_nothing() {
-    let mut game = fresh();
-    drain(&mut game);
-    assert_eq!(game.notify(&nid("no_such_thing")), Err(NoNotify::Unknown));
-    assert_eq!(game.notifications_pending(), 0);
-}
-
-#[test]
 fn always_queues_every_time_and_once_ever_queues_once() {
     let mut game = fresh();
     drain(&mut game);
 
-    assert_eq!(game.notify(&nid("milestone_breach")), Ok(()));
-    assert_eq!(game.notify(&nid("milestone_breach")), Ok(()));
+    assert!(game.notify(NotificationKind::Breach));
+    assert!(game.notify(NotificationKind::Breach));
     assert_eq!(game.notifications_pending(), 2, "Always does not latch");
     drain(&mut game);
 
-    assert_eq!(game.notify(&nid("tutorial_first_raid")), Ok(()));
-    assert_eq!(
-        game.notify(&nid("tutorial_first_raid")),
-        Err(NoNotify::AlreadySeen)
+    assert!(game.notify(NotificationKind::FirstRaid));
+    assert!(
+        !game.notify(NotificationKind::FirstRaid),
+        "a spent OnceEver latch is the only refusal left"
     );
     assert_eq!(game.notifications_pending(), 1);
 }
@@ -56,7 +54,7 @@ fn firing_without_a_detail_leaves_it_none() {
     let mut game = fresh();
     drain(&mut game);
 
-    game.notify(&nid("milestone_breach")).unwrap();
+    assert!(game.notify(NotificationKind::Breach));
     let breach = game.take_notification().expect("queued");
     assert_eq!(breach.detail, None);
 
@@ -67,14 +65,14 @@ fn firing_without_a_detail_leaves_it_none() {
     assert_eq!(descent.detail, None);
 }
 
-/// The queue is FIFO and hands back the *resolved* def, so what the screen
-/// draws cannot depend on the catalogue still being on disk.
+/// The queue is FIFO and hands back *resolved* text, which is what lets an
+/// achievement push one built from its own prose rather than from a kind.
 #[test]
 fn the_queue_is_first_in_first_out_and_carries_finished_text() {
     let mut game = fresh();
     drain(&mut game);
-    game.notify(&nid("milestone_contract")).unwrap();
-    game.notify(&nid("milestone_breach")).unwrap();
+    assert!(game.notify(NotificationKind::ContractClosed));
+    assert!(game.notify(NotificationKind::Breach));
 
     let first = game.take_notification().expect("one queued");
     assert_eq!(first.title, "Contract Closed");
@@ -96,20 +94,15 @@ fn a_once_ever_notification_dirties_the_profile_and_always_does_not() {
         "a fresh run has not latched anything yet"
     );
 
-    game.notify(&nid("milestone_breach")).unwrap();
+    assert!(game.notify(NotificationKind::Breach));
     assert!(
         !game.take_pending_profile_writes(),
         "an Always notification stores nothing, so nothing needs writing"
     );
 
-    game.notify(&nid("tutorial_first_raid")).unwrap();
+    assert!(game.notify(NotificationKind::FirstRaid));
     assert!(game.take_pending_profile_writes());
-    assert!(
-        game.world
-            .resource::<Profile>()
-            .seen_notifications
-            .contains(&nid("tutorial_first_raid"))
-    );
+    assert!(latched(&game, NotificationKind::FirstRaid));
 }
 
 /// The latch has to survive the run it was set in — that is the whole
@@ -119,7 +112,7 @@ fn a_once_ever_notification_dirties_the_profile_and_always_does_not() {
 #[test]
 fn a_once_ever_latch_survives_a_profile_round_trip() {
     let mut game = fresh();
-    game.notify(&nid("tutorial_first_descent")).ok();
+    game.notify(NotificationKind::FirstDescent);
     let dir = scratch_assets_dir("notification_profile");
     std::fs::create_dir_all(&*dir).unwrap();
     let path = dir.join("profile.ron");
@@ -130,16 +123,69 @@ fn a_once_ever_latch_survives_a_profile_round_trip() {
     assert!(
         reloaded
             .seen_notifications
-            .contains(&nid("tutorial_first_descent"))
+            .iter()
+            .any(|seen| seen == NotificationKind::FirstDescent.latch_key())
     );
 
     let mut next_run = fresh();
     next_run.world.insert_resource(reloaded);
     drain(&mut next_run);
-    assert_eq!(
-        next_run.notify(&nid("tutorial_first_descent")),
-        Err(NoNotify::AlreadySeen),
+    assert!(
+        !next_run.notify(NotificationKind::FirstDescent),
         "a tutorial seen in one run stays seen in the next"
+    );
+}
+
+/// **The latch keys are a file format.** They were the ids of the deleted
+/// `assets/notifications/*.ron`, and a player who has already been shown a
+/// tutorial holds them in `profile.ron` today. Renaming one re-shows that
+/// tutorial to everybody, which nothing else in the suite can see — the
+/// round trip above writes and reads the *same* build's keys and passes
+/// whatever they say.
+#[test]
+fn a_profile_written_before_this_refactor_keeps_its_latches() {
+    let dir = scratch_assets_dir("notification_legacy_profile");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("profile.ron");
+    std::fs::write(
+        &path,
+        "(earned: [], seen_notifications: [\"tutorial_first_descent\", \"tutorial_first_raid\"])",
+    )
+    .unwrap();
+
+    let (profile, warning) = Profile::load(&path);
+    assert!(warning.is_none(), "{warning:?}");
+
+    let mut game = fresh();
+    game.world.insert_resource(profile);
+    drain(&mut game);
+    assert!(!game.notify(NotificationKind::FirstDescent));
+    assert!(!game.notify(NotificationKind::FirstRaid));
+    assert!(
+        game.notify(NotificationKind::BaseFounding),
+        "one this profile has not seen still fires"
+    );
+}
+
+/// A key no build has copy for any more must sit there inertly. `load`
+/// discards the *whole* profile on a parse error — achievements included —
+/// which is why `seen_notifications` is `Vec<String>` and not a typed id.
+#[test]
+fn a_retired_latch_key_does_not_cost_the_profile() {
+    let dir = scratch_assets_dir("notification_retired_key");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("profile.ron");
+    std::fs::write(
+        &path,
+        "(earned: [], seen_notifications: [\"tutorial_gone\"])",
+    )
+    .unwrap();
+
+    let (profile, warning) = Profile::load(&path);
+    assert!(warning.is_none(), "{warning:?}");
+    assert_eq!(
+        profile.seen_notifications,
+        vec!["tutorial_gone".to_string()]
     );
 }
 
@@ -154,30 +200,6 @@ fn a_profile_written_before_notifications_still_loads() {
     let (profile, warning) = Profile::load(&path);
     assert!(warning.is_none(), "{warning:?}");
     assert!(profile.seen_notifications.is_empty());
-}
-
-/// Deleting `assets/notifications/` is a supported way to play. Every
-/// trigger keeps firing and every one of them is a no-op — nothing is
-/// gated on the database anywhere, which is the property that makes the
-/// omission safe at *every* site rather than at the ones someone remembered.
-#[test]
-fn an_empty_catalogue_leaves_every_trigger_a_no_op() {
-    let mut game = fresh();
-    game.world.insert_resource(NotificationDb::default());
-    drain(&mut game);
-
-    for id in [
-        "tutorial_base_founding",
-        "tutorial_first_descent",
-        "tutorial_first_raid",
-        "tutorial_first_work_order",
-        "milestone_breach",
-        "milestone_contract",
-    ] {
-        assert_eq!(game.notify(&nid(id)), Err(NoNotify::Unknown), "{id}");
-    }
-    assert_eq!(game.notifications_pending(), 0);
-    assert!(!game.take_pending_profile_writes());
 }
 
 /// A notification queued while the player is somewhere it must not be drawn
@@ -250,63 +272,58 @@ fn an_achievement_notification_quotes_the_achievement_def() {
     );
 }
 
-/// Every shipped def is fired by something. There is no `trigger:` field to
-/// derive this from — the catalogue is data and the triggers are Rust — so
-/// this census is the whole rule, `MEMORY_TRIGGERS`' shape.
+/// Every kind is fired by something. There is no `trigger:` field to derive
+/// this from — the copy is a table and the triggers are hooks into
+/// particular functions — so this census is the whole rule,
+/// `MEMORY_TRIGGERS`' shape.
+///
+/// **The match is what makes it a census.** A new variant fails to compile
+/// here until somebody names the site that fires it, which a `&[(kind,
+/// site)]` table would not; the walk over `all()` is then only checking that
+/// nobody wrote an empty string.
 #[test]
-fn every_shipped_notification_is_fired_by_a_named_site() {
-    /// `(id, the Rust site that fires it)`. Achievements are deliberately
-    /// absent: they build their notification from their own def and author
-    /// no file here.
-    const TRIGGERS: &[(&str, &str)] = &[
-        ("tutorial_base_founding", "Game::place_structure, founding"),
-        ("tutorial_first_descent", "Game::descend_to"),
-        ("tutorial_first_raid", "Game::run_raid"),
-        ("tutorial_first_work_order", "Game::queue_work_order"),
-        ("milestone_breach", "Game::enter_next_zone"),
-        ("milestone_contract", "Game::complete_contract"),
-        ("onboarding_mission", "Game::ensure_tutorial_held"),
-    ];
-
-    let (db, warnings) =
-        NotificationDb::load_dir(&test_assets_dir().join("notifications")).unwrap();
-    assert!(warnings.is_empty(), "{warnings:?}");
-
-    for def in db.iter() {
-        assert!(
-            TRIGGERS.iter().any(|(id, _)| *id == def.id.as_str()),
-            "{} is shipped but nothing fires it — add it to TRIGGERS with \
-             the site, or delete the file",
-            def.id
-        );
-        assert!(!def.title.is_empty(), "{}", def.id);
-        assert!(!def.body.is_empty(), "{}", def.id);
+fn every_notification_kind_is_fired_by_a_named_site() {
+    // Achievements are deliberately absent: they build their notification
+    // from their own def and name no kind at all.
+    fn site(kind: NotificationKind) -> &'static str {
+        match kind {
+            NotificationKind::BaseFounding => "Game::place_structure, founding",
+            NotificationKind::FirstDescent => "Game::descend_to",
+            NotificationKind::FirstRaid => "Game::run_raid",
+            NotificationKind::FirstWorkOrder => "Game::queue_work_order",
+            NotificationKind::Breach => "Game::enter_next_zone",
+            NotificationKind::ContractClosed => "Game::complete_contract",
+            NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
+        }
     }
-    for (id, site) in TRIGGERS {
-        assert!(
-            db.get(&nid(id)).is_some(),
-            "{site} fires {id}, which no file defines"
-        );
+
+    for kind in NotificationKind::all() {
+        assert!(!site(kind).is_empty(), "{kind} is fired by nothing");
     }
 }
 
 /// Every tutorial is `OnceEver` and every milestone is `Always`. Getting
 /// this backwards is silent: a tutorial that re-fires reads as a bug in the
 /// screen, and a milestone that fires once reads as one in the trigger.
+///
+/// A second match rather than a fold over the variant names, for the reason
+/// above — and because the grouping the enum expresses with a comment is
+/// exactly what a name-prefix rule used to express with a string.
 #[test]
 fn tutorials_latch_and_milestones_do_not() {
-    let (db, _) = NotificationDb::load_dir(&test_assets_dir().join("notifications")).unwrap();
-    for def in db.iter() {
-        // `onboarding_` is deliberately a different prefix from `tutorial_`
-        // and takes the other policy: the chain runs on every new game, so a
-        // briefing latched across runs would leave a second playthrough's
-        // missions unexplained.
-        let expected = if def.id.as_str().starts_with("tutorial_") {
-            Repeat::OnceEver
-        } else {
-            Repeat::Always
+    for kind in NotificationKind::all() {
+        let expected = match kind {
+            NotificationKind::BaseFounding
+            | NotificationKind::FirstDescent
+            | NotificationKind::FirstRaid
+            | NotificationKind::FirstWorkOrder => Repeat::OnceEver,
+            // The chain runs on every new game, so a briefing latched across
+            // runs would leave a second playthrough's missions unexplained.
+            NotificationKind::Breach
+            | NotificationKind::ContractClosed
+            | NotificationKind::OnboardingMission => Repeat::Always,
         };
-        assert_eq!(def.repeat, expected, "{}", def.id);
+        assert_eq!(kind.def().repeat, expected, "{kind}");
     }
 }
 
@@ -316,7 +333,7 @@ fn tutorials_latch_and_milestones_do_not() {
 #[test]
 fn the_queue_does_not_survive_a_save() {
     let mut game = fresh();
-    game.notify(&nid("milestone_breach")).unwrap();
+    assert!(game.notify(NotificationKind::Breach));
     assert!(game.notifications_pending() > 0);
 
     let dir = scratch_assets_dir("notification_save");
@@ -345,7 +362,7 @@ fn draining_the_profile_channel_clears_both_halves() {
     game.world
         .resource_mut::<PendingProfileWrites>()
         .seen
-        .push(nid("x"));
+        .push(NotificationKind::BaseFounding);
     assert!(game.take_pending_profile_writes());
     assert!(!game.take_pending_profile_writes());
 }
@@ -386,10 +403,7 @@ fn a_fresh_run_opens_on_its_briefing_and_no_other_notice() {
 fn filling_replaces_the_holes_the_caller_named() {
     let mut game = fresh();
     drain(&mut game);
-    assert_eq!(
-        game.notify_filled(&nid("milestone_breach"), &[("nothing", "x")]),
-        Ok(())
-    );
+    assert!(game.notify_filled(NotificationKind::Breach, &[("nothing", "x")]));
     assert!(game.take_notification().is_some());
 }
 
@@ -458,29 +472,5 @@ fn finishing_a_mission_briefs_the_next_one() {
     assert!(
         std::iter::from_fn(|| game.take_notification()).any(|n| n.title.contains(&next.name)),
         "the step that was just handed out is the one briefed"
-    );
-}
-
-/// Deleting `assets/notifications/` is a supported install, and the chain
-/// must not notice. The briefing is the only new caller, so this is the
-/// property that keeps it that way.
-#[test]
-fn a_run_with_no_notification_catalogue_still_runs_the_chain() {
-    let dir = scratch_assets_dir("chain_no_notifications");
-    copy_shipped_assets(&dir, &[]);
-    let contracts = dir.join("contracts");
-    std::fs::create_dir_all(&contracts).unwrap();
-    for entry in std::fs::read_dir(test_assets_dir().join("contracts")).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_file() {
-            std::fs::copy(&path, contracts.join(path.file_name().unwrap())).unwrap();
-        }
-    }
-    // No `notifications/` directory at all.
-    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
-    assert_eq!(game.notifications_pending(), 0);
-    assert!(
-        game.active_contracts().iter().any(|row| row.tutorial),
-        "the chain is handed out exactly as it is with a catalogue"
     );
 }

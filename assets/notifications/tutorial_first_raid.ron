@@ -1,8 +1,0 @@
-(
-    id: "tutorial_first_raid",
-    title: "GC Entropy Sweep",
-    body: "The garbage collector has found your base. A sweep comes to clean up stray data, ...your structures, and it will keep coming.\n\nStaff posted at a machine defend it, and take damage doing so. There must be a way to defend against it.",
-    glyph: '!',
-    color: Red,
-    repeat: OnceEver,
-)

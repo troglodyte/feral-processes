@@ -1,7 +1,7 @@
 (
     id: "tutorial_first_light",
     name: "First Light",
-    description: "Nothing gets raised out here until there is somewhere to raise it from. Put your Home down — it is the one build your own hands finish, and everything else is a request you file against it.",
+    description: "Instantiate your pocket dimension, a virtual machine where you can build and grow. Put your Home down. \n\n 'b' for build, Deploy -> place home",
     objective: Build(structure: "home"),
     reward: [Credits(10), Xp(30)],
     tutorial: Some(10),

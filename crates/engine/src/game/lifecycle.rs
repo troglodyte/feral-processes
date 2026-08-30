@@ -111,7 +111,6 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
-            notifications: notification_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -149,7 +148,6 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
-        world.insert_resource(notification_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -379,7 +377,6 @@ impl Game {
             environment: environment_db,
             memories: memory_db,
             needs: need_db,
-            notifications: notification_db,
             sorties: sortie_db,
             caravans: caravan_db,
             rock: rock_db,
@@ -431,7 +428,6 @@ impl Game {
         world.insert_resource(environment_db);
         world.insert_resource(memory_db);
         world.insert_resource(need_db);
-        world.insert_resource(notification_db);
         world.insert_resource(crate::resources::Notifications::default());
         world.insert_resource(sortie_db);
         world.insert_resource(caravan_db);
@@ -1980,7 +1976,6 @@ struct AssetDbs {
     environment: crate::environment::EnvironmentDb,
     memories: crate::memories::MemoryDb,
     needs: crate::needs::NeedDb,
-    notifications: crate::notifications::NotificationDb,
     sorties: crate::sorties::SortieDb,
     caravans: crate::caravans::CaravanDb,
     nemesis: crate::nemesis::NemesisDb,
@@ -2086,12 +2081,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // which is the pre-needs game.
     let (needs, need_warnings) = crate::needs::NeedDb::load_dir(&assets_dir.join("needs"))?;
     warnings.extend(need_warnings);
-    // Same absent-is-silent rule again — see `NotificationDb`'s own doc. An
-    // empty catalogue makes `Game::notify` a no-op and no screen ever opens,
-    // which is the pre-notification game.
-    let (notifications, notification_warnings) =
-        crate::notifications::NotificationDb::load_dir(&assets_dir.join("notifications"))?;
-    warnings.extend(notification_warnings);
     // Same absent-is-silent rule again — see `SortieDb`'s own doc. An empty
     // catalogue leaves `Game::sortie_board` with nothing to offer, which is
     // the pre-sortie game.
@@ -2142,7 +2131,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         environment,
         memories,
         needs,
-        notifications,
         sorties,
         caravans,
         nemesis,

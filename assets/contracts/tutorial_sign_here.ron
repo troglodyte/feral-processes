@@ -1,7 +1,7 @@
 (
     id: "tutorial_sign_here",
     name: "Sign Here",
-    description: "Work does not find you out here. Stand up a Contract Broker and it will start posting jobs worth taking.",
+    description: "Stand up a Contract Broker and it will start posting jobs.",
     objective: Build(structure: "contract_broker"),
     reward: [Credits(25), Item("core_fragment", 8), Xp(90)],
     tutorial: Some(50),

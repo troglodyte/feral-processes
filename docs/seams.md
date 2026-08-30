@@ -8400,28 +8400,44 @@ a return walk the player is not home to see is dropped rather than saved for
 later. That matches raid flashes and is the price of the whole feature being
 free.
 
-### A notification is a catalogue plus a queue plus one equality
+### A notification is a table plus a queue plus one equality
 
-The moments that deserve the whole screen are few, and every word of them
-is content. So the split is: `assets/notifications/` is data,
-`Game::notify(id)` is Rust, and the three parts are separable.
+The moments that deserve the whole screen are few, and every one of them is
+a hook into a particular line of a particular function. So the whole feature
+is one module: `NotificationKind` is the census, `NotificationKind::def` is
+the copy, and adding one is a variant plus an arm plus a call site.
 
-`NotificationDb` is `NeedDb::load_dir` line for line, which is `MemoryDb`'s
-before it. That is deliberate repetition rather than a missing abstraction:
-what is shared is the *property set* — absent directory silent, malformed
-file costs one entry, iteration sorted — and a generic loader would make
-each catalogue's required-versus-defaulted field list a type parameter for
-no gain. The property that matters is that **deleting the directory
-restores the pre-notification game**, and the way that lapses is a system
-or a screen gated on the db being non-empty, not a duplicated `read_dir`.
+**It shipped as `assets/notifications/*.ron` behind a `NotificationDb` and
+that half was retired.** The catalogue sat on the same half-data seam
+`needs::NeedDef` and `memories::MemoryDef` still sit on — data says *what*,
+Rust says *when* — and on this feature the data half bought nothing. A
+`.ron` file cannot express when a notification fires, so every one of the
+seven already needed a Rust call site; what the loader charged for making
+seven strings editable was an id newtype, an absent-directory rule, a
+malformed-file rule, a resource in two constructors, an `Unknown` refusal
+every caller discarded, and a pairing census in the test suite whose only
+job was to catch a def nothing fires. Seven `.ron` files became seven match
+arms and the module got shorter.
 
-**The queue holds resolved values.** This is `ActiveContract`'s rule and
-`Sortie`'s, reaching a third feature: an id in the queue means a `.ron`
-edited between the push and the draw silently rewrites what the player is
-about to read, and one deleted strands it. The cost is that a `Notification`
-is a fourth copy of five fields; the alternative is a class of bug that only
-appears to people editing assets with the game running, which is every
-modder.
+The seam is genuinely different from `NeedDb`'s, and the difference is what
+justifies moving one and not the other: a need is a *thing in the world*
+with a decay rate and an amenity, and a modded catalogue of them is a
+different game. A notification is the game explaining itself. Nobody mods
+prose they cannot re-time.
+
+**`def` is an exhaustive match, and that is the point rather than a style.**
+`cell_mark`'s rule: written as a table lookup with a fallback, a new variant
+ships blank; written as a match, it fails to compile until somebody writes
+the words. The same trade turned the trigger census from a `&[(&str, &str)]`
+that a new def could simply be left out of into a `match` that a new variant
+cannot compile past.
+
+**The queue still holds resolved values.** This is `ActiveContract`'s rule
+and `Sortie`'s, and it survives the loader that motivated it: the reason is
+now `achievement_system`, which pushes a `Notification` built from an
+achievement's own `name` and `description` and names no kind at all. A queue
+of kinds could not carry that, and a `detail` — a figure drawn from live
+state at the moment of firing — could not ride one either.
 
 **Two repeat policies, and the third was rejected on its name.** Once per
 *run* would have to latch on the session-only queue resource, so it would
@@ -8445,6 +8461,19 @@ remember to drain, and the one that drifts is the one nobody runs.
 `take_pending_profile_writes` became a bool in the same edit: no caller had
 ever read the ids, and with two kinds of dirt a single typed list could only
 carry one of them honestly.
+
+**`Profile::seen_notifications` is a `Vec<String>` where every other id in
+that file is a type, and `NotificationKind::latch_key` is why.** Those
+strings are the ids of the deleted `.ron` files, unchanged, because they are
+already sitting in players' `profile.ron` — and `Profile::load` discards the
+*whole* profile, achievements included, when it cannot parse. So a key this
+build has retired has to be inert rather than fatal, which a typed id cannot
+be, and a key this build still uses must not be renamed, which nothing else
+in the suite can see: the round-trip test writes and reads the same build's
+keys and passes whatever they say.
+`a_profile_written_before_this_refactor_keeps_its_latches` loads a
+hand-written legacy profile instead, and was verified by mutation — renaming
+one arm of `latch_key` fails it.
 
 **Achievements are a second source and not a second door.** The notification
 is built from the achievement def's own `name` and `description`. Authoring
@@ -8472,8 +8501,9 @@ keypress.
 
 **The screen has no scroll**, which makes its height a layout constraint
 rather than a style question, the memories page's rule.
-`the_tallest_shipped_notification_fits_its_screen` is what says the
-catalogue fits at 1280x720; raising a body past it means giving the screen a
+`the_tallest_shipped_notification_fits_its_screen` is what says every kind
+fits at 1280x720 — it walks `NotificationKind::all`, so a new variant is
+measured the moment it compiles; raising a body past it means giving the screen a
 scroll, not trimming the test. It was verified by mutation — inflating
 `ART_CELLS` fails it — because a fits-in-a-window assertion is exactly the
 shape that passes vacuously.
@@ -8484,5 +8514,7 @@ returns `false` so the glyph is drawn instead. Both halves are asserted for
 `base.rs`'s reason: the sprite half alone passes against a renderer that
 paints the texture over a glyph still sitting there, which looks exactly
 right on opaque art and is wrong the moment the art has any transparency.
-Every shipped notification draws its glyph today, since `assets/sprites/`
-holds one file — that is the design working, not a gap.
+Every notification draws its glyph today, since `assets/sprites/` holds one
+file — that is the design working, not a gap. `NotificationDef::sprite`
+stayed through the move to Rust for that reason: it is the live hook art
+lands on, not an unused field.

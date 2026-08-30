@@ -141,7 +141,7 @@ pub(super) fn wrapped_body(body: &str, columns: usize) -> Vec<String> {
 mod tests {
     use super::*;
     use feral_processes_engine::components::GlyphColor;
-    use feral_processes_engine::notifications::{NotificationDb, NotificationId};
+    use feral_processes_engine::notifications::NotificationKind;
     use feral_processes_engine::{DifficultyMode, Game};
 
     /// The longest payout a shipped contract can state, for the height
@@ -160,12 +160,16 @@ mod tests {
             .expect("the shipped assets define contracts")
     }
 
-    fn shipped() -> NotificationDb {
-        let dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/notifications");
-        let (db, warnings) = NotificationDb::load_dir(&dir).unwrap();
-        assert!(warnings.is_empty(), "{warnings:?}");
-        db
+    /// Every notification the engine can raise, paired with its copy. The
+    /// census walks `NotificationKind::all` rather than a directory now, so
+    /// a new variant is measured here the moment it compiles.
+    fn shipped() -> impl Iterator<
+        Item = (
+            NotificationKind,
+            feral_processes_engine::notifications::NotificationDef,
+        ),
+    > {
+        NotificationKind::all().into_iter().map(|k| (k, k.def()))
     }
 
     /// A blank line between paragraphs and nowhere else. Wrapping the whole
@@ -214,9 +218,9 @@ mod tests {
                 detail_h > m.gap,
                 "the detail census measured nothing — {detail:?} has no height"
             );
-            for def in shipped().iter() {
-                let lines = wrapped_body(&def.body, columns.max(20));
-                let title_h = p.measure_ui(&def.title, m.title() + 6).height;
+            for (kind, def) in shipped() {
+                let lines = wrapped_body(def.body, columns.max(20));
+                let title_h = p.measure_ui(def.title, m.title() + 6).height;
                 let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
                 let block = m.line_height * ART_CELLS
                     + m.gap
@@ -231,7 +235,7 @@ mod tests {
                     "{} is {block}px of notification (with the widest shipped contract \
                      payout as its detail) in a {h}px window ({} lines) — this screen has \
                      no scroll, so give it one or cut the body",
-                    def.id,
+                    kind,
                     lines.len()
                 );
             }
@@ -255,10 +259,7 @@ mod tests {
             assets,
         )
         .expect("shipped assets");
-        let template = shipped()
-            .get(&feral_processes_engine::notifications::NotificationId::from("onboarding_mission"))
-            .expect("the briefing template ships")
-            .clone();
+        let template = NotificationKind::OnboardingMission.def();
 
         let missions: Vec<_> = game
             .contract_catalogue()
@@ -314,12 +315,11 @@ mod tests {
     fn every_shipped_title_fits_on_one_line() {
         let m = crate::text::ui_metrics(720.0);
         crate::paint::with_painter(|p| {
-            for def in shipped().iter() {
-                let width = p.measure_ui_advance(&def.title, m.title() + 6);
+            for (kind, def) in shipped() {
+                let width = p.measure_ui_advance(def.title, m.title() + 6);
                 assert!(
                     width < 1280.0 - 2.0 * m.pad,
-                    "{} has a {width}px title in a 1280px window",
-                    def.id
+                    "{kind} has a {width}px title in a 1280px window"
                 );
             }
         });
@@ -422,32 +422,33 @@ mod tests {
         );
     }
 
-    /// Nothing in the catalogue may name a sprite the game does not ship —
-    /// not a failure (the glyph covers it) but a silent one, and a typo in a
-    /// name reads as the art never having been drawn.
+    /// No notification may name a sprite the game does not ship — not a
+    /// failure (the glyph covers it) but a silent one, and a typo in a name
+    /// reads as the art never having been drawn.
     #[test]
     fn every_shipped_sprite_name_has_a_file() {
         let art = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sprites");
-        for def in shipped().iter() {
-            let Some(name) = &def.sprite else { continue };
+        for (kind, def) in shipped() {
+            let Some(name) = def.sprite else { continue };
             assert!(
                 art.join(format!("{name}.png")).exists(),
-                "{} names the sprite {name:?}, which is not in assets/sprites/",
-                def.id
+                "{kind} names the sprite {name:?}, which is not in assets/sprites/"
             );
         }
     }
 
     #[test]
     fn the_shipped_colours_all_resolve() {
-        for def in shipped().iter() {
+        let mut seen = 0;
+        for (kind, def) in shipped() {
             let c = glyph_color(def.color);
-            assert!(c.a > 0.0, "{} draws its art invisible", def.id);
+            assert!(c.a > 0.0, "{kind} draws its art invisible");
+            seen += 1;
         }
-        assert!(
-            shipped()
-                .get(&NotificationId::from("milestone_breach"))
-                .is_some()
+        assert_eq!(
+            seen,
+            NotificationKind::all().len(),
+            "the census walked none"
         );
     }
 }

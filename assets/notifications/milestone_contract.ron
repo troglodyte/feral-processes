@@ -1,8 +1,0 @@
-(
-    id: "milestone_contract",
-    title: "Contract Closed",
-    body: "The Broker marks the contract settled and pays out, more contracts are available.",
-    glyph: '$',
-    color: Green,
-    repeat: Always,
-)

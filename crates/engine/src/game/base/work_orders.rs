@@ -2098,9 +2098,7 @@ impl Game {
         } else {
             format!("Work order filed: {qty} x {name}.")
         });
-        let _ = self.notify(&crate::notifications::NotificationId::from(
-            "tutorial_first_work_order",
-        ));
+        self.notify(crate::notifications::NotificationKind::FirstWorkOrder);
         // Standing only, and below every refusal: the mission asks for the
         // order that keeps working without being asked again, so a one-off
         // must not finish it.

@@ -1,7 +1,17 @@
 # Full-screen notifications
 
-**Status:** implemented
+**Status:** implemented; the data half was retired 2026-08-30
 **Date:** 2026-08-29
+
+> **Superseded in part.** The split this spec argues for — "the queue, the
+> door and the screen are Rust; every word the player reads is a `.ron`
+> file" — held for one day and was then reversed: `assets/notifications/`
+> and `NotificationDb` are gone, and `NotificationKind` in
+> `crates/engine/src/notifications.rs` carries the copy. Everything below
+> about the queue, the repeat policies, the profile latch, the timing
+> equality and the screen still describes the shipped feature. The argument
+> for the reversal is in `docs/seams.md` under "A notification is a table
+> plus a queue plus one equality".
 
 Every big moment in a run currently lands as a line in the log pane. A zone
 breach, a first descent, an achievement earned and a machine finishing a

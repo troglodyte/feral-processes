@@ -1,8 +1,0 @@
-(
-    id: "milestone_breach",
-    title: "Breach",
-    body: "The portal holds long enough. A new sector resolves around you — new ground, new species, a harder floor and a higher ceiling.\n\nYour base travels with you.",
-    glyph: '*',
-    color: Magenta,
-    repeat: Always,
-)

@@ -157,9 +157,7 @@ impl Game {
             // Fired unconditionally: `Repeat::OnceEver` is what makes it
             // once-only, and a second `if first_time` here would put the
             // policy in two places.
-            let _ = self.notify(&crate::notifications::NotificationId::from(
-                "tutorial_base_founding",
-            ));
+            self.notify(crate::notifications::NotificationKind::BaseFounding);
             self.tick();
             return Ok(());
         }

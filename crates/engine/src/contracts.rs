@@ -166,6 +166,24 @@ pub struct ContractDef {
     /// sector happened to supply.
     #[serde(default)]
     pub starter: bool,
+    /// Which step of the onboarding chain this mission is, if any. Absent on
+    /// an ordinary contract, which is every shipped contract but eleven.
+    ///
+    /// A **step, not an index**: the shipped missions are spaced 10 apart so
+    /// inserting one later never renumbers the others. The chain itself is
+    /// `ContractDb::tutorial_chain`, and the run's position in it is derived
+    /// from `ActiveContracts::done` rather than stored — see
+    /// `Game::ensure_tutorial_held`.
+    ///
+    /// Refused at load beside `starter` or `repeatable`: a tutorial mission
+    /// is never offered, so a board-slot flag on one is a claim about
+    /// something that cannot happen, and a repeatable one would leave and
+    /// re-enter the chain forever.
+    ///
+    /// `min_zone` is not refused here but is inert — nothing gates a mission
+    /// the player is handed.
+    #[serde(default)]
+    pub tutorial: Option<u32>,
 }
 
 /// Separates a template's id from the parameters a roll filled in —
@@ -357,6 +375,7 @@ impl ContractTemplate {
             min_zone: self.min_zone,
             repeatable: self.repeatable,
             starter: false,
+            tutorial: None,
         })
     }
 }
@@ -427,8 +446,14 @@ impl ContractDb {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((db, warnings)),
             Err(e) => return Err(e),
         };
-        for entry in entries {
-            let path = entry?.path();
+        // Sorted before parsing, `MemoryDb::load_dir`'s rule: two files
+        // claiming one id — or, now, one tutorial step — have to resolve the
+        // same way on every machine, and `read_dir` gives no such promise.
+        let mut paths: Vec<std::path::PathBuf> = entries
+            .map(|e| e.map(|e| e.path()))
+            .collect::<std::io::Result<_>>()?;
+        paths.sort();
+        for path in paths {
             if path.extension().and_then(|e| e.to_str()) != Some("ron") {
                 continue;
             }
@@ -442,6 +467,15 @@ impl ContractDb {
                         "skipped invalid contract file {path:?}: id {} is already taken",
                         def.id
                     )),
+                    None if def.tutorial.is_some()
+                        && db.defs.values().any(|d| d.tutorial == def.tutorial) =>
+                    {
+                        warnings.push(format!(
+                            "skipped invalid contract file {path:?}: tutorial step {} is \
+                             already taken",
+                            def.tutorial.expect("guarded by is_some above")
+                        ))
+                    }
                     None => {
                         db.defs.insert(def.id.clone(), def);
                     }
@@ -534,6 +568,22 @@ impl ContractDb {
     pub fn iter(&self) -> impl Iterator<Item = &ContractDef> {
         self.defs.values()
     }
+
+    /// The onboarding chain: every def carrying a `tutorial` step, in step
+    /// order. The one derivation of what the chain is.
+    ///
+    /// Sorted by step and then by id. The second key is unreachable while
+    /// `load_dir` refuses a duplicate step; it is here so the order is total
+    /// on its own rather than resting on that refusal.
+    pub fn tutorial_chain(&self) -> Vec<&ContractDef> {
+        let mut chain: Vec<&ContractDef> = self
+            .defs
+            .values()
+            .filter(|d| d.tutorial.is_some())
+            .collect();
+        chain.sort_by(|a, b| (a.tutorial, &a.id).cmp(&(b.tutorial, &b.id)));
+        chain
+    }
 }
 
 /// Why `def` cannot be loaded, or `None` if it is fine. A contract that pays
@@ -561,6 +611,22 @@ fn complaint(def: &ContractDef) -> Option<String> {
         .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
     {
         return Some("a reward of 0 pays nothing; give it at least 1 or delete it".to_string());
+    }
+    if def.tutorial.is_some() && def.starter {
+        return Some(
+            "a tutorial mission is handed to the player, never offered, so it cannot \
+             also be a starter — a starter flag on one claims a board slot it can \
+             never occupy"
+                .to_string(),
+        );
+    }
+    if def.tutorial.is_some() && def.repeatable {
+        return Some(
+            "a tutorial mission cannot be repeatable: the chain's position is derived \
+             from what has been finished, so a repeatable one would leave and re-enter \
+             it forever"
+                .to_string(),
+        );
     }
     None
 }

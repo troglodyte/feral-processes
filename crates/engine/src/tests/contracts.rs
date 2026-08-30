@@ -352,6 +352,7 @@ fn def(id: &str, objective: Objective, reward: Vec<Reward>) -> ContractDef {
         min_zone: 0,
         repeatable: false,
         starter: false,
+        tutorial: None,
     }
 }
 
@@ -2380,4 +2381,154 @@ fn a_grown_base_carries_the_desk_out_to_its_new_edge() {
         BrokerReach::AtBroker,
         "the same cell, once it is floor"
     );
+}
+
+/// The chain is every def carrying a step, in step order — not file order,
+/// not id order. Written with the files deliberately out of order so a
+/// `read_dir` that happened to return them sorted cannot pass this by luck.
+#[test]
+fn the_tutorial_chain_is_every_stepped_contract_in_step_order() {
+    let (db, warnings) = load(
+        "tutorial_chain_order",
+        &[
+            (
+                "z_third.ron",
+                r#"(id: "third", name: "Third", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(30))"#,
+            ),
+            (
+                "a_first.ron",
+                r#"(id: "first", name: "First", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+            (
+                "m_plain.ron",
+                r#"(id: "plain", name: "Plain", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)])"#,
+            ),
+            (
+                "b_second.ron",
+                r#"(id: "second", name: "Second", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(20))"#,
+            ),
+        ],
+    );
+    assert!(warnings.is_empty(), "all four are valid: {warnings:?}");
+    let chain: Vec<&str> = db.tutorial_chain().iter().map(|d| d.id.as_str()).collect();
+    assert_eq!(
+        chain,
+        vec!["first", "second", "third"],
+        "the chain is step order, and a contract with no step is not in it"
+    );
+}
+
+/// A directory with no stepped contract has no chain, which is the
+/// pre-tutorial game and a supported install.
+#[test]
+fn a_directory_with_no_stepped_contract_has_no_chain() {
+    let (db, _) = load(
+        "tutorial_chain_empty",
+        &[(
+            "plain.ron",
+            r#"(id: "plain", name: "Plain", description: "d",
+                objective: Breach(zone: 2), reward: [Xp(1)])"#,
+        )],
+    );
+    assert!(db.tutorial_chain().is_empty());
+}
+
+/// Two files claiming one step would run the chain in an order nobody
+/// authored, and which of them won would depend on `read_dir`. The second is
+/// skipped with a warning, exactly as a duplicate id is.
+#[test]
+fn a_duplicate_tutorial_step_is_refused() {
+    let (db, warnings) = load(
+        "tutorial_dup_step",
+        &[
+            (
+                "a.ron",
+                r#"(id: "a", name: "A", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+            (
+                "b.ron",
+                r#"(id: "b", name: "B", description: "d",
+                    objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+            ),
+        ],
+    );
+    assert_eq!(db.tutorial_chain().len(), 1, "one of the two is kept");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "and the other is warned about: {warnings:?}"
+    );
+    assert!(
+        warnings[0].contains("step"),
+        "the warning names what collided: {warnings:?}"
+    );
+}
+
+/// `load_dir` sorts its entries, so two files claiming one step resolve the
+/// same way every run. Without the sort the survivor above is whichever
+/// `read_dir` happened to yield first, and the shipped chain would differ
+/// between machines.
+#[test]
+fn a_duplicate_tutorial_step_resolves_the_same_way_every_run() {
+    for i in 0..4 {
+        let (db, _) = load(
+            &format!("tutorial_dup_stable_{i}"),
+            &[
+                (
+                    "zzz.ron",
+                    r#"(id: "zzz", name: "Z", description: "d",
+                        objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+                ),
+                (
+                    "aaa.ron",
+                    r#"(id: "aaa", name: "A", description: "d",
+                        objective: Breach(zone: 2), reward: [Xp(1)], tutorial: Some(10))"#,
+                ),
+            ],
+        );
+        assert_eq!(
+            db.tutorial_chain()[0].id.as_str(),
+            "aaa",
+            "the file that sorts first is the one that loads"
+        );
+    }
+}
+
+/// A tutorial mission is never offered, so a `starter` flag on one is a
+/// claim about a board slot it can never occupy.
+#[test]
+fn a_tutorial_mission_may_not_also_be_a_starter() {
+    let (db, warnings) = load(
+        "tutorial_and_starter",
+        &[(
+            "a.ron",
+            r#"(id: "a", name: "A", description: "d", objective: Breach(zone: 2),
+                reward: [Xp(1)], tutorial: Some(10), starter: true)"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("starter"), "{warnings:?}");
+}
+
+/// The chain's position is derived from `done`, so a repeatable mission
+/// would leave and re-enter it forever.
+#[test]
+fn a_tutorial_mission_may_not_be_repeatable() {
+    let (db, warnings) = load(
+        "tutorial_and_repeatable",
+        &[(
+            "a.ron",
+            r#"(id: "a", name: "A", description: "d", objective: Breach(zone: 2),
+                reward: [Xp(1)], tutorial: Some(10), repeatable: true)"#,
+        )],
+    );
+    assert_eq!(db.iter().count(), 0);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("repeatable"), "{warnings:?}");
 }

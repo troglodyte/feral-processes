@@ -68,6 +68,10 @@ loses its progress; it is not banked.
     // Optional, default false. One of the jobs a new run is onboarded with.
     // See "Starters" below.
     starter: false,
+
+    // Optional. Which step of the onboarding chain this is. See "The
+    // tutorial chain" below. Absent on an ordinary contract.
+    tutorial: Some(60),
 )
 ```
 
@@ -153,6 +157,38 @@ Templates have no `starter` field, so a rolled contract is never one: the arc is
 a written sequence, not whatever this sector happened to supply. The shipped set
 ships seven, all `min_zone: 0` — a first kill, a first delivery, three
 first structures, a first descent and the breach out of sector 1.
+
+## The tutorial chain
+
+A contract carrying a `tutorial` step is an **onboarding mission**. The chain
+is every such contract in step order, and it behaves unlike everything else
+here:
+
+- It is **handed to the player, never offered**. It appears under *Held* at
+  the start of a run, with no Broker standing and no key pressed. There is
+  nothing to accept and nothing to decline.
+- **One is live at a time.** Finishing one hands out the next in the same
+  tick.
+- It **does not count against `MAX_ACTIVE_CONTRACTS`**, and it cannot be
+  given back with `[A]`.
+- While the chain is unfinished the **ordinary board is empty**. When the
+  last mission completes the board fills normally, starters first.
+- It draws **green** on the contracts screen.
+
+The number is a *step*, not an index. The shipped missions are spaced 10
+apart so a mission inserted later never renumbers the others. Two files
+claiming one step is refused at load, as is `tutorial` beside `starter` or
+`repeatable`. `min_zone` on a tutorial mission is inert.
+
+The chain runs on new games only. A save made before this existed has every
+mission filed as finished at load.
+
+**A mission must be finishable, or onboarding stops for the rest of the
+run.** The shipped chain is held to that by three tests over the real assets
+in `crates/engine/src/tests/assets.rs`: its build costs never outrun its
+payouts, every `Deed` it names has an emit site, and every id it names
+resolves. A mod is not checked, which is the line every content directory
+here draws.
 
 ## Templates
 

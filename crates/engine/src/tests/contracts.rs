@@ -2886,17 +2886,44 @@ mod deed_sites {
         assert!(!deeds(&game).contains(&Deed::UnlockedPerk));
     }
 
-    /// `post_worker` directly rather than the `post_program` fixture, which
-    /// ticks afterwards — and a tick is what drains the queue this asserts
-    /// on.
+    /// The player's own key — `set_standing_job`, which is what
+    /// `StaffAction::StandingWork` calls.
     #[test]
-    fn posting_a_worker_writes_a_deed() {
+    fn setting_a_machine_to_be_kept_staffed_writes_a_deed() {
         let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, true, false).unwrap();
+        assert!(deeds(&game).contains(&Deed::PostedStaff));
+    }
+
+    /// Turning the job **off** is not doing it, and neither is setting a
+    /// guard — the mission asks for a machine kept staffed.
+    #[test]
+    fn clearing_a_standing_job_writes_no_deed() {
+        let mut game = Game::new(29, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, false, false).unwrap();
+        assert!(!deeds(&game).contains(&Deed::PostedStaff));
+    }
+
+    /// **The scheduler is not the player.** `post_worker`'s only non-test
+    /// caller is `schedule_base_labour`, which runs every tick — a deed
+    /// written there would complete `tutorial_man_the_node` on its own, with
+    /// nobody having pressed anything, and the mission's own text names a
+    /// verb no key reaches.
+    #[test]
+    fn the_scheduler_posting_a_body_writes_no_deed() {
+        let mut game = Game::new(30, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         stand_in_base(&mut game);
         let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
         let worker = spawn_tamed(&mut game, 10, 3);
         game.post_worker(worker, machine);
-        assert!(deeds(&game).contains(&Deed::PostedStaff));
+        assert!(
+            !deeds(&game).contains(&Deed::PostedStaff),
+            "the base deciding where a body goes is not the player asking for it"
+        );
     }
 }
 
@@ -3178,4 +3205,71 @@ fn a_run_saved_mid_chain_resumes_on_the_same_step() {
         .collect();
     assert!(held.contains(&"fixture_step_2".to_string()), "{held:?}");
     assert!(loaded.in_tutorial());
+}
+
+/// **The board is the sector's, not the party's.**
+///
+/// It is readable underground, so `Game::offerable` must answer at depth 0
+/// however deep the party is standing. Asked from the party's live state a
+/// `Descend(1)` is `already_met` five frames down and drops out of the pool —
+/// and `board_defs` draws with `swap_remove`, so a pool one entry shorter
+/// reshuffles *every* slot rather than just the one that left. A board that
+/// changes as you walk is against the seam that says it is derived from the
+/// seed and nothing else.
+///
+/// Asserted on `offerable` rather than on the three rows a seed happened to
+/// draw: the draw is a lossy view of the pool, and for most seeds it hides
+/// the change entirely.
+#[test]
+fn a_descend_contract_stays_offerable_however_deep_the_party_stands() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let descend = def(
+        "probe_descend",
+        Objective::Descend { depth: 1 },
+        vec![Reward::Xp(1)],
+    );
+    assert!(
+        game.offerable_contracts_for_test(&descend),
+        "the fixture has to start from an offerable contract"
+    );
+
+    game.world.insert_resource(Locale::Stack {
+        depth: 5,
+        frames: 6,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    });
+
+    assert!(
+        game.offerable_contracts_for_test(&descend),
+        "five frames down, the sector's board still offers the descent"
+    );
+}
+
+/// The same rule one objective over, and the one that will fire the day a
+/// non-tutorial `Hold` ships: a board read against the live pack would
+/// reshuffle whenever the player picked something up.
+#[test]
+fn a_hold_contract_stays_offerable_whatever_is_in_the_pack() {
+    let mut game = fresh();
+    deploy_broker(&mut game);
+    let hold = def(
+        "probe_hold",
+        Objective::Hold {
+            item: ItemId::from(ids::CORE_FRAGMENT),
+            count: 12,
+        },
+        vec![Reward::Xp(1)],
+    );
+    assert!(game.offerable_contracts_for_test(&hold));
+
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
+
+    assert!(
+        game.offerable_contracts_for_test(&hold),
+        "what is in the pack is not a board input"
+    );
 }

@@ -255,8 +255,19 @@ mod tests {
             let m = ui_metrics(900.0);
             // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for line in contract_footer() {
-                let drawn = p.measure_ui_advance(line, m.font_size);
+            // The section headers ride along: they are drawn on this screen
+            // and are the only other lines on it that are not built from a
+            // contract row, which the census above already measures.
+            let headers = [
+                offered_header(BrokerReach::AtBroker, true),
+                offered_header(BrokerReach::OffBase, false),
+            ];
+            for line in contract_footer()
+                .into_iter()
+                .map(String::from)
+                .chain(headers)
+            {
+                let drawn = p.measure_ui_advance(&line, m.font_size);
                 assert!(
                     drawn <= room,
                     "the contract footer overflows its popup by {:.0}px \

@@ -922,10 +922,6 @@ fn a_decompile_outside_the_mission_still_rolls() {
     let dir = assets_with_decompile_mission("honest_decompile");
     let (mut game, wild) = hopeless_decompile(3202, &dir);
     skip_tutorial(&mut game);
-    // The stream is spent by whatever `skip_tutorial` did not do; reseed so
-    // the failing draw is the one this attempt takes.
-    game.world
-        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
     let player = game.player_entity();
 
     game.attempt_decompile(0, player);

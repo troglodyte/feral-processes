@@ -576,25 +576,24 @@ impl Game {
         if held.done.contains(&def.id) && !def.repeatable {
             return false;
         }
-        // Never offer something the run has already done.
-        !def.objective.already_met(&self.objective_state())
-    }
-
-    /// One snapshot of everything a state-shaped objective can be asked
-    /// about. Built per call rather than cached, matching what
-    /// `standing_structures` already did — `offerable` is asked once per def
-    /// and this is no more work than the walk it replaces.
-    pub(crate) fn objective_state(&self) -> crate::contracts::ObjectiveState {
-        crate::contracts::ObjectiveState {
-            depth: contract_depth(self.world.resource::<Locale>()),
-            zone: self.world.resource::<ZoneLevel>().0,
-            standing: self.standing_structures(),
-            carried: self
-                .world
-                .get::<Inventory>(self.player_entity())
-                .map(|inv| inv.items.clone())
-                .unwrap_or_default(),
-        }
+        // Never offer something the run has already done — asked at depth 0
+        // and against an empty pack, deliberately.
+        //
+        // The board is **the sector's**, and it is readable underground and
+        // off the base. Answered from the party's live `ObjectiveState` a
+        // `Descend(1)` would drop out of the pool the moment the party stood
+        // one frame down, and `board_defs` draws with `swap_remove`, so a
+        // pool one entry shorter reshuffles *every* slot — a board that
+        // changed as you walked, against the seam that says it is derived
+        // from the seed and nothing else. `carried` is the same trap one
+        // objective over, waiting for the first non-tutorial `Hold`.
+        !def.objective
+            .already_met(&crate::contracts::ObjectiveState {
+                depth: 0,
+                zone,
+                standing: self.standing_structures(),
+                carried: Vec::new(),
+            })
     }
 
     /// Every deployed structure's kind. Collected rather than queried lazily
@@ -820,7 +819,7 @@ impl Game {
                 Deed::TookFromContainer => "Take stock out of a machine with [c]".to_string(),
                 Deed::QueuedStandingOrder => "Place a standing work order".to_string(),
                 Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
-                Deed::PostedStaff => "Post a program to a machine".to_string(),
+                Deed::PostedStaff => "Set a machine to be kept staffed".to_string(),
             },
         }
     }

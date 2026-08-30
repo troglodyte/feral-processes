@@ -914,7 +914,6 @@ impl Game {
             progress: 0,
             required: ticks,
         });
-        self.note_deed(crate::contracts::Deed::PostedStaff);
     }
 
     /// `post_worker`'s counterpart for a dig site: the crew job, posted by

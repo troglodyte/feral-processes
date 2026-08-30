@@ -1853,6 +1853,14 @@ impl Game {
         } else {
             entity.remove::<StandingJob>();
         }
+        // Here and not in `post_worker`, which is the *scheduler's* door: its
+        // only non-test caller is `schedule_base_labour`, which runs every
+        // tick, so a deed written there records what the base decided rather
+        // than what the player asked for — and the mission that asks for this
+        // would complete itself. This is the key the player presses.
+        if work {
+            self.note_deed(crate::contracts::Deed::PostedStaff);
+        }
         Ok(())
     }
 

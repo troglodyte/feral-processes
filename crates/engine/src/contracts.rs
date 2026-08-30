@@ -88,7 +88,8 @@ pub enum Deed {
     QueuedStandingOrder,
     /// A Perk Point was spent. `Game::unlock_perk`.
     UnlockedPerk,
-    /// A program was posted to a machine. `Game::post_worker`.
+    /// A machine was set to be kept staffed. `Game::set_standing_job` —
+    /// the player's own key, not `post_worker`, which is the scheduler's.
     PostedStaff,
 }
 
@@ -183,7 +184,7 @@ impl Objective {
     /// pay out on the spot.
     ///
     /// The one statement of it, and it has two readers that must not drift:
-    /// `contract_system` advances the three state-shaped objectives by exactly
+    /// `contract_system` advances the state-shaped objectives by exactly
     /// this, and `Game::offerable` refuses to put one on the board while it is
     /// already true. They were one expression in the system alone until a
     /// board was read against the `contracts` template and offered
@@ -191,8 +192,11 @@ impl Objective {
     /// Credits, 5 Power Cells and 140 XP for pressing a key — and offered
     /// *Reach sector 3* to a run already in sector 3.
     ///
-    /// The two counting objectives are never already met: a contract asking
-    /// for zero of something is refused at load.
+    /// The event-shaped objectives are never already met: `Terminate` and
+    /// `Deliver` because a contract asking for zero of something is refused
+    /// at load, and `Perform` because a deed is a thing that happens rather
+    /// than a state the run is in — a board would otherwise refuse to offer
+    /// one forever.
     ///
     /// The run's side of the question is one `ObjectiveState` rather than a
     /// widening argument list, because with two readers every objective

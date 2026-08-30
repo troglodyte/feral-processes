@@ -1,7 +1,7 @@
 (
     id: "tutorial_man_the_node",
     name: "Man the Node",
-    description: "A Research Node with nobody on it is furniture. Post one of your programs to it and leave them there — an unstaffed machine banks nothing.",
+    description: "A Research Node with nobody on it is furniture. Open its staffing screen and set it to be kept worked — your crew will put a body on it and keep one there, and an unstaffed machine banks nothing.",
     objective: Perform(deed: PostedStaff),
     reward: [Credits(25), Xp(90)],
     tutorial: Some(100),

@@ -1204,7 +1204,10 @@ pub(crate) fn skip_tutorial(app: &mut App) {
         }
     }
     save::save_to_file(&path, &data).unwrap();
-    app.game = Game::load(&path, &test_assets_dir()).ok();
+    // The install the app was built with, not `test_assets_dir()` — they are
+    // the same today, and a modded fixture is what would tell them apart.
+    let assets = app.assets_dir.clone();
+    app.game = Game::load(&path, &assets).ok();
     let _ = std::fs::remove_file(&path);
 }
 

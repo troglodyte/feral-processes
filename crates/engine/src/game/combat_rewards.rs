@@ -926,28 +926,6 @@ impl Game {
     /// while only one catalyst is held, both pass the per-slot check, and the
     /// first to resolve spends the only copy. Without this guard the second
     /// would hit an `expect` instead of a refusal.
-    /// Whether the run's live onboarding mission is the one that teaches
-    /// decompiling.
-    ///
-    /// The one place the chain changes a shipped formula's outcome, and it is
-    /// bounded to a single mission of a single run: read off the live mission
-    /// rather than a flag, so it disarms itself the moment the chain moves
-    /// on and there is no state to leave set.
-    ///
-    /// Keyed on the **objective**, not the id, so it stays content-driven —
-    /// a mod authoring its own `Perform(deed: Tamed)` mission gets the same
-    /// guarantee, and renaming the shipped file changes nothing.
-    fn tutorial_grants_capture(&self) -> bool {
-        self.current_tutorial().is_some_and(|def| {
-            matches!(
-                def.objective,
-                crate::contracts::Objective::Perform {
-                    deed: crate::contracts::Deed::Tamed
-                }
-            )
-        })
-    }
-
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
         let Some((catalyst, potency)) = self.taming_catalyst() else {
             self.log_kind(
@@ -1065,5 +1043,27 @@ impl Game {
         }
         self.log("Another rogue program from the pack engages!");
         false
+    }
+
+    /// Whether the run's live onboarding mission is the one that teaches
+    /// decompiling.
+    ///
+    /// The one place the chain changes a shipped formula's outcome, and it is
+    /// bounded to a single mission of a single run: read off the live mission
+    /// rather than a flag, so it disarms itself the moment the chain moves
+    /// on and there is no state to leave set.
+    ///
+    /// Keyed on the **objective**, not the id, so it stays content-driven —
+    /// a mod authoring its own `Perform(deed: Tamed)` mission gets the same
+    /// guarantee, and renaming the shipped file changes nothing.
+    fn tutorial_grants_capture(&self) -> bool {
+        self.current_tutorial().is_some_and(|def| {
+            matches!(
+                def.objective,
+                crate::contracts::Objective::Perform {
+                    deed: crate::contracts::Deed::Tamed
+                }
+            )
+        })
     }
 }

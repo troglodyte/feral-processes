@@ -2532,18 +2532,15 @@ fn the_tutorial_chain_can_always_afford_its_next_step() {
                     .unwrap_or(0);
                 balance -= cost;
             }
-            crate::contracts::Objective::Hold { item, count } => {
-                assert!(
-                    *item == fragment,
-                    "{} holds something the balance does not track: {item}",
-                    def.id
-                );
-                assert!(
-                    balance >= 0,
-                    "{} asks the player to hold {count} with a balance of {balance}",
-                    def.id
-                );
-            }
+            // A `Hold` is satisfied by *play* — fighting and mining — not by
+            // the chain's own payouts, so there is no balance claim to make
+            // here beyond the one below. What this arm is for is keeping the
+            // model honest about what it tracks.
+            crate::contracts::Objective::Hold { item, .. } => assert!(
+                *item == fragment,
+                "{} holds something the balance does not track: {item}",
+                def.id
+            ),
             _ => {}
         }
         assert!(
@@ -2591,7 +2588,15 @@ fn every_deed_has_an_emit_site() {
         if path.components().any(|c| c.as_os_str() == "tests") {
             continue;
         }
-        body.push_str(&std::fs::read_to_string(path).unwrap());
+        // Comment lines stripped: `Deed`'s own doc names each emit site, and
+        // a doc comment quoting the call form would answer this census for a
+        // deed that has no writer at all.
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            if !line.trim_start().starts_with("//") {
+                body.push_str(line);
+                body.push('\n');
+            }
+        }
     }
     assert!(
         body.len() > 10_000,

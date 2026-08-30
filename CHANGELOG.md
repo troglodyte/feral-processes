@@ -27,6 +27,64 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.56
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+The info column opens on the pane the party's locale asks for, the depot
+picker is a table whose arrows point at its own columns, and a settled
+contract names its payout on the screen that announces it.
+
+- **The info column always opened on BASE, wherever the party was.**
+  Standing out on the surface — with nothing base-shaped in front of you —
+  meant reading a pane about the base while the crew you were walking with
+  sat one keypress away. The tab now follows the party across the base
+  boundary: walking out selects CREW, walking back in selects BASE, and a
+  zone breach lands on whichever the far side wants. `App::sync_info_tab_to_locale`
+  is the one writer, called from `after_tick` so every verb able to move the
+  party reaches it through one hook rather than each setting the tab itself,
+  and it only rewrites the tab when the side actually changes — so a manual
+  `1`/`2`/`3`/`4` press survives until the next crossing. A fresh or loaded
+  run opens on the true tab rather than waiting for a crossing that, from
+  its point of view, already happened. The Stack rides the same boolean:
+  underground reads as outside, so descending selects CREW and surfacing
+  reselects BASE.
+
+- **The transfer picker packed three figures into one unlabelled suffix.**
+  A row read `3 / -5 .. +128`, which said nothing about which number was
+  your pack and which was the shelf you were standing next to — the screen
+  the whole feature exists for, and it was the hardest one in the game to
+  read. It is four named columns now, `item | change | you | container`,
+  under a header. `you` and `container` are still `App::put_available` and
+  `App::take_available` — the same live ceilings, so a `you` reading 0 while
+  the pack holds units is still the screen saying the other rows have spent
+  the Depot's room — but the `-`/`+` decoration is gone, because the heading
+  now says which end it is. A row nobody has touched reads a bare `0` in the
+  change column rather than `+0`: a direction with a quantity of nothing is
+  not a direction.
+
+- **The arrows now point at the columns they move stock toward.** With the
+  container as the rightmost column, Left pulls units off it toward you and
+  Right pushes them from you into it — the reverse of what shipped, which
+  had been inverted by request back when the screen had no columns to be
+  inverted against. Shift still takes a row to the end its arrow heads for
+  and Ctrl still halves the gap to it. The sign convention underneath is
+  untouched: negative still puts and positive still takes, so the basket,
+  the clamp and `transfer_items` never learned about the change. The
+  controls page was telling the player the old arrows and now tells them the
+  new ones.
+
+- **A closed contract never said what it paid.** The alert screen took over
+  the display to announce the Broker had settled up, and the figure reached
+  the player only as a log line they had to scroll back through afterwards.
+  The payout now sits on that screen, in the notification's own colour so it
+  reads as a figure rather than as more prose, and it is built from the same
+  call the log line makes so the two cannot quote different numbers. What
+  carries it is a detail on the queued notification rather than a field in
+  the `.ron` — a payout is what the firing site knows and a content file
+  cannot author — and the screen has no scroll, so the census that says the
+  shipped catalogue fits now measures every notification as though it were
+  the one carrying the longest payout the shipped contracts can word.
+
 ## 0.13.55
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -2695,3 +2695,188 @@ fn a_deed_does_not_survive_the_tick_that_drained_it() {
         "the queue is drained unconditionally"
     );
 }
+
+/// Every emit site, one test each. They assert on the queue rather than on a
+/// finished contract so a failure names the site that stopped writing rather
+/// than reading as the contract system being broken.
+///
+/// `Deed::Tamed` is not here: it is tested in `tests/taming.rs` beside the
+/// forced first decompile, because the two are one behaviour from the
+/// player's side.
+mod deed_sites {
+    use super::*;
+    use crate::contracts::Deed;
+    use crate::game::base::work_orders::WorkOrder;
+
+    fn deeds(game: &Game) -> Vec<Deed> {
+        game.world
+            .resource::<crate::resources::RunFeats>()
+            .deeds
+            .clone()
+    }
+
+    fn stocked(game: &mut Game, kind: &str, x: i32, y: i32, output: &[(&str, u32)]) -> Entity {
+        let machine = spawn_machine_at(game, kind, x, y);
+        let mut stock = game.world.get_mut::<Stock>(machine).unwrap();
+        for (id, n) in output {
+            stock.output.insert(ItemId::from(*id), *n);
+        }
+        machine
+    }
+
+    fn player_tile(game: &Game) -> Position {
+        *game.world.get::<Position>(game.player_entity()).unwrap()
+    }
+
+    #[test]
+    fn examining_something_writes_a_deed() {
+        let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let start = player_tile(&game);
+        clear_creatures_east_of_player(&mut game, start, 10);
+        let species = game.species_defs().into_iter().next().unwrap();
+        game.world.spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position {
+                x: start.x + 3,
+                y: start.y,
+            },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 1,
+                mitigation: 1,
+            },
+        ));
+        assert!(
+            game.find_target_in_direction(1, 0, 5).is_some(),
+            "the fixture has to put something there"
+        );
+        assert!(deeds(&game).contains(&Deed::Examined));
+    }
+
+    #[test]
+    fn examining_nothing_writes_no_deed() {
+        let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let start = player_tile(&game);
+        clear_creatures_along_ray(&mut game, start, 0, -1, 10);
+        // An empty ray. The mission is to teach that `x` reports something,
+        // so pointing it at blank ground must not complete it.
+        assert!(game.find_target_in_direction(0, -1, 1).is_none());
+        assert!(!deeds(&game).contains(&Deed::Examined));
+    }
+
+    /// `transfer_items` ticks, and the tick is what drains the queue — so
+    /// these two read the contract rather than `RunFeats`. The deed is
+    /// written *before* that tick deliberately, so the mission advances on
+    /// the action rather than a tick behind it.
+    fn holding_a_take_mission(seed: u32) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        give(
+            &mut game,
+            def(
+                "take_test",
+                Objective::Perform {
+                    deed: Deed::TookFromContainer,
+                },
+                vec![Reward::Xp(1)],
+            ),
+            0,
+        );
+        game
+    }
+
+    fn finished_take_mission(game: &Game) -> bool {
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("take_test"))
+    }
+
+    /// Taking teaches pulling stock *out* of a machine, so only the take
+    /// side writes.
+    #[test]
+    fn taking_from_a_container_writes_a_deed() {
+        let mut game = holding_a_take_mission(22);
+        // Base-space coordinates: `stand_in_base` puts the party at the
+        // base's own origin, and `Position` is the surface tile.
+        stand_in_base(&mut game);
+        stocked(&mut game, "mining_node", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
+        let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]);
+        assert!(!taken.is_empty(), "the fixture has to move something");
+        assert!(finished_take_mission(&game));
+    }
+
+    /// The negative half, and the one that catches a `note_deed` written
+    /// unconditionally at the top of `transfer_items`: a player who only put
+    /// something in has not done what the mission asks.
+    #[test]
+    fn only_putting_into_a_container_writes_no_deed() {
+        let mut game = holding_a_take_mission(23);
+        stand_in_base(&mut game);
+        stocked(&mut game, "depot", 1, 0, &[]);
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 10)]);
+        let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+        assert!(!given.is_empty(), "the fixture has to move something");
+        assert!(!finished_take_mission(&game));
+    }
+
+    /// The mission asks for a *standing* order, which is the thing that
+    /// keeps working without being asked again.
+    #[test]
+    fn a_standing_work_order_writes_a_deed() {
+        let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        game.queue_work_order(WorkOrder::level(ItemId::from(ids::CORE_FRAGMENT), 20))
+            .unwrap();
+        assert!(deeds(&game).contains(&Deed::QueuedStandingOrder));
+    }
+
+    /// And a one-off is not one. Without this the mission completes on the
+    /// first order of any kind and the lesson never lands.
+    #[test]
+    fn a_one_off_work_order_writes_no_deed() {
+        let mut game = Game::new(25, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        spawn_machine_at(&mut game, "mining_node", 1, 0);
+        game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 20))
+            .unwrap();
+        assert!(!deeds(&game).contains(&Deed::QueuedStandingOrder));
+    }
+
+    #[test]
+    fn unlocking_a_perk_writes_a_deed() {
+        let mut game = Game::new(26, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 20;
+        let perk = game.perk_defs().first().expect("a shipped perk").id;
+        game.unlock_perk(perk).unwrap();
+        assert!(deeds(&game).contains(&Deed::UnlockedPerk));
+    }
+
+    /// A refusal spends nothing and must record nothing.
+    #[test]
+    fn a_refused_perk_writes_no_deed() {
+        let mut game = Game::new(27, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        game.world.get_mut::<Perks>(player).unwrap().points = 0;
+        let perk = game.perk_defs().first().expect("a shipped perk").id;
+        assert!(game.unlock_perk(perk).is_err());
+        assert!(!deeds(&game).contains(&Deed::UnlockedPerk));
+    }
+
+    /// `post_worker` directly rather than the `post_program` fixture, which
+    /// ticks afterwards — and a tick is what drains the queue this asserts
+    /// on.
+    #[test]
+    fn posting_a_worker_writes_a_deed() {
+        let mut game = Game::new(28, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        let worker = spawn_tamed(&mut game, 10, 3);
+        game.post_worker(worker, machine);
+        assert!(deeds(&game).contains(&Deed::PostedStaff));
+    }
+}

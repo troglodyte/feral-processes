@@ -2093,6 +2093,12 @@ impl Game {
         let _ = self.notify(&crate::notifications::NotificationId::from(
             "tutorial_first_work_order",
         ));
+        // Standing only, and below every refusal: the mission asks for the
+        // order that keeps working without being asked again, so a one-off
+        // must not finish it.
+        if standing {
+            self.note_deed(crate::contracts::Deed::QueuedStandingOrder);
+        }
         Ok(())
     }
 

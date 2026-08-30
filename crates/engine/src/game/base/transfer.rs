@@ -119,6 +119,13 @@ impl Game {
             let summary = self.moved_summary(&given);
             self.log_base(format!("You put away {summary}."));
         }
+        // The take side only. The mission teaches pulling stock *out* of a
+        // machine; a player who only put something in has not done it.
+        // Before the tick, so the deed is drained by the very
+        // `contract_system` run this action pays for.
+        if !taken.is_empty() {
+            self.note_deed(crate::contracts::Deed::TookFromContainer);
+        }
         if !taken.is_empty() || !given.is_empty() {
             self.tick();
         }

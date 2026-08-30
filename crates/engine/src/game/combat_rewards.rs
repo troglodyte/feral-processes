@@ -983,6 +983,7 @@ impl Game {
             .resource_mut::<BattleState>()
             .rewards
             .decompile_verdict = None;
+        self.note_deed(crate::contracts::Deed::Tamed);
 
         // Taken while the program is still hostile: `kill_xp` reads its
         // `Stats`, and everything below this line is the act of turning it

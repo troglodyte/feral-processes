@@ -3010,3 +3010,39 @@ fn an_install_with_no_chain_hands_out_nothing() {
         0
     );
 }
+
+/// While the chain runs the board is empty — one mission at a time means
+/// one, not one plus three the player cannot evaluate yet.
+#[test]
+fn the_board_is_empty_while_the_chain_runs() {
+    let dir = assets_with_fixture_chain("board_suppressed");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    deploy_broker(&mut game);
+    assert!(game.in_tutorial());
+    assert_eq!(
+        game.contract_board(),
+        Some(Vec::new()),
+        "a Broker is standing, so the board exists and is empty — not `None`, \
+         which is the claim that no Broker is standing at all"
+    );
+}
+
+/// And fills the moment the chain is finished.
+#[test]
+fn the_board_fills_when_the_chain_is_finished() {
+    let dir = assets_with_fixture_chain("board_freed");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    deploy_broker(&mut game);
+    skip_tutorial(&mut game);
+    let board = game.contract_board().expect("a Broker is standing");
+    assert!(!board.is_empty(), "the ordinary board is live again");
+}
+
+/// With no Broker the answer is still `None` and not an empty board. Two
+/// readers depend on that difference.
+#[test]
+fn no_broker_still_answers_none_during_the_chain() {
+    let dir = assets_with_fixture_chain("board_no_broker");
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    assert_eq!(game.contract_board(), None);
+}

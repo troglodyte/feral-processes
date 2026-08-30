@@ -512,6 +512,14 @@ pub(super) fn assets_with_fixture_chain(tag: &str) -> ScratchAssets {
     copy_shipped_assets(&dir, &[]);
     let contracts = dir.join("contracts");
     std::fs::create_dir_all(&contracts).unwrap();
+    // One ordinary contract beside the chain, so a test about the board
+    // being *suppressed* can tell that from a board with nothing to offer.
+    std::fs::write(
+        contracts.join("fixture_plain.ron"),
+        r#"(id: "fixture_plain", name: "Fixture Plain", description: "d",
+            objective: Terminate(species: None, count: 1), reward: [Xp(1)])"#,
+    )
+    .unwrap();
     // Steps of its own, on numbers no shipped mission uses.
     for (n, step) in [(1u32, 9001u32), (2, 9002), (3, 9003)] {
         std::fs::write(

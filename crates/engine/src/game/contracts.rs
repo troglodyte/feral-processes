@@ -359,6 +359,22 @@ impl Game {
         if self.broker_reach() == BrokerReach::NoBroker {
             return None;
         }
+        // Onboarding owns the board while it runs. A new player choosing
+        // between three offers they have no way to evaluate is what the
+        // chain exists to replace, and the starter queue below was the
+        // weaker first attempt at the same thing.
+        //
+        // `Some(vec![])` rather than `None`: the Broker is standing and
+        // reachable, and `None` is the claim that it is not — a claim two
+        // other readers act on.
+        //
+        // It also keeps the chain's *later* steps off the board. They are
+        // ordinary unfinished contracts, so `offerable` would happily list
+        // step 3 beside step 1's held copy; once the chain is over they are
+        // all in `done` and refused there, so this is the only guard needed.
+        if self.in_tutorial() {
+            return Some(Vec::new());
+        }
         let mut pool = self.offerable_contracts();
         pool.extend(self.rolled_contracts());
         // Starters first, and only then the rest of the pool. Three slots

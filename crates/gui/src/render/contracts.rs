@@ -7,7 +7,15 @@ use super::*;
 /// are the sector's, not the tile's — so this is where the screen says they
 /// cannot be signed from here, rather than leaving the player to press a key
 /// and read a refusal.
-fn offered_header(reach: BrokerReach) -> String {
+///
+/// `onboarding` is the same errand one step earlier: the board really is
+/// empty while the chain runs, and under a Broker the player has just built,
+/// *Nothing on the board.* reads as the Broker being broken rather than as
+/// the game waiting on them.
+fn offered_header(reach: BrokerReach, onboarding: bool) -> String {
+    if onboarding {
+        return "Offered - finish your onboarding and the board opens up".to_string();
+    }
     match reach {
         BrokerReach::AtBroker | BrokerReach::NoBroker => "Offered".to_string(),
         BrokerReach::OffBase => "Offered - return to your base to take one".to_string(),
@@ -44,7 +52,11 @@ pub(super) fn draw_contracts(
     }
 
     rows.push(text_row(""));
-    rows.push(Row::TextColored(offered_header(reach), CYAN));
+    // Derived from the rows the screen is already holding rather than asked
+    // of the engine a second time, so the header and the list cannot
+    // disagree — the same reason both lists come in from app-core.
+    let onboarding = active.iter().any(|row| row.tutorial);
+    rows.push(Row::TextColored(offered_header(reach, onboarding), CYAN));
     if offers.is_empty() {
         rows.push(text_row("    Nothing on the board."));
     }
@@ -81,7 +93,7 @@ fn contract_line(contract: &ContractRow, idx: usize, selected: usize, held: bool
     } else {
         String::new()
     };
-    item_row(
+    let mut row = item_row(
         format!(
             "[{}] {} - {}{progress} - pays {}",
             menu_shortcut(idx),
@@ -90,7 +102,17 @@ fn contract_line(contract: &ContractRow, idx: usize, selected: usize, held: bool
             contract.reward_line
         ),
         idx == selected,
-    )
+    );
+    // Onboarding missions, and nothing else on this screen. `color` means
+    // fusion tier on the gear screens and CRITICAL HP on the party screen;
+    // the contracts screen has never used it, so green lands on a free axis
+    // rather than becoming a second meaning on a loaded one.
+    if contract.tutorial
+        && let Row::Item { color, .. } = &mut row
+    {
+        *color = GREEN;
+    }
+    row
 }
 
 #[cfg(test)]
@@ -104,14 +126,14 @@ mod tests {
     /// to press a key to find that out has been shown a menu that lies.
     #[test]
     fn the_board_header_says_when_an_offer_cannot_be_taken_from_here() {
-        assert_eq!(offered_header(BrokerReach::AtBroker), "Offered");
+        assert_eq!(offered_header(BrokerReach::AtBroker, false), "Offered");
         assert_eq!(
-            offered_header(BrokerReach::NoBroker),
+            offered_header(BrokerReach::NoBroker, false),
             "Offered",
             "with no Broker the section is empty anyway, and `Nothing on the \
              board` is the line that speaks"
         );
-        let away = offered_header(BrokerReach::OffBase);
+        let away = offered_header(BrokerReach::OffBase, false);
         assert!(
             away.starts_with("Offered"),
             "the section still has to be recognisable as the board: {away:?}"
@@ -119,6 +141,55 @@ mod tests {
         assert!(
             away.contains("base"),
             "the header names the errand: {away:?}"
+        );
+    }
+
+    fn row(id: &str, tutorial: bool) -> ContractRow {
+        ContractRow {
+            id: id.into(),
+            name: "A Contract".to_string(),
+            description: "d".to_string(),
+            objective_line: "Build a Home".to_string(),
+            reward_line: "10 Credits".to_string(),
+            progress: 0,
+            target: 1,
+            tutorial,
+        }
+    }
+
+    fn row_color(contract: &ContractRow) -> Color {
+        match contract_line(contract, 0, usize::MAX, true) {
+            Row::Item { color, .. } => color,
+            _ => panic!("contract_line builds an item row"),
+        }
+    }
+
+    /// An onboarding mission draws green. It is the only row on this screen
+    /// that is coloured at all, so the axis carries exactly one meaning here.
+    #[test]
+    fn an_onboarding_missions_row_is_green() {
+        assert_eq!(row_color(&row("tutorial_first_light", true)), GREEN);
+    }
+
+    /// An ordinary contract is untouched.
+    #[test]
+    fn an_ordinary_contracts_row_is_not_green() {
+        assert_ne!(row_color(&row("raw_stock", false)), GREEN);
+    }
+
+    /// A board that is empty *because onboarding owns it* has to say so.
+    /// Under a Broker the player just built, *Nothing on the board.* reads as
+    /// the Broker being broken.
+    #[test]
+    fn the_board_header_says_when_onboarding_owns_it() {
+        let line = offered_header(BrokerReach::AtBroker, true);
+        assert!(
+            line.starts_with("Offered"),
+            "still recognisable as the board: {line:?}"
+        );
+        assert!(
+            line.len() > "Offered".len(),
+            "and it names why there is nothing on it: {line:?}"
         );
     }
 

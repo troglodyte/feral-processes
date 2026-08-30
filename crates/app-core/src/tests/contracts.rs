@@ -164,6 +164,54 @@ fn picking_an_offer_accepts_it_and_the_screen_stays_open() {
     );
 }
 
+/// `[A]` on an onboarding mission refuses with a sentence, on both surfaces.
+/// A silent no-op reads as the key being broken, and the engine's own
+/// refusal is a bare `false` that cannot reach the log.
+#[test]
+fn giving_back_an_onboarding_mission_is_refused_with_a_sentence() {
+    // Not `app_at_a_contract_broker`, which skips the chain: this is about a
+    // run still running it, and it needs no Broker — the mission is in hand
+    // from tick 0.
+    let mut app = test_app(3123);
+    open_via_menu(&mut app, 'b', "Contracts");
+    let held = app.game.as_ref().unwrap().active_contracts();
+    assert_eq!(held.len(), 1, "one onboarding mission in hand");
+    assert!(held[0].tutorial);
+
+    app.handle_key(GameKey::Char('A'));
+
+    let line = app.status_line.clone().expect("a refusal has a sentence");
+    let lowered = line.to_lowercase();
+    assert!(
+        lowered.contains("onboarding") || lowered.contains("finish"),
+        "the sentence says why: {line:?}"
+    );
+    // Both surfaces: `App::refuse` writes the log too, and asserting only on
+    // `status_line` would pass against a bare `self.status_line = ...`.
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .message_history(50)
+            .iter()
+            .any(|entry| entry.text.contains("cannot be given back")),
+        "the refusal reaches the log the player scrolls back through — and on \
+         a fragment the hand-out line does not share, or the ONBOARDING: \
+         line would answer this on its own"
+    );
+    assert_eq!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .active_contracts()
+            .iter()
+            .filter(|r| r.tutorial)
+            .count(),
+        1,
+        "and it is still in hand"
+    );
+}
+
 #[test]
 fn abandoning_the_highlighted_contract_drops_it() {
     let mut app = app_at_a_contract_broker(3107, false);

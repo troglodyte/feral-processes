@@ -28,10 +28,39 @@ impl Game {
     /// `Repeat::OnceEver` and lives here, so a second `if first_time` check
     /// in Rust would put the policy in two places and let the two disagree.
     pub fn notify(&mut self, id: &NotificationId) -> Result<(), NoNotify> {
+        self.notify_filled(id, &[])
+    }
+
+    /// `notify`, with `{hole}` placeholders in the title and body replaced.
+    ///
+    /// The substitution is a **parameter on the one door**, not a second
+    /// door — `pursuit_field`'s shape over `walk_field`. Every property
+    /// `notify` has (the latch, the resolved push, no RNG, no log line)
+    /// belongs to exactly one function still, and `notify(id)` is this with
+    /// no fills.
+    ///
+    /// It exists so a def can be written once and read for many subjects:
+    /// the onboarding chain's briefing is one file filled from whichever
+    /// mission was just handed out, rather than eleven files each repeating
+    /// a mission's own name and description. A hole no caller names is left
+    /// standing rather than blanked, so it is visible to a census instead of
+    /// reading as a missing word.
+    pub fn notify_filled(
+        &mut self,
+        id: &NotificationId,
+        fills: &[(&str, &str)],
+    ) -> Result<(), NoNotify> {
         let Some(def) = self.world.resource::<NotificationDb>().get(id) else {
             return Err(NoNotify::Unknown);
         };
-        let notification = Notification::from(def);
+        let fill = |text: &str| {
+            fills.iter().fold(text.to_string(), |text, (key, value)| {
+                text.replace(&format!("{{{key}}}"), value)
+            })
+        };
+        let mut notification = Notification::from(def);
+        notification.title = fill(&notification.title);
+        notification.body = fill(&notification.body);
         let repeat = def.repeat;
         if repeat == Repeat::OnceEver {
             if !self.world.resource_mut::<Profile>().see(id) {

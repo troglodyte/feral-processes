@@ -252,3 +252,51 @@ fn a_refusal_reports_why_and_leaves_the_screen_open() {
     );
     assert_eq!(app.mode, Mode::Contracts);
 }
+
+/// **A new run's first tick opens on its onboarding briefing.**
+///
+/// The full-screen notice is how a new player learns the chain exists at
+/// all — the mission is in hand from tick 0, but nothing else points at it.
+/// Asserted through `start_new_game` rather than `test_app`, which drains
+/// the queue, so this is the screen a player actually sees.
+#[test]
+fn a_new_run_opens_on_the_first_missions_briefing() {
+    let mut app = test_app(3124);
+    app.start_new_game(DifficultyMode::Forgiving);
+    let mission = app
+        .game
+        .as_ref()
+        .unwrap()
+        .active_contracts()
+        .into_iter()
+        .find(|row| row.tutorial)
+        .expect("a new run holds the chain's first mission");
+
+    // The queue is drained by `after_tick`, so the briefing lands on the
+    // first keypress rather than at the menu.
+    app.handle_key(GameKey::Char('.'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Notification,
+        "the briefing takes the screen"
+    );
+    let shown = app
+        .pending_notification
+        .clone()
+        .expect("a notice is on screen");
+    assert_eq!(shown.title, mission.name, "titled for the mission");
+    assert!(
+        shown.body.contains(&mission.description),
+        "and carries the contract's own words rather than a second copy: {:?}",
+        shown.body
+    );
+    assert!(
+        shown.body.contains("[4]"),
+        "it points at the key that opens the contracts pane: {:?}",
+        shown.body
+    );
+
+    app.handle_key(GameKey::Char(' '));
+    assert_eq!(app.mode, Mode::Playing, "and any key returns to the map");
+}

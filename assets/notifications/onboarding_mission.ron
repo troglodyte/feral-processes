@@ -1,0 +1,8 @@
+(
+    id: "onboarding_mission",
+    title: "{name}",
+    body: "{description}\n\nASKED OF YOU: {objective}\n\nPress [4] at any time to view a summary of your contracts.",
+    glyph: '!',
+    color: Green,
+    repeat: Always,
+)

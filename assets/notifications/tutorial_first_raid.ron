@@ -1,7 +1,7 @@
 (
     id: "tutorial_first_raid",
     title: "GC Entropy Sweep",
-    body: "The garbage collector has found your base. A sweep does not come for you — it comes for your structures, and it will keep coming.\n\nStaff posted at a machine defend it, and take damage doing so. A program that goes down is not lost: it keeps its slot on the roster and walks itself to a Repair Bay, if one is standing.\n\nMore bodies and more Bays are the answer. An empty base is a base that loses buildings.",
+    body: "The garbage collector has found your base. A sweep comes to clean up stray data, ...your structures, and it will keep coming.\n\nStaff posted at a machine defend it, and take damage doing so. There must be a way to defend against it.",
     glyph: '!',
     color: Red,
     repeat: OnceEver,

@@ -81,6 +81,13 @@ pub(crate) fn test_app(seed: u32) -> App {
         )),
     );
     app.game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok();
+    // A new run queues the onboarding chain's first briefing, which would
+    // otherwise take the screen the moment any test reached `Playing` — the
+    // engine's own notification tests drain for the same reason. A test
+    // about the briefing itself queues its own.
+    if let Some(game) = &mut app.game {
+        while game.take_notification().is_some() {}
+    }
     app.mode = Mode::Playing;
     app
 }

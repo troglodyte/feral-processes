@@ -147,6 +147,20 @@ impl Game {
         }
         let accepted_tick = self.current_tick();
         let name = def.name.clone();
+        // The briefing carries the contract's own words, filled from the def
+        // in hand — one template file rather than a second copy of every
+        // mission's name and description. An absent catalogue returns
+        // `Unknown` and is ignored, so deleting `assets/notifications/`
+        // stays a supported install.
+        let objective = self.objective_line(&def.objective);
+        let _ = self.notify_filled(
+            &crate::notifications::NotificationId::from("onboarding_mission"),
+            &[
+                ("name", &name),
+                ("objective", &objective),
+                ("description", &def.description),
+            ],
+        );
         self.world.resource_mut::<ActiveContracts>().active.push(
             crate::resources::ActiveContract {
                 def,

@@ -1,7 +1,7 @@
 (
     id: "milestone_breach",
     title: "Breach",
-    body: "The portal holds long enough. A new sector resolves around you — new ground, new species, a harder floor and a higher ceiling.\n\nYour base travels with you. The zone does not: wild populations, contracts on the board and anything a trader was holding for you are all left behind on the other side.",
+    body: "The portal holds long enough. A new sector resolves around you — new ground, new species, a harder floor and a higher ceiling.\n\nYour base travels with you.",
     glyph: '*',
     color: Magenta,
     repeat: Always,

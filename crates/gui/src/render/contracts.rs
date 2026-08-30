@@ -38,6 +38,23 @@ pub(super) fn draw_contracts(
     painter: &Painter,
     m: &Metrics,
 ) {
+    let rows = contract_rows(active, offers, reach, selected);
+    draw_popup("Contracts", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// Every row the screen draws, built without touching a `Painter`.
+///
+/// Split out so the width censuses measure **what the screen emits** rather
+/// than what a helper would have returned if it were called — a census that
+/// calls `description_rows` itself stays green through a `draw_contracts`
+/// that stopped calling it, which is the regression that put an unwrapped
+/// paragraph on this screen in the first place.
+fn contract_rows(
+    active: &[ContractRow],
+    offers: &[ContractRow],
+    reach: BrokerReach,
+    selected: usize,
+) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut idx = 0;
 
@@ -47,7 +64,7 @@ pub(super) fn draw_contracts(
     }
     for contract in active {
         rows.push(contract_line(contract, idx, selected, true));
-        rows.push(text_row(format!("    {}", contract.description)));
+        rows.extend(description_rows(&contract.description));
         idx += 1;
     }
 
@@ -62,13 +79,13 @@ pub(super) fn draw_contracts(
     }
     for contract in offers {
         rows.push(contract_line(contract, idx, selected, false));
-        rows.push(text_row(format!("    {}", contract.description)));
+        rows.extend(description_rows(&contract.description));
         idx += 1;
     }
 
     rows.push(text_row(""));
     rows.extend(contract_footer().into_iter().map(text_row));
-    draw_popup("Contracts", PopupSize::Large, &rows, refusal, painter, m);
+    rows
 }
 
 /// The footer's two lines. Split out, like `rename_help`, so a test can
@@ -191,6 +208,68 @@ mod tests {
             line.len() > "Offered".len(),
             "and it names why there is nothing on it: {line:?}"
         );
+    }
+
+    /// A description longer than the popup is wide is wrapped, not run off
+    /// the edge. The screen clips nothing horizontally, so an unwrapped
+    /// paragraph simply leaves the popup and takes its own tail with it.
+    #[test]
+    fn a_long_description_wraps_rather_than_running_off_the_popup() {
+        let long = "Mining by hand is a way to spend a run. Stand up a Mining Node \
+                    and let it work while you do something else — post a program to \
+                    it, then stay in the base a while and watch your crew haul what \
+                    it cuts across to a buffer on their own.";
+        let rows: Vec<Row> = description_rows(long).collect();
+        assert!(rows.len() > 1, "a paragraph this long is more than one row");
+        for row in &rows {
+            let Row::Item { text, .. } = row else {
+                panic!("`description_rows` builds item rows");
+            };
+            assert!(
+                text.chars().count() <= DESCRIBE_WRAP_COLUMNS,
+                "a wrapped line still overruns the wrap budget: {text:?}"
+            );
+        }
+    }
+
+    /// **No shipped contract's description overflows the popup either.**
+    ///
+    /// The row census below measures the `[n] Name - objective - pays` line
+    /// and has never looked at the paragraph under it — which is how eleven
+    /// onboarding missions, whose descriptions are several times longer than
+    /// any other contract's, shipped against a green suite.
+    #[test]
+    fn no_shipped_contract_description_overflows_its_popup() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(43, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        // Through the screen's own row builder, so a `draw_contracts` that
+        // stopped wrapping fails here.
+        let catalogue = game.contract_catalogue();
+        let widest = contract_rows(&catalogue, &[], BrokerReach::AtBroker, usize::MAX)
+            .into_iter()
+            .filter_map(|row| match row {
+                Row::Item { text, .. } if text.starts_with(DESCRIPTION_INDENT) => Some(text),
+                _ => None,
+            })
+            .max_by_key(|line| line.chars().count())
+            .expect("the shipped assets define contracts");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            let drawn = p.measure_ui_advance(&widest, m.font_size);
+            assert!(
+                drawn > 0.0,
+                "the census measured nothing — the shipped set has to reach here"
+            );
+            assert!(
+                drawn <= room,
+                "the widest description line overflows by {:.0}px \
+                 ({drawn:.0} into {room:.0}):\n{widest}",
+                drawn - room
+            );
+        });
     }
 
     /// **The widest contract row the shipped assets can build still fits.**

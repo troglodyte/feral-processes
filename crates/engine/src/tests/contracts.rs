@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 5];
+    let mut seen = [false; 6];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -318,6 +318,7 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Descend { .. } => 2,
             Objective::Breach { .. } => 3,
             Objective::Build { .. } => 4,
+            Objective::Hold { .. } => 5,
         };
         seen[slot] = true;
     }
@@ -2531,4 +2532,86 @@ fn a_tutorial_mission_may_not_be_repeatable() {
     assert_eq!(db.iter().count(), 0);
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     assert!(warnings[0].contains("repeatable"), "{warnings:?}");
+}
+
+/// `Hold` is met by what is in the pack, needs no Broker, and is what lets
+/// the chain teach "fighting pays in stock" before one is standing.
+#[test]
+fn hold_is_met_by_what_the_player_is_carrying() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 12,
+    };
+    let mut state = crate::contracts::ObjectiveState {
+        depth: 0,
+        zone: 1,
+        standing: Vec::new(),
+        carried: vec![(ItemId::from(crate::items::ids::CORE_FRAGMENT), 11)],
+    };
+    assert!(!objective.already_met(&state), "eleven is not twelve");
+    state.carried[0].1 = 12;
+    assert!(objective.already_met(&state));
+    state.carried[0].1 = 40;
+    assert!(
+        objective.already_met(&state),
+        "more than asked still counts"
+    );
+}
+
+/// State-shaped, so it completes through the one `progress >= target` rule
+/// with a target of 1 — the same shape `Build` and `Descend` have.
+#[test]
+fn hold_is_a_latch_with_a_target_of_one() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 12,
+    };
+    assert_eq!(objective.target(), 1);
+}
+
+/// Carrying nothing of the item at all is the common case and must not
+/// panic or read as met.
+#[test]
+fn hold_is_not_met_by_an_empty_pack() {
+    let objective = Objective::Hold {
+        item: ItemId::from(crate::items::ids::CORE_FRAGMENT),
+        count: 1,
+    };
+    let state = crate::contracts::ObjectiveState {
+        depth: 0,
+        zone: 1,
+        standing: Vec::new(),
+        carried: Vec::new(),
+    };
+    assert!(!objective.already_met(&state));
+}
+
+/// A held `Hold` finishes off the run's own inventory, through the ordinary
+/// tick path and the ordinary completion path.
+#[test]
+fn a_held_hold_completes_from_the_players_pack() {
+    let mut game = Game::new(31, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 100);
+    give(
+        &mut game,
+        def(
+            "hold_test",
+            Objective::Hold { item, count: 12 },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    game.tick();
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveContracts>()
+            .done
+            .contains(&ContractId::from("hold_test")),
+        "a pack that already meets the objective finishes it on the next tick"
+    );
 }

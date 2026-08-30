@@ -87,6 +87,7 @@ loses its progress; it is not banked.
 | `Descend(depth: 3)` | the party stands in a Stack frame 3 or more levels down |
 | `Breach(zone: 3)` | the run reaches sector 3 or deeper |
 | `Build(structure: "refinery")` | one of those is deployed |
+| `Hold(item: "core_fragment", count: 12)` | you have that many in your pack at once |
 
 `Terminate` names a species id from `assets/species/`; `Deliver` an item id from
 `assets/items/`; `Build` a structure id from `assets/structures/`. An id
@@ -97,6 +98,11 @@ set is checked by a test; a mod is not.
 `Deliver` is the one objective that needs you to go somewhere: items are handed
 over at the Broker, and it takes only as many as the contract still needs.
 Everything else is measured wherever you are, including four frames down.
+
+`Hold` is not `Deliver`. Nothing is handed over and nothing is spent, so it
+needs no Broker and is met wherever you are, four frames down included. It is
+also **latched**: once you have held the count, spending it does not
+un-finish the contract.
 
 Don't name a **banked** item (`ItemDef::banked` — Research Data is the shipped
 one). A bank shares `Inventory` with cargo, so the hand-over quietly works,

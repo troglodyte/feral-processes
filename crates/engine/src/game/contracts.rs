@@ -23,6 +23,21 @@ use crate::contracts::{ContractId, Objective, Reward};
 use crate::items::{ItemId, ids};
 use crate::resources::{ActiveContracts, Locale, MessageKind, RunFeats, ZoneLevel};
 
+/// How deep the party stands, for a `Descend` objective.
+///
+/// A free function so `contract_system` and `Game::objective_state` cannot
+/// disagree about what base space answers — 0 is what "no Stack depth
+/// reached" means here, and base space is neither the surface nor a frame.
+///
+/// Deliberately not `stack_market`'s `stack_depth`, which floors at 1
+/// because a price needs a multiplier.
+fn contract_depth(locale: &Locale) -> u32 {
+    match locale {
+        Locale::Stack { depth, .. } => *depth,
+        Locale::Surface | Locale::Base { .. } => 0,
+    }
+}
+
 /// Raises `ActiveContract::progress` and nothing else. Completion is
 /// `Game::settle_contracts`' — a payout writes to the player's inventory and
 /// grants XP, which is `&mut Game` work rather than anything a system can
@@ -36,17 +51,18 @@ pub fn contract_system(
     // surface coordinate.
     locale: Res<Locale>,
     structures: Query<&Structure>,
+    player: Query<&Inventory, With<crate::components::Player>>,
 ) {
-    let depth = match *locale {
-        Locale::Stack { depth, .. } => depth,
-        // Base space has no depth to reach, and it is not the surface
-        // either — but 0 is what "no Stack depth reached" already means
-        // here, so both non-Stack locales answer the same.
-        Locale::Surface | Locale::Base { .. } => 0,
+    let state = crate::contracts::ObjectiveState {
+        depth: contract_depth(&locale),
+        zone: zone.0,
+        standing: structures.iter().map(|s| s.kind.clone()).collect(),
+        carried: player
+            .iter()
+            .next()
+            .map(|inv| inv.items.clone())
+            .unwrap_or_default(),
     };
-
-    let standing: Vec<crate::structures::StructureId> =
-        structures.iter().map(|s| s.kind.clone()).collect();
 
     for contract in &mut held.active {
         let target = contract.def.objective.target();
@@ -58,11 +74,11 @@ pub fn contract_system(
                 .count() as u32,
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
-            // The three state-shaped ones advance by exactly the predicate
+            // The state-shaped ones advance by exactly the predicate
             // `Game::offerable` refuses a board slot on, so a contract cannot
             // be offered in a state that would finish it and then fail to
             // finish once taken.
-            state => u32::from(state.already_met(depth, zone.0, &standing)),
+            polled => u32::from(polled.already_met(&state)),
         };
         contract.progress = contract.progress.saturating_add(advance).min(target);
     }
@@ -466,12 +482,25 @@ impl Game {
         if held.done.contains(&def.id) && !def.repeatable {
             return false;
         }
-        // Never offer something the run has already done. A board is only read
-        // on the surface, so the depth here is always 0 and a `Descend` can
-        // never be pre-met — `Breach` and `Build` are the live cases, and both
-        // shipped authored contracts that could hit them.
-        !def.objective
-            .already_met(0, zone, &self.standing_structures())
+        // Never offer something the run has already done.
+        !def.objective.already_met(&self.objective_state())
+    }
+
+    /// One snapshot of everything a state-shaped objective can be asked
+    /// about. Built per call rather than cached, matching what
+    /// `standing_structures` already did — `offerable` is asked once per def
+    /// and this is no more work than the walk it replaces.
+    pub(crate) fn objective_state(&self) -> crate::contracts::ObjectiveState {
+        crate::contracts::ObjectiveState {
+            depth: contract_depth(self.world.resource::<Locale>()),
+            zone: self.world.resource::<ZoneLevel>().0,
+            standing: self.standing_structures(),
+            carried: self
+                .world
+                .get::<Inventory>(self.player_entity())
+                .map(|inv| inv.items.clone())
+                .unwrap_or_default(),
+        }
     }
 
     /// Every deployed structure's kind. Collected rather than queried lazily
@@ -684,6 +713,9 @@ impl Game {
                     .map(|def| def.name.clone())
                     .unwrap_or_else(|| structure.clone());
                 format!("Build a {name}")
+            }
+            Objective::Hold { item, count } => {
+                format!("Hold {count} {}", self.item_name(item))
             }
         }
     }

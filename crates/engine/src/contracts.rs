@@ -75,6 +75,47 @@ pub enum Objective {
     Breach { zone: u32 },
     /// One of these is deployed.
     Build { structure: StructureId },
+    /// This many of an item are in the player's pack **at once**.
+    ///
+    /// Not `Deliver`: nothing is handed over and nothing is spent, so it
+    /// needs no Broker and can be met four frames down. That is why it
+    /// exists — the onboarding chain has to teach that fighting pays in
+    /// stock before a Contract Broker has been built.
+    ///
+    /// State-shaped and **latched**, like `Build` and `Descend`: once met it
+    /// stays met, so spending the stock on the next thing the chain asks for
+    /// does not un-finish it.
+    Hold { item: ItemId, count: u32 },
+}
+
+/// Everything about the run a state-shaped objective can be asked against.
+///
+/// A struct rather than positional arguments because `Objective::already_met`
+/// has two readers that must not drift — `contract_system` advances by it and
+/// `Game::offerable` refuses a board slot on it — so every objective added
+/// widened one signature at two call sites. A field costs neither, and the
+/// next objective costs a field.
+pub struct ObjectiveState {
+    /// Stack depth, read from `resources::Locale` and never from `Position`,
+    /// which is pinned to the surface entrance tile while underground.
+    pub depth: u32,
+    pub zone: u32,
+    /// Every deployed structure's kind.
+    pub standing: Vec<StructureId>,
+    /// What the player is carrying, for `Objective::Hold`.
+    pub carried: Vec<(ItemId, u32)>,
+}
+
+impl ObjectiveState {
+    /// Units of `item` in the pack, 0 if none — carrying nothing of it is the
+    /// common case, not an error.
+    pub fn count(&self, item: &ItemId) -> u32 {
+        self.carried
+            .iter()
+            .find(|(i, _)| i == item)
+            .map(|(_, q)| *q)
+            .unwrap_or(0)
+    }
 }
 
 impl Objective {
@@ -85,7 +126,10 @@ impl Objective {
     pub fn target(&self) -> u32 {
         match self {
             Objective::Terminate { count, .. } | Objective::Deliver { count, .. } => *count,
-            Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => 1,
+            Objective::Descend { .. }
+            | Objective::Breach { .. }
+            | Objective::Build { .. }
+            | Objective::Hold { .. } => 1,
         }
     }
 
@@ -103,12 +147,17 @@ impl Objective {
     ///
     /// The two counting objectives are never already met: a contract asking
     /// for zero of something is refused at load.
-    pub fn already_met(&self, depth: u32, zone: u32, standing: &[StructureId]) -> bool {
+    ///
+    /// The run's side of the question is one `ObjectiveState` rather than a
+    /// widening argument list, because with two readers every objective
+    /// added cost a signature change at both.
+    pub fn already_met(&self, state: &ObjectiveState) -> bool {
         match self {
             Objective::Terminate { .. } | Objective::Deliver { .. } => false,
-            Objective::Descend { depth: want } => depth >= *want,
-            Objective::Breach { zone: want } => zone >= *want,
-            Objective::Build { structure } => standing.contains(structure),
+            Objective::Descend { depth } => state.depth >= *depth,
+            Objective::Breach { zone } => state.zone >= *zone,
+            Objective::Build { structure } => state.standing.contains(structure),
+            Objective::Hold { item, count } => state.count(item) >= *count,
         }
     }
 }

@@ -864,3 +864,96 @@ fn a_program_far_beneath_you_previews_better_odds_than_an_even_match() {
          markedly better odds at the same full Integrity: {outclassed} vs {even}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The onboarding chain's decompile mission
+// ---------------------------------------------------------------------------
+
+/// A fight the seeded stream would lose: `SEED_THAT_FAILS`' first draw comes
+/// up false, and the target is untouched with no decompiler investment.
+fn hopeless_decompile(seed: u32, dir: &std::path::Path) -> (Game, Entity) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, dir).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 50)]);
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+    (game, wild)
+}
+
+fn catalysts_held(game: &Game) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .items
+        .iter()
+        .find(|(id, _)| id.as_str() == ids::ICE_BREAKER)
+        .map(|(_, n)| *n)
+        .unwrap_or(0)
+}
+
+/// The chain's decompile mission cannot be failed — a run of bad rolls would
+/// end onboarding permanently, which is the one thing an unbreakable chain
+/// must not do. The catalyst is still spent, so the lesson that decompiling
+/// is priced in catalysts still lands.
+#[test]
+fn the_chains_decompile_mission_cannot_be_failed() {
+    let dir = assets_with_decompile_mission("forced_decompile");
+    let (mut game, wild) = hopeless_decompile(3201, &dir);
+    let player = game.player_entity();
+    let before = catalysts_held(&game);
+
+    game.attempt_decompile(0, player);
+
+    assert!(
+        game.world.get::<Tamed>(wild).is_some(),
+        "the roll is forced while the mission is live"
+    );
+    assert_eq!(
+        catalysts_held(&game),
+        before - 1,
+        "and the catalyst is still spent — that is the half of the lesson that stays"
+    );
+}
+
+/// Off the mission the formula is untouched. Without this the forced roll is
+/// indistinguishable from having broken `capture_chance`.
+#[test]
+fn a_decompile_outside_the_mission_still_rolls() {
+    let dir = assets_with_decompile_mission("honest_decompile");
+    let (mut game, wild) = hopeless_decompile(3202, &dir);
+    skip_tutorial(&mut game);
+    // The stream is spent by whatever `skip_tutorial` did not do; reseed so
+    // the failing draw is the one this attempt takes.
+    game.world
+        .insert_resource(GameRng(rand::SeedableRng::seed_from_u64(SEED_THAT_FAILS)));
+    let player = game.player_entity();
+
+    game.attempt_decompile(0, player);
+
+    assert!(
+        game.world.get::<Hostile>(wild).is_some(),
+        "hopeless odds still fail when nothing is forcing them"
+    );
+}
+
+/// A successful decompile writes its deed either way, which is what finishes
+/// the mission.
+#[test]
+fn a_successful_decompile_writes_its_deed() {
+    let dir = assets_with_decompile_mission("deed_decompile");
+    let (mut game, wild) = hopeless_decompile(3203, &dir);
+    let player = game.player_entity();
+
+    game.attempt_decompile(0, player);
+
+    assert!(
+        game.world.get::<Tamed>(wild).is_some(),
+        "the fixture has to land one"
+    );
+    assert!(
+        game.world
+            .resource::<crate::resources::RunFeats>()
+            .deeds
+            .contains(&crate::contracts::Deed::Tamed)
+    );
+}

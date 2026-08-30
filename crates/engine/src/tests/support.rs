@@ -534,6 +534,26 @@ pub(super) fn assets_with_fixture_chain(tag: &str) -> ScratchAssets {
     dir
 }
 
+/// A scratch install whose whole chain is one mission asking for a
+/// decompile — what the forced first roll keys off.
+///
+/// Keyed on the *objective* rather than on a shipped id, so this fixture
+/// exercises exactly the rule the engine applies and does not depend on
+/// what the shipped chain calls its decompile step.
+pub(super) fn assets_with_decompile_mission(tag: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let contracts = dir.join("contracts");
+    std::fs::create_dir_all(&contracts).unwrap();
+    std::fs::write(
+        contracts.join("fixture_decompile.ron"),
+        r#"(id: "fixture_decompile", name: "Fixture Decompile", description: "d",
+            objective: Perform(deed: Tamed), reward: [Xp(1)], tutorial: Some(9001))"#,
+    )
+    .unwrap();
+    dir
+}
+
 /// Files every onboarding mission as finished, so the ordinary contract
 /// board is live.
 ///

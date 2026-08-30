@@ -27,6 +27,60 @@ about what is installed.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.55
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+A held contract reaches the HUD, two keys stop being invisible, a skipped
+battle reveal makes a sound again, and a dig plan the crew cannot reach
+stops soaking the crew.
+
+- **Contracts are a fourth info-column tab, on `4`.** A held contract had no
+  HUD presence at all — no pane row, no attention kind, nothing in the
+  status bar — so the only always-visible figure was a bare count on the
+  manifest stat sheet, and reading `8/10` meant opening the base menu and
+  walking into the Contracts screen. Two rows a contract now: the name with
+  its progress, the objective under it. The tail takes the attention colour
+  once progress reaches the target, since a contract you can walk in and
+  hand over is the actionable state, and the pane reads from anywhere the
+  Stack included. The key is bound beside the other three rather than
+  behind the Stack's own handler, so it works underground.
+
+- **The Contracts screen's footer was painted outside its own popup.** One
+  122-character sentence measuring 1175px into 1105px of body at 1280x720 —
+  and since nothing clips horizontally, its last seven characters were drawn
+  over the map beyond the border and "Esc to close" lost its verb. It is two
+  lines now, and the abandon hint leads the second: `[A]` had been sitting
+  at character 74, in the third clause, dim, the only bracketed letter on a
+  screen whose every other shortcut is a digit. On screen the whole time and
+  still unfindable, which was the bug. The overflow census the other popup
+  screens already carry now covers this one too.
+
+- **The controls page names the side column's digits.** `1`-`3` were never
+  documented and `4` would have joined them unmentioned. The tab row was the
+  only place they appeared.
+
+- **Skipping a battle reveal was silent.** Pressing the action key mid-fight
+  to dump the rest of the round jumped the reveal to the end without walking
+  the loop that plays the swing cues, so a fight fought at any speed made no
+  sound at all. A skip now plays the *loudest* blow among the lines it
+  dumps — one cue rather than one per line, or a wipe is six clips inside a
+  frame, and loudest rather than first so a round that landed a crit sounds
+  like a crit however many plain hits came with it.
+
+- **A dig plan nobody could reach starved the one cell they could.** The
+  scheduler already dropped the boxed-in interior of a marked block before
+  budgeting bodies for it, but left the *other* refusal — a cell with a
+  perfectly good face and no route to it — below the cut that trims wants to
+  the number of programs. A run of those (a pocket entropy sealed off, or a
+  plan drawn past the walk cap) sorts first in tile order, costs no body when
+  its turn comes, and pushes the reachable rim off the end of the list: the
+  crew stands idle in front of a plan, and nothing says why. Both refusals
+  are now answered above the cut, sharing the block that already dropped
+  unreachable build requests. Asked one walk per want that would have been a
+  Dijkstra field per face across a hundred-cell plan every tick, so the
+  field is built from the *body* instead, once, leaving each want a lookup —
+  in a connected base, one walk for the whole scheduler.
+
 ## 0.13.54
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

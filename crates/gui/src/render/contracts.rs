@@ -55,11 +55,22 @@ pub(super) fn draw_contracts(
     }
 
     rows.push(text_row(""));
-    rows.push(text_row(
-        "Pick an offer's key to take it, a held contract's to hand over its \
-         cargo. [A] gives back the highlighted one. Esc to close",
-    ));
+    rows.extend(contract_footer().into_iter().map(text_row));
     draw_popup("Contracts", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The footer's two lines. Split out, like `rename_help`, so a test can
+/// measure exactly the strings `draw_contracts` pushes.
+///
+/// Two lines rather than one: a single 122-character run-on overflowed
+/// `PopupSize::Large`'s body, painting its last few characters over the map,
+/// and buried the `[A]` abandon hint in its third clause behind two clauses
+/// about an unrelated key. The abandon hint now leads its own line.
+fn contract_footer() -> [&'static str; 2] {
+    [
+        "Pick a number to take an offer, or to hand over a held contract's cargo.",
+        "[A] gives back the highlighted contract.        Esc to close.",
+    ]
 }
 
 /// One contract's headline row. A held one shows its progress; an offer has
@@ -159,6 +170,29 @@ mod tests {
                  ({drawn:.0} into {room:.0}):\n{widest}",
                 drawn - room
             );
+        });
+    }
+
+    /// The footer is `Row::Text`, never wrapped or clipped horizontally
+    /// either, so it stays inside the same body the item census above
+    /// measures against. Every line the screen draws, not just the first —
+    /// a two-line footer that only checked line one would miss an overflow
+    /// on line two.
+    #[test]
+    fn no_contract_footer_overflows_its_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in contract_footer() {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the contract footer overflows its popup by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
         });
     }
 }

@@ -1787,10 +1787,53 @@ involved is the one deliberately kept quiet.
 of what a face is. It is the half of `NoPost::BoxedIn` that does not depend
 on who is asking — `from` ranks a target's faces and never adds or removes
 one — which is why it can be answered before the bodies are counted, and it
-costs four grid lookups rather than a walk. `NoPost::NoRoute` stays below the
-cut where it was: a site with a face and no route is the player's errand and
-says so once, so it is visible when it starves something, which a silent
-refusal never is.
+costs four grid lookups rather than a walk.
+
+**`NoPost::NoRoute` was left below the cut and had to follow it up**, which
+is the correction this entry carries. The argument for leaving it was that a
+cut-off site announces itself, so it would be *visible* when it starved
+something. It is not: the sentence names one cell, the starvation is a crew
+standing idle with a plan on the wall, and nothing joins the two. And the
+starvation is the same shape as the boxed-in one, because a run of cells
+sharing one sealed pocket — entropy takes a corridor back, or the plan is
+drawn past `haul_walk_radius` — sorts first in tile order exactly as an
+interior does, `continue`s without costing a body when its turn comes, and
+leaves the reachable rim below the cut. A save was reproduced in that state
+on 2026-08-29 with four sealed marks and one reachable wall: four idle
+programs and not a swing taken.
+
+So both refusals are now answered above the truncation, in the block that
+was already dropping unreachable *build* requests, and the two kinds share
+it. `can_walk_to_dig` is gone with them — with the announcement moved out of
+it, it was `can_walk_to_post` under another name, and the assignment loop
+now asks one question of both kinds and skips silently either way.
+`post_reach` stays the authority *at the posting*, so a want the filter
+keeps and this body cannot reach still simply goes to nobody this tick.
+
+**The cost is why this is one field per body rather than one walk per
+want.** `post_route` builds a Dijkstra field per face, and a plan is
+routinely a hundred cells: asked per site, that is a hundred walks a tick
+for as long as the plan stands — which, after this fix, is until the player
+digs through to it, so the hitch would be permanent and would land on
+exactly the base that has just been fixed. `hauling::crew_reach` turns the
+question around and builds the field from the *body*, once, leaving every
+want a set lookup through `hauling::reaches`. In a connected base the first
+body answers everything and the whole scheduler costs one walk — fewer than
+the build filter alone cost before.
+
+Turning it around has one seam of its own: `walk_field` bounds successors to
+a box centred on its origin, so a body-centred field is bounded around the
+body where `post_field`'s is bounded around the face. Both boxes are
+`haul_walk_radius(pocket_radius)` half-width and every base cell is within
+`pocket_radius` of the origin, so up to a base radius of
+`HAUL_WALK_MAX_TILES / 2` — 30, itself three times the size the Heap
+Pillar's cost makes routine — each box contains the whole base and the two
+agree by construction. Past that they can bind differently, and only one
+direction of disagreement costs anything: a want the filter *keeps* is
+refused again at the posting, while a want it *drops* on a base wider than
+the walk cap was ever sized for is a job the crew declines. That is the
+trade, and it is why the filter is a filter and `post_reach` is still the
+authority.
 
 ### Mining does not go through `battle::resolve_attack`
 
@@ -4246,16 +4289,45 @@ pins it. A *successful* escape keeps its own `SoundEvent::Flee`, pushed
 immediately as before — fleeing has no swing to wait for and reads as its
 own discrete outcome, the same footing as `Victory`/`Defeat`.
 
-**A skip silences the cues it skipped past, and that falls out of the
-mechanism rather than needing a special case.** `App::finish_reveal` (the
-"any key during a reveal dumps the rest" path in `handle_key`) sets
-`revealed` straight to the total without walking `advance_reveal`'s `while`
-loop, so it never touches `pending_sounds` at all. A skip means "show me the
-end," not "play every blow I skipped past in one burst" —
-`skipping_a_reveal_silences_the_swing_cues_it_skipped_past` pins the
-behaviour, not because anyone had to gate it, but so a future change to
-`finish_reveal` that *did* start walking the loop would have a test to
-answer to.
+**A skip is heard as one cue, and the gesture — not the release — is what
+plays it.** 2026-08-29, correcting the shipped behaviour below. `App::
+finish_reveal` (the "any key during a reveal dumps the rest" path in
+`handle_key`) sets `revealed` straight to the total without walking
+`advance_reveal`'s `while` loop, so it never touches `pending_sounds` at
+all. That silence was taken at first as falling out of the mechanism rather
+than needing a special case — a skip means "show me the end," not "play
+every blow I skipped past in one burst" — and it made the whole feature
+inaudible in play. The report was that pressing `A` no longer made any
+noise at all; a probe on the real gesture is what settled it. A one-hostile
+round narrates three lines (`── round 1 ──`, then a swing each way), the
+header eats the first reveal slot at `REVEAL_LINES_PER_SECOND = 4.0`, and
+the player's own blow lands its cue **0.483s** after the key. Pressing the
+action key again inside that window — which is the whole point of `A`, and
+what anyone fighting at speed does — silenced both cues, so a fight fought
+at any speed made no sound at all.
+
+The fix is `App::skip_reveal`: `loudest_cue` over the lines about to be
+dumped, then `finish_reveal`, then the one cue. **One, not one per line**,
+or a wipe is six clips inside a single frame; **loudest, not first**, so a
+round that landed a crit sounds like a crit however many plain hits came
+with it. The ranking is a private `cue_rank` beside `swing_sound` and
+deliberately **not** an `Ord` derived on `SwingOutcome`, whose own variant
+order is the four bands `battle::resolve_attack` draws — a reordering there
+would otherwise silently change what a skipped round sounds like.
+
+**The cue rides the gesture, and that is why it is not in
+`finish_reveal`.** The obvious place is the release itself, but
+`finish_arena_fight` calls `finish_reveal` too, to hand the arena result
+screen its transcript whole rather than spending the player's first key on
+skipping it — a transition, not a player pressing past blows, and a swing
+landing as that screen appears is a sound with nothing on screen to explain
+it. The same holds for the test fixtures that drain the opening narration.
+So `finish_reveal` stays silent and `handle_key`'s guard calls
+`skip_reveal`; `releasing_a_reveal_without_the_skip_gesture_stays_silent`
+pins the split, `skipping_a_reveal_plays_one_cue_for_the_blows_it_skipped_past`
+the count, and `a_skipped_round_is_heard_as_its_loudest_band` the ranking —
+that last one on the fold directly, since no seed can be asked for a round
+holding one of each band.
 
 **The testing trap this surfaced, worth knowing before writing another
 seeded battle-band test.** `crate::tests::support::force_the_next_attack_to_land`
@@ -7183,7 +7255,8 @@ announcement had to *move*: a dry site is now never posted, so no builder
 ever stands there to report it, and the report belongs where the drop
 happens — which is the codebase's existing rule that the scheduler is the
 only thing that can see a post nobody holds. `run_build_crew` is silent
-about it, exactly as `can_walk_to_dig` owns the stuck announcement.
+about it, exactly as `announce_dig_cut_off` sits beside the drop that
+silences a cut-off dig site.
 And `build_is_workable` must count **a load already in a builder's hands**,
 or the base announces "nothing to fetch" the instant a builder empties the
 last shelf into its arms — naming the whole bill outstanding, because

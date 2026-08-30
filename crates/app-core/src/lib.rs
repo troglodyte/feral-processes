@@ -652,6 +652,7 @@ pub enum InfoTab {
     Base,
     Crew,
     Pack,
+    Contracts,
 }
 
 impl InfoTab {
@@ -659,7 +660,12 @@ impl InfoTab {
     /// them — `1` is `ALL[0]`. The two have to agree or a digit would open a
     /// pane other than the one under the label it was pressed for, which is
     /// `LogFilter::ALL`'s reason one screen along.
-    pub const ALL: [InfoTab; 3] = [InfoTab::Base, InfoTab::Crew, InfoTab::Pack];
+    pub const ALL: [InfoTab; 4] = [
+        InfoTab::Base,
+        InfoTab::Crew,
+        InfoTab::Pack,
+        InfoTab::Contracts,
+    ];
 
     /// What the tab row calls it.
     pub fn label(self) -> &'static str {
@@ -667,6 +673,7 @@ impl InfoTab {
             InfoTab::Base => "BASE",
             InfoTab::Crew => "CREW",
             InfoTab::Pack => "PACK",
+            InfoTab::Contracts => "CONTRACTS",
         }
     }
 }

@@ -269,6 +269,66 @@ fn post_field(
     Err(NoPost::NoRoute)
 }
 
+/// A body's own reach: the tile it set off from, and every tile it can walk
+/// to from there. Aliased for the same `type_complexity` reason `PostRoute`
+/// above is.
+pub(crate) type CrewReach = (Position, HashMap<(i32, i32), u32>);
+
+/// Every tile a worker at `from` could walk to, in one field.
+///
+/// `post_field` above answers "can this one body reach this one post" and
+/// costs a Dijkstra walk per face to do it. `schedule_base_labour` has to
+/// ask that of **every** dig want before it budgets bodies for them — a
+/// plan can be a hundred cells — so asking it one post at a time is a
+/// hundred walks a tick, every tick, for as long as the plan stands.
+/// Turned around, one walk answers all of them: build the field from the
+/// *body* instead of from the post, and each want is a set lookup through
+/// `reaches`.
+///
+/// The step rule is `post_field`'s, character for character, because the
+/// two have to agree about which tiles are crossable. What differs is which
+/// end the search is bounded around: `walk_field` bounds successors to a box
+/// centred on its origin, so this one is centred on the worker where
+/// `post_field`'s is centred on the face. Both boxes are
+/// `haul_walk_radius(pocket_radius)` half-width and every cell of the base
+/// is within `pocket_radius` of the origin, so up to a base radius of
+/// `HAUL_WALK_MAX_TILES / 2` each box contains the whole base and the two
+/// agree by construction. Past that the boxes can bind differently — which
+/// is why this is a *filter* and `post_reach` stays the authority at the
+/// posting itself: a want this keeps is still refused there, and the only
+/// thing at stake is a want it drops on a base wider than the walk cap was
+/// ever sized for.
+pub(crate) fn crew_reach(
+    grid: &BaseGrid,
+    from: Position,
+    blocked: &HashSet<(i32, i32)>,
+    pocket_radius: i32,
+) -> HashMap<(i32, i32), u32> {
+    let start = (from.x, from.y);
+    walk_field(start, haul_walk_radius(pocket_radius), |p| {
+        grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
+    })
+}
+
+/// Whether a body whose `crew_reach` field is `reach` could stand at a post
+/// on `structure` — `post_reach` asked of a field already built.
+///
+/// `at_station` first and for `post_reach`'s reason: a body already touching
+/// the post never walks, so it can never be refused for want of a route
+/// through a field.
+pub(crate) fn reaches(
+    grid: &BaseGrid,
+    reach: &HashMap<(i32, i32), u32>,
+    from: Position,
+    structure: Position,
+    blocked: &HashSet<(i32, i32)>,
+) -> bool {
+    at_station(from, structure)
+        || station_candidates(grid, structure, blocked)
+            .iter()
+            .any(|s| reach.contains_key(&(s.x, s.y)))
+}
+
 /// Whether a worker standing at `from` could ever reach a post at
 /// `structure`, and why not when it could not. See `post_field` for why this
 /// is the same question the walker asks.

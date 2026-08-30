@@ -17,6 +17,33 @@ fn swing_sound(outcome: SwingOutcome) -> SoundEvent {
     }
 }
 
+/// How loud a band is, for `loudest_cue` alone. Deliberately not an `Ord`
+/// derived on `SwingOutcome`: the enum's own order is the four bands
+/// `battle::resolve_attack` draws, and reading a ranking into it would make
+/// a reordering there silently change what a skipped round sounds like.
+fn cue_rank(outcome: SwingOutcome) -> u8 {
+    match outcome {
+        SwingOutcome::Crit => 2,
+        SwingOutcome::Hit => 1,
+        SwingOutcome::Miss | SwingOutcome::Fumble => 0,
+    }
+}
+
+/// The one cue a skipped stretch of narration is heard as — the loudest band
+/// among the lines it dumps, or `None` when none of them was a swing.
+///
+/// One, not one per line: `App::skip_reveal` releases a whole round at once,
+/// and a cue per swing would be six clips inside a single frame. Loudest
+/// rather than first, so a round that landed a crit sounds like a crit
+/// however many plain hits it also drew.
+pub(crate) fn loudest_cue(lines: &[LogLine]) -> Option<SoundEvent> {
+    lines
+        .iter()
+        .filter_map(|line| line.outcome)
+        .max_by_key(|&outcome| cue_rank(outcome))
+        .map(swing_sound)
+}
+
 /// The transitions that re-enter a list the player was already in, and so
 /// must not have their highlight reset to the top of it. Every other mode
 /// change starts fresh — see `App::handle_key`.
@@ -123,7 +150,7 @@ impl App {
         // and is not acted on. Without this the pacing would be a tax on
         // anyone who reads faster than it scrolls.
         if self.is_revealing() {
-            self.finish_reveal();
+            self.skip_reveal();
             return;
         }
         // Whatever this key raises gets its full time on screen rather than
@@ -531,7 +558,29 @@ impl App {
         self.unrevealed()
     }
 
-    /// Releases every remaining line at once — the skip.
+    /// The skip: releases the rest of the narration and plays the loudest
+    /// blow it dumped, so a round pressed straight through still sounds like
+    /// something happened.
+    ///
+    /// **The cue rides the gesture, not the release.** `finish_reveal` is
+    /// also how `finish_arena_fight` opens the result screen, which is a
+    /// transition and not a player skipping past blows — a swing landing as
+    /// that screen appears would be a sound with nothing on screen to
+    /// explain it.
+    pub(crate) fn skip_reveal(&mut self) {
+        let start = self.reveal.revealed;
+        let cue = self
+            .game
+            .as_ref()
+            .and_then(|game| game.battle_log().get(start..).and_then(loudest_cue));
+        self.finish_reveal();
+        if let Some(cue) = cue {
+            self.pending_sounds.push(cue);
+        }
+    }
+
+    /// Releases every remaining line at once, silently — see `skip_reveal`
+    /// for the half of the skip that makes a sound.
     pub(crate) fn finish_reveal(&mut self) {
         let Some(game) = &self.game else { return };
         self.reveal = BattleReveal {

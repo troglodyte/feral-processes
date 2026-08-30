@@ -1,4 +1,5 @@
-//! What the info column's open pane draws: the BASE, CREW and PACK bodies.
+//! What the info column's open pane draws: the BASE, CREW, PACK and
+//! CONTRACTS bodies.
 //!
 //! The column **does not scroll**, the same as the gear inspect and memories
 //! pages, so the body rect's height is a layout constraint and not a starting
@@ -17,7 +18,7 @@
 
 use feral_processes_app_core::{InfoTab, item_fusion_note};
 use feral_processes_engine::{
-    ActiveBuffView, BuildOrderRow, LabourDemand, PetInfo, StockRow, StructureReport,
+    ActiveBuffView, BuildOrderRow, ContractRow, LabourDemand, PetInfo, StockRow, StructureReport,
 };
 
 use super::palette;
@@ -36,6 +37,12 @@ const BUILD_ROWS: usize = 4;
 const CREW_ROWS: usize = 12;
 /// Party pips on the CREW tab's collapsed bar.
 const CREW_PIPS: usize = 5;
+/// Cells a contract's name gets before its progress tail. Wide enough for
+/// every name the shipped assets can build, which
+/// `no_shipped_contract_is_truncated_in_the_column` is what holds.
+const CONTRACT_NAME_CELLS: usize = 30;
+/// Cells a contract's objective gets on its second row.
+const CONTRACT_OBJECTIVE_CELLS: usize = 36;
 
 /// One line of a pane body.
 ///
@@ -218,6 +225,12 @@ pub(in crate::render) struct PaneData<'a> {
     pub stock: &'a [StockRow],
     pub builds: &'a [BuildOrderRow],
     pub labour: LabourDemand,
+    /// What the run is signed to, from `Game::active_contracts` — which is
+    /// `&self` and capped at `MAX_ACTIVE_CONTRACTS`, so it costs a frame
+    /// nothing. `Game::contract_board` is the one that must never be reached
+    /// from here: it is `&mut`, it rolls templates and it samples the
+    /// habitat ring.
+    pub contracts: &'a [ContractRow],
     pub shielded: bool,
     /// Base space only: out on the surface there is no base to report on, so
     /// the BASE pane says where the base is instead of drawing empty blocks.
@@ -240,6 +253,7 @@ pub(in crate::render) fn rows(tab: InfoTab, d: &PaneData) -> Vec<Row> {
         InfoTab::Base => base_rows(d),
         InfoTab::Crew => crew_rows(d),
         InfoTab::Pack => pack_rows(d),
+        InfoTab::Contracts => contract_rows(d),
     }
 }
 
@@ -260,6 +274,13 @@ fn body(t: impl Into<String>) -> Piece {
 
 fn label(t: impl Into<String>) -> Piece {
     (t.into(), palette::LABEL, false)
+}
+
+/// Cuts to `w` cells without padding, for a row whose tail is right-aligned
+/// and so needs no column under it — [`cell`]'s padding would only push the
+/// measured width up for nothing.
+fn clip(t: &str, w: usize) -> String {
+    t.chars().take(w).collect()
 }
 
 /// Pads to `w` cells. The column is monospace-measured, so a fixed-width cell
@@ -548,6 +569,53 @@ fn pack_rows(d: &PaneData) -> Vec<Row> {
     out
 }
 
+// ------------------------------------------------------------ CONTRACTS
+
+/// Whether a contract has met what it asks for and is waiting to be handed
+/// in. One expression, read by the pane's colour and by its collapsed bar,
+/// so the two cannot disagree about what "ready" means.
+fn is_ready(c: &ContractRow) -> bool {
+    c.progress >= c.target
+}
+
+/// What the run is signed to, two rows apiece: the name with its progress,
+/// and the objective under it.
+///
+/// This pane does **not** short-circuit off-base the way BASE does. A
+/// contract reads from anywhere — off the base and underground alike, which
+/// is `Game::active_contracts`' own rule — so there is no locale for the
+/// body to be empty in.
+///
+/// The chip says `b` because the Contracts screen hangs off the base group
+/// menu, at `Locality::Anywhere`.
+fn contract_rows(d: &PaneData) -> Vec<Row> {
+    let mut out = vec![head("CONTRACTS", 'b', "contracts")];
+    if d.contracts.is_empty() {
+        out.push(text(vec![dim("  nothing signed")]));
+        return out;
+    }
+    for c in d.contracts {
+        let ready = is_ready(c);
+        out.push(with_tail(
+            vec![dim("  \u{00b7} "), body(clip(&c.name, CONTRACT_NAME_CELLS))],
+            vec![(
+                format!("{}/{}", c.progress, c.target),
+                if ready {
+                    palette::ATTENTION
+                } else {
+                    palette::BODY
+                },
+                ready,
+            )],
+        ));
+        out.push(text(vec![dim(format!(
+            "    {}",
+            clip(&c.objective_line, CONTRACT_OBJECTIVE_CELLS)
+        ))]));
+    }
+    out
+}
+
 /// A closed tab's one-line summary, for its collapsed bar.
 ///
 /// Read **only when the tab has no attention row** — a condition needing the
@@ -575,6 +643,16 @@ pub(in crate::render) fn summary(tab: InfoTab, d: &PaneData) -> String {
         // Units, not rows: the pack has no capacity, so the figure that means
         // anything is how much is being carried.
         InfoTab::Pack => format!("{} units", d.carrying),
+        InfoTab::Contracts => {
+            if d.contracts.is_empty() {
+                return "nothing signed".to_string();
+            }
+            let ready = d.contracts.iter().filter(|c| is_ready(c)).count();
+            match ready {
+                0 => format!("{} signed", d.contracts.len()),
+                n => format!("{n} ready \u{00b7} {} signed", d.contracts.len()),
+            }
+        }
     }
 }
 
@@ -662,6 +740,7 @@ mod tests {
         stock: &'a [StockRow],
         buffs: &'a [ActiveBuffView],
         pack: &'a [PackRow],
+        contracts: &'a [ContractRow],
     ) -> PaneData<'a> {
         PaneData {
             roster: (33, 33),
@@ -676,8 +755,23 @@ mod tests {
                 wanted: 12,
                 staff: 8,
             },
+            contracts,
             shielded: true,
             in_base: true,
+        }
+    }
+
+    /// A contract row at the widest the shipped assets can build, so the
+    /// census measures the worst case rather than a convenient one.
+    fn contract(name: &str, objective: &str, progress: u32, target: u32) -> ContractRow {
+        ContractRow {
+            id: feral_processes_engine::contracts::ContractId::from(name),
+            name: name.to_string(),
+            description: String::new(),
+            objective_line: objective.to_string(),
+            reward_line: String::new(),
+            progress,
+            target,
         }
     }
     use super::*;
@@ -840,7 +934,12 @@ mod tests {
                 tier: 0,
             })
             .collect();
-        let d = busy(&pets, &structures, &stock, &buffs, &pack);
+        let contracts = [
+            contract("Reclamation Order", "Terminate 12 wild programs", 8, 12),
+            contract("Deep Sounding", "Stand 4 frames down a Stack", 0, 1),
+            contract("Cache Requisition", "Deliver 12 Cache Grain", 12, 12),
+        ];
+        let d = busy(&pets, &structures, &stock, &buffs, &pack, &contracts);
         for tab in InfoTab::ALL {
             let (_, cut) = fitting_rows(&rows(tab, &d), body.h, &m);
             assert_eq!(
@@ -848,6 +947,47 @@ mod tests {
                 0,
                 "{} drops {cut} rows off a base under load at 1280x720",
                 tab.label()
+            );
+        }
+    }
+
+    /// The column truncates through [`cell`], so a wide name cannot overflow
+    /// it — which makes a width census alone vacuous here. What can still go
+    /// wrong is the truncation *biting*: a shipped contract whose name is
+    /// cut mid-word reads as a bug in the pane rather than as content that
+    /// outgrew its cell. So this measures the shipped set against the cells
+    /// rather than against the column.
+    ///
+    /// `Game::contract_catalogue` is the widest row the assets can build —
+    /// templates resolved at their longest, not the authored strings, which
+    /// carry `{target}` holes and understate it.
+    #[test]
+    fn no_shipped_contract_is_truncated_in_the_column() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = feral_processes_engine::Game::new(
+            41,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets");
+        let catalogue = game.contract_catalogue();
+        assert!(
+            !catalogue.is_empty(),
+            "the census measured nothing \u{2014} the shipped set has to reach here"
+        );
+        for row in &catalogue {
+            assert!(
+                row.name.chars().count() <= CONTRACT_NAME_CELLS,
+                "\"{}\" is {} cells and the column gives a name {CONTRACT_NAME_CELLS}",
+                row.name,
+                row.name.chars().count()
+            );
+            assert!(
+                row.objective_line.chars().count() <= CONTRACT_OBJECTIVE_CELLS,
+                "\"{}\" is {} cells and the column gives an objective \
+                 {CONTRACT_OBJECTIVE_CELLS}",
+                row.objective_line,
+                row.objective_line.chars().count()
             );
         }
     }
@@ -886,7 +1026,12 @@ mod tests {
             name: "Recompiled Pulse Blade".to_string(),
             tier: 3,
         }];
-        let d = busy(&pets, &structures, &stock, &buffs, &pack);
+        let contracts = [
+            contract("Reclamation Order", "Terminate 12 wild programs", 8, 12),
+            contract("Deep Sounding", "Stand 4 frames down a Stack", 0, 1),
+            contract("Cache Requisition", "Deliver 12 Cache Grain", 12, 12),
+        ];
+        let d = busy(&pets, &structures, &stock, &buffs, &pack, &contracts);
         with_painter(|p| {
             for tab in InfoTab::ALL {
                 for row in rows(tab, &d) {
@@ -916,7 +1061,7 @@ mod tests {
     #[test]
     fn every_tab_has_a_live_summary() {
         let pets = [pet("Archive", Some(0))];
-        let d = busy(&pets, &[], &[], &[], &[]);
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
         for tab in InfoTab::ALL {
             let s = summary(tab, &d);
             assert!(

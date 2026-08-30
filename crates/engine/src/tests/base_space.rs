@@ -2967,6 +2967,30 @@ fn an_unreachable_dig_site_complains_exactly_once() {
     );
 }
 
+/// "Can anybody reach this" is asked of the staff, so with nobody on shift
+/// it answers no for want of an *anybody* — and every marked cell in the
+/// base would be announced cut off by a crew that is simply not at work.
+/// Nothing is posted on such a tick either way, so the guard costs nothing
+/// and the sentence is the whole of what it buys.
+#[test]
+fn a_base_with_nobody_on_shift_does_not_call_its_marks_cut_off() {
+    let (mut game, staff) = base_with_a_crew(3267, 1);
+    mark(&mut game, WALL);
+    for worker in staff {
+        game.world
+            .entity_mut(worker)
+            .insert(crate::components::Downed);
+    }
+
+    pass(&mut game, 20);
+
+    assert_eq!(
+        lines_saying(&game, CUT_OFF),
+        0,
+        "a reachable wall was called cut off because the crew was off its feet"
+    );
+}
+
 /// Settled decision 6's silent half. The interior of any block you mark has
 /// no face to stand at and resolves itself as the shell comes down, so
 /// saying so would fire for every buried cell of every plan ever drawn.
@@ -3391,6 +3415,54 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
         posted_at(&game, staff[0]),
         Some(site),
         "the one body must dig the one cell it can reach"
+    );
+}
+
+/// The other half of the same starvation, and the half `has_station` cannot
+/// answer: a marked cell with a perfectly good face that **no body can walk
+/// to**. A pocket sealed off by entropy, or a plan drawn beyond
+/// `haul_walk_radius`, leaves cells that pass the face test and fail the
+/// walk — and the walk used to be asked *below* the truncation, so those
+/// cells took the whole budget and the one reachable cell was cut off the
+/// end of the list. The crew stood idle with a plan on the wall.
+#[test]
+fn an_unroutable_mark_does_not_starve_a_reachable_one() {
+    let (mut game, staff) = base_with_a_crew(3265, 4);
+    // A sealed cell of open rock, walled in on every side: it gives its four
+    // neighbours a face nothing can route to.
+    let sealed = (-crate::tuning::STARTING_POCKET_RADIUS - 4, 0);
+    game.world
+        .resource_mut::<base_grid::BaseGrid>()
+        .open(sealed.0, sealed.1, 0);
+    for cell in [
+        (sealed.0 - 1, sealed.1),
+        (sealed.0 + 1, sealed.1),
+        (sealed.0, sealed.1 - 1),
+        (sealed.0, sealed.1 + 1),
+    ] {
+        mark(&mut game, cell);
+    }
+    mark(&mut game, WALL);
+    assert!(
+        game.marked_cells().first() != Some(&WALL),
+        "precondition: the sealed cells must sort ahead of the reachable one"
+    );
+
+    game.tick();
+
+    let site = game
+        .dig_site_at(WALL.0, WALL.1)
+        .expect("marking a wall spawns its dig site");
+    let digging: Vec<Entity> = staff
+        .iter()
+        .copied()
+        .filter(|&w| posted_at(&game, w) == Some(site))
+        .collect();
+    assert_eq!(
+        digging.len(),
+        1,
+        "the one cell the crew can reach must have exactly one body on it, \
+         and the four it cannot must have none"
     );
 }
 

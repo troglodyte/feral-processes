@@ -453,20 +453,35 @@
   the next swing opens a whole wall for free.
 - **A dig site's two unreachable states are not symmetrical.** `BoxedIn` is
   silent (it is the normal interior of any marked block and resolves itself);
-  `NoRoute` complains **once**, latched on `DigSite::announced_stuck`, per
-  `set_machine_status`'s only-on-transition rule. The latch is not saved: a
-  reload should say it again.
+  `NoRoute` complains **once**, latched on `DigSite::announced_stuck` by
+  `announce_dig_cut_off`, per `set_machine_status`'s only-on-transition rule.
+  The latch is not saved: a reload should say it again. **Both are answered
+  above the truncation** — see the entry below — so the announcer is only
+  ever reached with a face to stand at, and the assignment loop's own skip
+  is silent for either.
 - **Dig wants are appended last in `schedule_base_labour`, and the priority
   *is* the position in that list** — `truncate(staff.len())` cuts from the
   end, so anything inserted above them silently starves production.
   `dig_wants` is structural like `feeders_for`, never a stock count, and
-  sorted by tile. **The trap is that reachability is tested below the cut**:
-  a marked block is boxed in everywhere but its rim, `can_walk_to_dig`
-  refuses those silently and by design, and listed as wants they sort first
-  and spend the whole budget on cells nobody can stand beside.
-  `hauling::has_station` drops them in `dig_wants` — the half of
-  `NoPost::BoxedIn` that does not depend on who is asking. `NoRoute` stays
-  below the cut, because it announces itself.
+  sorted by tile. **The trap is any reachability question left below the
+  cut**: unworkable cells sort first, `continue` costs no body when their
+  turn comes, and the rim the crew could have been sent to is cut off the
+  end of the list — a plan with a crew standing idle in front of it and
+  nothing said. It bit twice. `hauling::has_station` drops the boxed-in
+  interior in `dig_wants` (the half of `NoPost::BoxedIn` that does not
+  depend on who is asking, four grid lookups, no walk); `NoRoute` was left
+  below the cut on the argument that it announces itself, and a sealed
+  pocket or a plan past `haul_walk_radius` starved the same way. Both now
+  drop in the block above the cut that already dropped unreachable build
+  requests, and `can_walk_to_dig` is gone — with the announcement moved out
+  it was `can_walk_to_post` renamed. **The trap in the fix is cost**: one
+  `post_route` per want is a Dijkstra field per face times a hundred-cell
+  plan, every tick, permanently. `hauling::crew_reach` builds the field from
+  the *body* once and `hauling::reaches` makes each want a lookup — one walk
+  for the whole scheduler in a connected base. Its box is centred on the
+  body rather than the face, which is identical up to base radius
+  `HAUL_WALK_MAX_TILES / 2` and only *drops* a workable want past that, so
+  `post_reach` stays the authority at the posting itself.
 - **Mining does not go through `battle::resolve_attack`**, for
   `attack_nest`'s reason: rock cannot dodge and identical swings must land
   identical damage. `swing_damage` is shared with the crew, so a stronger

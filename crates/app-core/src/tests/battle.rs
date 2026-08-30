@@ -1,6 +1,7 @@
 //! Driving an intrusion from key presses to a resolved round.
 
 use super::support::*;
+use crate::app::input::loudest_cue;
 use crate::*;
 use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
 
@@ -190,11 +191,13 @@ fn a_swings_cue_fires_exactly_when_its_own_line_is_revealed() {
 }
 
 /// A key pressed mid-reveal dumps the rest of the narration at once — see
-/// `App::handle_key`'s guard on `is_revealing`. The remaining swing cues go
-/// silent along with it: a skip means "show me the end", not "play every
-/// blow I skipped past".
+/// `App::handle_key`'s guard on `is_revealing` — and is heard as **one** cue,
+/// not as every blow it skipped past. The gesture is the common one: the
+/// player presses the action key again the moment a round resolves, well
+/// inside the second or two its narration takes to scroll in, so a silent
+/// skip meant a fight fought at any speed made no sound at all.
 #[test]
-fn skipping_a_reveal_silences_the_swing_cues_it_skipped_past() {
+fn skipping_a_reveal_plays_one_cue_for_the_blows_it_skipped_past() {
     let mut app = battling_app();
     app.commit_battle_action(0, BattleAction::Attack { group: 0 });
     let _ = app.take_sounds();
@@ -206,9 +209,74 @@ fn skipping_a_reveal_silences_the_swing_cues_it_skipped_past() {
         !app.is_revealing(),
         "the keypress should have finished the reveal"
     );
+    let sounds = app.take_sounds();
+    assert_eq!(
+        sounds.len(),
+        1,
+        "a skip is one cue, never one per blow it dumped, got {sounds:?}"
+    );
+    assert!(
+        matches!(
+            sounds[0],
+            SoundEvent::Hit | SoundEvent::Crit | SoundEvent::Miss
+        ),
+        "the skip's cue is one of the three swing bands, got {sounds:?}"
+    );
+}
+
+/// The band the skip is heard as is the **loudest** one it dumped, so a round
+/// that landed a crit sounds like a crit however many plain hits came with
+/// it. Tested on the fold rather than through a fight, since no seed can be
+/// asked for a round holding one of each band.
+#[test]
+fn a_skipped_round_is_heard_as_its_loudest_band() {
+    let line = |outcome| LogLine {
+        kind: MessageKind::Info,
+        source: MessageSource::Field,
+        text: String::new(),
+        outcome,
+    };
+    assert_eq!(
+        loudest_cue(&[
+            line(Some(SwingOutcome::Miss)),
+            line(Some(SwingOutcome::Crit)),
+            line(Some(SwingOutcome::Hit)),
+        ]),
+        Some(SoundEvent::Crit)
+    );
+    assert_eq!(
+        loudest_cue(&[
+            line(Some(SwingOutcome::Miss)),
+            line(Some(SwingOutcome::Hit)),
+        ]),
+        Some(SoundEvent::Hit)
+    );
+    // A fumble is a failed swing to the ear, exactly as `swing_sound` has it.
+    assert_eq!(
+        loudest_cue(&[line(Some(SwingOutcome::Fumble))]),
+        Some(SoundEvent::Miss)
+    );
+    // Narration with no swing in it — an opening line, a loot tally — is
+    // skipped past in silence.
+    assert_eq!(loudest_cue(&[line(None), line(None)]), None);
+}
+
+/// The cue rides the player's **gesture**, not the release: `finish_reveal`
+/// is also how `finish_arena_fight` opens the result screen, and a blow
+/// landing as a screen transition completes is a sound with nothing on
+/// screen to explain it.
+#[test]
+fn releasing_a_reveal_without_the_skip_gesture_stays_silent() {
+    let mut app = battling_app();
+    app.commit_battle_action(0, BattleAction::Attack { group: 0 });
+    let _ = app.take_sounds();
+    assert!(app.is_revealing(), "the round should still be scrolling in");
+
+    app.finish_reveal();
+
     assert!(
         app.take_sounds().is_empty(),
-        "a skipped reveal must not dump every swing's cue at once"
+        "only the skip gesture plays a cue; the bare release must not"
     );
 }
 

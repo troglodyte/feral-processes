@@ -63,7 +63,7 @@ fn the_digits_work_underground() {
 fn the_tab_order_is_the_digit_order() {
     for (i, tab) in InfoTab::ALL.iter().enumerate() {
         let mut app = test_app(184 + i as u32);
-        let digit = char::from_digit(i as u32 + 1, 10).expect("three tabs, three digits");
+        let digit = char::from_digit(i as u32 + 1, 10).expect("a tab per digit");
         app.handle_key(GameKey::Char(digit));
         assert_eq!(app.info_tab, *tab, "{digit} did not open {}", tab.label());
     }

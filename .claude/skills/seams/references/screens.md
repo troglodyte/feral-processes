@@ -21,9 +21,15 @@
   cues. Six call sites set it, all through the one door, `Game::log_swing`.
   **Three cues, not four**: `SwingOutcome::Fumble` plays the same clip as
   `Miss` (`app::input::swing_sound`), since the log line already carries the
-  severity a fourth sound would only duplicate. A key pressed mid-reveal
-  (`App::finish_reveal`) silences whatever cues it skipped past — a skip
-  means "show me the end," not "play every blow at once."
+  severity a fourth sound would only duplicate. A key pressed mid-reveal is
+  heard as **one** cue for the loudest band it dumped (`App::skip_reveal`,
+  ranking through `cue_rank`) — not one per blow, which is six clips in a
+  frame, and not silence, which is what shipped first and made the feature
+  inaudible: the player presses the action key again well inside the ~0.5s
+  the first cue waits for its own line, so a fight fought at speed made no
+  sound at all. **The cue rides the gesture, not the release** —
+  `finish_reveal` stays silent because `finish_arena_fight` and the test
+  fixtures call it as a transition.
 - **A refusal is one sentence on two surfaces, and `App::refuse` is the one
   door** — `App::status_line` for the popup the player typed into, and
   `Game::note_refusal` for the log they scroll back through. It is drawn

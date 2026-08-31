@@ -90,6 +90,63 @@ const FLOAT_RISE_PX: f32 = 24.0;
 
 const LOG_FLASH_SECONDS: f64 = 0.35;
 
+// --- Cloud shadows ----------------------------------------------------
+//
+// Patches of shade drifting over the zone map. Pure atmosphere: they mean
+// nothing, cost nothing and are the one thing on this map that moves
+// without something having happened. The zone map alone — base space is a
+// pocket underground and the Stack draws through `render/stack.rs`.
+//
+// **They are not the weather.** `environment::StaticEvent` is a real
+// mechanical layer that claims a whole *biome* at a time and reads out as a
+// word on the map frame's top border. A shadow drifting over a biome under
+// a Thread Storm is not that storm and does not mark it. That collision was
+// weighed and accepted when the feature was chosen; if the shade is ever
+// wanted as the tell for Static, the honest version gates the whole field
+// on the event rather than trying to make a drifting patch stand for a
+// zone-wide condition.
+
+/// How far into shadow the deepest part of a cloud takes the ground, as a
+/// fraction off its lit brightness.
+///
+/// Bounded well under the `SHADE_JITTER` band's neighbour-to-neighbour
+/// spread times a few, so a cloud reads as a large soft thing passing over
+/// texture rather than as the texture itself changing. Deeper than about a
+/// third and the ground under it stops answering which biome it is, which
+/// is the one thing the map's brightness is genuinely *for*.
+const CLOUD_DEPTH: f32 = 0.22;
+
+/// How fast the field travels, in tiles per second, and in which direction.
+///
+/// Off-axis, and the two components deliberately not equal: an axis-aligned
+/// wind marches the shadow front down a row of tiles, and an exactly
+/// diagonal one bands the map along its diagonal — `tile_hash`'s reason for
+/// mixing its two axes with different constants, arrived at again here.
+///
+/// Slow enough that the motion is caught rather than watched: at 0.32 the
+/// leading edge crosses a tile about every three seconds and a whole patch
+/// takes the better part of a minute to pass over you.
+const CLOUD_WIND: (f32, f32) = (0.32, 0.13);
+
+/// How large a patch is, in tiles, as the wavelength of the field's slowest
+/// component. Around half a screen at zoom 1, so a cloud is a thing the map
+/// is partly under rather than a mottling of it.
+const CLOUD_SCALE: f32 = 22.0;
+
+/// The band the raw field is mapped through to decide cover. Everything at
+/// or below `CLOUD_EDGE0` is full daylight and everything at or above
+/// `CLOUD_EDGE1` is fully shaded; between them is the soft edge.
+///
+/// The gap between them is what makes a shadow *creep* rather than *step*.
+/// The field is sampled per world coordinate — it has to be, since anything
+/// keyed to screen position crawls across the terrain as the camera slides
+/// — so the edge advances a tile at a time. A wide band spreads that edge
+/// over several tiles, where a hard threshold would switch each tile from
+/// lit to dark in one frame and read as a checkerboard wiping across the
+/// ground.
+const CLOUD_EDGE0: f32 = 0.52;
+const CLOUD_EDGE1: f32 = 0.92;
+
 // --- Raid spark burst -------------------------------------------------
 //
 // The knobs for the debris a raided structure throws. A burst borrows its
@@ -227,6 +284,51 @@ fn stranded_blink_alpha(time: f64) -> f32 {
     } else {
         STRANDED_BLINK_MIN
     }
+}
+
+/// How much of its lit brightness the ground at `world` keeps under the
+/// clouds at `now`: `1.0` in the open, down to `1.0 - CLOUD_DEPTH` under the
+/// deepest part of a patch.
+///
+/// **Three sines and not `tile_hash`**, which is sitting right there and is
+/// the wrong tool twice over. A hash keyed on the coordinate gives white
+/// noise, and what is wanted is patches; a hash keyed on the coordinate
+/// *and* the clock gives white noise that changes every frame, which is
+/// television static. What makes this read as a shadow is that the whole
+/// field translates — the sample point is walked upwind by `CLOUD_WIND *
+/// now` and nothing else about it depends on time, so the ground downwind
+/// of you later is the ground you are standing on now. That is a property a
+/// test can hold, and `the_cloud_field_drifts_rather_than_flickering` is
+/// what holds it.
+///
+/// Three components rather than one because a single sine is a set of
+/// parallel stripes however it is angled. The frequencies are
+/// incommensurate and the angles unrelated, so the sum has no period a
+/// player could sit still and watch come round.
+///
+/// Keyed on the **world** coordinate for `tile_shade`'s reason: the camera
+/// slides continuously across tiles, and a field tied to screen position
+/// would crawl over the terrain as it went.
+fn cloud_shade(world: (i32, i32), now: f64) -> f32 {
+    let x = (world.0 as f64 - CLOUD_WIND.0 as f64 * now) / CLOUD_SCALE as f64;
+    let y = (world.1 as f64 - CLOUD_WIND.1 as f64 * now) / CLOUD_SCALE as f64;
+    let tau = std::f64::consts::TAU;
+    // Amplitudes fall off with frequency, so the coarse component decides
+    // where a patch is and the two finer ones only rough up its edge.
+    let f = 0.55 * (tau * (x * 1.00 + y * 0.35)).sin()
+        + 0.30 * (tau * (x * -0.62 + y * 1.43)).sin()
+        + 0.15 * (tau * (x * 1.91 + y * 1.07)).sin();
+    // The sum runs -1..1 by construction; fold it to 0..1 before the band.
+    let cover = smoothstep(CLOUD_EDGE0, CLOUD_EDGE1, (f as f32 + 1.0) / 2.0);
+    1.0 - CLOUD_DEPTH * cover
+}
+
+/// The usual cubic ease between two edges, clamped outside them. Local
+/// because this is the only thing in the module that needs one — the bobs
+/// and pulses are all trigonometric and the flashes are all linear.
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// How many sparks a burst throws and how far they reach, in tiles.
@@ -428,6 +530,22 @@ impl Fx {
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
             self.clear_bars();
+        }
+    }
+
+    /// How much of its lit brightness the ground at `world` keeps under this
+    /// frame's clouds — see [`cloud_shade`], of which this is the frame's
+    /// clock plus the effects toggle.
+    ///
+    /// Off with effects, and exactly `1.0` rather than nearly so: this is a
+    /// multiplier into the ground's brightness, and a player who has turned
+    /// the moving parts off should get the same pixels they got before the
+    /// feature shipped.
+    pub fn cloud_shade(&self, world: (i32, i32)) -> f32 {
+        if self.enabled {
+            cloud_shade(world, self.now)
+        } else {
+            1.0
         }
     }
 
@@ -1288,5 +1406,123 @@ mod tests {
         fx.begin_frame(0.3, Vec::new(), Vec::new(), false);
         fx.enabled = false;
         assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
+    }
+
+    /// The sample grid the field tests sweep: wide enough to hold several
+    /// patches at `CLOUD_SCALE`, so a census over it is a census of the
+    /// map rather than of one cloud.
+    fn cloud_field(now: f64) -> Vec<f32> {
+        (-40..40)
+            .flat_map(|y| (-40..40).map(move |x| (x, y)))
+            .map(|w| cloud_shade(w, now))
+            .collect()
+    }
+
+    #[test]
+    fn cloud_shade_stays_inside_its_band() {
+        for now in [0.0, 3.5, 41.0, 600.0] {
+            for v in cloud_field(now) {
+                assert!(
+                    (1.0 - CLOUD_DEPTH..=1.0).contains(&v),
+                    "{v} is outside the shadow band at t={now}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cloud_shade_is_stable_for_a_given_tile_and_instant() {
+        assert_eq!(cloud_shade((3, -9), 12.5), cloud_shade((3, -9), 12.5));
+    }
+
+    #[test]
+    fn cloud_shade_leaves_some_ground_clear_and_shadows_some() {
+        let field = cloud_field(0.0);
+        assert!(
+            field.iter().any(|v| *v > 0.999),
+            "no tile is in full daylight"
+        );
+        assert!(
+            field.iter().any(|v| *v < 1.0 - CLOUD_DEPTH * 0.9),
+            "no tile is deep in shadow"
+        );
+    }
+
+    #[test]
+    fn cloud_cover_is_a_minority_of_the_map() {
+        // Both ends fail loudly on purpose: a field that shadows everything
+        // reads as the map having gone dark, and one that shadows almost
+        // nothing reads as the feature never having shipped.
+        for now in [0.0, 77.0, 250.0] {
+            let field = cloud_field(now);
+            let covered = field.iter().filter(|v| **v < 0.999).count() as f32;
+            let fraction = covered / field.len() as f32;
+            assert!(
+                (0.15..0.55).contains(&fraction),
+                "{fraction} of the map is shadowed at t={now}"
+            );
+        }
+    }
+
+    /// The test the other five cannot fail: every one of them passes against
+    /// a field that is re-hashed per tile per frame, which is TV static. What
+    /// makes this a *shadow* is that the whole field translates — so sampling
+    /// it downwind of where it was, later by exactly that much, must find the
+    /// same ground.
+    #[test]
+    fn the_cloud_field_drifts_rather_than_flickering() {
+        // Only whole-tile drifts can be checked, since the field is sampled
+        // at integer coordinates — so the elapsed times here are the ones
+        // `CLOUD_WIND` carries an exact number of tiles over. A `dt` that
+        // lands mid-tile compares two points a fraction of a tile apart and
+        // fails against a field that is drifting perfectly well.
+        for dt in [100.0, 200.0] {
+            let (dx, dy) = (CLOUD_WIND.0 as f64 * dt, CLOUD_WIND.1 as f64 * dt);
+            assert!(
+                (dx - dx.round()).abs() < 1e-4 && (dy - dy.round()).abs() < 1e-4,
+                "{dt}s of wind is ({dx}, {dy}), which is not a whole number of tiles"
+            );
+            for (x, y) in [(0, 0), (11, -4), (-23, 17), (5, 31)] {
+                let downwind = (x + dx.round() as i32, y + dy.round() as i32);
+                let before = cloud_shade((x, y), 0.0);
+                let after = cloud_shade(downwind, dt);
+                assert!(
+                    (before - after).abs() < 0.005,
+                    "({x},{y}) read {before} but {downwind:?} read {after} {dt}s later"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_wind_is_off_axis_so_a_front_does_not_march_down_a_row() {
+        assert!(CLOUD_WIND.0 != 0.0 && CLOUD_WIND.1 != 0.0);
+        assert!(
+            (CLOUD_WIND.0 - CLOUD_WIND.1).abs() > f32::EPSILON,
+            "an exactly diagonal wind bands the map the way a symmetric hash does"
+        );
+    }
+
+    #[test]
+    fn clouds_are_off_when_effects_are() {
+        let mut fx = Fx::new();
+        fx.begin_frame(40.0, Vec::new(), Vec::new(), false);
+        fx.enabled = false;
+        for w in [(0, 0), (7, 7), (-13, 2)] {
+            assert_eq!(fx.cloud_shade(w), 1.0);
+        }
+    }
+
+    #[test]
+    fn clouds_move_with_the_frame_clock() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+        let before: Vec<f32> = cloud_field(0.0);
+        fx.begin_frame(45.0, Vec::new(), Vec::new(), false);
+        let after: Vec<f32> = cloud_field(45.0);
+        assert!(
+            before != after,
+            "the field must be somewhere else three quarters of a minute later"
+        );
     }
 }

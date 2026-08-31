@@ -174,7 +174,9 @@ fn bite_is_the_floored_percentage_and_zero_for_none() {
 
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
 use crate::resources::{MessageLog, Party, ZoneLevel};
-use crate::tests::support::{descend, enlist, spawn_tamed, stand_in_base, test_assets_dir};
+use crate::tests::support::{
+    descend, enlist, spawn_tamed, spawn_wild_on_player_tile, stand_in_base, test_assets_dir,
+};
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
 
@@ -1311,6 +1313,58 @@ fn zone_one_terrain_and_turnover_agree_on_no_weather() {
             .iter()
             .any(|l| l.text.contains(description)),
         "note_static_turnover must refuse the same arrival terrain_at refuses"
+    );
+}
+
+/// The regression this branch's own last fix introduced: moving
+/// `note_static_turnover`'s call into `tick_inner` made it reachable from
+/// battle-active paths (the ambush early return's own `tick()`, an ordinary
+/// combat round's, a failed jack-out's) that `move_player`'s
+/// `has_active_battle()` refusal used to keep this function from ever
+/// seeing. `MessageSource::Field` is not something the battle pane filters
+/// out, so a boundary crossed there would interleave a weather line into
+/// the fight's own narration. Both halves in one test, `zone_one_takes_no_
+/// weather`'s shape: a guard that silently disabled the feature everywhere
+/// would pass a battle-only assertion just as well as the real fix.
+#[test]
+fn turnover_is_silent_during_battle_but_still_fires_outside_one() {
+    let mut battle = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&battle);
+    set_tick(&mut battle, epoch * STATIC_EPOCH_TICKS - 1);
+    let wild = spawn_wild_on_player_tile(&mut battle);
+    battle.start_battle(vec![wild]);
+    assert!(
+        battle.has_active_battle(),
+        "the fixture never started a fight"
+    );
+
+    battle.tick();
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !battle
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "a boundary crossed mid-battle must not interleave a weather line into the fight"
+    );
+
+    let mut outside = game_standing_on(Biome::NullSector);
+    set_tick(&mut outside, epoch * STATIC_EPOCH_TICKS - 1);
+
+    outside.tick();
+
+    assert!(
+        outside
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "the same boundary crossed outside a battle must still announce it, or the \
+         guard would silently disable the feature everywhere rather than just in battle"
     );
 }
 

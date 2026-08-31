@@ -636,12 +636,25 @@ impl Game {
     /// refused both states before this was ever reachable from anywhere but
     /// itself; called from `tick_inner`, every tick-spending verb in both
     /// locales reaches this and needs the same refusal.
+    ///
+    /// **Also refuses while a battle is active.** `move_player` used to be
+    /// the only caller, and it refuses outright on `has_active_battle()`, so
+    /// this was structurally unreachable during a fight. Moving the call
+    /// into `tick_inner` opened three battle-active paths to it — the
+    /// ambush early return's own `tick()`, an ordinary combat round's
+    /// `tick()`, and a failed jack-out's `tick()` — and `MessageSource::
+    /// Field` is not one the battle pane filters out, so a boundary crossed
+    /// mid-fight would interleave a weather line into the fight's own
+    /// narration. A boundary genuinely crossed during a battle is simply
+    /// never announced: nothing about the epoch is stored, so there is
+    /// nothing to announce late, and the player reads the weather off the
+    /// map pane's border the moment the fight ends.
     pub(crate) fn note_static_turnover(&mut self, epoch_before: u64) {
         let epoch_after = self.static_epoch();
         if epoch_after == epoch_before {
             return;
         }
-        if self.is_underground() || self.in_base() {
+        if self.is_underground() || self.in_base() || self.has_active_battle() {
             return;
         }
         let player = self.player_entity();

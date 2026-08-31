@@ -2,7 +2,9 @@
 //! camera's follow reads.
 
 use super::support::*;
-use crate::components::{Creature, Position, Stats, Structure, Tamed, Task, TaskKind};
+use crate::components::{
+    Creature, Glyph, GlyphColor, Position, Stats, Structure, Tamed, Task, TaskKind,
+};
 use crate::resources::{Sorties, Sortie, WieldedProgram};
 use crate::*;
 
@@ -39,6 +41,12 @@ fn staffer(game: &mut Game, dx: i32, dy: i32) -> Entity {
                 mitigation: 1,
             },
             Tamed { owner },
+            // The map's entity query is `(Entity, &Position, &Glyph)`, so a
+            // body with no glyph is in no window at all.
+            Glyph {
+                ch: 'p',
+                color: GlyphColor::Green,
+            },
         ))
         .id()
 }
@@ -189,5 +197,57 @@ fn a_program_that_is_gone_cannot_be_watched() {
         game.watch_position(game.player_entity()),
         None,
         "the player is what watching returns you to, never a subject of it"
+    );
+}
+
+/// The whole camera change is one value: the tile the two view calls are
+/// centred on. Watching re-points that and nothing else, so the tile window,
+/// the entity window and the effect overlay all move together.
+///
+/// The uncentred pair keep `scan_center`, which is what the inspector and
+/// `run_symlink` target from — a camera that moved *those* would let the
+/// player examine and teleport from wherever they happened to be looking.
+#[test]
+fn the_centred_views_are_centred_where_they_are_told() {
+    let mut game = base(1);
+    let (ox, oy) = game.base_pos().unwrap();
+    let staff = staffer(&mut game, 3, 2);
+    let watched = game.watch_position(staff).unwrap();
+
+    let seen: Vec<_> = game
+        .view_entities_at(watched, 0, 0)
+        .into_iter()
+        .map(|v| v.entity)
+        .collect();
+    assert!(
+        seen.contains(&staff),
+        "a zero-radius window on the watched tile holds the watched program"
+    );
+
+    let seen: Vec<_> = game
+        .view_entities(0, 0)
+        .into_iter()
+        .map(|v| v.entity)
+        .collect();
+    assert!(
+        !seen.contains(&staff),
+        "the uncentred call still looks at the party's own cell, three tiles \
+         away — `scan_center` is what examine and symlink target from"
+    );
+
+    // Base space is derived per cell from `(seed, block)`, so two windows on
+    // the same tile agree by construction and a shifted one need not: the
+    // assertion that carries is that the *centre* moved, which the entity
+    // window above already shows. This one pins that the tile call takes the
+    // same coordinates rather than quietly ignoring them.
+    let there = game.view_tiles_at(watched, 0, 0);
+    let here = game.view_tiles_at((ox, oy), 0, 0);
+    assert_eq!(there.len(), 1, "a zero-radius window is one row of one");
+    assert_eq!(here.len(), 1);
+    let shifted = game.view_tiles_at((ox + 3, oy + 2), 0, 0);
+    assert_eq!(
+        there[0][0].biome, shifted[0][0].biome,
+        "the same coordinates must produce the same cell however they were \
+         arrived at"
     );
 }

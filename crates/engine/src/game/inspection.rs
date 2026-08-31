@@ -76,7 +76,26 @@ impl Game {
     /// absent (solid) → `Biome::Entropy`, all three walkable exactly as
     /// `Biome::walkable` already says.
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
-        if let Some((cx, cy)) = self.base_pos() {
+        let center = self.scan_center();
+        self.view_tiles_at((center.x, center.y), half_w, half_h)
+    }
+
+    /// [`Game::view_tiles`], centred where the caller says rather than on the
+    /// party.
+    ///
+    /// **The centre moves; the space does not.** Which grid is read is still
+    /// `base_pos`, because that is the party's own locale and the map draws
+    /// one space at a time — `center` only ever names a cell *within* it.
+    /// `Game::watch_position` is the one thing that hands this anything but
+    /// `scan_center`, and it refuses outside base space for that reason.
+    pub fn view_tiles_at(
+        &mut self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<Tile>> {
+        let (cx, cy) = center;
+        if self.base_pos().is_some() {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             // Hoisted out of the loop: this runs per tile per frame, and a
             // resource lookup per cell for a value that cannot change inside
@@ -111,13 +130,12 @@ impl Game {
             }
             return rows;
         }
-        let center = *self.world.get::<Position>(self.player_entity()).unwrap();
         let mut world_map = self.world.resource_mut::<WorldMap>();
         let mut rows = Vec::new();
         for ty in -half_h..=half_h {
             let mut row = Vec::new();
             for tx in -half_w..=half_w {
-                row.push(world_map.tile(center.x + tx, center.y + ty));
+                row.push(world_map.tile(cx + tx, cy + ty));
             }
             rows.push(row);
         }
@@ -804,8 +822,29 @@ impl Game {
     /// once — and read through `scan_center` instead, which is the base's
     /// half of that.
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
-        let in_base = self.in_base();
         let center = self.scan_center();
+        self.view_entities_at((center.x, center.y), half_w, half_h)
+    }
+
+    /// [`Game::view_entities`], centred where the caller says rather than on
+    /// the party — [`Game::view_tiles_at`]'s counterpart, and the other half
+    /// of what the watch camera re-points.
+    ///
+    /// The player is still placed at `scan_center` rather than at `center`:
+    /// this is the map's only source of the `@`, and while the camera is
+    /// elsewhere the player is exactly what must be drawn *off* centre.
+    pub fn view_entities_at(
+        &mut self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<EntityView> {
+        let in_base = self.in_base();
+        let party = self.scan_center();
+        let center = Position {
+            x: center.0,
+            y: center.1,
+        };
         let player = self.player_entity();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
         let hits: Vec<(Entity, Position, Glyph)> = query
@@ -818,7 +857,7 @@ impl Game {
             // whatever base-space cell the anchor's surface coordinates
             // aliased onto and left it there however far the party walked.
             // A no-op on the surface, where `scan_center` *is* that tile.
-            .map(|(e, p, g)| (e, if e == player { center } else { *p }, *g))
+            .map(|(e, p, g)| (e, if e == player { party } else { *p }, *g))
             .filter(|(_, p, _)| {
                 (p.x - center.x).abs() <= half_w && (p.y - center.y).abs() <= half_h
             })

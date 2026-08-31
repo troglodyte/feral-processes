@@ -33,6 +33,19 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.64
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **Routine slots come in pairs now, doubling every kit at every level.** A
+  companion still reaches its ceiling at level 6 and the player at 25, with
+  twelve slots waiting there instead of six.
+- **A new game opens with a free slot beside `decompile`**, where the
+  player's one starting slot used to be spoken for.
+- **The program page's ROUTINES box still draws six rows**, so a kit past
+  that spends its last line on a "+N more" note — the manifest has the least
+  clearance in the renderer and buys nothing new here.
+
 ## 0.13.63
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -1055,6 +1055,7 @@ mod tests {
             is_companion: false,
             is_hostile: false,
             is_structure: true,
+            is_anchor: false,
             is_home: false,
             tier: Some(tier),
             ceiling: Some(ceiling),

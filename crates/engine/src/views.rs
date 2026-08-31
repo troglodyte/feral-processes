@@ -702,6 +702,17 @@ pub struct EntityView {
     pub is_companion: bool,
     pub is_hostile: bool,
     pub is_structure: bool,
+    /// Whether this entity is the base anchor — `components::BaseAnchor`,
+    /// the permanent door into base space that `Game::new` spawns under the
+    /// party.
+    ///
+    /// It is neither a creature nor a `Structure`, so it is the one map
+    /// fixture `is_player`, `is_hostile` and `is_structure` all say nothing
+    /// about; without this a frontend had to recognise it by its glyph.
+    /// Distinct from `is_home` below, which names the Home *building* — the
+    /// two stand in different spaces and only one of them is ever drawn on
+    /// the zone map.
+    pub is_anchor: bool,
     /// Whether this (structure) entity is the base's Home — the anchor for
     /// the 15-tile build radius, and the one whose removal cascades to
     /// every other structure (see `Game::remove_structure`).

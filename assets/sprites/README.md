@@ -42,3 +42,11 @@ than shipping invisible.
   to prove the texture pipeline end to end and is meant to be replaced by
   real art. It is deliberately not an `@`, so it is obvious at a glance
   whether the sprite or the glyph drew.
+- `anchor.png` — the base anchor, the permanent door into base space. A
+  ring with a bright core, hard-edged rather than anti-aliased: alpha
+  blending on a 16px circle becomes 4x4 blocks of half-transparency at
+  zoom 4, where a thresholded edge stays a clean step. Its glyph fallback
+  is `#`, which was chosen by elimination rather than by meaning (see
+  `Game::new`'s anchor spawn), so this is the sprite that carries the most
+  — it is also what `NotificationKind::BaseFounding` draws, and that
+  notice's prose deliberately no longer names a character.

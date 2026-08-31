@@ -145,11 +145,15 @@ impl NotificationKind {
         match self {
             NotificationKind::BaseFounding => NotificationDef {
                 title: "Base Space",
-                body: "Your Home stands, the base runs out of phase with the zone map. Climb up \
-                       (# icon) to visit.\n\n [b] for the base menu: build, craft, and assign \
-                       entities to structures.\n\n Programs you own and are not in the party will \
-                       live and work in the base.",
-                sprite: None,
+                body: "Your Home stands, the base runs out of phase with the zone map. Use the \
+                       home portal to enter phase space.\n\n [b] for the base menu: build, craft, \
+                       and assign entities to structures.\n\n Programs you own and are not in the \
+                       party will live and work in the base.",
+                // The same art the zone map now draws the anchor with, so
+                // the tutorial and the map agree on what to look for. The
+                // prose no longer names a character for the same reason:
+                // `#` is the *fallback*, not what the player will see.
+                sprite: Some("anchor"),
                 glyph: '#',
                 color: GlyphColor::Cyan,
                 repeat: Repeat::OnceEver,

@@ -575,24 +575,27 @@ impl Game {
     /// `maybe_spawn_wild_creature` performs: that cap bounds the population
     /// of *idle* programs the player walked away from, and an ambush pack
     /// is about to be resolved rather than left to roam.
+    ///
+    /// One `terrain_at` call, not a second tile lookup: the tile is already
+    /// in `WorldMap`'s chunk cache from the step that led here, and its
+    /// `effect.ambush_mult` is what a live weather event scales this roll
+    /// by — `EnvironmentEffect::fold`'s multiplicative term, reaching a roll
+    /// rather than a bite.
     pub(crate) fn maybe_ambush(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
-        if self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome
-            == Biome::Platform
-        {
+        let terrain = self.terrain_at(pos.x, pos.y);
+        if terrain.biome == Biome::Platform {
             return;
         }
         let ambushed = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(RANDOM_ENCOUNTER_CHANCE)
+            rng.0.random_bool(
+                (RANDOM_ENCOUNTER_CHANCE * terrain.effect.ambush_mult as f64).clamp(0.0, 1.0),
+            )
         };
         if !ambushed {
             return;

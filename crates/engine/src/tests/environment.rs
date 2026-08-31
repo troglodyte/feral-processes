@@ -324,7 +324,10 @@ fn a_mitigation_buff_reduces_the_bite() {
 }
 
 /// The one place in this phase where two systems meet at a lethal edge:
-/// ground that kills must not then roll an ambush onto the corpse.
+/// ground that kills must not then roll an ambush onto the corpse. Null
+/// Sector with a forced live `LeakingMemory` epoch, so weather is in the sum
+/// that kills — `maybe_ambush`'s `is_game_over` gate does not know or care
+/// how many sources contributed to the damage.
 #[test]
 fn attrition_that_kills_does_not_then_start_an_ambush() {
     // Permadeath, because a Forgiving death reboots the player to full
@@ -332,7 +335,11 @@ fn attrition_that_kills_does_not_then_start_an_ambush() {
     // the test needs to look at would be gone before it could.
     let mut game = Game::new(16, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Mainframe, true);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     {
         let mut stats = game.world.get_mut::<Stats>(game.player_entity()).unwrap();
         stats.hp = 1;
@@ -663,9 +670,20 @@ fn static_at_survives_a_save_and_load_round_trip() {
     );
 }
 
-/// What `derive::index`'s high-bit reduction buys, and what `%` would
-/// silently break: two biomes folding the same seed and zone must not track
-/// each other epoch for epoch.
+/// Two biomes folding the same seed and zone, differing only in the biome
+/// word `static_seed` mixes in, must not answer identically epoch for
+/// epoch — a hash that let the biome wash out would make every claimed
+/// biome's weather turn over in lockstep, which would read as one global
+/// weather flag rather than a property of the place.
+///
+/// This does **not** guard `derive::index` against `%`: that reduction's
+/// documented failure is a *two-entry* pool reading nothing but its seed's
+/// lowest bit, and `static_in_epoch`'s pools here are 4-5 entries (the clear
+/// weight plus each claimed event) with a varying epoch folded in last, so
+/// `%` decorrelates these two sequences too. `derive::index` stays the
+/// implementation regardless — it is the global rule and the rest of the
+/// codebase's convention — but this test's reach is the decorrelation
+/// itself, not a choice between the two reductions.
 #[test]
 fn adjacent_biomes_decorrelate_across_epochs() {
     let game = fresh_game(503);
@@ -680,4 +698,262 @@ fn adjacent_biomes_decorrelate_across_epochs() {
         null_sector, mainframe,
         "two biomes folding the same seed, zone and epoch must not answer identically"
     );
+}
+
+// ------------------------------------------------------- weather reaches the player
+
+/// The guard on the fold reaching `terrain_at`: a reader that took only the
+/// bite would compile clean and silently drop the drag and ambush terms, so
+/// all three are asserted together, the shape
+/// `fold_adds_attrition_and_drag_and_multiplies_ambush` already checked for
+/// `EnvironmentEffect` alone. Null Sector is the one biome where a ground
+/// condition and a weather event both claim the same tile, which is what
+/// makes stacking observable here rather than merely folding onto `NONE`.
+#[test]
+fn ground_and_weather_effects_stack() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, Some(StaticEvent::LeakingMemory));
+    let ground = GroundCondition::DanglingReads.def().effect;
+    let weather = StaticEvent::LeakingMemory.def().effect;
+    assert_eq!(
+        terrain.effect.attrition_percent,
+        ground.attrition_percent + weather.attrition_percent,
+        "attrition sums"
+    );
+    assert_eq!(
+        terrain.effect.min_damage,
+        ground.min_damage + weather.min_damage,
+        "the floor sums"
+    );
+    assert_eq!(
+        terrain.effect.extra_ticks,
+        ground.extra_ticks + weather.extra_ticks,
+        "drag sums"
+    );
+    assert_eq!(
+        terrain.effect.ambush_mult,
+        ground.ambush_mult * weather.ambush_mult,
+        "the ambush term multiplies"
+    );
+}
+
+/// The one-call guard: `apply_damage`'s mitigation floors any positive
+/// damage at 1, so two sources billed through two calls floor twice.
+/// Chosen so the numbers only pull apart under that per-call floor — small
+/// enough that each source's own attrition rounds away to nothing and only
+/// its `min_damage` survives, and mitigated hard enough that even the
+/// summed bite rounds under 1 before the floor catches it once.
+#[test]
+fn ground_and_weather_attrition_lands_as_one_bite() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 5;
+        stats.hp = 5;
+    }
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Ablative Layer".into(),
+            power: 60,
+            remaining: 100,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        5 - player_hp(&game),
+        1,
+        "the summed attrition must land through one apply_damage call — \
+         one call per source would each floor at 1 and cost 2"
+    );
+}
+
+#[test]
+fn zone_one_takes_no_weather() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    // Forced live so a zone-1 read that skipped the gate would be caught —
+    // the gate itself does not consult the clock, so any epoch would
+    // otherwise pass this test by coincidence.
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e).is_some())
+        .expect("a live epoch must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, None, "zone 1 takes no weather");
+    assert_eq!(terrain.effect, EnvironmentEffect::NONE);
+    assert_eq!(
+        terrain.biome,
+        Biome::NullSector,
+        "the ground is still named"
+    );
+}
+
+#[test]
+fn platform_takes_no_weather() {
+    let mut game = game_about_to_step(Biome::Platform);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, None, "the base's own floor takes no weather");
+    assert_eq!(terrain.effect, EnvironmentEffect::NONE);
+}
+
+/// A single ambush attempt on a fresh, independently seeded fixture: builds
+/// the game, stamps the player's own tile as `Mainframe`, sets the clock to
+/// `tick`, reseeds `GameRng` to `rng_seed`, then reports whether that one
+/// `maybe_ambush` call started a battle. Independent games rather than one
+/// game looped, so a battle starting on one trial never blocks the next.
+fn ambush_fires(seed: u32, rng_seed: u64, tick: u64) -> bool {
+    let mut game = fresh_game(seed);
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::Mainframe,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    set_tick(&mut game, tick);
+    reseed_rng(&mut game, rng_seed);
+    game.maybe_ambush();
+    game.has_active_battle()
+}
+
+/// The multiplier reaches the roll, not just the number on `Terrain`: the
+/// same 400 seeded trials, once with Mainframe's epoch forced to
+/// `ThreadStorm` and once forced clear, must ambush more often live than
+/// clear. Asserted as a **difference**, never an absolute rate — an
+/// absolute is a seed-luck test that fails the day an unrelated change
+/// shifts the RNG stream, and `-p feral-processes-engine` vs `--workspace`
+/// already shift it differently for identical source.
+#[test]
+fn ambush_multiplier_reaches_the_roll() {
+    let seed = 900;
+    let mut probe = fresh_game(seed);
+    probe.world.resource_mut::<ZoneLevel>().0 = 2;
+    let live_epoch = (0..2000u64)
+        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e) == Some(StaticEvent::ThreadStorm))
+        .expect("ThreadStorm must be reachable in Mainframe's pool");
+    let clear_epoch = (0..2000u64)
+        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e).is_none())
+        .expect("clear must be reachable in Mainframe's pool");
+
+    let trials = 400u64;
+    let live_hits = (0..trials)
+        .filter(|&i| ambush_fires(seed, i, live_epoch * STATIC_EPOCH_TICKS + 1))
+        .count();
+    let clear_hits = (0..trials)
+        .filter(|&i| ambush_fires(seed, i, clear_epoch * STATIC_EPOCH_TICKS + 1))
+        .count();
+
+    assert!(
+        live_hits > clear_hits,
+        "a live ambush multiplier must ambush more often: live {live_hits} \
+         vs clear {clear_hits} across {trials} trials"
+    );
+}
+
+/// `a_mitigation_buff_reduces_the_bite`'s shape, over the stacked
+/// ground-and-weather bite rather than ground alone — mitigation goes
+/// through `apply_damage`, which does not know how many sources summed into
+/// the number it received.
+#[test]
+fn mitigation_blunts_the_stacked_bite() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 400;
+        stats.hp = 400;
+    }
+    let unmitigated = {
+        // Same seed as `game_about_to_step` uses, so the same epoch answers
+        // the same way for this probe.
+        let mut probe = game_about_to_step(Biome::NullSector);
+        set_tick(&mut probe, epoch * STATIC_EPOCH_TICKS + 1);
+        let p = probe.player_entity();
+        {
+            let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
+            stats.max_hp = 400;
+            stats.hp = 400;
+        }
+        probe.move_player(1, 0);
+        400 - player_hp(&probe)
+    };
+    assert!(unmitigated > 1, "the fixture has to have room to mitigate");
+
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Ablative Layer".into(),
+            power: 50,
+            remaining: 100,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+    game.move_player(1, 0);
+
+    assert!(
+        400 - player_hp(&game) < unmitigated,
+        "mitigation must blunt the stacked ground-and-weather bite the same \
+         way it blunts the ground alone"
+    );
+}
+
+/// `attrition_never_touches_the_party`'s shape, with a live weather event
+/// folded into the ground's bite — corrupting the party would route program
+/// deaths, and on Permadeath the run-ending path, through something that is
+/// not a fight.
+#[test]
+fn party_untouched_by_weather() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let member = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, member);
+    let before = game.world.get::<Stats>(member).unwrap().hp;
+    assert!(game.world.resource::<Party>().0.contains(&member));
+
+    game.move_player(1, 0);
+
+    assert_eq!(game.world.get::<Stats>(member).unwrap().hp, before);
 }

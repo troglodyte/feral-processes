@@ -53,9 +53,9 @@ pub struct EnvironmentEffect {
     pub min_damage: i32,
     /// Extra ticks the step costs, on top of the one every step costs.
     pub extra_ticks: u32,
-    /// Multiplies `RANDOM_ENCOUNTER_CHANCE` in `maybe_ambush`. Carried on
-    /// the struct from this task on, but nothing reads it yet — a later
-    /// weather layer is what gives it a value other than `1.0`.
+    /// Multiplies `RANDOM_ENCOUNTER_CHANCE` in `maybe_ambush`. Every ground
+    /// condition ships `1.0`; a live `StaticEvent` is what gives it a value
+    /// other than that.
     pub ambush_mult: f32,
 }
 

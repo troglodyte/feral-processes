@@ -16,6 +16,10 @@ use crate::world::{Biome, WorldMap};
 pub struct Terrain {
     pub biome: Biome,
     pub condition: Option<GroundCondition>,
+    /// The weather event live in this biome right now, if any. Folded into
+    /// `effect` alongside `condition` — never in place of it — by
+    /// `EnvironmentEffect::fold`.
+    pub event: Option<StaticEvent>,
     /// Folded and clamped — the one number the turn hook needs, so it never
     /// has to know how many sources contributed to it.
     pub effect: EnvironmentEffect,
@@ -41,6 +45,7 @@ impl Game {
             return Terrain {
                 biome,
                 condition: None,
+                event: None,
                 effect: EnvironmentEffect::NONE,
             };
         }
@@ -50,6 +55,7 @@ impl Game {
             return Terrain {
                 biome,
                 condition: None,
+                event: None,
                 effect: EnvironmentEffect::NONE,
             };
         }
@@ -57,14 +63,18 @@ impl Game {
         let ground = condition
             .map(|c| c.def().effect)
             .unwrap_or(EnvironmentEffect::NONE);
-        // Folded onto the identity rather than just clamped: there is only
-        // one source this task, but the fold is the shape a later weather
-        // layer stacks onto, not a case-split that has to change shape when
-        // a second source arrives.
-        let effect = EnvironmentEffect::NONE.fold(ground).clamped();
+        let event = self.static_at(biome);
+        let weather = event
+            .map(|e| e.def().effect)
+            .unwrap_or(EnvironmentEffect::NONE);
+        // The ground you know is still doing what it does, and weather
+        // stacks on top of it rather than replacing it — `fold`'s own doc
+        // gives the arithmetic.
+        let effect = ground.fold(weather).clamped();
         Terrain {
             biome,
             condition,
+            event,
             effect,
         }
     }

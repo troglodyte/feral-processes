@@ -594,27 +594,21 @@ impl Game {
     /// pure calls: nothing about the previous epoch is stored anywhere,
     /// which is what keeps a save/load mid-epoch from re-announcing.
     ///
-    /// Gated the way `terrain_at` gates weather itself — zone 1 and the
-    /// base's own `Platform` floor never carry weather, so announcing a
-    /// turnover there would describe an effect that never actually bites.
+    /// Gated through `Game::environment_biome_at` — zone 1 and the base's
+    /// own `Platform` floor never carry weather, so announcing a turnover
+    /// there would describe an effect that never actually bites. Reading
+    /// that gate rather than carrying a second copy of its two checks is
+    /// what keeps this in step with `terrain_at`'s own refusal.
     pub(crate) fn note_static_turnover(&mut self, epoch_before: u64) {
         let epoch_after = self.static_epoch();
         if epoch_after == epoch_before {
             return;
         }
-        if self.world.resource::<ZoneLevel>().0 <= 1 {
-            return;
-        }
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
-        let biome = self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome;
-        if biome == Biome::Platform {
+        let Some(biome) = self.environment_biome_at(pos.x, pos.y) else {
             return;
-        }
+        };
         let before = self.static_in_epoch(biome, epoch_before);
         let after = self.static_in_epoch(biome, epoch_after);
         match (before, after) {

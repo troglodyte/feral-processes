@@ -825,6 +825,58 @@ fn platform_takes_no_weather() {
     assert_eq!(terrain.effect, EnvironmentEffect::NONE);
 }
 
+/// `Game::environment_biome_at` is the one gate `terrain_at` and
+/// `note_static_turnover` both read — Task 4 shipped `note_static_turnover`
+/// with its own copy of these two checks, which is exactly the shape
+/// CLAUDE.md's ground section warns about: nothing fails to compile when
+/// one copy is edited and the other is not. Testing the shared predicate
+/// directly, rather than only through `terrain_at`, is what would catch a
+/// future edit to this one definition going wrong for *either* caller —
+/// `zone_one_takes_no_weather` and `platform_takes_no_weather` above only
+/// ever exercised it through `terrain_at`.
+#[test]
+fn environment_biome_at_refuses_zone_one_and_platform() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    assert_eq!(
+        game.environment_biome_at(0, 0),
+        None,
+        "zone 1 refuses everywhere, whatever the biome"
+    );
+
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::Platform,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    assert_eq!(
+        game.environment_biome_at(pos.x, pos.y),
+        None,
+        "the base's own floor refuses past zone 1 too"
+    );
+
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::NullSector,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    assert_eq!(
+        game.environment_biome_at(pos.x, pos.y),
+        Some(Biome::NullSector),
+        "an ordinary biome past zone 1 takes environment effects"
+    );
+}
+
 /// A single ambush attempt on a fresh, independently seeded fixture: builds
 /// the game, stamps the player's own tile as `Mainframe`, sets the clock to
 /// `tick`, reseeds `GameRng` to `rng_seed`, then reports whether that one
@@ -1114,6 +1166,42 @@ fn turnover_in_a_biome_the_player_is_not_standing_in_is_silent() {
             .iter()
             .any(|l| l.text.contains(description)),
         "weather turning over in a biome the player isn't standing in must stay silent"
+    );
+}
+
+/// `terrain_at` and `note_static_turnover` reading the same
+/// `environment_biome_at` means a zone-1 player crossing straight through a
+/// live-weather arrival cannot see one caller refuse it while the other
+/// announces it — the seam Task 4's two independent copies of the same two
+/// checks put at risk. Asserted on the actual arrival boundary rather than
+/// an arbitrary tick, so this exercises exactly the moment
+/// `weather_arrival_fires_on_the_boundary_in_the_players_biome` fires the
+/// notice at zone 2.
+#[test]
+fn zone_one_terrain_and_turnover_agree_on_no_weather() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!(
+        game.terrain_at(pos.x, pos.y).event,
+        None,
+        "terrain_at must refuse weather at zone 1"
+    );
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !game
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "note_static_turnover must refuse the same arrival terrain_at refuses"
     );
 }
 

@@ -26,14 +26,38 @@ pub struct Terrain {
 }
 
 impl Game {
+    /// Whether `(x, y)` takes environment effects at all, and its biome if
+    /// so. `None` for zone 1's tutorial floor and the base's own
+    /// `Platform`, neither of which ever carries a condition or weather —
+    /// zone 1 is where a run learns the game, and ground that bites there
+    /// would be a tax on the tutorial rather than an exception to it, and
+    /// the one safe floor in the game should not depend on a condition
+    /// never claiming `Platform`.
+    ///
+    /// **The one gate.** `terrain_at` and `note_static_turnover` both read
+    /// this rather than each carrying its own copy of the same two checks —
+    /// two copies is exactly how the neutral-zone-1 rule lapses, per
+    /// CLAUDE.md's own warning about a second caller resolving a biome
+    /// itself.
+    ///
+    /// `&mut self` because `WorldMap::tile` generates its chunk on demand;
+    /// nothing here writes anything the caller can observe.
+    pub(crate) fn environment_biome_at(&mut self, x: i32, y: i32) -> Option<Biome> {
+        let biome = self.world.resource_mut::<WorldMap>().tile(x, y).biome;
+        if self.world.resource::<ZoneLevel>().0 <= 1 {
+            return None;
+        }
+        if biome == Biome::Platform {
+            return None;
+        }
+        Some(biome)
+    }
+
     /// Resolves `(x, y)` to its `Terrain`.
     ///
-    /// The one door: both the zone-1 rule and the `Platform` refusal live
-    /// here rather than at the call site, so neither can lapse when a
-    /// second caller appears. Zone 1 is where a run learns the game, and
-    /// ground that bites there would be a tax on the tutorial rather than
-    /// an exception to it. The biome's *name* is deliberately outside the
-    /// zone-1 gate — a zone-1 player must still learn the world's
+    /// The one door onto ambient ground and weather alike, gated through
+    /// `environment_biome_at`. The biome's *name* is deliberately read
+    /// outside that gate — a zone-1 player must still learn the world's
     /// vocabulary, so this returns the real biome and a neutral effect
     /// rather than an `Option` that would hide both.
     ///
@@ -41,24 +65,14 @@ impl Game {
     /// nothing here writes anything the caller can observe.
     pub fn terrain_at(&mut self, x: i32, y: i32) -> Terrain {
         let biome = self.world.resource_mut::<WorldMap>().tile(x, y).biome;
-        if self.world.resource::<ZoneLevel>().0 <= 1 {
+        let Some(biome) = self.environment_biome_at(x, y) else {
             return Terrain {
                 biome,
                 condition: None,
                 event: None,
                 effect: EnvironmentEffect::NONE,
             };
-        }
-        // The one safe floor in the game should not depend on a condition
-        // never claiming it — a base can be stamped over any ground at all.
-        if biome == Biome::Platform {
-            return Terrain {
-                biome,
-                condition: None,
-                event: None,
-                effect: EnvironmentEffect::NONE,
-            };
-        }
+        };
         let condition = GroundCondition::for_biome(biome);
         let ground = condition
             .map(|c| c.def().effect)
@@ -85,7 +99,7 @@ impl Game {
     }
 
     /// Ungated derivation, for an epoch the caller names. The zone-1 and
-    /// `Platform` gates live in `terrain_at`, not here.
+    /// `Platform` gates live in `environment_biome_at`, not here.
     ///
     /// **Takes the epoch rather than reading the clock**, because Task 4
     /// has to ask what was live in the epoch that just ended. A version

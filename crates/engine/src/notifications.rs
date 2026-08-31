@@ -193,7 +193,7 @@ impl NotificationKind {
             },
             NotificationKind::FirstStatic => NotificationDef {
                 title: "Static",
-                body: "That bite was Static, not the ground itself — interference riding on \
+                body: "That is Static, not the ground itself — interference riding on \
                        top of the terrain, tied to the whole biome you are standing in rather \
                        than to this one tile.\n\nIt runs on its own clock. Given time it clears, \
                        and something else may settle over the same ground later. There is \

@@ -90,7 +90,35 @@ pub enum Deed {
     UnlockedPerk,
     /// A machine was set to be kept staffed. `Game::set_standing_job` —
     /// the player's own key, not `post_worker`, which is the scheduler's.
+    ///
+    /// **The one deed that is also a standing condition**, and the only one
+    /// with a `Deed::already_true` answer. A machine already kept worked
+    /// when the mission arrives satisfies it: the deed alone could not,
+    /// because `RunFeats::deeds` is drained every tick, so the only way left
+    /// was to turn the job **off** and on again — which pulls the body off
+    /// the machine and is the opposite of what the mission asks for.
     PostedStaff,
+}
+
+impl Deed {
+    /// Whether the run is already standing in the state this deed asks for,
+    /// with no edge needed.
+    ///
+    /// Exhaustive, `cell_mark`'s rule: a `_ => false` arm would ship the
+    /// next standing-condition deed answering nothing, which reads as the
+    /// mission being uncompletable rather than as a missing arm.
+    pub fn already_true(&self, state: &ObjectiveState) -> bool {
+        match self {
+            Deed::PostedStaff => state.posted,
+            // Pure events. There is no state to read back: nothing in the
+            // world says the player once examined something.
+            Deed::Examined
+            | Deed::Tamed
+            | Deed::TookFromContainer
+            | Deed::QueuedStandingOrder
+            | Deed::UnlockedPerk => false,
+        }
+    }
 }
 
 /// What a contract asks for.
@@ -150,6 +178,12 @@ pub struct ObjectiveState {
     pub standing: Vec<StructureId>,
     /// What the player is carrying, for `Objective::Hold`.
     pub carried: Vec<(ItemId, u32)>,
+    /// Whether any deployed structure is set to be kept worked —
+    /// `components::StandingJob::work`, whose only writer is
+    /// `Game::set_standing_job`, the player's own key. The scheduler's
+    /// `post_worker` writes no `StandingJob`, so this stays false for a body
+    /// the base placed by itself.
+    pub posted: bool,
 }
 
 impl ObjectiveState {
@@ -205,9 +239,11 @@ impl Objective {
         match self {
             // Event-shaped, so never *already* true: a board would otherwise
             // refuse to offer one forever.
-            Objective::Terminate { .. } | Objective::Deliver { .. } | Objective::Perform { .. } => {
-                false
-            }
+            Objective::Terminate { .. } | Objective::Deliver { .. } => false,
+            // Five of the six deeds are events too and answer the same way.
+            // The sixth, `PostedStaff`, is a standing condition — see
+            // `Deed::already_true`.
+            Objective::Perform { deed } => deed.already_true(state),
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),

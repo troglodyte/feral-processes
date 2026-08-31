@@ -155,6 +155,15 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
+        // Captured here, at the one place the clock actually advances,
+        // rather than at each of the thirty-odd call sites that spend a
+        // tick — a verb-by-verb list of "and also announce a boundary" is
+        // exactly how `idle_tick` and the crafting/building/trading paths
+        // went silent on this in the first place. A single tick can cross
+        // at most one epoch boundary (the clock only ever moves by one), so
+        // this fires at most once per call regardless of how many verbs
+        // share this function.
+        let epoch_before = self.static_epoch();
         // Before the ambient roll, not after: the roll's density gate reads
         // `local_hostile_count`, and asking it about ground that has not been
         // stocked yet would answer "empty" and spend a spawn filling in what
@@ -229,6 +238,7 @@ impl Game {
         // buff, not base upkeep the player paused by staying home.
         self.tick_field_buffs();
         self.world.resource_mut::<GameClock>().tick += 1;
+        self.note_static_turnover(epoch_before);
     }
 
     /// Moves every provoked nest guardian one step closer to the player and
@@ -569,33 +579,39 @@ impl Game {
             // `is_game_over` itself.
             self.maybe_ambush();
         }
-        // Before the tick that may cross a weather epoch boundary, so
-        // `note_static_turnover` below can compare what was live in the
-        // epoch this step started in against what is live in the epoch it
-        // ends in.
-        let epoch_before = self.static_epoch();
         self.tick();
         // Slow ground is the one step that costs more than a turn. A tick
         // can start a fight — `nest_aggro_tick` is the precedent — so the
         // rest of them are dropped the moment one does, rather than
         // resolving a world the player is no longer standing in while a
-        // battle waits on the screen.
+        // battle waits on the screen. Each of these ticks — and the one
+        // above — makes its own `note_static_turnover` call from inside
+        // `tick_inner`, so a `Drag` step spending several ticks still
+        // announces at most once: only the one tick that actually crosses a
+        // boundary has anything to say.
         for _ in 0..drag_ticks {
             if self.is_game_over().is_some() || self.has_active_battle() {
                 break;
             }
             self.tick();
         }
-        // After the drag loop, not inside it: a `Drag` step spends several
-        // ticks, and calling this per tick would announce one turnover per
-        // tick spent rather than once for the step.
-        self.note_static_turnover(epoch_before);
     }
 
     /// Announces weather arriving or clearing under the player, if the tick
-    /// (or ticks — see the drag loop in `move_player`) just taken crossed a
-    /// weather epoch boundary. Called once per player step, after every
-    /// tick that step spent.
+    /// `tick_inner` just took crossed a weather epoch boundary. Called from
+    /// `tick_inner` itself, once per tick, right after the clock advances —
+    /// the one place the clock actually moves, rather than a second call
+    /// site threaded through every verb that spends a tick. A single tick
+    /// only ever moves the clock forward by one, so it can cross at most one
+    /// boundary; this cannot fire more than once for it.
+    ///
+    /// This is what makes standing still (`Game::idle_tick`), crafting,
+    /// building, trading and every other tick-spending verb announce a
+    /// boundary exactly like a step does — the previous version of this
+    /// hook was reachable only from `move_player`, so a boundary crossed
+    /// while the player stood still, worked a bench, or traded was missed
+    /// forever: nothing about the previous epoch is stored, so the next
+    /// step's own comparison could not see back past it.
     ///
     /// Fires only for the biome the player is standing in *now* — the other
     /// biomes turning over silently is the point, or a boundary would cost
@@ -609,9 +625,23 @@ impl Game {
     /// there would describe an effect that never actually bites. Reading
     /// that gate rather than carrying a second copy of its two checks is
     /// what keeps this in step with `terrain_at`'s own refusal.
+    ///
+    /// **Also refuses underground and in base space**, which
+    /// `environment_biome_at` alone does not: `Position` stays pinned to the
+    /// surface entrance (Stack) or the anchor tile (base) in both locales —
+    /// the same pinning `terrain_row`'s own guard exists for — so without
+    /// this a boundary turning over at the entrance tile would announce
+    /// weather at a place the player is not standing while they are four
+    /// frames down or safely inside the base pocket. `move_player` already
+    /// refused both states before this was ever reachable from anywhere but
+    /// itself; called from `tick_inner`, every tick-spending verb in both
+    /// locales reaches this and needs the same refusal.
     pub(crate) fn note_static_turnover(&mut self, epoch_before: u64) {
         let epoch_after = self.static_epoch();
         if epoch_after == epoch_before {
+            return;
+        }
+        if self.is_underground() || self.in_base() {
             return;
         }
         let player = self.player_entity();

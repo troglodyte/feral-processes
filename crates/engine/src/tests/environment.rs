@@ -1162,6 +1162,32 @@ fn weather_clearing_fires_on_the_boundary_the_other_way() {
     );
 }
 
+/// The requirement behind moving the hook into `tick_inner`: a player who
+/// never takes another step must still be told. `App::update_realtime`
+/// calls `Game::idle_tick` once a second whenever the player stands on the
+/// surface — before this fix that path never called
+/// `note_static_turnover` at all, and because nothing about the previous
+/// epoch is stored, a boundary crossed this way was missed *forever*, not
+/// merely delayed until the next step.
+#[test]
+fn idle_tick_announces_a_weather_boundary_while_standing_still() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.idle_tick();
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description) && l.text.contains(Biome::NullSector.name())),
+        "standing still across a weather boundary must still announce it"
+    );
+}
+
 /// The fifth trigger, and the one full-screen rather than a log line:
 /// standing onto a tile with a live event queues `FirstStatic` once, and a
 /// second such step must not queue it again — the once-only rule is

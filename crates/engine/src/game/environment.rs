@@ -5,6 +5,7 @@
 //! obvious home beside it rather than inside the catalogue module.
 
 use crate::Game;
+use crate::components::Position;
 use crate::derive;
 use crate::environment::{EnvironmentEffect, GroundCondition, StaticEvent};
 use crate::game::contracts::fold;
@@ -23,6 +24,18 @@ pub struct Terrain {
     /// Folded and clamped — the one number the turn hook needs, so it never
     /// has to know how many sources contributed to it.
     pub effect: EnvironmentEffect,
+}
+
+/// What the map pane's border reads: the ground under the player and, if
+/// any, the weather over it — names only, already resolved to the def's own
+/// prose. The renderer draws this and derives nothing; it does not even see
+/// `GroundCondition` or `StaticEvent`, so it has no way to format either
+/// differently than the log line that announced them does.
+#[derive(Clone, Copy, Debug)]
+pub struct TerrainRow {
+    pub biome: &'static str,
+    pub condition: Option<&'static str>,
+    pub event: Option<&'static str>,
 }
 
 impl Game {
@@ -91,6 +104,29 @@ impl Game {
             event,
             effect,
         }
+    }
+
+    /// What the map pane's border reads. `None` underground — a Stack
+    /// frame has no biome, which is the same reason the threat readout
+    /// counts no hostiles down there.
+    ///
+    /// Reads the player's `Position`, which stays pinned to the surface
+    /// entrance while the party is underground — `is_underground` is
+    /// checked first rather than trusted to fall out of `terrain_at`, or
+    /// this would report the entrance's ground as if the party were
+    /// standing on it.
+    pub fn terrain_row(&mut self) -> Option<TerrainRow> {
+        if self.is_underground() {
+            return None;
+        }
+        let player = self.player_entity();
+        let pos = *self.world.get::<Position>(player).unwrap();
+        let terrain = self.terrain_at(pos.x, pos.y);
+        Some(TerrainRow {
+            biome: terrain.biome.name(),
+            condition: terrain.condition.map(|c| c.def().name),
+            event: terrain.event.map(|e| e.def().name),
+        })
     }
 
     /// The weather epoch the clock is in right now.

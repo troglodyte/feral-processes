@@ -170,7 +170,7 @@ fn bite_is_the_floored_percentage_and_zero_for_none() {
 
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
 use crate::resources::{MessageLog, Party, ZoneLevel};
-use crate::tests::support::{enlist, spawn_tamed, test_assets_dir};
+use crate::tests::support::{descend, enlist, spawn_tamed, test_assets_dir};
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
 
@@ -1281,5 +1281,54 @@ fn save_load_mid_epoch_does_not_reannounce_arrival() {
             .iter()
             .any(|l| l.text.contains(description)),
         "a save/load landing mid-epoch must not fabricate an arrival that never happened"
+    );
+}
+
+// -------------------------------------------------------------- terrain_row
+
+/// The engine hands the renderer already-resolved names — a claimed biome
+/// with a live event carries both.
+#[test]
+fn terrain_row_names_the_ground_and_the_live_weather() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS);
+
+    let row = game.terrain_row().expect("the surface always has a biome");
+
+    assert_eq!(row.biome, Biome::NullSector.name());
+    assert_eq!(
+        row.condition,
+        Some(GroundCondition::DanglingReads.def().name)
+    );
+    assert_eq!(row.event, Some(StaticEvent::LeakingMemory.def().name));
+}
+
+/// Unclaimed ground names the biome and nothing else — `for_biome`'s own
+/// neutral case, read back through the row rather than the catalogue.
+#[test]
+fn terrain_row_names_nothing_extra_on_unclaimed_ground() {
+    let mut game = game_standing_on(Biome::OpenGrid);
+
+    let row = game.terrain_row().expect("the surface always has a biome");
+
+    assert_eq!(row.biome, Biome::OpenGrid.name());
+    assert_eq!(row.condition, None);
+    assert_eq!(row.event, None);
+}
+
+/// The one case the border strip must draw nothing for: a Stack frame has
+/// no biome, the same reason the threat readout counts no hostiles down
+/// there.
+#[test]
+fn terrain_row_is_none_underground() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    descend(&mut game);
+    assert!(game.is_underground(), "the fixture never got underground");
+
+    assert!(
+        game.terrain_row().is_none(),
+        "a Stack frame has no biome for the border to read"
     );
 }

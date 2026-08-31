@@ -33,6 +33,22 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.61
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The base anchor is drawn as a portal now, not a `#`.** Its glyph was
+  chosen by elimination rather than by meaning — `>` and `<` were claimed by
+  Stack links, Blue and Cyan were reserved — so it was the one fixture on
+  the zone map that said nothing about itself.
+- **`assets/sprites/anchor.png` is a ring with a bright core**, hard-edged
+  rather than anti-aliased, and near-white so it inherits the anchor's tint
+  the same way every sprite does.
+- **The "Base Space" notice draws the same art and no longer names a
+  character**, so the tutorial and the map agree on what to look for.
+- **`EntityView::is_anchor` is what the renderer reads**, the anchor being
+  the one map fixture that is neither a creature nor a `Structure`.
+
 ## 0.13.60
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

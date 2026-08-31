@@ -2,16 +2,26 @@
 
 use super::stack::draw_stack;
 use super::*;
+use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::views::drawn_on_surface_map;
 
 /// How far a bare tile's background may stray from its biome's flat colour,
 /// as a fraction either side. Enough to break up a field of identical tiles,
 /// not enough to read as two different biomes.
 const SHADE_JITTER: f32 = 0.08;
-/// How dark the map pane's corners get relative to its centre. Floored well
-/// short of illegible: the vignette is depth, and must never be the reason a
-/// hostile at the pane's edge goes unnoticed.
-const VIGNETTE_MIN: f32 = 0.75;
+/// How dark the map pane's corners get relative to its centre, at a full
+/// Power reserve and at an empty one. Floored well short of illegible: the
+/// vignette is depth, and must never be the reason a hostile at the pane's
+/// edge goes unnoticed.
+///
+/// **That rule is why the drained floor is a deepening and not a blackout.**
+/// The glyph takes the vignette (see its call site below), so every step
+/// down here dims a hostile standing at the pane's edge — and an empty
+/// reserve is precisely when the player can least afford to miss one. The
+/// gap between the two is meant to be felt at a glance and read through
+/// regardless.
+const VIGNETTE_FLOOR_FULL: f32 = 0.75;
+const VIGNETTE_FLOOR_EMPTY: f32 = 0.60;
 
 /// The staffed mark's side, as a fraction of the tile, and how far it is held
 /// off the tile's edges. The inset is not cosmetic: `outline_open` drops the
@@ -139,11 +149,33 @@ fn tile_hash(world: (i32, i32)) -> u32 {
 /// gradient the same shape at every zoom step and window size, and squaring
 /// the radius keeps the centre broadly flat so the falloff reads only near
 /// the edges.
-fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32) -> f32 {
+fn vignette(dx: f32, dy: f32, half_w_px: f32, half_h_px: f32, floor: f32) -> f32 {
     let r = ((dx / half_w_px).powi(2) + (dy / half_h_px).powi(2))
         .sqrt()
         .min(1.0);
-    1.0 - (1.0 - VIGNETTE_MIN) * r * r
+    1.0 - (1.0 - floor) * r * r
+}
+
+/// How dark the corners are allowed to get, given the player's Power reserve.
+///
+/// The vignette is **always on** and what Power moves is its depth. One that
+/// only appeared below some threshold would be news the first time and
+/// unread for the rest of the run; one that is always there, and tightens,
+/// is a gauge the player takes in without looking away from the map.
+///
+/// Deliberately not keyed to `tuning::LOW_POWER_ATTACK_THRESHOLD`'s knee.
+/// That constant is where Power starts costing you damage, and a kink here
+/// at the same place would claim the darkening and the penalty are one
+/// statement — they are not, and the PWR meter is where a threshold reading
+/// belongs.
+///
+/// `render/stack.rs`'s `fog` is this same idea turned down the corridor's own
+/// axis, and the two are deliberately *not* a shared function: a floor on a
+/// radial falloff and a per-cell fog rate are different quantities that
+/// happen to be driven by the same reserve.
+fn vignette_floor(power: f32) -> f32 {
+    let fraction = (power / POWER_MAX).clamp(0.0, 1.0);
+    VIGNETTE_FLOOR_EMPTY + (VIGNETTE_FLOOR_FULL - VIGNETTE_FLOOR_EMPTY) * fraction
 }
 
 /// A biome's colour, and with it the map's one colour rule: **hue answers
@@ -608,7 +640,7 @@ pub(super) fn draw_playing_base(
         mining: game.mining(),
     };
     if let Some(view) = game.stack_view() {
-        draw_stack(&view, painter, regions.map_pane, m);
+        draw_stack(&view, painter, regions.map_pane, m, status.power);
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
@@ -848,6 +880,9 @@ fn draw_surface_map(
     // player who is out of the base through the log pane's own flash and a
     // `MessageKind::Raid` line, and neither of those claims a tile.
     let show_effects = base_pos.is_some();
+    // Hoisted out of the tile loop: it is one reading of one reserve, and the
+    // whole grid is drawn against the same one.
+    let floor = vignette_floor(status.power);
     let (off_x, off_y) = fx.camera_offset(center, painter.delta());
     let tiles = game.view_tiles(hw, hh);
     let entities: Vec<_> = game
@@ -1055,6 +1090,7 @@ fn draw_surface_map(
                 py + tile_px / 2.0 - (pane.y + pane.h / 2.0),
                 pane.w / 2.0,
                 pane.h / 2.0,
+                floor,
             );
             let dim = shade * vig;
             let mut bg = at_level(bg_source, GROUND_LEVEL * dim);
@@ -2585,23 +2621,24 @@ mod tests {
 
     #[test]
     fn the_vignette_leaves_the_centre_of_the_pane_untouched() {
-        assert_eq!(vignette(0.0, 0.0, 400.0, 300.0), 1.0);
+        assert_eq!(vignette(0.0, 0.0, 400.0, 300.0, VIGNETTE_FLOOR_FULL), 1.0);
     }
 
     #[test]
     fn the_vignette_bottoms_out_at_its_floor_and_never_below() {
-        assert!((vignette(400.0, 0.0, 400.0, 300.0) - VIGNETTE_MIN).abs() < 1e-6);
+        let f = VIGNETTE_FLOOR_FULL;
+        assert!((vignette(400.0, 0.0, 400.0, 300.0, f) - f).abs() < 1e-6);
         // The corners sit past the unit radius and must clamp rather than
         // keep darkening.
-        assert!(vignette(400.0, 300.0, 400.0, 300.0) >= VIGNETTE_MIN);
-        assert!(vignette(9999.0, 9999.0, 400.0, 300.0) >= VIGNETTE_MIN);
+        assert!(vignette(400.0, 300.0, 400.0, 300.0, f) >= f);
+        assert!(vignette(9999.0, 9999.0, 400.0, 300.0, f) >= f);
     }
 
     #[test]
     fn the_vignette_darkens_monotonically_outward() {
         let mut previous = f32::MAX;
         for i in 0..=20 {
-            let v = vignette(i as f32 * 20.0, 0.0, 400.0, 300.0);
+            let v = vignette(i as f32 * 20.0, 0.0, 400.0, 300.0, VIGNETTE_FLOOR_FULL);
             assert!(
                 v <= previous,
                 "brightened at step {i}: {v} after {previous}"
@@ -2614,9 +2651,55 @@ mod tests {
     /// same shape at every zoom step and window size.
     #[test]
     fn the_vignette_depends_on_position_within_the_pane_not_on_its_size() {
-        let small = vignette(100.0, 75.0, 400.0, 300.0);
-        let large = vignette(200.0, 150.0, 800.0, 600.0);
+        let small = vignette(100.0, 75.0, 400.0, 300.0, VIGNETTE_FLOOR_FULL);
+        let large = vignette(200.0, 150.0, 800.0, 600.0, VIGNETTE_FLOOR_FULL);
         assert!((small - large).abs() < 1e-6, "{small} vs {large}");
+    }
+
+    /// The whole of what Power buys: a full reserve is the vignette this map
+    /// has always drawn, and draining it deepens the corners and nothing
+    /// else.
+    #[test]
+    fn the_vignette_floor_deepens_as_the_reserve_drains() {
+        assert_eq!(vignette_floor(POWER_MAX), VIGNETTE_FLOOR_FULL);
+        assert_eq!(vignette_floor(0.0), VIGNETTE_FLOOR_EMPTY);
+
+        let mut previous = f32::MAX;
+        for i in 0..=10 {
+            let f = vignette_floor(POWER_MAX * (10 - i) as f32 / 10.0);
+            assert!(
+                f <= previous,
+                "brightened at step {i}: {f} after {previous}"
+            );
+            previous = f;
+        }
+    }
+
+    /// `PowerReserve` clamps itself, but this reads a `PlayerStatus` field
+    /// rather than the type, and a floor that ran past either constant would
+    /// either blow out the centre or drive the corners toward black.
+    #[test]
+    fn the_vignette_floor_is_clamped_at_both_ends() {
+        assert_eq!(vignette_floor(POWER_MAX * 4.0), VIGNETTE_FLOOR_FULL);
+        assert_eq!(vignette_floor(-40.0), VIGNETTE_FLOOR_EMPTY);
+    }
+
+    /// It stays a *vignette* at every reserve: the pane's middle is untouched
+    /// whatever the floor, so a drained reserve costs the player nothing at
+    /// the centre of their own attention. A version that dimmed the whole
+    /// pane would be a wash, and would read as the renderer having faulted
+    /// rather than as the reserve running down.
+    #[test]
+    fn a_drained_reserve_darkens_the_pane_edge_and_not_its_centre() {
+        let full = vignette_floor(POWER_MAX);
+        let empty = vignette_floor(0.0);
+
+        assert_eq!(vignette(0.0, 0.0, 400.0, 300.0, full), 1.0);
+        assert_eq!(vignette(0.0, 0.0, 400.0, 300.0, empty), 1.0);
+        assert!(
+            vignette(400.0, 0.0, 400.0, 300.0, empty) < vignette(400.0, 0.0, 400.0, 300.0, full),
+            "an empty reserve must darken the edge"
+        );
     }
 
     /// The tile mark's whole job is not fighting the rarity bar for the

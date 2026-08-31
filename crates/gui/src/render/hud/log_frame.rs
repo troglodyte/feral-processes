@@ -41,6 +41,7 @@
 //! a pickup and a sweep — picked out of it. See `channel_tag`.
 
 use feral_processes_app_core::LogFilter;
+use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::text::wrap;
 use feral_processes_engine::{LogEntry, MessageKind, MessageSource, PlayerStatus};
 
@@ -62,9 +63,6 @@ const GUTTER_SAMPLE: &str = "ALERT  ";
 const INTEG_CELLS: usize = 16;
 const POWER_CELLS: usize = 10;
 const XP_CELLS: usize = 14;
-/// `POWER_MAX` — the reserve's ceiling is fixed forever and does not scale
-/// with the player, unlike `max_hp`.
-const POWER_MAX: f32 = 100.0;
 
 /// What the vitals strip reads.
 pub(in crate::render) struct Vitals<'a> {

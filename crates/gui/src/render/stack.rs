@@ -20,6 +20,7 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_engine::components::POWER_MAX;
 use feral_processes_engine::{StackCellView, StackView};
 
 /// How much narrower each successive slice is. Tuned by eye: much above this
@@ -31,18 +32,39 @@ const SHRINK: f32 = 0.58;
 /// multiplies it by. The fog is what makes distance legible at all — with
 /// flat shading every slice is the same colour and the corridor reads as
 /// concentric rectangles rather than as depth.
+///
+/// The fog thickens as the player's Power reserve drains, `FOG_FULL` down to
+/// `FOG_EMPTY` — this view's half of the same statement `render/base.rs`'s
+/// `vignette_floor` makes on the surface map, turned down the axis this view
+/// actually has. On a grid "away from the player" is radial; down a corridor
+/// it is depth, so the corridor's edge-darkening *is* its fog.
+///
+/// It thickens the fog rather than dimming the corridor outright for the
+/// reason the surface map leaves its centre alone: the nearest cell is
+/// `powi(0)` and so is identical at every reserve, which keeps a drained
+/// reserve reading as sight closing in rather than as the renderer having
+/// faulted. And it moves no engine number — `view_cone` and `visible_rows`
+/// still hand over exactly the cells they always did, so this stays a
+/// **look** and never becomes a sight-range nerf wearing one.
 const NEAR_SHADE: f32 = 1.0;
-const FOG: f32 = 0.62;
+const FOG_FULL: f32 = 0.62;
+const FOG_EMPTY: f32 = 0.50;
 
 /// The fog the cell marks fade under, which is deliberately gentler than
 /// the one the geometry fades under.
 ///
-/// `FOG` is a depth cue: it exists so the corridor reads as receding rather
+/// `FOG_FULL` is a depth cue: it exists so the corridor reads as receding rather
 /// than as concentric rectangles, and dimming a surface to a quarter of
 /// itself four cells out is the whole point. A mark is the opposite kind of
 /// thing — it is there to be spotted from the far end of the view, and the
 /// same curve applied to it puts the thing you are meant to notice at 24%
 /// brightness against geometry that is also near-black.
+///
+/// **Which is also why it takes no reserve term.** A thickening fog is
+/// allowed to swallow the walls; the glyph telling the player there is a
+/// door down there is the one thing a drained reserve must not take, exactly
+/// as `VIGNETTE_FLOOR_EMPTY` is floored so the surface map keeps a hostile
+/// at its edge visible.
 const MARK_FOG: f32 = 0.85;
 
 /// Fraction of the pane's half-height the corridor occupies at depth 0.
@@ -100,9 +122,15 @@ fn column_slice(depth: usize, lateral: i32, pane: Rect) -> (f32, f32, f32, f32) 
     (l + dx, t, r + dx, b)
 }
 
-/// How bright a surface `depth` cells away is drawn.
-fn shade(depth: usize) -> f32 {
-    NEAR_SHADE * FOG.powi(depth as i32)
+/// How thick the fog is at a given Power reserve. See `FOG_FULL`.
+fn fog(power: f32) -> f32 {
+    let fraction = (power / POWER_MAX).clamp(0.0, 1.0);
+    FOG_EMPTY + (FOG_FULL - FOG_EMPTY) * fraction
+}
+
+/// How bright a surface `depth` cells away is drawn, at a given reserve.
+fn shade(depth: usize, power: f32) -> f32 {
+    NEAR_SHADE * fog(power).powi(depth as i32)
 }
 
 /// How bright the mark on a cell `depth` cells away is drawn — see
@@ -181,7 +209,7 @@ fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color
 /// window's, because the base stock strip claims a row above it. Every
 /// piece of the projection derives from `slice`, so that origin is stated
 /// once here and the whole corridor follows it.
-pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics) {
+pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics, power: f32) {
     painter.rect(pane.x, pane.y, pane.w, pane.h, VOID);
 
     // Floored before any geometry, so nothing inside the corridor's own band
@@ -207,7 +235,7 @@ pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Me
         for depth in (0..view.cells.len()).rev() {
             let row = &view.cells[depth];
             for i in 0..row.len() {
-                draw_cell(painter, row, i, depth, pane, m);
+                draw_cell(painter, row, i, depth, pane, m, power);
             }
         }
     });
@@ -255,12 +283,13 @@ fn draw_cell(
     depth: usize,
     pane: Rect,
     m: &Metrics,
+    power: f32,
 ) {
     let cell = row[i];
     let lateral = i as i32 - (row.len() / 2) as i32;
     let (nl, nt, nr, nb) = column_slice(depth, lateral, pane);
     let (fl, ft, fr, fb) = column_slice(depth + 1, lateral, pane);
-    let s = shade(depth);
+    let s = shade(depth, power);
 
     let face = draws_as_face(depth, cell);
     if face {
@@ -531,7 +560,7 @@ mod tests {
     /// drawn is three cells out.
     #[test]
     fn the_unlit_fill_is_lighter_than_void_and_darker_than_the_far_wall() {
-        let far_wall = dim(WALL, shade(3));
+        let far_wall = dim(WALL, shade(3, POWER_MAX));
         for (fill, void, wall) in [
             (UNLIT.r, VOID.r, far_wall.r),
             (UNLIT.g, VOID.g, far_wall.g),
@@ -546,7 +575,7 @@ mod tests {
     fn distance_darkens_and_never_brightens() {
         let mut last = f32::MAX;
         for depth in 0..6 {
-            let s = shade(depth);
+            let s = shade(depth, POWER_MAX);
             assert!(s < last, "depth {depth} is not darker than the one before");
             assert!(s > 0.0, "fog must never reach pure black");
             last = s;
@@ -703,7 +732,7 @@ mod tests {
         ];
         crate::paint::with_painter(|p| {
             for case in &cases {
-                draw_stack(case, p, Rect::new(0.0, 0.0, 1000.0, 640.0), &m);
+                draw_stack(case, p, Rect::new(0.0, 0.0, 1000.0, 640.0), &m, POWER_MAX);
             }
         });
     }
@@ -731,15 +760,78 @@ mod tests {
             let s = mark_shade(depth);
             assert!(s <= last, "depth {depth} marks brighten with distance");
             assert!(
-                s >= shade(depth),
+                s >= shade(depth, POWER_MAX),
                 "depth {depth} marks fade faster than the geometry"
             );
             last = s;
         }
         assert!(
-            mark_shade(3) > shade(3) * 2.0,
+            mark_shade(3) > shade(3, POWER_MAX) * 2.0,
             "the far end of the view is where the fog was eating the marks"
         );
+    }
+
+    /// The corridor's half of the Power vignette. A drained reserve is meant
+    /// to be read as the dark closing in from the far end, which is where
+    /// this view's "edge" is.
+    #[test]
+    fn a_drained_reserve_thickens_the_fog() {
+        assert_eq!(fog(POWER_MAX), FOG_FULL);
+        assert_eq!(fog(0.0), FOG_EMPTY);
+
+        let mut previous = f32::MAX;
+        for i in 0..=10 {
+            let f = fog(POWER_MAX * (10 - i) as f32 / 10.0);
+            assert!(
+                f <= previous,
+                "the fog thinned at step {i}: {f} after {previous}"
+            );
+            previous = f;
+        }
+        assert!(
+            shade(3, 0.0) < shade(3, POWER_MAX),
+            "the far end must darken"
+        );
+    }
+
+    /// What keeps it a *vignette* rather than a wash: `powi(0)` is 1 whatever
+    /// the fog, so the cell the party is standing in front of is pixel-for-
+    /// pixel identical at every reserve. A drained corridor that dimmed
+    /// uniformly would read as the renderer having faulted.
+    #[test]
+    fn the_nearest_cell_is_untouched_by_the_reserve() {
+        assert_eq!(shade(0, 0.0), shade(0, POWER_MAX));
+        assert!(
+            shade(1, 0.0) < shade(1, POWER_MAX),
+            "and the next one is not"
+        );
+    }
+
+    /// `MARK_FOG` carries no reserve term, and this is the property that
+    /// buys: the fog may swallow the walls, but the `+` that says there is a
+    /// door down there survives an empty reserve — the corridor's version of
+    /// `VIGNETTE_FLOOR_EMPTY` being floored well short of illegible.
+    #[test]
+    fn a_mark_still_outshines_the_geometry_at_an_empty_reserve() {
+        for depth in 0..6 {
+            assert!(
+                mark_shade(depth) >= shade(depth, 0.0),
+                "depth {depth}: a drained reserve ate the mark"
+            );
+        }
+        assert!(
+            mark_shade(3) > shade(3, 0.0) * 2.0,
+            "the far end is where a thickening fog would eat the marks first"
+        );
+    }
+
+    /// `PowerReserve` clamps itself, but this reads a `PlayerStatus` field
+    /// rather than the type, and a fog past either end would either flatten
+    /// the depth cue or drive the corridor to black.
+    #[test]
+    fn the_fog_is_clamped_at_both_ends() {
+        assert_eq!(fog(POWER_MAX * 4.0), FOG_FULL);
+        assert_eq!(fog(-40.0), FOG_EMPTY);
     }
 
     /// A renderer must survive whatever the engine hands it, including the
@@ -767,8 +859,8 @@ mod tests {
             standing_on: None,
         };
         crate::paint::with_painter(|p| {
-            draw_stack(&empty, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m);
-            draw_stack(&single, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m);
+            draw_stack(&empty, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m, POWER_MAX);
+            draw_stack(&single, p, Rect::new(0.0, 0.0, 800.0, 600.0), &m, POWER_MAX);
         });
     }
 

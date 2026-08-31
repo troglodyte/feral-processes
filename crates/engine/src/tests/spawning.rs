@@ -5,7 +5,8 @@ use crate::species::DangerBand;
 use crate::tuning::{
     BOSS_SPAWN_CHANCE, MAX_GROUP_SIZE_STEPS, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY,
     NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
+    OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WANDER_COOLDOWN_MAX_TICKS,
+    WANDER_COOLDOWN_MIN_TICKS, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
     WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
 };
 use crate::*;
@@ -210,6 +211,88 @@ fn a_guardian_outside_its_tether_walks_back_toward_its_nest() {
         dist < start_dist,
         "a guardian dragged outside its tether should walk back toward its nest, \
          but stayed at distance {dist} (started at {start_dist})"
+    );
+}
+
+/// A wild program waits out `WANDER_COOLDOWN_MIN_TICKS` between moves, and
+/// averages the range's midpoint over a run of them.
+///
+/// The pace is a **pairing**, and this is the only thing holding it.
+/// `WORLD_SPEED_MULTIPLIER` in app-core runs the world at two ticks a real
+/// second, and these two constants are what keep a wanderer at the
+/// wall-clock speed it had at one — nothing makes them fail to compile when
+/// one moves without the other. At the `2..6` this replaced, the smallest
+/// gap is 2 and the mean is under 4, so both assertions below fail.
+///
+/// Gaps between *moves* rather than between cooldown firings: a firing that
+/// draws `(0, 0)`, or that would step onto ground closed to hostiles, spends
+/// its cooldown without moving. So a gap is a sum of one or more firing
+/// intervals, which is why the minimum is asserted exactly and the mean is
+/// asserted against a band that sits above the firing interval itself.
+#[test]
+fn a_wild_program_waits_out_its_cooldown_between_moves() {
+    let mut game = Game::new(4021, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    skip_tutorial(&mut game);
+    let at = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let start = Position {
+        x: at.x + 4,
+        y: at.y,
+    };
+    let wanderer = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Hostile,
+            WanderAi::default(),
+            start,
+            Stats {
+                hp: 10,
+                max_hp: 10,
+                atk: 1,
+                mitigation: 1,
+            },
+        ))
+        .id();
+
+    let mut gaps: Vec<u64> = Vec::new();
+    let mut last_move: Option<u64> = None;
+    let mut prev = start;
+    for step in 1..=1500u64 {
+        game.tick();
+        let Some(now) = game.world.get::<Position>(wanderer).copied() else {
+            break;
+        };
+        if now != prev {
+            if let Some(last) = last_move {
+                gaps.push(step - last);
+            }
+            last_move = Some(step);
+            prev = now;
+        }
+    }
+
+    assert!(
+        gaps.len() >= 50,
+        "1500 ticks should have moved a wanderer well over fifty times, but saw {} moves \
+         — if it is far fewer the program was despawned or fenced in, and the pace below \
+         is being measured off noise",
+        gaps.len()
+    );
+    let smallest = *gaps.iter().min().expect("gaps is non-empty");
+    assert!(
+        smallest >= u64::from(WANDER_COOLDOWN_MIN_TICKS),
+        "a wanderer moved again after only {smallest} ticks, under the \
+         WANDER_COOLDOWN_MIN_TICKS of {WANDER_COOLDOWN_MIN_TICKS} — the map's wall-clock \
+         pace is pinned to that floor"
+    );
+    let mean = gaps.iter().sum::<u64>() as f64 / gaps.len() as f64;
+    assert!(
+        (6.0..=10.0).contains(&mean),
+        "a wanderer averaged a move every {mean:.2} ticks; the cooldown range \
+         {WANDER_COOLDOWN_MIN_TICKS}..{WANDER_COOLDOWN_MAX_TICKS} should put that near 7.9 \
+         (a firing every 7 ticks, ~8 in 9 of which move)"
     );
 }
 
@@ -1892,8 +1975,8 @@ fn despawn_all_hostiles(game: &mut Game) {
 /// A real save measured 65 hostiles in one box around a base the player had
 /// been working at.
 ///
-/// 4000 rolls at `WILD_SPAWN_CHANCE` is ~200 spawn events; ungated that is
-/// ~200 creatures in the box, so the bound below fails by an order of
+/// 4000 rolls at `WILD_SPAWN_CHANCE` is ~100 spawn events; ungated that is
+/// ~100 creatures in the box, so the bound below fails by an order of
 /// magnitude with the gate removed rather than by a hair.
 #[test]
 fn idling_in_one_place_stops_at_the_local_density_target() {

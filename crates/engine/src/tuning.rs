@@ -868,7 +868,15 @@ pub const DEFAULT_TAMING_DIFFICULTY: f32 = 0.5;
 /// `Game::maybe_spawn_wild_creature`), and the box radius around the player
 /// the roll places into. The radius is wide enough that a spawn lands
 /// off-screen and is walked into rather than appearing on top of you.
-pub const WILD_SPAWN_CHANCE: f64 = 0.05;
+///
+/// **Pinned to app-core's `WORLD_SPEED_MULTIPLIER`**, the same way
+/// `WANDER_COOLDOWN_MIN_TICKS` is and with nothing to make it fail to
+/// compile when that moves: this was `0.05` while the world ran at one tick
+/// a real second, and it is halved so that ambient encounters keep arriving
+/// at the rate they did per real minute rather than at twice it. A *cap* is
+/// not what paces this — `WILD_LOCAL_DENSITY_TARGET` bounds how many end up
+/// standing around you, not how often one shows up.
+pub const WILD_SPAWN_CHANCE: f64 = 0.025;
 pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
 
 /// Chance per walked step that the player is ambushed — a biome-appropriate
@@ -1741,6 +1749,26 @@ pub const NEST_SPAWN_CHANCE: f64 = 0.06;
 /// Chebyshev distance a `NestGuardian` may wander from its `Nest` — see
 /// `systems::wander_ai_system`.
 pub const NEST_TETHER_RADIUS: i32 = 5;
+
+/// How long a wild program holds a tile before `systems::wander_ai_system`
+/// offers it another — a half-open range, so the draw is
+/// `MIN..MAX` and the longest wait is `MAX - 1`.
+///
+/// **These two are pinned to app-core's `WORLD_SPEED_MULTIPLIER`**, and
+/// nothing makes them fail to compile when one moves without the other.
+/// The world runs at that many ticks a real second; these hold a wanderer
+/// at the wall-clock pace it had when the world ran at one. They were
+/// `2..6` — mean 3.5 — while the clock ticked once a second. `4..11` is
+/// the contiguous range whose mean is exactly twice that, 7.0; `4..12`
+/// reads like the more obvious doubling and lands at 7.5, which is 7%
+/// slower than the pace it claims to hold.
+///
+/// Deliberately *not* scaled from the multiplier at runtime: wall-clock is
+/// the frontend's business and this file is pure tick-space, so the pairing
+/// is prose on both ends rather than an argument threaded through the
+/// engine.
+pub const WANDER_COOLDOWN_MIN_TICKS: u32 = 4;
+pub const WANDER_COOLDOWN_MAX_TICKS: u32 = 11;
 
 /// Inclusive range of guardians a freshly spawned `Nest` starts with —
 /// see `Game::spawn_nest`.

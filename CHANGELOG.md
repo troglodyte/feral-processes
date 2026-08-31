@@ -33,6 +33,34 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.59
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The surface has weather: four Static events, biome-wide and either on or
+  off, that stack on whatever the ground was already doing.**
+- **Which event is live is derived from the world seed, the sector, the biome
+  and the clock epoch, so there is no save field, no roll to scum, and it
+  rotates on its own.**
+- **Static is the first thing to bias the ambush roll, so ground you have
+  crossed safely all run can turn dangerous without the map changing.**
+- **Packet Flood claims Open Grid, which has no standing condition, so the
+  biome most of the map is made of is now safe *usually* rather than
+  always.**
+- **Ground effects finally say what they are doing: the crossing line names
+  the condition, its description arrives the first time you meet it, and
+  Static announces its arrival and its passing.**
+- **The map pane's top-left border stops reading `SECTOR MAP` and reads the
+  ground you are standing on instead.**
+- **The first Static of a run takes the screen, on the tutorial half of
+  `NotificationKind`.**
+- **Ambient effects are a table in Rust, not a catalogue on disk:
+  `assets/environment/` and `EnvironmentDb` are gone, and `GroundCondition`
+  and `StaticEvent` are the census.** This is a mod-facing content directory
+  removed — a third-party file dropped there is no longer loaded.
+- **`Game::terrain_at` is the one door onto what a place does to you, and the
+  zone-1 gate and the base-slab refusal have one definition between them.**
+
 ## 0.13.58
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

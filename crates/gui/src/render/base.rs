@@ -2187,7 +2187,7 @@ mod tests {
 
     /// ...and with nothing loaded the map is exactly what it was. This is
     /// what makes `assets/sprites/` deletable, the same supported way
-    /// `assets/environment/` is.
+    /// `assets/sectors/` is.
     #[test]
     fn an_empty_sprite_table_leaves_the_glyph_map_alone() {
         let (images, glyphs) = drawn_map(SpriteTable::default());

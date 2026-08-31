@@ -671,8 +671,8 @@ mod tests {
 
     /// No group file at all is the pre-grouping screen exactly: one
     /// unlabelled run in `Perk::all()` order. Deleting `groups.ron` restores
-    /// the flat list the same supported way deleting `assets/environment/`
-    /// restores the pre-effects game.
+    /// the flat list the same supported way deleting `assets/sectors/`
+    /// restores undifferentiated zones.
     #[test]
     fn no_group_file_leaves_the_catalogue_flat() {
         let dir = scratch_dir("groups_absent");

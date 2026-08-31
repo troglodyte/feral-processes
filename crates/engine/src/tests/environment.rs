@@ -671,33 +671,48 @@ fn static_at_survives_a_save_and_load_round_trip() {
     );
 }
 
-/// Two biomes folding the same seed and zone, differing only in the biome
-/// word `static_seed` mixes in, must not answer identically epoch for
-/// epoch — a hash that let the biome wash out would make every claimed
-/// biome's weather turn over in lockstep, which would read as one global
-/// weather flag rather than a property of the place.
+/// Two biomes whose pools are the **same shape** — Mainframe's `{clear×3,
+/// ThreadStorm}` and Open Grid's `{clear×3, PacketFlood}`, each a single
+/// weight-1 event against `STATIC_CLEAR_WEIGHT`, both a pool of 4 — differing
+/// only in the biome word `static_seed` mixes in, must not answer *live or
+/// clear* identically epoch for epoch. A hash that let the biome wash out
+/// would make every claimed biome's weather turn over in lockstep, which
+/// would read as one global weather flag rather than a property of the
+/// place.
+///
+/// **Same-shaped pools, not merely different ones**: the original version of
+/// this test compared Null Sector against Mainframe, whose pools are `{clear
+/// ×3, LeakingMemory, SignalNoise}` (total 5) against `{clear×3,
+/// ThreadStorm}` (total 4). `assert_ne!` held there even with `biome_ord`
+/// deleted from `static_seed` entirely, because a different pool *size*
+/// changes what `derive::index` reduces regardless of the biome word — the
+/// two sequences differed for a reason that had nothing to do with the
+/// biome reaching the hash. Comparing which epochs are *live* (`is_some()`)
+/// between two pools of identical size and shape is what isolates the
+/// biome word's own contribution: with it deleted, Mainframe's and Open
+/// Grid's live/clear sequences become bit-identical.
 ///
 /// This does **not** guard `derive::index` against `%`: that reduction's
 /// documented failure is a *two-entry* pool reading nothing but its seed's
-/// lowest bit, and `static_in_epoch`'s pools here are 4-5 entries (the clear
-/// weight plus each claimed event) with a varying epoch folded in last, so
-/// `%` decorrelates these two sequences too. `derive::index` stays the
-/// implementation regardless — it is the global rule and the rest of the
-/// codebase's convention — but this test's reach is the decorrelation
-/// itself, not a choice between the two reductions.
+/// lowest bit, and these pools are 4 entries each with a varying epoch
+/// folded in last, so `%` decorrelates these two sequences too.
+/// `derive::index` stays the implementation regardless — it is the global
+/// rule and the rest of the codebase's convention — but this test's reach is
+/// the decorrelation itself, not a choice between the two reductions.
 #[test]
 fn adjacent_biomes_decorrelate_across_epochs() {
     let game = fresh_game(503);
-    let null_sector: Vec<Option<StaticEvent>> = (0..200u64)
-        .map(|epoch| game.static_in_epoch(Biome::NullSector, epoch))
+    let mainframe_live: Vec<bool> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::Mainframe, epoch).is_some())
         .collect();
-    let mainframe: Vec<Option<StaticEvent>> = (0..200u64)
-        .map(|epoch| game.static_in_epoch(Biome::Mainframe, epoch))
+    let open_grid_live: Vec<bool> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::OpenGrid, epoch).is_some())
         .collect();
 
     assert_ne!(
-        null_sector, mainframe,
-        "two biomes folding the same seed, zone and epoch must not answer identically"
+        mainframe_live, open_grid_live,
+        "two same-shaped pools folding the same seed, zone and epoch must not \
+         agree on which epochs are live"
     );
 }
 

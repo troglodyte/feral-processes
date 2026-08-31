@@ -33,6 +33,32 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.63
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **`w` on a program's manifest sends the map's camera to it, and Esc hands
+  it back** — the base runs at two ticks a second now and there was no way
+  to watch any of it happen except by standing where it did.
+- **What may be watched is whatever the sim actually walks**, which is
+  `ProgramRole::Staff` less the guards: a party member, a wielded program, a
+  squad away on a sortie and a guard all keep the tile they were last
+  written at, and parking a camera on one claims a program is somewhere it
+  isn't.
+- **Deliberately not `position_is_honest`**, the neighbouring rule, which
+  goes false for a worker standing at its own machine — the one moment the
+  player most wanted to be looking.
+- **The camera reads `Game::watch_position` every frame and lets go the
+  moment it answers nothing**, so a program dissolved, dispatched, taken
+  into the party or left behind in base space is one rule rather than a list
+  of endings.
+- **A step releases the camera and still steps**, because walking with the
+  view somewhere else is walking blind and a swallowed movement key reads as
+  the game having frozen.
+- **The watch line takes the ground readout's mount rather than a border of
+  its own**, since `map_pane`'s bottom border carries nothing by design and a
+  strip there would re-lay the whole grid the moment `w` was pressed.
+
 ## 0.13.62
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
